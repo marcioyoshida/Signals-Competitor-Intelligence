@@ -13,6 +13,72 @@ from typing import Any
 
 import requests
 
+
+def _parse_documents_from_html(html_text: str) -> list[dict[str, Any]]:
+    """Parse document cards from either legacy HTML lists or the current rendered text."""
+    docs: list[dict[str, Any]] = []
+    for match in re.finditer(r"<li[^>]*>(.*?)</li>", html_text, flags=re.S):
+        block = match.group(1)
+        if "Instrução Normativa BCB" in block or "Resolução" in block or "Comunicado" in block:
+            title_match = re.search(r"<a[^>]*>(.*?)</a>", block, flags=re.S)
+            if not title_match:
+                continue
+            title = html.unescape(re.sub(r"<[^>]+>", "", title_match.group(1))).strip()
+            if not title:
+                continue
+            block_text = html.unescape(re.sub(r"<[^>]+>", " ", block)).strip()
+            subject_match = re.search(r"Assunto:\s*(.*?)(?:\s+Responsável:|$)", block_text, flags=re.S)
+            date_match = re.search(r"Data/Hora Documento:\s*(.*?)(?:\s+Assunto:|\s+Responsável:|$)", block_text, flags=re.S)
+            rel_match = re.search(r"Responsável:\s*(.*)$", block_text, flags=re.S)
+            url_match = re.search(r'href="([^"]+)"', title_match.group(0))
+            docs.append(
+                {
+                    "id": f"bcb:{title}",
+                    "source": "BCB",
+                    "kind": "regulatory",
+                    "doc_type": title.split(" n°", 1)[0].strip() if " n°" in title else title,
+                    "number": re.search(r"n°\s*([0-9]+)", title).group(1) if re.search(r"n°\s*([0-9]+)", title) else None,
+                    "date": date_match.group(1).strip() if date_match else None,
+                    "subject": subject_match.group(1).strip() if subject_match else None,
+                    "url": f"https://www.bcb.gov.br{url_match.group(1)}" if url_match else None,
+                }
+            )
+    return docs
+
+
+def _parse_documents_from_rendered_text(html_text: str) -> list[dict[str, Any]]:
+    """Parse the results from the current BCB page when it renders plain text content."""
+    docs: list[dict[str, Any]] = []
+    if "Resultado da busca de normas" not in html_text:
+        return docs
+
+    blocks = re.split(r"(?=Título:)", html_text)
+    for block in blocks:
+        if "Título:" not in block:
+            continue
+        title_match = re.search(r"Título:\s*(.+?)\s*(?:Data/Hora Documento:|$)", block, flags=re.S)
+        if not title_match:
+            continue
+        title = html.unescape(re.sub(r"\s+", " ", title_match.group(1)).strip())
+        if not title:
+            continue
+        subject_match = re.search(r"Assunto:\s*(.+?)(?:\s+Responsável:|$)", block, flags=re.S)
+        date_match = re.search(r"Data/Hora Documento:\s*(.+?)(?:\s+Assunto:|\s+Responsável:|$)", block, flags=re.S)
+        rel_match = re.search(r"Responsável:\s*(.+)$", block, flags=re.S)
+        docs.append(
+            {
+                "id": f"bcb:{title}",
+                "source": "BCB",
+                "kind": "regulatory",
+                "doc_type": title.split(" n°", 1)[0].strip() if " n°" in title else title,
+                "number": re.search(r"n°\s*([0-9]+)", title).group(1) if re.search(r"n°\s*([0-9]+)", title) else None,
+                "date": date_match.group(1).strip() if date_match else None,
+                "subject": subject_match.group(1).strip() if subject_match else None,
+                "url": None,
+            }
+        )
+    return docs
+
 SEARCH_URL = "https://www.bcb.gov.br/estabilidadefinanceira/buscanormas"
 
 # Document types most relevant to payments/fintech strategy.
@@ -26,13 +92,13 @@ DEFAULT_TYPES = [
 ]
 
 
-def fetch_recent(days: int = 7, types: list[str] | None = None) -> list[dict[str, Any]]:
+def fetch_recent(days: int = 7, types: list[str] | None = None, query: str | None = None) -> list[dict[str, Any]]:
     """Fetch normativos published in the last `days` days."""
     since = (dt.date.today() - dt.timedelta(days=days)).isoformat()
     params = {
-        "conteudo": "",
-        "dataInicioBusca": dt.date.today() - dt.timedelta(days=days),
-        "dataFimBusca": dt.date.today(),
+        "conteudo": query or "",
+        "dataInicioBusca": (dt.date.today() - dt.timedelta(days=days)).strftime("%d/%m/%Y"),
+        "dataFimBusca": dt.date.today().strftime("%d/%m/%Y"),
         "tipoDocumento": "Todos",
     }
 
@@ -44,33 +110,10 @@ def fetch_recent(days: int = 7, types: list[str] | None = None) -> list[dict[str
         return []
 
     html_text = resp.text
-    docs: list[dict[str, Any]] = []
-    for match in re.finditer(r"<li[^>]*>(.*?)</li>", html_text, flags=re.S):
-        block = match.group(1)
-        if "Instrução Normativa BCB" in block or "Resolução" in block or "Comunicado" in block:
-            title_match = re.search(r"<a[^>]*>(.*?)</a>", block, flags=re.S)
-            if not title_match:
-                continue
-            title = html.unescape(re.sub(r"<[^>]+>", "", title_match.group(1))).strip()
-            if not title:
-                continue
-            subject_match = re.search(r"Assunto:\s*(.*?)<", block, flags=re.S)
-            date_match = re.search(r"Data/Hora Documento:\s*(.*?)<", block, flags=re.S)
-            rel_match = re.search(r"Responsável:\s*(.*?)<", block, flags=re.S)
-            url_match = re.search(r'href="([^"]+)"', title_match.group(0))
-            docs.append(
-                {
-                    "id": f"bcb:{title}",
-                    "source": "BCB",
-                    "kind": "regulatory",
-                    "doc_type": title.split(" n°", 1)[0].strip() if " n°" in title else title,
-                    "number": re.search(r"n°\s*([0-9]+)", title),
-                    "date": html.unescape(date_match.group(1)).strip() if date_match else None,
-                    "subject": html.unescape(subject_match.group(1)).strip() if subject_match else None,
-                    "url": f"https://www.bcb.gov.br{url_match.group(1)}" if url_match else None,
-                }
-            )
-    return docs
+    docs = _parse_documents_from_html(html_text)
+    if docs:
+        return docs
+    return _parse_documents_from_rendered_text(html_text)
 
 
 if __name__ == "__main__":
