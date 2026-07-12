@@ -16,8 +16,17 @@ from src.ingest import bcb_ifdata, bcb_normativos, cvm_fundos
 
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """Return a small digest payload for downstream Lambda/CDK wiring."""
-    normativos = bcb_normativos.fetch_recent(days=7)
-    funds = cvm_fundos.fetch_funds(watchlist_admins=[])
+    try:
+        normativos = bcb_normativos.fetch_recent(days=7)
+    except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
+        normativos = []
+        print(f"Warning: BCB normativos fetch failed: {exc}")
+
+    try:
+        funds = cvm_fundos.fetch_funds(watchlist_admins=[])
+    except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
+        funds = []
+        print(f"Warning: CVM funds fetch failed: {exc}")
 
     try:
         base_date = bcb_ifdata.latest_base_date()
