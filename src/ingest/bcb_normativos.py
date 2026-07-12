@@ -1,8 +1,11 @@
 """Ingest BCB normativos (resolutions, circulars, instructions).
 
-The historical API endpoint is returning 400 for current requests, so the
-handler falls back to the public Busca de Normas page and parses the rendered
-results HTML.
+The public 'Busca de Normas' page (estabilidadefinanceira/buscanormas) is a
+client-rendered Angular app — there's no server HTML to scrape, and the old
+/api/search/app/normativos/buscanormas REST endpoint this used to call is
+decommissioned (400 regardless of params). The real backing API, found by
+inspecting the page's network requests, is the SharePoint Search REST
+endpoint below (confirmed against a live browser capture on 2026-07-12).
 """
 from __future__ import annotations
 
@@ -10,76 +13,13 @@ import datetime as dt
 import html
 import re
 from typing import Any
+from urllib.parse import urlencode
 
 import requests
 
-
-def _parse_documents_from_html(html_text: str) -> list[dict[str, Any]]:
-    """Parse document cards from either legacy HTML lists or the current rendered text."""
-    docs: list[dict[str, Any]] = []
-    for match in re.finditer(r"<li[^>]*>(.*?)</li>", html_text, flags=re.S):
-        block = match.group(1)
-        if "Instrução Normativa BCB" in block or "Resolução" in block or "Comunicado" in block:
-            title_match = re.search(r"<a[^>]*>(.*?)</a>", block, flags=re.S)
-            if not title_match:
-                continue
-            title = html.unescape(re.sub(r"<[^>]+>", "", title_match.group(1))).strip()
-            if not title:
-                continue
-            block_text = html.unescape(re.sub(r"<[^>]+>", " ", block)).strip()
-            subject_match = re.search(r"Assunto:\s*(.*?)(?:\s+Responsável:|$)", block_text, flags=re.S)
-            date_match = re.search(r"Data/Hora Documento:\s*(.*?)(?:\s+Assunto:|\s+Responsável:|$)", block_text, flags=re.S)
-            rel_match = re.search(r"Responsável:\s*(.*)$", block_text, flags=re.S)
-            url_match = re.search(r'href="([^"]+)"', title_match.group(0))
-            docs.append(
-                {
-                    "id": f"bcb:{title}",
-                    "source": "BCB",
-                    "kind": "regulatory",
-                    "doc_type": title.split(" n°", 1)[0].strip() if " n°" in title else title,
-                    "number": re.search(r"n°\s*([0-9]+)", title).group(1) if re.search(r"n°\s*([0-9]+)", title) else None,
-                    "date": date_match.group(1).strip() if date_match else None,
-                    "subject": subject_match.group(1).strip() if subject_match else None,
-                    "url": f"https://www.bcb.gov.br{url_match.group(1)}" if url_match else None,
-                }
-            )
-    return docs
-
-
-def _parse_documents_from_rendered_text(html_text: str) -> list[dict[str, Any]]:
-    """Parse the results from the current BCB page when it renders plain text content."""
-    docs: list[dict[str, Any]] = []
-    if "Resultado da busca de normas" not in html_text:
-        return docs
-
-    blocks = re.split(r"(?=Título:)", html_text)
-    for block in blocks:
-        if "Título:" not in block:
-            continue
-        title_match = re.search(r"Título:\s*(.+?)\s*(?:Data/Hora Documento:|$)", block, flags=re.S)
-        if not title_match:
-            continue
-        title = html.unescape(re.sub(r"\s+", " ", title_match.group(1)).strip())
-        if not title:
-            continue
-        subject_match = re.search(r"Assunto:\s*(.+?)(?:\s+Responsável:|$)", block, flags=re.S)
-        date_match = re.search(r"Data/Hora Documento:\s*(.+?)(?:\s+Assunto:|\s+Responsável:|$)", block, flags=re.S)
-        rel_match = re.search(r"Responsável:\s*(.+)$", block, flags=re.S)
-        docs.append(
-            {
-                "id": f"bcb:{title}",
-                "source": "BCB",
-                "kind": "regulatory",
-                "doc_type": title.split(" n°", 1)[0].strip() if " n°" in title else title,
-                "number": re.search(r"n°\s*([0-9]+)", title).group(1) if re.search(r"n°\s*([0-9]+)", title) else None,
-                "date": date_match.group(1).strip() if date_match else None,
-                "subject": subject_match.group(1).strip() if subject_match else None,
-                "url": None,
-            }
-        )
-    return docs
-
-SEARCH_URL = "https://www.bcb.gov.br/estabilidadefinanceira/buscanormas"
+SEARCH_URL = "https://www.bcb.gov.br/api/search/app/normativos/buscanormativos"
+DOCUMENT_URL = "https://www.bcb.gov.br/estabilidadefinanceira/exibenormativo"
+REFERER = "https://www.bcb.gov.br/estabilidadefinanceira/buscanormas"
 
 # Document types most relevant to payments/fintech strategy.
 # Full list includes Resolução CMN, Resolução BCB, Instrução Normativa BCB,
@@ -91,31 +31,83 @@ DEFAULT_TYPES = [
     "Comunicado",
 ]
 
+ROWS_PER_PAGE = 50
+MAX_ROWS = 500
+
+
+def _clean_html(text: str) -> str:
+    return html.unescape(re.sub(r"<[^>]+>", " ", text or "")).strip()
+
+
+def _to_doc(row: dict[str, Any]) -> dict[str, Any]:
+    doc_type = row.get("TipodoNormativoOWSCHCS") or ""
+    number = None
+    raw_number = row.get("NumeroOWSNMBR")
+    if raw_number:
+        try:
+            number = str(int(float(raw_number)))
+        except ValueError:
+            number = str(raw_number)
+    return {
+        "id": f"bcb:{doc_type}:{number}",
+        "source": "BCB",
+        "kind": "regulatory",
+        "doc_type": doc_type,
+        "number": number,
+        "date": (row.get("data") or "")[:10] or None,
+        "subject": _clean_html(row.get("AssuntoNormativoOWSMTXT", "")),
+        "url": f"{DOCUMENT_URL}?{urlencode({'tipo': doc_type, 'numero': number})}" if number else None,
+    }
+
 
 def fetch_recent(days: int = 7, types: list[str] | None = None, query: str | None = None) -> list[dict[str, Any]]:
     """Fetch normativos published in the last `days` days."""
-    since = (dt.date.today() - dt.timedelta(days=days)).isoformat()
-    params = {
-        "conteudo": query or "",
-        "dataInicioBusca": (dt.date.today() - dt.timedelta(days=days)).strftime("%d/%m/%Y"),
-        "dataFimBusca": dt.date.today().strftime("%d/%m/%Y"),
-        "tipoDocumento": "Todos",
+    start = (dt.date.today() - dt.timedelta(days=days)).isoformat()
+    end = dt.date.today().isoformat()
+
+    querytext = "ContentType:normativo AND contentSource:normativos"
+    if query:
+        querytext += f" AND {query}"
+
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json, text/plain, */*",
+        "Referer": REFERER,
     }
 
-    try:
-        resp = requests.get(SEARCH_URL, params=params, timeout=30, headers={"User-Agent": "Mozilla/5.0"})
-        resp.raise_for_status()
-    except requests.RequestException as exc:
-        print(f"Warning: BCB normativos fetch failed: {exc}")
-        return []
+    rows: list[dict[str, Any]] = []
+    startrow = 0
+    while True:
+        params = {
+            "querytext": querytext,
+            "rowlimit": ROWS_PER_PAGE,
+            "startrow": startrow,
+            "sortlist": "Data1OWSDATE:descending",
+            "refinementfilters": f"Data:range(datetime({start}),datetime({end}T23:59:59))",
+        }
+        try:
+            resp = requests.get(SEARCH_URL, params=params, timeout=30, headers=headers)
+            resp.raise_for_status()
+        except requests.RequestException as exc:
+            print(f"Warning: BCB normativos fetch failed: {exc}")
+            return [_to_doc(r) for r in rows]
 
-    html_text = resp.text
-    docs = _parse_documents_from_html(html_text)
-    if docs:
-        return docs
-    return _parse_documents_from_rendered_text(html_text)
+        payload = resp.json()
+        page_rows = payload.get("Rows", [])
+        rows.extend(page_rows)
+
+        startrow += ROWS_PER_PAGE
+        total = payload.get("TotalRows", len(rows))
+        if startrow >= total or startrow >= MAX_ROWS or not page_rows:
+            break
+
+    docs = [_to_doc(r) for r in rows]
+    if types:
+        docs = [d for d in docs if d["doc_type"] in types]
+    return docs
 
 
 if __name__ == "__main__":
     for d in fetch_recent(days=14):
-        print(f"{d['date']}  {d['doc_type']} {d['number']}: {d['subject'][:90]}")
+        print(f"{d['date']}  {d['doc_type']} {d['number']}: {(d['subject'] or '')[:90]}")
+        print(f"   {d['url']}")
