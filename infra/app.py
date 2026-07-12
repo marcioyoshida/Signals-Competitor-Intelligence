@@ -32,11 +32,12 @@ class OncaPrototypeStack(Stack):
             removal_policy=None,
         )
 
-        digests_bucket = s3.Bucket(
+        # Provisioned out-of-band by infra/bootstrap.sh (account-level baseline
+        # bucket, shared across future stacks) — import it, don't create it.
+        digests_bucket = s3.Bucket.from_bucket_name(
             self,
             "OncaDigestsBucket",
-            bucket_name=f"onca-digests-{self.account}",
-            removal_policy=None,
+            f"onca-digests-{self.account}",
         )
 
         func = lambda_.Function(
