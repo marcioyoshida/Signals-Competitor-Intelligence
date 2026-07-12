@@ -28,6 +28,7 @@ def test_lambda_handler_returns_digest_payload_when_ingesters_fail(monkeypatch):
     monkeypatch.setattr(lambda_port.cvm_fundos, "fetch_funds", lambda watchlist_admins=None: [])
     monkeypatch.setattr(lambda_port.bcb_ifdata, "latest_base_date", lambda: 202603)
     monkeypatch.setattr(lambda_port.bcb_ifdata, "fetch_institutions", lambda base_date=None: [])
+    monkeypatch.setattr(lambda_port.bcb_ifdata, "fetch_institution_names", lambda base_date: {})
 
     response = lambda_port.lambda_handler({}, None)
 
@@ -36,6 +37,26 @@ def test_lambda_handler_returns_digest_payload_when_ingesters_fail(monkeypatch):
     assert payload["regulatory"]["count"] == 0
     assert payload["competitor"]["count"] == 0
     assert payload["market"]["count"] == 0
+
+
+def test_lambda_handler_resolves_institution_names_in_market_share(monkeypatch):
+    monkeypatch.setattr(lambda_port, "_new_since_last_run", lambda source, docs: docs)
+    monkeypatch.setattr(lambda_port.bcb_normativos, "fetch_recent", lambda days=7, types=None: [])
+    monkeypatch.setattr(lambda_port.cvm_fundos, "fetch_funds", lambda watchlist_admins=None: [])
+    monkeypatch.setattr(lambda_port.bcb_ifdata, "latest_base_date", lambda: 202603)
+    monkeypatch.setattr(
+        lambda_port.bcb_ifdata,
+        "fetch_institutions",
+        lambda base_date=None: [{"CodInst": "00068987", "NomeColuna": "Ativo Total", "Saldo": 100.0}],
+    )
+    monkeypatch.setattr(
+        lambda_port.bcb_ifdata, "fetch_institution_names", lambda base_date: {"00068987": "Banco Exemplo"}
+    )
+
+    response = lambda_port.lambda_handler({}, None)
+
+    payload = json.loads(response["body"])
+    assert payload["market"]["items"] == [{"institution": "Banco Exemplo", "value": 100.0, "share_pct": 100.0}]
 
 
 def test_lambda_handler_continues_when_normativos_fetch_raises(monkeypatch):
@@ -47,6 +68,7 @@ def test_lambda_handler_continues_when_normativos_fetch_raises(monkeypatch):
     monkeypatch.setattr(lambda_port.cvm_fundos, "fetch_funds", lambda watchlist_admins=None: [])
     monkeypatch.setattr(lambda_port.bcb_ifdata, "latest_base_date", lambda: 202603)
     monkeypatch.setattr(lambda_port.bcb_ifdata, "fetch_institutions", lambda base_date=None: [])
+    monkeypatch.setattr(lambda_port.bcb_ifdata, "fetch_institution_names", lambda base_date: {})
 
     response = lambda_port.lambda_handler({}, None)
 
@@ -65,6 +87,7 @@ def test_lambda_handler_continues_when_cvm_funds_fetch_raises(monkeypatch):
     monkeypatch.setattr(lambda_port.cvm_fundos, "fetch_funds", broken_fetch_funds)
     monkeypatch.setattr(lambda_port.bcb_ifdata, "latest_base_date", lambda: 202603)
     monkeypatch.setattr(lambda_port.bcb_ifdata, "fetch_institutions", lambda base_date=None: [])
+    monkeypatch.setattr(lambda_port.bcb_ifdata, "fetch_institution_names", lambda base_date: {})
 
     response = lambda_port.lambda_handler({}, None)
 
@@ -124,6 +147,7 @@ def test_lambda_handler_continues_when_s3_upload_fails(monkeypatch):
     monkeypatch.setattr(lambda_port.cvm_fundos, "fetch_funds", lambda watchlist_admins=None: [])
     monkeypatch.setattr(lambda_port.bcb_ifdata, "latest_base_date", lambda: 202603)
     monkeypatch.setattr(lambda_port.bcb_ifdata, "fetch_institutions", lambda base_date=None: [])
+    monkeypatch.setattr(lambda_port.bcb_ifdata, "fetch_institution_names", lambda base_date: {})
     monkeypatch.setenv("ONCA_DIGESTS_BUCKET", "test-bucket")
 
     class BrokenS3Client:
@@ -148,6 +172,7 @@ def test_lambda_handler_reports_only_new_normativos_across_two_runs(monkeypatch)
     monkeypatch.setattr(lambda_port.cvm_fundos, "fetch_funds", lambda watchlist_admins=None: [])
     monkeypatch.setattr(lambda_port.bcb_ifdata, "latest_base_date", lambda: 202603)
     monkeypatch.setattr(lambda_port.bcb_ifdata, "fetch_institutions", lambda base_date=None: [])
+    monkeypatch.setattr(lambda_port.bcb_ifdata, "fetch_institution_names", lambda base_date: {})
 
     doc_a = {"id": "bcb:a", "subject": "Resolução A"}
     doc_b = {"id": "bcb:b", "subject": "Resolução B"}
@@ -183,6 +208,7 @@ def test_lambda_handler_treats_all_as_new_when_diff_state_unavailable(monkeypatc
     monkeypatch.setattr(lambda_port.cvm_fundos, "fetch_funds", lambda watchlist_admins=None: [])
     monkeypatch.setattr(lambda_port.bcb_ifdata, "latest_base_date", lambda: 202603)
     monkeypatch.setattr(lambda_port.bcb_ifdata, "fetch_institutions", lambda base_date=None: [])
+    monkeypatch.setattr(lambda_port.bcb_ifdata, "fetch_institution_names", lambda base_date: {})
 
     response = lambda_port.lambda_handler({}, None)
 

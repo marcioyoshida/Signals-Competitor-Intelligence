@@ -41,7 +41,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     try:
         base_date = bcb_ifdata.latest_base_date()
         rows = bcb_ifdata.fetch_institutions(base_date=base_date)
-        market = bcb_ifdata.market_share(rows)[:10]
+        names = bcb_ifdata.fetch_institution_names(base_date)
+        market = bcb_ifdata.market_share(rows, institution_names=names)[:10]
     except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
         market = []
         print(f"Warning: IF.data market fetch failed: {exc}")

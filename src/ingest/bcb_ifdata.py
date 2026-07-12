@@ -35,7 +35,11 @@ def latest_base_date() -> int:
 
 
 def fetch_institutions(base_date: int | None = None) -> list[dict[str, Any]]:
-    """Fetch summary financials for all institutions at a base date."""
+    """Fetch summary financials for all institutions at a base date.
+
+    Rows are keyed by CodInst only — this report has no institution name
+    field. Resolve display names separately via fetch_institution_names.
+    """
     base_date = base_date or latest_base_date()
     url = (
         f"{BASE}/IfDataValores("
@@ -50,23 +54,42 @@ def fetch_institutions(base_date: int | None = None) -> list[dict[str, Any]]:
     return resp.json().get("value", [])
 
 
-def market_share(rows: list[dict[str, Any]], metric: str = "Ativo Total") -> list[dict[str, Any]]:
+def fetch_institution_names(base_date: int) -> dict[str, str]:
+    """Map CodInst -> institution name via the IF.data cadastro function.
+
+    $top is set well above the current registry size (~5.9k institutions)
+    since this endpoint doesn't expose a total count to paginate against.
+    """
+    url = f"{BASE}/IfDataCadastro(AnoMes=@AnoMes)?@AnoMes={base_date}&$format=json&$top=10000"
+    resp = requests.get(url, timeout=60, headers={"User-Agent": "Mozilla/5.0"})
+    resp.raise_for_status()
+    return {r["CodInst"]: r["NomeInstituicao"] for r in resp.json().get("value", []) if r.get("CodInst")}
+
+
+def market_share(
+    rows: list[dict[str, Any]],
+    metric: str = "Ativo Total",
+    institution_names: dict[str, str] | None = None,
+) -> list[dict[str, Any]]:
     """Compute share of a metric across institutions.
 
-    IF.data returns long-format rows (one row per institution+account).
-    Filter to the metric, sum the sector total, compute each share.
+    IF.data returns long-format rows (one row per institution+account),
+    keyed by CodInst. Filter to the metric, sum the sector total, compute
+    each share. Pass institution_names (from fetch_institution_names) to
+    show names instead of raw codes; falls back to the code if omitted.
     """
+    names = institution_names or {}
     values: dict[str, float] = {}
     for r in rows:
         if r.get("NomeColuna") == metric and r.get("Saldo") is not None:
-            name = r.get("NomeInstituicao", "?")
-            values[name] = values.get(name, 0.0) + float(r["Saldo"])
+            code = r.get("CodInst", "?")
+            values[code] = values.get(code, 0.0) + float(r["Saldo"])
 
     total = sum(values.values()) or 1.0
     ranked = sorted(values.items(), key=lambda kv: kv[1], reverse=True)
     return [
-        {"institution": name, "value": round(val, 2), "share_pct": round(100 * val / total, 3)}
-        for name, val in ranked
+        {"institution": names.get(code, code), "value": round(val, 2), "share_pct": round(100 * val / total, 3)}
+        for code, val in ranked
     ]
 
 
@@ -74,5 +97,6 @@ if __name__ == "__main__":
     date = latest_base_date()
     print(f"Latest IF.data base date: {date}")
     rows = fetch_institutions(date)
-    for row in market_share(rows)[:15]:
+    names = fetch_institution_names(date)
+    for row in market_share(rows, institution_names=names)[:15]:
         print(f"{row['share_pct']:6.2f}%  {row['institution']}")
