@@ -6,7 +6,10 @@ can later be wired to EventBridge + Lambda with minimal changes.
 from __future__ import annotations
 
 import json
+import os
 from typing import Any
+
+import boto3
 
 from src.ingest import bcb_ifdata, bcb_normativos, cvm_fundos
 
@@ -30,4 +33,18 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         "market": {"count": len(market), "items": market},
         "source": "lambda_port",
     }
+
+    bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
+    if bucket:
+        try:
+            s3 = boto3.client("s3")
+            key = f"lambda-digests/{getattr(context, 'aws_request_id', 'local')}.json"
+            s3.put_object(
+                Bucket=bucket,
+                Key=key,
+                Body=json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8"),
+            )
+        except Exception as exc:  # pragma: no cover - defensive handling for S3 write failures
+            print(f"Warning: S3 upload failed: {exc}")
+
     return {"statusCode": 200, "body": json.dumps(payload, ensure_ascii=False, indent=2)}
