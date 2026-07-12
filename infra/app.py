@@ -12,6 +12,7 @@ from aws_cdk import aws_dynamodb as dynamodb
 from aws_cdk import aws_events as events
 from aws_cdk import aws_events_targets as targets
 from aws_cdk import aws_lambda as lambda_
+from aws_cdk import aws_s3 as s3
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -31,6 +32,13 @@ class OncaPrototypeStack(Stack):
             removal_policy=None,
         )
 
+        digests_bucket = s3.Bucket(
+            self,
+            "OncaDigestsBucket",
+            bucket_name=f"onca-digests-{self.account}",
+            removal_policy=None,
+        )
+
         func = lambda_.Function(
             self,
             "OncaLambdaPrototype",
@@ -42,9 +50,11 @@ class OncaPrototypeStack(Stack):
             environment={
                 "PYTHONPATH": "/var/task",
                 "ONCA_STATE_TABLE": state_table.table_name,
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
             },
         )
         state_table.grant_read_write_data(func)
+        digests_bucket.grant_put(func)
 
         rule = events.Rule(
             self,
