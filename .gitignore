@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+.venv/
+
+cdk.out/
+infra/aws/
+infra/awscliv2.zip
+infra/read.*.lock
+build/
+
+data/state/*.json
+data/latest_digest.json
