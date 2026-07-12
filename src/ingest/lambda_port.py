@@ -11,7 +11,17 @@ from typing import Any
 
 import boto3
 
+from src.diff.engine import DynamoDbState, detect_new
 from src.ingest import bcb_ifdata, bcb_normativos, cvm_fundos
+
+
+def _new_since_last_run(source: str, docs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Diff docs against DynamoDB-backed state; degrade to 'everything is new' on failure."""
+    try:
+        return detect_new(source, docs, state=DynamoDbState(source))
+    except Exception as exc:  # pragma: no cover - defensive handling for state-table issues
+        print(f"Warning: {source} diff state unavailable, treating all as new: {exc}")
+        return docs
 
 
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
@@ -36,9 +46,12 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         market = []
         print(f"Warning: IF.data market fetch failed: {exc}")
 
+    new_normativos = _new_since_last_run("bcb_normativos", normativos)
+    new_funds = _new_since_last_run("cvm_fundos", funds)
+
     payload = {
-        "regulatory": {"count": len(normativos), "items": normativos[:5]},
-        "competitor": {"count": len(funds), "items": funds[:5]},
+        "regulatory": {"count": len(normativos), "new_count": len(new_normativos), "items": new_normativos[:5]},
+        "competitor": {"count": len(funds), "new_count": len(new_funds), "items": new_funds[:5]},
         "market": {"count": len(market), "items": market},
         "source": "lambda_port",
     }
