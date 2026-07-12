@@ -26,14 +26,17 @@ def _new_since_last_run(source: str, docs: list[dict[str, Any]]) -> list[dict[st
 
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """Return a small digest payload for downstream Lambda/CDK wiring."""
+    lookback_days = int(os.environ.get("ONCA_LOOKBACK_DAYS", "7"))
+    competitors = [c for c in os.environ.get("ONCA_COMPETITORS", "").split(",") if c]
+
     try:
-        normativos = bcb_normativos.fetch_recent(days=7)
+        normativos = bcb_normativos.fetch_recent(days=lookback_days)
     except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
         normativos = []
         print(f"Warning: BCB normativos fetch failed: {exc}")
 
     try:
-        funds = cvm_fundos.fetch_funds(watchlist_admins=[])
+        funds = cvm_fundos.fetch_funds(watchlist_admins=competitors)
     except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
         funds = []
         print(f"Warning: CVM funds fetch failed: {exc}")

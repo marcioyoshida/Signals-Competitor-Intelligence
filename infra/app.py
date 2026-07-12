@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import yaml
 from aws_cdk import App, Duration, Stack
 from aws_cdk import aws_dynamodb as dynamodb
 from aws_cdk import aws_events as events
@@ -17,6 +18,7 @@ from aws_cdk import aws_s3 as s3
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 LAMBDA_ASSET = REPO_ROOT / "build" / "lambda"
+WATCHLIST_CONFIG = REPO_ROOT / "config" / "watchlist.yaml"
 
 
 class OncaPrototypeStack(Stack):
@@ -40,6 +42,8 @@ class OncaPrototypeStack(Stack):
             f"onca-digests-{self.account}",
         )
 
+        watchlist = yaml.safe_load(WATCHLIST_CONFIG.read_text())
+
         func = lambda_.Function(
             self,
             "OncaLambdaPrototype",
@@ -52,6 +56,8 @@ class OncaPrototypeStack(Stack):
                 "PYTHONPATH": "/var/task",
                 "ONCA_STATE_TABLE": state_table.table_name,
                 "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+                "ONCA_LOOKBACK_DAYS": str(watchlist.get("lookback_days", 7)),
+                "ONCA_COMPETITORS": ",".join(watchlist.get("competitors", [])),
             },
         )
         state_table.grant_read_write_data(func)

@@ -39,6 +39,32 @@ def test_lambda_handler_returns_digest_payload_when_ingesters_fail(monkeypatch):
     assert payload["market"]["count"] == 0
 
 
+def test_lambda_handler_passes_watchlist_config_to_ingesters(monkeypatch):
+    captured = {}
+
+    def fake_fetch_recent(days=7, types=None):
+        captured["days"] = days
+        return []
+
+    def fake_fetch_funds(watchlist_admins=None):
+        captured["watchlist_admins"] = watchlist_admins
+        return []
+
+    monkeypatch.setattr(lambda_port, "_new_since_last_run", lambda source, docs: docs)
+    monkeypatch.setattr(lambda_port.bcb_normativos, "fetch_recent", fake_fetch_recent)
+    monkeypatch.setattr(lambda_port.cvm_fundos, "fetch_funds", fake_fetch_funds)
+    monkeypatch.setattr(lambda_port.bcb_ifdata, "latest_base_date", lambda: 202603)
+    monkeypatch.setattr(lambda_port.bcb_ifdata, "fetch_institutions", lambda base_date=None: [])
+    monkeypatch.setattr(lambda_port.bcb_ifdata, "fetch_institution_names", lambda base_date: {})
+    monkeypatch.setenv("ONCA_LOOKBACK_DAYS", "14")
+    monkeypatch.setenv("ONCA_COMPETITORS", "ITAU,BTG PACTUAL")
+
+    lambda_port.lambda_handler({}, None)
+
+    assert captured["days"] == 14
+    assert captured["watchlist_admins"] == ["ITAU", "BTG PACTUAL"]
+
+
 def test_lambda_handler_resolves_institution_names_in_market_share(monkeypatch):
     monkeypatch.setattr(lambda_port, "_new_since_last_run", lambda source, docs: docs)
     monkeypatch.setattr(lambda_port.bcb_normativos, "fetch_recent", lambda days=7, types=None: [])
