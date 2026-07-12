@@ -265,3 +265,115 @@ def test_lambda_handler_treats_all_as_new_when_diff_state_unavailable(monkeypatc
     payload = json.loads(response["body"])
     assert payload["regulatory"]["count"] == 1
     assert payload["regulatory"]["new_count"] == 1
+
+
+class FakeBedrockAgentClient:
+    def __init__(self):
+        self.ingestion_jobs = []
+
+    def start_ingestion_job(self, knowledgeBaseId, dataSourceId):
+        self.ingestion_jobs.append((knowledgeBaseId, dataSourceId))
+
+
+def _stub_all_ingesters(monkeypatch, normativos=None, funds=None):
+    monkeypatch.setattr(lambda_port, "_new_since_last_run", lambda source, docs: docs)
+    monkeypatch.setattr(lambda_port.bcb_normativos, "fetch_recent", lambda days=7, types=None: normativos or [])
+    monkeypatch.setattr(lambda_port.cvm_fundos, "fetch_funds", lambda watchlist_admins=None: funds or [])
+    monkeypatch.setattr(lambda_port.bcb_ifdata, "latest_base_date", lambda: 202603)
+    monkeypatch.setattr(lambda_port.bcb_ifdata, "fetch_institutions", lambda base_date=None: [])
+    monkeypatch.setattr(lambda_port.bcb_ifdata, "fetch_institution_names", lambda base_date: {})
+
+
+def test_lambda_handler_writes_new_docs_and_triggers_kb_sync(monkeypatch):
+    doc = {"id": "bcb:a", "source": "BCB", "kind": "regulatory", "subject": "x"}
+    _stub_all_ingesters(monkeypatch, normativos=[doc])
+    monkeypatch.setenv("ONCA_RAW_BUCKET", "onca-raw-test")
+    monkeypatch.setenv("ONCA_KB_ID", "kb-123")
+    monkeypatch.setenv("ONCA_KB_DATA_SOURCE_ID", "ds-456")
+
+    captured = {}
+
+    def fake_write_raw_documents(bucket, docs):
+        captured["bucket"] = bucket
+        captured["docs"] = docs
+        return [f"BCB/{d['id']}.txt" for d in docs]
+
+    monkeypatch.setattr(lambda_port.raw_writer, "write_raw_documents", fake_write_raw_documents)
+
+    fake_bedrock = FakeBedrockAgentClient()
+    monkeypatch.setattr(lambda_port.boto3, "client", lambda *args, **kwargs: fake_bedrock)
+
+    response = lambda_port.lambda_handler({}, None)
+
+    assert response["statusCode"] == 200
+    assert captured["bucket"] == "onca-raw-test"
+    assert captured["docs"] == [doc]
+    assert fake_bedrock.ingestion_jobs == [("kb-123", "ds-456")]
+
+
+def test_lambda_handler_skips_kb_sync_when_no_new_docs(monkeypatch):
+    _stub_all_ingesters(monkeypatch)
+    monkeypatch.setenv("ONCA_RAW_BUCKET", "onca-raw-test")
+    monkeypatch.setenv("ONCA_KB_ID", "kb-123")
+    monkeypatch.setenv("ONCA_KB_DATA_SOURCE_ID", "ds-456")
+
+    calls = []
+    monkeypatch.setattr(lambda_port.raw_writer, "write_raw_documents", lambda bucket, docs: calls.append(docs) or [])
+
+    fake_bedrock = FakeBedrockAgentClient()
+    monkeypatch.setattr(lambda_port.boto3, "client", lambda *args, **kwargs: fake_bedrock)
+
+    response = lambda_port.lambda_handler({}, None)
+
+    assert response["statusCode"] == 200
+    assert calls == [[]]
+    assert fake_bedrock.ingestion_jobs == []
+
+
+def test_lambda_handler_skips_corpus_write_when_raw_bucket_not_configured(monkeypatch):
+    doc = {"id": "bcb:a", "source": "BCB", "kind": "regulatory", "subject": "x"}
+    _stub_all_ingesters(monkeypatch, normativos=[doc])
+
+    called = []
+    monkeypatch.setattr(lambda_port.raw_writer, "write_raw_documents", lambda bucket, docs: called.append(1) or [])
+
+    response = lambda_port.lambda_handler({}, None)
+
+    assert response["statusCode"] == 200
+    assert called == []
+
+
+def test_lambda_handler_continues_when_raw_corpus_write_fails(monkeypatch):
+    doc = {"id": "bcb:a", "source": "BCB", "kind": "regulatory", "subject": "x"}
+    _stub_all_ingesters(monkeypatch, normativos=[doc])
+    monkeypatch.setenv("ONCA_RAW_BUCKET", "onca-raw-test")
+
+    def broken_write(bucket, docs):
+        raise RuntimeError("S3 write failed")
+
+    monkeypatch.setattr(lambda_port.raw_writer, "write_raw_documents", broken_write)
+
+    response = lambda_port.lambda_handler({}, None)
+
+    assert response["statusCode"] == 200
+    payload = json.loads(response["body"])
+    assert payload["regulatory"]["new_count"] == 1
+
+
+def test_lambda_handler_continues_when_kb_sync_fails(monkeypatch):
+    doc = {"id": "bcb:a", "source": "BCB", "kind": "regulatory", "subject": "x"}
+    _stub_all_ingesters(monkeypatch, normativos=[doc])
+    monkeypatch.setenv("ONCA_RAW_BUCKET", "onca-raw-test")
+    monkeypatch.setenv("ONCA_KB_ID", "kb-123")
+    monkeypatch.setenv("ONCA_KB_DATA_SOURCE_ID", "ds-456")
+    monkeypatch.setattr(lambda_port.raw_writer, "write_raw_documents", lambda bucket, docs: ["BCB/bcb:a.txt"])
+
+    class BrokenBedrockClient:
+        def start_ingestion_job(self, **kwargs):
+            raise RuntimeError("KB sync failed")
+
+    monkeypatch.setattr(lambda_port.boto3, "client", lambda *args, **kwargs: BrokenBedrockClient())
+
+    response = lambda_port.lambda_handler({}, None)
+
+    assert response["statusCode"] == 200

@@ -12,7 +12,7 @@ from typing import Any
 import boto3
 
 from src.diff.engine import DynamoDbState, detect_new
-from src.ingest import bcb_ifdata, bcb_normativos, cvm_fundos
+from src.ingest import bcb_ifdata, bcb_normativos, cvm_fundos, raw_writer
 
 
 def _new_since_last_run(source: str, docs: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -22,6 +22,36 @@ def _new_since_last_run(source: str, docs: list[dict[str, Any]]) -> list[dict[st
     except Exception as exc:  # pragma: no cover - defensive handling for state-table issues
         print(f"Warning: {source} diff state unavailable, treating all as new: {exc}")
         return docs
+
+
+def _populate_corpus_and_sync(new_docs: list[dict[str, Any]]) -> None:
+    """Write new docs to the raw corpus bucket and trigger a KB ingestion sync.
+
+    A corpus/sync failure must never break the digest response, matching the
+    graceful-degradation pattern used for every other external call here.
+    """
+    raw_bucket = os.environ.get("ONCA_RAW_BUCKET")
+    if not raw_bucket:
+        return
+
+    try:
+        written = raw_writer.write_raw_documents(raw_bucket, new_docs)
+    except Exception as exc:  # pragma: no cover - defensive handling for S3 write failures
+        print(f"Warning: raw corpus write failed: {exc}")
+        return
+
+    if not written:
+        return
+
+    kb_id = os.environ.get("ONCA_KB_ID")
+    data_source_id = os.environ.get("ONCA_KB_DATA_SOURCE_ID")
+    if not kb_id or not data_source_id:
+        return
+
+    try:
+        boto3.client("bedrock-agent").start_ingestion_job(knowledgeBaseId=kb_id, dataSourceId=data_source_id)
+    except Exception as exc:  # pragma: no cover - defensive handling for KB sync failures
+        print(f"Warning: KB ingestion sync failed: {exc}")
 
 
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
@@ -52,6 +82,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     new_normativos = _new_since_last_run("bcb_normativos", normativos)
     new_funds = _new_since_last_run("cvm_fundos", funds)
+
+    _populate_corpus_and_sync(new_normativos + new_funds)
 
     payload = {
         "regulatory": {"count": len(normativos), "new_count": len(new_normativos), "items": new_normativos[:5]},
