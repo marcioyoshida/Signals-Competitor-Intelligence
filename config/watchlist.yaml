@@ -1,0 +1,10 @@
+# Onça watchlist configuration
+lookback_days: 7
+
+# Substrings matched against CVM fund administrator names (case-insensitive).
+# Replace with your actual competitor set.
+competitors:
+  - ITAU
+  - BTG PACTUAL
+  - NU INVEST
+  - XP INVESTIMENTOS
