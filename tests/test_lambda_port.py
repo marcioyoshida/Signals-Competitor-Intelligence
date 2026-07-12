@@ -114,6 +114,29 @@ def test_lambda_handler_continues_when_ifdata_base_date_lookup_raises(monkeypatc
     assert payload["market"]["items"] == []
 
 
+def test_lambda_handler_continues_when_institution_names_lookup_raises(monkeypatch):
+    def broken_fetch_institution_names(base_date):
+        raise RuntimeError("IfDataCadastro endpoint timed out")
+
+    monkeypatch.setattr(lambda_port, "_new_since_last_run", lambda source, docs: docs)
+    monkeypatch.setattr(lambda_port.bcb_normativos, "fetch_recent", lambda days=7, types=None: [])
+    monkeypatch.setattr(lambda_port.cvm_fundos, "fetch_funds", lambda watchlist_admins=None: [])
+    monkeypatch.setattr(lambda_port.bcb_ifdata, "latest_base_date", lambda: 202603)
+    monkeypatch.setattr(
+        lambda_port.bcb_ifdata,
+        "fetch_institutions",
+        lambda base_date=None: [{"CodInst": "00068987", "NomeColuna": "Ativo Total", "Saldo": 100.0}],
+    )
+    monkeypatch.setattr(lambda_port.bcb_ifdata, "fetch_institution_names", broken_fetch_institution_names)
+
+    response = lambda_port.lambda_handler({}, None)
+
+    assert response["statusCode"] == 200
+    payload = json.loads(response["body"])
+    assert payload["market"]["count"] == 0
+    assert payload["market"]["items"] == []
+
+
 def test_lambda_handler_continues_when_all_ingesters_raise(monkeypatch):
     monkeypatch.setattr(lambda_port, "_new_since_last_run", lambda source, docs: docs)
     monkeypatch.setattr(
