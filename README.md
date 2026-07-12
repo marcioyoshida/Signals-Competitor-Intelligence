@@ -16,6 +16,11 @@ AWS account: my2027 (668449743071), region us-east-1.
     pip install -r requirements.txt
     python run.py
 
+### Phase 1.5 prototype
+
+    . .venv/bin/activate
+    python -c "from src.ingest.lambda_port import lambda_handler; print(lambda_handler({}, None))"
+
 First run seeds state; subsequent runs report genuine deltas only.
 See CLAUDE.md "caveats" — API response field names need a one-time
 alignment against live responses.

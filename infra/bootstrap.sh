@@ -16,7 +16,21 @@ if [ "$CALLER" != "$ACCOUNT_ID" ]; then
 fi
 echo "OK — $PROFILE → $ACCOUNT_ID"
 
+echo "── 1b. Check for Windows-side CDK compatibility"
+if [ -d /mnt/c/Users/MY/.aws ] && [ ! -s /mnt/c/Users/MY/.aws/credentials ]; then
+  echo "WARNING: CDK running from Windows may not see the AWS profile from WSL."
+  echo "Create matching credentials in /mnt/c/Users/MY/.aws/credentials or export AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY before running CDK."
+fi
+
 echo "── 2. CDK bootstrap (required once per account+region)"
+export AWS_PROFILE="$PROFILE"
+export AWS_DEFAULT_PROFILE="$PROFILE"
+export AWS_REGION="$REGION"
+export AWS_DEFAULT_REGION="$REGION"
+export AWS_SDK_LOAD_CONFIG=1
+export AWS_CONFIG_FILE="${AWS_CONFIG_FILE:-$HOME/.aws/config}"
+export AWS_SHARED_CREDENTIALS_FILE="${AWS_SHARED_CREDENTIALS_FILE:-$HOME/.aws/credentials}"
+
 npx cdk bootstrap "aws://$ACCOUNT_ID/$REGION" --profile "$PROFILE"
 
 echo "── 3. Baseline S3 buckets (raw landing + digests)"

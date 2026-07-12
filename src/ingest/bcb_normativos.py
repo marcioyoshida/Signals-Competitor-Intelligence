@@ -37,9 +37,19 @@ def fetch_recent(days: int = 7, types: list[str] | None = None) -> list[dict[str
         "rows": 100,
         "sort": "data desc",
     }
-    resp = requests.get(SEARCH_URL, params=params, timeout=30)
-    resp.raise_for_status()
-    rows = resp.json().get("conteudo", [])
+
+    try:
+        resp = requests.get(SEARCH_URL, params=params, timeout=30)
+        resp.raise_for_status()
+    except requests.RequestException as exc:
+        print(f"Warning: BCB normativos fetch failed: {exc}")
+        return []
+
+    try:
+        rows = resp.json().get("conteudo", [])
+    except ValueError:
+        print("Warning: BCB normativos returned invalid JSON")
+        return []
 
     docs = []
     for row in rows:

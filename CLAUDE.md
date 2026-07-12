@@ -71,7 +71,9 @@ licensed aggregator (People Data Labs / Explorium), never scraped.
   are best-effort against docs — align against live API responses on
   first run before building on top.
 - **Phase 1.5** — Lambda/CDK port: each fetch_* → Lambda + EventBridge
-  cron; JsonState → DynamoDB; digest → S3
+  cron; JsonState → DynamoDB; digest → S3. A lightweight prototype now
+  exists in `src/ingest/lambda_port.py` and `infra/app.py` for the first
+  lambda-style wiring pass.
 - **Phase 2** — Bedrock KB + AgentCore synthesis loop with citations;
   correlation logic (regulatory event + competitor signal → one
   flagged narrative). This correlation IS the product.
