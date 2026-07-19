@@ -87,7 +87,8 @@ Six ingesters, pure `fetch_*` functions, plus a two-mode diff engine
 | `bcb_autorizacoes.py` | **Instituicoes_em_funcionamento** | new entrants | detect_new (seeded) | yes | yes |
 | `bcb_juros.py` | **taxaJuros v2 daily** | rate moves by product | detect_moves | yes | yes |
 | `cvm_ofertas.py` | **CVM oferta-distrib ZIP** | capital raise / launch | detect_new (seeded) | yes | yes |
-| `cvm_fundos.py` | CVM cad_fi | watchlisted fund launches | detect_new | yes | yes |
+| `cvm_inf_diario.py` | **Informe Diário + RCVM175 reg** | fund AUM moves | detect_moves | yes | yes |
+| `cvm_fundos.py` | CVM cad_fi (legacy) | watchlisted fund launches | detect_new | yes | yes |
 | `sec_filings.py` | SEC EDGAR | US-listed fintech filings | detect_new | yes | **not yet** |
 
 `run.py` → local digest; `src/ingest/lambda_port.py` → daily EventBridge
@@ -135,7 +136,7 @@ HEADERS — SEC blocks requests without a real contact UA.
    (`docs/AWS_BEDROCK_QUOTA_TICKET.md`); prove ingestion + Retrieve.
 2. **Stage B harden** — deploy synthesis Lambda; live dry-run on real
    digests; tune candidate fusion; enable LLM when Converse works.
-3. **Next data sources:** CVM Informe Diário; optional SEC on Lambda.
+3. **Next data sources:** optional deeper SEC text extraction; BCB SCR.
 4. **Phase 3** — dashboard + alerts (consume `narratives/` in S3).
 5. **Phase 4** — design partners, then Marketplace SaaS listing.
 

@@ -194,6 +194,20 @@ class OncaPrototypeStack(Stack):
                     watchlist.get("sec_user_agent")
                     or "Onca Competitive Intelligence marcioyoshida@gmail.com"
                 ),
+                "ONCA_INF_DIARIO_WATCHLIST": ",".join(
+                    str(x) for x in (watchlist.get("inf_diario_watchlist") or [])
+                ),
+                "ONCA_INF_DIARIO_USE_COMPETITORS": (
+                    "true"
+                    if watchlist.get("inf_diario_use_competitors_watchlist", True)
+                    else "false"
+                ),
+                "ONCA_INF_DIARIO_MOVE_THRESHOLD_PCT": str(
+                    watchlist.get("inf_diario_move_threshold_pct", 10.0)
+                ),
+                "ONCA_INF_DIARIO_TOP_N": str(
+                    watchlist.get("inf_diario_top_n") or ""
+                ),
                 "ONCA_RAW_BUCKET": raw_bucket.bucket_name,
                 "ONCA_KB_ID": knowledge_base.attr_knowledge_base_id,
                 "ONCA_KB_DATA_SOURCE_ID": data_source.attr_data_source_id,

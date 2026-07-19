@@ -12,6 +12,7 @@ Sources:
   - BCB juros médios (pricing moves) — detect_moves via DynamoDB value state
   - CVM ofertas de distribuição — detect_new, first-run seed suppressed
   - SEC EDGAR (US-listed fintechs) — detect_new, first-run seed suppressed
+  - CVM Informe Diário (fund AUM moves) — detect_moves via DynamoDB value state
 """
 from __future__ import annotations
 
@@ -29,6 +30,7 @@ from src.ingest import (
     bcb_normativos,
     bcb_pix,
     cvm_fundos,
+    cvm_inf_diario,
     cvm_ofertas,
     raw_writer,
     sec_filings,
@@ -149,6 +151,16 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         ofertas_watch = competitors
     sec_tickers = _csv_env("ONCA_SEC_TICKERS")
     sec_lookback = int(os.environ.get("ONCA_SEC_LOOKBACK_DAYS", "365"))
+    inf_diario_watch = _csv_env("ONCA_INF_DIARIO_WATCHLIST")
+    if not inf_diario_watch and os.environ.get(
+        "ONCA_INF_DIARIO_USE_COMPETITORS", "true"
+    ).lower() in ("1", "true", "yes"):
+        inf_diario_watch = competitors
+    inf_diario_threshold = float(
+        os.environ.get("ONCA_INF_DIARIO_MOVE_THRESHOLD_PCT", "10.0")
+    )
+    inf_diario_top = os.environ.get("ONCA_INF_DIARIO_TOP_N", "").strip()
+    inf_diario_top_n = int(inf_diario_top) if inf_diario_top else None
 
     try:
         normativos = bcb_normativos.fetch_recent(days=lookback_days)
@@ -251,10 +263,29 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as exc:  # pragma: no cover
             print(f"Warning: SEC EDGAR fetch failed: {exc}")
 
+    # CVM Informe Diário — fund AUM moves for watchlisted admins.
+    inf_diario_rows: list[dict[str, Any]] = []
+    inf_diario_moves: list[dict[str, Any]] = []
+    if inf_diario_watch:
+        try:
+            inf_diario_rows = cvm_inf_diario.fetch_latest(
+                watchlist_admins=inf_diario_watch,
+                top_n=inf_diario_top_n,
+            )
+            inf_diario_moves = _moves_since_last_run(
+                "cvm_inf_diario",
+                cvm_inf_diario.for_moves(inf_diario_rows),
+                key_field="move_key",
+                value_field="pl",
+                min_pct=inf_diario_threshold,
+            )
+        except Exception as exc:  # pragma: no cover
+            print(f"Warning: CVM Informe Diário fetch failed: {exc}")
+
     new_normativos = _new_since_last_run("bcb_normativos", normativos)
     new_funds = _new_since_last_run("cvm_fundos", funds)
 
-    # Corpus gets document-like signals only (not numeric Pix/juros moves).
+    # Corpus gets document-like signals only (not numeric Pix/juros/AUM moves).
     _populate_corpus_and_sync(
         new_normativos + new_funds + new_entrants + new_ofertas + new_sec
     )
@@ -295,6 +326,12 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             "count": len(sec_filings_rows),
             "new_count": len(new_sec),
             "items": new_sec[:10],
+        },
+        "inf_diario_moves": {
+            "funds_tracked": len(inf_diario_rows),
+            "as_of": (inf_diario_rows[0].get("date") if inf_diario_rows else None),
+            "move_count": len(inf_diario_moves),
+            "items": inf_diario_moves[:10],
         },
         "source": "lambda_port",
     }

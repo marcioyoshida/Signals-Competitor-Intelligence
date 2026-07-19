@@ -22,6 +22,8 @@ def _auto_stub_external_sources(monkeypatch):
     monkeypatch.setattr(lambda_port.bcb_juros, "for_moves", lambda rows: rows)
     monkeypatch.setattr(lambda_port.cvm_ofertas, "fetch_recent", lambda **kwargs: [])
     monkeypatch.setattr(lambda_port.sec_filings, "fetch_filings", lambda *a, **k: [])
+    monkeypatch.setattr(lambda_port.cvm_inf_diario, "fetch_latest", lambda **kwargs: [])
+    monkeypatch.setattr(lambda_port.cvm_inf_diario, "for_moves", lambda rows: rows)
 
 
 class FakeStateTable:
@@ -85,6 +87,8 @@ def test_lambda_handler_returns_digest_payload_when_ingesters_fail(monkeypatch):
     assert payload["ofertas"]["new_count"] == 0
     assert payload["sec_filings"]["count"] == 0
     assert payload["sec_filings"]["new_count"] == 0
+    assert payload["inf_diario_moves"]["funds_tracked"] == 0
+    assert payload["inf_diario_moves"]["move_count"] == 0
 
 
 def test_lambda_handler_passes_watchlist_config_to_ingesters(monkeypatch):

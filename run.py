@@ -26,6 +26,7 @@ from src.ingest import (
     bcb_normativos,
     bcb_pix,
     cvm_fundos,
+    cvm_inf_diario,
     cvm_ofertas,
     sec_filings,
 )
@@ -191,6 +192,40 @@ def main() -> None:
         print(f"\nCompetitor — CVM ofertas skipped ({type(e).__name__}: {e})")
         print("  Run `python -m src.ingest.cvm_ofertas inspect` to verify the dataset.")
 
+    # CVM Informe Diário — AUM moves for watchlisted fund admins.
+    inf_diario_moves = []
+    try:
+        inf_watch = list(cfg.get("inf_diario_watchlist") or [])
+        if not inf_watch and cfg.get("inf_diario_use_competitors_watchlist", True):
+            inf_watch = list(cfg.get("competitors") or [])
+        top_n = cfg.get("inf_diario_top_n")
+        inf_rows = cvm_inf_diario.fetch_latest(
+            watchlist_admins=inf_watch or None,
+            top_n=int(top_n) if top_n else None,
+        )
+        inf_diario_moves = detect_moves(
+            "cvm_inf_diario",
+            cvm_inf_diario.for_moves(inf_rows),
+            key_field="move_key",
+            value_field="pl",
+            min_pct=float(cfg.get("inf_diario_move_threshold_pct", 10.0)),
+        )
+        as_of = inf_rows[0].get("date") if inf_rows else "?"
+        print(
+            f"\nCompetitor — {len(inf_diario_moves)} fund AUM moves "
+            f"({len(inf_rows)} funds as of {as_of}):"
+        )
+        for m in inf_diario_moves[:20]:
+            arrow = "↑" if m["pct_change"] > 0 else "↓"
+            print(
+                f"  {arrow} {m['pct_change']:+.1f}%  "
+                f"PL R$ {(m.get('pl') or 0):,.0f}  "
+                f"{(m.get('fund_name') or m.get('cnpj') or '?')[:45]}"
+            )
+    except Exception as e:  # noqa: BLE001
+        print(f"\nCompetitor — Informe Diário skipped ({type(e).__name__}: {e})")
+        print("  Run `python -m src.ingest.cvm_inf_diario inspect`.")
+
     digest = {
         "new_normativos": new_norms,
         "new_fund_filings": new_funds,
@@ -199,6 +234,7 @@ def main() -> None:
         "new_sec_filings": new_sec,
         "juros_moves": juros_moves,
         "new_ofertas": new_ofertas,
+        "inf_diario_moves": inf_diario_moves,
     }
     out = Path(__file__).parent / "data" / "latest_digest.json"
     out.write_text(json.dumps(digest, ensure_ascii=False, indent=2))

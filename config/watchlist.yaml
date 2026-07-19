@@ -38,6 +38,16 @@ ofertas_lookback_days: 30
 ofertas_watchlist: []
 ofertas_use_competitors_watchlist: true
 
+# CVM Informe Diário (fund AUM + daily flows). Joins RCVM 175 registry to
+# monthly inf_diario_fi_YYYYMM.zip. Empty watchlist + use_competitors →
+# reuse competitors (admin/gestor name substrings).
+inf_diario_watchlist: []
+inf_diario_use_competitors_watchlist: true
+# Relative % AUM (VL_PATRIM_LIQ) move to flag (first run seeds baseline).
+inf_diario_move_threshold_pct: 10.0
+# Optional cap by PL after filter (null/omit = all watchlisted funds that day).
+# inf_diario_top_n: 500
+
 # US-listed Brazilian fintechs to track via SEC EDGAR. Empty = skip SEC
 # entirely (appropriate if your target customer is a bank/insurer and
 # these acquirers/fintechs aren't relevant competitors).

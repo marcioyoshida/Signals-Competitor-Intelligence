@@ -82,7 +82,11 @@ def _all_competitor_signals(
         ("entrants", _section_items(digest, "new_entrants") or digest.get("new_entrants") or []),
         ("pix_moves", _section_items(digest, "pix_moves") or digest.get("pix_moves") or []),
         ("juros_moves", _section_items(digest, "juros_moves") or digest.get("juros_moves") or []),
-        ("sec", digest.get("new_sec_filings") or []),
+        (
+            "inf_diario_moves",
+            _section_items(digest, "inf_diario_moves") or digest.get("inf_diario_moves") or [],
+        ),
+        ("sec", digest.get("new_sec_filings") or _section_items(digest, "sec_filings") or []),
     ]
     out: list[tuple[str, list[dict[str, Any]]]] = []
     for name, items in mapping:

@@ -198,13 +198,21 @@ These reveal what a competitor is *actually doing*, not just what rules changed.
 - **Access:** OData — `olinda.bcb.gov.br/olinda/servico/IFDATA/versao/v1`
 - **Implemented:** `src/ingest/bcb_ifdata.py`
 
-### CVM — Informe Diário de Fundos (daily fund reports)
-- **What:** Per-fund daily: total portfolio value, net worth (PL), quota value, inflows/outflows (captações/resgates)
-- **CI value:** ★★★★☆ — competitor fund **AUM and flows** = product traction + investor sentiment. TP_FUNDO column added
-- **Access:** monthly ZIP CSVs, dados.cvm.gov.br/dataset/fi-doc-inf_diario (pre-2021 in /HIST)
-- **Signal:** competitor fund AUM growth, net inflows vs. outflows
-- **Note:** large — one file per month, ZIP-compressed; stream + filter to watchlist CNPJs
-- **Status:** not implemented
+### CVM — Informe Diário de Fundos (daily fund reports) *(in Lambda + local)*
+- **What:** Per-class daily: portfolio total, PL (`VL_PATRIM_LIQ`), quota, captação, resgate, cotistas
+- **CI value:** ★★★★☆ — competitor fund **AUM and flows** = product traction + investor sentiment
+- **Access:** monthly ZIP CSVs — `dados.cvm.gov.br/dataset/fi-doc-inf_diario`
+  - ZIP: `.../FI/DOC/INF_DIARIO/DADOS/inf_diario_fi_YYYYMM.zip` (~300k rows/month)
+  - Registry join (RCVM 175): `registro_fundo_classe.zip` (`registro_fundo` + `registro_classe`)
+  - **Not** legacy `cad_fi.csv` (mostly cancelled / non-adapted funds)
+- **Live schema (inf_diario):** `TP_FUNDO_CLASSE`, `CNPJ_FUNDO_CLASSE`, `ID_SUBCLASSE`,
+  `DT_COMPTC`, `VL_TOTAL`, `VL_QUOTA`, `VL_PATRIM_LIQ`, `CAPTC_DIA`, `RESG_DIA`, `NR_COTST`
+- **Watchlist:** admin/gestor substrings on `registro_fundo` → class CNPJs
+- **As-of date:** most recent competency date with ≥50% of peak daily volume
+  (avoids sparse late-filer days)
+- **Signal:** `detect_moves` on PL by `move_key=cnpj`; first run seeds
+- **Implemented:** `src/ingest/cvm_inf_diario.py`. Verify:
+  `python -m src.ingest.cvm_inf_diario inspect`
 
 ### CVM — Companhias Abertas: DFP / ITR (financial statements)
 - **What:** Standardized annual (DFP) + quarterly (ITR) financial statements of listed companies; now include "Dados da Empresa / Composição do Capital" and Pareceres e Declarações sections
@@ -260,6 +268,7 @@ coordinators — relationship-graph enrichment, not a standalone signal.
 | BCB institutions in operation | `bcb_autorizacoes.py` | yes | yes | detect_new (seeded) |
 | BCB juros médios (daily) | `bcb_juros.py` | yes | yes | detect_moves |
 | CVM ofertas distribuição | `cvm_ofertas.py` | yes | yes | detect_new (seeded) |
+| CVM Informe Diário | `cvm_inf_diario.py` | yes | yes | detect_moves (PL) |
 | SEC EDGAR | `sec_filings.py` | yes | yes | detect_new (seeded) |
 | BCB SPI aggregate | `bcb_pix.fetch_spi` | CLI | no | n/a |
 
@@ -278,7 +287,7 @@ Lambda env (from `config/watchlist.yaml` via CDK):
    (`Instituicoes_em_funcionamento`; first-run seed).
 3. ~~**Juros médios**~~ — DONE + **live-aligned** (`TaxasJurosDiariaPorInicioPeriodo`).
 4. ~~**CVM Ofertas de Distribuição**~~ — DONE + **live-aligned** (`oferta_resolucao_160.csv`).
-5. **CVM Informe Diário** — fund AUM + flows (heavier; ZIP streaming).
+5. ~~**CVM Informe Diário**~~ — DONE (`registro_fundo_classe` join + PL moves).
 6. ~~**SEC on Lambda**~~ — DONE (real User-Agent + seed; tickers in watchlist).
 
 Already implemented: IF.data (market share), cad_fi (fund launches),
