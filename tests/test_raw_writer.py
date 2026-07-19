@@ -73,12 +73,14 @@ def test_write_raw_documents_writes_text_and_metadata_for_competitor_doc(monkeyp
     assert "BANCO DA AMAZÔNIA S.A." in text
 
     # No url and no fund_class value for this doc — must be omitted, not crash or write empty strings.
+    # fund_name is surfaced as citation metadata "name".
     metadata = json.loads(fake.objects[f"{written[0]}.metadata.json"])
     assert metadata == {
         "metadataAttributes": {
             "source": "CVM",
             "kind": "competitor",
             "date": "2004-08-02",
+            "name": "AMAZÔNIA CREDIT 90",
         }
     }
 

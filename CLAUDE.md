@@ -73,37 +73,30 @@ licensed aggregator (People Data Labs / Explorium), never scraped.
 - **Phase 0** — customer discovery (5–10 strategist interviews),
   Marketplace seller registration, AWS credits applications
 - **Phase 1 (done)** — data spine: ingesters + diff engine + digest.
-  `bcb_normativos.py`, `bcb_ifdata.py`, `cvm_fundos.py`, `diff/engine.py`,
-  `run.py`. All three ingesters validated against live API responses
-  (see docs/2026-07-12-lambda-diff-wiring.md and the BCB normativos fix
-  — the SharePoint search API, not the page HTML, is the real source).
-- **Phase 1.5 (done)** — Lambda/CDK port: each fetch_* → Lambda +
-  EventBridge cron; JsonState → DynamoDB; digest → S3. Deployed and
-  validated live (`src/ingest/lambda_port.py`, `infra/app.py`).
-- **Phase 2 (CURRENT)** — Bedrock KB + AgentCore synthesis loop with
-  citations; correlation logic (regulatory event + competitor signal →
-  one flagged narrative). This correlation IS the product.
-  **Stage A (infra deployed, blocked on account quota)** — new
-  regulatory/competitor docs are written to `onca-raw-{account}`
-  (`src/ingest/raw_writer.py`) and a Bedrock Knowledge Base backed by S3
-  Vectors is provisioned (`infra/app.py`), wired into the existing ingest
-  Lambda. Live-validated through corpus population (raw docs + metadata
-  land in S3 correctly). `StartIngestionJob` (embedding sync) is currently
-  blocked — this account's on-demand throughput quota is 0 for every
-  Bedrock embedding model, a fresh-account provisioning gap, not a config
-  bug. See docs/2026-07-12-phase2-stage-a-knowledge-base.md before
-  touching this further — needs an AWS Support quota increase (or the
-  Cohere Embed V4 cross-region quota lead investigated) before retrieval
-  can be proven end-to-end. **Stage B (not started)** — the
-  correlation/synthesis Lambda that actually reads the KB and produces
-  flagged narratives with citations.
+  Modules: normativos, IF.data, CVM funds, Pix DICT keys, autorizações,
+  SEC (local), `diff/engine.py`, `run.py`. See DATA_SOURCES.md for
+  **live-verified** Pix/autorizações schemas (2026-07-19).
+- **Phase 1.5 (done, extended 2026-07-19)** — Lambda + EventBridge +
+  DynamoDB state + S3 digests. Live digest sources: normativos, CVM
+  funds, IF.data, **autorizações** (seeded detect_new), **Pix DICT keys**
+  (detect_moves). Env from watchlist: competitors, ISPB list, Pix move
+  threshold. SEC not on Lambda yet. Smoke-tested in my2027.
+- **Phase 2 (CURRENT)** — Bedrock KB + synthesis loop with citations;
+  correlation logic (regulatory event + competitor signal → one flagged
+  narrative). This correlation IS the product.
+  **Stage A (infra deployed, blocked on account quota)** — raw corpus to
+  `onca-raw-{account}` + Bedrock KB (S3 Vectors). Corpus write live-ok;
+  `StartIngestionJob` blocked by **0 embedding on-demand quota**. See
+  docs/2026-07-12-phase2-stage-a-knowledge-base.md. **Stage B (not
+  started)** — synthesis/correlation Lambda.
 - **Phase 3** — dashboard + alerts
 - **Phase 4** — design partners, then Marketplace SaaS listing
 
 ## Conventions
 
 - Python 3.11+, type hints, small pure fetch functions (Lambda-portable)
-- State behind a narrow interface (JsonState now, DynamoDB later)
+- State behind a narrow interface (JsonState / ValueState local;
+  DynamoDbState / DynamoDbValueState in Lambda)
 - Every synthesized output must carry source URLs — no uncited claims
 - Prototype cost ceiling: ~$100/month. Before adding any managed
   service, check its idle/floor cost.

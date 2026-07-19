@@ -16,19 +16,24 @@ AWS account: my2027 (668449743071), region us-east-1.
     pip install -r requirements.txt
     python run.py
 
-### Phase 1.5 prototype
-
-    . .venv/bin/activate
-    python -c "from src.ingest.lambda_port import lambda_handler; print(lambda_handler({}, None))"
-
 First run seeds state; subsequent runs report genuine deltas only.
 See CLAUDE.md "caveats" — API response field names need a one-time
 alignment against live responses.
 
 ## Layout
 
-    src/ingest/    BCB normativos, IF.data market share, CVM fund filings
-    src/diff/      change detection (the product's atomic unit)
-    run.py         digest runner → data/latest_digest.json
-    config/        watchlist (competitors, lookback)
-    infra/         AWS bootstrap for account 668449743071
+    src/ingest/    BCB normativos, IF.data, Pix DICT keys, autorizações,
+                   CVM funds, SEC filings, Lambda handler
+    src/diff/      change detection (detect_new + detect_moves)
+    run.py         local digest runner → data/latest_digest.json
+    config/        watchlist (competitors, ISPB, thresholds)
+    infra/         CDK stack (Lambda, DynamoDB, S3, Bedrock KB)
+    docs/          CONTEXT, DATA_SOURCES (live schemas), phase notes
+
+## Status (2026-07-19)
+
+Phase 1.5 Lambda on my2027 digests: normativos, CVM funds, IF.data,
+autorizações (~1.7k institutions, seeded), Pix DICT keys (~872 ISPBs).
+Phase 2 Stage A KB infra is up; embedding sync still blocked on Bedrock
+quota. Details: [docs/CONTEXT.md](docs/CONTEXT.md),
+[docs/DATA_SOURCES.md](docs/DATA_SOURCES.md).

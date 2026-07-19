@@ -8,3 +8,23 @@ competitors:
   - BTG PACTUAL
   - NU INVEST
   - XP INVESTIMENTOS
+
+# Pix competitor tracking (BCB Pix statistics).
+# ISPB = 8-digit institution identifier in the SPI. Find via BCB's
+# participant list; leave empty to rank all institutions.
+# Examples (VERIFY before use): Nubank 18236120, Itaú 60701190, BTG 30306294
+competitor_ispb: []
+
+# Minimum month-over-month % change in Pix value to flag as a signal.
+pix_move_threshold_pct: 15.0
+
+# US-listed Brazilian fintechs to track via SEC EDGAR. Empty = skip SEC
+# entirely (appropriate if your target customer is a bank/insurer and
+# these acquirers/fintechs aren't relevant competitors).
+# STNE=Stone, PAGS=PagSeguro, NU=Nu Holdings, INTR=Inter&Co, XP=XP Inc
+sec_tickers:
+  - STNE
+  - PAGS
+  - NU
+  - INTR
+  - XP

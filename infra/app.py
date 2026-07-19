@@ -151,6 +151,13 @@ class OncaPrototypeStack(Stack):
                 "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
                 "ONCA_LOOKBACK_DAYS": str(watchlist.get("lookback_days", 7)),
                 "ONCA_COMPETITORS": ",".join(watchlist.get("competitors", [])),
+                # Pix: empty ISPB list = rank all institutions (noisier).
+                "ONCA_COMPETITOR_ISPB": ",".join(
+                    str(x) for x in (watchlist.get("competitor_ispb") or [])
+                ),
+                "ONCA_PIX_MOVE_THRESHOLD_PCT": str(
+                    watchlist.get("pix_move_threshold_pct", 15.0)
+                ),
                 "ONCA_RAW_BUCKET": raw_bucket.bucket_name,
                 "ONCA_KB_ID": knowledge_base.attr_knowledge_base_id,
                 "ONCA_KB_DATA_SOURCE_ID": data_source.attr_data_source_id,

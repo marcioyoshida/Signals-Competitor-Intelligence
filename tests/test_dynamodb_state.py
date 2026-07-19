@@ -6,7 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from src.diff.engine import DynamoDbState, detect_new
 
 
-def test_detect_new_uses_dynamodb_state_when_available(monkeypatch):
+def test_detect_new_uses_dynamodb_state_when_available():
     calls = []
 
     class FakeTable:
@@ -14,10 +14,11 @@ def test_detect_new_uses_dynamodb_state_when_available(monkeypatch):
             self.items = {}
 
         def get_item(self, Key):
-            return {"Item": {"id": self.items.get(Key["id"])} } if Key["id"] in self.items else {}
+            item = self.items.get((Key["source"], Key["id"]))
+            return {"Item": item} if item is not None else {}
 
         def put_item(self, Item):
-            self.items[Item["id"]] = Item["id"]
+            self.items[(Item["source"], Item["id"])] = Item
             calls.append(Item)
 
     state = DynamoDbState("demo", table=FakeTable())
@@ -29,3 +30,5 @@ def test_detect_new_uses_dynamodb_state_when_available(monkeypatch):
 
     assert fresh == [{"id": "b"}]
     assert calls
+    # Final save should include both ids in the meta record.
+    assert set(calls[-1]["seen"]) == {"a", "b"}

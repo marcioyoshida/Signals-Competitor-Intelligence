@@ -2,6 +2,13 @@
 
 This keeps the fetch functions pure and exposes a single event handler that
 can later be wired to EventBridge + Lambda with minimal changes.
+
+Sources:
+  - BCB normativos (regulatory) — detect_new
+  - CVM cad_fi funds (competitor) — detect_new
+  - BCB IF.data market share — snapshot (no id-diff)
+  - BCB autorizações (new entrants) — detect_new, first-run seed suppressed
+  - BCB Pix (traction moves) — detect_moves via DynamoDB value state
 """
 from __future__ import annotations
 
@@ -11,17 +18,68 @@ from typing import Any
 
 import boto3
 
-from src.diff.engine import DynamoDbState, detect_new
-from src.ingest import bcb_ifdata, bcb_normativos, cvm_fundos, raw_writer
+from src.diff.engine import DynamoDbState, DynamoDbValueState, detect_moves, detect_new
+from src.ingest import bcb_autorizacoes, bcb_ifdata, bcb_normativos, bcb_pix, cvm_fundos, raw_writer
 
 
-def _new_since_last_run(source: str, docs: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Diff docs against DynamoDB-backed state; degrade to 'everything is new' on failure."""
+def _new_since_last_run(
+    source: str,
+    docs: list[dict[str, Any]],
+    *,
+    seed_if_empty: bool = False,
+) -> list[dict[str, Any]]:
+    """Diff docs against DynamoDB-backed state; degrade gracefully on failure.
+
+    When seed_if_empty is True (autorizações registry), the first run with
+    an empty state table seeds the baseline and reports nothing — otherwise
+    every authorized institution would appear as a "new entrant".
+    """
     try:
-        return detect_new(source, docs, state=DynamoDbState(source))
+        state = DynamoDbState(source)
+        if hasattr(state, "load"):
+            state.load()
+        was_empty = len(state.seen) == 0
+        fresh = detect_new(source, docs, state=state)
+        if seed_if_empty and was_empty and docs:
+            print(
+                f"Info: {source} baseline seeded ({len(docs)} items); "
+                "new items will surface from the next run on."
+            )
+            return []
+        return fresh
     except Exception as exc:  # pragma: no cover - defensive handling for state-table issues
-        print(f"Warning: {source} diff state unavailable, treating all as new: {exc}")
+        print(f"Warning: {source} diff state unavailable: {exc}")
+        # Never dump a full authorization registry as "new" when state is broken.
+        if seed_if_empty:
+            return []
         return docs
+
+
+def _moves_since_last_run(
+    source: str,
+    items: list[dict[str, Any]],
+    key_field: str,
+    value_field: str,
+    min_pct: float,
+) -> list[dict[str, Any]]:
+    """Compare numeric series against DynamoDB value state; no inventing moves on failure."""
+    try:
+        state = DynamoDbValueState(source)
+        return detect_moves(
+            source,
+            items,
+            key_field=key_field,
+            value_field=value_field,
+            min_pct=min_pct,
+            state=state,
+        )
+    except Exception as exc:  # pragma: no cover - defensive handling for state-table issues
+        print(f"Warning: {source} value state unavailable, skipping moves: {exc}")
+        return []
+
+
+def _csv_env(name: str) -> list[str]:
+    return [part.strip() for part in os.environ.get(name, "").split(",") if part.strip()]
 
 
 def _populate_corpus_and_sync(new_docs: list[dict[str, Any]]) -> None:
@@ -49,7 +107,9 @@ def _populate_corpus_and_sync(new_docs: list[dict[str, Any]]) -> None:
         return
 
     try:
-        boto3.client("bedrock-agent").start_ingestion_job(knowledgeBaseId=kb_id, dataSourceId=data_source_id)
+        boto3.client("bedrock-agent").start_ingestion_job(
+            knowledgeBaseId=kb_id, dataSourceId=data_source_id
+        )
     except Exception as exc:  # pragma: no cover - defensive handling for KB sync failures
         print(f"Warning: KB ingestion sync failed: {exc}")
 
@@ -57,7 +117,9 @@ def _populate_corpus_and_sync(new_docs: list[dict[str, Any]]) -> None:
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """Return a small digest payload for downstream Lambda/CDK wiring."""
     lookback_days = int(os.environ.get("ONCA_LOOKBACK_DAYS", "7"))
-    competitors = [c for c in os.environ.get("ONCA_COMPETITORS", "").split(",") if c]
+    competitors = _csv_env("ONCA_COMPETITORS")
+    competitor_ispb = _csv_env("ONCA_COMPETITOR_ISPB")
+    pix_threshold = float(os.environ.get("ONCA_PIX_MOVE_THRESHOLD_PCT", "15.0"))
 
     try:
         normativos = bcb_normativos.fetch_recent(days=lookback_days)
@@ -80,15 +142,63 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         market = []
         print(f"Warning: IF.data market fetch failed: {exc}")
 
+    # New entrants — authorized-entities registry (seed suppressed on first run).
+    authorized: list[dict[str, Any]] = []
+    new_entrants: list[dict[str, Any]] = []
+    try:
+        authorized = bcb_autorizacoes.fetch_authorized()
+        new_entrants = _new_since_last_run(
+            "bcb_autorizacoes", authorized, seed_if_empty=True
+        )
+    except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
+        print(f"Warning: BCB autorizações fetch failed: {exc}")
+
+    # Pix traction — month-over-month volume moves (first run seeds baseline only).
+    pix_by_inst: list[dict[str, Any]] = []
+    pix_moves: list[dict[str, Any]] = []
+    try:
+        pix_rows = bcb_pix.fetch_recent()
+        pix_by_inst = bcb_pix.by_institution(
+            pix_rows, watchlist_ispb=competitor_ispb or None
+        )
+        pix_moves = _moves_since_last_run(
+            "bcb_pix",
+            pix_by_inst,
+            key_field="ispb",
+            value_field="tx_value",
+            min_pct=pix_threshold,
+        )
+    except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
+        print(f"Warning: BCB Pix fetch failed: {exc}")
+
     new_normativos = _new_since_last_run("bcb_normativos", normativos)
     new_funds = _new_since_last_run("cvm_fundos", funds)
 
-    _populate_corpus_and_sync(new_normativos + new_funds)
+    # Corpus gets document-like signals only (not numeric Pix moves).
+    _populate_corpus_and_sync(new_normativos + new_funds + new_entrants)
 
     payload = {
-        "regulatory": {"count": len(normativos), "new_count": len(new_normativos), "items": new_normativos[:5]},
-        "competitor": {"count": len(funds), "new_count": len(new_funds), "items": new_funds[:5]},
+        "regulatory": {
+            "count": len(normativos),
+            "new_count": len(new_normativos),
+            "items": new_normativos[:5],
+        },
+        "competitor": {
+            "count": len(funds),
+            "new_count": len(new_funds),
+            "items": new_funds[:5],
+        },
         "market": {"count": len(market), "items": market},
+        "new_entrants": {
+            "count": len(authorized),
+            "new_count": len(new_entrants),
+            "items": new_entrants[:5],
+        },
+        "pix_moves": {
+            "institutions_tracked": len(pix_by_inst),
+            "move_count": len(pix_moves),
+            "items": pix_moves[:10],
+        },
         "source": "lambda_port",
     }
 
