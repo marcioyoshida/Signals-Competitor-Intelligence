@@ -88,12 +88,25 @@ From one digest payload:
 - Threat scoring model (placeholder `threat_score` heuristic only)
 - True AgentCore Runtime
 
+## Hardening (2026-07-19, no Bedrock)
+
+- Ingest digests now carry **`context` samples** (not only delta `items`)
+  and tag deltas with `is_new`, so Stage B still fuses after seeding.
+- Entity alias map (`src/synth/entities.py`) fuses SEC tickers, CVM leaders,
+  admins, and market labels (NU/Stone/Itaú/BTG/…).
+- Candidate kinds: `entity_fusion`, `regulatory_fusion`, `competitor:*`.
+- Heuristic narratives list multi-lens evidence with citation URLs.
+
 ## Verification
 
 ```bash
 python -m pytest tests/test_synth_*.py -q
 # Local dry run with a digest fixture:
 python -m src.synth.lambda_handler
+# Against a saved digest JSON:
+python -m src.synth.lambda_handler /tmp/real-digest.json
+# Against latest S3 digest:
+ONCA_DIGESTS_BUCKET=onca-digests-668449743071 python -m src.synth.lambda_handler --s3
 # After deploy:
 aws lambda invoke --function-name <OncaSynthesis...> --payload '{}' out.json
 ```

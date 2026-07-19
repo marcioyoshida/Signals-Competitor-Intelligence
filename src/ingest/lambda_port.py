@@ -97,6 +97,29 @@ def _csv_env(name: str) -> list[str]:
     return [part.strip() for part in os.environ.get(name, "").split(",") if part.strip()]
 
 
+def _tag_new(docs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Mark delta rows for Stage B prioritization without mutating originals."""
+    out: list[dict[str, Any]] = []
+    for d in docs:
+        if not isinstance(d, dict):
+            continue
+        row = {k: v for k, v in d.items() if k != "raw"}
+        row["is_new"] = True
+        out.append(row)
+    return out
+
+
+def _strip_raw(docs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Compact rows for digest context (drop bulky raw payloads)."""
+    out: list[dict[str, Any]] = []
+    for d in docs:
+        if not isinstance(d, dict):
+            continue
+        row = {k: v for k, v in d.items() if k != "raw"}
+        row.setdefault("is_new", False)
+        out.append(row)
+    return out
+
 def _populate_corpus_and_sync(new_docs: list[dict[str, Any]]) -> None:
     """Write new docs to the raw corpus bucket and trigger a KB ingestion sync.
 
@@ -290,48 +313,60 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         new_normativos + new_funds + new_entrants + new_ofertas + new_sec
     )
 
+    # Stage B fusion needs more than deltas: after seeding, items[] is often
+    # empty while pulls still succeed. Attach compact context samples and
+    # tag delta rows with is_new for prioritization.
     payload = {
         "regulatory": {
             "count": len(normativos),
             "new_count": len(new_normativos),
-            "items": new_normativos[:5],
+            "items": _tag_new(new_normativos[:8]),
+            "context": _strip_raw(normativos[:12]),
         },
         "competitor": {
             "count": len(funds),
             "new_count": len(new_funds),
-            "items": new_funds[:5],
+            "items": _tag_new(new_funds[:8]),
+            "context": _strip_raw(funds[:12]),
         },
-        "market": {"count": len(market), "items": market},
+        "market": {"count": len(market), "items": market, "context": market},
         "new_entrants": {
             "count": len(authorized),
             "new_count": len(new_entrants),
-            "items": new_entrants[:5],
+            "items": _tag_new(new_entrants[:8]),
+            "context": _strip_raw(new_entrants[:8] or authorized[:5]),
         },
         "pix_moves": {
             "institutions_tracked": len(pix_by_inst),
             "move_count": len(pix_moves),
-            "items": pix_moves[:10],
+            "items": _tag_new(pix_moves[:10]),
+            "context": _strip_raw(pix_by_inst[:15]),
         },
         "juros_moves": {
             "series_tracked": len(juros_focus),
             "move_count": len(juros_moves),
-            "items": juros_moves[:10],
+            "items": _tag_new(juros_moves[:10]),
+            "context": _strip_raw(juros_focus[:15]),
         },
         "ofertas": {
             "count": len(offerings),
             "new_count": len(new_ofertas),
-            "items": new_ofertas[:10],
+            "items": _tag_new(new_ofertas[:10]),
+            "context": _strip_raw(offerings[:15]),
         },
         "sec_filings": {
             "count": len(sec_filings_rows),
             "new_count": len(new_sec),
-            "items": new_sec[:10],
+            "items": _tag_new(new_sec[:10]),
+            "context": _strip_raw(sec_filings_rows[:15]),
         },
         "inf_diario_moves": {
             "funds_tracked": len(inf_diario_rows),
             "as_of": (inf_diario_rows[0].get("date") if inf_diario_rows else None),
             "move_count": len(inf_diario_moves),
-            "items": inf_diario_moves[:10],
+            "items": _tag_new(inf_diario_moves[:10]),
+            # Top-by-PL sample for entity fusion (already sorted in fetch_latest).
+            "context": _strip_raw(inf_diario_rows[:15]),
         },
         "source": "lambda_port",
     }

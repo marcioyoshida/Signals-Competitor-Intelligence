@@ -12,9 +12,27 @@ SYSTEM = (
     "Write a short flagged briefing (3–6 sentences). "
     "Every factual claim about a filing or rule must include the source URL "
     "exactly as provided in the Sources list. Do not invent URLs or numbers. "
-    "If uncertain, say so. Use Portuguese or English; prefer Portuguese for "
-    "regulatory titles when present."
+    "If uncertain, say so. Prefer Portuguese for regulatory titles when present."
 )
+
+ENTITY_LABELS = {
+    "nubank": "Nubank / Nu Holdings",
+    "stone": "Stone / StoneCo",
+    "pagseguro": "PagSeguro / PagBank",
+    "inter": "Inter&Co",
+    "xp": "XP Inc / XP Investimentos",
+    "itau": "Itaú",
+    "btg": "BTG Pactual",
+    "bradesco": "Bradesco",
+    "santander": "Santander",
+    "bb": "Banco do Brasil",
+    "caixa": "Caixa Econômica Federal",
+    "picpay": "PicPay",
+    "mercado_pago": "Mercado Pago",
+    "c6": "C6 Bank",
+    "original": "Banco Original",
+    "neon": "Neon",
+}
 
 
 def synthesize_candidate(
@@ -43,7 +61,6 @@ def synthesize_candidate(
 
     guarded = citations.enforce_citations(raw_text, sources)
     if not guarded["ok"]:
-        # Last resort: force a minimal citable heuristic and re-guard.
         raw_text = _heuristic_narrative(candidate, force_urls=True)
         guarded = citations.enforce_citations(raw_text, sources)
         mode = "heuristic"
@@ -53,6 +70,10 @@ def synthesize_candidate(
     return {
         "id": candidate.get("id"),
         "kind": candidate.get("kind"),
+        "entity": candidate.get("entity"),
+        "entities": candidate.get("entities") or [],
+        "lenses": candidate.get("lenses") or [],
+        "is_alert": bool(candidate.get("is_alert")),
         "threat_score": candidate.get("threat_score"),
         "threat_score_note": "estimated_heuristic",
         "narrative": guarded["narrative"],
@@ -65,14 +86,18 @@ def synthesize_candidate(
 
 
 def _build_prompt(candidate: dict[str, Any]) -> str:
-    lines = ["Sources (use only these URLs):"]
+    lines = [
+        f"Entity: {candidate.get('entity') or candidate.get('entities') or 'n/a'}",
+        f"Lenses: {', '.join(candidate.get('lenses') or [])}",
+        "Sources (use only these URLs):",
+    ]
     for s in candidate.get("sources") or []:
         lines.append(
-            f"- id={s.get('id')} source={s.get('source')} url={s.get('url') or '(none)'} "
-            f"summary={_one_line(s)}"
+            f"- lens={s.get('_lens')} id={s.get('id')} source={s.get('source')} "
+            f"url={s.get('url') or '(none)'} summary={_one_line(s)}"
         )
     lines.append("")
-    lines.append("Write the flagged briefing now.")
+    lines.append("Write the flagged briefing now, fusing the lenses into one narrative.")
     return "\n".join(lines)
 
 
@@ -82,12 +107,20 @@ def _one_line(src: dict[str, Any]) -> str:
         "fund_name",
         "issuer",
         "name",
+        "company",
         "institution",
         "security",
         "modality",
+        "ticker",
+        "form",
     ):
         if src.get(key):
-            return str(src[key])[:200]
+            extra = ""
+            if src.get("pct_change") is not None:
+                extra = f" pct_change={src.get('pct_change')}"
+            if src.get("pl") is not None:
+                extra += f" pl={src.get('pl')}"
+            return f"{src[key]}{extra}"[:220]
     return str(src.get("id") or "")[:80]
 
 
@@ -96,55 +129,22 @@ def _heuristic_narrative(
     *,
     force_urls: bool = False,
 ) -> str:
-    """Deterministic briefing from structured fields — always attaches known URLs."""
+    """Deterministic multi-lens briefing from structured fields."""
     seed = candidate.get("seed") or {}
     related = candidate.get("related") or []
+    entity = candidate.get("entity")
+    entity_label = ENTITY_LABELS.get(str(entity or ""), str(entity or "").title() or None)
     parts: list[str] = []
 
-    if seed.get("doc_type") or seed.get("subject"):
-        url = seed.get("url") or ""
+    if candidate.get("kind") == "entity_fusion" and entity_label:
+        lenses = ", ".join(candidate.get("lenses") or [])
         parts.append(
-            f"Regulatory signal: {seed.get('doc_type') or 'document'} "
-            f"{seed.get('number') or ''} — {seed.get('subject') or 'n/a'}. "
-            f"{url}".strip()
+            f"Fused competitor signal on {entity_label} across lenses [{lenses}]."
         )
-    elif seed.get("fund_name"):
-        url = seed.get("url") or ""
-        parts.append(
-            f"Competitor fund filing: {seed.get('fund_name')} "
-            f"(admin {seed.get('admin') or 'n/a'}). {url}".strip()
-        )
-    elif seed.get("issuer") or seed.get("security"):
-        url = seed.get("url") or ""
-        parts.append(
-            f"Securities offering: {seed.get('security') or 'instrument'} by "
-            f"{seed.get('issuer') or 'issuer'}; lead {seed.get('leader') or 'n/a'}. "
-            f"{url}".strip()
-        )
-    elif seed.get("name") or seed.get("cnpj"):
-        parts.append(
-            f"New supervised entity signal: {seed.get('name') or seed.get('cnpj')} "
-            f"({seed.get('entity_type') or 'entity'})."
-        )
-    elif seed.get("pct_change") is not None:
-        parts.append(
-            f"Market metric move: {seed.get('institution') or seed.get('ispb') or 'institution'} "
-            f"{seed.get('modality') or ''} changed {seed.get('pct_change')}% "
-            f"(value {seed.get('rate_year') or seed.get('tx_value')})."
-        )
-    else:
-        parts.append(f"Competitor signal id={seed.get('id')}.")
 
-    for rel in related[:3]:
-        url = rel.get("url") or ""
-        label = (
-            rel.get("fund_name")
-            or rel.get("issuer")
-            or rel.get("name")
-            or rel.get("institution")
-            or rel.get("id")
-        )
-        parts.append(f"Related competitor context: {label}. {url}".strip())
+    parts.append(_describe_signal(seed))
+    for rel in related[:4]:
+        parts.append(_describe_signal(rel, prefix="Related"))
 
     if force_urls:
         for s in candidate.get("sources") or []:
@@ -152,3 +152,63 @@ def _heuristic_narrative(
                 parts.append(f"Source: {s['url']}")
 
     return " ".join(p for p in parts if p)
+
+
+def _describe_signal(sig: dict[str, Any], prefix: str = "") -> str:
+    lens = sig.get("_lens") or ""
+    url = sig.get("url") or ""
+    alert = " [NEW]" if sig.get("is_new") else ""
+    head = f"{prefix}: " if prefix else ""
+
+    if lens == "regulatory" or sig.get("doc_type") or sig.get("subject"):
+        return (
+            f"{head}Regulatory{alert}: {sig.get('doc_type') or 'document'} "
+            f"{sig.get('number') or ''} — {sig.get('subject') or 'n/a'}. {url}"
+        ).strip()
+    if lens == "sec" or sig.get("ticker") and sig.get("form"):
+        return (
+            f"{head}SEC filing{alert}: {sig.get('ticker')} {sig.get('form')} "
+            f"({sig.get('company') or ''}) filed {sig.get('filed') or ''}. {url}"
+        ).strip()
+    if lens == "ofertas" or sig.get("issuer") or sig.get("security"):
+        amt = sig.get("amount")
+        amt_s = f" amount={amt}" if amt is not None else ""
+        return (
+            f"{head}CVM offering{alert}: {sig.get('security') or 'instrument'} by "
+            f"{sig.get('issuer') or 'issuer'}; lead {sig.get('leader') or 'n/a'}"
+            f"{amt_s}. {url}"
+        ).strip()
+    if lens == "inf_diario" or sig.get("pl") is not None and sig.get("fund_name"):
+        pct = sig.get("pct_change")
+        pct_s = f" move={pct}%" if pct is not None else ""
+        return (
+            f"{head}Fund AUM{alert}: {sig.get('fund_name') or sig.get('cnpj')} "
+            f"PL={sig.get('pl')}{pct_s} (admin {sig.get('admin') or 'n/a'}). {url}"
+        ).strip()
+    if lens == "pix" or (sig.get("ispb") and sig.get("tx_value") is not None):
+        return (
+            f"{head}Pix metric{alert}: {sig.get('institution') or sig.get('ispb')} "
+            f"value={sig.get('tx_value')} pct_change={sig.get('pct_change')}. {url}"
+        ).strip()
+    if lens == "juros" or sig.get("rate_year") is not None:
+        return (
+            f"{head}Pricing{alert}: {sig.get('institution') or sig.get('cnpj8')} "
+            f"{sig.get('modality') or ''} rate_year={sig.get('rate_year')} "
+            f"pct_change={sig.get('pct_change')}. {url}"
+        ).strip()
+    if lens == "entrants" or sig.get("entity_type"):
+        return (
+            f"{head}New entrant{alert}: {sig.get('name') or sig.get('cnpj')} "
+            f"({sig.get('entity_type') or 'entity'})."
+        ).strip()
+    if lens == "market" or sig.get("share_pct") is not None:
+        return (
+            f"{head}Market share context: {sig.get('institution')} "
+            f"share_pct={sig.get('share_pct')} value={sig.get('value')}."
+        ).strip()
+    if sig.get("fund_name"):
+        return (
+            f"{head}Fund filing{alert}: {sig.get('fund_name')} "
+            f"(admin {sig.get('admin') or 'n/a'}). {url}"
+        ).strip()
+    return f"{head}Signal{alert} id={sig.get('id')}. {url}".strip()

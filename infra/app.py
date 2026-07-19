@@ -247,8 +247,9 @@ class OncaPrototypeStack(Stack):
                 "ONCA_RAW_BUCKET": raw_bucket.bucket_name,
                 "ONCA_KB_ID": knowledge_base.attr_knowledge_base_id,
                 "ONCA_SYNTH_MAX_CANDIDATES": "10",
-                "ONCA_SYNTH_USE_LLM": "true",
-                "ONCA_SYNTH_USE_KB": "true",
+                # Heuristic-first until Bedrock embed/LLM quotas are non-zero.
+                "ONCA_SYNTH_USE_LLM": "false",
+                "ONCA_SYNTH_USE_KB": "false",
                 "ONCA_ROUTER_MODEL_ID": "amazon.nova-micro-v1:0",
                 "ONCA_SYNTH_MODEL_ID": "amazon.nova-lite-v1:0",
             },

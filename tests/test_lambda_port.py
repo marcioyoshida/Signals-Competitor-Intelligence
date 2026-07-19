@@ -329,7 +329,7 @@ def test_lambda_handler_reports_only_new_normativos_across_two_runs(monkeypatch)
     day_one = json.loads(lambda_port.lambda_handler({}, None)["body"])
     assert day_one["regulatory"]["count"] == 2
     assert day_one["regulatory"]["new_count"] == 2
-    assert day_one["regulatory"]["items"] == [doc_a, doc_b]
+    assert day_one["regulatory"]["items"] == [{**doc_a, "is_new": True}, {**doc_b, "is_new": True}]
 
     monkeypatch.setattr(
         lambda_port.bcb_normativos, "fetch_recent", lambda days=7, types=None: [doc_a, doc_b, doc_c]
@@ -337,7 +337,7 @@ def test_lambda_handler_reports_only_new_normativos_across_two_runs(monkeypatch)
     day_two = json.loads(lambda_port.lambda_handler({}, None)["body"])
     assert day_two["regulatory"]["count"] == 3
     assert day_two["regulatory"]["new_count"] == 1
-    assert day_two["regulatory"]["items"] == [doc_c]
+    assert day_two["regulatory"]["items"] == [{**doc_c, "is_new": True}]
 
 
 def test_lambda_handler_treats_all_as_new_when_diff_state_unavailable(monkeypatch):
@@ -402,7 +402,7 @@ def test_autorizacoes_first_run_seeds_silently(monkeypatch):
     day_two = json.loads(lambda_port.lambda_handler({}, None)["body"])
     assert day_two["new_entrants"]["count"] == 3
     assert day_two["new_entrants"]["new_count"] == 1
-    assert day_two["new_entrants"]["items"] == [entity_c]
+    assert day_two["new_entrants"]["items"] == [{**entity_c, "is_new": True}]
 
 
 def test_pix_moves_detected_across_two_runs(monkeypatch):
@@ -476,7 +476,7 @@ def test_sec_filings_first_run_seeds_silently(monkeypatch):
     day_two = json.loads(lambda_port.lambda_handler({}, None)["body"])
     assert day_two["sec_filings"]["count"] == 3
     assert day_two["sec_filings"]["new_count"] == 1
-    assert day_two["sec_filings"]["items"] == [f3]
+    assert day_two["sec_filings"]["items"] == [{**f3, "is_new": True}]
 
 
 def test_ofertas_first_run_seeds_silently(monkeypatch):
@@ -515,7 +515,7 @@ def test_ofertas_first_run_seeds_silently(monkeypatch):
     day_two = json.loads(lambda_port.lambda_handler({}, None)["body"])
     assert day_two["ofertas"]["count"] == 3
     assert day_two["ofertas"]["new_count"] == 1
-    assert day_two["ofertas"]["items"] == [o3]
+    assert day_two["ofertas"]["items"] == [{**o3, "is_new": True}]
 
 
 def test_juros_moves_detected_across_two_runs(monkeypatch):

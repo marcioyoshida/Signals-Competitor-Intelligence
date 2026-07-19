@@ -134,8 +134,8 @@ HEADERS — SEC blocks requests without a real contact UA.
 1. **Stage A quota completion** — track pending Embed V4 requests; open
    Support case for Titan Embed V2 once Support plan is enabled
    (`docs/AWS_BEDROCK_QUOTA_TICKET.md`); prove ingestion + Retrieve.
-2. **Stage B harden** — deploy synthesis Lambda; live dry-run on real
-   digests; tune candidate fusion; enable LLM when Converse works.
+2. **Stage B harden** — DONE (context digests + entity fusion on real
+   S3 digests; heuristic narratives). Re-enable LLM/KB when quotas allow.
 3. **Next data sources:** optional deeper SEC text extraction; BCB SCR.
 4. **Phase 3** — dashboard + alerts (consume `narratives/` in S3).
 5. **Phase 4** — design partners, then Marketplace SaaS listing.
