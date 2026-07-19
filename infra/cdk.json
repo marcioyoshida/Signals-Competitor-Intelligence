@@ -1,0 +1,10 @@
+{
+  "app": "../.venv/bin/python app.py",
+  "watch": {
+    "include": ["**"],
+    "exclude": ["README.md", "cdk*.json", "**/__pycache__", "**/*.pyc"]
+  },
+  "context": {
+    "@aws-cdk/core:bootstrapQualifier": "hnb659fds"
+  }
+}
