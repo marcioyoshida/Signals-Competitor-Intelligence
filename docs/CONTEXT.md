@@ -130,13 +130,13 @@ HEADERS — SEC blocks requests without a real contact UA.
 
 ## What's next (in priority order)
 
-1. **Phase 2 Stage A unblock** — AWS Support quota increase for Bedrock
-   embedding on-demand throughput; prove `StartIngestionJob` + Retrieve.
-2. **Phase 2 Stage B** — synthesis/correlation Lambda (Retrieve + Converse,
-   citation guardrail). This is the product differentiator.
-3. **Next data sources:** CVM Informe Diário; optional SEC on Lambda if
-   payments buyers stay in focus.
-4. **Phase 3** — dashboard + alerts.
+1. **Stage A quota completion** — track pending Embed V4 requests; open
+   Support case for Titan Embed V2 once Support plan is enabled
+   (`docs/AWS_BEDROCK_QUOTA_TICKET.md`); prove ingestion + Retrieve.
+2. **Stage B harden** — deploy synthesis Lambda; live dry-run on real
+   digests; tune candidate fusion; enable LLM when Converse works.
+3. **Next data sources:** CVM Informe Diário; optional SEC on Lambda.
+4. **Phase 3** — dashboard + alerts (consume `narratives/` in S3).
 5. **Phase 4** — design partners, then Marketplace SaaS listing.
 
 Deferred: CNPJ bulk registry (multi-GB), SUSEP + Diário Oficial scrapers.

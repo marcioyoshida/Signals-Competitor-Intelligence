@@ -80,15 +80,18 @@ licensed aggregator (People Data Labs / Explorium), never scraped.
   DynamoDB state + S3 digests. Live digest sources: normativos, CVM
   funds, IF.data, **autorizações**, **Pix DICT keys**, **juros médios**,
   **CVM ofertas** (seeded detect_new). Env from watchlist includes
-  ofertas lookback/watchlist. SEC not on Lambda yet.
+  ofertas lookback/watchlist, SEC EDGAR (seeded; STNE/PAGS/NU/INTR/XP).
 - **Phase 2 (CURRENT)** — Bedrock KB + synthesis loop with citations;
   correlation logic (regulatory event + competitor signal → one flagged
   narrative). This correlation IS the product.
-  **Stage A (infra deployed, blocked on account quota)** — raw corpus to
-  `onca-raw-{account}` + Bedrock KB (S3 Vectors). Corpus write live-ok;
-  `StartIngestionJob` blocked by **0 embedding on-demand quota**. See
-  docs/2026-07-12-phase2-stage-a-knowledge-base.md. **Stage B (not
-  started)** — synthesis/correlation Lambda.
+  **Stage A (infra deployed, embedding quota in progress)** — raw corpus
+  to `onca-raw-{account}` + Bedrock KB (S3 Vectors). Corpus write live-ok;
+  `StartIngestionJob` blocked until embed RPM > 0. Self-service increases
+  filed for Cohere Embed V4 cross-region RPM/TPM; Titan V2 needs Support
+  case (see `docs/AWS_BEDROCK_QUOTA_TICKET.md`).
+  **Stage B (scaffolded 2026-07-19)** — `src/synth/` digest-first synthesis
+  Lambda with citation guardrail; optional KB Retrieve + Converse. Design:
+  `docs/2026-07-19-phase2-stage-b-scaffold.md`.
 - **Phase 3** — dashboard + alerts
 - **Phase 4** — design partners, then Marketplace SaaS listing
 

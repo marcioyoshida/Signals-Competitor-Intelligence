@@ -43,6 +43,19 @@ def _document_text(doc: dict[str, Any]) -> str:
                 if doc.get("rito"):
                     lines.append(f"Rito: {doc['rito']}")
                 return "\n".join(line for line in lines if line and not line.endswith(": "))
+        # SEC EDGAR filing
+        if doc.get("source") == "SEC-EDGAR" or (
+            doc.get("ticker") and doc.get("form")
+        ):
+            if doc.get("form") or doc.get("ticker"):
+                lines = [
+                    f"{doc.get('ticker') or ''} {doc.get('form') or ''}".strip(),
+                    doc.get("company") or "",
+                    f"Filed: {doc.get('filed') or ''}",
+                    f"Accession: {doc.get('accession') or ''}",
+                    doc.get("url") or "",
+                ]
+                return "\n".join(line for line in lines if line)
         # BCB autorizações / new-entrant entity
         if doc.get("name") or doc.get("cnpj"):
             lines = [
@@ -68,17 +81,21 @@ def _metadata_attributes(doc: dict[str, Any]) -> dict[str, str]:
         "doc_type": doc.get("doc_type")
         or doc.get("fund_class")
         or doc.get("entity_type")
-        or doc.get("security"),
+        or doc.get("security")
+        or doc.get("form"),
         "date": doc.get("date")
         or doc.get("registered")
-        or doc.get("event_date"),
+        or doc.get("event_date")
+        or doc.get("filed"),
         "url": doc.get("url"),
         "cnpj": doc.get("cnpj") or doc.get("issuer_cnpj"),
         "name": doc.get("name")
         or doc.get("fund_name")
         or doc.get("admin")
         or doc.get("issuer")
-        or doc.get("leader"),
+        or doc.get("leader")
+        or doc.get("company")
+        or doc.get("ticker"),
     }
     return {k: v for k, v in attrs.items() if v}
 

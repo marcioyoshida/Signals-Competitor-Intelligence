@@ -48,3 +48,9 @@ sec_tickers:
   - NU
   - INTR
   - XP
+# Only filings with filingDate within this many days (caps seed volume).
+sec_lookback_days: 365
+# SEC fair-access User-Agent (must include a contact). Override in env via
+# ONCA_SEC_USER_AGENT if you prefer not to commit an email here.
+# Short product + email form (SEC returns 403 on some verbose UA strings).
+sec_user_agent: "Onca Competitive Intelligence marcioyoshida@gmail.com"

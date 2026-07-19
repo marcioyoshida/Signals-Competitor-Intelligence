@@ -11,6 +11,7 @@ Sources:
   - BCB Pix (traction moves) — detect_moves via DynamoDB value state
   - BCB juros médios (pricing moves) — detect_moves via DynamoDB value state
   - CVM ofertas de distribuição — detect_new, first-run seed suppressed
+  - SEC EDGAR (US-listed fintechs) — detect_new, first-run seed suppressed
 """
 from __future__ import annotations
 
@@ -30,6 +31,7 @@ from src.ingest import (
     cvm_fundos,
     cvm_ofertas,
     raw_writer,
+    sec_filings,
 )
 
 
@@ -145,6 +147,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         "ONCA_OFERTAS_USE_COMPETITORS", "true"
     ).lower() in ("1", "true", "yes"):
         ofertas_watch = competitors
+    sec_tickers = _csv_env("ONCA_SEC_TICKERS")
+    sec_lookback = int(os.environ.get("ONCA_SEC_LOOKBACK_DAYS", "365"))
 
     try:
         normativos = bcb_normativos.fetch_recent(days=lookback_days)
@@ -233,11 +237,27 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
         print(f"Warning: CVM ofertas fetch failed: {exc}")
 
+    # SEC EDGAR — US-listed payments/fintech disclosures (seed on first run).
+    sec_filings_rows: list[dict[str, Any]] = []
+    new_sec: list[dict[str, Any]] = []
+    if sec_tickers:
+        try:
+            sec_filings_rows = sec_filings.fetch_filings(
+                sec_tickers, lookback_days=sec_lookback
+            )
+            new_sec = _new_since_last_run(
+                "sec_filings", sec_filings_rows, seed_if_empty=True
+            )
+        except Exception as exc:  # pragma: no cover
+            print(f"Warning: SEC EDGAR fetch failed: {exc}")
+
     new_normativos = _new_since_last_run("bcb_normativos", normativos)
     new_funds = _new_since_last_run("cvm_fundos", funds)
 
     # Corpus gets document-like signals only (not numeric Pix/juros moves).
-    _populate_corpus_and_sync(new_normativos + new_funds + new_entrants + new_ofertas)
+    _populate_corpus_and_sync(
+        new_normativos + new_funds + new_entrants + new_ofertas + new_sec
+    )
 
     payload = {
         "regulatory": {
@@ -270,6 +290,11 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             "count": len(offerings),
             "new_count": len(new_ofertas),
             "items": new_ofertas[:10],
+        },
+        "sec_filings": {
+            "count": len(sec_filings_rows),
+            "new_count": len(new_sec),
+            "items": new_sec[:10],
         },
         "source": "lambda_port",
     }

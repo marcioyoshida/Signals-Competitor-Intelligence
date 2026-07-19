@@ -14,6 +14,7 @@ EventBridge once ported to Lambda.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import yaml
@@ -34,6 +35,8 @@ CONFIG = Path(__file__).parent / "config" / "watchlist.yaml"
 
 def main() -> None:
     cfg = yaml.safe_load(CONFIG.read_text())
+    if cfg.get("sec_user_agent"):
+        os.environ.setdefault("ONCA_SEC_USER_AGENT", str(cfg["sec_user_agent"]))
 
     print("── Onça digest ──────────────────────────────")
 
@@ -104,7 +107,10 @@ def main() -> None:
     sec_tickers = cfg.get("sec_tickers", [])
     if sec_tickers:
         try:
-            filings = sec_filings.fetch_filings(sec_tickers)
+            filings = sec_filings.fetch_filings(
+                sec_tickers,
+                lookback_days=int(cfg.get("sec_lookback_days", 365)),
+            )
             new_sec = detect_new("sec_filings", filings)
             print(f"\nCompetitor — {len(new_sec)} new SEC filings:")
             for f in new_sec:
@@ -112,7 +118,7 @@ def main() -> None:
                 print(f"     {f['url']}")
         except Exception as e:  # noqa: BLE001 — prototype: isolate source failures
             print(f"\nCompetitor — SEC ingestion skipped ({type(e).__name__}: {e})")
-            print("  Set a real User-Agent in sec_filings.HEADERS; verify with "
+            print("  Set ONCA_SEC_USER_AGENT / config sec_user_agent; verify with "
                   "`python -m src.ingest.sec_filings inspect`.")
 
     # Juros médios — rate moves by institution × modality (pricing axis).

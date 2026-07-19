@@ -183,6 +183,17 @@ class OncaPrototypeStack(Stack):
                     if watchlist.get("ofertas_use_competitors_watchlist", True)
                     else "false"
                 ),
+                # SEC EDGAR — payments/US-listed fintechs; empty tickers = skip.
+                "ONCA_SEC_TICKERS": ",".join(
+                    str(x) for x in (watchlist.get("sec_tickers") or [])
+                ),
+                "ONCA_SEC_LOOKBACK_DAYS": str(
+                    watchlist.get("sec_lookback_days", 365)
+                ),
+                "ONCA_SEC_USER_AGENT": str(
+                    watchlist.get("sec_user_agent")
+                    or "Onca Competitive Intelligence marcioyoshida@gmail.com"
+                ),
                 "ONCA_RAW_BUCKET": raw_bucket.bucket_name,
                 "ONCA_KB_ID": knowledge_base.attr_knowledge_base_id,
                 "ONCA_KB_DATA_SOURCE_ID": data_source.attr_data_source_id,
@@ -205,6 +216,62 @@ class OncaPrototypeStack(Stack):
             enabled=True,
         )
         rule.add_target(targets.LambdaFunction(func))
+
+        # Phase 2 Stage B: synthesis / correlation Lambda (digest-first;
+        # optional KB Retrieve + Converse when quotas allow).
+        synth = lambda_.Function(
+            self,
+            "OncaSynthesisLambda",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.synth.lambda_handler.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.minutes(5),
+            memory_size=512,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+                "ONCA_RAW_BUCKET": raw_bucket.bucket_name,
+                "ONCA_KB_ID": knowledge_base.attr_knowledge_base_id,
+                "ONCA_SYNTH_MAX_CANDIDATES": "10",
+                "ONCA_SYNTH_USE_LLM": "true",
+                "ONCA_SYNTH_USE_KB": "true",
+                "ONCA_ROUTER_MODEL_ID": "amazon.nova-micro-v1:0",
+                "ONCA_SYNTH_MODEL_ID": "amazon.nova-lite-v1:0",
+            },
+        )
+        digests_bucket.grant_read(synth)
+        digests_bucket.grant_put(synth)
+        raw_bucket.grant_read(synth)
+        synth.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=[
+                    "bedrock:Retrieve",
+                    "bedrock:RetrieveAndGenerate",
+                ],
+                resources=[knowledge_base.attr_knowledge_base_arn],
+            )
+        )
+        synth.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=[
+                    "bedrock:InvokeModel",
+                    "bedrock:Converse",
+                ],
+                resources=[
+                    f"arn:aws:bedrock:{self.region}::foundation-model/*",
+                    f"arn:aws:bedrock:{self.region}:{self.account}:inference-profile/*",
+                ],
+            )
+        )
+
+        # Best-effort daily schedule; Step Functions ordering is a later upgrade.
+        synth_rule = events.Rule(
+            self,
+            "OncaSynthesisDailySchedule",
+            schedule=events.Schedule.rate(Duration.days(1)),
+            enabled=True,
+        )
+        synth_rule.add_target(targets.LambdaFunction(synth))
 
 
 app = App()

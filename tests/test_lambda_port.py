@@ -21,6 +21,7 @@ def _auto_stub_external_sources(monkeypatch):
     )
     monkeypatch.setattr(lambda_port.bcb_juros, "for_moves", lambda rows: rows)
     monkeypatch.setattr(lambda_port.cvm_ofertas, "fetch_recent", lambda **kwargs: [])
+    monkeypatch.setattr(lambda_port.sec_filings, "fetch_filings", lambda *a, **k: [])
 
 
 class FakeStateTable:
@@ -82,6 +83,8 @@ def test_lambda_handler_returns_digest_payload_when_ingesters_fail(monkeypatch):
     assert payload["juros_moves"]["move_count"] == 0
     assert payload["ofertas"]["count"] == 0
     assert payload["ofertas"]["new_count"] == 0
+    assert payload["sec_filings"]["count"] == 0
+    assert payload["sec_filings"]["new_count"] == 0
 
 
 def test_lambda_handler_passes_watchlist_config_to_ingesters(monkeypatch):
@@ -428,6 +431,48 @@ def test_pix_moves_detected_across_two_runs(monkeypatch):
     assert move["ispb"] == "111"
     assert move["pct_change"] == 50.0
     assert move["prev_value"] == 100.0
+
+
+def test_sec_filings_first_run_seeds_silently(monkeypatch):
+    fake_table = FakeStateTable()
+    monkeypatch.setattr(lambda_port, "DynamoDbState", lambda source: DynamoDbState(source, table=fake_table))
+    monkeypatch.setattr(
+        lambda_port, "DynamoDbValueState", lambda source: DynamoDbValueState(source, table=fake_table)
+    )
+    monkeypatch.setattr(lambda_port.bcb_normativos, "fetch_recent", lambda days=7, types=None: [])
+    monkeypatch.setattr(lambda_port.cvm_fundos, "fetch_funds", lambda watchlist_admins=None: [])
+    monkeypatch.setattr(lambda_port.bcb_ifdata, "latest_base_date", lambda: 202603)
+    monkeypatch.setattr(lambda_port.bcb_ifdata, "fetch_institutions", lambda base_date=None: [])
+    monkeypatch.setattr(lambda_port.bcb_ifdata, "fetch_institution_names", lambda base_date: {})
+    monkeypatch.setattr(lambda_port.bcb_autorizacoes, "fetch_authorized", lambda: [])
+    monkeypatch.setattr(lambda_port.bcb_pix, "fetch_recent", lambda **kwargs: [])
+    monkeypatch.setattr(lambda_port.bcb_pix, "by_institution", lambda rows, watchlist_ispb=None: [])
+    monkeypatch.setattr(lambda_port.cvm_ofertas, "fetch_recent", lambda **kwargs: [])
+    monkeypatch.setenv("ONCA_SEC_TICKERS", "STNE,NU")
+
+    f1 = {
+        "id": "sec:1:acc-a",
+        "source": "SEC-EDGAR",
+        "kind": "competitor",
+        "ticker": "STNE",
+        "form": "6-K",
+        "company": "StoneCo",
+        "filed": "2026-06-01",
+        "url": "https://www.sec.gov/Archives/edgar/data/1/a.htm",
+    }
+    f2 = {**f1, "id": "sec:1:acc-b", "form": "20-F"}
+
+    monkeypatch.setattr(lambda_port.sec_filings, "fetch_filings", lambda *a, **k: [f1, f2])
+    day_one = json.loads(lambda_port.lambda_handler({}, None)["body"])
+    assert day_one["sec_filings"]["count"] == 2
+    assert day_one["sec_filings"]["new_count"] == 0
+
+    f3 = {**f1, "id": "sec:1:acc-c", "form": "6-K"}
+    monkeypatch.setattr(lambda_port.sec_filings, "fetch_filings", lambda *a, **k: [f1, f2, f3])
+    day_two = json.loads(lambda_port.lambda_handler({}, None)["body"])
+    assert day_two["sec_filings"]["count"] == 3
+    assert day_two["sec_filings"]["new_count"] == 1
+    assert day_two["sec_filings"]["items"] == [f3]
 
 
 def test_ofertas_first_run_seeds_silently(monkeypatch):

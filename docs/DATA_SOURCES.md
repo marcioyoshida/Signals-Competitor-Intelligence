@@ -168,7 +168,7 @@ These reveal what a competitor is *actually doing*, not just what rules changed.
 - **Note:** funds adapted to Res. CVM 175 no longer listed in the legacy structured-funds cadastral file; TAXA_ADM / INF_TAXA_ADM columns now included
 - **Implemented:** `src/ingest/cvm_fundos.py`
 
-### SEC EDGAR — US-listed Brazilian fintechs *(local only; not yet on Lambda)*
+### SEC EDGAR — US-listed Brazilian fintechs *(in Lambda + local)*
 - **What:** Filings for Brazilian fintechs listed in the US — Stone (STNE),
   PagSeguro (PAGS), Nu Holdings (NU), Inter&Co (INTR), XP (XP). Foreign
   private issuers file annual 20-F + interim/material 6-K; richest source
@@ -179,12 +179,14 @@ These reveal what a competitor is *actually doing*, not just what rules changed.
   (consolidated inside Itaú/Santander)
 - **Access:** free EDGAR APIs — company_tickers.json (ticker→CIK) +
   data.sec.gov/submissions. Requires a descriptive User-Agent w/ contact;
-  <=10 req/s
-- **Relevance gate:** only worth running if payments/acquiring competitors
-  matter to the target customer — controlled by `sec_tickers` in
-  config/watchlist.yaml (empty = skip)
-- **Implemented:** `src/ingest/sec_filings.py`. Set a real User-Agent in
-  HEADERS first; verify: `python -m src.ingest.sec_filings inspect`
+  polite pause between CIK requests
+- **User-Agent:** `ONCA_SEC_USER_AGENT` env or `sec_user_agent` in watchlist
+  (must include contact email)
+- **Lookback:** `sec_lookback_days` (default 365) + `max_per_ticker` 40
+- **Signal:** `detect_new` on `sec:{CIK}:{accession}`; first run seeds
+- **Relevance gate:** empty `sec_tickers` skips SEC entirely
+- **Implemented:** `src/ingest/sec_filings.py`. Verify:
+  `python -m src.ingest.sec_filings inspect`
 
 ---
 
@@ -258,7 +260,7 @@ coordinators — relationship-graph enrichment, not a standalone signal.
 | BCB institutions in operation | `bcb_autorizacoes.py` | yes | yes | detect_new (seeded) |
 | BCB juros médios (daily) | `bcb_juros.py` | yes | yes | detect_moves |
 | CVM ofertas distribuição | `cvm_ofertas.py` | yes | yes | detect_new (seeded) |
-| SEC EDGAR | `sec_filings.py` | yes | **no** | detect_new |
+| SEC EDGAR | `sec_filings.py` | yes | yes | detect_new (seeded) |
 | BCB SPI aggregate | `bcb_pix.fetch_spi` | CLI | no | n/a |
 
 Lambda env (from `config/watchlist.yaml` via CDK):
@@ -277,7 +279,7 @@ Lambda env (from `config/watchlist.yaml` via CDK):
 3. ~~**Juros médios**~~ — DONE + **live-aligned** (`TaxasJurosDiariaPorInicioPeriodo`).
 4. ~~**CVM Ofertas de Distribuição**~~ — DONE + **live-aligned** (`oferta_resolucao_160.csv`).
 5. **CVM Informe Diário** — fund AUM + flows (heavier; ZIP streaming).
-6. **SEC on Lambda** — after real User-Agent; optional for bank/insurer buyers.
+6. ~~**SEC on Lambda**~~ — DONE (real User-Agent + seed; tickers in watchlist).
 
 Already implemented: IF.data (market share), cad_fi (fund launches),
 BCB normativos (rule changes).
