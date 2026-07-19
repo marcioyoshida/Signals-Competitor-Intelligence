@@ -26,6 +26,23 @@ def _document_text(doc: dict[str, Any]) -> str:
             if doc.get("fund_class"):
                 lines.append(f"Class: {doc['fund_class']}")
             return "\n".join(line for line in lines if line)
+        # CVM ofertas de distribuição
+        if doc.get("source") == "CVM-Ofertas" or doc.get("security") or doc.get("issuer"):
+            if doc.get("security") or doc.get("issuer"):
+                lines = [
+                    doc.get("security") or "Securities offering",
+                    f"Issuer: {doc.get('issuer') or ''}",
+                    f"Lead: {doc.get('leader') or ''}",
+                    f"Type: {doc.get('offer_type') or ''}",
+                    f"Date: {doc.get('event_date') or doc.get('registered') or ''}",
+                ]
+                if doc.get("amount") is not None:
+                    lines.append(f"Amount: {doc['amount']}")
+                if doc.get("status"):
+                    lines.append(f"Status: {doc['status']}")
+                if doc.get("rito"):
+                    lines.append(f"Rito: {doc['rito']}")
+                return "\n".join(line for line in lines if line and not line.endswith(": "))
         # BCB autorizações / new-entrant entity
         if doc.get("name") or doc.get("cnpj"):
             lines = [
@@ -50,11 +67,18 @@ def _metadata_attributes(doc: dict[str, Any]) -> dict[str, str]:
         "kind": doc.get("kind"),
         "doc_type": doc.get("doc_type")
         or doc.get("fund_class")
-        or doc.get("entity_type"),
-        "date": doc.get("date") or doc.get("registered"),
+        or doc.get("entity_type")
+        or doc.get("security"),
+        "date": doc.get("date")
+        or doc.get("registered")
+        or doc.get("event_date"),
         "url": doc.get("url"),
-        "cnpj": doc.get("cnpj"),
-        "name": doc.get("name") or doc.get("fund_name") or doc.get("admin"),
+        "cnpj": doc.get("cnpj") or doc.get("issuer_cnpj"),
+        "name": doc.get("name")
+        or doc.get("fund_name")
+        or doc.get("admin")
+        or doc.get("issuer")
+        or doc.get("leader"),
     }
     return {k: v for k, v in attrs.items() if v}
 

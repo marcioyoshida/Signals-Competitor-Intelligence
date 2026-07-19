@@ -111,20 +111,55 @@ These reveal what a competitor is *actually doing*, not just what rules changed.
 - **Signal:** competitor credit-portfolio growth rate + segment mix
 - **Status:** not implemented
 
-### BCB — Juros médios (average interest rates by institution)
-- **What:** Average interest rates charged per institution (per Instrução Normativa nº 563, 2024-12-12)
+### BCB — Juros médios (average interest rates by institution) *(in Lambda + local)*
+- **What:** Average interest rates charged per institution (Instrução Normativa nº 563, 2024-12-12)
 - **CI value:** ★★★★☆ — competitor-level **pricing intelligence**, regulator-published. Feeds the radar "pricing aggressiveness" axis directly
-- **Access:** dadosabertos.bcb.gov.br (structured)
-- **Signal:** competitor rate changes over time by product
-- **Status:** not implemented — next greenfield build priority
+- **Access:** OData taxaJuros **v2**
+  - Service: `olinda.bcb.gov.br/olinda/servico/taxaJuros/versao/v2`
+  - **Primary (daily):** `TaxasJurosDiariaPorInicioPeriodo?$filter=InicioPeriodo eq 'YYYY-MM-DD'`
+  - Latest window: `ConsultaDatas?$filter=tipoModalidade eq 'D'&$orderby=inicioPeriodo desc`
+  - Monthly (mostly real-estate modalities): `TaxasJurosMensalPorMes?$filter=anoMes eq 'YYYY-MM'`
+- **Live schema (daily row):**
 
-### CVM — Ofertas de Distribuição (securities offerings)
-- **What:** Distribution offerings (shares, funds, debentures, CRI, etc.) registered or exempt (ICVM 400 / RCVM 160). Includes restricted-effort offers (ICVM 476) since 2022-01-01
-- **CI value:** ★★★★☆ — competitor **capital-raising and product-launch** signal
-- **Access:** bulk CSV, dados.cvm.gov.br
-- **Columns of note:** Modalidade_Oferta, Data_Inicio_Oferta, Tipo_Societario_Emissor, Tipo_Fundo_Investimento
-- **Signal:** competitor raising capital or launching a securitized product
-- **Status:** not implemented
+  | Field | Notes |
+  |---|---|
+  | `InicioPeriodo` / `FimPeriodo` | ~5 business-day window |
+  | `Segmento` | PESSOA FÍSICA / PESSOA JURÍDICA |
+  | `Modalidade` | Product (card revolving, personal credit, …) |
+  | `InstituicaoFinanceira` | Name |
+  | `cnpj8` | Institution id |
+  | `TaxaJurosAoMes` / `TaxaJurosAoAno` | Average rates |
+  | `Posicao` | Rank within modality |
+
+- **Live volume (2026-06-29 window):** ~**799** rows, ~**173** institutions, **20** modalities
+- **Signal:** relative % move in `TaxaJurosAoAno` per `cnpj8|Modalidade` (`detect_moves`)
+- **Default modality focus:** card revolving, card installment, unsecured personal credit, overdraft
+- **Implemented:** `src/ingest/bcb_juros.py`. Verify: `python -m src.ingest.bcb_juros inspect` — next greenfield build priority
+
+### CVM — Ofertas de Distribuição (securities offerings) *(in Lambda + local)*
+- **What:** Distribution offerings (shares, funds, debentures, CRI, FIDC, etc.) under ICVM 400 / RCVM 160 (and legacy restricted efforts)
+- **CI value:** ★★★★☆ — competitor **capital-raising and product-launch** signal (issuer + lead coordinator)
+- **Access:** ZIP CSV (latin-1, `;`)
+  - Package: `dados.cvm.gov.br/dataset/oferta-distrib`
+  - ZIP: `dados.cvm.gov.br/dados/OFERTA/DISTRIB/DADOS/oferta_distribuicao.zip`
+  - **Primary live file:** `oferta_resolucao_160.csv` (~14k rows; recent activity)
+  - Legacy: `oferta_distribuicao.csv` (~49k; almost no last-30d rows)
+- **Live schema (RCVM 160 — key fields):**
+
+  | Field | Notes |
+  |---|---|
+  | `Numero_Requerimento` | Stable id |
+  | `Data_Registro` / `Data_requerimento` | Event dates for lookback |
+  | `Nome_Emissor` / `CNPJ_Emissor` | Issuer |
+  | `Nome_Lider` / `CNPJ_Lider` | Lead coordinator |
+  | `Valor_Mobiliario` | Security type (Debêntures, Cotas de FIDC, …) |
+  | `Valor_Total_Registrado` | Registered amount |
+  | `Status_Requerimento`, `Tipo_Oferta`, `Rito_Requerimento` | Context |
+
+- **Live volume:** ~**359** offerings in last 30d (RCVM 160); watchlist (ITAU/BTG/XP/…) hits common as leader
+- **Signal:** `detect_new` on `cvm-oferta:r160:{Numero_Requerimento}`; first run seeds silently
+- **Config:** `ofertas_lookback_days` (default 30), `ofertas_watchlist` / reuse competitors
+- **Implemented:** `src/ingest/cvm_ofertas.py`. Verify: `python -m src.ingest.cvm_ofertas inspect`
 
 ### CVM — cad_fi (fund registry) *(in Lambda + local)*
 - **What:** Registry of structured + non-structured funds (ICVM 555 / Res. CVM 175), refreshed to last business day
@@ -221,12 +256,16 @@ coordinators — relationship-graph enrichment, not a standalone signal.
 | BCB IF.data | `bcb_ifdata.py` | (CLI) | yes (snapshot) | ranking only |
 | BCB Pix DICT keys | `bcb_pix.py` | yes | yes | detect_moves |
 | BCB institutions in operation | `bcb_autorizacoes.py` | yes | yes | detect_new (seeded) |
+| BCB juros médios (daily) | `bcb_juros.py` | yes | yes | detect_moves |
+| CVM ofertas distribuição | `cvm_ofertas.py` | yes | yes | detect_new (seeded) |
 | SEC EDGAR | `sec_filings.py` | yes | **no** | detect_new |
 | BCB SPI aggregate | `bcb_pix.fetch_spi` | CLI | no | n/a |
 
 Lambda env (from `config/watchlist.yaml` via CDK):
 `ONCA_LOOKBACK_DAYS`, `ONCA_COMPETITORS`, `ONCA_COMPETITOR_ISPB`,
-`ONCA_PIX_MOVE_THRESHOLD_PCT` (default 15), plus state/digest/raw/KB ids.
+`ONCA_PIX_MOVE_THRESHOLD_PCT` (default 15), `ONCA_JUROS_COMPETITORS`,
+`ONCA_JUROS_MODALITIES`, `ONCA_JUROS_USE_DEFAULT_MODALITIES`,
+`ONCA_JUROS_MOVE_THRESHOLD_PCT` (default 10), plus state/digest/raw/KB ids.
 
 ---
 
@@ -235,8 +274,8 @@ Lambda env (from `config/watchlist.yaml` via CDK):
 1. ~~**Pix statistics**~~ — DONE + **live-aligned** (`ChavesPix` DICT keys).
 2. ~~**Autorizações**~~ — DONE + **live-aligned**
    (`Instituicoes_em_funcionamento`; first-run seed).
-3. **Juros médios** — competitor pricing, feeds a dashboard axis.
-4. **CVM Ofertas de Distribuição** — capital-raising / product-launch signal.
+3. ~~**Juros médios**~~ — DONE + **live-aligned** (`TaxasJurosDiariaPorInicioPeriodo`).
+4. ~~**CVM Ofertas de Distribuição**~~ — DONE + **live-aligned** (`oferta_resolucao_160.csv`).
 5. **CVM Informe Diário** — fund AUM + flows (heavier; ZIP streaming).
 6. **SEC on Lambda** — after real User-Agent; optional for bank/insurer buyers.
 

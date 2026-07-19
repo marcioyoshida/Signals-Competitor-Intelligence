@@ -9,6 +9,8 @@ Sources:
   - BCB IF.data market share — snapshot (no id-diff)
   - BCB autorizações (new entrants) — detect_new, first-run seed suppressed
   - BCB Pix (traction moves) — detect_moves via DynamoDB value state
+  - BCB juros médios (pricing moves) — detect_moves via DynamoDB value state
+  - CVM ofertas de distribuição — detect_new, first-run seed suppressed
 """
 from __future__ import annotations
 
@@ -19,7 +21,16 @@ from typing import Any
 import boto3
 
 from src.diff.engine import DynamoDbState, DynamoDbValueState, detect_moves, detect_new
-from src.ingest import bcb_autorizacoes, bcb_ifdata, bcb_normativos, bcb_pix, cvm_fundos, raw_writer
+from src.ingest import (
+    bcb_autorizacoes,
+    bcb_ifdata,
+    bcb_juros,
+    bcb_normativos,
+    bcb_pix,
+    cvm_fundos,
+    cvm_ofertas,
+    raw_writer,
+)
 
 
 def _new_since_last_run(
@@ -120,6 +131,20 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     competitors = _csv_env("ONCA_COMPETITORS")
     competitor_ispb = _csv_env("ONCA_COMPETITOR_ISPB")
     pix_threshold = float(os.environ.get("ONCA_PIX_MOVE_THRESHOLD_PCT", "15.0"))
+    juros_competitors = _csv_env("ONCA_JUROS_COMPETITORS")
+    juros_modalities = _csv_env("ONCA_JUROS_MODALITIES")
+    juros_use_defaults = os.environ.get("ONCA_JUROS_USE_DEFAULT_MODALITIES", "true").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    juros_threshold = float(os.environ.get("ONCA_JUROS_MOVE_THRESHOLD_PCT", "10.0"))
+    ofertas_lookback = int(os.environ.get("ONCA_OFERTAS_LOOKBACK_DAYS", "30"))
+    ofertas_watch = _csv_env("ONCA_OFERTAS_WATCHLIST")
+    if not ofertas_watch and os.environ.get(
+        "ONCA_OFERTAS_USE_COMPETITORS", "true"
+    ).lower() in ("1", "true", "yes"):
+        ofertas_watch = competitors
 
     try:
         normativos = bcb_normativos.fetch_recent(days=lookback_days)
@@ -171,11 +196,48 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
         print(f"Warning: BCB Pix fetch failed: {exc}")
 
+    # Juros médios — relative rate moves by institution × modality.
+    juros_focus: list[dict[str, Any]] = []
+    juros_moves: list[dict[str, Any]] = []
+    try:
+        juros_rows = bcb_juros.fetch_daily()
+        modalities = juros_modalities
+        if not modalities and juros_use_defaults:
+            modalities = list(bcb_juros.DEFAULT_MODALITY_FILTERS)
+        juros_focus = bcb_juros.filter_rates(
+            juros_rows,
+            institutions=juros_competitors or None,
+            modalities=modalities or None,
+        )
+        juros_moves = _moves_since_last_run(
+            "bcb_juros",
+            bcb_juros.for_moves(juros_focus),
+            key_field="move_key",
+            value_field="rate_year",
+            min_pct=juros_threshold,
+        )
+    except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
+        print(f"Warning: BCB juros médios fetch failed: {exc}")
+
+    # CVM ofertas — capital raise / product launch (seed suppressed on first run).
+    offerings: list[dict[str, Any]] = []
+    new_ofertas: list[dict[str, Any]] = []
+    try:
+        offerings = cvm_ofertas.fetch_recent(
+            lookback_days=ofertas_lookback,
+            watchlist=ofertas_watch or None,
+        )
+        new_ofertas = _new_since_last_run(
+            "cvm_ofertas", offerings, seed_if_empty=True
+        )
+    except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
+        print(f"Warning: CVM ofertas fetch failed: {exc}")
+
     new_normativos = _new_since_last_run("bcb_normativos", normativos)
     new_funds = _new_since_last_run("cvm_fundos", funds)
 
-    # Corpus gets document-like signals only (not numeric Pix moves).
-    _populate_corpus_and_sync(new_normativos + new_funds + new_entrants)
+    # Corpus gets document-like signals only (not numeric Pix/juros moves).
+    _populate_corpus_and_sync(new_normativos + new_funds + new_entrants + new_ofertas)
 
     payload = {
         "regulatory": {
@@ -198,6 +260,16 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             "institutions_tracked": len(pix_by_inst),
             "move_count": len(pix_moves),
             "items": pix_moves[:10],
+        },
+        "juros_moves": {
+            "series_tracked": len(juros_focus),
+            "move_count": len(juros_moves),
+            "items": juros_moves[:10],
+        },
+        "ofertas": {
+            "count": len(offerings),
+            "new_count": len(new_ofertas),
+            "items": new_ofertas[:10],
         },
         "source": "lambda_port",
     }

@@ -4,8 +4,23 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import pytest
+
 from src.diff.engine import DynamoDbState, DynamoDbValueState, detect_moves
 from src.ingest import lambda_port
+
+
+@pytest.fixture(autouse=True)
+def _auto_stub_external_sources(monkeypatch):
+    """Keep lambda tests off live juros/ofertas APIs unless a test overrides."""
+    monkeypatch.setattr(lambda_port.bcb_juros, "fetch_daily", lambda **kwargs: [])
+    monkeypatch.setattr(
+        lambda_port.bcb_juros,
+        "filter_rates",
+        lambda rows, institutions=None, modalities=None: rows,
+    )
+    monkeypatch.setattr(lambda_port.bcb_juros, "for_moves", lambda rows: rows)
+    monkeypatch.setattr(lambda_port.cvm_ofertas, "fetch_recent", lambda **kwargs: [])
 
 
 class FakeStateTable:
@@ -22,6 +37,21 @@ class FakeStateTable:
         self.items[(Item["source"], Item["id"])] = Item
 
 
+def _stub_juros(monkeypatch, rows=None):
+    monkeypatch.setattr(lambda_port.bcb_juros, "fetch_daily", lambda **kwargs: rows or [])
+    monkeypatch.setattr(
+        lambda_port.bcb_juros,
+        "filter_rates",
+        lambda rows, institutions=None, modalities=None: rows,
+    )
+    monkeypatch.setattr(lambda_port.bcb_juros, "for_moves", lambda rows: rows)
+    monkeypatch.setattr(
+        lambda_port.bcb_juros,
+        "DEFAULT_MODALITY_FILTERS",
+        ["Cartão de crédito - rotativo"],
+    )
+
+
 def _stub_core_ingesters(monkeypatch):
     """Stub sources that every handler test must not hit live."""
     monkeypatch.setattr(lambda_port.bcb_normativos, "fetch_recent", lambda days=7, types=None: [])
@@ -32,6 +62,7 @@ def _stub_core_ingesters(monkeypatch):
     monkeypatch.setattr(lambda_port.bcb_autorizacoes, "fetch_authorized", lambda: [])
     monkeypatch.setattr(lambda_port.bcb_pix, "fetch_recent", lambda anomes=None, resource=None, top=10000: [])
     monkeypatch.setattr(lambda_port.bcb_pix, "by_institution", lambda rows, watchlist_ispb=None: [])
+    _stub_juros(monkeypatch)
 
 
 def test_lambda_handler_returns_digest_payload_when_ingesters_fail(monkeypatch):
@@ -48,6 +79,9 @@ def test_lambda_handler_returns_digest_payload_when_ingesters_fail(monkeypatch):
     assert payload["market"]["count"] == 0
     assert payload["new_entrants"]["count"] == 0
     assert payload["pix_moves"]["move_count"] == 0
+    assert payload["juros_moves"]["move_count"] == 0
+    assert payload["ofertas"]["count"] == 0
+    assert payload["ofertas"]["new_count"] == 0
 
 
 def test_lambda_handler_passes_watchlist_config_to_ingesters(monkeypatch):
@@ -396,6 +430,99 @@ def test_pix_moves_detected_across_two_runs(monkeypatch):
     assert move["prev_value"] == 100.0
 
 
+def test_ofertas_first_run_seeds_silently(monkeypatch):
+    fake_table = FakeStateTable()
+    monkeypatch.setattr(lambda_port, "DynamoDbState", lambda source: DynamoDbState(source, table=fake_table))
+    monkeypatch.setattr(
+        lambda_port, "DynamoDbValueState", lambda source: DynamoDbValueState(source, table=fake_table)
+    )
+    monkeypatch.setattr(lambda_port.bcb_normativos, "fetch_recent", lambda days=7, types=None: [])
+    monkeypatch.setattr(lambda_port.cvm_fundos, "fetch_funds", lambda watchlist_admins=None: [])
+    monkeypatch.setattr(lambda_port.bcb_ifdata, "latest_base_date", lambda: 202603)
+    monkeypatch.setattr(lambda_port.bcb_ifdata, "fetch_institutions", lambda base_date=None: [])
+    monkeypatch.setattr(lambda_port.bcb_ifdata, "fetch_institution_names", lambda base_date: {})
+    monkeypatch.setattr(lambda_port.bcb_autorizacoes, "fetch_authorized", lambda: [])
+    monkeypatch.setattr(lambda_port.bcb_pix, "fetch_recent", lambda **kwargs: [])
+    monkeypatch.setattr(lambda_port.bcb_pix, "by_institution", lambda rows, watchlist_ispb=None: [])
+
+    o1 = {
+        "id": "cvm-oferta:r160:1",
+        "source": "CVM-Ofertas",
+        "kind": "competitor",
+        "issuer": "ACME",
+        "security": "Debêntures",
+        "event_date": "2026-07-01",
+        "url": "https://dados.cvm.gov.br/dataset/oferta-distrib",
+    }
+    o2 = {**o1, "id": "cvm-oferta:r160:2", "issuer": "BETA"}
+
+    monkeypatch.setattr(lambda_port.cvm_ofertas, "fetch_recent", lambda **kwargs: [o1, o2])
+    day_one = json.loads(lambda_port.lambda_handler({}, None)["body"])
+    assert day_one["ofertas"]["count"] == 2
+    assert day_one["ofertas"]["new_count"] == 0
+
+    o3 = {**o1, "id": "cvm-oferta:r160:3", "issuer": "GAMA"}
+    monkeypatch.setattr(lambda_port.cvm_ofertas, "fetch_recent", lambda **kwargs: [o1, o2, o3])
+    day_two = json.loads(lambda_port.lambda_handler({}, None)["body"])
+    assert day_two["ofertas"]["count"] == 3
+    assert day_two["ofertas"]["new_count"] == 1
+    assert day_two["ofertas"]["items"] == [o3]
+
+
+def test_juros_moves_detected_across_two_runs(monkeypatch):
+    fake_table = FakeStateTable()
+    monkeypatch.setattr(lambda_port, "DynamoDbState", lambda source: DynamoDbState(source, table=fake_table))
+    monkeypatch.setattr(
+        lambda_port, "DynamoDbValueState", lambda source: DynamoDbValueState(source, table=fake_table)
+    )
+    monkeypatch.setattr(lambda_port.bcb_normativos, "fetch_recent", lambda days=7, types=None: [])
+    monkeypatch.setattr(lambda_port.cvm_fundos, "fetch_funds", lambda watchlist_admins=None: [])
+    monkeypatch.setattr(lambda_port.bcb_ifdata, "latest_base_date", lambda: 202603)
+    monkeypatch.setattr(lambda_port.bcb_ifdata, "fetch_institutions", lambda base_date=None: [])
+    monkeypatch.setattr(lambda_port.bcb_ifdata, "fetch_institution_names", lambda base_date: {})
+    monkeypatch.setattr(lambda_port.bcb_autorizacoes, "fetch_authorized", lambda: [])
+    monkeypatch.setattr(lambda_port.bcb_pix, "fetch_recent", lambda **kwargs: [])
+    monkeypatch.setattr(lambda_port.bcb_pix, "by_institution", lambda rows, watchlist_ispb=None: [])
+    monkeypatch.setenv("ONCA_JUROS_MOVE_THRESHOLD_PCT", "10.0")
+    monkeypatch.setenv("ONCA_JUROS_USE_DEFAULT_MODALITIES", "false")
+
+    day1 = [
+        {
+            "move_key": "123|Cartão rotativo",
+            "rate_year": 200.0,
+            "institution": "Bank A",
+            "modality": "Cartão rotativo",
+            "cnpj8": "123",
+        }
+    ]
+    day2 = [
+        {
+            "move_key": "123|Cartão rotativo",
+            "rate_year": 250.0,
+            "institution": "Bank A",
+            "modality": "Cartão rotativo",
+            "cnpj8": "123",
+        }
+    ]
+
+    monkeypatch.setattr(lambda_port.bcb_juros, "fetch_daily", lambda **kwargs: day1)
+    monkeypatch.setattr(
+        lambda_port.bcb_juros, "filter_rates", lambda rows, institutions=None, modalities=None: rows
+    )
+    monkeypatch.setattr(lambda_port.bcb_juros, "for_moves", lambda rows: rows)
+
+    first = json.loads(lambda_port.lambda_handler({}, None)["body"])
+    assert first["juros_moves"]["series_tracked"] == 1
+    assert first["juros_moves"]["move_count"] == 0
+
+    monkeypatch.setattr(lambda_port.bcb_juros, "fetch_daily", lambda **kwargs: day2)
+    second = json.loads(lambda_port.lambda_handler({}, None)["body"])
+    assert second["juros_moves"]["move_count"] == 1
+    move = second["juros_moves"]["items"][0]
+    assert move["pct_change"] == 25.0
+    assert move["prev_value"] == 200.0
+
+
 def test_autorizacoes_state_failure_does_not_flood_new_entrants(monkeypatch):
     class BrokenState:
         def __init__(self, source):
@@ -443,6 +570,7 @@ def _stub_all_ingesters(monkeypatch, normativos=None, funds=None, entrants=None)
     monkeypatch.setattr(lambda_port.bcb_autorizacoes, "fetch_authorized", lambda: entrants or [])
     monkeypatch.setattr(lambda_port.bcb_pix, "fetch_recent", lambda **kwargs: [])
     monkeypatch.setattr(lambda_port.bcb_pix, "by_institution", lambda rows, watchlist_ispb=None: [])
+    _stub_juros(monkeypatch)
 
 
 def test_lambda_handler_writes_new_docs_and_triggers_kb_sync(monkeypatch):

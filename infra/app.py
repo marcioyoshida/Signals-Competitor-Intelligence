@@ -158,6 +158,31 @@ class OncaPrototypeStack(Stack):
                 "ONCA_PIX_MOVE_THRESHOLD_PCT": str(
                     watchlist.get("pix_move_threshold_pct", 15.0)
                 ),
+                # Juros médios: empty competitors = all institutions; empty
+                # modalities + use_defaults=true → DEFAULT_MODALITY_FILTERS in code.
+                "ONCA_JUROS_COMPETITORS": ",".join(
+                    str(x) for x in (watchlist.get("juros_competitors") or [])
+                ),
+                "ONCA_JUROS_MODALITIES": ",".join(
+                    str(x) for x in (watchlist.get("juros_modalities") or [])
+                ),
+                "ONCA_JUROS_USE_DEFAULT_MODALITIES": (
+                    "true" if watchlist.get("juros_use_default_modalities", True) else "false"
+                ),
+                "ONCA_JUROS_MOVE_THRESHOLD_PCT": str(
+                    watchlist.get("juros_move_threshold_pct", 10.0)
+                ),
+                "ONCA_OFERTAS_LOOKBACK_DAYS": str(
+                    watchlist.get("ofertas_lookback_days", 30)
+                ),
+                "ONCA_OFERTAS_WATCHLIST": ",".join(
+                    str(x) for x in (watchlist.get("ofertas_watchlist") or [])
+                ),
+                "ONCA_OFERTAS_USE_COMPETITORS": (
+                    "true"
+                    if watchlist.get("ofertas_use_competitors_watchlist", True)
+                    else "false"
+                ),
                 "ONCA_RAW_BUCKET": raw_bucket.bucket_name,
                 "ONCA_KB_ID": knowledge_base.attr_knowledge_base_id,
                 "ONCA_KB_DATA_SOURCE_ID": data_source.attr_data_source_id,

@@ -21,9 +21,11 @@ import yaml
 from src.diff.engine import detect_moves, detect_new
 from src.ingest import (
     bcb_autorizacoes,
+    bcb_juros,
     bcb_normativos,
     bcb_pix,
     cvm_fundos,
+    cvm_ofertas,
     sec_filings,
 )
 
@@ -113,12 +115,84 @@ def main() -> None:
             print("  Set a real User-Agent in sec_filings.HEADERS; verify with "
                   "`python -m src.ingest.sec_filings inspect`.")
 
+    # Juros médios — rate moves by institution × modality (pricing axis).
+    juros_moves = []
+    try:
+        juros_rows = bcb_juros.fetch_daily()
+        modalities = cfg.get("juros_modalities") or []
+        if not modalities and cfg.get("juros_use_default_modalities", True):
+            modalities = bcb_juros.DEFAULT_MODALITY_FILTERS
+        juros_focus = bcb_juros.filter_rates(
+            juros_rows,
+            institutions=cfg.get("juros_competitors") or None,
+            modalities=modalities or None,
+        )
+        juros_moves = detect_moves(
+            "bcb_juros",
+            bcb_juros.for_moves(juros_focus),
+            key_field="move_key",
+            value_field="rate_year",
+            min_pct=cfg.get("juros_move_threshold_pct", 10.0),
+        )
+        print(f"\nCompetitor — {len(juros_moves)} notable juros rate moves "
+              f"({len(juros_focus)} series tracked):")
+        for m in juros_moves[:20]:
+            arrow = "↑" if m["pct_change"] > 0 else "↓"
+            print(
+                f"  {arrow} {m['pct_change']:+.1f}%  "
+                f"{m.get('rate_year')}% a.a.  "
+                f"{(m.get('institution') or m.get('cnpj8') or '?')[:30]}  "
+                f"{(m.get('modality') or '')[:40]}"
+            )
+    except Exception as e:  # noqa: BLE001 — prototype: isolate source failures
+        print(f"\nCompetitor — Juros médios skipped ({type(e).__name__}: {e})")
+        print("  Run `python -m src.ingest.bcb_juros inspect` to verify the API.")
+
+    # CVM ofertas — capital raise / product launch (seed on first run).
+    new_ofertas = []
+    try:
+        from src.diff.engine import STATE_DIR
+
+        ofertas_days = int(cfg.get("ofertas_lookback_days", 30))
+        ofertas_watch = list(cfg.get("ofertas_watchlist") or [])
+        if not ofertas_watch and cfg.get("ofertas_use_competitors_watchlist", True):
+            ofertas_watch = list(cfg.get("competitors") or [])
+        seeded_ofertas = (STATE_DIR / "cvm_ofertas.json").exists()
+        offerings = cvm_ofertas.fetch_recent(
+            lookback_days=ofertas_days,
+            watchlist=ofertas_watch or None,
+        )
+        detected_ofertas = detect_new("cvm_ofertas", offerings)
+        if not seeded_ofertas:
+            print(
+                f"\nCompetitor — CVM ofertas baseline seeded "
+                f"({len(offerings)} in last {ofertas_days}d); "
+                "new offerings will surface from the next run on."
+            )
+        else:
+            new_ofertas = detected_ofertas
+            print(f"\nCompetitor — {len(new_ofertas)} new CVM offerings:")
+            for o in new_ofertas[:20]:
+                amt = o.get("amount")
+                amt_s = f" R$ {amt:,.0f}" if isinstance(amt, (int, float)) else ""
+                print(
+                    f"  [{o.get('event_date')}] {(o.get('security') or '?')[:28]:28} "
+                    f"{(o.get('issuer') or '?')[:32]}{amt_s}"
+                )
+                if o.get("leader"):
+                    print(f"     lead: {o['leader'][:50]}")
+    except Exception as e:  # noqa: BLE001 — prototype: isolate source failures
+        print(f"\nCompetitor — CVM ofertas skipped ({type(e).__name__}: {e})")
+        print("  Run `python -m src.ingest.cvm_ofertas inspect` to verify the dataset.")
+
     digest = {
         "new_normativos": new_norms,
         "new_fund_filings": new_funds,
         "pix_moves": pix_moves,
         "new_entrants": new_entrants,
         "new_sec_filings": new_sec,
+        "juros_moves": juros_moves,
+        "new_ofertas": new_ofertas,
     }
     out = Path(__file__).parent / "data" / "latest_digest.json"
     out.write_text(json.dumps(digest, ensure_ascii=False, indent=2))

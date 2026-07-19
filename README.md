@@ -32,8 +32,7 @@ alignment against live responses.
 
 ## Status (2026-07-19)
 
-Phase 1.5 Lambda on my2027 digests: normativos, CVM funds, IF.data,
-autorizações (~1.7k institutions, seeded), Pix DICT keys (~872 ISPBs).
-Phase 2 Stage A KB infra is up; embedding sync still blocked on Bedrock
-quota. Details: [docs/CONTEXT.md](docs/CONTEXT.md),
-[docs/DATA_SOURCES.md](docs/DATA_SOURCES.md).
+Phase 1.5 Lambda digests: normativos, CVM funds, IF.data, autorizações,
+Pix DICT keys, and BCB juros médios (daily pricing). Phase 2 Stage A KB
+infra is up; embedding sync still blocked on Bedrock quota. Details:
+[docs/CONTEXT.md](docs/CONTEXT.md), [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md).

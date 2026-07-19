@@ -18,6 +18,26 @@ competitor_ispb: []
 # Minimum month-over-month % change in Pix value to flag as a signal.
 pix_move_threshold_pct: 15.0
 
+# BCB juros médios (average rates by institution × modality).
+# Institution name substrings (case-insensitive). Empty = all institutions.
+juros_competitors: []
+# Modalidade substrings. Defaults in code cover card revolving/installment,
+# unsecured personal credit, and overdraft when this list is omitted/empty
+# and juros_use_default_modalities is true.
+juros_modalities: []
+juros_use_default_modalities: true
+# Relative % change in TaxaJurosAoAno to flag (first run seeds baseline only).
+juros_move_threshold_pct: 10.0
+
+# CVM Ofertas de Distribuição (capital raise / product launch).
+# Lookback window for event dates (Data_Registro / Data_Inicio_Oferta).
+ofertas_lookback_days: 30
+# Name substrings for issuer/leader/admin/manager. Empty = all recent offerings
+# (noisier; first run seeds baseline without alerting).
+# Reuses competitors list when ofertas_use_competitors_watchlist is true.
+ofertas_watchlist: []
+ofertas_use_competitors_watchlist: true
+
 # US-listed Brazilian fintechs to track via SEC EDGAR. Empty = skip SEC
 # entirely (appropriate if your target customer is a bank/insurer and
 # these acquirers/fintechs aren't relevant competitors).

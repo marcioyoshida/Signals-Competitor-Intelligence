@@ -85,6 +85,8 @@ Six ingesters, pure `fetch_*` functions, plus a two-mode diff engine
 | `bcb_ifdata.py` | IF.data OData | market share | ranking | CLI | yes |
 | `bcb_pix.py` | **ChavesPix** DICT keys | key-stock moves by ISPB | detect_moves | yes | yes |
 | `bcb_autorizacoes.py` | **Instituicoes_em_funcionamento** | new entrants | detect_new (seeded) | yes | yes |
+| `bcb_juros.py` | **taxaJuros v2 daily** | rate moves by product | detect_moves | yes | yes |
+| `cvm_ofertas.py` | **CVM oferta-distrib ZIP** | capital raise / launch | detect_new (seeded) | yes | yes |
 | `cvm_fundos.py` | CVM cad_fi | watchlisted fund launches | detect_new | yes | yes |
 | `sec_filings.py` | SEC EDGAR | US-listed fintech filings | detect_new | yes | **not yet** |
 
@@ -94,9 +96,10 @@ Lambda → DynamoDB state + S3 digests + raw corpus for Bedrock KB.
 ### Status as of 2026-07-19 (my2027 / 668449743071 / us-east-1)
 
 - **Phase 1.5 live:** Lambda digest includes normativos, CVM funds, IF.data,
-  **autorizações**, and **Pix DICT keys**. Smoke-tested: 1,751 institutions
-  seeded, 872 ISPBs tracked; second invoke stable (0 false “new”).
-- **Schemas live-aligned** for Pix + autorizações (see DATA_SOURCES.md).
+  **autorizações**, **Pix DICT keys**, and **juros médios** (daily rates).
+  Smoke-tested Pix/autorizações (1,751 institutions / 872 ISPBs); juros
+  wired with live schema (~799 daily rows, default modality filter).
+- **Schemas live-aligned** for Pix, autorizações, juros (see DATA_SOURCES.md).
   Earlier catalog guesses (`TransacoesPix`, plain BcBase EntitySet) were wrong.
 - **Phase 2 Stage A:** raw corpus writer + Bedrock KB (S3 Vectors) still
   provisioned; embedding `StartIngestionJob` still blocked on **0 on-demand
@@ -131,8 +134,8 @@ HEADERS — SEC blocks requests without a real contact UA.
    embedding on-demand throughput; prove `StartIngestionJob` + Retrieve.
 2. **Phase 2 Stage B** — synthesis/correlation Lambda (Retrieve + Converse,
    citation guardrail). This is the product differentiator.
-3. **Next data sources:** Juros médios → CVM Ofertas → CVM Informe Diário;
-   optional SEC on Lambda if payments buyers stay in focus.
+3. **Next data sources:** CVM Informe Diário; optional SEC on Lambda if
+   payments buyers stay in focus.
 4. **Phase 3** — dashboard + alerts.
 5. **Phase 4** — design partners, then Marketplace SaaS listing.
 

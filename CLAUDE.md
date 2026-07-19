@@ -73,14 +73,14 @@ licensed aggregator (People Data Labs / Explorium), never scraped.
 - **Phase 0** — customer discovery (5–10 strategist interviews),
   Marketplace seller registration, AWS credits applications
 - **Phase 1 (done)** — data spine: ingesters + diff engine + digest.
-  Modules: normativos, IF.data, CVM funds, Pix DICT keys, autorizações,
-  SEC (local), `diff/engine.py`, `run.py`. See DATA_SOURCES.md for
-  **live-verified** Pix/autorizações schemas (2026-07-19).
+  Modules: normativos, IF.data, CVM funds, CVM ofertas, Pix DICT keys,
+  autorizações, juros médios, SEC (local), `diff/engine.py`, `run.py`.
+  See DATA_SOURCES.md for **live-verified** schemas (2026-07-19).
 - **Phase 1.5 (done, extended 2026-07-19)** — Lambda + EventBridge +
   DynamoDB state + S3 digests. Live digest sources: normativos, CVM
-  funds, IF.data, **autorizações** (seeded detect_new), **Pix DICT keys**
-  (detect_moves). Env from watchlist: competitors, ISPB list, Pix move
-  threshold. SEC not on Lambda yet. Smoke-tested in my2027.
+  funds, IF.data, **autorizações**, **Pix DICT keys**, **juros médios**,
+  **CVM ofertas** (seeded detect_new). Env from watchlist includes
+  ofertas lookback/watchlist. SEC not on Lambda yet.
 - **Phase 2 (CURRENT)** — Bedrock KB + synthesis loop with citations;
   correlation logic (regulatory event + competitor signal → one flagged
   narrative). This correlation IS the product.
