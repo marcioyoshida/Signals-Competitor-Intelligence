@@ -60,7 +60,7 @@ migration path between the two.
 |---|---|---|
 | BCB Buscador de Normas | REST API | New regulatory documents |
 | BCB IF.data (Olinda OData) | API | Quarterly institution financials → market share |
-| CVM Dados Abertos (cad_fi) | CSV | New fund filings by competitors |
+| CVM Dados Abertos (registro_fundo_classe / RCVM 175) | ZIP CSV | New fund/class filings by competitors |
 | Receita Federal CNPJ | bulk CSV | Company universe (deferred — multi-GB) |
 | SUSEP / Diário Oficial | scrape | Deferred — higher maintenance |
 

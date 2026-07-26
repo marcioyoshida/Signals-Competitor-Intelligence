@@ -16,12 +16,12 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """
     event = event or {}
     max_cand = int(os.environ.get("ONCA_SYNTH_MAX_CANDIDATES", "10"))
-    use_llm = os.environ.get("ONCA_SYNTH_USE_LLM", "true").lower() in (
+    use_llm = os.environ.get("ONCA_SYNTH_USE_LLM", "false").lower() in (
         "1",
         "true",
         "yes",
     )
-    use_kb = os.environ.get("ONCA_SYNTH_USE_KB", "true").lower() in (
+    use_kb = os.environ.get("ONCA_SYNTH_USE_KB", "false").lower() in (
         "1",
         "true",
         "yes",
@@ -66,6 +66,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         "regulatory_fusion": sum(1 for c in cands if c.get("kind") == "regulatory_fusion"),
         "alerts": sum(1 for c in cands if c.get("is_alert")),
         "multi_lens": sum(1 for c in cands if len(c.get("lenses") or []) >= 2),
+        "min_lenses": int(os.environ.get("ONCA_SYNTH_MIN_LENSES", "2")),
+        "min_score": float(os.environ.get("ONCA_SYNTH_MIN_SCORE", "0.45")),
     }
     status = "ok" if narratives else "ok_empty"
     payload = {
@@ -75,6 +77,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         "narratives": narratives,
         "keys": keys,
         "fusion": fusion,
+        "as_of": next((n.get("as_of") for n in narratives if n.get("as_of")), None),
         "source": "stage_b_synth",
     }
     return {

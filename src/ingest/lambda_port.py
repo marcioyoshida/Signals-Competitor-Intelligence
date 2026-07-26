@@ -5,7 +5,7 @@ can later be wired to EventBridge + Lambda with minimal changes.
 
 Sources:
   - BCB normativos (regulatory) — detect_new
-  - CVM cad_fi funds (competitor) — detect_new
+  - CVM funds RCVM 175 registry (competitor launches) — detect_new
   - BCB IF.data market share — snapshot (no id-diff)
   - BCB autorizações (new entrants) — detect_new, first-run seed suppressed
   - BCB Pix (traction moves) — detect_moves via DynamoDB value state
@@ -110,13 +110,21 @@ def _tag_new(docs: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _strip_raw(docs: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Compact rows for digest context (drop bulky raw payloads)."""
+    """Compact rows for digest context (drop bulky raw payloads).
+
+    SEC primary documents can be 100k+ chars; digests keep subject + a short
+    excerpt so Stage B fusion stays light. Full text is on the raw S3 object.
+    """
+    max_text = int(os.environ.get("ONCA_DIGEST_TEXT_CHARS", "2000"))
     out: list[dict[str, Any]] = []
     for d in docs:
         if not isinstance(d, dict):
             continue
         row = {k: v for k, v in d.items() if k != "raw"}
         row.setdefault("is_new", False)
+        text = row.get("text")
+        if isinstance(text, str) and len(text) > max_text:
+            row["text"] = text[:max_text].rstrip() + "…"
         out.append(row)
     return out
 
@@ -273,6 +281,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         print(f"Warning: CVM ofertas fetch failed: {exc}")
 
     # SEC EDGAR — US-listed payments/fintech disclosures (seed on first run).
+    # Metadata first (submissions JSON), then primary-document bodies for the
+    # diffed set + a small context sample so digests/corpus carry text not only URLs.
     sec_filings_rows: list[dict[str, Any]] = []
     new_sec: list[dict[str, Any]] = []
     if sec_tickers:
@@ -283,6 +293,20 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             new_sec = _new_since_last_run(
                 "sec_filings", sec_filings_rows, seed_if_empty=True
             )
+            # Corpus: full body for genuinely new filings.
+            if new_sec:
+                try:
+                    sec_filings.enrich_with_content(new_sec)
+                except Exception as exc:  # pragma: no cover
+                    print(f"Warning: SEC primary-document fetch failed: {exc}")
+            # Digest context: enrich a few recent rows still missing text
+            # (same object refs as new_sec are skipped via skip_existing).
+            context_need = [r for r in sec_filings_rows[:15] if not r.get("text")]
+            if context_need:
+                try:
+                    sec_filings.enrich_with_content(context_need)
+                except Exception as exc:  # pragma: no cover
+                    print(f"Warning: SEC context content fetch failed: {exc}")
         except Exception as exc:  # pragma: no cover
             print(f"Warning: SEC EDGAR fetch failed: {exc}")
 

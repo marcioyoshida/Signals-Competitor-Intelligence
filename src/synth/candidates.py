@@ -1,16 +1,24 @@
-"""Extract fusion candidates from an ingest digest (Stage B hardened).
+"""Extract fusion candidates from an ingest digest (Stage B quality bar).
 
 Uses both delta `items` (is_new) and `context` samples so real digests still
 yield product narratives after state seeding empties the delta lists.
+
+Quality gates (env-overridable via kwargs from the handler):
+  - Prefer multi-lens entity clusters (≥ min_lenses, default 2)
+  - Single-lens only if is_new and lens is high-value
+  - Drop market-only / weak context noise
+  - Optional PL floor on fund AUM context
+  - Attach digest as_of dates onto candidates
 """
 from __future__ import annotations
 
+import os
 import re
 from collections import defaultdict
 from typing import Any
 from uuid import uuid4
 
-from src.synth.entities import primary_entity, resolve_entities, signal_blob, tokens_for_match
+from src.synth.entities import resolve_entities, signal_blob, tokens_for_match
 
 # Lens priority when ranking multi-signal entity clusters.
 LENS_WEIGHT = {
@@ -25,33 +33,60 @@ LENS_WEIGHT = {
     "market": 0.08,
 }
 
+# Single-lens candidates allowed only for these lenses when is_new.
+HIGH_VALUE_SOLO_LENSES = frozenset({"regulatory", "sec", "ofertas", "entrants", "funds"})
+
+# Market is backdrop only — never a solo seed.
+BACKDROP_LENSES = frozenset({"market"})
+
 
 def extract_candidates(
     digest: dict[str, Any],
     max_candidates: int = 10,
+    *,
+    min_lenses: int | None = None,
+    min_pl: float | None = None,
+    min_score: float | None = None,
 ) -> list[dict[str, Any]]:
     """Build correlation candidates from digest sections + context."""
-    signals = _collect_signals(digest)
+    min_lenses = (
+        min_lenses
+        if min_lenses is not None
+        else int(os.environ.get("ONCA_SYNTH_MIN_LENSES", "2"))
+    )
+    min_pl = (
+        min_pl
+        if min_pl is not None
+        else float(os.environ.get("ONCA_SYNTH_MIN_FUND_PL", "100000000"))  # R$100M
+    )
+    min_score = (
+        min_score
+        if min_score is not None
+        else float(os.environ.get("ONCA_SYNTH_MIN_SCORE", "0.45"))
+    )
+
+    as_of = _digest_as_of(digest)
+    signals = _collect_signals(digest, min_pl=min_pl)
     if not signals:
         return []
 
-    # 1) Entity clusters (multi-lens fusion)
-    clusters = _cluster_by_entity(signals)
+    # 1) Entity clusters (multi-lens fusion) — primary product unit
+    clusters = _cluster_by_entity(signals, min_lenses=min_lenses)
     candidates: list[dict[str, Any]] = []
     used_ids: set[str] = set()
 
     for entity_id, members in clusters.items():
-        if len(candidates) >= max_candidates:
+        if len(candidates) >= max_candidates * 2:  # gather then gate/sort
             break
-        cand = _candidate_from_cluster(entity_id, members)
+        cand = _candidate_from_cluster(entity_id, members, as_of=as_of)
         for s in cand["sources"]:
             if s.get("id"):
                 used_ids.add(str(s["id"]))
         candidates.append(cand)
 
-    # 2) Regulatory seeds not already in a cluster (topic fusion via soft match)
+    # 2) Regulatory seeds not already clustered (topic fusion)
     for reg in signals:
-        if len(candidates) >= max_candidates:
+        if len(candidates) >= max_candidates * 2:
             break
         if reg.get("_lens") != "regulatory":
             continue
@@ -76,20 +111,22 @@ def extract_candidates(
                 "lenses": _lenses(sources),
                 "threat_score": _threat_score(sources),
                 "is_alert": bool(reg.get("is_new") or any(r.get("is_new") for r in related)),
+                "as_of": as_of,
+                "data_as_of": _sources_as_of(sources, as_of),
             }
         )
 
-    # 3) Remaining high-value competitor alerts (new moves / filings)
+    # 3) High-value NEW competitor alerts only (no weak context solo seeds)
     for sig in sorted(signals, key=_signal_rank, reverse=True):
-        if len(candidates) >= max_candidates:
+        if len(candidates) >= max_candidates * 2:
             break
         sid = str(sig.get("id") or "")
         if sid and sid in used_ids:
             continue
-        if not sig.get("is_new") and sig.get("_lens") not in ("sec", "ofertas", "inf_diario"):
-            # Prefer alerts; allow context only for high-value lenses as seed
-            if not (sig.get("pct_change") and abs(float(sig.get("pct_change") or 0)) >= 15):
-                continue
+        if not sig.get("is_new"):
+            continue
+        if sig.get("_lens") in BACKDROP_LENSES:
+            continue
         if sid:
             used_ids.add(sid)
         related = _soft_related(sig, signals, used_ids, limit=3)
@@ -107,9 +144,16 @@ def extract_candidates(
                 "entities": resolve_entities(sig),
                 "lenses": _lenses(sources),
                 "threat_score": _threat_score(sources),
-                "is_alert": bool(sig.get("is_new")),
+                "is_alert": True,
+                "as_of": as_of,
+                "data_as_of": _sources_as_of(sources, as_of),
             }
         )
+
+    # Quality gate
+    candidates = [
+        c for c in candidates if _passes_quality_gate(c, min_lenses=min_lenses, min_score=min_score)
+    ]
 
     candidates.sort(
         key=lambda c: (
@@ -122,7 +166,76 @@ def extract_candidates(
     return candidates[:max_candidates]
 
 
-def _collect_signals(digest: dict[str, Any]) -> list[dict[str, Any]]:
+def _passes_quality_gate(
+    cand: dict[str, Any],
+    *,
+    min_lenses: int,
+    min_score: float,
+) -> bool:
+    lenses = [x for x in (cand.get("lenses") or []) if x not in BACKDROP_LENSES]
+    # Counting backdrop separately: multi-lens can include market as 3rd
+    all_lenses = cand.get("lenses") or []
+    n_core = len(lenses)
+    n_all = len(all_lenses)
+    score = float(cand.get("threat_score") or 0)
+    is_alert = bool(cand.get("is_alert"))
+    seed_lens = (cand.get("seed") or {}).get("_lens")
+
+    # Always drop pure market-only
+    if n_all == 1 and seed_lens in BACKDROP_LENSES:
+        return False
+    if n_core == 0 and n_all <= 1:
+        return False
+
+    # Prefer multi-lens product unit
+    if n_all >= min_lenses and score >= min_score * 0.85:
+        return True
+    if n_core >= min_lenses and score >= min_score * 0.85:
+        return True
+
+    # Solo only for new high-value alerts
+    if is_alert and n_core == 1 and seed_lens in HIGH_VALUE_SOLO_LENSES and score >= min_score:
+        return True
+    if is_alert and n_all >= 2 and score >= min_score * 0.9:
+        return True
+
+    return False
+
+
+def _digest_as_of(digest: dict[str, Any]) -> str | None:
+    """Best-effort digest timestamp for product surfaces."""
+    inf = digest.get("inf_diario_moves") or {}
+    if isinstance(inf, dict) and inf.get("as_of"):
+        return str(inf["as_of"])[:10]
+    # fall back to newest filed/event_date in any section
+    dates: list[str] = []
+    for key in ("sec_filings", "ofertas", "regulatory", "competitor"):
+        for item in _section_pool(digest, key):
+            for dk in ("filed", "event_date", "registered", "date"):
+                v = item.get(dk)
+                if v:
+                    dates.append(str(v)[:10])
+    return max(dates) if dates else None
+
+
+def _sources_as_of(sources: list[dict[str, Any]], fallback: str | None) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for s in sources:
+        lens = str(s.get("_lens") or "signal")
+        for dk in ("filed", "event_date", "registered", "date", "anomes"):
+            if s.get(dk):
+                out[lens] = str(s[dk])[:10]
+                break
+    if fallback and "digest" not in out:
+        out["digest"] = fallback
+    return out
+
+
+def _collect_signals(
+    digest: dict[str, Any],
+    *,
+    min_pl: float = 0.0,
+) -> list[dict[str, Any]]:
     """Flatten items + context from each section into tagged signal dicts."""
     sections = [
         ("regulatory", "regulatory"),
@@ -143,6 +256,14 @@ def _collect_signals(digest: dict[str, Any]) -> list[dict[str, Any]]:
                 continue
             row = dict(item)
             row["_lens"] = lens
+            # Noise: tiny AUM context funds
+            if lens == "inf_diario" and not row.get("is_new"):
+                pl = row.get("pl")
+                try:
+                    if pl is not None and float(pl) < min_pl:
+                        continue
+                except (TypeError, ValueError):
+                    pass
             # Market rows lack ids — synthesize stable ones
             if not row.get("id"):
                 if lens == "market":
@@ -153,7 +274,6 @@ def _collect_signals(digest: dict[str, Any]) -> list[dict[str, Any]]:
                     row["id"] = f"{lens}:{uuid4().hex[:10]}"
             iid = str(row["id"])
             if iid in seen:
-                # Prefer keeping is_new=True version
                 continue
             seen.add(iid)
             out.append(row)
@@ -195,31 +315,41 @@ def _section_pool(digest: dict[str, Any], key: str) -> list[dict[str, Any]]:
 
 def _cluster_by_entity(
     signals: list[dict[str, Any]],
+    *,
+    min_lenses: int = 2,
 ) -> dict[str, list[dict[str, Any]]]:
     clusters: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for sig in signals:
         for ent in resolve_entities(sig):
             clusters[ent].append(sig)
-    # Keep clusters with 2+ distinct lenses, or 1 lens if alert/new, or strong move
     kept: dict[str, list[dict[str, Any]]] = {}
     for ent, members in clusters.items():
+        uniq: dict[str, dict[str, Any]] = {}
+        for m in members:
+            uniq[str(m.get("id"))] = m
+        members = list(uniq.values())
         lenses = {m.get("_lens") for m in members}
+        core = lenses - BACKDROP_LENSES
         has_new = any(m.get("is_new") for m in members)
         has_move = any(
             m.get("pct_change") is not None and abs(float(m.get("pct_change") or 0)) >= 10
             for m in members
         )
-        if len(lenses) >= 2 or has_new or has_move or len(members) >= 2:
-            # de-dupe members by id
-            uniq: dict[str, dict[str, Any]] = {}
-            for m in members:
-                uniq[str(m.get("id"))] = m
-            kept[ent] = list(uniq.values())
+        # Product bar: multi-lens preferred; single-lens only for new high-value
+        if len(lenses) >= min_lenses or len(core) >= min_lenses:
+            kept[ent] = members
+        elif has_new and (core & HIGH_VALUE_SOLO_LENSES):
+            kept[ent] = members
+        elif has_move and len(core) >= 1 and len(lenses) >= 2:
+            kept[ent] = members
     return kept
 
 
 def _candidate_from_cluster(
-    entity_id: str, members: list[dict[str, Any]]
+    entity_id: str,
+    members: list[dict[str, Any]],
+    *,
+    as_of: str | None = None,
 ) -> dict[str, Any]:
     # Seed: prefer regulatory, else SEC, else highest threat component
     def seed_key(m: dict[str, Any]) -> tuple:
@@ -245,6 +375,8 @@ def _candidate_from_cluster(
         "lenses": _lenses(sources),
         "threat_score": _threat_score(sources),
         "is_alert": any(m.get("is_new") for m in members),
+        "as_of": as_of,
+        "data_as_of": _sources_as_of(sources, as_of),
     }
 
 

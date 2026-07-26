@@ -80,7 +80,8 @@ def synthesize_candidate(
         "citations": guarded["citations"],
         "dropped_urls": guarded["dropped_urls"],
         "mode": mode,
-        "as_of": dt.date.today().isoformat(),
+        "as_of": candidate.get("as_of") or dt.date.today().isoformat(),
+        "data_as_of": candidate.get("data_as_of") or {},
         "source_ids": [s.get("id") for s in sources if s.get("id")],
     }
 
@@ -166,9 +167,14 @@ def _describe_signal(sig: dict[str, Any], prefix: str = "") -> str:
             f"{sig.get('number') or ''} — {sig.get('subject') or 'n/a'}. {url}"
         ).strip()
     if lens == "sec" or sig.get("ticker") and sig.get("form"):
+        subj = (sig.get("subject") or "").strip()
+        if not subj and isinstance(sig.get("text"), str):
+            subj = sig["text"][:240].replace("\n", " ").strip()
+        subj_s = f" — {subj}" if subj else ""
         return (
             f"{head}SEC filing{alert}: {sig.get('ticker')} {sig.get('form')} "
-            f"({sig.get('company') or ''}) filed {sig.get('filed') or ''}. {url}"
+            f"({sig.get('company') or ''}) filed {sig.get('filed') or ''}"
+            f"{subj_s}. {url}"
         ).strip()
     if lens == "ofertas" or sig.get("issuer") or sig.get("security"):
         amt = sig.get("amount")

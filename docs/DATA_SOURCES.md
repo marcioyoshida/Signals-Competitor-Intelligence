@@ -161,12 +161,15 @@ These reveal what a competitor is *actually doing*, not just what rules changed.
 - **Config:** `ofertas_lookback_days` (default 30), `ofertas_watchlist` / reuse competitors
 - **Implemented:** `src/ingest/cvm_ofertas.py`. Verify: `python -m src.ingest.cvm_ofertas inspect`
 
-### CVM — cad_fi (fund registry) *(in Lambda + local)*
-- **What:** Registry of structured + non-structured funds (ICVM 555 / Res. CVM 175), refreshed to last business day
-- **CI value:** ★★★★☆ — new fund by a watchlisted admin = competitor product launch
-- **Access:** `dados.cvm.gov.br/dados/FI/CAD/DADOS/cad_fi.csv` (latin-1, `;`)
-- **Note:** funds adapted to Res. CVM 175 no longer listed in the legacy structured-funds cadastral file; TAXA_ADM / INF_TAXA_ADM columns now included
-- **Implemented:** `src/ingest/cvm_fundos.py`
+### CVM — fund registry / launches *(in Lambda + local)*
+- **What:** Live RCVM 175 cadastral data — fundos + classes (admin, gestor, registration dates)
+- **CI value:** ★★★★☆ — new fund/class for a watchlisted admin = competitor product launch
+- **Access:** ZIP `dados.cvm.gov.br/dados/FI/CAD/DADOS/registro_fundo_classe.zip`
+  - `registro_fundo.csv` — fund-level admin/gestor
+  - `registro_classe.csv` — class CNPJ (joins Informe Diário)
+- **Legacy:** `cad_fi.csv` is non-adapted / mostly CANCELADA — **not** used for active watchlists
+- **Signal:** `detect_new` on `cvm:fund:{cnpj}` / `cvm:class:{cnpj}`
+- **Implemented:** `src/ingest/cvm_fundos.py`. Verify: `python -m src.ingest.cvm_fundos inspect`
 
 ### SEC EDGAR — US-listed Brazilian fintechs *(in Lambda + local)*
 - **What:** Filings for Brazilian fintechs listed in the US — Stone (STNE),
@@ -262,7 +265,7 @@ coordinators — relationship-graph enrichment, not a standalone signal.
 | Source | Module | Local `run.py` | Lambda digest | Diff |
 |---|---|---|---|---|
 | BCB normativos | `bcb_normativos.py` | yes | yes | detect_new |
-| CVM cad_fi | `cvm_fundos.py` | yes | yes | detect_new |
+| CVM funds (RCVM 175 registry) | `cvm_fundos.py` | yes | yes | detect_new |
 | BCB IF.data | `bcb_ifdata.py` | (CLI) | yes (snapshot) | ranking only |
 | BCB Pix DICT keys | `bcb_pix.py` | yes | yes | detect_moves |
 | BCB institutions in operation | `bcb_autorizacoes.py` | yes | yes | detect_new (seeded) |

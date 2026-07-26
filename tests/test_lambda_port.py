@@ -466,6 +466,12 @@ def test_sec_filings_first_run_seeds_silently(monkeypatch):
     }
     f2 = {**f1, "id": "sec:1:acc-b", "form": "20-F"}
 
+    # Avoid live SEC Archives fetches in unit tests.
+    monkeypatch.setattr(
+        lambda_port.sec_filings,
+        "enrich_with_content",
+        lambda rows, **kw: rows,
+    )
     monkeypatch.setattr(lambda_port.sec_filings, "fetch_filings", lambda *a, **k: [f1, f2])
     day_one = json.loads(lambda_port.lambda_handler({}, None)["body"])
     assert day_one["sec_filings"]["count"] == 2
@@ -477,6 +483,77 @@ def test_sec_filings_first_run_seeds_silently(monkeypatch):
     assert day_two["sec_filings"]["count"] == 3
     assert day_two["sec_filings"]["new_count"] == 1
     assert day_two["sec_filings"]["items"] == [{**f3, "is_new": True}]
+
+
+def test_sec_new_filings_get_primary_content_before_corpus(monkeypatch):
+    """New SEC rows must be content-enriched so raw_writer stores body, not just URL."""
+    fake_table = FakeStateTable()
+    monkeypatch.setattr(lambda_port, "DynamoDbState", lambda source: DynamoDbState(source, table=fake_table))
+    monkeypatch.setattr(
+        lambda_port, "DynamoDbValueState", lambda source: DynamoDbValueState(source, table=fake_table)
+    )
+    _stub_core_ingesters(monkeypatch)
+    monkeypatch.setenv("ONCA_SEC_TICKERS", "NU")
+    monkeypatch.setenv("ONCA_RAW_BUCKET", "onca-raw-test")
+
+    seed = {
+        "id": "sec:1:acc-a",
+        "source": "SEC-EDGAR",
+        "kind": "competitor",
+        "ticker": "NU",
+        "form": "6-K",
+        "company": "Nu Holdings",
+        "filed": "2026-06-01",
+        "url": "https://www.sec.gov/Archives/edgar/data/1/a.htm",
+        "text": None,
+    }
+    monkeypatch.setattr(lambda_port.sec_filings, "fetch_filings", lambda *a, **k: [seed])
+    # Seed baseline (no content needed)
+    monkeypatch.setattr(
+        lambda_port.sec_filings,
+        "enrich_with_content",
+        lambda rows, **kw: rows,
+    )
+    lambda_port.lambda_handler({}, None)
+
+    new_row = {
+        **seed,
+        "id": "sec:1:acc-b",
+        "filed": "2026-07-20",
+        "url": "https://www.sec.gov/Archives/edgar/data/1/b.htm",
+    }
+    monkeypatch.setattr(lambda_port.sec_filings, "fetch_filings", lambda *a, **k: [seed, new_row])
+
+    enriched_ids: list[str] = []
+
+    def fake_enrich(rows, **kw):
+        for r in rows:
+            r["text"] = "Nu active customers and TPV for the month."
+            r["subject"] = "Nu active customers and TPV for the month."
+            r["content_chars"] = len(r["text"])
+            enriched_ids.append(r["id"])
+        return rows
+
+    monkeypatch.setattr(lambda_port.sec_filings, "enrich_with_content", fake_enrich)
+
+    written_docs: list[dict] = []
+
+    def fake_write(bucket, docs):
+        written_docs.extend(docs)
+        return [f"{d['source']}/{d['id']}.txt" for d in docs]
+
+    monkeypatch.setattr(lambda_port.raw_writer, "write_raw_documents", fake_write)
+
+    day_two = json.loads(lambda_port.lambda_handler({}, None)["body"])
+    assert day_two["sec_filings"]["new_count"] == 1
+    assert "sec:1:acc-b" in enriched_ids
+    assert len(written_docs) == 1
+    assert written_docs[0]["id"] == "sec:1:acc-b"
+    assert "TPV" in (written_docs[0].get("text") or "")
+    # Digest items should carry subject/text excerpt (not null).
+    item = day_two["sec_filings"]["items"][0]
+    assert item["is_new"] is True
+    assert "TPV" in (item.get("text") or "")
 
 
 def test_ofertas_first_run_seeds_silently(monkeypatch):

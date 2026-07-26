@@ -91,3 +91,36 @@ def test_write_raw_documents_returns_empty_list_for_empty_input(monkeypatch):
 
     assert raw_writer.write_raw_documents("onca-raw-test", []) == []
     assert fake.objects == {}
+
+
+def test_write_raw_documents_includes_sec_filing_body(monkeypatch):
+    fake = FakeS3Client()
+    monkeypatch.setattr(raw_writer.boto3, "client", lambda *a, **k: fake)
+
+    doc = {
+        "id": "sec:1745431:0001-26-000001",
+        "source": "SEC-EDGAR",
+        "kind": "competitor",
+        "ticker": "STNE",
+        "form": "6-K",
+        "company": "StoneCo Ltd.",
+        "filed": "2026-06-01",
+        "accession": "0001-26-000001",
+        "subject": "Earnings release for Q1 2026",
+        "text": "StoneCo reported total payment volume of R$ 100 billion.",
+        "url": "https://www.sec.gov/Archives/edgar/data/1745431/0001/a.htm",
+    }
+
+    written = raw_writer.write_raw_documents("onca-raw-test", [doc])
+    assert written == ["SEC-EDGAR/sec:1745431:0001-26-000001.txt"]
+    text = fake.objects[written[0]].decode("utf-8")
+    assert "STNE 6-K" in text
+    assert "StoneCo Ltd." in text
+    assert "Earnings release for Q1 2026" in text
+    assert "total payment volume" in text
+    assert doc["url"] in text
+
+    metadata = json.loads(fake.objects[f"{written[0]}.metadata.json"])
+    assert metadata["metadataAttributes"]["source"] == "SEC-EDGAR"
+    assert metadata["metadataAttributes"]["doc_type"] == "6-K"
+    assert metadata["metadataAttributes"]["url"] == doc["url"]

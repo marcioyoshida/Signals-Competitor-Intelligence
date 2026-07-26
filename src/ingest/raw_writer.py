@@ -43,19 +43,29 @@ def _document_text(doc: dict[str, Any]) -> str:
                 if doc.get("rito"):
                     lines.append(f"Rito: {doc['rito']}")
                 return "\n".join(line for line in lines if line and not line.endswith(": "))
-        # SEC EDGAR filing
+        # SEC EDGAR filing — prefer primary-document text when present
         if doc.get("source") == "SEC-EDGAR" or (
             doc.get("ticker") and doc.get("form")
         ):
             if doc.get("form") or doc.get("ticker"):
-                lines = [
+                header = [
                     f"{doc.get('ticker') or ''} {doc.get('form') or ''}".strip(),
                     doc.get("company") or "",
                     f"Filed: {doc.get('filed') or ''}",
                     f"Accession: {doc.get('accession') or ''}",
-                    doc.get("url") or "",
                 ]
-                return "\n".join(line for line in lines if line)
+                if doc.get("subject"):
+                    header.append(f"Subject: {doc['subject']}")
+                if doc.get("url"):
+                    header.append(doc["url"])
+                head = "\n".join(line for line in header if line)
+                body = (doc.get("text") or "").strip()
+                if body:
+                    return f"{head}\n\n{body}"
+                # Fallback when body fetch failed — still leave a citable stub.
+                if doc.get("content_error"):
+                    return f"{head}\n\n[content unavailable: {doc['content_error']}]"
+                return head
         # BCB autorizações / new-entrant entity
         if doc.get("name") or doc.get("cnpj"):
             lines = [

@@ -250,6 +250,10 @@ class OncaPrototypeStack(Stack):
                 # Heuristic-first until Bedrock embed/LLM quotas are non-zero.
                 "ONCA_SYNTH_USE_LLM": "false",
                 "ONCA_SYNTH_USE_KB": "false",
+                # Quality bar: multi-lens preferred; solo only for new high-value.
+                "ONCA_SYNTH_MIN_LENSES": "2",
+                "ONCA_SYNTH_MIN_SCORE": "0.45",
+                "ONCA_SYNTH_MIN_FUND_PL": "100000000",
                 "ONCA_ROUTER_MODEL_ID": "amazon.nova-micro-v1:0",
                 "ONCA_SYNTH_MODEL_ID": "amazon.nova-lite-v1:0",
             },
