@@ -834,3 +834,46 @@ def test_detect_moves_with_dynamodb_value_state():
     moves = detect_moves("bcb_pix", items_v2, "ispb", "tx_value", min_pct=10, state=state2)
     assert len(moves) == 1
     assert moves[0]["pct_change"] == 100.0
+
+
+def test_source_budget_skips_when_deadline_passed():
+    import time as _t
+
+    with pytest.raises(lambda_port._SourceBudgetExceeded):
+        with lambda_port._source_budget("x", deadline=_t.monotonic() - 1, per_source=90):
+            pass  # pragma: no cover - budget raises on entry
+
+
+def test_source_budget_caps_a_slow_call():
+    import time as _t
+
+    started = _t.monotonic()
+    with pytest.raises(lambda_port._SourceBudgetExceeded):
+        with lambda_port._source_budget("slow", deadline=_t.monotonic() + 60, per_source=1):
+            _t.sleep(5)
+    # SIGALRM should have fired near the 1s cap, well before the 5s sleep.
+    assert _t.monotonic() - started < 3
+
+
+def test_handler_degrades_when_a_source_exceeds_its_budget(monkeypatch):
+    import time as _t
+
+    def _slow_normativos(days=7, types=None):
+        _t.sleep(5)
+        return [{"id": "should-not-appear"}]
+
+    monkeypatch.setattr(lambda_port, "_new_since_last_run", lambda source, docs, seed_if_empty=False: docs)
+    monkeypatch.setattr(lambda_port, "_moves_since_last_run", lambda *a, **k: [])
+    _stub_core_ingesters(monkeypatch)
+    monkeypatch.setattr(lambda_port.bcb_normativos, "fetch_recent", _slow_normativos)
+    monkeypatch.setenv("ONCA_SOURCE_TIMEOUT_SEC", "1")
+
+    started = _t.monotonic()
+    response = lambda_port.lambda_handler({}, None)
+    elapsed = _t.monotonic() - started
+
+    assert response["statusCode"] == 200
+    payload = json.loads(response["body"])
+    # normativos was cut by its budget -> empty, not the slow-return sentinel.
+    assert payload["regulatory"]["count"] == 0
+    assert elapsed < 4  # cut at ~1s, did not wait the full 5s

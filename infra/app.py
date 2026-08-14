@@ -17,6 +17,8 @@ from aws_cdk import aws_iam as iam
 from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_s3 as s3
 from aws_cdk import aws_s3vectors as s3vectors
+from aws_cdk import aws_stepfunctions as sfn
+from aws_cdk import aws_stepfunctions_tasks as sfn_tasks
 
 EMBEDDING_MODEL_ID = "amazon.titan-embed-text-v2:0"
 VECTOR_DIMENSION = 1024
@@ -143,8 +145,11 @@ class OncaPrototypeStack(Stack):
             runtime=lambda_.Runtime.PYTHON_3_11,
             handler="src.ingest.lambda_port.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
-            timeout=Duration.minutes(5),
-            memory_size=512,
+            # Ingest does many sequential live fetches (BCB/CVM/SEC/IF.data,
+            # rate-limited); 5 min was too tight and timed out. Give it the
+            # Lambda max headroom so the pipeline's ingest step completes.
+            timeout=Duration.minutes(15),
+            memory_size=1024,
             environment={
                 "PYTHONPATH": "/var/task",
                 "ONCA_STATE_TABLE": state_table.table_name,
@@ -223,14 +228,6 @@ class OncaPrototypeStack(Stack):
             )
         )
 
-        rule = events.Rule(
-            self,
-            "OncaDailySchedule",
-            schedule=events.Schedule.rate(Duration.days(1)),
-            enabled=True,
-        )
-        rule.add_target(targets.LambdaFunction(func))
-
         # Phase 2 Stage B: synthesis / correlation Lambda (digest-first;
         # optional KB Retrieve + Converse when quotas allow).
         synth = lambda_.Function(
@@ -285,14 +282,58 @@ class OncaPrototypeStack(Stack):
             )
         )
 
-        # Best-effort daily schedule; Step Functions ordering is a later upgrade.
-        synth_rule = events.Rule(
+        # Orchestration: one daily pipeline ordering ingest -> synth, replacing
+        # the two independent schedules. Sequential execution guarantees synth
+        # reads the digest this run's ingest just wrote (digest_io picks the
+        # newest object in lambda-digests/). Each task gets an empty payload so
+        # synth never mistakes the ingest Lambda's {statusCode, body} return for
+        # a digest. No KB-ingestion wait: synth is digest-first and KB Retrieve
+        # only enriches the already-embedded corpus, so today's newest docs
+        # lagging one run is acceptable.
+        ingest_task = sfn_tasks.LambdaInvoke(
             self,
-            "OncaSynthesisDailySchedule",
+            "IngestTask",
+            lambda_function=func,
+            payload=sfn.TaskInput.from_object({}),
+            result_path="$.ingest",
+        )
+        ingest_task.add_retry(
+            errors=["States.ALL"],
+            max_attempts=2,
+            interval=Duration.seconds(30),
+            backoff_rate=2.0,
+        )
+        synth_task = sfn_tasks.LambdaInvoke(
+            self,
+            "SynthTask",
+            lambda_function=synth,
+            payload=sfn.TaskInput.from_object({}),
+            result_path="$.synth",
+        )
+        synth_task.add_retry(
+            errors=["States.ALL"],
+            max_attempts=2,
+            interval=Duration.seconds(30),
+            backoff_rate=2.0,
+        )
+
+        pipeline = sfn.StateMachine(
+            self,
+            "OncaPipeline",
+            definition_body=sfn.DefinitionBody.from_chainable(
+                ingest_task.next(synth_task)
+            ),
+            # Budget for a 15-min ingest (plus a retry) followed by synth.
+            timeout=Duration.minutes(45),
+        )
+
+        pipeline_rule = events.Rule(
+            self,
+            "OncaPipelineDailySchedule",
             schedule=events.Schedule.rate(Duration.days(1)),
             enabled=True,
         )
-        synth_rule.add_target(targets.LambdaFunction(synth))
+        pipeline_rule.add_target(targets.SfnStateMachine(pipeline))
 
 
 app = App()

@@ -27,7 +27,17 @@ class JsonState:
 
 
 class DynamoDbState:
-    """Set-of-seen-IDs state, stored as one DynamoDB item per source."""
+    """Set-of-seen-IDs state, sharded across DynamoDB items per source.
+
+    The seen set is written in fixed-size shards (``__seen__#N``) with a
+    ``__meta__`` record holding ``shard_count``. A single item can't hold an
+    unbounded set — DynamoDB caps items at 400 KB, and a source like
+    ``cvm_fundos`` outgrew that, breaking persistence. Sharding keeps every
+    item small. Legacy single-item ``__meta__.seen`` state is read on load and
+    migrated to shards on the next save.
+    """
+
+    SHARD_SIZE = 1000
 
     def __init__(self, source: str, table: Any | None = None):
         self.source = source
@@ -43,16 +53,40 @@ class DynamoDbState:
     def load(self) -> None:
         if self.table is None:
             return
-        resp = self.table.get_item(Key={"source": self.source, "id": "__meta__"})
-        item = resp.get("Item") or {}
-        seen = item.get("seen", [])
-        self.seen = set(seen) if seen else set()
+        meta = (
+            self.table.get_item(Key={"source": self.source, "id": "__meta__"}).get("Item")
+            or {}
+        )
+        shard_count = int(meta.get("shard_count", 0) or 0)
+        seen: set[str] = set()
+        if shard_count:
+            for i in range(shard_count):
+                shard = (
+                    self.table.get_item(
+                        Key={"source": self.source, "id": f"__seen__#{i}"}
+                    ).get("Item")
+                    or {}
+                )
+                seen.update(shard.get("seen", []))
+        else:
+            # Back-compat: legacy single-item seen list on the __meta__ record.
+            seen.update(meta.get("seen", []))
+        self.seen = seen
 
     def save(self) -> None:
         if self.table is None:
             return
+        ids = sorted(self.seen)
+        shards = [
+            ids[i : i + self.SHARD_SIZE] for i in range(0, len(ids), self.SHARD_SIZE)
+        ] or [[]]
+        for i, chunk in enumerate(shards):
+            self.table.put_item(
+                Item={"source": self.source, "id": f"__seen__#{i}", "seen": chunk}
+            )
+        # Meta last: only carries shard_count now (drops any legacy seen list).
         self.table.put_item(
-            Item={"source": self.source, "id": "__meta__", "seen": sorted(self.seen)}
+            Item={"source": self.source, "id": "__meta__", "shard_count": len(shards)}
         )
 
 
@@ -67,7 +101,13 @@ def detect_new(source: str, docs: list[dict[str, Any]], state: Any | None = None
         state.load()
     fresh = [d for d in docs if d["id"] not in state.seen]
     state.seen.update(d["id"] for d in docs)
-    state.save()
+    # A persistence failure must not discard the correctly-computed fresh set.
+    # Returning every doc as "new" here once flooded downstream corpus writes
+    # with thousands of S3 objects and timed the ingest Lambda out.
+    try:
+        state.save()
+    except Exception as exc:  # pragma: no cover - defensive; state save is best-effort
+        print(f"Warning: {source} state save failed (returning fresh anyway): {exc}")
     return fresh
 
 

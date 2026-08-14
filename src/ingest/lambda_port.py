@@ -18,11 +18,71 @@ from __future__ import annotations
 
 import json
 import os
+import signal
+import threading
+import time
+from contextlib import contextmanager
 from typing import Any
 
 import boto3
 
 from src.diff.engine import DynamoDbState, DynamoDbValueState, detect_moves, detect_new
+
+
+class _SourceBudgetExceeded(Exception):
+    """A single source ran past its wall-clock budget (or the ingest deadline)."""
+
+
+@contextmanager
+def _source_budget(label: str, deadline: float, per_source: int):
+    """Bound one source's wall-clock time so a slow endpoint can't eat the run.
+
+    Enforces both a per-source cap and the overall ingest deadline. If the
+    deadline has already passed, the source is skipped. Uses SIGALRM (main
+    thread only); elsewhere it degrades to a no-op and relies on the caller's
+    deadline checks. The raised error is an Exception, so each source's existing
+    ``except Exception`` handler catches it and falls back to an empty result.
+    """
+    remaining = deadline - time.monotonic()
+    if remaining <= 1:
+        raise _SourceBudgetExceeded(f"{label} skipped (ingest deadline reached)")
+
+    use_alarm = hasattr(signal, "SIGALRM") and (
+        threading.current_thread() is threading.main_thread()
+    )
+    if not use_alarm:
+        yield
+        return
+
+    secs = max(1, int(min(per_source, remaining)))
+
+    def _fire(signum, frame):
+        raise _SourceBudgetExceeded(f"{label} exceeded {secs}s budget")
+
+    previous = signal.getsignal(signal.SIGALRM)
+    signal.signal(signal.SIGALRM, _fire)
+    signal.alarm(secs)
+    try:
+        yield
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, previous)
+
+
+def _ingest_deadline(context: Any) -> float:
+    """Monotonic time by which ingestion must stop starting new work.
+
+    Derived from the Lambda's actual remaining time (minus a reserve for the
+    S3 digest write + return), so it adapts to the configured timeout. Falls
+    back to a fixed budget when no Lambda context is available (local/tests).
+    """
+    reserve = int(os.environ.get("ONCA_INGEST_RESERVE_SEC", "25"))
+    fallback = int(os.environ.get("ONCA_INGEST_BUDGET_SEC", "780"))
+    now = time.monotonic()
+    if context is not None and hasattr(context, "get_remaining_time_in_millis"):
+        remaining_s = context.get_remaining_time_in_millis() / 1000.0
+        return now + max(5.0, remaining_s - reserve)
+    return now + fallback
 from src.ingest import (
     bcb_autorizacoes,
     bcb_ifdata,
@@ -138,6 +198,16 @@ def _populate_corpus_and_sync(new_docs: list[dict[str, Any]]) -> None:
     if not raw_bucket:
         return
 
+    # Defense-in-depth: never write an unbounded number of objects in one run.
+    # A broken diff state once marked every fund "new"; capping keeps a single
+    # run's corpus writes (and the ingest Lambda's wall clock) bounded.
+    max_docs = int(os.environ.get("ONCA_MAX_CORPUS_DOCS", "300"))
+    if len(new_docs) > max_docs:
+        print(
+            f"Info: corpus write capped at {max_docs} of {len(new_docs)} new docs"
+        )
+        new_docs = new_docs[:max_docs]
+
     try:
         written = raw_writer.write_raw_documents(raw_bucket, new_docs)
     except Exception as exc:  # pragma: no cover - defensive handling for S3 write failures
@@ -193,23 +263,31 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     inf_diario_top = os.environ.get("ONCA_INF_DIARIO_TOP_N", "").strip()
     inf_diario_top_n = int(inf_diario_top) if inf_diario_top else None
 
+    # Wall-clock guards: bound each source and stop starting new work before the
+    # Lambda times out, so ingest always returns a (possibly partial) digest.
+    deadline = _ingest_deadline(context)
+    per_source = int(os.environ.get("ONCA_SOURCE_TIMEOUT_SEC", "90"))
+
     try:
-        normativos = bcb_normativos.fetch_recent(days=lookback_days)
+        with _source_budget("BCB normativos", deadline, per_source):
+            normativos = bcb_normativos.fetch_recent(days=lookback_days)
     except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
         normativos = []
         print(f"Warning: BCB normativos fetch failed: {exc}")
 
     try:
-        funds = cvm_fundos.fetch_funds(watchlist_admins=competitors)
+        with _source_budget("CVM funds", deadline, per_source):
+            funds = cvm_fundos.fetch_funds(watchlist_admins=competitors)
     except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
         funds = []
         print(f"Warning: CVM funds fetch failed: {exc}")
 
     try:
-        base_date = bcb_ifdata.latest_base_date()
-        rows = bcb_ifdata.fetch_institutions(base_date=base_date)
-        names = bcb_ifdata.fetch_institution_names(base_date)
-        market = bcb_ifdata.market_share(rows, institution_names=names)[:10]
+        with _source_budget("IF.data market", deadline, per_source):
+            base_date = bcb_ifdata.latest_base_date()
+            rows = bcb_ifdata.fetch_institutions(base_date=base_date)
+            names = bcb_ifdata.fetch_institution_names(base_date)
+            market = bcb_ifdata.market_share(rows, institution_names=names)[:10]
     except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
         market = []
         print(f"Warning: IF.data market fetch failed: {exc}")
@@ -218,10 +296,11 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     authorized: list[dict[str, Any]] = []
     new_entrants: list[dict[str, Any]] = []
     try:
-        authorized = bcb_autorizacoes.fetch_authorized()
-        new_entrants = _new_since_last_run(
-            "bcb_autorizacoes", authorized, seed_if_empty=True
-        )
+        with _source_budget("BCB autorizações", deadline, per_source):
+            authorized = bcb_autorizacoes.fetch_authorized()
+            new_entrants = _new_since_last_run(
+                "bcb_autorizacoes", authorized, seed_if_empty=True
+            )
     except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
         print(f"Warning: BCB autorizações fetch failed: {exc}")
 
@@ -229,17 +308,18 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     pix_by_inst: list[dict[str, Any]] = []
     pix_moves: list[dict[str, Any]] = []
     try:
-        pix_rows = bcb_pix.fetch_recent()
-        pix_by_inst = bcb_pix.by_institution(
-            pix_rows, watchlist_ispb=competitor_ispb or None
-        )
-        pix_moves = _moves_since_last_run(
-            "bcb_pix",
-            pix_by_inst,
-            key_field="ispb",
-            value_field="tx_value",
-            min_pct=pix_threshold,
-        )
+        with _source_budget("BCB Pix", deadline, per_source):
+            pix_rows = bcb_pix.fetch_recent()
+            pix_by_inst = bcb_pix.by_institution(
+                pix_rows, watchlist_ispb=competitor_ispb or None
+            )
+            pix_moves = _moves_since_last_run(
+                "bcb_pix",
+                pix_by_inst,
+                key_field="ispb",
+                value_field="tx_value",
+                min_pct=pix_threshold,
+            )
     except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
         print(f"Warning: BCB Pix fetch failed: {exc}")
 
@@ -247,22 +327,23 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     juros_focus: list[dict[str, Any]] = []
     juros_moves: list[dict[str, Any]] = []
     try:
-        juros_rows = bcb_juros.fetch_daily()
-        modalities = juros_modalities
-        if not modalities and juros_use_defaults:
-            modalities = list(bcb_juros.DEFAULT_MODALITY_FILTERS)
-        juros_focus = bcb_juros.filter_rates(
-            juros_rows,
-            institutions=juros_competitors or None,
-            modalities=modalities or None,
-        )
-        juros_moves = _moves_since_last_run(
-            "bcb_juros",
-            bcb_juros.for_moves(juros_focus),
-            key_field="move_key",
-            value_field="rate_year",
-            min_pct=juros_threshold,
-        )
+        with _source_budget("BCB juros médios", deadline, per_source):
+            juros_rows = bcb_juros.fetch_daily()
+            modalities = juros_modalities
+            if not modalities and juros_use_defaults:
+                modalities = list(bcb_juros.DEFAULT_MODALITY_FILTERS)
+            juros_focus = bcb_juros.filter_rates(
+                juros_rows,
+                institutions=juros_competitors or None,
+                modalities=modalities or None,
+            )
+            juros_moves = _moves_since_last_run(
+                "bcb_juros",
+                bcb_juros.for_moves(juros_focus),
+                key_field="move_key",
+                value_field="rate_year",
+                min_pct=juros_threshold,
+            )
     except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
         print(f"Warning: BCB juros médios fetch failed: {exc}")
 
@@ -270,13 +351,14 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     offerings: list[dict[str, Any]] = []
     new_ofertas: list[dict[str, Any]] = []
     try:
-        offerings = cvm_ofertas.fetch_recent(
-            lookback_days=ofertas_lookback,
-            watchlist=ofertas_watch or None,
-        )
-        new_ofertas = _new_since_last_run(
-            "cvm_ofertas", offerings, seed_if_empty=True
-        )
+        with _source_budget("CVM ofertas", deadline, per_source):
+            offerings = cvm_ofertas.fetch_recent(
+                lookback_days=ofertas_lookback,
+                watchlist=ofertas_watch or None,
+            )
+            new_ofertas = _new_since_last_run(
+                "cvm_ofertas", offerings, seed_if_empty=True
+            )
     except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
         print(f"Warning: CVM ofertas fetch failed: {exc}")
 
@@ -287,26 +369,31 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     new_sec: list[dict[str, Any]] = []
     if sec_tickers:
         try:
-            sec_filings_rows = sec_filings.fetch_filings(
-                sec_tickers, lookback_days=sec_lookback
-            )
-            new_sec = _new_since_last_run(
-                "sec_filings", sec_filings_rows, seed_if_empty=True
-            )
-            # Corpus: full body for genuinely new filings.
-            if new_sec:
-                try:
-                    sec_filings.enrich_with_content(new_sec)
-                except Exception as exc:  # pragma: no cover
-                    print(f"Warning: SEC primary-document fetch failed: {exc}")
-            # Digest context: enrich a few recent rows still missing text
-            # (same object refs as new_sec are skipped via skip_existing).
-            context_need = [r for r in sec_filings_rows[:15] if not r.get("text")]
-            if context_need:
-                try:
-                    sec_filings.enrich_with_content(context_need)
-                except Exception as exc:  # pragma: no cover
-                    print(f"Warning: SEC context content fetch failed: {exc}")
+            with _source_budget("SEC EDGAR", deadline, per_source):
+                sec_filings_rows = sec_filings.fetch_filings(
+                    sec_tickers, lookback_days=sec_lookback
+                )
+                new_sec = _new_since_last_run(
+                    "sec_filings", sec_filings_rows, seed_if_empty=True
+                )
+                # Corpus: full body for genuinely new filings.
+                if new_sec:
+                    try:
+                        sec_filings.enrich_with_content(new_sec)
+                    except _SourceBudgetExceeded:
+                        raise
+                    except Exception as exc:  # pragma: no cover
+                        print(f"Warning: SEC primary-document fetch failed: {exc}")
+                # Digest context: enrich a few recent rows still missing text
+                # (same object refs as new_sec are skipped via skip_existing).
+                context_need = [r for r in sec_filings_rows[:15] if not r.get("text")]
+                if context_need:
+                    try:
+                        sec_filings.enrich_with_content(context_need)
+                    except _SourceBudgetExceeded:
+                        raise
+                    except Exception as exc:  # pragma: no cover
+                        print(f"Warning: SEC context content fetch failed: {exc}")
         except Exception as exc:  # pragma: no cover
             print(f"Warning: SEC EDGAR fetch failed: {exc}")
 
@@ -315,22 +402,29 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     inf_diario_moves: list[dict[str, Any]] = []
     if inf_diario_watch:
         try:
-            inf_diario_rows = cvm_inf_diario.fetch_latest(
-                watchlist_admins=inf_diario_watch,
-                top_n=inf_diario_top_n,
-            )
-            inf_diario_moves = _moves_since_last_run(
-                "cvm_inf_diario",
-                cvm_inf_diario.for_moves(inf_diario_rows),
-                key_field="move_key",
-                value_field="pl",
-                min_pct=inf_diario_threshold,
-            )
+            with _source_budget("CVM Informe Diário", deadline, per_source):
+                inf_diario_rows = cvm_inf_diario.fetch_latest(
+                    watchlist_admins=inf_diario_watch,
+                    top_n=inf_diario_top_n,
+                )
+                inf_diario_moves = _moves_since_last_run(
+                    "cvm_inf_diario",
+                    cvm_inf_diario.for_moves(inf_diario_rows),
+                    key_field="move_key",
+                    value_field="pl",
+                    min_pct=inf_diario_threshold,
+                )
         except Exception as exc:  # pragma: no cover
             print(f"Warning: CVM Informe Diário fetch failed: {exc}")
 
-    new_normativos = _new_since_last_run("bcb_normativos", normativos)
-    new_funds = _new_since_last_run("cvm_fundos", funds)
+    new_normativos: list[dict[str, Any]] = []
+    new_funds: list[dict[str, Any]] = []
+    try:
+        with _source_budget("state diffs", deadline, per_source):
+            new_normativos = _new_since_last_run("bcb_normativos", normativos)
+            new_funds = _new_since_last_run("cvm_fundos", funds)
+    except Exception as exc:  # pragma: no cover - deadline reached / state unavailable
+        print(f"Warning: normativos/funds diff skipped: {exc}")
 
     # Corpus gets document-like signals only (not numeric Pix/juros/AUM moves).
     _populate_corpus_and_sync(
