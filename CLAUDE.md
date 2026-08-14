@@ -81,18 +81,29 @@ licensed aggregator (People Data Labs / Explorium), never scraped.
   funds, IF.data, **autorizações**, **Pix DICT keys**, **juros médios**,
   **CVM ofertas** (seeded detect_new). Env from watchlist includes
   ofertas lookback/watchlist, SEC EDGAR (seeded; STNE/PAGS/NU/INTR/XP).
-- **Phase 2 (CURRENT)** — Bedrock KB + synthesis loop with citations;
-  correlation logic (regulatory event + competitor signal → one flagged
-  narrative). This correlation IS the product.
-  **Stage A (infra deployed, embedding quota in progress)** — raw corpus
-  to `onca-raw-{account}` + Bedrock KB (S3 Vectors). Corpus write live-ok;
-  `StartIngestionJob` blocked until embed RPM > 0. Self-service increases
-  filed for Cohere Embed V4 cross-region RPM/TPM; Titan V2 needs Support
-  case (see `docs/AWS_BEDROCK_QUOTA_TICKET.md`).
-  **Stage B (scaffolded 2026-07-19)** — `src/synth/` digest-first synthesis
-  Lambda with citation guardrail; optional KB Retrieve + Converse. Design:
-  `docs/2026-07-19-phase2-stage-b-scaffold.md`.
-- **Phase 3** — dashboard + alerts
+- **Phase 2 (done 2026-08-14)** — Bedrock KB + synthesis loop with
+  citations; correlation logic (regulatory event + competitor signal → one
+  flagged narrative). This correlation IS the product.
+  **Stage A (done)** — raw corpus to `onca-raw-{account}` + Bedrock KB
+  (S3 Vectors, KB `CQ5LBZBQTY`). Titan V2 embed quota 60 RPM approved
+  2026-08-10; ingestion + cited retrieval validated.
+  **Stage B (live 2026-08-14)** — `src/synth/` synthesis Lambda producing
+  LLM-written (nova-lite Converse) + KB-retrieved, source-cited fused
+  narratives → `narratives/{date}/{id}.json`. Guardrails: citation scrub
+  (`scrub_fake_url_tokens`) + absolute-PL AUM floor. `ONCA_SYNTH_USE_LLM/
+  USE_KB=true`.
+  **Orchestration (2026-08-14)** — `OncaPipeline` Step Functions state
+  machine, `IngestTask → SynthTask`, one daily schedule (replaced the two
+  standalone EventBridge rules). Ingest hardened after a 15-min-timeout
+  root cause: `DynamoDbState` seen-set now sharded (`src/diff/engine.py`),
+  per-source budgets + corpus cap (`src/ingest/lambda_port.py`). Ingest
+  ~45–57s, pipeline ~90s green. See
+  `docs/2026-08-14-phase2-pipeline-and-hardening.md`.
+- **Phase 3 (CURRENT)** — warroom dashboard + alerts. Dashboard chosen
+  next; design in `docs/2026-08-14-phase3-dashboard-plan.md` (static
+  S3+CloudFront reading an aggregated `feed.json`; frontend-build and auth
+  decisions still open). Not started. `threat_score` is still a
+  placeholder heuristic — real threat scoring is separate future work.
 - **Phase 4** — design partners, then Marketplace SaaS listing
 
 ## Conventions
