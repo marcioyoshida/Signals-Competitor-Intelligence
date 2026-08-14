@@ -6,6 +6,40 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from src.synth.candidates import extract_candidates
 
 
+def test_inf_diario_drops_subfloor_aum_even_when_new():
+    """Near-zero / negative-AUM funds yield meaningless |pct_change|>100% and
+    must be filtered by the absolute-PL floor regardless of is_new."""
+    digest = {
+        "inf_diario_moves": {
+            "items": [
+                {
+                    "id": "cvm-inf:shell",
+                    "fund_name": "ITAÚ SMALL CAP VALUATION II",
+                    "admin": "ITAU UNIBANCO S.A.",
+                    "pl": -34210.63,
+                    "pct_change": -104.51,
+                    "url": "https://dados.cvm.gov.br/dataset/fi-doc-inf_diario",
+                    "is_new": True,
+                },
+                {
+                    "id": "cvm-inf:real",
+                    "fund_name": "ITAÚ SOBERANO RF",
+                    "admin": "ITAU UNIBANCO S.A.",
+                    "pl": 5e10,
+                    "pct_change": 2.1,
+                    "url": "https://dados.cvm.gov.br/dataset/fi-doc-inf_diario",
+                    "is_new": True,
+                },
+            ],
+            "context": [],
+        },
+    }
+    cands = extract_candidates(digest, max_candidates=10, min_lenses=1, min_score=0.0)
+    src_ids = {s.get("id") for c in cands for s in (c.get("sources") or [])}
+    assert "cvm-inf:shell" not in src_ids
+    assert "cvm-inf:real" in src_ids
+
+
 def test_extract_regulatory_and_competitor_candidates():
     digest = {
         "regulatory": {

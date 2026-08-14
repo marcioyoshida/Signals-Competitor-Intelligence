@@ -247,9 +247,11 @@ class OncaPrototypeStack(Stack):
                 "ONCA_RAW_BUCKET": raw_bucket.bucket_name,
                 "ONCA_KB_ID": knowledge_base.attr_knowledge_base_id,
                 "ONCA_SYNTH_MAX_CANDIDATES": "10",
-                # Heuristic-first until Bedrock embed/LLM quotas are non-zero.
-                "ONCA_SYNTH_USE_LLM": "false",
-                "ONCA_SYNTH_USE_KB": "false",
+                # Live synthesis on: Titan V2 embed quota (60 RPM, approved
+                # 2026-08-10) unblocked KB ingestion; nova-lite Converse + KB
+                # Retrieve verified against this account 2026-08-13.
+                "ONCA_SYNTH_USE_LLM": "true",
+                "ONCA_SYNTH_USE_KB": "true",
                 # Quality bar: multi-lens preferred; solo only for new high-value.
                 "ONCA_SYNTH_MIN_LENSES": "2",
                 "ONCA_SYNTH_MIN_SCORE": "0.45",

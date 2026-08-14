@@ -256,11 +256,14 @@ def _collect_signals(
                 continue
             row = dict(item)
             row["_lens"] = lens
-            # Noise: tiny AUM context funds
-            if lens == "inf_diario" and not row.get("is_new"):
+            # Noise: funds below the AUM floor. Use absolute PL so near-zero or
+            # negative-AUM shells (which yield meaningless |pct_change| > 100%,
+            # e.g. a R$-34k fund reading "-104.51%") are dropped even when the
+            # move is_new — otherwise they headline the feed as false threats.
+            if lens == "inf_diario":
                 pl = row.get("pl")
                 try:
-                    if pl is not None and float(pl) < min_pl:
+                    if pl is not None and abs(float(pl)) < min_pl:
                         continue
                 except (TypeError, ValueError):
                     pass

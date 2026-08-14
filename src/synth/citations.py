@@ -10,6 +10,27 @@ from urllib.parse import urlparse
 
 _URL_RE = re.compile(r"https?://[^\s\]\)\"'<>]+", re.IGNORECASE)
 
+# Placeholder "citations" the LLM emits when a source has no real link. Two
+# costumes seen live: "(URL: CVM-Ofertas)" / "URL: None", and angle-bracket
+# pseudo-links "<BCB-Autorizacoes>". Both mimic a citation without being one.
+_FAKE_URL_RE = re.compile(
+    r"\s*\(?\s*url\s*[:=]\s*(?!https?://)[^)\n]*?\)?(?=[\s.,;)]|$)",
+    re.IGNORECASE,
+)
+# <https://real/link> → keep the bare URL (markdown autolink).
+_ANGLE_LINK_RE = re.compile(r"<\s*(https?://[^>\s]+)\s*>", re.IGNORECASE)
+# <anything-that-is-not-a-link> → drop entirely (source-name pseudo-link).
+_ANGLE_FAKE_RE = re.compile(r"\s*<\s*(?!https?://)[^>\n]*?>", re.IGNORECASE)
+
+
+def scrub_fake_url_tokens(text: str) -> str:
+    """Strip non-link citation placeholders; keep real URLs; tidy whitespace."""
+    cleaned = _ANGLE_LINK_RE.sub(r"\1", text or "")
+    cleaned = _ANGLE_FAKE_RE.sub("", cleaned)
+    cleaned = _FAKE_URL_RE.sub("", cleaned)
+    cleaned = re.sub(r"\s+([.,;])", r"\1", cleaned)
+    return re.sub(r"\s{2,}", " ", cleaned).strip()
+
 
 def collect_allowed_urls(sources: list[dict[str, Any]]) -> set[str]:
     """Gather citation URLs from source records (normalized, no trailing punct)."""
@@ -55,6 +76,10 @@ def enforce_citations(
     """
     allowed = collect_allowed_urls(sources)
     if not narrative or not narrative.strip():
+        return {"narrative": "", "citations": [], "dropped_urls": [], "ok": False}
+
+    narrative = scrub_fake_url_tokens(narrative)
+    if not narrative:
         return {"narrative": "", "citations": [], "dropped_urls": [], "ok": False}
 
     sentences = _split_sentences(narrative)

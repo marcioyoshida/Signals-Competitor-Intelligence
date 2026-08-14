@@ -10,9 +10,13 @@ from src.synth import bedrock_llm, citations
 SYSTEM = (
     "You are a competitive-intelligence analyst for Brazilian financial services. "
     "Write a short flagged briefing (3–6 sentences). "
-    "Every factual claim about a filing or rule must include the source URL "
-    "exactly as provided in the Sources list. Do not invent URLs or numbers. "
-    "If uncertain, say so. Prefer Portuguese for regulatory titles when present."
+    "When a Source provides an http(s) URL, cite the claim by pasting that URL "
+    "verbatim as plain text. If a Source has no URL, refer to it by name only — "
+    "never write a URL, the literal word 'None', angle brackets like "
+    "'<BCB-Autorizacoes>', or a placeholder such as '(URL: ...)'. "
+    "Do not invent URLs or numbers. If uncertain, say so. "
+    "Prefer Portuguese for regulatory titles when present. "
+    "Return only the briefing prose — no title, heading, or markdown."
 )
 
 ENTITY_LABELS = {
@@ -93,9 +97,11 @@ def _build_prompt(candidate: dict[str, Any]) -> str:
         "Sources (use only these URLs):",
     ]
     for s in candidate.get("sources") or []:
+        url = s.get("url")
+        url_field = url if url else "(no link — refer by name, do not write a URL)"
         lines.append(
             f"- lens={s.get('_lens')} id={s.get('id')} source={s.get('source')} "
-            f"url={s.get('url') or '(none)'} summary={_one_line(s)}"
+            f"url={url_field} summary={_one_line(s)}"
         )
     lines.append("")
     lines.append("Write the flagged briefing now, fusing the lenses into one narrative.")
