@@ -14,6 +14,7 @@ from aws_cdk import App, CfnOutput, Duration, Stack
 from aws_cdk import aws_bedrock as bedrock
 from aws_cdk import aws_cloudfront as cloudfront
 from aws_cdk import aws_cloudfront_origins as cf_origins
+from aws_cdk import aws_cloudwatch as cloudwatch
 from aws_cdk import aws_dynamodb as dynamodb
 from aws_cdk import aws_events as events
 from aws_cdk import aws_events_targets as targets
@@ -342,6 +343,44 @@ class OncaPrototypeStack(Stack):
                 ],
             ),
             comment="Onca warroom dashboard",
+            # Pilot traffic monitor: standard access logs to an auto-provisioned
+            # S3 bucket (per-request detail — IP, URI, status, referer).
+            enable_logging=True,
+            log_file_prefix="cf-access/",
+        )
+
+        # And a CloudWatch dashboard to watch pilot traffic at a glance.
+        def _cf_metric(name: str, statistic: str) -> cloudwatch.Metric:
+            return cloudwatch.Metric(
+                namespace="AWS/CloudFront",
+                metric_name=name,
+                dimensions_map={
+                    "DistributionId": distribution.distribution_id,
+                    "Region": "Global",
+                },
+                statistic=statistic,
+                period=Duration.hours(1),
+            )
+
+        traffic = cloudwatch.Dashboard(
+            self,
+            "OncaDashboardTraffic",
+            dashboard_name="Onca-Warroom-Traffic",
+        )
+        traffic.add_widgets(
+            cloudwatch.GraphWidget(
+                title="Requests (hourly)",
+                left=[_cf_metric("Requests", "Sum")],
+                width=12,
+            ),
+            cloudwatch.GraphWidget(
+                title="Error rate % (4xx / 5xx)",
+                left=[
+                    _cf_metric("4xxErrorRate", "Average"),
+                    _cf_metric("5xxErrorRate", "Average"),
+                ],
+                width=12,
+            ),
         )
 
         # Deploy the static frontend (index.html). prune=False so the Lambda's
@@ -447,6 +486,15 @@ class OncaPrototypeStack(Stack):
             "DashboardUrl",
             value=f"https://{distribution.distribution_domain_name}",
             description="Onca warroom dashboard (basic auth)",
+        )
+        CfnOutput(
+            self,
+            "TrafficDashboardUrl",
+            value=(
+                f"https://console.aws.amazon.com/cloudwatch/home?region={self.region}"
+                f"#dashboards:name={traffic.dashboard_name}"
+            ),
+            description="CloudWatch traffic monitor for the pilot dashboard",
         )
 
 

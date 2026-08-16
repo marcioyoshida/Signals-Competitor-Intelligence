@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="pt-BR" data-theme="dark">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="robots" content="noindex, nofollow" />
-<title>Onça — Warroom</title>
+<title>Onça — Sala de Guerra</title>
 <style>
   :root {
     --bg: #ffffff; --panel: #f6f7f9; --panel2: #eef0f3; --border: #d9dde3;
@@ -63,6 +63,7 @@
     border-radius: 8px; padding: 6px 8px; font-size: 13px;
   }
   label.chk { display: inline-flex; align-items: center; gap: 6px; color: var(--ink2); font-size: 13px; }
+  .hint { color: var(--muted); font-size: 12px; padding: 0 16px 10px; }
   .legend { display: flex; gap: 12px; flex-wrap: wrap; padding: 0 16px 12px; color: var(--ink2); font-size: 12px; }
   .legend .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
   .feed { padding: 6px 10px 14px; }
@@ -85,17 +86,20 @@
   .est { color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: .4px; }
   .lenses { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
   .chip { font-size: 11px; color: var(--ink2); background: var(--panel2); border: 1px solid var(--border);
-    border-radius: 6px; padding: 1px 7px; }
+    border-radius: 6px; padding: 1px 7px; cursor: help; }
   .narr { margin: 8px 0 0; color: var(--ink); }
   .narr.clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .cites { margin-top: 9px; display: flex; gap: 8px; flex-wrap: wrap; font-size: 12px; }
   .cites .src { color: var(--muted); }
-  .ent-row { display: grid; grid-template-columns: 1fr 96px 42px; align-items: center; gap: 8px;
+  .ent-row { display: grid; grid-template-columns: 1fr 96px 52px; align-items: center; gap: 8px;
     padding: 9px 16px; border-bottom: 1px solid var(--border); cursor: pointer; }
   .ent-row:hover { background: var(--panel2); }
   .ent-row.active { background: var(--panel2); }
   .ent-name { font-size: 13px; font-weight: 560; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ent-meta { text-align: right; font-size: 12px; color: var(--ink2); font-variant-numeric: tabular-nums; }
+  .ent-meta { text-align: right; }
+  .heat { display: inline-block; min-width: 40px; text-align: center; padding: 2px 6px;
+    border-radius: 6px; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--ink);
+    border: 1px solid var(--border); }
   .spark { display: block; }
   table.tv { width: 100%; border-collapse: collapse; font-size: 13px; }
   table.tv th, table.tv td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); }
@@ -108,11 +112,11 @@
 </head>
 <body>
 <header>
-  <h1>🐆 Onça <span style="color:var(--muted);font-weight:500">— Warroom</span></h1>
+  <h1>🐆 Onça <span style="color:var(--muted);font-weight:500">— Sala de Guerra</span></h1>
   <span class="sub" id="asof"></span>
   <span class="spacer"></span>
-  <button class="btn" id="tableToggle">Table view</button>
-  <button class="btn" id="themeToggle">Light</button>
+  <button class="btn" id="tableToggle">Tabela</button>
+  <button class="btn" id="themeToggle">Claro</button>
 </header>
 
 <div class="wrap">
@@ -120,40 +124,60 @@
 
   <div class="cols">
     <div class="panel">
-      <h2>Threat-scored feed</h2>
+      <h2>Feed priorizado por ameaça</h2>
       <div class="filters">
-        <select id="fEntity"><option value="">All entities</option></select>
-        <select id="fLens"><option value="">All lenses</option></select>
-        <select id="fDate"><option value="">All dates</option></select>
-        <label class="chk"><input type="checkbox" id="fAlert" /> Alerts only</label>
-        <button class="btn" id="viewToggle" title="Summarize to one card per entity">By entity</button>
-        <input type="search" id="fSearch" placeholder="Search narratives…" style="flex:1;min-width:140px" />
+        <select id="fEntity"><option value="">Todas as entidades</option></select>
+        <select id="fLens"><option value="">Todas as fontes</option></select>
+        <select id="fDate"><option value="">Todas as datas</option></select>
+        <label class="chk"><input type="checkbox" id="fAlert" /> Somente alertas</label>
+        <button class="btn" id="viewToggle" title="Resumir para um cartão por entidade">Por entidade</button>
+        <input type="search" id="fSearch" placeholder="Buscar nas narrativas…" style="flex:1;min-width:140px" />
       </div>
+      <div class="hint">Cada cartão reúne sinais de várias fontes (as “lentes”) sobre a mesma entidade e traz o link de cada fonte. O nível de ameaça é uma estimativa que combina quantas fontes e quão relevantes são.</div>
       <div class="legend" id="legend"></div>
       <div class="feed" id="feed"></div>
       <div id="tableView" class="hidden" style="padding:6px 12px 16px"></div>
     </div>
 
     <div class="panel" style="align-self:start">
-      <h2>Entity watch <span style="text-transform:none;letter-spacing:0">· peak score over window</span></h2>
+      <h2>Monitor de entidades <span style="text-transform:none;letter-spacing:0">· pico de ameaça no período</span></h2>
       <div id="entities"></div>
     </div>
   </div>
-  <p class="est" style="margin:16px 6px">Threat score is an estimated heuristic (not a validated model). Every claim links to its source.</p>
+  <p class="est" style="margin:16px 6px">O nível de ameaça é uma estimativa heurística (não é um modelo validado). Cada afirmação tem link para a sua fonte.</p>
 </div>
 
 <div class="tip" id="tip"></div>
 
 <script>
 const TIERS = [
-  { min: 0.85, label: "CRITICAL", var: "--t-crit" },
-  { min: 0.65, label: "HIGH",     var: "--t-high" },
-  { min: 0.40, label: "MEDIUM",   var: "--t-med"  },
-  { min: 0.00, label: "LOW",      var: "--t-low"  },
+  { min: 0.85, label: "CRÍTICO", var: "--t-crit" },
+  { min: 0.65, label: "ALTO",    var: "--t-high" },
+  { min: 0.40, label: "MÉDIO",   var: "--t-med"  },
+  { min: 0.00, label: "BAIXO",   var: "--t-low"  },
 ];
+// Plain-language names for the signal "lenses" (data sources fused per narrative).
+const LENS_LABELS = {
+  regulatory: "Regulatório (BCB)",
+  sec: "Documentos SEC (EUA)",
+  ofertas: "Ofertas de distribuição (CVM)",
+  inf_diario: "Patrimônio de fundos (CVM)",
+  funds: "Registro de fundos (CVM)",
+  pix: "Movimentação Pix",
+  juros: "Juros médios (BCB)",
+  entrants: "Novos entrantes (BCB)",
+  market: "Participação de mercado",
+};
+const lensLabel = (l) => LENS_LABELS[l] || l;
 const cssvar = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const tierOf = (s) => TIERS.find(t => (s ?? 0) >= t.min) || TIERS[TIERS.length - 1];
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
+function hexToRgba(hex, a) {
+  hex = hex.replace("#", "");
+  if (hex.length === 3) hex = hex.split("").map(c => c + c).join("");
+  const n = parseInt(hex, 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+}
 
 let DATA = null;
 // "all" = flat list of distinct events (default); "entity" = one summary card per entity.
@@ -166,21 +190,21 @@ async function boot() {
     DATA = await r.json();
   } catch (e) {
     document.getElementById("feed").innerHTML =
-      `<div class="empty">No feed yet. It's published after the daily pipeline runs.<br><small>(${esc(e.message)})</small></div>`;
+      `<div class="empty">Ainda não há feed. Ele é publicado após a execução diária do pipeline.<br><small>(${esc(e.message)})</small></div>`;
     return;
   }
   document.getElementById("asof").textContent =
-    `as of ${DATA.as_of ?? "—"} · ${DATA.feed.length} narratives · ${DATA.dates.length}-day window`;
+    `em ${DATA.as_of ?? "—"} · ${DATA.feed.length} narrativas · janela de ${DATA.dates.length} dias`;
   renderKpis(); renderLegend(); populateFilters(); renderEntities(); render();
 }
 
 function renderKpis() {
   const k = DATA.kpis;
   const tiles = [
-    ["Narratives today", k.narratives_latest],
-    ["Alerts today", k.alerts_latest],
-    ["Entities tracked", k.entities_tracked],
-    ["Distinct sources", k.sources],
+    ["Narrativas hoje", k.narratives_latest],
+    ["Alertas hoje", k.alerts_latest],
+    ["Entidades monitoradas", k.entities_tracked],
+    ["Fontes distintas", k.sources],
   ];
   document.getElementById("kpis").innerHTML = tiles.map(
     ([l, n]) => `<div class="tile"><div class="n">${n}</div><div class="l">${l}</div></div>`
@@ -190,15 +214,15 @@ function renderKpis() {
 function renderLegend() {
   document.getElementById("legend").innerHTML =
     TIERS.map(t => `<span><span class="swatch" style="background:${cssvar(t.var)}"></span>${t.label}</span>`).join("")
-    + `<span style="margin-left:auto"><span class="swatch" style="background:var(--accent)"></span>peak score trend</span>`;
+    + `<span style="margin-left:auto"><span class="swatch" style="background:var(--accent)"></span>tendência do pico</span>`;
 }
 
 function populateFilters() {
   const ent = document.getElementById("fEntity");
   DATA.entities.forEach(e => ent.add(new Option(e.label, e.entity)));
-  const lenses = [...new Set(DATA.feed.flatMap(f => f.lenses))].sort();
+  const lenses = [...new Set(DATA.feed.flatMap(f => f.lenses))].sort((a, b) => lensLabel(a).localeCompare(lensLabel(b)));
   const lensSel = document.getElementById("fLens");
-  lenses.forEach(l => lensSel.add(new Option(l, l)));
+  lenses.forEach(l => lensSel.add(new Option(lensLabel(l), l)));
   const dSel = document.getElementById("fDate");
   [...DATA.dates].reverse().forEach(d => dSel.add(new Option(d, d)));
 
@@ -224,29 +248,29 @@ function citeHtml(c) {
     let host = c.url; try { host = new URL(c.url).hostname.replace(/^www\./, ""); } catch (e) {}
     return `<a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(host)} ↗</a>`;
   }
-  return `<span class="src">${esc(c.source || c.id || "source")}</span>`;
+  return `<span class="src">${esc(c.source || c.id || "fonte")}</span>`;
 }
 
 function cardHtml(f, group) {
   const t = tierOf(f.threat_score);
   const pct = Math.round((f.threat_score ?? 0) * 100);
   const multi = group && group.count > 1
-    ? `<span class="est">· ${group.count} updates in window · peak ${group.peak.toFixed(2)}</span>`
+    ? `<span class="est">· ${group.count} atualizações no período · pico ${group.peak.toFixed(2)}</span>`
     : "";
   return `<div class="card" data-id="${esc(f.id)}">
     <div class="row1">
       <span class="tier" style="background:${cssvar(t.var)}">${t.label}</span>
       <span class="entity">${esc(f.entity_label)}</span>
-      ${f.is_alert ? '<span class="alert">ALERT</span>' : ''}
+      ${f.is_alert ? '<span class="alert">ALERTA</span>' : ''}
       <span class="spacer" style="flex:1"></span>
       <span class="date">${esc(f.date)}</span>
     </div>
     <div class="bar"><span style="width:${pct}%;background:${cssvar(t.var)}"></span></div>
-    <div><span class="score">${(f.threat_score ?? 0).toFixed(2)} threat</span> <span class="est">· est.</span> ${multi}</div>
-    <div class="lenses">${f.lenses.map(l => `<span class="chip">${esc(l)}</span>`).join("")}</div>
+    <div><span class="score">${(f.threat_score ?? 0).toFixed(2)} ameaça</span> <span class="est">· est.</span> ${multi}</div>
+    <div class="lenses">${f.lenses.map(l => `<span class="chip" title="Fonte: ${esc(lensLabel(l))}">${esc(lensLabel(l))}</span>`).join("")}</div>
     <p class="narr clamp">${esc(f.narrative)}</p>
     <div class="cites">${f.citations.map(citeHtml).join("")}
-      ${f.source_ids.length ? `<span class="src">· ${f.source_ids.length} sources</span>` : ""}</div>
+      ${f.source_ids.length ? `<span class="src">· ${f.source_ids.length} fontes</span>` : ""}</div>
   </div>`;
 }
 
@@ -284,11 +308,11 @@ function collapseByEntity(rows) {
 function render() {
   const rows = filtered();
   const feed = document.getElementById("feed");
-  // Collapse repeats per entity by default; a specific date already scopes to one day.
+  // Collapse repeats per entity only when opted in; a date already scopes to one day.
   const collapse = state.view === "entity" && !state.date;
   let html;
   if (!rows.length) {
-    html = `<div class="empty">No narratives match these filters.</div>`;
+    html = `<div class="empty">Nenhuma narrativa corresponde a estes filtros.</div>`;
   } else if (collapse) {
     html = collapseByEntity(rows).map(g => cardHtml(g.item, g)).join("");
   } else {
@@ -304,11 +328,11 @@ function render() {
 
 function renderTable(rows) {
   document.getElementById("tableView").innerHTML =
-    `<table class="tv"><thead><tr><th>Date</th><th>Entity</th><th>Tier</th>
-     <th>Threat (est.)</th><th>Alert</th><th>Lenses</th></tr></thead><tbody>` +
+    `<table class="tv"><thead><tr><th>Data</th><th>Entidade</th><th>Nível</th>
+     <th>Ameaça (est.)</th><th>Alerta</th><th>Fontes</th></tr></thead><tbody>` +
     rows.map(f => `<tr><td>${esc(f.date)}</td><td>${esc(f.entity_label)}</td>
       <td>${tierOf(f.threat_score).label}</td><td>${(f.threat_score ?? 0).toFixed(2)}</td>
-      <td>${f.is_alert ? "yes" : ""}</td><td>${esc(f.lenses.join(", "))}</td></tr>`).join("") +
+      <td>${f.is_alert ? "sim" : ""}</td><td>${esc(f.lenses.map(lensLabel).join(", "))}</td></tr>`).join("") +
     `</tbody></table>`;
 }
 
@@ -332,12 +356,17 @@ function sparkline(timeline) {
 
 function renderEntities() {
   const el = document.getElementById("entities");
-  el.innerHTML = DATA.entities.map(e => `
-    <div class="ent-row" data-entity="${esc(e.entity)}">
+  el.innerHTML = DATA.entities.map(e => {
+    // Heatmap peak cell: tint intensity scales with the score; number stays readable.
+    const t = tierOf(e.peak_score);
+    const bg = hexToRgba(cssvar(t.var), 0.18 + 0.55 * (e.peak_score ?? 0));
+    return `<div class="ent-row" data-entity="${esc(e.entity)}">
       <div class="ent-name" title="${esc(e.label)}">${esc(e.label)}</div>
       <div>${sparkline(e.timeline)}</div>
-      <div class="ent-meta">${e.peak_score.toFixed(2)}</div>
-    </div>`).join("");
+      <div class="ent-meta"><span class="heat" title="Pico de ameaça: ${t.label}"
+        style="background:${bg}">${e.peak_score.toFixed(2)}</span></div>
+    </div>`;
+  }).join("");
   el.querySelectorAll(".ent-row").forEach(r => r.onclick = () => {
     const en = r.dataset.entity;
     state.entity = state.entity === en ? "" : en;
@@ -363,19 +392,19 @@ function syncEntityHighlight() {
 document.getElementById("themeToggle").onclick = (e) => {
   const dark = document.documentElement.getAttribute("data-theme") === "dark";
   document.documentElement.setAttribute("data-theme", dark ? "light" : "dark");
-  e.target.textContent = dark ? "Dark" : "Light";
+  e.target.textContent = dark ? "Escuro" : "Claro";
   if (DATA) { renderLegend(); renderEntities(); render(); syncEntityHighlight(); }
 };
 document.getElementById("viewToggle").onclick = (e) => {
   state.view = state.view === "entity" ? "all" : "entity";
-  e.target.textContent = state.view === "entity" ? "Updates" : "By entity";
+  e.target.textContent = state.view === "entity" ? "Atualizações" : "Por entidade";
   render();
 };
 document.getElementById("tableToggle").onclick = (e) => {
   const tv = document.getElementById("tableView");
   const hidden = tv.classList.toggle("hidden");
   document.getElementById("feed").classList.toggle("hidden", !hidden);
-  e.target.textContent = hidden ? "Table view" : "Card view";
+  e.target.textContent = hidden ? "Tabela" : "Cartões";
 };
 
 boot();

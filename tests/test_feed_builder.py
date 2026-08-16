@@ -140,9 +140,9 @@ def test_load_recent_narratives_filters_by_window(monkeypatch):
 
 def test_display_label_falls_back_to_kind_when_entity_less():
     assert feed_builder.display_label("itau", "entity_fusion") == "Itaú"
-    assert feed_builder.display_label(None, "regulatory_fusion") == "Regulatory"
-    assert feed_builder.display_label(None, "competitor:funds") == "Competitor signal"
-    assert feed_builder.display_label(None, None) == "Cross-market signal"
+    assert feed_builder.display_label(None, "regulatory_fusion") == "Regulatório"
+    assert feed_builder.display_label(None, "competitor:funds") == "Sinal de concorrente"
+    assert feed_builder.display_label(None, None) == "Sinal de mercado"
 
 
 def test_build_feed_labels_entity_less_narratives():
@@ -150,4 +150,4 @@ def test_build_feed_labels_entity_less_narratives():
         {"id": "r", "entity": None, "kind": "regulatory_fusion",
          "as_of": "2026-08-13", "threat_score": 0.9},
     ])
-    assert feed["feed"][0]["entity_label"] == "Regulatory"
+    assert feed["feed"][0]["entity_label"] == "Regulatório"

@@ -45,10 +45,10 @@ def display_label(entity: str | None, kind: str | None) -> str:
         return entity_label(entity)
     k = str(kind or "")
     if k.startswith("regulatory"):
-        return "Regulatory"
+        return "Regulatório"
     if k.startswith("competitor"):
-        return "Competitor signal"
-    return "Cross-market signal"
+        return "Sinal de concorrente"
+    return "Sinal de mercado"
 
 
 def _source_of(citation: dict[str, Any]) -> str | None:

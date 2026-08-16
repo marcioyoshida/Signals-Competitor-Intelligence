@@ -9,7 +9,8 @@ from src.synth import bedrock_llm, citations
 
 SYSTEM = (
     "You are a competitive-intelligence analyst for Brazilian financial services. "
-    "Write a short flagged briefing (3–6 sentences). "
+    "Write the briefing in Brazilian Portuguese (pt-BR) — the readers are "
+    "non-bilingual executives. Write a short flagged briefing (3–6 sentences). "
     "When a Source provides an http(s) URL, cite the claim by pasting that URL "
     "verbatim as plain text. If a Source has no URL, refer to it by name only — "
     "never write a URL, the literal word 'None', angle brackets like "
@@ -36,6 +37,19 @@ ENTITY_LABELS = {
     "c6": "C6 Bank",
     "original": "Banco Original",
     "neon": "Neon",
+}
+
+# Plain pt-BR names for the signal "lenses" (data sources fused into a narrative).
+LENS_LABELS = {
+    "regulatory": "Regulatório (BCB)",
+    "sec": "Documentos SEC (EUA)",
+    "ofertas": "Ofertas de distribuição (CVM)",
+    "inf_diario": "Patrimônio de fundos (CVM)",
+    "funds": "Registro de fundos (CVM)",
+    "pix": "Movimentação Pix",
+    "juros": "Juros médios (BCB)",
+    "entrants": "Novos entrantes (BCB)",
+    "market": "Participação de mercado",
 }
 
 
@@ -144,14 +158,15 @@ def _heuristic_narrative(
     parts: list[str] = []
 
     if candidate.get("kind") == "entity_fusion" and entity_label:
-        lenses = ", ".join(candidate.get("lenses") or [])
+        lenses = ", ".join(LENS_LABELS.get(l, l) for l in (candidate.get("lenses") or []))
         parts.append(
-            f"Fused competitor signal on {entity_label} across lenses [{lenses}]."
+            f"Sinais combinados sobre {entity_label}, cruzando várias fontes "
+            f"({lenses})."
         )
 
     parts.append(_describe_signal(seed))
     for rel in related[:4]:
-        parts.append(_describe_signal(rel, prefix="Related"))
+        parts.append(_describe_signal(rel, prefix="Relacionado"))
 
     if force_urls:
         for s in candidate.get("sources") or []:
@@ -164,13 +179,13 @@ def _heuristic_narrative(
 def _describe_signal(sig: dict[str, Any], prefix: str = "") -> str:
     lens = sig.get("_lens") or ""
     url = sig.get("url") or ""
-    alert = " [NEW]" if sig.get("is_new") else ""
+    alert = " [NOVO]" if sig.get("is_new") else ""
     head = f"{prefix}: " if prefix else ""
 
     if lens == "regulatory" or sig.get("doc_type") or sig.get("subject"):
         return (
-            f"{head}Regulatory{alert}: {sig.get('doc_type') or 'document'} "
-            f"{sig.get('number') or ''} — {sig.get('subject') or 'n/a'}. {url}"
+            f"{head}Regulatório{alert}: {sig.get('doc_type') or 'documento'} "
+            f"{sig.get('number') or ''} — {sig.get('subject') or 'n/d'}. {url}"
         ).strip()
     if lens == "sec" or sig.get("ticker") and sig.get("form"):
         subj = (sig.get("subject") or "").strip()
@@ -178,49 +193,49 @@ def _describe_signal(sig: dict[str, Any], prefix: str = "") -> str:
             subj = sig["text"][:240].replace("\n", " ").strip()
         subj_s = f" — {subj}" if subj else ""
         return (
-            f"{head}SEC filing{alert}: {sig.get('ticker')} {sig.get('form')} "
-            f"({sig.get('company') or ''}) filed {sig.get('filed') or ''}"
+            f"{head}Documento SEC{alert}: {sig.get('ticker')} {sig.get('form')} "
+            f"({sig.get('company') or ''}) protocolado {sig.get('filed') or ''}"
             f"{subj_s}. {url}"
         ).strip()
     if lens == "ofertas" or sig.get("issuer") or sig.get("security"):
         amt = sig.get("amount")
-        amt_s = f" amount={amt}" if amt is not None else ""
+        amt_s = f" valor={amt}" if amt is not None else ""
         return (
-            f"{head}CVM offering{alert}: {sig.get('security') or 'instrument'} by "
-            f"{sig.get('issuer') or 'issuer'}; lead {sig.get('leader') or 'n/a'}"
+            f"{head}Oferta CVM{alert}: {sig.get('security') or 'instrumento'} por "
+            f"{sig.get('issuer') or 'emissor'}; líder {sig.get('leader') or 'n/d'}"
             f"{amt_s}. {url}"
         ).strip()
     if lens == "inf_diario" or sig.get("pl") is not None and sig.get("fund_name"):
         pct = sig.get("pct_change")
-        pct_s = f" move={pct}%" if pct is not None else ""
+        pct_s = f" variação={pct}%" if pct is not None else ""
         return (
-            f"{head}Fund AUM{alert}: {sig.get('fund_name') or sig.get('cnpj')} "
-            f"PL={sig.get('pl')}{pct_s} (admin {sig.get('admin') or 'n/a'}). {url}"
+            f"{head}Patrimônio de fundo{alert}: {sig.get('fund_name') or sig.get('cnpj')} "
+            f"PL={sig.get('pl')}{pct_s} (admin. {sig.get('admin') or 'n/d'}). {url}"
         ).strip()
     if lens == "pix" or (sig.get("ispb") and sig.get("tx_value") is not None):
         return (
-            f"{head}Pix metric{alert}: {sig.get('institution') or sig.get('ispb')} "
-            f"value={sig.get('tx_value')} pct_change={sig.get('pct_change')}. {url}"
+            f"{head}Movimentação Pix{alert}: {sig.get('institution') or sig.get('ispb')} "
+            f"valor={sig.get('tx_value')} variação={sig.get('pct_change')}. {url}"
         ).strip()
     if lens == "juros" or sig.get("rate_year") is not None:
         return (
-            f"{head}Pricing{alert}: {sig.get('institution') or sig.get('cnpj8')} "
-            f"{sig.get('modality') or ''} rate_year={sig.get('rate_year')} "
-            f"pct_change={sig.get('pct_change')}. {url}"
+            f"{head}Juros{alert}: {sig.get('institution') or sig.get('cnpj8')} "
+            f"{sig.get('modality') or ''} taxa_ano={sig.get('rate_year')} "
+            f"variação={sig.get('pct_change')}. {url}"
         ).strip()
     if lens == "entrants" or sig.get("entity_type"):
         return (
-            f"{head}New entrant{alert}: {sig.get('name') or sig.get('cnpj')} "
-            f"({sig.get('entity_type') or 'entity'})."
+            f"{head}Novo entrante{alert}: {sig.get('name') or sig.get('cnpj')} "
+            f"({sig.get('entity_type') or 'entidade'})."
         ).strip()
     if lens == "market" or sig.get("share_pct") is not None:
         return (
-            f"{head}Market share context: {sig.get('institution')} "
-            f"share_pct={sig.get('share_pct')} value={sig.get('value')}."
+            f"{head}Participação de mercado: {sig.get('institution')} "
+            f"share={sig.get('share_pct')} valor={sig.get('value')}."
         ).strip()
     if sig.get("fund_name"):
         return (
-            f"{head}Fund filing{alert}: {sig.get('fund_name')} "
-            f"(admin {sig.get('admin') or 'n/a'}). {url}"
+            f"{head}Registro de fundo{alert}: {sig.get('fund_name')} "
+            f"(admin. {sig.get('admin') or 'n/d'}). {url}"
         ).strip()
-    return f"{head}Signal{alert} id={sig.get('id')}. {url}".strip()
+    return f"{head}Sinal{alert} id={sig.get('id')}. {url}".strip()
