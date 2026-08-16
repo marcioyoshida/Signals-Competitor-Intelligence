@@ -39,3 +39,29 @@ def test_known_parents_excludes_self_link():
     # controller string matches the entrant's own name -> not a "parent"
     e = {"name": "BTG PACTUAL SERVICOS FINANCEIROS", "controllers": ["BTG PACTUAL HOLDING"]}
     assert known_parents(e) == []
+
+
+def test_private_fintech_aliases_resolve():
+    from src.synth.entities import primary_entity
+    cases = {
+        "CREDITAS SOCIEDADE DE CRÉDITO DIRETO S.A.": "creditas",
+        "RECARGAPAY INSTITUICAO DE PAGAMENTO LTDA.": "recargapay",
+        "CLOUDWALK INSTITUIÇÃO DE PAGAMENTO E SERVICOS LTDA": "infinitepay",
+        "NEON PAGAMENTOS S.A. - INSTITUIÇÃO DE PAGAMENTO": "neon",
+        "STONE INSTITUIÇÃO DE PAGAMENTO S.A.": "stone",
+    }
+    for name, expected in cases.items():
+        assert primary_entity({"name": name}) == expected, name
+
+
+def test_stone_alias_excludes_unrelated_stonex():
+    from src.synth.entities import resolve_entities
+    # StoneX Group is a different company — must not resolve to StoneCo
+    assert "stone" not in resolve_entities({"name": "BANCO STONEX S.A."})
+    assert "stone" not in resolve_entities({"institution": "STONEX DISTRIBUIDORA DE TVM LTDA."})
+
+
+def test_parent_link_via_cloudwalk_controller():
+    from src.synth.entities import known_parents
+    e = {"name": "NOVA SCD S.A.", "controllers": ["CLOUDWALK FINANCEIRA S.A."]}
+    assert known_parents(e) == ["infinitepay"]

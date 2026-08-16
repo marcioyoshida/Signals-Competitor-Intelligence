@@ -38,6 +38,10 @@ ENTITY_LABELS = {
     "c6": "C6 Bank",
     "original": "Banco Original",
     "neon": "Neon",
+    "creditas": "Creditas",
+    "recargapay": "RecargaPay",
+    "infinitepay": "InfinitePay (CloudWalk)",
+    "nomad": "Nomad",
 }
 
 # Plain pt-BR names for the signal "lenses" (data sources fused into a narrative).

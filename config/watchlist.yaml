@@ -8,6 +8,14 @@ competitors:
   - BTG PACTUAL
   - NU INVEST
   - XP INVESTIMENTOS
+  # Private fintechs — distinctive substrings only. STONE / NEON are omitted
+  # here (crude substring would catch StoneX / NeoEnergia in CVM); their precise
+  # aliases in src/synth/entities.py still cluster them accurately.
+  - CREDITAS
+  - RECARGAPAY
+  - CLOUDWALK
+  - INFINITEPAY
+  - NOMAD
 
 # Pix competitor tracking (BCB Pix statistics).
 # ISPB = 8-digit institution identifier in the SPI. Find via BCB's

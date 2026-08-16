@@ -8,7 +8,9 @@ from typing import Any
 # Used to fuse SEC, CVM, BCB signals that use different labels.
 ENTITY_ALIASES: dict[str, list[str]] = {
     "nubank": ["NUBANK", "NU PAGAMENTOS", "NU HOLDINGS", "NU INVEST", " NU ", "TICKER:NU"],
-    "stone": ["STONE", "STONECO", "STNE", "TICKER:STNE"],
+    # "STONE " (trailing space) matches Stone IP/SCFI/SCD without catching the
+    # unrelated "BANCO STONEX" / "STONEX DTVM" (StoneX Group).
+    "stone": ["STONECO", "STONE ", "STNE", "TICKER:STNE"],
     "pagseguro": ["PAGSEGURO", "PAGBANK", "PAGS", "TICKER:PAGS"],
     "inter": ["INTER&CO", "INTER CO", "BANCO INTER", "INTR", "TICKER:INTR"],
     "xp": ["XP INC", "XP INVESTIMENTOS", "XP INVEST", "TICKER:XP", "BCO XP"],
@@ -22,7 +24,14 @@ ENTITY_ALIASES: dict[str, list[str]] = {
     "mercado_pago": ["MERCADO PAGO", "MERCADO CRÉDITO", "MERCADO CREDITO"],
     "c6": ["BCO C6", "BANCO C6", "C6 BANK"],
     "original": ["BANCO ORIGINAL"],
-    "neon": ["NEON "],
+    "neon": ["NEON PAGAMENTOS", "NEON FINANCEIRA", "NEON CORRETORA", "NEON "],
+    # Private fintechs (legal names verified live against the BCB registry).
+    "creditas": ["CREDITAS"],
+    "recargapay": ["RECARGAPAY", "RECARGA PAY"],
+    # Brand InfinitePay; legal entity CloudWalk.
+    "infinitepay": ["INFINITEPAY", "INFINITE PAY", "CLOUDWALK", "CLOUD WALK"],
+    # Nomad has no BCB footprint (US-facing) — matches via CVM/news only.
+    "nomad": ["NOMAD"],
 }
 
 
