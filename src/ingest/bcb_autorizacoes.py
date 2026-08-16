@@ -39,9 +39,51 @@ DEFAULT_RESOURCES: list[str] = [
     "SedesConsorcios",
 ]
 
-# Optional segment filter (case-insensitive substring). Empty = keep all.
-# Examples: "Instituição de Pagamento", "Sociedade de Crédito Direto".
+# Optional segment filter (case-insensitive substring). Empty = keep all
+# (classification below prioritizes fintech licenses without dropping the rest).
 RELEVANT_TYPES: list[str] = []
+
+# Normalize the registry's SEGMENTO/CLASSE into a compact license class. The
+# fintech-entrant licenses (IP, SCD, SEP, SCFI, microcrédito) are what a
+# "quiet registration" radar cares about; ordered so the first substring match
+# wins. Values verified live against SedesSociedades/SedesBancoComMultCE.
+_LICENSE_RULES: list[tuple[str, str]] = [
+    ("instituição de pagamento", "Instituição de Pagamento"),
+    ("crédito direto", "Crédito Direto (SCD)"),
+    ("empréstimo entre pessoas", "Empréstimo P2P (SEP)"),
+    ("financiamento e investimento", "Financeira (SCFI)"),
+    ("microempreendedor", "Microcrédito (SCMEPP)"),
+    ("banco", "Banco"),
+    ("corretora", "Corretora/DTVM"),
+    ("distribuidora", "Corretora/DTVM"),
+    ("arrendamento", "Leasing"),
+    ("fomento", "Agência de Fomento"),
+    ("hipotecária", "Companhia Hipotecária"),
+    ("cooperativa", "Cooperativa"),
+    # SedesCooperativas rows classify as "Singular" / "Central".
+    ("singular", "Cooperativa"),
+    ("central", "Cooperativa"),
+    ("consórcio", "Consórcio"),
+    ("consorcio", "Consórcio"),
+]
+
+# License classes considered "fintech entrants" for the radar.
+FINTECH_LICENSES = frozenset({
+    "Instituição de Pagamento",
+    "Crédito Direto (SCD)",
+    "Empréstimo P2P (SEP)",
+    "Financeira (SCFI)",
+    "Microcrédito (SCMEPP)",
+})
+
+
+def classify_license(entity_type: str | None) -> str:
+    """Map a raw SEGMENTO/CLASSE to a compact license class label."""
+    text = (entity_type or "").lower()
+    for needle, label in _LICENSE_RULES:
+        if needle in text:
+            return label
+    return (entity_type or "Outro").strip() or "Outro"
 
 
 def fetch_authorized(
@@ -83,6 +125,7 @@ def _normalize(row: dict[str, Any], resource: str) -> dict[str, Any]:
         or resource  # cooperatives/consortia lack SEGMENTO
     )
     ident = cnpj or name or "unknown"
+    license_class = classify_license(entity_type)
     return {
         "id": f"bcb-auth:{ident}",
         "source": "BCB-Autorizacoes",
@@ -90,6 +133,8 @@ def _normalize(row: dict[str, Any], resource: str) -> dict[str, Any]:
         "cnpj": cnpj,
         "name": name,
         "entity_type": entity_type,
+        "license_class": license_class,
+        "is_fintech": license_class in FINTECH_LICENSES,
         "legal_nature": None,
         "situation": "em_funcionamento",
         "registry": resource,

@@ -227,7 +227,7 @@ def _describe_signal(sig: dict[str, Any], prefix: str = "") -> str:
     if lens == "entrants" or sig.get("entity_type"):
         return (
             f"{head}Novo entrante{alert}: {sig.get('name') or sig.get('cnpj')} "
-            f"({sig.get('entity_type') or 'entidade'})."
+            f"({sig.get('license_class') or sig.get('entity_type') or 'entidade'})."
         ).strip()
     if lens == "market" or sig.get("share_pct") is not None:
         return (

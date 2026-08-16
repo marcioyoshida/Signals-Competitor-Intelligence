@@ -318,3 +318,36 @@ def test_threat_score_magnitude_scales_with_move():
     small, _ = _score_threat([{"_lens": "inf_diario", "id": "a", "is_new": True, "pct_change": 5}])
     big, _ = _score_threat([{"_lens": "inf_diario", "id": "b", "is_new": True, "pct_change": 80}])
     assert big > small
+
+
+def test_entrant_license_class_drives_score():
+    """A new credit fintech (SCD) outscores a new consórcio — same lens, diff class."""
+    from src.synth.candidates import _score_threat
+
+    scd, sf = _score_threat([
+        {"_lens": "entrants", "id": "e1", "is_new": True,
+         "license_class": "Crédito Direto (SCD)"},
+    ])
+    consorcio, cf = _score_threat([
+        {"_lens": "entrants", "id": "e2", "is_new": True,
+         "license_class": "Consórcio"},
+    ])
+    assert scd > consorcio + 0.2
+    assert sf["signal"] >= 0.9 and cf["signal"] <= 0.3
+
+
+def test_entrant_scd_beats_consorcio_end_to_end():
+    scd = extract_candidates({
+        "new_entrants": {"items": [{
+            "id": "bcb-auth:1", "name": "NOVA SCD LTDA",
+            "license_class": "Crédito Direto (SCD)", "entity_type": "Sociedade de Crédito Direto",
+            "is_new": True}], "context": []}},
+        max_candidates=5, min_lenses=1, min_score=0.0)
+    con = extract_candidates({
+        "new_entrants": {"items": [{
+            "id": "bcb-auth:2", "name": "NOVO CONSORCIO SA",
+            "license_class": "Consórcio", "entity_type": "Administradora de Consórcio",
+            "is_new": True}], "context": []}},
+        max_candidates=5, min_lenses=1, min_score=0.0)
+    assert scd and con
+    assert scd[0]["threat_score"] > con[0]["threat_score"]

@@ -475,6 +475,32 @@ STRATEGIC_WEIGHT = {
     "market": 0.3,
 }
 
+# For a new entrant, the license class refines the signal: a new credit fintech
+# (SCD/SEP) or payment institution is a sharper competitive signal than a new
+# consórcio or cooperative. Keyed on bcb_autorizacoes.classify_license labels.
+ENTRANT_CLASS_WEIGHT = {
+    "Crédito Direto (SCD)": 0.95,
+    "Empréstimo P2P (SEP)": 0.95,
+    "Instituição de Pagamento": 0.9,
+    "Banco": 0.9,
+    "Financeira (SCFI)": 0.8,
+    "Microcrédito (SCMEPP)": 0.7,
+    "Corretora/DTVM": 0.5,
+    "Companhia Hipotecária": 0.45,
+    "Leasing": 0.45,
+    "Agência de Fomento": 0.4,
+    "Cooperativa": 0.25,
+    "Consórcio": 0.2,
+}
+
+
+def _source_signal(s: dict[str, Any]) -> float:
+    """Strategic weight of one source; entrants refined by license class."""
+    lens = s.get("_lens")
+    if lens == "entrants":
+        return ENTRANT_CLASS_WEIGHT.get(s.get("license_class"), 0.6)
+    return STRATEGIC_WEIGHT.get(str(lens), 0.4)
+
 
 def _score_weights() -> dict[str, float]:
     """Blend weights for the four score axes (env-tunable), normalized to sum 1."""
@@ -517,7 +543,7 @@ def _score_threat(sources: list[dict[str, Any]]) -> tuple[float, dict[str, float
     """
     lenses = _lenses(sources)
     core = [l for l in lenses if l not in BACKDROP_LENSES]
-    signal = max((STRATEGIC_WEIGHT.get(l, 0.4) for l in lenses), default=0.3)
+    signal = max((_source_signal(s) for s in sources), default=0.3)
     magnitude = _magnitude(sources)
     novelty = 1.0 if any(s.get("is_new") for s in sources) else 0.3
     n = len(core) or (1 if lenses else 0)
