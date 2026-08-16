@@ -223,6 +223,9 @@ class OncaPrototypeStack(Stack):
                 "ONCA_RAW_BUCKET": raw_bucket.bucket_name,
                 "ONCA_KB_ID": knowledge_base.attr_knowledge_base_id,
                 "ONCA_KB_DATA_SOURCE_ID": data_source.attr_data_source_id,
+                # Receita Federal CNPJ (QSA) enrichment of new entrants.
+                "ONCA_RECEITA_ENRICH": "true",
+                "ONCA_RECEITA_MAX": "15",
             },
         )
         state_table.grant_read_write_data(func)

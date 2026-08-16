@@ -93,6 +93,7 @@ from src.ingest import (
     cvm_inf_diario,
     cvm_ofertas,
     raw_writer,
+    receita_cnpj,
     sec_filings,
 )
 
@@ -303,6 +304,20 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             )
     except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
         print(f"Warning: BCB autorizações fetch failed: {exc}")
+
+    # Receita Federal enrichment: resolve the brand + controllers behind each new
+    # entrant's (otherwise anonymous) CNPJ. Own budget so a slow lookup can't lose
+    # the entrants list; only new entrants (bounded volume) are enriched.
+    if new_entrants and os.environ.get("ONCA_RECEITA_ENRICH", "true").lower() in (
+        "1",
+        "true",
+        "yes",
+    ):
+        try:
+            with _source_budget("Receita QSA", deadline, per_source):
+                receita_cnpj.enrich_entrants(new_entrants)
+        except Exception as exc:  # pragma: no cover - enrichment is best-effort
+            print(f"Warning: Receita enrichment skipped: {exc}")
 
     # Pix traction — month-over-month volume moves (first run seeds baseline only).
     pix_by_inst: list[dict[str, Any]] = []

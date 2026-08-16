@@ -225,10 +225,13 @@ def _describe_signal(sig: dict[str, Any], prefix: str = "") -> str:
             f"variação={sig.get('pct_change')}. {url}"
         ).strip()
     if lens == "entrants" or sig.get("entity_type"):
-        return (
-            f"{head}Novo entrante{alert}: {sig.get('name') or sig.get('cnpj')} "
-            f"({sig.get('license_class') or sig.get('entity_type') or 'entidade'})."
-        ).strip()
+        name = sig.get("name") or sig.get("cnpj") or "entidade"
+        brand = sig.get("trade_name")
+        who = f"{name} ({brand})" if brand and brand.upper() not in str(name).upper() else name
+        lic = sig.get("license_class") or sig.get("entity_type") or "entidade"
+        ctrl = f" Controlador: {sig.get('controller')}." if sig.get("controller") else ""
+        text = f"{head}Novo entrante{alert}: {who} — {lic}.{ctrl}".strip()
+        return text.replace("..", ".")
     if lens == "market" or sig.get("share_pct") is not None:
         return (
             f"{head}Participação de mercado: {sig.get('institution')} "
