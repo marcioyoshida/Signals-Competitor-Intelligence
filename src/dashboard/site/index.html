@@ -186,6 +186,21 @@ function hexToRgba(hex, a) {
   const n = parseInt(hex, 16);
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
 }
+// Display dates as DD-MM-YYYY (values/keys stay ISO for sorting/filtering).
+function fmtDate(iso) {
+  const p = String(iso ?? "").slice(0, 10).split("-");
+  return p.length === 3 ? `${p[2]}-${p[1]}-${p[0]}` : (iso ?? "—");
+}
+function fmtDateTime(iso) {
+  try {
+    const parts = new Intl.DateTimeFormat("pt-BR", {
+      timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit",
+      year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false,
+    }).formatToParts(new Date(iso));
+    const p = Object.fromEntries(parts.map(x => [x.type, x.value]));
+    return `${p.day}-${p.month}-${p.year} ${p.hour}:${p.minute}`;
+  } catch (e) { return String(iso ?? "—"); }
+}
 
 let DATA = null;
 // "all" = flat list of distinct events (default); "entity" = one summary card per entity.
@@ -201,15 +216,9 @@ async function boot() {
       `<div class="empty">Ainda não há feed. Ele é publicado após a execução diária do pipeline.<br><small>(${esc(e.message)})</small></div>`;
     return;
   }
-  let checked = "";
-  if (DATA.generated_at) {
-    try {
-      checked = " · verificado " + new Date(DATA.generated_at).toLocaleString("pt-BR",
-        { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" });
-    } catch (e) {}
-  }
+  const checked = DATA.generated_at ? ` · verificado ${fmtDateTime(DATA.generated_at)}` : "";
   document.getElementById("asof").textContent =
-    `dados de ${DATA.as_of ?? "—"}${checked} · ${DATA.feed.length} narrativas · janela de ${DATA.dates.length} dias`;
+    `dados de ${fmtDate(DATA.as_of)}${checked} · ${DATA.feed.length} narrativas · janela de ${DATA.dates.length} dias`;
   renderKpis(); renderLegend(); populateFilters(); renderEntities(); render();
 }
 
@@ -239,7 +248,7 @@ function populateFilters() {
   const lensSel = document.getElementById("fLens");
   lenses.forEach(l => lensSel.add(new Option(lensLabel(l), l)));
   const dSel = document.getElementById("fDate");
-  [...DATA.dates].reverse().forEach(d => dSel.add(new Option(d, d)));
+  [...DATA.dates].reverse().forEach(d => dSel.add(new Option(fmtDate(d), d)));
 
   ent.onchange = e => { state.entity = e.target.value; syncEntityHighlight(); render(); };
   lensSel.onchange = e => { state.lens = e.target.value; render(); };
@@ -278,7 +287,7 @@ function cardHtml(f, group) {
       <span class="entity">${esc(f.entity_label)}</span>
       ${f.is_alert ? '<span class="alert">ALERTA</span>' : ''}
       <span class="spacer" style="flex:1"></span>
-      <span class="date">${esc(f.date)}</span>
+      <span class="date">${esc(fmtDate(f.date))}</span>
     </div>
     <div class="bar"><span style="width:${pct}%;background:${cssvar(t.var)}"></span></div>
     <div><span class="score" style="cursor:help" title="${esc(factorsTip(f.threat_factors))}">${(f.threat_score ?? 0).toFixed(2)} ameaça</span> <span class="est">· est.</span> ${multi}</div>
@@ -345,7 +354,7 @@ function renderTable(rows) {
   document.getElementById("tableView").innerHTML =
     `<table class="tv"><thead><tr><th>Data</th><th>Entidade</th><th>Nível</th>
      <th>Ameaça (est.)</th><th>Alerta</th><th>Fontes</th></tr></thead><tbody>` +
-    rows.map(f => `<tr><td>${esc(f.date)}</td><td>${esc(f.entity_label)}</td>
+    rows.map(f => `<tr><td>${esc(fmtDate(f.date))}</td><td>${esc(f.entity_label)}</td>
       <td>${tierOf(f.threat_score).label}</td><td>${(f.threat_score ?? 0).toFixed(2)}</td>
       <td>${f.is_alert ? "sim" : ""}</td><td>${esc(f.lenses.map(lensLabel).join(", "))}</td></tr>`).join("") +
     `</tbody></table>`;
@@ -391,7 +400,7 @@ function renderEntities() {
   const tip = document.getElementById("tip");
   el.querySelectorAll("circle").forEach(c => {
     c.onmousemove = ev => {
-      tip.textContent = `${c.dataset.d}: ${c.dataset.v}`;
+      tip.textContent = `${fmtDate(c.dataset.d)}: ${c.dataset.v}`;
       tip.style.left = (ev.clientX + 12) + "px"; tip.style.top = (ev.clientY - 10) + "px";
       tip.style.opacity = 1;
     };
