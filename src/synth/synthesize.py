@@ -47,6 +47,7 @@ ENTITY_LABELS = {
 # Plain pt-BR names for the signal "lenses" (data sources fused into a narrative).
 LENS_LABELS = {
     "regulatory": "Regulatório (BCB)",
+    "fatos": "Fato Relevante (CVM)",
     "sec": "Documentos SEC (EUA)",
     "ofertas": "Ofertas de distribuição (CVM)",
     "inf_diario": "Patrimônio de fundos (CVM)",
@@ -188,6 +189,12 @@ def _describe_signal(sig: dict[str, Any], prefix: str = "") -> str:
     alert = " [NOVO]" if sig.get("is_new") else ""
     head = f"{prefix}: " if prefix else ""
 
+    if lens == "fatos":
+        return (
+            f"{head}{sig.get('doc_type') or 'Fato Relevante'}{alert}: "
+            f"{sig.get('company') or sig.get('name') or 'companhia'} — "
+            f"{sig.get('subject') or 'n/d'}. {url}"
+        ).strip()
     if lens == "regulatory" or sig.get("doc_type") or sig.get("subject"):
         return (
             f"{head}Regulatório{alert}: {sig.get('doc_type') or 'documento'} "

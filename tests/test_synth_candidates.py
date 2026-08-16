@@ -351,3 +351,22 @@ def test_entrant_scd_beats_consorcio_end_to_end():
         max_candidates=5, min_lenses=1, min_score=0.0)
     assert scd and con
     assert scd[0]["threat_score"] > con[0]["threat_score"]
+
+
+def test_fatos_material_fact_high_value_and_resolves_entity():
+    from src.synth.synthesize import _describe_signal
+    d = {"fatos": {"items": [{
+        "id": "cvm-fato:P1", "company": "BANCO BRADESCO S.A.", "name": "BANCO BRADESCO S.A.",
+        "doc_type": "Fato Relevante", "subject": "Aquisição de participação relevante",
+        "date": "2026-08-13", "url": "https://rad.cvm.gov.br/x", "is_new": True}],
+        "context": []}}
+    cands = extract_candidates(d, max_candidates=5, min_lenses=1, min_score=0.0)
+    assert cands
+    c = cands[0]
+    assert "fatos" in c["lenses"]
+    assert "bradesco" in (c.get("entities") or [])
+    assert c["threat_score"] >= 0.5  # strategic disclosure + novel
+    # narrative uses the Fato Relevante branch, not the regulatory one
+    txt = _describe_signal({**d["fatos"]["items"][0], "_lens": "fatos"})
+    assert txt.startswith("Fato Relevante")  # not the "Regulatório" branch
+    assert "BANCO BRADESCO" in txt and "Aquisição de participação" in txt

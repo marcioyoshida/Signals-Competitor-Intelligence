@@ -195,6 +195,17 @@ class OncaPrototypeStack(Stack):
                     if watchlist.get("ofertas_use_competitors_watchlist", True)
                     else "false"
                 ),
+                # CVM material facts (Fato Relevante / Comunicado ao Mercado).
+                "ONCA_FATOS_LOOKBACK_DAYS": str(watchlist.get("fatos_lookback_days", 45)),
+                "ONCA_FATOS_WATCHLIST": ",".join(
+                    str(x) for x in (watchlist.get("fatos_watchlist") or [])
+                ),
+                "ONCA_FATOS_USE_COMPETITORS": (
+                    "true" if watchlist.get("fatos_use_competitors", True) else "false"
+                ),
+                "ONCA_FATOS_CATEGORIES": ",".join(
+                    str(x) for x in (watchlist.get("fatos_categories") or [])
+                ),
                 # SEC EDGAR — payments/US-listed fintechs; empty tickers = skip.
                 "ONCA_SEC_TICKERS": ",".join(
                     str(x) for x in (watchlist.get("sec_tickers") or [])

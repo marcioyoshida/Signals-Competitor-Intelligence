@@ -56,6 +56,21 @@ inf_diario_move_threshold_pct: 10.0
 # Optional cap by PL after filter (null/omit = all watchlisted funds that day).
 # inf_diario_top_n: 500
 
+# CVM material facts (Fato Relevante / Comunicado ao Mercado) from B3-listed
+# competitors. Precise names (avoid "ITAU" bare — catches "ITAUNENSE").
+# Empty watchlist would pull all issuers (noisy), so this is required to enable.
+fatos_lookback_days: 45
+fatos_use_competitors: true
+fatos_watchlist:
+  - ITAU UNIBANCO
+  - ITAUSA
+  - BRADESCO
+  - SANTANDER
+  - BANCO DO BRASIL
+  - BTG PACTUAL
+# Categorias to keep (empty = defaults: Fato Relevante, Comunicado ao Mercado).
+fatos_categories: []
+
 # US-listed Brazilian fintechs to track via SEC EDGAR. Empty = skip SEC
 # entirely (appropriate if your target customer is a bank/insurer and
 # these acquirers/fintechs aren't relevant competitors).

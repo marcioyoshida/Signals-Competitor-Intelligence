@@ -91,6 +91,7 @@ from src.ingest import (
     bcb_pix,
     cvm_fundos,
     cvm_inf_diario,
+    cvm_ipe,
     cvm_ofertas,
     raw_writer,
     receita_cnpj,
@@ -264,6 +265,14 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     inf_diario_top = os.environ.get("ONCA_INF_DIARIO_TOP_N", "").strip()
     inf_diario_top_n = int(inf_diario_top) if inf_diario_top else None
 
+    # CVM material facts (Fato Relevante / Comunicado ao Mercado). Own watchlist
+    # (B3-listed FS names); optionally unioned with the competitors list.
+    fatos_lookback = int(os.environ.get("ONCA_FATOS_LOOKBACK_DAYS", "45"))
+    fatos_watch = _csv_env("ONCA_FATOS_WATCHLIST")
+    if os.environ.get("ONCA_FATOS_USE_COMPETITORS", "true").lower() in ("1", "true", "yes"):
+        fatos_watch = list(dict.fromkeys(fatos_watch + competitors))
+    fatos_categories = _csv_env("ONCA_FATOS_CATEGORIES") or None
+
     # Wall-clock guards: bound each source and stop starting new work before the
     # Lambda times out, so ingest always returns a (possibly partial) digest.
     deadline = _ingest_deadline(context)
@@ -377,6 +386,22 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
         print(f"Warning: CVM ofertas fetch failed: {exc}")
 
+    # CVM material facts — Fato Relevante / Comunicado ao Mercado (strategic
+    # disclosures from B3-listed competitors; seed suppressed on first run).
+    fatos: list[dict[str, Any]] = []
+    new_fatos: list[dict[str, Any]] = []
+    if fatos_watch:
+        try:
+            with _source_budget("CVM fatos relevantes", deadline, per_source):
+                fatos = cvm_ipe.fetch_material_facts(
+                    lookback_days=fatos_lookback,
+                    watchlist=fatos_watch,
+                    categories=fatos_categories,
+                )
+                new_fatos = _new_since_last_run("cvm_fatos", fatos, seed_if_empty=True)
+        except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
+            print(f"Warning: CVM fatos relevantes fetch failed: {exc}")
+
     # SEC EDGAR — US-listed payments/fintech disclosures (seed on first run).
     # Metadata first (submissions JSON), then primary-document bodies for the
     # diffed set + a small context sample so digests/corpus carry text not only URLs.
@@ -443,7 +468,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     # Corpus gets document-like signals only (not numeric Pix/juros/AUM moves).
     _populate_corpus_and_sync(
-        new_normativos + new_funds + new_entrants + new_ofertas + new_sec
+        new_normativos + new_funds + new_entrants + new_ofertas + new_sec + new_fatos
     )
 
     # Stage B fusion needs more than deltas: after seeding, items[] is often
@@ -492,6 +517,12 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             "new_count": len(new_sec),
             "items": _tag_new(new_sec[:10]),
             "context": _strip_raw(sec_filings_rows[:15]),
+        },
+        "fatos": {
+            "count": len(fatos),
+            "new_count": len(new_fatos),
+            "items": _tag_new(new_fatos[:10]),
+            "context": _strip_raw(fatos[:15]),
         },
         "inf_diario_moves": {
             "funds_tracked": len(inf_diario_rows),
