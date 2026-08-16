@@ -5,6 +5,7 @@ import datetime as dt
 from typing import Any
 
 from src.synth import bedrock_llm, citations
+from src.synth.entities import known_parents
 
 
 SYSTEM = (
@@ -230,7 +231,10 @@ def _describe_signal(sig: dict[str, Any], prefix: str = "") -> str:
         who = f"{name} ({brand})" if brand and brand.upper() not in str(name).upper() else name
         lic = sig.get("license_class") or sig.get("entity_type") or "entidade"
         ctrl = f" Controlador: {sig.get('controller')}." if sig.get("controller") else ""
-        text = f"{head}Novo entrante{alert}: {who} — {lic}.{ctrl}".strip()
+        parents = known_parents(sig)
+        plabel = ", ".join(ENTITY_LABELS.get(p, str(p).title()) for p in parents)
+        parent_s = f" Vinculado a concorrente conhecido: {plabel}." if parents else ""
+        text = f"{head}Novo entrante{alert}: {who} — {lic}.{ctrl}{parent_s}".strip()
         return text.replace("..", ".")
     if lens == "market" or sig.get("share_pct") is not None:
         return (

@@ -54,8 +54,38 @@ def signal_blob(item: dict[str, Any]) -> str:
     return " ".join(parts).upper()
 
 
+def known_parents(item: dict[str, Any]) -> list[str]:
+    """Known-competitor entities behind an entrant, from its QSA controllers.
+
+    Links a quietly-registered fintech to its parent when a controller/sócio is
+    a known player — e.g. a new SCD controlled by "NU HOLDINGS" → ``nubank``.
+    Excludes a match that is really the entrant's own name (avoids self-links).
+    """
+    controllers = item.get("controllers") or item.get("controller") or []
+    if isinstance(controllers, str):
+        controllers = [controllers]
+    ctrl = " " + " ".join(str(c) for c in controllers).upper() + " "
+    if not ctrl.strip():
+        return []
+    own_name = str(item.get("name") or "").upper()
+    parents: list[str] = []
+    for entity_id, aliases in ENTITY_ALIASES.items():
+        for alias in aliases:
+            token = alias.upper()
+            if token.startswith("TICKER:"):
+                continue
+            if token in ctrl and token not in own_name:
+                parents.append(entity_id)
+                break
+    return parents
+
+
 def resolve_entities(item: dict[str, Any]) -> list[str]:
-    """Return canonical entity ids matched in an item (may be multiple)."""
+    """Return canonical entity ids matched in an item (may be multiple).
+
+    Includes parents linked via an entrant's QSA controllers, so a new fintech
+    controlled by a known player clusters into that player's narrative.
+    """
     blob = f" {signal_blob(item)} "
     found: list[str] = []
     for entity_id, aliases in ENTITY_ALIASES.items():
@@ -73,6 +103,9 @@ def resolve_entities(item: dict[str, Any]) -> list[str]:
             elif token in blob:
                 found.append(entity_id)
                 break
+    for parent in known_parents(item):
+        if parent not in found:
+            found.append(parent)
     return found
 
 
