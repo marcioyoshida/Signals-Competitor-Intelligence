@@ -48,6 +48,7 @@ ENTITY_LABELS = {
 LENS_LABELS = {
     "regulatory": "Regulatório (BCB)",
     "fatos": "Fato Relevante (CVM)",
+    "dou": "Diário Oficial (DOU)",
     "sec": "Documentos SEC (EUA)",
     "ofertas": "Ofertas de distribuição (CVM)",
     "inf_diario": "Patrimônio de fundos (CVM)",
@@ -183,6 +184,26 @@ def _heuristic_narrative(
     return " ".join(p for p in parts if p)
 
 
+_DOU_ORGANS = [
+    ("Defesa Econômica", "CADE"),
+    ("Seguros Privados", "SUSEP"),
+    ("Previdência Complementar", "PREVIC"),
+    ("Banco Central", "BACEN"),
+    ("Valores Mobiliários", "CVM"),
+    ("Conselho Nacional de Seguros", "CNSP"),
+    ("Conselho Monetário", "CMN"),
+]
+
+
+def _dou_organ(organ: str | None) -> str:
+    """Short label for a DOU publishing body (from its hierarchyStr)."""
+    text = organ or ""
+    for needle, short in _DOU_ORGANS:
+        if needle in text:
+            return short
+    return (text.split("/")[-1] or "DOU")[:40]
+
+
 def _describe_signal(sig: dict[str, Any], prefix: str = "") -> str:
     lens = sig.get("_lens") or ""
     url = sig.get("url") or ""
@@ -194,6 +215,12 @@ def _describe_signal(sig: dict[str, Any], prefix: str = "") -> str:
             f"{head}{sig.get('doc_type') or 'Fato Relevante'}{alert}: "
             f"{sig.get('company') or sig.get('name') or 'companhia'} — "
             f"{sig.get('subject') or 'n/d'}. {url}"
+        ).strip()
+    if lens == "dou":
+        organ = _dou_organ(sig.get("organ"))
+        return (
+            f"{head}Diário Oficial{alert} ({organ}): "
+            f"{sig.get('title') or sig.get('subject') or 'ato'}. {url}"
         ).strip()
     if lens == "regulatory" or sig.get("doc_type") or sig.get("subject"):
         return (

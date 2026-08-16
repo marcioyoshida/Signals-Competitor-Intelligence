@@ -24,6 +24,7 @@ from src.synth.entities import resolve_entities, signal_blob, tokens_for_match
 LENS_WEIGHT = {
     "regulatory": 0.35,
     "fatos": 0.3,
+    "dou": 0.3,
     "sec": 0.25,
     "ofertas": 0.2,
     "inf_diario": 0.15,
@@ -36,7 +37,7 @@ LENS_WEIGHT = {
 
 # Single-lens candidates allowed only for these lenses when is_new.
 HIGH_VALUE_SOLO_LENSES = frozenset(
-    {"regulatory", "fatos", "sec", "ofertas", "entrants", "funds"}
+    {"regulatory", "fatos", "dou", "sec", "ofertas", "entrants", "funds"}
 )
 
 # Market is backdrop only — never a solo seed.
@@ -272,6 +273,7 @@ def _collect_signals(
         ("new_entrants", "entrants"),
         ("ofertas", "ofertas"),
         ("fatos", "fatos"),
+        ("dou", "dou"),
         ("sec_filings", "sec"),
         ("pix_moves", "pix"),
         ("juros_moves", "juros"),
@@ -471,6 +473,7 @@ STRATEGIC_WEIGHT = {
     "regulatory": 1.0,
     "entrants": 0.9,
     "fatos": 0.88,
+    "dou": 0.82,
     "sec": 0.85,
     "ofertas": 0.6,
     "pix": 0.55,

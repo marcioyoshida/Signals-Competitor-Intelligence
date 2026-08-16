@@ -71,6 +71,13 @@ fatos_watchlist:
 # Categorias to keep (empty = defaults: Fato Relevante, Comunicado ao Mercado).
 fatos_categories: []
 
+# Diário Oficial da União — official acts (SUSEP / CADE / BACEN / PREVIC / CVM)
+# naming a competitor. Reuses the fatos watchlist + competitors as search terms
+# (quoted phrases). Organ allowlist in code keeps only intel-relevant regulators.
+dou_lookback_days: 30
+dou_use_competitors: true
+dou_watchlist: []
+
 # US-listed Brazilian fintechs to track via SEC EDGAR. Empty = skip SEC
 # entirely (appropriate if your target customer is a bank/insurer and
 # these acquirers/fintechs aren't relevant competitors).

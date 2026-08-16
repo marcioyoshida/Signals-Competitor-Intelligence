@@ -370,3 +370,21 @@ def test_fatos_material_fact_high_value_and_resolves_entity():
     txt = _describe_signal({**d["fatos"]["items"][0], "_lens": "fatos"})
     assert txt.startswith("Fato Relevante")  # not the "Regulatório" branch
     assert "BANCO BRADESCO" in txt and "Aquisição de participação" in txt
+
+
+def test_dou_act_is_high_value_and_resolves_entity():
+    from src.synth.synthesize import _describe_signal
+    d = {"dou": {"items": [{
+        "id": "dou:despacho-cade-941", "company": "BANCO BTG PACTUAL", "name": "BANCO BTG PACTUAL",
+        "doc_type": "Despacho", "title": "DESPACHO SG Nº 941 - Ato de Concentração",
+        "organ": "Ministério da Justiça/Conselho Administrativo de Defesa Econômica",
+        "date": "2026-08-13", "url": "https://www.in.gov.br/web/dou/-/despacho-cade-941",
+        "is_new": True}], "context": []}}
+    cands = extract_candidates(d, max_candidates=5, min_lenses=1, min_score=0.0)
+    assert cands
+    c = cands[0]
+    assert "dou" in c["lenses"]
+    assert "btg" in (c.get("entities") or [])
+    assert c["threat_score"] >= 0.5
+    txt = _describe_signal({**d["dou"]["items"][0], "_lens": "dou"})
+    assert txt.startswith("Diário Oficial") and "(CADE)" in txt

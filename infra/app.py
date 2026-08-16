@@ -206,6 +206,14 @@ class OncaPrototypeStack(Stack):
                 "ONCA_FATOS_CATEGORIES": ",".join(
                     str(x) for x in (watchlist.get("fatos_categories") or [])
                 ),
+                # Diário Oficial (SUSEP / CADE / BACEN acts naming a competitor).
+                "ONCA_DOU_LOOKBACK_DAYS": str(watchlist.get("dou_lookback_days", 30)),
+                "ONCA_DOU_WATCHLIST": ",".join(
+                    str(x) for x in (watchlist.get("dou_watchlist") or [])
+                ),
+                "ONCA_DOU_USE_COMPETITORS": (
+                    "true" if watchlist.get("dou_use_competitors", True) else "false"
+                ),
                 # SEC EDGAR — payments/US-listed fintechs; empty tickers = skip.
                 "ONCA_SEC_TICKERS": ",".join(
                     str(x) for x in (watchlist.get("sec_tickers") or [])

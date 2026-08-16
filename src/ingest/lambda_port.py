@@ -93,6 +93,7 @@ from src.ingest import (
     cvm_inf_diario,
     cvm_ipe,
     cvm_ofertas,
+    dou,
     raw_writer,
     receita_cnpj,
     sec_filings,
@@ -273,6 +274,12 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         fatos_watch = list(dict.fromkeys(fatos_watch + competitors))
     fatos_categories = _csv_env("ONCA_FATOS_CATEGORIES") or None
 
+    # Diário Oficial (DOU) — SUSEP / CADE / BACEN acts mentioning a competitor.
+    dou_lookback = int(os.environ.get("ONCA_DOU_LOOKBACK_DAYS", "30"))
+    dou_terms = _csv_env("ONCA_DOU_WATCHLIST")
+    if os.environ.get("ONCA_DOU_USE_COMPETITORS", "true").lower() in ("1", "true", "yes"):
+        dou_terms = list(dict.fromkeys(dou_terms + fatos_watch))
+
     # Wall-clock guards: bound each source and stop starting new work before the
     # Lambda times out, so ingest always returns a (possibly partial) digest.
     deadline = _ingest_deadline(context)
@@ -402,6 +409,17 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
             print(f"Warning: CVM fatos relevantes fetch failed: {exc}")
 
+    # Diário Oficial — official acts (SUSEP/CADE/BACEN) naming a competitor.
+    dou_acts: list[dict[str, Any]] = []
+    new_dou: list[dict[str, Any]] = []
+    if dou_terms:
+        try:
+            with _source_budget("Diário Oficial", deadline, per_source):
+                dou_acts = dou.fetch_dou(dou_terms, lookback_days=dou_lookback)
+                new_dou = _new_since_last_run("dou", dou_acts, seed_if_empty=True)
+        except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
+            print(f"Warning: Diário Oficial fetch failed: {exc}")
+
     # SEC EDGAR — US-listed payments/fintech disclosures (seed on first run).
     # Metadata first (submissions JSON), then primary-document bodies for the
     # diffed set + a small context sample so digests/corpus carry text not only URLs.
@@ -468,7 +486,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     # Corpus gets document-like signals only (not numeric Pix/juros/AUM moves).
     _populate_corpus_and_sync(
-        new_normativos + new_funds + new_entrants + new_ofertas + new_sec + new_fatos
+        new_normativos + new_funds + new_entrants + new_ofertas + new_sec
+        + new_fatos + new_dou
     )
 
     # Stage B fusion needs more than deltas: after seeding, items[] is often
@@ -523,6 +542,12 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             "new_count": len(new_fatos),
             "items": _tag_new(new_fatos[:10]),
             "context": _strip_raw(fatos[:15]),
+        },
+        "dou": {
+            "count": len(dou_acts),
+            "new_count": len(new_dou),
+            "items": _tag_new(new_dou[:10]),
+            "context": _strip_raw(dou_acts[:15]),
         },
         "inf_diario_moves": {
             "funds_tracked": len(inf_diario_rows),
