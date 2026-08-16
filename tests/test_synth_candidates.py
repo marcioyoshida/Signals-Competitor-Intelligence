@@ -73,7 +73,11 @@ def test_extract_regulatory_and_competitor_candidates():
 
 
 def test_entity_fusion_from_context_when_items_empty():
-    """Real digests after seeding: items=[] but context has samples."""
+    """Context-only fusion still works when emit-on-change is opted out.
+
+    (By default require_change suppresses steady-state context restatements —
+    see test_change_only_drops_steady_state_cluster — but the fusion capability
+    itself must still function when a caller opts out.)"""
     digest = {
         "regulatory": {"items": [], "context": [], "count": 49, "new_count": 0},
         "sec_filings": {
@@ -149,7 +153,9 @@ def test_entity_fusion_from_context_when_items_empty():
         "new_entrants": {"items": [], "context": []},
         "competitor": {"items": [], "context": []},
     }
-    cands = extract_candidates(digest, max_candidates=10, min_lenses=2, min_score=0.4)
+    cands = extract_candidates(
+        digest, max_candidates=10, min_lenses=2, min_score=0.4, require_change=False
+    )
     assert cands, "context-only multi-lens digest must yield candidates"
     # Quality bar: multi-lens entity fusions
     assert any(c.get("kind") == "entity_fusion" for c in cands)
@@ -157,6 +163,8 @@ def test_entity_fusion_from_context_when_items_empty():
     entities = {e for c in cands for e in (c.get("entities") or [])}
     assert entities & {"itau", "btg", "nubank"}
     assert any(c.get("as_of") == "2026-07-16" for c in cands)
+    # And by default (emit-on-change) this steady-state digest yields nothing.
+    assert extract_candidates(digest, max_candidates=10, min_lenses=2, min_score=0.4) == []
 
 
 def test_quality_gate_drops_single_lens_context_noise():
@@ -241,3 +249,39 @@ def test_multi_lens_entity_scores_higher_than_single():
     assert stone is not None
     assert len(stone.get("lenses") or []) >= 2
     assert stone["threat_score"] >= 0.4
+
+
+def _steady_btg_digest():
+    """A 2-lens BTG cluster built purely from steady-state context (no is_new)."""
+    return {
+        "ofertas": {"items": [], "context": [
+            {"id": "of1", "issuer": "BTG PACTUAL", "security": "Debêntures",
+             "leader": "BTG PACTUAL", "url": "https://dados.cvm.gov.br/o"}]},
+        "inf_diario_moves": {"items": [], "context": [
+            {"id": "inf1", "fund_name": "BTG PACTUAL TESOURO SELIC",
+             "admin": "BTG PACTUAL", "pl": 5e10, "url": "https://dados.cvm.gov.br/i"}]},
+    }
+
+
+def test_change_only_drops_steady_state_cluster():
+    d = _steady_btg_digest()
+    # default (require_change on) drops daily restatement of unchanged signals
+    assert not any(
+        c["kind"] == "entity_fusion" for c in extract_candidates(d, require_change=True)
+    )
+    # opting out keeps the steady-state cluster (old behavior)
+    assert any(
+        c["kind"] == "entity_fusion" for c in extract_candidates(d, require_change=False)
+    )
+
+
+def test_change_only_keeps_changed_cluster():
+    d = _steady_btg_digest()
+    # a genuine new offering (is_new) for the same entity -> emitted even change-only
+    d["ofertas"]["items"] = [
+        {"id": "of-new", "issuer": "BTG PACTUAL", "security": "Debêntures",
+         "leader": "BTG PACTUAL", "url": "https://dados.cvm.gov.br/new", "is_new": True}
+    ]
+    assert any(
+        c["kind"] == "entity_fusion" for c in extract_candidates(d, require_change=True)
+    )

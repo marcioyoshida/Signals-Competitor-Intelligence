@@ -44,6 +44,9 @@ def test_handler_produces_cited_narratives_without_bedrock(monkeypatch):
 def test_handler_context_only_digest_fuses_entities(monkeypatch):
     monkeypatch.setenv("ONCA_SYNTH_USE_LLM", "false")
     monkeypatch.setenv("ONCA_SYNTH_USE_KB", "false")
+    # Opt out of emit-on-change: this test exercises the context-fusion path.
+    # (By default the handler suppresses steady-state, change-less digests.)
+    monkeypatch.setenv("ONCA_SYNTH_CHANGE_ONLY", "false")
     written = []
     monkeypatch.setattr(
         lambda_handler.digest_io,
@@ -104,6 +107,26 @@ def test_handler_context_only_digest_fuses_entities(monkeypatch):
     assert body["narrative_count"] >= 1
     assert body["fusion"]["entity_fusion"] >= 1 or body["fusion"]["multi_lens"] >= 1
     assert written
+
+
+def test_handler_suppresses_changeless_digest_by_default(monkeypatch):
+    """Emit-on-change default: a steady-state, change-less digest -> no narratives."""
+    monkeypatch.setenv("ONCA_SYNTH_USE_LLM", "false")
+    monkeypatch.setenv("ONCA_SYNTH_USE_KB", "false")
+    monkeypatch.delenv("ONCA_SYNTH_CHANGE_ONLY", raising=False)  # default (on)
+    event = {
+        "digest": {
+            "ofertas": {"items": [], "context": [
+                {"id": "of:1", "issuer": "Issuer SA", "leader": "BTG PACTUAL",
+                 "security": "Debêntures", "url": "https://dados.cvm.gov.br/of"}]},
+            "inf_diario_moves": {"items": [], "context": [
+                {"id": "inf:1", "fund_name": "BTG RF", "admin": "BTG PACTUAL",
+                 "pl": 1e11, "url": "https://dados.cvm.gov.br/i"}]},
+        }
+    }
+    body = json.loads(lambda_handler.lambda_handler(event, None)["body"])
+    assert body["narrative_count"] == 0
+    assert body["status"] == "ok_empty"
 
 
 def test_handler_no_digest(monkeypatch):

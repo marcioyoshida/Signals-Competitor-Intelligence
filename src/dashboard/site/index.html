@@ -126,6 +126,7 @@
         <select id="fLens"><option value="">All lenses</option></select>
         <select id="fDate"><option value="">All dates</option></select>
         <label class="chk"><input type="checkbox" id="fAlert" /> Alerts only</label>
+        <button class="btn" id="viewToggle" title="Collapse repeats per entity">All updates</button>
         <input type="search" id="fSearch" placeholder="Search narratives…" style="flex:1;min-width:140px" />
       </div>
       <div class="legend" id="legend"></div>
@@ -155,7 +156,8 @@ const tierOf = (s) => TIERS.find(t => (s ?? 0) >= t.min) || TIERS[TIERS.length -
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
 
 let DATA = null;
-const state = { entity: "", lens: "", date: "", alert: false, q: "" };
+// view "entity" collapses repeats to one card per entity (default); "all" lists every update.
+const state = { entity: "", lens: "", date: "", alert: false, q: "", view: "entity" };
 
 async function boot() {
   try {
@@ -225,9 +227,12 @@ function citeHtml(c) {
   return `<span class="src">${esc(c.source || c.id || "source")}</span>`;
 }
 
-function cardHtml(f) {
+function cardHtml(f, group) {
   const t = tierOf(f.threat_score);
   const pct = Math.round((f.threat_score ?? 0) * 100);
+  const multi = group && group.count > 1
+    ? `<span class="est">· ${group.count} updates in window · peak ${group.peak.toFixed(2)}</span>`
+    : "";
   return `<div class="card" data-id="${esc(f.id)}">
     <div class="row1">
       <span class="tier" style="background:${cssvar(t.var)}">${t.label}</span>
@@ -237,7 +242,7 @@ function cardHtml(f) {
       <span class="date">${esc(f.date)}</span>
     </div>
     <div class="bar"><span style="width:${pct}%;background:${cssvar(t.var)}"></span></div>
-    <div><span class="score">${(f.threat_score ?? 0).toFixed(2)} threat</span> <span class="est">· est.</span></div>
+    <div><span class="score">${(f.threat_score ?? 0).toFixed(2)} threat</span> <span class="est">· est.</span> ${multi}</div>
     <div class="lenses">${f.lenses.map(l => `<span class="chip">${esc(l)}</span>`).join("")}</div>
     <p class="narr clamp">${esc(f.narrative)}</p>
     <div class="cites">${f.citations.map(citeHtml).join("")}
@@ -245,12 +250,33 @@ function cardHtml(f) {
   </div>`;
 }
 
+function collapseByEntity(rows) {
+  // rows are pre-sorted newest-date-first then score desc, so the first seen
+  // per entity is the representative (latest) card; peak/count span the window.
+  const groups = new Map();
+  for (const f of rows) {
+    const key = f.entity || f.entity_label;
+    let g = groups.get(key);
+    if (!g) { g = { item: f, count: 0, peak: 0 }; groups.set(key, g); }
+    g.count++; g.peak = Math.max(g.peak, f.threat_score ?? 0);
+  }
+  return [...groups.values()].sort((a, b) => b.peak - a.peak);
+}
+
 function render() {
   const rows = filtered();
   const feed = document.getElementById("feed");
-  feed.innerHTML = rows.length
-    ? rows.map(cardHtml).join("")
-    : `<div class="empty">No narratives match these filters.</div>`;
+  // Collapse repeats per entity by default; a specific date already scopes to one day.
+  const collapse = state.view === "entity" && !state.date;
+  let html;
+  if (!rows.length) {
+    html = `<div class="empty">No narratives match these filters.</div>`;
+  } else if (collapse) {
+    html = collapseByEntity(rows).map(g => cardHtml(g.item, g)).join("");
+  } else {
+    html = rows.map(f => cardHtml(f, null)).join("");
+  }
+  feed.innerHTML = html;
   feed.querySelectorAll(".card").forEach(c => c.onclick = () => {
     c.querySelector(".narr").classList.toggle("clamp");
   });
@@ -320,6 +346,11 @@ document.getElementById("themeToggle").onclick = (e) => {
   document.documentElement.setAttribute("data-theme", dark ? "light" : "dark");
   e.target.textContent = dark ? "Dark" : "Light";
   if (DATA) { renderLegend(); renderEntities(); render(); syncEntityHighlight(); }
+};
+document.getElementById("viewToggle").onclick = (e) => {
+  state.view = state.view === "entity" ? "all" : "entity";
+  e.target.textContent = state.view === "entity" ? "All updates" : "By entity";
+  render();
 };
 document.getElementById("tableToggle").onclick = (e) => {
   const tv = document.getElementById("tableView");

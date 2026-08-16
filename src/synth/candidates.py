@@ -47,12 +47,26 @@ def extract_candidates(
     min_lenses: int | None = None,
     min_pl: float | None = None,
     min_score: float | None = None,
+    require_change: bool | None = None,
 ) -> list[dict[str, Any]]:
-    """Build correlation candidates from digest sections + context."""
+    """Build correlation candidates from digest sections + context.
+
+    With ``require_change`` (default on), only candidates carrying a genuine
+    delta (``is_new`` — set on new documents and threshold-exceeding numeric
+    moves) are emitted. This is the "report change, not presence" rule: without
+    it, a multi-lens entity built purely from steady-state context surfaces a
+    near-duplicate narrative every day, polluting the feed.
+    """
     min_lenses = (
         min_lenses
         if min_lenses is not None
         else int(os.environ.get("ONCA_SYNTH_MIN_LENSES", "2"))
+    )
+    require_change = (
+        require_change
+        if require_change is not None
+        else os.environ.get("ONCA_SYNTH_CHANGE_ONLY", "true").lower()
+        in ("1", "true", "yes")
     )
     min_pl = (
         min_pl
@@ -150,9 +164,12 @@ def extract_candidates(
             }
         )
 
-    # Quality gate
+    # Quality gate (+ emit-on-change: drop steady-state restatements)
     candidates = [
-        c for c in candidates if _passes_quality_gate(c, min_lenses=min_lenses, min_score=min_score)
+        c
+        for c in candidates
+        if _passes_quality_gate(c, min_lenses=min_lenses, min_score=min_score)
+        and (not require_change or _has_change(c))
     ]
 
     candidates.sort(
@@ -164,6 +181,11 @@ def extract_candidates(
         reverse=True,
     )
     return candidates[:max_candidates]
+
+
+def _has_change(cand: dict[str, Any]) -> bool:
+    """True if any source is a genuine delta (new doc or threshold move)."""
+    return any(s.get("is_new") for s in (cand.get("sources") or []))
 
 
 def _passes_quality_gate(

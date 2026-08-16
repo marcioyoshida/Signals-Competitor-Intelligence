@@ -255,6 +255,10 @@ class OncaPrototypeStack(Stack):
                 # Retrieve verified against this account 2026-08-13.
                 "ONCA_SYNTH_USE_LLM": "true",
                 "ONCA_SYNTH_USE_KB": "true",
+                # Emit-on-change: only surface narratives when an entity's
+                # signals actually changed (new doc / threshold move), so the
+                # feed reports change, not daily steady-state restatements.
+                "ONCA_SYNTH_CHANGE_ONLY": "true",
                 # Quality bar: multi-lens preferred; solo only for new high-value.
                 "ONCA_SYNTH_MIN_LENSES": "2",
                 "ONCA_SYNTH_MIN_SCORE": "0.45",
