@@ -201,8 +201,15 @@ async function boot() {
       `<div class="empty">Ainda não há feed. Ele é publicado após a execução diária do pipeline.<br><small>(${esc(e.message)})</small></div>`;
     return;
   }
+  let checked = "";
+  if (DATA.generated_at) {
+    try {
+      checked = " · verificado " + new Date(DATA.generated_at).toLocaleString("pt-BR",
+        { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" });
+    } catch (e) {}
+  }
   document.getElementById("asof").textContent =
-    `em ${DATA.as_of ?? "—"} · ${DATA.feed.length} narrativas · janela de ${DATA.dates.length} dias`;
+    `dados de ${DATA.as_of ?? "—"}${checked} · ${DATA.feed.length} narrativas · janela de ${DATA.dates.length} dias`;
   renderKpis(); renderLegend(); populateFilters(); renderEntities(); render();
 }
 
