@@ -56,6 +56,7 @@ LENS_LABELS = {
     "pix": "Movimentação Pix",
     "juros": "Juros médios (BCB)",
     "entrants": "Novos entrantes (BCB)",
+    "news": "Imprensa (notícias)",
     "market": "Participação de mercado",
 }
 
@@ -221,6 +222,11 @@ def _describe_signal(sig: dict[str, Any], prefix: str = "") -> str:
         return (
             f"{head}Diário Oficial{alert} ({organ}): "
             f"{sig.get('title') or sig.get('subject') or 'ato'}. {url}"
+        ).strip()
+    if lens == "news":
+        return (
+            f"{head}Imprensa{alert} ({sig.get('publisher') or 'notícia'}): "
+            f"{sig.get('title') or sig.get('subject') or ''}. {url}"
         ).strip()
     if lens == "regulatory" or sig.get("doc_type") or sig.get("subject"):
         return (

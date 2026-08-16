@@ -388,3 +388,22 @@ def test_dou_act_is_high_value_and_resolves_entity():
     assert c["threat_score"] >= 0.5
     txt = _describe_signal({**d["dou"]["items"][0], "_lens": "dou"})
     assert txt.startswith("Diário Oficial") and "(CADE)" in txt
+
+
+def test_news_item_surfaces_but_scores_below_official():
+    from src.synth.synthesize import _describe_signal
+    d = {"news": {"items": [{
+        "id": "news:abc", "company": "Nubank", "name": "Nubank", "publisher": "Valor Econômico",
+        "title": "Nubank tem lucro recorde no trimestre", "subject": "Nubank tem lucro recorde",
+        "date": "2026-08-13", "url": "https://news.google.com/x", "is_new": True}], "context": []}}
+    cands = extract_candidates(d, max_candidates=5, min_lenses=1, min_score=0.0)
+    assert cands and "news" in cands[0]["lenses"]
+    assert "nubank" in (cands[0].get("entities") or [])
+    news_score = cands[0]["threat_score"]
+    # a regulatory delta for the same entity should outrank the news item
+    d2 = {"regulatory": {"items": [{"id": "bcb:1", "doc_type": "Resolução",
+        "subject": "Nubank Pix rule", "url": "https://bcb/1", "is_new": True}], "context": []}}
+    reg_score = extract_candidates(d2, max_candidates=5, min_lenses=1, min_score=0.0)[0]["threat_score"]
+    assert reg_score > news_score
+    txt = _describe_signal({**d["news"]["items"][0], "_lens": "news"})
+    assert txt.startswith("Imprensa") and "Valor Econômico" in txt

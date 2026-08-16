@@ -97,6 +97,7 @@ from src.ingest import (
     raw_writer,
     receita_cnpj,
     sec_filings,
+    trade_press,
 )
 
 
@@ -280,6 +281,12 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     if os.environ.get("ONCA_DOU_USE_COMPETITORS", "true").lower() in ("1", "true", "yes"):
         dou_terms = list(dict.fromkeys(dou_terms + fatos_watch))
 
+    # Trade-press (Google News RSS) — brand-name queries for qualitative color.
+    news_lookback = int(os.environ.get("ONCA_NEWS_LOOKBACK_DAYS", "14"))
+    news_terms = _csv_env("ONCA_NEWS_WATCHLIST")
+    if os.environ.get("ONCA_NEWS_USE_COMPETITORS", "true").lower() in ("1", "true", "yes"):
+        news_terms = list(dict.fromkeys(news_terms + competitors))
+
     # Wall-clock guards: bound each source and stop starting new work before the
     # Lambda times out, so ingest always returns a (possibly partial) digest.
     deadline = _ingest_deadline(context)
@@ -420,6 +427,17 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
             print(f"Warning: Diário Oficial fetch failed: {exc}")
 
+    # Trade-press headlines (Google News RSS) — qualitative color, lower authority.
+    news_items: list[dict[str, Any]] = []
+    new_news: list[dict[str, Any]] = []
+    if news_terms:
+        try:
+            with _source_budget("Trade press", deadline, per_source):
+                news_items = trade_press.fetch_news(news_terms, lookback_days=news_lookback)
+                new_news = _new_since_last_run("trade_press", news_items, seed_if_empty=True)
+        except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
+            print(f"Warning: trade-press fetch failed: {exc}")
+
     # SEC EDGAR — US-listed payments/fintech disclosures (seed on first run).
     # Metadata first (submissions JSON), then primary-document bodies for the
     # diffed set + a small context sample so digests/corpus carry text not only URLs.
@@ -548,6 +566,12 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             "new_count": len(new_dou),
             "items": _tag_new(new_dou[:10]),
             "context": _strip_raw(dou_acts[:15]),
+        },
+        "news": {
+            "count": len(news_items),
+            "new_count": len(new_news),
+            "items": _tag_new(new_news[:12]),
+            "context": _strip_raw(news_items[:15]),
         },
         "inf_diario_moves": {
             "funds_tracked": len(inf_diario_rows),

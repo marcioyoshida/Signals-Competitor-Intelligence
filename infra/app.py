@@ -214,6 +214,14 @@ class OncaPrototypeStack(Stack):
                 "ONCA_DOU_USE_COMPETITORS": (
                     "true" if watchlist.get("dou_use_competitors", True) else "false"
                 ),
+                # Trade-press (Google News RSS) — brand-name queries.
+                "ONCA_NEWS_LOOKBACK_DAYS": str(watchlist.get("news_lookback_days", 14)),
+                "ONCA_NEWS_WATCHLIST": ",".join(
+                    str(x) for x in (watchlist.get("news_watchlist") or [])
+                ),
+                "ONCA_NEWS_USE_COMPETITORS": (
+                    "true" if watchlist.get("news_use_competitors", True) else "false"
+                ),
                 # SEC EDGAR — payments/US-listed fintechs; empty tickers = skip.
                 "ONCA_SEC_TICKERS": ",".join(
                     str(x) for x in (watchlist.get("sec_tickers") or [])

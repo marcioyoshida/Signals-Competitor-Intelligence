@@ -78,6 +78,27 @@ dou_lookback_days: 30
 dou_use_competitors: true
 dou_watchlist: []
 
+# Trade-press (Google News RSS) — brand-name queries; headline + link only, cite
+# the publisher (no full-text scrape). Finance-context filter in code drops
+# band/stadium/culture noise for ambiguous names (Stone, Inter).
+news_lookback_days: 14
+news_use_competitors: true
+news_watchlist:
+  - Nubank
+  - Stone
+  - PagBank
+  - Banco Inter
+  - XP Investimentos
+  - Creditas
+  - InfinitePay
+  - RecargaPay
+  - Neon
+  - Nomad
+  - Mercado Pago
+  - Itaú Unibanco
+  - Bradesco
+  - BTG Pactual
+
 # US-listed Brazilian fintechs to track via SEC EDGAR. Empty = skip SEC
 # entirely (appropriate if your target customer is a bank/insurer and
 # these acquirers/fintechs aren't relevant competitors).

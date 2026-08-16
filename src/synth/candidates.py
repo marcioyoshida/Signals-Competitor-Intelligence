@@ -32,12 +32,13 @@ LENS_WEIGHT = {
     "juros": 0.12,
     "entrants": 0.18,
     "funds": 0.15,
+    "news": 0.12,
     "market": 0.08,
 }
 
 # Single-lens candidates allowed only for these lenses when is_new.
 HIGH_VALUE_SOLO_LENSES = frozenset(
-    {"regulatory", "fatos", "dou", "sec", "ofertas", "entrants", "funds"}
+    {"regulatory", "fatos", "dou", "sec", "ofertas", "entrants", "funds", "news"}
 )
 
 # Market is backdrop only — never a solo seed.
@@ -274,6 +275,7 @@ def _collect_signals(
         ("ofertas", "ofertas"),
         ("fatos", "fatos"),
         ("dou", "dou"),
+        ("news", "news"),
         ("sec_filings", "sec"),
         ("pix_moves", "pix"),
         ("juros_moves", "juros"),
@@ -480,6 +482,7 @@ STRATEGIC_WEIGHT = {
     "juros": 0.55,
     "inf_diario": 0.5,
     "funds": 0.4,
+    "news": 0.55,  # qualitative color — lower authority than official filings
     "market": 0.3,
 }
 
