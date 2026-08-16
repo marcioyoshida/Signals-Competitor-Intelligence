@@ -99,11 +99,17 @@ licensed aggregator (People Data Labs / Explorium), never scraped.
   per-source budgets + corpus cap (`src/ingest/lambda_port.py`). Ingest
   ~45–57s, pipeline ~90s green. See
   `docs/2026-08-14-phase2-pipeline-and-hardening.md`.
-- **Phase 3 (CURRENT)** — warroom dashboard + alerts. Dashboard chosen
-  next; design in `docs/2026-08-14-phase3-dashboard-plan.md` (static
-  S3+CloudFront reading an aggregated `feed.json`; frontend-build and auth
-  decisions still open). Not started. `threat_score` is still a
-  placeholder heuristic — real threat scoring is separate future work.
+- **Phase 3 (CURRENT)** — warroom dashboard (done 2026-08-16) + alerts (next).
+  Dashboard: static S3 + CloudFront (OAC) site with edge basic-auth
+  (CloudFront Function), fed by `feed.json` aggregated by
+  `src/dashboard/feed_builder.py` and wired as a 3rd pipeline step
+  (ingest → synth → feed). Buildless single-file UI in
+  `src/dashboard/site/index.html` (threat-scored feed, KPI tiles, entity
+  timelines, source drill-down). Deployed + validated end-to-end; URL is
+  the `DashboardUrl` stack output. Design:
+  `docs/2026-08-14-phase3-dashboard-plan.md`. `threat_score` is still a
+  placeholder heuristic (labeled "estimated" in the UI) — real threat
+  scoring is separate future work. Remaining Phase 3: SNS/email alerts.
 - **Phase 4** — design partners, then Marketplace SaaS listing
 
 ## Conventions

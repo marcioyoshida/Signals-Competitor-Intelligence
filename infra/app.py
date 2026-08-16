@@ -5,17 +5,22 @@ later be extended to S3/DynamoDB persistence.
 """
 from __future__ import annotations
 
+import base64
+import os
 from pathlib import Path
 
 import yaml
-from aws_cdk import App, Duration, Stack
+from aws_cdk import App, CfnOutput, Duration, Stack
 from aws_cdk import aws_bedrock as bedrock
+from aws_cdk import aws_cloudfront as cloudfront
+from aws_cdk import aws_cloudfront_origins as cf_origins
 from aws_cdk import aws_dynamodb as dynamodb
 from aws_cdk import aws_events as events
 from aws_cdk import aws_events_targets as targets
 from aws_cdk import aws_iam as iam
 from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_s3 as s3
+from aws_cdk import aws_s3_deployment as s3deploy
 from aws_cdk import aws_s3vectors as s3vectors
 from aws_cdk import aws_stepfunctions as sfn
 from aws_cdk import aws_stepfunctions_tasks as sfn_tasks
@@ -26,6 +31,7 @@ VECTOR_DIMENSION = 1024
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 LAMBDA_ASSET = REPO_ROOT / "build" / "lambda"
+SITE_ASSET = REPO_ROOT / "src" / "dashboard" / "site"
 WATCHLIST_CONFIG = REPO_ROOT / "config" / "watchlist.yaml"
 
 
@@ -282,14 +288,98 @@ class OncaPrototypeStack(Stack):
             )
         )
 
-        # Orchestration: one daily pipeline ordering ingest -> synth, replacing
-        # the two independent schedules. Sequential execution guarantees synth
-        # reads the digest this run's ingest just wrote (digest_io picks the
-        # newest object in lambda-digests/). Each task gets an empty payload so
-        # synth never mistakes the ingest Lambda's {statusCode, body} return for
-        # a digest. No KB-ingestion wait: synth is digest-first and KB Retrieve
-        # only enriches the already-embedded corpus, so today's newest docs
-        # lagging one run is acceptable.
+        # Phase 3 warroom dashboard: static site (S3 + CloudFront), fed by a
+        # pre-aggregated feed.json. No API/backend — data changes once daily, so
+        # a static file keeps cost at the CloudFront request floor (no idle cost).
+        site_bucket = s3.Bucket(
+            self,
+            "OncaDashboardSite",
+            block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
+            enforce_ssl=True,
+        )
+
+        # Basic auth at the CloudFront edge (viewer-request). Prototype gate for a
+        # competitive-intel feed; credentials come from env at synth time and are
+        # baked into the function (set ONCA_DASH_USER / ONCA_DASH_PASS to override).
+        dash_user = os.environ.get("ONCA_DASH_USER", "onca")
+        dash_pass = os.environ.get("ONCA_DASH_PASS", "")
+        if not dash_pass:
+            dash_pass = "warroom"  # prototype default — override via env before real use
+            print("WARNING: ONCA_DASH_PASS not set; using default dashboard password 'warroom'")
+        basic = base64.b64encode(f"{dash_user}:{dash_pass}".encode()).decode()
+        auth_fn = cloudfront.Function(
+            self,
+            "OncaDashboardBasicAuth",
+            code=cloudfront.FunctionCode.from_inline(
+                "function handler(event) {\n"
+                "  var r = event.request; var h = r.headers;\n"
+                f'  var expected = "Basic {basic}";\n'
+                "  if (!h.authorization || h.authorization.value !== expected) {\n"
+                "    return { statusCode: 401, statusDescription: 'Unauthorized',\n"
+                "      headers: { 'www-authenticate': { value: 'Basic realm=\"Onca Warroom\"' } } };\n"
+                "  }\n"
+                "  return r;\n"
+                "}\n"
+            ),
+        )
+
+        distribution = cloudfront.Distribution(
+            self,
+            "OncaDashboardCdn",
+            default_root_object="index.html",
+            default_behavior=cloudfront.BehaviorOptions(
+                origin=cf_origins.S3BucketOrigin.with_origin_access_control(site_bucket),
+                viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+                function_associations=[
+                    cloudfront.FunctionAssociation(
+                        function=auth_fn,
+                        event_type=cloudfront.FunctionEventType.VIEWER_REQUEST,
+                    )
+                ],
+            ),
+            comment="Onca warroom dashboard",
+        )
+
+        # Deploy the static frontend (index.html). prune=False so the Lambda's
+        # feed.json isn't deleted on redeploys; invalidate index.html each time.
+        s3deploy.BucketDeployment(
+            self,
+            "OncaDashboardDeploy",
+            sources=[s3deploy.Source.asset(str(SITE_ASSET))],
+            destination_bucket=site_bucket,
+            distribution=distribution,
+            distribution_paths=["/index.html"],
+            prune=False,
+        )
+
+        # Feed builder: aggregate recent narratives -> feed.json in the site bucket.
+        feed_fn = lambda_.Function(
+            self,
+            "OncaFeedBuilder",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.dashboard.feed_builder.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.minutes(5),
+            memory_size=512,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+                "ONCA_SITE_BUCKET": site_bucket.bucket_name,
+                "ONCA_FEED_WINDOW_DAYS": "14",
+            },
+        )
+        digests_bucket.grant_read(feed_fn)
+        site_bucket.grant_put(feed_fn)
+
+        # Orchestration: one daily pipeline ordering ingest -> synth -> feed,
+        # replacing the two independent schedules. Sequential execution guarantees
+        # synth reads the digest this run's ingest just wrote (digest_io picks the
+        # newest object in lambda-digests/) and the feed builder sees synth's
+        # fresh narratives. Each task gets an empty payload so synth never mistakes
+        # the ingest Lambda's {statusCode, body} return for a digest. No
+        # KB-ingestion wait: synth is digest-first and KB Retrieve only enriches
+        # the already-embedded corpus, so today's newest docs lagging one run is
+        # acceptable.
         ingest_task = sfn_tasks.LambdaInvoke(
             self,
             "IngestTask",
@@ -316,14 +406,27 @@ class OncaPrototypeStack(Stack):
             interval=Duration.seconds(30),
             backoff_rate=2.0,
         )
+        feed_task = sfn_tasks.LambdaInvoke(
+            self,
+            "FeedTask",
+            lambda_function=feed_fn,
+            payload=sfn.TaskInput.from_object({}),
+            result_path="$.feed",
+        )
+        feed_task.add_retry(
+            errors=["States.ALL"],
+            max_attempts=2,
+            interval=Duration.seconds(30),
+            backoff_rate=2.0,
+        )
 
         pipeline = sfn.StateMachine(
             self,
             "OncaPipeline",
             definition_body=sfn.DefinitionBody.from_chainable(
-                ingest_task.next(synth_task)
+                ingest_task.next(synth_task).next(feed_task)
             ),
-            # Budget for a 15-min ingest (plus a retry) followed by synth.
+            # Budget for a 15-min ingest (plus a retry), then synth, then feed.
             timeout=Duration.minutes(45),
         )
 
@@ -334,6 +437,13 @@ class OncaPrototypeStack(Stack):
             enabled=True,
         )
         pipeline_rule.add_target(targets.SfnStateMachine(pipeline))
+
+        CfnOutput(
+            self,
+            "DashboardUrl",
+            value=f"https://{distribution.distribution_domain_name}",
+            description="Onca warroom dashboard (basic auth)",
+        )
 
 
 app = App()
