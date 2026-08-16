@@ -76,7 +76,7 @@ def extract_candidates(
     min_score = (
         min_score
         if min_score is not None
-        else float(os.environ.get("ONCA_SYNTH_MIN_SCORE", "0.45"))
+        else float(os.environ.get("ONCA_SYNTH_MIN_SCORE", "0.40"))
     )
 
     as_of = _digest_as_of(digest)
@@ -114,6 +114,7 @@ def extract_candidates(
         if rid:
             used_ids.add(rid)
         sources = [reg, *related]
+        threat, factors = _score_threat(sources)
         candidates.append(
             {
                 "id": f"cand-{_short_id(rid or uuid4().hex)}",
@@ -123,7 +124,8 @@ def extract_candidates(
                 "sources": sources,
                 "entities": resolve_entities(reg),
                 "lenses": _lenses(sources),
-                "threat_score": _threat_score(sources),
+                "threat_score": threat,
+                "threat_factors": factors,
                 "is_alert": bool(reg.get("is_new") or any(r.get("is_new") for r in related)),
                 "as_of": as_of,
                 "data_as_of": _sources_as_of(sources, as_of),
@@ -148,6 +150,7 @@ def extract_candidates(
             if r.get("id"):
                 used_ids.add(str(r["id"]))
         sources = [sig, *related]
+        threat, factors = _score_threat(sources)
         candidates.append(
             {
                 "id": f"cand-{_short_id(sid or uuid4().hex)}",
@@ -157,7 +160,8 @@ def extract_candidates(
                 "sources": sources,
                 "entities": resolve_entities(sig),
                 "lenses": _lenses(sources),
-                "threat_score": _threat_score(sources),
+                "threat_score": threat,
+                "threat_factors": factors,
                 "is_alert": True,
                 "as_of": as_of,
                 "data_as_of": _sources_as_of(sources, as_of),
@@ -389,6 +393,7 @@ def _candidate_from_cluster(
     seed = ordered[0]
     related = ordered[1:]
     sources = ordered
+    threat, factors = _score_threat(sources)
     return {
         "id": f"cand-ent-{entity_id}",
         "kind": "entity_fusion",
@@ -398,7 +403,8 @@ def _candidate_from_cluster(
         "sources": sources,
         "entities": [entity_id],
         "lenses": _lenses(sources),
-        "threat_score": _threat_score(sources),
+        "threat_score": threat,
+        "threat_factors": factors,
         "is_alert": any(m.get("is_new") for m in members),
         "as_of": as_of,
         "data_as_of": _sources_as_of(sources, as_of),
@@ -455,27 +461,82 @@ def _lenses(sources: list[dict[str, Any]]) -> list[str]:
     return out
 
 
-def _threat_score(sources: list[dict[str, Any]]) -> float:
-    """Estimated multi-lens score — not a calibrated model."""
-    score = 0.15
-    lenses = _lenses(sources)
-    for lens in lenses:
-        score += LENS_WEIGHT.get(lens, 0.05)
-    if any(s.get("is_new") for s in sources):
-        score += 0.15
+# How strategic each lens is on its own (0–1). Drives the score's "signal" axis:
+# a regulatory change or a new entrant matters more than a routine fund filing.
+STRATEGIC_WEIGHT = {
+    "regulatory": 1.0,
+    "entrants": 0.9,
+    "sec": 0.85,
+    "ofertas": 0.6,
+    "pix": 0.55,
+    "juros": 0.55,
+    "inf_diario": 0.5,
+    "funds": 0.4,
+    "market": 0.3,
+}
+
+
+def _score_weights() -> dict[str, float]:
+    """Blend weights for the four score axes (env-tunable), normalized to sum 1."""
+    w = {
+        "signal": float(os.environ.get("ONCA_SCORE_W_SIGNAL", "0.45")),
+        "magnitude": float(os.environ.get("ONCA_SCORE_W_MAGNITUDE", "0.30")),
+        "novelty": float(os.environ.get("ONCA_SCORE_W_NOVELTY", "0.15")),
+        "breadth": float(os.environ.get("ONCA_SCORE_W_BREADTH", "0.10")),
+    }
+    total = sum(w.values()) or 1.0
+    return {k: v / total for k, v in w.items()}
+
+
+def _magnitude(sources: list[dict[str, Any]]) -> float:
+    """Largest normalized numeric move among sources (0–1). 20%→0.5, 50%→0.71."""
+    best = 0.0
     for s in sources:
         pct = s.get("pct_change")
-        if pct is not None:
-            try:
-                score += min(0.2, abs(float(pct)) / 100.0)
-            except (TypeError, ValueError):
-                pass
-    # multi-lens bonus
-    if len(lenses) >= 2:
-        score += 0.1
-    if len(lenses) >= 3:
-        score += 0.1
-    return round(min(1.0, score), 3)
+        if pct is None:
+            continue
+        try:
+            p = abs(float(pct))
+        except (TypeError, ValueError):
+            continue
+        best = max(best, p / (p + 20.0))
+    return best
+
+
+def _score_threat(sources: list[dict[str, Any]]) -> tuple[float, dict[str, float]]:
+    """Estimated threat score (0–1) as a transparent weighted blend of four axes.
+
+    Not a calibrated model — a bounded, explainable estimate that spreads across
+    the range (a weighted average of 0–1 axes only reaches 1.0 if every axis
+    does). Returns (score, factor breakdown) so the UI can show *why*.
+
+    - signal:    most strategic lens present (regulatory/entrant > routine filing)
+    - magnitude: biggest normalized numeric move (pct_change)
+    - novelty:   genuine delta (is_new) vs steady-state context
+    - breadth:   multi-lens corroboration, with diminishing returns
+    """
+    lenses = _lenses(sources)
+    core = [l for l in lenses if l not in BACKDROP_LENSES]
+    signal = max((STRATEGIC_WEIGHT.get(l, 0.4) for l in lenses), default=0.3)
+    magnitude = _magnitude(sources)
+    novelty = 1.0 if any(s.get("is_new") for s in sources) else 0.3
+    n = len(core) or (1 if lenses else 0)
+    breadth = 1.0 - 0.6 ** n if n else 0.0
+
+    w = _score_weights()
+    score = (
+        w["signal"] * signal
+        + w["magnitude"] * magnitude
+        + w["novelty"] * novelty
+        + w["breadth"] * breadth
+    )
+    factors = {
+        "signal": round(signal, 3),
+        "magnitude": round(magnitude, 3),
+        "novelty": round(novelty, 3),
+        "breadth": round(breadth, 3),
+    }
+    return round(min(1.0, score), 3), factors
 
 
 def _signal_rank(sig: dict[str, Any]) -> float:

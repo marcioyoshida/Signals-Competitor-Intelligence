@@ -262,7 +262,8 @@ class OncaPrototypeStack(Stack):
                 "ONCA_SYNTH_CHANGE_ONLY": "true",
                 # Quality bar: multi-lens preferred; solo only for new high-value.
                 "ONCA_SYNTH_MIN_LENSES": "2",
-                "ONCA_SYNTH_MIN_SCORE": "0.45",
+                # Aligned with the dashboard's MÉDIO tier floor (real scoring v1).
+                "ONCA_SYNTH_MIN_SCORE": "0.40",
                 "ONCA_SYNTH_MIN_FUND_PL": "100000000",
                 "ONCA_ROUTER_MODEL_ID": "amazon.nova-micro-v1:0",
                 "ONCA_SYNTH_MODEL_ID": "amazon.nova-lite-v1:0",

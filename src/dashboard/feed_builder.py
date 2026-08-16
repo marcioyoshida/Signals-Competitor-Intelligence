@@ -89,6 +89,7 @@ def build_feed(
                 "lenses": n.get("lenses") or [],
                 "is_alert": bool(n.get("is_alert")),
                 "threat_score": _score(n.get("threat_score")),
+                "threat_factors": n.get("threat_factors") or {},
                 "threat_score_note": n.get("threat_score_note"),
                 "narrative": n.get("narrative") or "",
                 "citations": [c for c in (n.get("citations") or []) if isinstance(c, dict)],

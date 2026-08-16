@@ -265,13 +265,15 @@ def _steady_btg_digest():
 
 def test_change_only_drops_steady_state_cluster():
     d = _steady_btg_digest()
-    # default (require_change on) drops daily restatement of unchanged signals
+    # min_score=0 isolates the change-gate from the (now stricter) score threshold
     assert not any(
-        c["kind"] == "entity_fusion" for c in extract_candidates(d, require_change=True)
+        c["kind"] == "entity_fusion"
+        for c in extract_candidates(d, require_change=True, min_score=0.0)
     )
     # opting out keeps the steady-state cluster (old behavior)
     assert any(
-        c["kind"] == "entity_fusion" for c in extract_candidates(d, require_change=False)
+        c["kind"] == "entity_fusion"
+        for c in extract_candidates(d, require_change=False, min_score=0.0)
     )
 
 
@@ -283,5 +285,36 @@ def test_change_only_keeps_changed_cluster():
          "leader": "BTG PACTUAL", "url": "https://dados.cvm.gov.br/new", "is_new": True}
     ]
     assert any(
-        c["kind"] == "entity_fusion" for c in extract_candidates(d, require_change=True)
+        c["kind"] == "entity_fusion"
+        for c in extract_candidates(d, require_change=True, min_score=0.0)
     )
+
+
+def test_threat_score_model_ranks_and_spreads():
+    """Real scoring: strategic+novel+big-move outranks routine; bounded, explainable."""
+    from src.synth.candidates import _score_threat
+
+    routine, rf = _score_threat([
+        {"_lens": "funds", "id": "f1"},  # steady routine filing, no is_new/move
+    ])
+    strategic, sf = _score_threat([
+        {"_lens": "regulatory", "id": "r1", "is_new": True},
+        {"_lens": "sec", "id": "s1", "is_new": True},
+        {"_lens": "inf_diario", "id": "i1", "is_new": True, "pct_change": 45},
+    ])
+    assert 0.0 <= routine <= 1.0 and 0.0 <= strategic <= 1.0
+    assert strategic > routine + 0.2            # meaningfully separated, not saturated
+    assert strategic < 1.0                      # weighted blend doesn't peg at 1.0
+    # factor breakdown is present and reflects inputs
+    assert set(sf) == {"signal", "magnitude", "novelty", "breadth"}
+    assert sf["signal"] == 1.0                  # regulatory present
+    assert sf["novelty"] == 1.0 and rf["novelty"] == 0.3
+    assert sf["magnitude"] > 0                  # the 45% move registers
+
+
+def test_threat_score_magnitude_scales_with_move():
+    from src.synth.candidates import _score_threat
+
+    small, _ = _score_threat([{"_lens": "inf_diario", "id": "a", "is_new": True, "pct_change": 5}])
+    big, _ = _score_threat([{"_lens": "inf_diario", "id": "b", "is_new": True, "pct_change": 80}])
+    assert big > small

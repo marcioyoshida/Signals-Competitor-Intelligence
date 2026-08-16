@@ -38,7 +38,7 @@ def test_handler_produces_cited_narratives_without_bedrock(monkeypatch):
     narr = body["narratives"][0]
     assert narr["citations"]
     assert narr["narrative"]
-    assert narr.get("threat_score_note") == "estimated_heuristic"
+    assert narr.get("threat_score_note") == "estimated_v1"
 
 
 def test_handler_context_only_digest_fuses_entities(monkeypatch):
@@ -47,6 +47,9 @@ def test_handler_context_only_digest_fuses_entities(monkeypatch):
     # Opt out of emit-on-change: this test exercises the context-fusion path.
     # (By default the handler suppresses steady-state, change-less digests.)
     monkeypatch.setenv("ONCA_SYNTH_CHANGE_ONLY", "false")
+    # Isolate fusion from the score threshold — steady-state context scores low
+    # under the real model, which is correct but not what this test checks.
+    monkeypatch.setenv("ONCA_SYNTH_MIN_SCORE", "0.0")
     written = []
     monkeypatch.setattr(
         lambda_handler.digest_io,

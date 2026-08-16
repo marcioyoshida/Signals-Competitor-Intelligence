@@ -169,6 +169,14 @@ const LENS_LABELS = {
   market: "Participação de mercado",
 };
 const lensLabel = (l) => LENS_LABELS[l] || l;
+const FACTOR_LABELS = { signal: "Sinal", magnitude: "Magnitude", novelty: "Novidade", breadth: "Amplitude" };
+function factorsTip(fac) {
+  if (!fac) return "Estimativa de ameaça";
+  const parts = Object.entries(FACTOR_LABELS)
+    .filter(([k]) => fac[k] != null)
+    .map(([k, l]) => `${l} ${(+fac[k]).toFixed(2)}`);
+  return parts.length ? "Composição: " + parts.join(" · ") : "Estimativa de ameaça";
+}
 const cssvar = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const tierOf = (s) => TIERS.find(t => (s ?? 0) >= t.min) || TIERS[TIERS.length - 1];
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
@@ -266,7 +274,7 @@ function cardHtml(f, group) {
       <span class="date">${esc(f.date)}</span>
     </div>
     <div class="bar"><span style="width:${pct}%;background:${cssvar(t.var)}"></span></div>
-    <div><span class="score">${(f.threat_score ?? 0).toFixed(2)} ameaça</span> <span class="est">· est.</span> ${multi}</div>
+    <div><span class="score" style="cursor:help" title="${esc(factorsTip(f.threat_factors))}">${(f.threat_score ?? 0).toFixed(2)} ameaça</span> <span class="est">· est.</span> ${multi}</div>
     <div class="lenses">${f.lenses.map(l => `<span class="chip" title="Fonte: ${esc(lensLabel(l))}">${esc(lensLabel(l))}</span>`).join("")}</div>
     <p class="narr clamp">${esc(f.narrative)}</p>
     <div class="cites">${f.citations.map(citeHtml).join("")}
