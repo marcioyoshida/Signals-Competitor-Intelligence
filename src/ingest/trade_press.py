@@ -17,15 +17,32 @@ import datetime as dt
 import hashlib
 import re
 import time
+import unicodedata
 import xml.etree.ElementTree as ET
 from email.utils import parsedate_to_datetime
 from typing import Any, Callable, Iterable
 
 import requests
 
+
+def _fold(s: str) -> str:
+    """Uppercase, accent-stripped form for robust phrase matching."""
+    nfkd = unicodedata.normalize("NFKD", str(s or ""))
+    return "".join(c for c in nfkd if not unicodedata.combining(c)).upper()
+
 RSS_URL = "https://news.google.com/rss/search"
 DEFAULT_LOOKBACK_DAYS = 14
 DEFAULT_HL, DEFAULT_GL, DEFAULT_CEID = "pt-BR", "BR", "BR:pt-419"
+
+# Named outlets pulled directly (fuller coverage + direct publisher links, better
+# citations than Google News redirects). Filtered to headlines naming a
+# watchlisted competitor. (publisher, feed_url) — verified live 2026-08-16.
+OUTLET_FEEDS: list[tuple[str, str]] = [
+    ("Valor Econômico", "https://pox.globo.com/rss/valor/financas/"),
+    ("Valor Econômico", "https://pox.globo.com/rss/valor/empresas/"),
+    ("Money Times", "https://www.moneytimes.com.br/feed/"),
+    ("Money Times", "https://www.moneytimes.com.br/tag/mercados/feed/"),
+]
 
 # Ambiguous single-word brands (Stone, Nubank, Inter) pull band/stadium/culture
 # noise. Require a finance-context term in the headline to keep it business news.
@@ -47,8 +64,11 @@ def fetch_news(
     *,
     max_per_term: int = 10,
     require_finance_context: bool = True,
+    include_outlets: bool = True,
+    outlet_feeds: list[tuple[str, str]] | None = None,
     today: dt.date | None = None,
     fetcher: Callable[[str], bytes] | None = None,
+    outlet_fetcher: Callable[[str], bytes] | None = None,
     pause_sec: float = 0.3,
     max_terms: int = 25,
 ) -> list[dict[str, Any]]:
@@ -60,7 +80,7 @@ def fetch_news(
     seen: set[str] = set()
     uniq = [t for t in dict.fromkeys(str(t).strip() for t in terms) if t][:max_terms]
     for term in uniq:
-        tokens = [w for w in re.split(r"\W+", term.upper()) if len(w) >= 3]
+        term_f = _fold(term)
         kept = 0
         for rec in _parse(fetch(term), term):
             if kept >= max_per_term:
@@ -69,9 +89,9 @@ def fetch_news(
             if not date or date < cutoff:
                 continue
             title = rec.get("title") or ""
-            title_up = title.upper()
-            # precision: the competitor must be in the headline, not just the body
-            if tokens and not any(tok in title_up for tok in tokens):
+            # precision: the competitor must appear in the headline as a phrase
+            # (full brand, accent-folded) — not just a shared generic token.
+            if term_f and term_f not in _fold(title):
                 continue
             # and it must be business news (drops band/stadium/culture noise)
             if require_finance_context:
@@ -85,6 +105,33 @@ def fetch_news(
             kept += 1
         if pause_sec:
             time.sleep(pause_sec)
+
+    # Named outlets pulled directly, filtered to headlines naming a competitor.
+    if include_outlets:
+        ofetch = outlet_fetcher or _fetch_url
+        term_folded = {t: _fold(t) for t in uniq}
+        for publisher, feed_url in (outlet_feeds if outlet_feeds is not None else OUTLET_FEEDS):
+            for rec in _parse_feed(ofetch(feed_url), publisher):
+                title_f = _fold(rec.get("title") or "")
+                matched = next(
+                    (t for t, tf in term_folded.items() if tf and tf in title_f), None
+                )
+                if not matched:
+                    continue
+                date = _parse_date(rec.get("date"))
+                if not date or date < cutoff:
+                    continue
+                if require_finance_context and not any(
+                    k in (rec.get("title") or "").lower() for k in FINANCE_TERMS
+                ):
+                    continue
+                if rec["id"] in seen:
+                    continue
+                rec["company"] = matched
+                rec["name"] = matched
+                seen.add(rec["id"])
+                out.append(rec)
+
     out.sort(key=lambda r: r.get("date") or "", reverse=True)
     return out
 
@@ -101,6 +148,47 @@ def _fetch_rss(term: str) -> bytes:
     except Exception as exc:  # pragma: no cover - upstream best-effort
         print(f"Warning: news fetch failed for {term}: {exc}")
         return b""
+
+
+def _fetch_url(url: str) -> bytes:
+    try:
+        resp = requests.get(url, timeout=25, headers={"User-Agent": "Onca-CI/1.0 (competitive-intelligence)"})
+        return resp.content if resp.status_code == 200 else b""
+    except Exception as exc:  # pragma: no cover - upstream best-effort
+        print(f"Warning: outlet feed failed for {url}: {exc}")
+        return b""
+
+
+def _parse_feed(content: bytes, publisher: str) -> list[dict[str, Any]]:
+    """Parse a standard outlet RSS feed (fixed publisher, direct link)."""
+    if not content:
+        return []
+    try:
+        root = ET.fromstring(content)
+    except Exception:  # pragma: no cover - feed fragility
+        return []
+    out: list[dict[str, Any]] = []
+    for it in root.findall(".//item"):
+        title = (it.findtext("title") or "").strip()
+        link = (it.findtext("link") or "").strip()
+        if not title or not link:
+            continue
+        sig = re.sub(r"[^a-z0-9]+", "", f"{title}|{publisher}".lower())
+        out.append(
+            {
+                "id": "news:" + hashlib.sha1(sig.encode()).hexdigest()[:16],
+                "source": "News",
+                "kind": "competitor",
+                "publisher": publisher,
+                "title": title,
+                "subject": title,
+                "company": None,  # set by the caller once a term matches the title
+                "name": None,
+                "date": _iso(it.findtext("pubDate")),
+                "url": link,  # direct publisher URL
+            }
+        )
+    return out
 
 
 def _parse(content: bytes, term: str) -> list[dict[str, Any]]:
