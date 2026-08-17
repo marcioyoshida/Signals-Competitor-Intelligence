@@ -65,3 +65,19 @@ def test_parent_link_via_cloudwalk_controller():
     from src.synth.entities import known_parents
     e = {"name": "NOVA SCD S.A.", "controllers": ["CLOUDWALK FINANCEIRA S.A."]}
     assert known_parents(e) == ["infinitepay"]
+
+
+def test_resolve_uses_registry_when_configured(monkeypatch):
+    from src.synth import entities, entity_registry
+    monkeypatch.setenv("ONCA_ENTITIES_TABLE", "t")
+    monkeypatch.setattr(entity_registry, "load_alias_map", lambda *a, **k: {"acme": ["ACME BANK"]})
+    # a registry-only entity resolves with NO change to ENTITY_ALIASES / code
+    assert entities.resolve_entities({"name": "ACME BANK S.A."}) == ["acme"]
+    # and the registry map is authoritative when present
+    assert entities.resolve_entities({"name": "NUBANK"}) == []
+
+
+def test_resolve_falls_back_to_builtin_without_registry(monkeypatch):
+    from src.synth import entities
+    monkeypatch.delenv("ONCA_ENTITIES_TABLE", raising=False)
+    assert "nubank" in entities.resolve_entities({"name": "NUBANK PAGAMENTOS"})

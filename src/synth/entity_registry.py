@@ -42,6 +42,7 @@ def put_entity(
     display_name: str,
     aliases: Iterable[str],
     *,
+    alias_forms: Iterable[str] | None = None,
     sector: str | None = None,
     license_class: str | None = None,
     cnpj_roots: Iterable[str] = (),
@@ -51,9 +52,17 @@ def put_entity(
     canonical_id: str | None = None,
     table: Any | None = None,
 ) -> dict[str, Any]:
-    """Upsert an entity + its ALIAS#/CNPJ# lookup items. Returns the entity item."""
+    """Upsert an entity + its ALIAS#/CNPJ# lookup items. Returns the entity item.
+
+    ``aliases`` seed the normalized ALIAS# index (exact lookup). ``alias_forms``
+    (defaults to ``aliases``) are the *raw* strings used by resolve_entities'
+    substring matching — preserving curated hacks like "STONE " / "TICKER:STNE".
+    """
     t = _table(table)
-    norm = sorted({normalize_alias(a) for a in aliases if str(a).strip()})
+    raw = [str(a) for a in (alias_forms if alias_forms is not None else aliases) if str(a).strip()]
+    norm = sorted(
+        {normalize_alias(a) for a in aliases if str(a).strip() and not str(a).upper().startswith("TICKER:")}
+    )
     roots = sorted({str(r)[:8] for r in cnpj_roots if str(r).strip()})
     entity = {
         "pk": f"ENT#{entity_id}",
@@ -61,6 +70,7 @@ def put_entity(
         "entity_id": entity_id,
         "display_name": display_name,
         "aliases": norm,
+        "alias_forms": raw,
         "cnpj_roots": roots,
         "controllers": controllers or [],
         "confidence": confidence,
@@ -118,12 +128,44 @@ def seed(table: Any | None = None) -> int:
             entity_id,
             ENTITY_LABELS.get(entity_id, entity_id.replace("_", " ").title()),
             names,
+            alias_forms=list(aliases),  # exact curated forms for substring matching
             ticker=ticker,
             confidence="curated",
             table=t,
         )
         count += 1
     return count
+
+
+# Cached {entity_id: [raw alias forms]} map for resolve_entities. Loaded once per
+# Lambda execution env (pipeline runs daily; a warm-reuse day-old cache is fine).
+_ALIAS_MAP_CACHE: dict[str, list[str]] | None = None
+
+
+def load_alias_map(table: Any | None = None, force: bool = False) -> dict[str, list[str]]:
+    """Return {entity_id: raw alias forms} from the registry (cached)."""
+    global _ALIAS_MAP_CACHE
+    if _ALIAS_MAP_CACHE is not None and not force:
+        return _ALIAS_MAP_CACHE
+    t = _table(table)
+    out: dict[str, list[str]] = {}
+    kwargs: dict[str, Any] = {}
+    while True:
+        resp = t.scan(**kwargs)
+        for it in resp.get("Items", []):
+            if it.get("type") == "entity" and it.get("entity_id"):
+                out[it["entity_id"]] = list(it.get("alias_forms") or it.get("aliases") or [])
+        start = resp.get("LastEvaluatedKey")
+        if not start:
+            break
+        kwargs["ExclusiveStartKey"] = start
+    _ALIAS_MAP_CACHE = out
+    return out
+
+
+def clear_cache() -> None:
+    global _ALIAS_MAP_CACHE
+    _ALIAS_MAP_CACHE = None
 
 
 if __name__ == "__main__":

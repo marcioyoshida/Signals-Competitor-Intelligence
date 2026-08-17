@@ -17,6 +17,9 @@ class FakeTable:
         it = self.items.get(Key["pk"])
         return {"Item": it} if it is not None else {}
 
+    def scan(self, **kwargs):
+        return {"Items": list(self.items.values())}
+
 
 def test_normalize_alias_folds_accents_and_case():
     assert er.normalize_alias("Itaú  Unibanco") == "ITAU UNIBANCO"
@@ -53,3 +56,13 @@ def test_seed_from_curated_aliases_populates_registry():
     ent = er.get_entity("infinitepay", table=t)
     assert ent and ent["confidence"] == "curated"
     assert er.normalize_alias("CloudWalk") in ent["aliases"]
+
+
+def test_load_alias_map_returns_raw_forms():
+    t = FakeTable()
+    er.put_entity("nubank", "Nubank", ["NUBANK", "NU"],
+                  alias_forms=["NUBANK", " NU ", "TICKER:NU"], table=t)
+    er.clear_cache()
+    m = er.load_alias_map(table=t)
+    assert m["nubank"] == ["NUBANK", " NU ", "TICKER:NU"]  # raw curated forms preserved
+    er.clear_cache()

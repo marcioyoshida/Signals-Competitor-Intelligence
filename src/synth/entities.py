@@ -1,6 +1,7 @@
 """Entity resolution helpers for multi-source fusion (payments/fintech focus)."""
 from __future__ import annotations
 
+import os
 import re
 from typing import Any
 
@@ -33,6 +34,21 @@ ENTITY_ALIASES: dict[str, list[str]] = {
     # Nomad has no BCB footprint (US-facing) — matches via CVM/news only.
     "nomad": ["NOMAD"],
 }
+
+
+def _alias_map() -> dict[str, list[str]]:
+    """Effective {entity_id: aliases} — the DynamoDB registry when configured
+    (so new entities resolve with no code deploy), else the built-in seed."""
+    if os.environ.get("ONCA_ENTITIES_TABLE"):
+        try:
+            from src.synth import entity_registry
+
+            registry = entity_registry.load_alias_map()
+            if registry:
+                return registry
+        except Exception as exc:  # pragma: no cover - graceful fallback
+            print(f"Warning: entities registry unavailable, using built-in aliases: {exc}")
+    return ENTITY_ALIASES
 
 
 def signal_blob(item: dict[str, Any]) -> str:
@@ -78,7 +94,7 @@ def known_parents(item: dict[str, Any]) -> list[str]:
         return []
     own_name = str(item.get("name") or "").upper()
     parents: list[str] = []
-    for entity_id, aliases in ENTITY_ALIASES.items():
+    for entity_id, aliases in _alias_map().items():
         for alias in aliases:
             token = alias.upper()
             if token.startswith("TICKER:"):
@@ -97,7 +113,7 @@ def resolve_entities(item: dict[str, Any]) -> list[str]:
     """
     blob = f" {signal_blob(item)} "
     found: list[str] = []
-    for entity_id, aliases in ENTITY_ALIASES.items():
+    for entity_id, aliases in _alias_map().items():
         for alias in aliases:
             token = alias.upper()
             if token.startswith("TICKER:"):
