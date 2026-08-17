@@ -49,6 +49,16 @@ class OncaPrototypeStack(Stack):
             removal_policy=None,
         )
 
+        # Entities registry (ADR 2026-08-17): single-table lookup by typed pk
+        # (ENT#/ALIAS#/CNPJ#). Seeded from ENTITY_ALIASES; self-expands later.
+        entities_table = dynamodb.Table(
+            self,
+            "OncaEntitiesTable",
+            partition_key=dynamodb.Attribute(name="pk", type=dynamodb.AttributeType.STRING),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=None,
+        )
+
         # Provisioned out-of-band by infra/bootstrap.sh (account-level baseline
         # buckets, shared across future stacks) — import them, don't create them.
         digests_bucket = s3.Bucket.from_bucket_name(
@@ -160,6 +170,7 @@ class OncaPrototypeStack(Stack):
             environment={
                 "PYTHONPATH": "/var/task",
                 "ONCA_STATE_TABLE": state_table.table_name,
+                "ONCA_ENTITIES_TABLE": entities_table.table_name,
                 "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
                 "ONCA_LOOKBACK_DAYS": str(watchlist.get("lookback_days", 7)),
                 "ONCA_COMPETITORS": ",".join(watchlist.get("competitors", [])),
@@ -256,6 +267,7 @@ class OncaPrototypeStack(Stack):
             },
         )
         state_table.grant_read_write_data(func)
+        entities_table.grant_read_write_data(func)
         digests_bucket.grant_put(func)
         raw_bucket.grant_put(func)
         func.add_to_role_policy(
@@ -280,6 +292,7 @@ class OncaPrototypeStack(Stack):
                 "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
                 "ONCA_RAW_BUCKET": raw_bucket.bucket_name,
                 "ONCA_KB_ID": knowledge_base.attr_knowledge_base_id,
+                "ONCA_ENTITIES_TABLE": entities_table.table_name,
                 "ONCA_SYNTH_MAX_CANDIDATES": "10",
                 # Live synthesis on: Titan V2 embed quota (60 RPM, approved
                 # 2026-08-10) unblocked KB ingestion; nova-lite Converse + KB
@@ -302,6 +315,7 @@ class OncaPrototypeStack(Stack):
         digests_bucket.grant_read(synth)
         digests_bucket.grant_put(synth)
         raw_bucket.grant_read(synth)
+        entities_table.grant_read_write_data(synth)
         synth.add_to_role_policy(
             iam.PolicyStatement(
                 actions=[
@@ -517,6 +531,12 @@ class OncaPrototypeStack(Stack):
             "DashboardUrl",
             value=f"https://{distribution.distribution_domain_name}",
             description="Onca warroom dashboard (basic auth)",
+        )
+        CfnOutput(
+            self,
+            "EntitiesTableName",
+            value=entities_table.table_name,
+            description="Entities registry table (seed with src.synth.entity_registry)",
         )
         CfnOutput(
             self,
