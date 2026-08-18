@@ -50,6 +50,9 @@
   .tile .n { font-size: 26px; font-weight: 650; letter-spacing: .3px; }
   .tile .l { color: var(--muted); font-size: 12px; margin-top: 2px; }
   .cols { display: grid; grid-template-columns: 1fr 340px; gap: 18px; margin-top: 18px; }
+  /* Let the 1fr track shrink instead of being blown out by a long unbreakable
+     token (e.g. a raw news URL in a narrative) that would push content offscreen. */
+  .cols > * { min-width: 0; }
   @media (max-width: 900px) { .cols { grid-template-columns: 1fr; } .kpis { grid-template-columns: repeat(2,1fr); } }
   .panel {
     background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
@@ -70,6 +73,7 @@
   .card {
     border: 1px solid var(--border); border-radius: 10px; background: var(--bg);
     padding: 12px 14px; margin: 8px 6px; cursor: pointer;
+    overflow-wrap: anywhere; /* break long URLs/tokens instead of overflowing right */
   }
   .card:hover { border-color: var(--accent); }
   .card .row1 { display: flex; align-items: center; gap: 10px; }
@@ -89,8 +93,15 @@
     border-radius: 6px; padding: 1px 7px; cursor: help; }
   .narr { margin: 8px 0 0; color: var(--ink); }
   .narr.clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  .cites { margin-top: 9px; display: flex; gap: 8px; flex-wrap: wrap; font-size: 12px; }
+  .cites { margin-top: 9px; display: flex; gap: 10px; flex-wrap: wrap; font-size: 12px; align-items: baseline; }
   .cites .src { color: var(--muted); }
+  .cite-grp { display: inline-flex; align-items: baseline; gap: 5px; }
+  .refnum { color: var(--accent); font-variant-numeric: tabular-nums; }
+  .refnum.dead { color: var(--muted); }
+  /* inline footnote refs in the narrative — short, colored, unobtrusive */
+  .narr .ref { font-size: .78em; }
+  .narr .ref a { color: var(--accent); text-decoration: none; font-variant-numeric: tabular-nums; }
+  .narr .ref a:hover { text-decoration: underline; }
   .ent-row { display: grid; grid-template-columns: 1fr 96px 52px; align-items: center; gap: 8px;
     padding: 9px 16px; border-bottom: 1px solid var(--border); cursor: pointer; }
   .ent-row:hover { background: var(--panel2); }
@@ -270,17 +281,69 @@ function filtered() {
   );
 }
 
-function citeHtml(c) {
-  if (c.url) {
-    let host = c.url; try { host = new URL(c.url).hostname.replace(/^www\./, ""); } catch (e) {}
-    return `<a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(host)} ↗</a>`;
+function hostOf(url) {
+  try { return new URL(url).hostname.replace(/^www\./, ""); } catch (e) { return String(url || ""); }
+}
+
+// Footnote model: give each distinct citation/URL a global number [n] in
+// citation order, so inline refs in the narrative cross-reference the footer.
+function citationModel(f) {
+  const strip = u => String(u || "").replace(/[)\].,;:!?]+$/, "");  // drop trailing punct
+  const entries = [];           // {n, url, label}
+  const numByUrl = new Map();   // stripped url -> n
+  const add = (url, source, id) => {
+    if (url) { const k = strip(url); if (numByUrl.has(k)) return numByUrl.get(k); }
+    const n = entries.length + 1;
+    if (url) numByUrl.set(strip(url), n);
+    entries.push({ n, url: url || null, label: url ? hostOf(url) : (source || id || "fonte") });
+    return n;
+  };
+  (f.citations || []).forEach(c => add(c.url, c.source, c.id));
+  return { entries, numByUrl, strip, add };
+}
+
+// Replace raw URLs in the narrative prose with short colored [n] superscript
+// links — keeps sentences readable and ties each ref to the grouped footer.
+const URL_RE = /https?:\/\/[^\s<>]+/g;
+function linkifyNarrative(text, model) {
+  text = String(text || "");
+  let out = "", last = 0, m;
+  URL_RE.lastIndex = 0;
+  while ((m = URL_RE.exec(text))) {
+    out += esc(text.slice(last, m.index));
+    let url = m[0], trail = "";
+    const tm = url.match(/[)\].,;:!?]+$/);        // leave trailing punctuation outside the link
+    if (tm) { trail = tm[0]; url = url.slice(0, -trail.length); }
+    let n = model.numByUrl.get(model.strip(url)) || model.add(url);
+    out += `<sup class="ref"><a href="${esc(url)}" target="_blank" rel="noopener">[${n}]</a></sup>` + esc(trail);
+    last = m.index + m[0].length;
   }
-  return `<span class="src">${esc(c.source || c.id || "fonte")}</span>`;
+  return out + esc(text.slice(last));
+}
+
+// Footer: mention each source host once, followed by its stacked numbered links.
+function citationFooter(model) {
+  if (!model.entries.length) return "";
+  const groups = new Map();
+  model.entries.forEach(e => {
+    let g = groups.get(e.label);
+    if (!g) { g = { label: e.label, refs: [] }; groups.set(e.label, g); }
+    g.refs.push(e);
+  });
+  return [...groups.values()].map(g => {
+    const refs = g.refs.map(e => e.url
+      ? `<a class="refnum" href="${esc(e.url)}" target="_blank" rel="noopener">[${e.n}]</a>`
+      : `<span class="refnum dead">[${e.n}]</span>`).join(" ");
+    return `<span class="cite-grp"><span class="src">${esc(g.label)}</span> ${refs}</span>`;
+  }).join("");
 }
 
 function cardHtml(f, group) {
   const t = tierOf(f.threat_score);
   const pct = Math.round((f.threat_score ?? 0) * 100);
+  const model = citationModel(f);
+  const narr = linkifyNarrative(f.narrative, model); // before footer — appends any narrative-only URLs
+  const cites = citationFooter(model);
   const multi = group && group.count > 1
     ? `<span class="est">· ${group.count} atualizações no período · pico ${group.peak.toFixed(2)}</span>`
     : "";
@@ -295,9 +358,9 @@ function cardHtml(f, group) {
     <div class="bar"><span style="width:${pct}%;background:${cssvar(t.var)}"></span></div>
     <div><span class="score" style="cursor:help" title="${esc(factorsTip(f.threat_factors))}">${(f.threat_score ?? 0).toFixed(2)} ameaça</span> <span class="est">· est.</span> ${multi}</div>
     <div class="lenses">${f.lenses.map(l => `<span class="chip" title="Fonte: ${esc(lensLabel(l))}">${esc(lensLabel(l))}</span>`).join("")}</div>
-    <p class="narr clamp">${esc(f.narrative)}</p>
-    <div class="cites">${f.citations.map(citeHtml).join("")}
-      ${f.source_ids.length ? `<span class="src">· ${f.source_ids.length} fontes</span>` : ""}</div>
+    <p class="narr clamp">${narr}</p>
+    <div class="cites">${cites}
+      ${f.source_ids.length ? `<span class="src">· ${f.source_ids.length} sinais</span>` : ""}</div>
   </div>`;
 }
 
