@@ -205,6 +205,11 @@ function fmtDate(iso) {
   const p = String(iso ?? "").slice(0, 10).split("-");
   return p.length === 3 ? `${p[2]}-${p[1]}-${p[0]}` : (iso ?? "—");
 }
+function fmtTime(iso) {
+  // run_at already carries the BRT offset (-03:00) — slice the literal HH:MM.
+  const m = String(iso ?? "").match(/T(\d{2}:\d{2})/);
+  return m ? m[1] : "";
+}
 function fmtDateTime(iso) {
   try {
     const parts = new Intl.DateTimeFormat("pt-BR", {
@@ -366,7 +371,7 @@ function cardHtml(f, group) {
       <span class="entity">${esc(f.entity_label)}</span>
       ${f.is_alert ? '<span class="alert">ALERTA</span>' : ''}
       <span class="spacer" style="flex:1"></span>
-      <span class="date">${esc(fmtDate(f.date))}</span>
+      <span class="date">${esc(fmtDate(f.date))}${fmtTime(f.run_at) ? ` · ${esc(fmtTime(f.run_at))}` : ""}</span>
     </div>
     <div class="bar"><span style="width:${pct}%;background:${cssvar(t.var)}"></span></div>
     <div><span class="score" style="cursor:help" title="${esc(factorsTip(f.threat_factors))}">${(f.threat_score ?? 0).toFixed(2)} ameaça</span> <span class="est">· est.</span> ${multi}</div>

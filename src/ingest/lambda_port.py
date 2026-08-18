@@ -445,6 +445,38 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
             print(f"Warning: CVM fatos relevantes fetch failed: {exc}")
 
+    # Entities registry alias accumulation (ADR step 4): a structured CVM signal
+    # (offering issuer / fato relevante company) that carries a CNPJ already
+    # resolving to a known entity contributes its razão social to that entity's
+    # aliases — so a later name-only signal (news, DOU) about it resolves too.
+    # Data-derived + CNPJ-gated is the auto-safe case; best-effort, never blocks.
+    if os.environ.get("ONCA_ENTITIES_TABLE") and os.environ.get(
+        "ONCA_ENTITIES_ACCUMULATE", "true"
+    ).lower() in ("1", "true", "yes"):
+        try:
+            with _source_budget("entities alias accumulation", deadline, per_source):
+                from src.synth import entity_registry
+
+                named = [(o.get("issuer"), o.get("issuer_cnpj")) for o in new_ofertas]
+                named += [(f.get("company"), f.get("cnpj")) for f in new_fatos]
+                acc = 0
+                seen_pairs: set[tuple[str, str]] = set()
+                for name, cnpj in named:
+                    root = "".join(ch for ch in str(cnpj or "") if ch.isdigit())[:8]
+                    if not name or len(root) < 8:
+                        continue
+                    pair = (root, str(name))
+                    if pair in seen_pairs:
+                        continue
+                    seen_pairs.add(pair)
+                    eid = entity_registry.resolve_by_cnpj(root)
+                    if eid and entity_registry.accumulate_aliases(eid, [name]):
+                        acc += 1
+                if acc:
+                    print(f"entities: accumulated aliases for {acc} CVM signals")
+        except Exception as exc:  # pragma: no cover - best-effort, never blocks ingest
+            print(f"Warning: entity alias accumulation skipped: {exc}")
+
     # Diário Oficial — official acts (SUSEP/CADE/BACEN) naming a competitor.
     dou_acts: list[dict[str, Any]] = []
     new_dou: list[dict[str, Any]] = []

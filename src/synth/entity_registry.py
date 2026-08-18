@@ -5,10 +5,11 @@ Single-table lookup design (O(1) exact resolution, no GSI):
   pk = "ALIAS#<norm>"       -> {entity_id}   (accent-folded name index)
   pk = "CNPJ#<root8>"       -> {entity_id}   (exact join key)
 
-Step 1 (this file): the table + a curated seed from ENTITY_ALIASES, plus the
-reusable `put_entity` write primitive and read helpers. Wiring resolution into
-`resolve_entities` (step 2) and CNPJ auto-create from the entrant pipeline
-(step 3) build on these.
+This file grows with the ADR rollout: the table + curated seed and `put_entity`
+write primitive (step 1); the read helpers `resolve_entities` uses (step 2);
+`auto_create_from_entrant` — CNPJ-keyed auto-create from BCB entrants (step 3);
+and `accumulate_aliases` — data-derived alias accumulation from structured CVM
+signals (step 4). Steps 5–7 (review queue, per-tenant config, UI) build on these.
 
 Module-level imports stay free of src.synth.* so ingest can reuse the write
 primitives later without pulling synth; the curated seed imports lazily.
@@ -164,6 +165,62 @@ def auto_create_from_entrant(entrant: dict[str, Any], *, table: Any | None = Non
         table=t,
     )
     return entity_id
+
+
+def accumulate_aliases(
+    entity_id: str,
+    forms: Iterable[str],
+    *,
+    table: Any | None = None,
+) -> list[str]:
+    """ADR step 4: fold data-derived name forms into a resolved entity's aliases.
+
+    When a structured signal (a CVM offering's razão social, a fato relevante's
+    company name) names an entity we *already* resolve by CNPJ, add that name so
+    future name-only signals (news, DOU) about it resolve too — recall grows the
+    more an entity appears. Only *data-derived* forms belong here; fuzzy or
+    colloquial nicknames need review (step 5), never auto-commit.
+
+    Idempotent: writes only genuinely-new forms. A normalized name already owned
+    by a *different* entity is left untouched (StoneX must not steal StoneCo's
+    name) and skipped for the review queue. Returns the raw forms actually added.
+    """
+    t = _table(table)
+    ent = get_entity(entity_id, table=t)
+    if not ent:
+        return []
+    norm_set = set(ent.get("aliases") or [])
+    cur_forms = list(ent.get("alias_forms") or [])
+    forms_upper = {f.upper() for f in cur_forms}
+
+    added: list[str] = []
+    new_norm: list[str] = []
+    for raw in forms:
+        f = str(raw or "").strip()
+        if len(f) < 4:  # too short to be a safe substring key for resolve_entities
+            continue
+        if f.upper() not in forms_upper:
+            cur_forms.append(f)
+            forms_upper.add(f.upper())
+            added.append(f)
+        na = normalize_alias(f)
+        if not na or na in norm_set:
+            continue
+        owner = t.get_item(Key={"pk": f"ALIAS#{na}"}).get("Item")
+        if owner and owner.get("entity_id") not in (None, entity_id):
+            continue  # another entity owns this name — leave it for review (step 5)
+        norm_set.add(na)
+        new_norm.append(na)
+
+    if not added and not new_norm:
+        return []  # nothing new — skip the write
+
+    ent["aliases"] = sorted(norm_set)
+    ent["alias_forms"] = cur_forms
+    t.put_item(Item=ent)
+    for na in new_norm:
+        t.put_item(Item={"pk": f"ALIAS#{na}", "type": "alias", "entity_id": entity_id})
+    return added
 
 
 def seed(table: Any | None = None) -> int:

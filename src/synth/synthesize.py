@@ -7,15 +7,20 @@ from typing import Any
 from src.synth import bedrock_llm, citations
 from src.synth.entities import known_parents
 
-# Brazil runs UTC-3 year-round (no DST since 2019). The daily pipeline fires
-# ~23:28 BRT, which is past midnight UTC — so the operator's "today" is the BRT
-# calendar day, not UTC's. Used for run_date so narratives partition by the day
-# Onça actually surfaced them.
+# Brazil runs UTC-3 year-round (no DST since 2019). The pipeline fires a few
+# times per day inside office hours (BRT), so the operator's "today" is the BRT
+# calendar day, not UTC's. run_date partitions narratives by the day Onça
+# surfaced them; run_at additionally stamps the wall-clock time of the run so
+# the card can show which intraday pass (e.g. 06:45 vs 12:30) last changed it.
 _BRT = dt.timezone(dt.timedelta(hours=-3))
 
 
 def run_date_today() -> str:
     return dt.datetime.now(_BRT).date().isoformat()
+
+
+def run_at_now() -> str:
+    return dt.datetime.now(_BRT).replace(microsecond=0).isoformat()
 
 
 SYSTEM = (
@@ -121,6 +126,7 @@ def synthesize_candidate(
         # window/timeline); as_of = age of the underlying source data ("dados de").
         # These diverge when a source lags (e.g. CVM Informe Diário over a weekend).
         "run_date": run_date_today(),
+        "run_at": run_at_now(),
         "as_of": candidate.get("as_of") or run_date_today(),
         "data_as_of": candidate.get("data_as_of") or {},
         "source_ids": [s.get("id") for s in sources if s.get("id")],

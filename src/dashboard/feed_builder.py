@@ -85,6 +85,9 @@ def build_feed(
                 # data_date = source age, shown as "dados de". Legacy objects with
                 # no run_date fall back to as_of for both.
                 "date": (n.get("run_date") or n.get("as_of") or "")[:10],
+                # run_at = BRT timestamp of the run that last changed this
+                # narrative; card shows it as a time suffix (multiple runs/day).
+                "run_at": n.get("run_at") or "",
                 "data_date": (n.get("as_of") or n.get("run_date") or "")[:10],
                 "kind": n.get("kind"),
                 "entity": n.get("entity"),

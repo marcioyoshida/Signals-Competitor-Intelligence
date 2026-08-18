@@ -105,6 +105,49 @@ def test_auto_create_disambiguates_slug_collision_without_clobbering():
     assert er.resolve_by_cnpj("11222333", table=t) == "zapbank_11222333"
 
 
+def test_accumulate_aliases_adds_data_derived_form_and_indexes_it():
+    t = FakeTable()
+    # step 3 auto-created a fintech from its CNPJ; only the brand is known so far
+    er.put_entity("zapbank_11222333", "ZapBank", ["ZAPBANK"],
+                  cnpj_roots=["11222333"], confidence="cnpj", table=t)
+    # a later CVM offering names it by razão social — accumulate that alias
+    added = er.accumulate_aliases(
+        "zapbank_11222333", ["ZAPBANK INSTITUICAO DE PAGAMENTO S.A."], table=t
+    )
+    assert added == ["ZAPBANK INSTITUICAO DE PAGAMENTO S.A."]
+    # now a name-only signal (news/DOU) using the legal name resolves too
+    assert er.resolve_by_alias("Zapbank Instituicao de Pagamento S.A.", table=t) == "zapbank_11222333"
+    ent = er.get_entity("zapbank_11222333", table=t)
+    assert "ZAPBANK INSTITUICAO DE PAGAMENTO S.A." in ent["alias_forms"]
+
+
+def test_accumulate_aliases_is_idempotent_and_skips_short_forms():
+    t = FakeTable()
+    er.put_entity("inter", "Banco Inter", ["INTER"], confidence="curated", table=t)
+    assert er.accumulate_aliases("inter", ["Banco Inter S.A."], table=t) == ["Banco Inter S.A."]
+    # second pass with the same form writes nothing
+    assert er.accumulate_aliases("inter", ["Banco Inter S.A."], table=t) == []
+    # too-short forms are rejected (unsafe substring keys)
+    assert er.accumulate_aliases("inter", ["IB"], table=t) == []
+
+
+def test_accumulate_aliases_never_hijacks_another_entitys_name():
+    t = FakeTable()
+    er.put_entity("stoneco", "StoneCo", ["STONECO", "STONE PAGAMENTOS S.A."],
+                  confidence="curated", table=t)
+    er.put_entity("stonex", "StoneX", ["STONEX"], confidence="curated", table=t)
+    # trying to fold StoneCo's exact name onto StoneX must NOT steal the index
+    added = er.accumulate_aliases("stonex", ["STONE PAGAMENTOS S.A."], table=t)
+    assert added == ["STONE PAGAMENTOS S.A."]           # raw form kept on stonex
+    assert er.resolve_by_alias("STONE PAGAMENTOS S.A.", table=t) == "stoneco"  # index untouched
+    assert "STONE PAGAMENTOS S.A." not in er.get_entity("stonex", table=t)["aliases"]
+
+
+def test_accumulate_aliases_unknown_entity_is_noop():
+    t = FakeTable()
+    assert er.accumulate_aliases("ghost", ["Some Bank S.A."], table=t) == []
+
+
 def test_load_alias_map_returns_raw_forms():
     t = FakeTable()
     er.put_entity("nubank", "Nubank", ["NUBANK", "NU"],

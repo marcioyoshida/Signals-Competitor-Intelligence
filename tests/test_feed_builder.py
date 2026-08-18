@@ -62,6 +62,19 @@ def test_build_feed_separates_run_date_from_data_date():
     assert feed["kpis"]["narratives_latest"] == 1
 
 
+def test_build_feed_passes_run_at_time_suffix_through():
+    # With multiple runs/day the card shows a time suffix; run_at must survive.
+    narratives = [
+        {**_narr("a", "itau", "2026-08-18", 0.5),
+         "run_date": "2026-08-18", "run_at": "2026-08-18T12:30:04-03:00"},
+    ]
+    feed = feed_builder.build_feed(narratives)
+    assert feed["feed"][0]["run_at"] == "2026-08-18T12:30:04-03:00"
+    # Legacy narratives with no run_at degrade to an empty string, not a crash.
+    legacy = feed_builder.build_feed([_narr("b", "itau", "2026-08-18", 0.5)])
+    assert legacy["feed"][0]["run_at"] == ""
+
+
 def test_build_feed_entity_timeline_peak_and_count():
     narratives = [
         _narr("a", "itau", "2026-08-12", 0.4),

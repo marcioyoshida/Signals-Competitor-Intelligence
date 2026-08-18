@@ -1,6 +1,6 @@
 # ADR 001 — Entities registry, per-tenant watchlists, and auto-mapping
 
-- Status: **Proposed** (2026-08-17)
+- Status: **Accepted** — rollout steps 1–4 shipped (2026-08-18); 5–7 pending
 - Supersedes the hardcoded `config/watchlist.yaml` entity lists and the static
   `ENTITY_ALIASES` dict in `src/synth/entities.py`.
 
@@ -116,8 +116,16 @@ parts):
 2. Registry-backed `resolve_entities` — load + cache the ALIAS#/CNPJ# maps at run
    start; fall back to in-memory `ENTITY_ALIASES` if the table is unavailable.
 3. Auto-create/upsert on every observed CNPJ — start in the entrant + Receita path
-   (payload already exists), then extend to all CVM signals.
-4. Alias accumulation from all sources.
+   (payload already exists), then extend to all CVM signals. **Shipped 2026-08-18**
+   (`auto_create_from_entrant`, wired in `lambda_port.py`, live-tested).
+4. Alias accumulation from all sources. **Shipped 2026-08-18** (first slice):
+   `accumulate_aliases` folds a structured CVM signal's razão social
+   (offering `issuer` / fato relevante `company`) into the entity its CNPJ
+   already resolves to — data-derived + CNPJ-gated, the auto-safe case. A
+   normalized name owned by a *different* entity is never hijacked (left for the
+   step-5 review queue). Wired as a best-effort pass in `lambda_port.py`
+   (`ONCA_ENTITIES_ACCUMULATE`, default on). *Follow-up:* extend producers to SEC
+   ticker/company and auto-create-on-CNPJ-miss for CVM issuers.
 5. Review queue (`needs_review` items surfaced in the dashboard) + curation.
 6. `onca-tenant-config` + read-layer personalization (scoring/filter/alerts).
 7. Manage-entities UI (with the Cognito accounts layer).

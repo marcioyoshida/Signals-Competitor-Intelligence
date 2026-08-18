@@ -551,13 +551,26 @@ class OncaPrototypeStack(Stack):
             timeout=Duration.minutes(45),
         )
 
-        pipeline_rule = events.Rule(
-            self,
-            "OncaPipelineDailySchedule",
-            schedule=events.Schedule.rate(Duration.days(1)),
-            enabled=True,
-        )
-        pipeline_rule.add_target(targets.SfnStateMachine(pipeline))
+        # Intraday triggers. Brazil is UTC-3 year-round (no DST since 2019), so
+        # these UTC crons map to fixed BRT wall-clock times and never drift.
+        # Times land fresh feeds inside corporate office hours (08–18 BRT), just
+        # after the main gov publish windows. Add more (label, utc_h, utc_m)
+        # tuples to grow 3 -> 5 runs/day; each gets its own rule + target.
+        pipeline_runs = [
+            ("Abertura", 9, 45),     # 06:45 BRT — DOU AM edition + overnight CVM/SEC
+            ("MeioDia", 15, 30),     # 12:30 BRT — morning BCB acts + AM news
+            ("Fechamento", 20, 30),  # 17:30 BRT — afternoon filings + SEC US-morning
+        ]
+        for label, utc_hour, utc_minute in pipeline_runs:
+            rule = events.Rule(
+                self,
+                f"OncaPipelineSchedule{label}",
+                schedule=events.Schedule.cron(
+                    minute=str(utc_minute), hour=str(utc_hour)
+                ),
+                enabled=True,
+            )
+            rule.add_target(targets.SfnStateMachine(pipeline))
 
         CfnOutput(
             self,
