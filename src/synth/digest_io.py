@@ -63,7 +63,10 @@ def write_narrative(
     if not bucket:
         return None
     nid = narrative.get("id") or "unknown"
-    date = (narrative.get("as_of") or "unknown")[:10]
+    # Partition by run_date (the day Onça surfaced it), not the source data date —
+    # a lagging source (e.g. CVM Informe Diário) must not collapse every day's
+    # narratives into one stale folder. Falls back to as_of for legacy objects.
+    date = (narrative.get("run_date") or narrative.get("as_of") or "unknown")[:10]
     key = f"{prefix}{date}/{nid}.json"
     try:
         boto3.client("s3").put_object(

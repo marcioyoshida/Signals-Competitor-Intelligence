@@ -7,6 +7,16 @@ from typing import Any
 from src.synth import bedrock_llm, citations
 from src.synth.entities import known_parents
 
+# Brazil runs UTC-3 year-round (no DST since 2019). The daily pipeline fires
+# ~23:28 BRT, which is past midnight UTC — so the operator's "today" is the BRT
+# calendar day, not UTC's. Used for run_date so narratives partition by the day
+# Onça actually surfaced them.
+_BRT = dt.timezone(dt.timedelta(hours=-3))
+
+
+def run_date_today() -> str:
+    return dt.datetime.now(_BRT).date().isoformat()
+
 
 SYSTEM = (
     "You are a competitive-intelligence analyst for Brazilian financial services. "
@@ -107,7 +117,11 @@ def synthesize_candidate(
         "citations": guarded["citations"],
         "dropped_urls": guarded["dropped_urls"],
         "mode": mode,
-        "as_of": candidate.get("as_of") or dt.date.today().isoformat(),
+        # run_date = when Onça surfaced it (partitions S3 + drives the feed
+        # window/timeline); as_of = age of the underlying source data ("dados de").
+        # These diverge when a source lags (e.g. CVM Informe Diário over a weekend).
+        "run_date": run_date_today(),
+        "as_of": candidate.get("as_of") or run_date_today(),
         "data_as_of": candidate.get("data_as_of") or {},
         "source_ids": [s.get("id") for s in sources if s.get("id")],
     }

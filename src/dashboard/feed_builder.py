@@ -81,7 +81,11 @@ def build_feed(
         items.append(
             {
                 "id": n.get("id"),
-                "date": (n.get("as_of") or "")[:10],
+                # date = run_date (when surfaced) — drives sort/window/timeline;
+                # data_date = source age, shown as "dados de". Legacy objects with
+                # no run_date fall back to as_of for both.
+                "date": (n.get("run_date") or n.get("as_of") or "")[:10],
+                "data_date": (n.get("as_of") or n.get("run_date") or "")[:10],
                 "kind": n.get("kind"),
                 "entity": n.get("entity"),
                 "entity_label": display_label(n.get("entity"), n.get("kind")),
@@ -101,6 +105,10 @@ def build_feed(
     items.sort(key=lambda x: (x["date"], x["threat_score"]), reverse=True)
     dates = sorted({x["date"] for x in items if x["date"]})
     latest = dates[-1] if dates else None
+    # "dados de" = newest underlying source date (data_date), independent of when
+    # the run happened; can lag behind `latest` when a source (e.g. CVM) is stale.
+    data_dates = sorted({x["data_date"] for x in items if x["data_date"]})
+    data_as_of = data_dates[-1] if data_dates else latest
 
     # Per-entity timelines (peak score + count per date), for sparklines.
     by_entity: dict[str, dict[str, Any]] = {}
@@ -142,7 +150,8 @@ def build_feed(
     return {
         "generated_at": generated_at
         or dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
-        "as_of": latest,
+        "as_of": data_as_of,
+        "run_date": latest,
         "dates": dates,
         "kpis": {
             "narratives_latest": len(latest_items),

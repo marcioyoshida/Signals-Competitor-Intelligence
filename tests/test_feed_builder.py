@@ -43,6 +43,25 @@ def test_build_feed_sorts_and_rolls_up():
     assert feed["kpis"]["narratives_total"] == 3
 
 
+def test_build_feed_separates_run_date_from_data_date():
+    # A lagging source (as_of stuck at 08-13) surfaced on later run days must
+    # spread across the run-date timeline, while "dados de" stays the data date.
+    narratives = [
+        {**_narr("a", "itau", "2026-08-13", 0.4), "run_date": "2026-08-16"},
+        {**_narr("b", "itau", "2026-08-13", 0.7), "run_date": "2026-08-17"},
+    ]
+    feed = feed_builder.build_feed(narratives)
+    # window/timeline keyed by run_date, not the stale data date
+    assert feed["dates"] == ["2026-08-16", "2026-08-17"]
+    assert feed["run_date"] == "2026-08-17"
+    # "dados de" reflects the underlying source date
+    assert feed["as_of"] == "2026-08-13"
+    itau = next(e for e in feed["entities"] if e["entity"] == "itau")
+    assert [t["date"] for t in itau["timeline"]] == ["2026-08-16", "2026-08-17"]
+    # KPIs scope to the latest run day
+    assert feed["kpis"]["narratives_latest"] == 1
+
+
 def test_build_feed_entity_timeline_peak_and_count():
     narratives = [
         _narr("a", "itau", "2026-08-12", 0.4),
