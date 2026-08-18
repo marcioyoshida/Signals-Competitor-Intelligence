@@ -134,10 +134,13 @@ parts):
    sharing a QSA controller get a *proposed* `canonical_id` link (never
    auto-merged; StoneX ≠ StoneCo), curated member preferred as leader. Wired in
    `lambda_port` after auto-create (`ONCA_ENTITIES_REVIEW`, default on; scans
-   only when a new entrant appeared). *Deferred to the accounts slice (step 7):*
-   the dashboard surface + browser approve/reject write-path (needs an
-   authenticated action endpoint) — curation runs via the backend functions
-   until then.
+   only when a new entrant appeared). **Read-only surface shipped 2026-08-18**:
+   the feed builder reads pending `REVIEW#` items (`entities_table` read grant),
+   resolves slugs to display names, and rides them on `feed.json` as `reviews[]`;
+   the dashboard shows a "Revisão de entidades" panel (visible only when
+   proposals exist), stating nothing is auto-merged. *Still deferred:* the
+   browser approve/reject **write-path** (needs an authenticated action endpoint)
+   — curation runs via the backend functions until that lands.
 6. `onca-tenant-config` + read-layer personalization (scoring/filter/alerts).
 7. Manage-entities UI (with the Cognito accounts layer).
 

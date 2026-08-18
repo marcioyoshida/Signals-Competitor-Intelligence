@@ -67,6 +67,9 @@
   }
   label.chk { display: inline-flex; align-items: center; gap: 6px; color: var(--ink2); font-size: 13px; }
   .hint { color: var(--muted); font-size: 12px; padding: 0 16px 10px; }
+  .review { padding: 10px 16px; border-top: 1px solid var(--border); }
+  .review:first-child { border-top: 0; }
+  .review .rmeta { color: var(--muted); font-size: 12px; margin-top: 3px; }
   .legend { display: flex; gap: 12px; flex-wrap: wrap; padding: 0 16px 12px; color: var(--ink2); font-size: 12px; }
   .legend .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
   .feed { padding: 6px 10px 14px; }
@@ -155,6 +158,13 @@
       <div id="entities"></div>
     </div>
   </div>
+
+  <div class="panel" id="reviewPanel" style="margin-top:14px;display:none">
+    <h2>Revisão de entidades <span style="text-transform:none;letter-spacing:0">· propostas aguardando curadoria</span></h2>
+    <div class="hint">Sugestões automáticas de vínculo entre entidades (ex.: mesmo controlador no QSA). Nada é mesclado automaticamente — cada proposta precisa de confirmação humana.</div>
+    <div id="reviews"></div>
+  </div>
+
   <p class="est" style="margin:16px 6px">O nível de ameaça é uma estimativa heurística (não é um modelo validado). Cada afirmação tem link para a sua fonte.</p>
 </div>
 
@@ -238,7 +248,24 @@ async function boot() {
   const checked = DATA.generated_at ? ` · verificado ${fmtDateTime(DATA.generated_at)}` : "";
   document.getElementById("asof").textContent =
     `dados de ${fmtDate(DATA.as_of)}${checked} · ${DATA.feed.length} narrativas · janela de ${DATA.dates.length} dias`;
-  renderKpis(); renderLegend(); populateFilters(); renderEntities(); render();
+  renderKpis(); renderLegend(); populateFilters(); renderEntities(); renderReviews(); render();
+}
+
+function renderReviews() {
+  const panel = document.getElementById("reviewPanel");
+  const list = DATA.reviews || [];
+  if (!list.length) { panel.style.display = "none"; return; }
+  panel.style.display = "";
+  document.getElementById("reviews").innerHTML = list.map(r => {
+    const desc = r.kind === "group_merge"
+      ? `Agrupar <b>${esc(r.member_label || r.member || "?")}</b> sob <b>${esc(r.leader_label || r.leader || "?")}</b>`
+      : `Adicionar nome <b>${esc(r.proposed || "?")}</b> a <b>${esc(r.member_label || r.member || "?")}</b>`;
+    const when = fmtDate(String(r.created_at || "").slice(0, 10));
+    return `<div class="review">
+      <div>${desc}</div>
+      <div class="rmeta">${esc(r.reason || "")} · <span class="chip">${esc(r.confidence || "")}</span> · <span class="date">${esc(when)}</span></div>
+    </div>`;
+  }).join("");
 }
 
 function renderKpis() {

@@ -67,6 +67,7 @@ def build_feed(
     narratives: list[dict[str, Any]],
     *,
     generated_at: str | None = None,
+    reviews: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Pure aggregation: narratives -> feed payload. No I/O.
 
@@ -165,6 +166,8 @@ def build_feed(
         },
         "feed": items,
         "entities": entities,
+        # Pending entity-registry review proposals (ADR step 5), read-only surface.
+        "reviews": reviews or [],
     }
 
 
@@ -201,6 +204,50 @@ def load_recent_narratives(
     return out
 
 
+def load_pending_reviews(*, limit: int = 50) -> list[dict[str, Any]]:
+    """Read pending entity-registry review proposals and attach display labels.
+
+    Best-effort and read-only: any failure (no table, no access) yields an empty
+    list so the feed still publishes. Labels resolve entity_id/target_id slugs to
+    display names so the dashboard can render a human-readable proposal.
+    """
+    if not os.environ.get("ONCA_ENTITIES_TABLE"):
+        return []
+    try:
+        from src.synth import entity_registry
+
+        names: dict[str, str] = {}
+
+        def label(eid: str | None) -> str | None:
+            if not eid:
+                return None
+            if eid not in names:
+                ent = entity_registry.get_entity(eid)
+                names[eid] = (ent or {}).get("display_name") or eid
+            return names[eid]
+
+        out: list[dict[str, Any]] = []
+        for r in entity_registry.list_reviews(status="pending")[:limit]:
+            out.append(
+                {
+                    "review_id": r.get("review_id"),
+                    "kind": r.get("kind"),
+                    "member": r.get("entity_id"),
+                    "member_label": label(r.get("entity_id")),
+                    "leader": r.get("target_id"),
+                    "leader_label": label(r.get("target_id")),
+                    "proposed": r.get("proposed"),
+                    "reason": r.get("reason"),
+                    "confidence": r.get("confidence"),
+                    "created_at": r.get("created_at"),
+                }
+            )
+        return out
+    except Exception as exc:  # pragma: no cover - best-effort, read-only
+        print(f"Warning: load pending reviews failed: {exc}")
+        return []
+
+
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """Build feed.json from recent narratives and publish it to the site bucket."""
     digests_bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
@@ -211,7 +258,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         return {"statusCode": 200, "body": json.dumps({"status": "no_digests_bucket"})}
 
     narratives = load_recent_narratives(digests_bucket, window_days)
-    feed = build_feed(narratives)
+    feed = build_feed(narratives, reviews=load_pending_reviews())
     body = json.dumps(feed, ensure_ascii=False).encode("utf-8")
 
     published = None
@@ -236,6 +283,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 "as_of": feed["as_of"],
                 "feed_count": len(feed["feed"]),
                 "entities": len(feed["entities"]),
+                "reviews_pending": len(feed["reviews"]),
                 "published": published,
             }
         ),

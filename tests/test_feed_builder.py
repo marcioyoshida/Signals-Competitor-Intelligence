@@ -62,6 +62,16 @@ def test_build_feed_separates_run_date_from_data_date():
     assert feed["kpis"]["narratives_latest"] == 1
 
 
+def test_build_feed_carries_reviews_and_defaults_empty():
+    # reviews (ADR step 5) ride along on the feed for the read-only surface
+    proposals = [{"review_id": "group_merge:a_b", "kind": "group_merge",
+                  "member_label": "Fintech A", "leader_label": "BrandCo"}]
+    feed = feed_builder.build_feed([_narr("a", "itau", "2026-08-18", 0.5)], reviews=proposals)
+    assert feed["reviews"] == proposals
+    # absent by default (never KeyErrors the frontend)
+    assert feed_builder.build_feed([])["reviews"] == []
+
+
 def test_build_feed_passes_run_at_time_suffix_through():
     # With multiple runs/day the card shows a time suffix; run_at must survive.
     narratives = [

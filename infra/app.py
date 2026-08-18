@@ -487,10 +487,14 @@ class OncaPrototypeStack(Stack):
                 "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
                 "ONCA_SITE_BUCKET": site_bucket.bucket_name,
                 "ONCA_FEED_WINDOW_DAYS": "14",
+                # Read the entities review queue (ADR step 5) to surface pending
+                # group-merge proposals in the dashboard (read-only).
+                "ONCA_ENTITIES_TABLE": entities_table.table_name,
             },
         )
         digests_bucket.grant_read(feed_fn)
         site_bucket.grant_put(feed_fn)
+        entities_table.grant_read_data(feed_fn)
 
         # Orchestration: one daily pipeline ordering ingest -> synth -> feed,
         # replacing the two independent schedules. Sequential execution guarantees
