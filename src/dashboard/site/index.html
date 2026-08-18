@@ -284,22 +284,33 @@ function filtered() {
 function hostOf(url) {
   try { return new URL(url).hostname.replace(/^www\./, ""); } catch (e) { return String(url || ""); }
 }
+// Friendlier source names for the common Brazilian FS hosts (fallback: bare host).
+const SOURCE_LABELS = {
+  "bcb.gov.br": "BCB", "dados.cvm.gov.br": "CVM", "rad.cvm.gov.br": "CVM",
+  "sec.gov": "SEC", "news.google.com": "Google Notícias",
+  "valor.globo.com": "Valor Econômico", "moneytimes.com.br": "Money Times",
+};
+function sourceLabel(url) { const h = hostOf(url); return SOURCE_LABELS[h] || h; }
 
-// Footnote model: give each distinct citation/URL a global number [n] in
-// citation order, so inline refs in the narrative cross-reference the footer.
+// Footnote model: give each distinct *linkable* citation a global number [n] in
+// citation order, so inline refs cross-reference the footer. Citations with no
+// http(s) URL (internal signal ids like pix:… / bcb-auth:…) carry no link and
+// are dropped — their provenance is already shown by the lens chips + "N sinais".
 function citationModel(f) {
   const strip = u => String(u || "").replace(/[)\].,;:!?]+$/, "");  // drop trailing punct
+  const isHttp = u => typeof u === "string" && /^https?:\/\//i.test(u);
   const entries = [];           // {n, url, label}
   const numByUrl = new Map();   // stripped url -> n
-  const add = (url, source, id) => {
-    if (url) { const k = strip(url); if (numByUrl.has(k)) return numByUrl.get(k); }
+  const add = (url) => {
+    const k = strip(url);
+    if (numByUrl.has(k)) return numByUrl.get(k);
     const n = entries.length + 1;
-    if (url) numByUrl.set(strip(url), n);
-    entries.push({ n, url: url || null, label: url ? hostOf(url) : (source || id || "fonte") });
+    numByUrl.set(k, n);
+    entries.push({ n, url, label: sourceLabel(url) });
     return n;
   };
-  (f.citations || []).forEach(c => add(c.url, c.source, c.id));
-  return { entries, numByUrl, strip, add };
+  (f.citations || []).forEach(c => { if (isHttp(c.url)) add(c.url); });
+  return { entries, numByUrl, strip, add, isHttp };
 }
 
 // Replace raw URLs in the narrative prose with short colored [n] superscript
