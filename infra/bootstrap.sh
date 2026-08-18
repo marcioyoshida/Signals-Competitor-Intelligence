@@ -46,6 +46,27 @@ for BUCKET in "onca-raw-$ACCOUNT_ID" "onca-digests-$ACCOUNT_ID"; do
   fi
 done
 
+echo "── 3b. Dashboard basic-auth credentials in SSM (durable across deploys)"
+# app.py reads these at synth and bakes them into the CloudFront auth function.
+# Kept out-of-band (not CDK-managed) so a SecureString value never lands in the
+# template. Only sets defaults if absent — edit the SecureString to change the pw.
+if ! aws ssm get-parameter --name /onca/dashboard/basic-auth-user --profile "$PROFILE" >/dev/null 2>&1; then
+  aws ssm put-parameter --name /onca/dashboard/basic-auth-user --type String \
+    --value onca --profile "$PROFILE" \
+    --description "Onca warroom dashboard basic-auth username" >/dev/null
+  echo "created: /onca/dashboard/basic-auth-user = onca"
+else
+  echo "exists: /onca/dashboard/basic-auth-user"
+fi
+if ! aws ssm get-parameter --name /onca/dashboard/basic-auth-pass --profile "$PROFILE" >/dev/null 2>&1; then
+  aws ssm put-parameter --name /onca/dashboard/basic-auth-pass --type SecureString \
+    --value warroom --profile "$PROFILE" \
+    --description "Onca warroom dashboard basic-auth password (baked into CloudFront at synth)" >/dev/null
+  echo "created: /onca/dashboard/basic-auth-pass (SecureString, default 'warroom' — change it)"
+else
+  echo "exists: /onca/dashboard/basic-auth-pass"
+fi
+
 echo "── 4. Bedrock model access reminder (manual, console-only)"
 echo "Open: https://$REGION.console.aws.amazon.com/bedrock/home?region=$REGION#/modelaccess"
 echo "Request access to: Claude Haiku (routing/classification) + one stronger"

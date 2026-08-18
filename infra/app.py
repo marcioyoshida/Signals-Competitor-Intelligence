@@ -35,6 +35,43 @@ LAMBDA_ASSET = REPO_ROOT / "build" / "lambda"
 SITE_ASSET = REPO_ROOT / "src" / "dashboard" / "site"
 WATCHLIST_CONFIG = REPO_ROOT / "config" / "watchlist.yaml"
 
+# Dashboard basic-auth creds live in SSM (provisioned out-of-band by
+# bootstrap.sh) so they survive a plain `cdk deploy` — otherwise a deploy with
+# no ONCA_DASH_* env vars silently resets the password to the default.
+DASH_USER_PARAM = "/onca/dashboard/basic-auth-user"
+DASH_PASS_PARAM = "/onca/dashboard/basic-auth-pass"
+
+
+def dashboard_credentials() -> tuple[str, str]:
+    """Resolve dashboard basic-auth (user, pass) at synth time.
+
+    Precedence per field: ONCA_DASH_* env override -> SSM Parameter Store ->
+    built-in default. The CloudFront Function needs the literal string baked in,
+    so we read the SecureString value directly via boto3 using the deployer's
+    credentials (no stack IAM needed); it already lives base64'd in the deployed
+    function, so SSM is just the durable source of truth.
+    """
+    user = os.environ.get("ONCA_DASH_USER")
+    pw = os.environ.get("ONCA_DASH_PASS")
+    if not (user and pw):
+        try:
+            import boto3
+
+            ssm = boto3.client("ssm")
+            if not user:
+                user = ssm.get_parameter(Name=DASH_USER_PARAM)["Parameter"]["Value"]
+            if not pw:
+                pw = ssm.get_parameter(Name=DASH_PASS_PARAM, WithDecryption=True)[
+                    "Parameter"
+                ]["Value"]
+        except Exception as exc:  # param missing / no creds — fall back below
+            print(f"WARNING: dashboard creds not read from SSM ({DASH_PASS_PARAM}): {exc}")
+    user = user or "onca"
+    if not pw:
+        pw = "warroom"  # prototype default — set the SSM param before real use
+        print("WARNING: dashboard password not in env or SSM; using default 'warroom'")
+    return user, pw
+
 
 class OncaPrototypeStack(Stack):
     def __init__(self, scope: object, id: str, **kwargs):
@@ -349,13 +386,9 @@ class OncaPrototypeStack(Stack):
         )
 
         # Basic auth at the CloudFront edge (viewer-request). Prototype gate for a
-        # competitive-intel feed; credentials come from env at synth time and are
-        # baked into the function (set ONCA_DASH_USER / ONCA_DASH_PASS to override).
-        dash_user = os.environ.get("ONCA_DASH_USER", "onca")
-        dash_pass = os.environ.get("ONCA_DASH_PASS", "")
-        if not dash_pass:
-            dash_pass = "warroom"  # prototype default — override via env before real use
-            print("WARNING: ONCA_DASH_PASS not set; using default dashboard password 'warroom'")
+        # competitive-intel feed. Credentials resolve from SSM (durable across
+        # deploys) with an ONCA_DASH_* env override — see dashboard_credentials().
+        dash_user, dash_pass = dashboard_credentials()
         basic = base64.b64encode(f"{dash_user}:{dash_pass}".encode()).decode()
         auth_fn = cloudfront.Function(
             self,
