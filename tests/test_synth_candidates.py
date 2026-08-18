@@ -407,3 +407,21 @@ def test_news_item_surfaces_but_scores_below_official():
     assert reg_score > news_score
     txt = _describe_signal({**d["news"]["items"][0], "_lens": "news"})
     assert txt.startswith("Imprensa") and "Valor Econômico" in txt
+
+
+def test_news_only_item_is_suppressed_at_prod_defaults():
+    # A lone news headline (no corroborating lens) must NOT surface as an alert
+    # under prod gating (min_lenses=2) — news is color, not a solo signal.
+    d = {"news": {"items": [{
+        "id": "news:promo", "company": "Nomad", "name": "Nomad",
+        "title": "Cartão Nomad Explorer oferece pontos em dobro",
+        "subject": "Nomad Explorer pontos em dobro",
+        "date": "2026-08-17", "url": "https://news.google.com/x", "is_new": True}],
+        "context": []}}
+    cands = extract_candidates(d, max_candidates=5)  # prod defaults
+    assert not any("nomad" in (c.get("entities") or []) for c in cands)
+    # but news corroborated by a real regulatory delta for the same entity surfaces
+    d["regulatory"] = {"items": [{"id": "bcb:9", "doc_type": "Resolução",
+        "subject": "Nomad autorizada", "url": "https://bcb/9", "is_new": True}], "context": []}
+    cands2 = extract_candidates(d, max_candidates=5)
+    assert any("nomad" in (c.get("entities") or []) for c in cands2)

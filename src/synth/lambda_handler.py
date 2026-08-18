@@ -5,7 +5,7 @@ import json
 import os
 from typing import Any
 
-from src.synth import candidates, digest_io, retrieve, synthesize
+from src.synth import candidates, digest_io, synthesize
 
 
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
@@ -17,11 +17,6 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     event = event or {}
     max_cand = int(os.environ.get("ONCA_SYNTH_MAX_CANDIDATES", "10"))
     use_llm = os.environ.get("ONCA_SYNTH_USE_LLM", "false").lower() in (
-        "1",
-        "true",
-        "yes",
-    )
-    use_kb = os.environ.get("ONCA_SYNTH_USE_KB", "false").lower() in (
         "1",
         "true",
         "yes",
@@ -43,15 +38,13 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     narratives: list[dict[str, Any]] = []
     keys: list[str] = []
 
+    # NOTE: KB Retrieve (semantic neighbours) was deliberately removed from the
+    # fusion path. Merging retrieved docs into `sources` made the LLM weave
+    # unrelated background into the narrative and cite it as if correlated — a
+    # false "nexus" (e.g. a Nomad points promo "linked" to an Open Finance
+    # manual). Grounding must use the entity's *own* signals, not neighbours; if
+    # reintroduced, KB context must stay out of sources/citations/source_ids.
     for cand in cands:
-        if use_kb:
-            extras = retrieve.enrich_with_kb(cand)
-            if extras:
-                cand = {
-                    **cand,
-                    "sources": list(cand.get("sources") or []) + extras,
-                    "related": list(cand.get("related") or []) + extras,
-                }
         result = synthesize.synthesize_candidate(cand, use_llm=use_llm)
         if not result:
             continue

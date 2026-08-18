@@ -355,6 +355,8 @@ function cardHtml(f, group) {
   const model = citationModel(f);
   const narr = linkifyNarrative(f.narrative, model); // before footer — appends any narrative-only URLs
   const cites = citationFooter(model);
+  // Count only real ingested signals — never KB retrievals (legacy narratives).
+  const nSinais = (f.source_ids || []).filter(s => !String(s).startsWith("kb:")).length;
   const multi = group && group.count > 1
     ? `<span class="est">· ${group.count} atualizações no período · pico ${group.peak.toFixed(2)}</span>`
     : "";
@@ -371,7 +373,7 @@ function cardHtml(f, group) {
     <div class="lenses">${f.lenses.map(l => `<span class="chip" title="Fonte: ${esc(lensLabel(l))}">${esc(lensLabel(l))}</span>`).join("")}</div>
     <p class="narr clamp">${narr}</p>
     <div class="cites">${cites}
-      ${f.source_ids.length ? `<span class="src">· ${f.source_ids.length} sinais</span>` : ""}</div>
+      ${nSinais ? `<span class="src">· ${nSinais} sinais</span>` : ""}</div>
   </div>`;
 }
 

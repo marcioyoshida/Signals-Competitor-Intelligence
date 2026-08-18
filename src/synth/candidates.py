@@ -37,8 +37,12 @@ LENS_WEIGHT = {
 }
 
 # Single-lens candidates allowed only for these lenses when is_new.
+# Lenses whose lone NEW signal is strong enough to surface/alert on its own.
+# News is intentionally excluded — it's "color" (low strategic weight); a single
+# headline must be corroborated by another lens to surface, else a routine promo
+# becomes a false alert.
 HIGH_VALUE_SOLO_LENSES = frozenset(
-    {"regulatory", "fatos", "dou", "sec", "ofertas", "entrants", "funds", "news"}
+    {"regulatory", "fatos", "dou", "sec", "ofertas", "entrants", "funds"}
 )
 
 # Market is backdrop only — never a solo seed.
