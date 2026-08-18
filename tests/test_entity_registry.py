@@ -148,6 +148,63 @@ def test_accumulate_aliases_unknown_entity_is_noop():
     assert er.accumulate_aliases("ghost", ["Some Bank S.A."], table=t) == []
 
 
+def test_review_queue_propose_is_idempotent_and_lists_pending():
+    t = FakeTable()
+    rid = er.propose_review("group_merge", key="a->b", entity_id="a", target_id="b",
+                            reason="shared controller: X", table=t)
+    assert rid == "group_merge:a_b"
+    # re-proposing the same (kind,key) is a no-op — no duplicate queue entries
+    assert er.propose_review("group_merge", key="a->b", entity_id="a", target_id="b", table=t) is None
+    pending = er.list_reviews(table=t)
+    assert len(pending) == 1 and pending[0]["status"] == "pending"
+
+
+def test_review_approve_group_merge_links_canonical_id():
+    t = FakeTable()
+    er.put_entity("stoneco", "StoneCo", ["STONECO"], confidence="curated", table=t)
+    er.put_entity("ent_x", "Some Fintech", ["SOME FINTECH"], cnpj_roots=["12345678"],
+                  confidence="cnpj", table=t)
+    rid = er.propose_review("group_merge", key="ent_x->stoneco",
+                            entity_id="ent_x", target_id="stoneco", table=t)
+    item = er.resolve_review(rid, "approved", table=t)
+    assert item["status"] == "approved" and "decided_at" in item
+    # the member is now grouped under the curated leader
+    assert er.get_entity("ent_x", table=t)["canonical_id"] == "stoneco"
+    # deciding again is a no-op (already resolved)
+    assert er.resolve_review(rid, "rejected", table=t) is None
+
+
+def test_review_reject_records_decision_without_applying():
+    t = FakeTable()
+    er.put_entity("ent_y", "Y", ["Y BRAND"], confidence="cnpj", table=t)
+    rid = er.propose_review("group_merge", key="ent_y->z", entity_id="ent_y",
+                            target_id="z", table=t)
+    er.resolve_review(rid, "rejected", table=t)
+    assert er.get_entity("ent_y", table=t)["canonical_id"] == "ent_y"  # unchanged
+    assert er.list_reviews(table=t) == []                              # not pending
+    assert er.list_reviews(status="rejected", table=t)[0]["review_id"] == rid
+
+
+def test_propose_group_merges_from_shared_controller():
+    t = FakeTable()
+    # two auto-created fintechs share a controller; a curated brand is the leader
+    er.put_entity("brandco", "BrandCo", ["BRANDCO"], confidence="curated",
+                  controllers=["BRAND HOLDING LTDA"], table=t)
+    er.put_entity("ent_a", "Fintech A", ["FINTECH A"], cnpj_roots=["11111111"],
+                  confidence="cnpj", controllers=["BRAND HOLDING LTDA"], table=t)
+    er.put_entity("ent_b", "Fintech B", ["FINTECH B"], cnpj_roots=["22222222"],
+                  confidence="cnpj", controllers=["Brand Holding Ltda"], table=t)  # case/spacing folds
+    # a lone entity with a unique controller must NOT be proposed
+    er.put_entity("solo", "Solo", ["SOLO"], cnpj_roots=["33333333"],
+                  confidence="cnpj", controllers=["OTHER HOLDING"], table=t)
+    n = er.propose_group_merges(table=t)
+    assert n == 2  # ent_a and ent_b, each -> brandco
+    targets = {r["entity_id"]: r["target_id"] for r in er.list_reviews(table=t)}
+    assert targets == {"ent_a": "brandco", "ent_b": "brandco"}
+    # idempotent: a second pass queues nothing new
+    assert er.propose_group_merges(table=t) == 0
+
+
 def test_load_alias_map_returns_raw_forms():
     t = FakeTable()
     er.put_entity("nubank", "Nubank", ["NUBANK", "NU"],

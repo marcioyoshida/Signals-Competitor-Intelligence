@@ -16,6 +16,7 @@ primitives later without pulling synth; the curated seed imports lazily.
 """
 from __future__ import annotations
 
+import datetime as _dt
 import os
 import re
 import unicodedata
@@ -221,6 +222,158 @@ def accumulate_aliases(
     for na in new_norm:
         t.put_item(Item={"pk": f"ALIAS#{na}", "type": "alias", "entity_id": entity_id})
     return added
+
+
+# --- Review queue (ADR step 5) -------------------------------------------------
+# The "propose, don't auto-commit" cases (grouping CNPJs under one brand, fuzzy
+# name matches, colloquial nicknames) never mutate an entity directly. They queue
+# a REVIEW# item a human approves/rejects — approval applies the change, rejection
+# records the decision so the producer won't re-propose it. Same single table:
+#   pk = "REVIEW#<review_id>" -> { kind, entity_id, target_id, proposed, status, ... }
+
+
+def _now_iso() -> str:
+    return _dt.datetime.now(_dt.timezone.utc).replace(microsecond=0).isoformat()
+
+
+def _scan_type(t: Any, type_: str) -> list[dict[str, Any]]:
+    """Return all items of a given ``type`` (paginated scan)."""
+    out: list[dict[str, Any]] = []
+    kwargs: dict[str, Any] = {}
+    while True:
+        resp = t.scan(**kwargs)
+        out.extend(it for it in resp.get("Items", []) if it.get("type") == type_)
+        start = resp.get("LastEvaluatedKey")
+        if not start:
+            break
+        kwargs["ExclusiveStartKey"] = start
+    return out
+
+
+def _review_id(kind: str, key: str) -> str:
+    """Stable id so a producer re-run proposes the same thing at most once."""
+    slug = re.sub(r"[^a-z0-9]+", "_", normalize_alias(key).lower()).strip("_")
+    return f"{kind}:{slug}"[:120]
+
+
+def propose_review(
+    kind: str,
+    *,
+    key: str,
+    entity_id: str | None = None,
+    target_id: str | None = None,
+    proposed: str | None = None,
+    reason: str = "",
+    hint: str = "",
+    confidence: str = "fuzzy",
+    table: Any | None = None,
+) -> str | None:
+    """Queue a human-review proposal. Idempotent by (kind, key): an already
+    queued OR already decided proposal is left untouched (never reopened, never
+    duplicated). Returns the review_id if newly queued, else ``None``."""
+    t = _table(table)
+    rid = _review_id(kind, key)
+    if t.get_item(Key={"pk": f"REVIEW#{rid}"}).get("Item"):
+        return None
+    t.put_item(
+        Item={
+            "pk": f"REVIEW#{rid}",
+            "type": "review",
+            "review_id": rid,
+            "kind": kind,
+            "entity_id": entity_id,
+            "target_id": target_id,
+            "proposed": proposed,
+            "reason": reason,
+            "hint": hint,
+            "confidence": confidence,
+            "status": "pending",
+            "created_at": _now_iso(),
+        }
+    )
+    return rid
+
+
+def list_reviews(status: str | None = "pending", table: Any | None = None) -> list[dict[str, Any]]:
+    """Return review items (default: pending), oldest first."""
+    items = [
+        r for r in _scan_type(_table(table), "review")
+        if status is None or r.get("status") == status
+    ]
+    items.sort(key=lambda r: r.get("created_at") or "")
+    return items
+
+
+def _apply_review(item: dict[str, Any], *, table: Any) -> None:
+    """Commit an approved proposal. Group-merge links a member under the group
+    leader via ``canonical_id``; fuzzy/nickname promote the proposed alias."""
+    kind = item.get("kind")
+    if kind == "group_merge" and item.get("entity_id") and item.get("target_id"):
+        ent = get_entity(item["entity_id"], table=table)
+        if ent:
+            ent["canonical_id"] = item["target_id"]
+            ent["needs_review"] = False
+            table.put_item(Item=ent)
+    elif kind in ("fuzzy_alias", "nickname") and item.get("entity_id") and item.get("proposed"):
+        accumulate_aliases(item["entity_id"], [item["proposed"]], table=table)
+
+
+def resolve_review(review_id: str, decision: str, table: Any | None = None) -> dict[str, Any] | None:
+    """Approve (apply the proposal) or reject a pending review. No-op if the
+    review is missing or already decided. Returns the updated item."""
+    if decision not in ("approved", "rejected"):
+        raise ValueError("decision must be 'approved' or 'rejected'")
+    t = _table(table)
+    item = t.get_item(Key={"pk": f"REVIEW#{review_id}"}).get("Item")
+    if not item or item.get("status") != "pending":
+        return None
+    if decision == "approved":
+        _apply_review(item, table=t)
+    item["status"] = decision
+    item["decided_at"] = _now_iso()
+    t.put_item(Item=item)
+    return item
+
+
+def propose_group_merges(table: Any | None = None) -> int:
+    """ADR step 5 producer: entities sharing a QSA controller are a hint they
+    belong to one brand/group. Propose (never auto-commit — StoneX ≠ StoneCo)
+    linking each member under a leader via ``canonical_id``. A curated member is
+    preferred as leader so auto-created CNPJs group under the trusted brand.
+    Returns the count of *newly* queued proposals."""
+    t = _table(table)
+    by_controller: dict[str, list[dict[str, Any]]] = {}
+    for e in _scan_type(t, "entity"):
+        for c in e.get("controllers") or []:
+            k = normalize_alias(c)
+            if k:
+                by_controller.setdefault(k, []).append(e)
+
+    queued = 0
+    for controller, members in by_controller.items():
+        uniq = {m["entity_id"]: m for m in members}
+        if len(uniq) < 2:
+            continue
+        curated = [m for m in uniq.values() if m.get("confidence") == "curated"]
+        leader = (curated[0] if curated else min(uniq.values(), key=lambda m: m["entity_id"]))
+        for eid, m in uniq.items():
+            if eid == leader["entity_id"]:
+                continue
+            if m.get("canonical_id") and m["canonical_id"] != eid:
+                continue  # already grouped under something
+            rid = propose_review(
+                "group_merge",
+                key=f"{eid}->{leader['entity_id']}",
+                entity_id=eid,
+                target_id=leader["entity_id"],
+                reason=f"shared controller: {controller}",
+                hint=controller,
+                confidence="fuzzy",
+                table=t,
+            )
+            if rid:
+                queued += 1
+    return queued
 
 
 def seed(table: Any | None = None) -> int:

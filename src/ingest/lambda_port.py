@@ -368,6 +368,18 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                         created += 1
                 if created:
                     print(f"entities: auto-created {created} from new entrants")
+                    # ADR step 5: a fresh entity may share a QSA controller with
+                    # an existing one — queue group-merge proposals for review
+                    # (never auto-merged). Only when something was created, so
+                    # the table scan stays off the common no-new-entrant runs.
+                    if os.environ.get("ONCA_ENTITIES_REVIEW", "true").lower() in (
+                        "1",
+                        "true",
+                        "yes",
+                    ):
+                        queued = entity_registry.propose_group_merges()
+                        if queued:
+                            print(f"entities: queued {queued} group-merge reviews")
         except Exception as exc:  # pragma: no cover - best-effort, never blocks ingest
             print(f"Warning: entity auto-create skipped: {exc}")
 

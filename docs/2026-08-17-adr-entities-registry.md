@@ -127,6 +127,17 @@ parts):
    (`ONCA_ENTITIES_ACCUMULATE`, default on). *Follow-up:* extend producers to SEC
    ticker/company and auto-create-on-CNPJ-miss for CVM issuers.
 5. Review queue (`needs_review` items surfaced in the dashboard) + curation.
+   **Backend shipped 2026-08-18** (first slice): a `REVIEW#` queue in the same
+   table with `propose_review` (idempotent by kind+key), `list_reviews`,
+   `resolve_review` (approve applies the change, reject records the decision so
+   it isn't re-proposed). First producer: `propose_group_merges` — entities
+   sharing a QSA controller get a *proposed* `canonical_id` link (never
+   auto-merged; StoneX ≠ StoneCo), curated member preferred as leader. Wired in
+   `lambda_port` after auto-create (`ONCA_ENTITIES_REVIEW`, default on; scans
+   only when a new entrant appeared). *Deferred to the accounts slice (step 7):*
+   the dashboard surface + browser approve/reject write-path (needs an
+   authenticated action endpoint) — curation runs via the backend functions
+   until then.
 6. `onca-tenant-config` + read-layer personalization (scoring/filter/alerts).
 7. Manage-entities UI (with the Cognito accounts layer).
 
