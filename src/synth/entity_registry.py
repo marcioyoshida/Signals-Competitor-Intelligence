@@ -16,6 +16,7 @@ primitives later without pulling synth; the curated seed imports lazily.
 from __future__ import annotations
 
 import os
+import re
 import unicodedata
 from typing import Any, Iterable
 
@@ -106,6 +107,63 @@ def resolve_by_cnpj(cnpj_root: str, table: Any | None = None) -> str | None:
         return None
     item = _table(table).get_item(Key={"pk": f"CNPJ#{root}"}).get("Item")
     return item.get("entity_id") if item else None
+
+
+def _slug(value: str) -> str:
+    """Readable, ascii entity_id from a name (accent-folded, lowercase, _-joined)."""
+    s = re.sub(r"[^a-z0-9]+", "_", normalize_alias(value).lower()).strip("_")
+    return s[:40]
+
+
+def auto_create_from_entrant(entrant: dict[str, Any], *, table: Any | None = None) -> str | None:
+    """ADR step 3: CNPJ-keyed auto-create of an entity from a new BCB entrant.
+
+    Makes a quietly-registered fintech resolvable for *future* signals (a later
+    CVM offering, DOU act, or news headline) without a redeploy. Expects the
+    entrant already enriched by Receita (``trade_name`` / ``legal_name`` /
+    ``controllers``). Idempotent by CNPJ root; returns the entity_id when a new
+    record is written, else ``None`` (already mapped, or no CNPJ to key on).
+
+    Writes ``confidence="cnpj"`` — the safe, auto-committable case in the ADR.
+    Grouping this CNPJ under a parent brand (``canonical_id``) stays a
+    review-queue decision (step 5), so this never merges into a curated entity.
+    """
+    root = "".join(ch for ch in str(entrant.get("cnpj") or "") if ch.isdigit())[:8]
+    if len(root) < 8:
+        return None
+    t = _table(table)
+    if resolve_by_cnpj(root, table=t):  # already known — idempotent no-op
+        return None
+
+    brand = str(entrant.get("trade_name") or "").strip()
+    legal = str(entrant.get("legal_name") or entrant.get("name") or "").strip()
+    # Raw substring forms resolve_entities matches against future signal blobs.
+    forms: list[str] = []
+    for v in (brand, legal, str(entrant.get("name") or "").strip()):
+        if len(v) >= 4 and v.upper() not in {f.upper() for f in forms}:
+            forms.append(v)
+    if not forms:
+        return None
+
+    display = brand or legal or f"CNPJ {root}"
+    entity_id = _slug(brand or legal) or f"ent_{root}"
+    existing = get_entity(entity_id, table=t)
+    if existing and root not in (existing.get("cnpj_roots") or []):
+        entity_id = f"{entity_id}_{root}"  # never clobber a different entity
+
+    put_entity(
+        entity_id,
+        display,
+        forms,
+        alias_forms=forms,
+        cnpj_roots=[root],
+        controllers=entrant.get("controllers") or None,
+        license_class=entrant.get("license_class"),
+        sector="fintech" if entrant.get("is_fintech") else None,
+        confidence="cnpj",
+        table=t,
+    )
+    return entity_id
 
 
 def seed(table: Any | None = None) -> int:

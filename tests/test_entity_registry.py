@@ -58,6 +58,53 @@ def test_seed_from_curated_aliases_populates_registry():
     assert er.normalize_alias("CloudWalk") in ent["aliases"]
 
 
+def _entrant(**kw):
+    base = {
+        "id": "bcb-auth:11222333000181",
+        "cnpj": "11.222.333/0001-81",
+        "name": "ZAPBANK INSTITUICAO DE PAGAMENTO S.A.",
+        "trade_name": "ZapBank",
+        "legal_name": "ZAPBANK INSTITUICAO DE PAGAMENTO S.A.",
+        "controllers": ["ZAP HOLDING LTDA"],
+        "license_class": "IP",
+        "is_fintech": True,
+    }
+    base.update(kw)
+    return base
+
+
+def test_auto_create_from_entrant_writes_and_is_idempotent():
+    t = FakeTable()
+    eid = er.auto_create_from_entrant(_entrant(), table=t)
+    assert eid == "zapbank"
+    ent = er.get_entity(eid, table=t)
+    assert ent["confidence"] == "cnpj" and ent["cnpj_roots"] == ["11222333"]
+    assert ent["controllers"] == ["ZAP HOLDING LTDA"] and ent["sector"] == "fintech"
+    # resolvable by CNPJ root and by both brand + legal name (future signals)
+    assert er.resolve_by_cnpj("11.222.333/0001-81", table=t) == "zapbank"
+    assert er.resolve_by_alias("ZapBank", table=t) == "zapbank"
+    assert er.resolve_by_alias("ZAPBANK INSTITUICAO DE PAGAMENTO S.A.", table=t) == "zapbank"
+    # second pass is a no-op (already mapped by CNPJ)
+    assert er.auto_create_from_entrant(_entrant(), table=t) is None
+
+
+def test_auto_create_skips_without_cnpj():
+    t = FakeTable()
+    assert er.auto_create_from_entrant(_entrant(cnpj=None), table=t) is None
+    assert er.auto_create_from_entrant(_entrant(cnpj="123"), table=t) is None  # too short
+
+
+def test_auto_create_disambiguates_slug_collision_without_clobbering():
+    t = FakeTable()
+    # a curated entity already owns the slug for a *different* CNPJ
+    er.put_entity("zapbank", "ZapBank (curated)", ["ZAPBANK"],
+                  cnpj_roots=["99999999"], confidence="curated", table=t)
+    eid = er.auto_create_from_entrant(_entrant(), table=t)
+    assert eid == "zapbank_11222333"  # disambiguated, did not overwrite
+    assert er.get_entity("zapbank", table=t)["confidence"] == "curated"
+    assert er.resolve_by_cnpj("11222333", table=t) == "zapbank_11222333"
+
+
 def test_load_alias_map_returns_raw_forms():
     t = FakeTable()
     er.put_entity("nubank", "Nubank", ["NUBANK", "NU"],

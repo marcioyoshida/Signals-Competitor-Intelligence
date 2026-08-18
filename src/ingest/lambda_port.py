@@ -342,6 +342,35 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as exc:  # pragma: no cover - enrichment is best-effort
             print(f"Warning: Receita enrichment skipped: {exc}")
 
+    # Entities registry auto-create (ADR step 3): give each new fintech entrant's
+    # CNPJ a registry record so future signals about it (CVM/news/DOU) resolve and
+    # cluster with no redeploy. CNPJ-keyed + idempotent; best-effort, never blocks.
+    if (
+        new_entrants
+        and os.environ.get("ONCA_ENTITIES_TABLE")
+        and os.environ.get("ONCA_ENTITIES_AUTOCREATE", "true").lower()
+        in ("1", "true", "yes")
+    ):
+        fintech_only = os.environ.get(
+            "ONCA_ENTITIES_AUTOCREATE_FINTECH_ONLY", "true"
+        ).lower() in ("1", "true", "yes")
+        try:
+            with _source_budget("entities auto-create", deadline, per_source):
+                from src.synth import entity_registry
+
+                created = 0
+                for e in new_entrants:
+                    if fintech_only and not e.get("is_fintech"):
+                        continue
+                    eid = entity_registry.auto_create_from_entrant(e)
+                    if eid:
+                        e["registry_entity_id"] = eid
+                        created += 1
+                if created:
+                    print(f"entities: auto-created {created} from new entrants")
+        except Exception as exc:  # pragma: no cover - best-effort, never blocks ingest
+            print(f"Warning: entity auto-create skipped: {exc}")
+
     # Pix traction — month-over-month volume moves (first run seeds baseline only).
     pix_by_inst: list[dict[str, Any]] = []
     pix_moves: list[dict[str, Any]] = []
