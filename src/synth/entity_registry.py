@@ -520,9 +520,15 @@ def entity_industry_map(table: Any | None = None) -> dict[str, list[str]]:
 NEWS_TERM_OVERRIDES: dict[str, str] = {
     "pagseguro": "PagBank",
     "inter": "Banco Inter",
-    "xp": "XP Investimentos",
+    # The press names the listed entity "XP Inc." — "XP Investimentos" as an exact
+    # phrase returns nothing (missed its Q2 earnings); bare "XP" is ambiguous.
+    "xp": "XP Inc",
     "itau": "Itaú Unibanco",
     "santander": "Santander Brasil",
+    # The full legal name "Caixa Econômica Federal" is too precise to match
+    # headlines (0 results); bare "Caixa" is the common word (cashbox) and is
+    # dropped in free-text. "Caixa Econômica" is the phrase the press actually uses.
+    "caixa": "Caixa Econômica",
 }
 
 

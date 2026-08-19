@@ -50,9 +50,11 @@ def test_news_query_term_cleans_and_overrides():
     assert er.news_query_term("nubank", "Nubank / Nu Holdings") == "Nubank"
     assert er.news_query_term("infinitepay", "InfinitePay (CloudWalk)") == "InfinitePay"
     assert er.news_query_term("c6", "C6 Bank") == "C6 Bank"
-    # curated overrides for ambiguous brands
+    # curated overrides for ambiguous / too-precise brands
     assert er.news_query_term("santander", "Santander") == "Santander Brasil"
     assert er.news_query_term("itau", "Itaú") == "Itaú Unibanco"
+    assert er.news_query_term("xp", "XP Inc / XP Investimentos") == "XP Inc"
+    assert er.news_query_term("caixa", "Caixa Econômica Federal") == "Caixa Econômica"
     # fallback to id when no display_name
     assert er.news_query_term("weirdco", "") == "weirdco"
 
