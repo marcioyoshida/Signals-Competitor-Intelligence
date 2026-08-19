@@ -205,6 +205,40 @@ def test_propose_group_merges_from_shared_controller():
     assert er.propose_group_merges(table=t) == 0
 
 
+def test_load_trust_map_reflects_confidence_and_news_safe():
+    t = FakeTable()
+    er.put_entity("cur", "Curated", ["CURATED"], confidence="curated", table=t)
+    er.put_entity("auto", "Auto", ["AUTO"], cnpj_roots=["11112222"], confidence="cnpj", table=t)
+    er.clear_cache()
+    tm = er.load_trust_map(table=t)
+    assert tm == {"cur": True, "auto": False}         # curated trusted, auto not
+    # promoting the auto entity flips its trust
+    assert er.set_news_safe("auto", True, table=t) is True
+    er.clear_cache()
+    assert er.load_trust_map(table=t)["auto"] is True
+    er.clear_cache()
+
+
+def test_news_safe_review_promotes_entity_on_approve():
+    t = FakeTable()
+    er.put_entity("zapbank", "ZapBank", ["ZAPBANK"], cnpj_roots=["11222333"],
+                  confidence="cnpj", table=t)
+    rid = er.propose_news_safe("zapbank", "ZapBank", table=t)
+    assert er.get_entity("zapbank", table=t).get("news_safe") in (None, False)
+    er.resolve_review(rid, "approved", table=t)
+    assert er.get_entity("zapbank", table=t)["news_safe"] is True
+    # rejecting a different proposal must NOT promote
+    er.put_entity("other", "Other", ["OTHER"], confidence="cnpj", table=t)
+    rid2 = er.propose_news_safe("other", "Other", table=t)
+    er.resolve_review(rid2, "rejected", table=t)
+    assert er.get_entity("other", table=t).get("news_safe") in (None, False)
+
+
+def test_set_news_safe_missing_entity_is_noop():
+    t = FakeTable()
+    assert er.set_news_safe("ghost", True, table=t) is False
+
+
 def test_load_alias_map_returns_raw_forms():
     t = FakeTable()
     er.put_entity("nubank", "Nubank", ["NUBANK", "NU"],

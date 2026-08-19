@@ -259,9 +259,13 @@ function renderReviews() {
   if (!list.length) { panel.style.display = "none"; return; }
   panel.style.display = "";
   document.getElementById("reviews").innerHTML = list.map(r => {
-    const desc = r.kind === "group_merge"
-      ? `Agrupar <b>${esc(r.member_label || r.member || "?")}</b> sob <b>${esc(r.leader_label || r.leader || "?")}</b>`
-      : `Adicionar nome <b>${esc(r.proposed || "?")}</b> a <b>${esc(r.member_label || r.member || "?")}</b>`;
+    let desc;
+    if (r.kind === "group_merge")
+      desc = `Agrupar <b>${esc(r.member_label || r.member || "?")}</b> sob <b>${esc(r.leader_label || r.leader || "?")}</b>`;
+    else if (r.kind === "news_safe")
+      desc = `Liberar a marca <b>${esc(r.proposed || r.member_label || r.member || "?")}</b> em notícias/DOU`;
+    else
+      desc = `Adicionar nome <b>${esc(r.proposed || "?")}</b> a <b>${esc(r.member_label || r.member || "?")}</b>`;
     const when = fmtDate(String(r.created_at || "").slice(0, 10));
     return `<div class="review" data-rid="${esc(r.review_id)}">
       <div>${desc}</div>

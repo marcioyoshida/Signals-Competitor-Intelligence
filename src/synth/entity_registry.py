@@ -316,6 +316,9 @@ def _apply_review(item: dict[str, Any], *, table: Any) -> None:
             table.put_item(Item=ent)
     elif kind in ("fuzzy_alias", "nickname") and item.get("entity_id") and item.get("proposed"):
         accumulate_aliases(item["entity_id"], [item["proposed"]], table=table)
+    elif kind == "news_safe" and item.get("entity_id"):
+        # promote a vetted new entity so its bare brand resolves from news/DOU
+        set_news_safe(item["entity_id"], True, table=table)
 
 
 def resolve_review(review_id: str, decision: str, table: Any | None = None) -> dict[str, Any] | None:
@@ -333,6 +336,21 @@ def resolve_review(review_id: str, decision: str, table: Any | None = None) -> d
     item["decided_at"] = _now_iso()
     t.put_item(Item=item)
     return item
+
+
+def propose_news_safe(entity_id: str, brand: str, *, table: Any | None = None) -> str | None:
+    """Queue a review to let a new entity's bare brand resolve from news/DOU
+    (ADR 002). Idempotent by entity_id; a curator approves it once the brand is
+    verified distinctive enough for free text. Returns the review_id if queued."""
+    return propose_review(
+        "news_safe",
+        key=entity_id,
+        entity_id=entity_id,
+        proposed=brand,
+        reason="novo entrante — liberar a marca em notícias/DOU?",
+        confidence="fuzzy",
+        table=table,
+    )
 
 
 def propose_group_merges(table: Any | None = None) -> int:
@@ -405,35 +423,66 @@ def seed(table: Any | None = None) -> int:
     return count
 
 
-# Cached {entity_id: [raw alias forms]} map for resolve_entities. Loaded once per
-# Lambda execution env (pipeline runs daily; a warm-reuse day-old cache is fine).
+# Cached maps for resolve_entities, built in ONE scan and reused per Lambda
+# execution env: {entity_id: [raw alias forms]} and {entity_id: trusted_for_free_text}.
+# "Trusted" = a curated entity OR one a human promoted (news_safe) — governs whether
+# a bare single-token alias may resolve from free-text (news/DOU); see ADR 002.
 _ALIAS_MAP_CACHE: dict[str, list[str]] | None = None
+_TRUST_MAP_CACHE: dict[str, bool] | None = None
 
 
-def load_alias_map(table: Any | None = None, force: bool = False) -> dict[str, list[str]]:
-    """Return {entity_id: raw alias forms} from the registry (cached)."""
-    global _ALIAS_MAP_CACHE
-    if _ALIAS_MAP_CACHE is not None and not force:
-        return _ALIAS_MAP_CACHE
+def _load_maps(
+    table: Any | None = None, force: bool = False
+) -> tuple[dict[str, list[str]], dict[str, bool]]:
+    global _ALIAS_MAP_CACHE, _TRUST_MAP_CACHE
+    if _ALIAS_MAP_CACHE is not None and _TRUST_MAP_CACHE is not None and not force:
+        return _ALIAS_MAP_CACHE, _TRUST_MAP_CACHE
     t = _table(table)
-    out: dict[str, list[str]] = {}
+    aliases: dict[str, list[str]] = {}
+    trust: dict[str, bool] = {}
     kwargs: dict[str, Any] = {}
     while True:
         resp = t.scan(**kwargs)
         for it in resp.get("Items", []):
             if it.get("type") == "entity" and it.get("entity_id"):
-                out[it["entity_id"]] = list(it.get("alias_forms") or it.get("aliases") or [])
+                eid = it["entity_id"]
+                aliases[eid] = list(it.get("alias_forms") or it.get("aliases") or [])
+                trust[eid] = it.get("confidence") == "curated" or bool(it.get("news_safe"))
         start = resp.get("LastEvaluatedKey")
         if not start:
             break
         kwargs["ExclusiveStartKey"] = start
-    _ALIAS_MAP_CACHE = out
-    return out
+    _ALIAS_MAP_CACHE, _TRUST_MAP_CACHE = aliases, trust
+    return aliases, trust
+
+
+def load_alias_map(table: Any | None = None, force: bool = False) -> dict[str, list[str]]:
+    """Return {entity_id: raw alias forms} from the registry (cached)."""
+    return _load_maps(table, force)[0]
+
+
+def load_trust_map(table: Any | None = None, force: bool = False) -> dict[str, bool]:
+    """Return {entity_id: trusted-for-free-text}. Trusted iff curated or news_safe."""
+    return _load_maps(table, force)[1]
+
+
+def set_news_safe(entity_id: str, value: bool = True, table: Any | None = None) -> bool:
+    """Promote (or demote) an entity so its bare single-token brand may resolve
+    from free-text news/DOU — the review-queue action for a vetted new entity.
+    Returns True if the entity existed and was updated."""
+    t = _table(table)
+    ent = get_entity(entity_id, table=t)
+    if not ent:
+        return False
+    ent["news_safe"] = bool(value)
+    t.put_item(Item=ent)
+    return True
 
 
 def clear_cache() -> None:
-    global _ALIAS_MAP_CACHE
+    global _ALIAS_MAP_CACHE, _TRUST_MAP_CACHE
     _ALIAS_MAP_CACHE = None
+    _TRUST_MAP_CACHE = None
 
 
 if __name__ == "__main__":

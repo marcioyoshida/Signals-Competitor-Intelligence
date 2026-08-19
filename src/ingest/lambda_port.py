@@ -358,6 +358,11 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             with _source_budget("entities auto-create", deadline, per_source):
                 from src.synth import entity_registry
 
+                review_on = os.environ.get("ONCA_ENTITIES_REVIEW", "true").lower() in (
+                    "1",
+                    "true",
+                    "yes",
+                )
                 created = 0
                 for e in new_entrants:
                     if fintech_only and not e.get("is_fintech"):
@@ -366,17 +371,20 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                     if eid:
                         e["registry_entity_id"] = eid
                         created += 1
+                        # New entity's bare brand stays structured-only until a
+                        # curator vets it (ADR 002). Queue a news-safe promotion
+                        # review when the brand is a single token (multi-token
+                        # legal names are already distinctive — no gate to lift).
+                        brand = str(e.get("trade_name") or e.get("name") or "").strip()
+                        if review_on and brand and " " not in brand:
+                            entity_registry.propose_news_safe(eid, brand)
                 if created:
                     print(f"entities: auto-created {created} from new entrants")
                     # ADR step 5: a fresh entity may share a QSA controller with
                     # an existing one — queue group-merge proposals for review
                     # (never auto-merged). Only when something was created, so
                     # the table scan stays off the common no-new-entrant runs.
-                    if os.environ.get("ONCA_ENTITIES_REVIEW", "true").lower() in (
-                        "1",
-                        "true",
-                        "yes",
-                    ):
+                    if review_on:
                         queued = entity_registry.propose_group_merges()
                         if queued:
                             print(f"entities: queued {queued} group-merge reviews")

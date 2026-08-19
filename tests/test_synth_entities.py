@@ -99,6 +99,22 @@ def test_ambiguous_token_accepted_in_structured_identity_source():
     assert "stone" in resolve_entities({"ticker": "STNE", "company": "StoneCo Ltd.", "form": "6-K"})
 
 
+def test_confidence_gate_new_entity_bare_brand_muted_in_news(monkeypatch):
+    from src.synth import entities, entity_registry
+    monkeypatch.setenv("ONCA_ENTITIES_TABLE", "t")
+    # a new auto-created entity named after a common word, single-token brand
+    monkeypatch.setattr(entity_registry, "load_alias_map",
+                        lambda *a, **k: {"nova": ["NOVA", "NOVA INSTITUICAO DE PAGAMENTO S.A."]})
+    monkeypatch.setattr(entity_registry, "load_trust_map", lambda *a, **k: {"nova": False})
+    news = {"source": "News", "title": "Uma nova era para o mercado"}
+    assert "nova" not in entities.resolve_entities(news)          # bare token muted in news
+    # its distinctive legal name still resolves (structured identity)
+    assert "nova" in entities.resolve_entities({"name": "NOVA INSTITUICAO DE PAGAMENTO S.A."})
+    # once a curator promotes it (news_safe -> trusted), the bare brand resolves
+    monkeypatch.setattr(entity_registry, "load_trust_map", lambda *a, **k: {"nova": True})
+    assert "nova" in entities.resolve_entities(news)
+
+
 def test_parent_link_via_cloudwalk_controller():
     from src.synth.entities import known_parents
     e = {"name": "NOVA SCD S.A.", "controllers": ["CLOUDWALK FINANCEIRA S.A."]}
