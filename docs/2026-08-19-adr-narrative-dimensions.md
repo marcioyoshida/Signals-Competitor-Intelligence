@@ -286,11 +286,18 @@ S3 store, registry + industries, review queue, threat scoring, ~14-day window).
 
 ## Suggested sequencing (waves, not committed)
 
-- **Wave 0 — enabler.** Build the **per-entity feature store** (rolling stats +
-  cadence). No user-facing axis; unlocks Wave 1.
+- **Wave 0 — enabler.** ✅ **Shipped 2026-08-19.** Built the **per-entity feature
+  store** (`src/synth/feature_store.py`, rolling stats + cadence). No user-facing
+  axis; unlocks Wave 1.
 - **Wave 1 — cheap, low-risk, high-leverage.** *Comparative, Longitudinal, Silence,
   Cohort* (all ride the feature store) + *Thematic* and *Regulatory-deadline*
   (independent, high value, low risk). This is the value sweet spot.
+  **Silence ✅ shipped 2026-08-19** (`src/synth/silence.py`, `OncaSilence`
+  Lambda) as the first detector — proves the pattern: deterministic gate on the
+  feature store, LLM-free, labeled inference, its own absence-tuned emit-on-change,
+  and a feedback-loop guard (derived axes excluded from feature-store "activity").
+  Next: *Longitudinal* (reads `score_z`, already computed) or *Comparative* (reads
+  the `cohorts` block) — same enabler, no new machinery.
 - **Wave 2 — new stores, moderate risk.** *Threaded / incident* (event identity +
   thread store); the full *Regulatory-lifecycle* thread; *Behavioral*.
 - **Wave 3 — graph + legal risk, review-gated from day one.** *Relational*, then

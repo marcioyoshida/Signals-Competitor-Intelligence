@@ -26,6 +26,14 @@ import boto3
 NARRATIVES_PREFIX = "narratives/"
 FEATURES_KEY = "features/latest.json"
 
+# Derived/inference narratives (ADR 003 axes that assert an *absence* or an
+# *inference*, not a fresh source signal). These are written into narratives/
+# like any other card, but they must NOT count as entity "activity" — otherwise
+# emitting a "went quiet" silence card would itself reset the entity's
+# days_since_last and cadence, a feedback loop. Freshness/cadence are built from
+# activity narratives only.
+DERIVED_AXES = frozenset({"silence"})
+
 # Noise floor for the break z-score denominator: threat scores are 0..1, so a
 # baseline std below this is treated as ~0.05 to avoid a div-by-zero (a flat
 # baseline) or an absurd z from trivially-small variance. ~one tier-width.
@@ -42,6 +50,22 @@ def _score(value: Any) -> float:
 def _date_of(n: dict[str, Any]) -> str:
     """Run date (when surfaced) — same rule feed_builder uses for the timeline."""
     return str(n.get("run_date") or n.get("as_of") or "")[:10]
+
+
+def is_activity_narrative(n: dict[str, Any]) -> bool:
+    """True for a real source-grounded signal (counts as entity activity).
+
+    Excludes derived/inference axes (silence and future absence/inference axes),
+    so a card *about* an absence never registers as presence. Shared by the
+    silence detector's freshness recompute so both layers agree on what counts.
+    """
+    if not isinstance(n, dict):
+        return False
+    if n.get("axis") in DERIVED_AXES:
+        return False
+    if n.get("mode") == "derived" or n.get("is_inference"):
+        return False
+    return True
 
 
 def _mean_std(values: list[float]) -> tuple[float, float]:
@@ -69,6 +93,8 @@ def build_features(
     break z-score, so a point is never scored against itself.
     """
     industry_map = industry_map or {}
+    # Only source-grounded activity shapes baselines/cadence (never silence &c).
+    narratives = [n for n in narratives if is_activity_narrative(n)]
 
     # (entity, date) -> {peak, alert, lenses, label}
     by_entity: dict[str, dict[str, Any]] = {}

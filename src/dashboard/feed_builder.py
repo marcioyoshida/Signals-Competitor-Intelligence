@@ -183,6 +183,12 @@ def build_feed(
                 "run_at": n.get("run_at") or "",
                 "data_date": (n.get("as_of") or n.get("run_date") or "")[:10],
                 "kind": n.get("kind"),
+                # ADR 003: narrative-type facets. Cross-sectional cards carry no
+                # axis (implicitly "cross_sectional"); silence &c set them so the
+                # UI can filter and flag inference. is_inference => label, not fact.
+                "axis": n.get("axis"),
+                "subject_type": n.get("subject_type"),
+                "is_inference": bool(n.get("is_inference")),
                 "entity": n.get("entity"),
                 "entity_label": display_label(n.get("entity"), n.get("kind")),
                 "entities": n.get("entities") or [],

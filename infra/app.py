@@ -495,6 +495,26 @@ class OncaPrototypeStack(Stack):
         digests_bucket.grant_put(feature_fn)
         entities_table.grant_read_data(feature_fn)
 
+        # Silence detector (ADR 003 Wave 1): reads features/latest.json + recent
+        # activity, writes derived "went quiet" narratives back into narratives/.
+        # Only touches the digests bucket (no registry, no LLM).
+        silence_fn = lambda_.Function(
+            self,
+            "OncaSilence",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.synth.silence.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.minutes(5),
+            memory_size=512,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+                "ONCA_FEATURE_WINDOW_DAYS": "90",
+            },
+        )
+        digests_bucket.grant_read(silence_fn)
+        digests_bucket.grant_put(silence_fn)
+
         # Feed builder: aggregate recent narratives -> feed.json in the site bucket.
         feed_fn = lambda_.Function(
             self,
@@ -613,6 +633,19 @@ class OncaPrototypeStack(Stack):
             interval=Duration.seconds(30),
             backoff_rate=2.0,
         )
+        silence_task = sfn_tasks.LambdaInvoke(
+            self,
+            "SilenceTask",
+            lambda_function=silence_fn,
+            payload=sfn.TaskInput.from_object({}),
+            result_path="$.silence",
+        )
+        silence_task.add_retry(
+            errors=["States.ALL"],
+            max_attempts=2,
+            interval=Duration.seconds(15),
+            backoff_rate=2.0,
+        )
         feed_task = sfn_tasks.LambdaInvoke(
             self,
             "FeedTask",
@@ -631,7 +664,10 @@ class OncaPrototypeStack(Stack):
             self,
             "OncaPipeline",
             definition_body=sfn.DefinitionBody.from_chainable(
-                ingest_task.next(feature_task).next(synth_task).next(feed_task)
+                ingest_task.next(feature_task)
+                .next(synth_task)
+                .next(silence_task)
+                .next(feed_task)
             ),
             # Budget for a 15-min ingest (plus a retry), then synth, then feed.
             timeout=Duration.minutes(45),

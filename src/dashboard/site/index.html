@@ -100,6 +100,9 @@
   .entity { font-weight: 640; font-size: 15px; }
   .date { color: var(--muted); font-size: 12px; }
   .alert { color: var(--t-crit); font-weight: 700; font-size: 11px; border: 1px solid currentColor; padding: 1px 6px; border-radius: 6px; }
+  /* Derived/inference cards (silence &c): flagged, never shown as sourced fact. */
+  .infer { color: var(--muted); font-weight: 700; font-size: 10.5px; text-transform: uppercase;
+    letter-spacing: .4px; border: 1px dashed currentColor; padding: 1px 6px; border-radius: 6px; }
   .bar { height: 6px; border-radius: 999px; background: var(--panel2); margin: 9px 0 8px; overflow: hidden; }
   .bar > span { display: block; height: 100%; border-radius: 999px; }
   .score { font-variant-numeric: tabular-nums; font-size: 12px; color: var(--ink2); }
@@ -468,6 +471,9 @@ function citationFooter(model) {
   }).join("");
 }
 
+const AXIS_LABELS = { silence: "Silêncio" };
+function axisLabel(axis) { return AXIS_LABELS[axis] || "Derivado"; }
+
 function cardHtml(f, group) {
   const t = tierOf(f.threat_score);
   const pct = Math.round((f.threat_score ?? 0) * 100);
@@ -484,6 +490,7 @@ function cardHtml(f, group) {
       <span class="tier" style="background:${cssvar(t.var)}">${t.label}</span>
       <span class="entity">${esc(f.entity_label)}</span>
       ${f.is_alert ? '<span class="alert">ALERTA</span>' : ''}
+      ${f.is_inference ? `<span class="infer" title="Indicador derivado (ex.: silêncio de sinal) — inferência, não um fato reportado. Sem fonte citável.">${esc(axisLabel(f.axis))} · inferência</span>` : ''}
       <span class="spacer" style="flex:1"></span>
       <span class="date">${esc(fmtDate(f.date))}${fmtTime(f.run_at) ? ` · ${esc(fmtTime(f.run_at))}` : ""}</span>
     </div>
