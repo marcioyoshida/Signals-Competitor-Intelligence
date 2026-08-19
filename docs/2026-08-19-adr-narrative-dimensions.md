@@ -48,6 +48,7 @@ poorly: **subject_type**, **subject_key**, **axis** (temporal shape). Generalize
 | **Threaded / incident** (#2) | an **incident** (event with identity) | open-ended, **updated in place** | "here's case Y and its latest development" | **event identity** + thread store + `emit-on-update` |
 | **Behavioral / campaign** (#3) | (entity, pattern template) | window | "X is running an event/marketing cadence" | pattern templates / classifier |
 | **Relational / dyadic** (#4, #5) | **entity pair** (+ relation type) | window | "A and B are converging / in dispute" | **relationship graph** (typed co-occurrence + evidence) |
+| **Operative / person** (§ operatives) | **individual** | window / open-ended | "who is X, where have they been, who do they bridge" | **person nodes** + entity↔individual role edges over the same graph |
 
 Two structural shifts unify every row:
 
@@ -86,6 +87,66 @@ rules, all feeding the one feed. It mirrors the existing **candidate → synthes
 split: cheap deterministic detectors *nominate*; the LLM only *narrates* the few
 that pass the gate (keeps cost inside the ~$100/mo envelope).
 
+## Operatives — the person layer (larger fulfillment)
+
+Everything above keeps the subject a **company**. But competitive intelligence in
+this market is ultimately about **people** — the operatives who carry capability,
+intent, and relationships *across* corporate boundaries. The difference is between
+"a stealth SCD was authorized" and "the team that built a rival's credit engine
+just left to found it, and its QSA names a controller who also sits on a
+competitor's board." The human layer is where the edge is, because a company is a
+shell around the actors moving through it.
+
+Concretely this makes narratives **projections over a heterogeneous intelligence
+graph**, not a feed of company cards — which is the "larger fulfillment": the
+product's job is to maintain the graph (entities, operatives, incidents, and the
+typed edges among them across time) and *narrate the deltas that matter*.
+
+### Shift 3 — subjects are a heterogeneous graph (entities **+** operatives)
+
+Add a **`person`** node type and **typed, time-bounded** person↔entity edges — the
+relationship graph from the relational axis generalizes from entity–entity to a
+graph over `{entity, person, incident}`:
+
+- **Role affiliations** (person —role→ entity, with a validity interval): sócio /
+  controller (QSA), administrator / director (CVM), founder, board member, legal
+  counsel or respondent (DOU / court), regulator. Roles carry *joined/left*, so
+  **movement is a first-class fact**, not an inference.
+- **This is not greenfield ingestion.** The person seeds are fields we already
+  touch: `controllers` / QSA (Receita — already read by `entities.known_parents`),
+  the CVM `leader` / `admin` / `manager` fields (already in `signal_blob`), and
+  named parties in DOU acts. Shift 3 *promotes those strings into resolved nodes*.
+- **People explain edges.** A person node often *grounds* an entity–entity edge
+  that would otherwise be speculative: an "A/B convergence" inference becomes a
+  **sourced fact** — "the same controller/director bridges them" — rather than a
+  guess from co-occurrence. Operatives turn some relational *inferences* into
+  citable *facts*.
+
+### Person-enabled axes (extend the taxonomy)
+
+- **Operative profile** (longitudinal on a person): a person's index across
+  entities and time — key-person tracking, capability signal.
+- **Talent movement** (threaded / longitudinal): a key hire or departure; a whole
+  **team lift-out** moving together is a strong new-entrant signal.
+- **Interlock / network** (relational *via* a person): shared directors or
+  controllers across competitors.
+- **Beneficial ownership / who's behind the shell**: extend `known_parents` from
+  entity-controllers to *person*-controllers — surface the operative behind a
+  quietly-registered SCD.
+- **Revolving door**: regulator ↔ industry movement — high-sensitivity in a
+  regulated market, and the archetypal person-mediated pattern.
+
+### Person identity — false-nexus, hard mode
+
+Person resolution must be **more conservative** than entity resolution, because
+there is no clean anchor: **no CPF as a key** (protected/masked — unlike CNPJ,
+which is a public business identifier), rampant **homonyms** (common names), and
+name variants (accents, married/maiden, abbreviations). So a person node is only
+minted/attached with **corroborating context** (name **+** role **+** affiliating
+document), confidence-gated, and **new person nodes go through the step-5 review
+queue** — the same precision-over-recall discipline as entities, but people don't
+have tickers, so the bar is higher.
+
 ## Decisions (proposed)
 
 1. **Adopt the axis taxonomy** above as the narrative-type model; carry
@@ -109,6 +170,11 @@ that pass the gate (keeps cost inside the ~$100/mo envelope).
    (potentially defamatory about two real named companies). New threads and new
    edges are created **precision-first**, through a **confidence gate + the step-5
    review queue**, exactly like new entities earn `news_safe`.
+6. **Add operatives as first-class subjects (Shift 3), public-record-scoped.**
+   People are nodes with typed, time-bounded role edges; person resolution is
+   review-gated and more conservative than entity resolution. Scope is **strictly
+   public professional roles from public records** (QSA, CVM filings, DOU, court
+   dockets) — never private-life inference, never a CPF as key.
 
 ## Risks / open questions (to steer)
 
@@ -116,6 +182,16 @@ that pass the gate (keeps cost inside the ~$100/mo envelope).
   relationship between two real companies. Recall-over-precision here is a legal
   risk, not just a quality one. Likely: relational edges start review-gated and
   never auto-publish an unreviewed "dispute"/"merger" claim.
+- **LGPD / privacy (operatives — the hardest guardrail yet).** Person narratives
+  are about *named humans*, so **Lei Geral de Proteção de Dados** applies:
+  individuals hold data-protection rights that companies do not. Scope to public
+  professional roles in public records (a legitimate-interest / public-source
+  basis); distinguish a **public figure acting in a corporate capacity** (a named
+  controller/director — in scope) from a **private individual** incidentally named
+  (out of scope). A false "person X moved to a competitor / is behind shell Y / is
+  a litigation respondent" is defamatory about a person — so person narratives are
+  review-gated from day one, labeled, cite the record, and never assert unverified
+  movement/ownership/litigation. No CPF is stored or keyed on.
 - **Per-axis threat scoring.** Each axis needs its own semantics (a break is
   inherently high-novelty; a dyadic score blends both entities' salience +
   evidence strength) while staying on the shared 0–1 + factor breakdown.
@@ -139,6 +215,13 @@ that pass the gate (keeps cost inside the ~$100/mo envelope).
    `emit-on-update`; the first mutable-document narrative.
 3. **Relational / dyadic (#4, #5)** — needs the relationship graph and carries the
    defamation risk; heaviest and last. Review-gated from day one.
+4. **Operatives / person layer (Shift 3)** — depends on the relationship-graph
+   machinery and carries the LGPD + defamation risk, so the *full* operative
+   network comes last. **But there is a safe beachhead first:** promote the QSA
+   **controller-person behind a new entrant** into a node (public, already
+   ingested by `known_parents`, low homonym risk because it's keyed by the
+   entrant's own filing) — "who's behind this SCD" — before the broader
+   movement/interlock/revolving-door axes.
 
 Independent of Phase C. Nothing here is implemented yet — this ADR records the
 model and the open decisions for a later build.
