@@ -45,6 +45,35 @@ def test_put_entity_writes_lookup_items_and_resolves():
     assert er.resolve_by_alias("unknown", table=t) is None
 
 
+def test_news_query_term_cleans_and_overrides():
+    # cleaned display_name
+    assert er.news_query_term("nubank", "Nubank / Nu Holdings") == "Nubank"
+    assert er.news_query_term("infinitepay", "InfinitePay (CloudWalk)") == "InfinitePay"
+    assert er.news_query_term("c6", "C6 Bank") == "C6 Bank"
+    # curated overrides for ambiguous brands
+    assert er.news_query_term("santander", "Santander") == "Santander Brasil"
+    assert er.news_query_term("itau", "Itaú") == "Itaú Unibanco"
+    # fallback to id when no display_name
+    assert er.news_query_term("weirdco", "") == "weirdco"
+
+
+def test_news_terms_only_trusted_and_deduped():
+    t = FakeTable()
+    er.put_entity("c6", "C6 Bank", ["C6 BANK"], confidence="curated", table=t)
+    er.put_entity("itau", "Itaú", ["ITAU"], confidence="curated", table=t)
+    # auto-created, not vetted -> excluded until news_safe
+    er.put_entity("newco", "NewCo Pay", ["NEWCO"], confidence="cnpj", table=t)
+    terms = er.news_terms(table=t)
+    assert "C6 Bank" in terms
+    assert "Itaú Unibanco" in terms      # override applied
+    assert "NewCo Pay" not in terms      # untrusted excluded
+    # promote it -> now included
+    er.set_news_safe("newco", True, table=t)
+    assert "NewCo Pay" in er.news_terms(table=t)
+    # trusted_only=False includes everything
+    assert "NewCo Pay" in er.news_terms(table=t, trusted_only=False)
+
+
 def test_seed_from_curated_aliases_populates_registry():
     t = FakeTable()
     n = er.seed(table=t)

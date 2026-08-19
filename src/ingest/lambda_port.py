@@ -286,6 +286,23 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     news_terms = _csv_env("ONCA_NEWS_WATCHLIST")
     if os.environ.get("ONCA_NEWS_USE_COMPETITORS", "true").lower() in ("1", "true", "yes"):
         news_terms = list(dict.fromkeys(news_terms + competitors))
+    # Derive news terms from the registry (the source of truth for the tracked
+    # entities) so the news set can't drift out of sync with it again — the
+    # C6/PicPay false-silence root cause. Config ONCA_NEWS_WATCHLIST remains a
+    # manual supplement (non-entity/thematic terms); the registry covers entities.
+    if os.environ.get("ONCA_ENTITIES_TABLE") and os.environ.get(
+        "ONCA_NEWS_USE_REGISTRY", "true"
+    ).lower() in ("1", "true", "yes"):
+        try:
+            from src.synth import entity_registry
+
+            reg_terms = entity_registry.news_terms()
+            # Case-fold dedup so a config/registry overlap isn't searched twice.
+            have = {t.lower() for t in news_terms}
+            news_terms = news_terms + [t for t in reg_terms if t.lower() not in have]
+            print(f"News terms: {len(reg_terms)} from registry, {len(news_terms)} total")
+        except Exception as exc:  # pragma: no cover - best-effort, config still works
+            print(f"Warning: registry news terms unavailable, using config: {exc}")
 
     # Wall-clock guards: bound each source and stop starting new work before the
     # Lambda times out, so ingest always returns a (possibly partial) digest.

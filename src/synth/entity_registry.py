@@ -511,6 +511,65 @@ def entity_industry_map(table: Any | None = None) -> dict[str, list[str]]:
     return out
 
 
+# News search terms are DERIVED from the registry (the single source of truth for
+# the tracked-entity set) so the news watchlist can never drift out of sync with
+# it again (the C6/PicPay false-silence root cause). The query phrase defaults to a
+# cleaned display_name; a few brands whose bare form is ambiguous or an awkward
+# query get a curated override (a precise phrase that Google News + the headline
+# phrase-match resolve cleanly). New entities auto-inherit the default.
+NEWS_TERM_OVERRIDES: dict[str, str] = {
+    "pagseguro": "PagBank",
+    "inter": "Banco Inter",
+    "xp": "XP Investimentos",
+    "itau": "Itaú Unibanco",
+    "santander": "Santander Brasil",
+}
+
+
+def _clean_news_term(display_name: str | None) -> str:
+    """First brand segment of a display_name as a clean query phrase.
+
+    "Nubank / Nu Holdings" -> "Nubank"; "InfinitePay (CloudWalk)" -> "InfinitePay".
+    """
+    term = str(display_name or "").split("/")[0]
+    term = re.sub(r"\(.*?\)", "", term)  # drop parentheticals
+    return re.sub(r"\s+", " ", term).strip()
+
+
+def news_query_term(entity_id: str | None, display_name: str | None) -> str:
+    """Best Google-News query phrase for an entity (override or cleaned name)."""
+    return (
+        NEWS_TERM_OVERRIDES.get(str(entity_id or ""))
+        or _clean_news_term(display_name)
+        or str(entity_id or "")
+    )
+
+
+def news_terms(table: Any | None = None, *, trusted_only: bool = True) -> list[str]:
+    """Derive news search phrases for tracked entities from the registry.
+
+    Only *trusted* entities (curated or human-vetted ``news_safe``) are included by
+    default — the same gate that lets a bare brand resolve in free-text — so an
+    unvetted auto-created entrant is not news-searched until promoted, and a newly
+    curated/promoted entity joins automatically. Sorted, de-duplicated (case-fold).
+    """
+    out: list[str] = []
+    seen: set[str] = set()
+    for e in _scan_type(_table(table), "entity"):
+        if not e.get("active", True):
+            continue
+        if trusted_only and not (
+            e.get("confidence") == "curated" or e.get("news_safe")
+        ):
+            continue
+        term = news_query_term(e.get("entity_id"), e.get("display_name"))
+        key = term.lower()
+        if term and key not in seen:
+            seen.add(key)
+            out.append(term)
+    return sorted(out)
+
+
 def seed_industries(table: Any | None = None) -> int:
     """Write the canonical IND# taxonomy items. Idempotent."""
     t = _table(table)

@@ -82,35 +82,17 @@ dou_watchlist: []
 # the publisher (no full-text scrape). Finance-context filter in code drops
 # band/stadium/culture noise for ambiguous names (Stone, Inter).
 news_lookback_days: 14
-news_use_competitors: true
-# IMPORTANT: this list must stay in sync with the tracked-entity set
-# (src/synth/entities.py ENTITY_ALIASES / the DynamoDB registry). An entity
-# that is tracked (so the silence detector watches it) but MISSING here gets no
-# news fetch — when its official-source coverage lulls it looks "silent" even
-# when the press is covering it, a false silence (e.g. C6/PicPay 2026-08-19).
-# Use precise brand phrases; bare noisy words (Santander, Caixa) get a qualifier.
-news_watchlist:
-  - Nubank
-  - Stone
-  - PagBank
-  - Banco Inter
-  - XP Investimentos
-  - Creditas
-  - InfinitePay
-  - RecargaPay
-  - Neon
-  - Nomad
-  - Mercado Pago
-  - Itaú Unibanco
-  - Bradesco
-  - BTG Pactual
-  # Previously missing tracked entities (caused false silences) —
-  - C6 Bank
-  - PicPay
-  - Banco do Brasil
-  - Santander Brasil
-  - Caixa Econômica Federal
-  - Banco Original
+# News terms are DERIVED from the entity registry (entity_registry.news_terms(),
+# ONCA_NEWS_USE_REGISTRY=true) — the single source of truth for the tracked-entity
+# set, so the news watchlist can no longer drift out of sync with it (the C6/PicPay
+# false-silence root cause). Query phrases come from each entity's display_name
+# with curated overrides (entity_registry.NEWS_TERM_OVERRIDES) for ambiguous brands.
+# The crude uppercase `competitors` substrings made noisy queries, so they are no
+# longer unioned into news; the registry supplies clean per-entity phrases.
+news_use_competitors: false
+# Manual SUPPLEMENT only — non-entity/thematic terms, or a competitor not yet in
+# the registry. Tracked entities are covered automatically; do NOT re-list them.
+news_watchlist: []
 
 # US-listed Brazilian fintechs to track via SEC EDGAR. Empty = skip SEC
 # entirely (appropriate if your target customer is a bank/insurer and
