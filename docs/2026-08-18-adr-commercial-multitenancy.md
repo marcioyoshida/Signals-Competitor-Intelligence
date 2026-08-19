@@ -19,6 +19,18 @@ Three threads converged while planning monetization:
    required to catch unknown entrants; cheap). If modules were a client-side
    filter over one shared `feed.json`, unpaid data would already be in the
    browser. Client-side filtering is **obfuscation, not enforcement**.
+
+   *Discovery vs. registry (a distinction that's easy to conflate):*
+   **unknown-entrant discovery requires ingesting at least one enumerable source
+   wholesale** (BCB authorized-entities list, CVM datasets) and diffing it — an
+   inherently shared, non-per-tenant pass; you cannot diff a list you never
+   downloaded, and per-**term** sources (news/DOU, one call per name) can only
+   find names you already supplied. The **registry** is downstream of discovery:
+   it is the shared *memory* that persists each find and makes it resolvable for
+   **every** tenant, with no tenant ever having named it. So the registry
+   decouples *availability* from any tenant's watchlist, but does **not** remove
+   the need for the wholesale shared *sensor* that feeds it. Chain:
+   *wholesale shared ingest → discovery → registry (persistence) → available to all.*
 3. **IP protection.** The curated entities registry — and the raw/digest
    artifacts that embed it — are the moat. They must not ship to tenants, and
    their footprint (S3, DynamoDB, the repo seed) must be minimized.
@@ -91,10 +103,6 @@ DynamoDB; only the pipeline and internal (basic-auth'd) curation tools read it;
   - **Server-only (IP):** `aliases`, `alias_forms`, `cnpj_roots`, `controllers`,
     `confidence`, `canonical_id`, `needs_review`, `sources`, `ispb`.
   - **Shippable:** opaque `entity_id`, `label`, per-tenant-derived timeline/score.
-- **Resolve, don't enumerate.** No tenant-facing list/scan of the registry. Any
-  live entity endpoint is `GET /entity/{id}` for an id the tenant already sees in
-  their entitled feed — projected, authorized, **rate-limited** (an enumerable
-  API is scraping-by-API — the same leak as shipping the file).
 - **Tenants never get DynamoDB creds / SDK / scan access** — reads go through an
   authorized endpoint only.
 - **Three tiers of the entity asset:**
@@ -104,6 +112,36 @@ DynamoDB; only the pipeline and internal (basic-auth'd) curation tools read it;
   | Registry (DynamoDB) | full curation — the IP | pipeline + internal curation only |
   | Derived entity view | slug, label, timeline, score | tenant's **entitlement-scoped** feed |
   | Resolution service | name → canonical entity | pipeline-internal only |
+
+**Anti-exfiltration — the registry is a saleable data asset (sell lookups, not
+dumps).** Single-record-only is *necessary but not sufficient*: N single requests
+= a scan. Protect the asset with the full stack:
+
+- **Resolve, don't enumerate — within entitlement.** The only live entity endpoint
+  is `GET /entity/{id}` for an id the tenant **already legitimately holds** (an
+  entity in their entitled feed), authorized against their modules. Not "any valid
+  id." This shrinks the reachable surface from the whole table to what they paid
+  to see. No `list`/`scan`/`batch` endpoint exists.
+- **Entitlement authz, not id-secrecy, is the control.** Current entity_ids are
+  readable slugs (`nubank`, `zapbank_11222333`) — trivially enumerable, so id
+  secrecy protects nothing. Authorize by "is this id in your set?", not by hoping
+  ids stay hidden. (Opaque per-tenant handles are a hardening option, not the gate.)
+- **Rate limits + volumetric anomaly detection.** Cap lookups/tenant/time and flag
+  *breadth* — a tenant resolving thousands of distinct entities is copying, not
+  using. Breadth-of-distinct-ids is the copying signature.
+- **Legal + forensic.** License/ToS forbids redistribution/scraping; seed
+  **canary records** (per-tenant fingerprints) so a leaked copy traces to its
+  source.
+- **Honest ceiling:** copying is made *uneconomic and detectable*, not impossible
+  — rendered data can always be harvested slowly. This is layered deterrence
+  (technical + legal + forensic), the same bar every data vendor lives with.
+- **Scope of the rule:** the *derived scoped feed* is delivered in bulk (that is
+  the product, already IP-stripped); the *registry* is never bulk-accessible. The
+  no-scan rule applies to the **asset**, not the product.
+- **Marketplace fit:** single-record maps 1:1 to AWS Marketplace **metered
+  per-lookup** billing, or to a **module subscription** with a fair-use rate cap.
+  The marketplace does billing/entitlement; **data protection stays with the
+  seller** — it is not provided for you.
 
 ### 5. Pricing is measured, not guessed
 Pricing ≈ f(industry **concentration**, **data richness**). Both are
@@ -173,6 +211,9 @@ projected, entitlement-gated outputs.**
   per-tenant identity; upgrade the review-queue write-path off shared basic-auth.
 - **Phase D — Entitlement read boundary.** `onca-tenant-config` with `modules[]`;
   pattern A authenticated feed API (or B signed shards); scope feed + aggregates.
+  Registry-as-asset controls: resolve-only `GET /entity/{id}` scoped to the
+  tenant's entitled set (no list/scan/batch), per-tenant rate limits + breadth
+  anomaly detection, canary records for leak forensics.
 - **Phase E — Packaging, pricing, billing.** Module catalog; data-driven tiers
   (from Phase B); Marketplace integration; choose tenancy deployment options.
 - **Phase F — Manage-entities UI.** Curation UI over the review queue; admin.
