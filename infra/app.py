@@ -473,6 +473,28 @@ class OncaPrototypeStack(Stack):
             prune=False,
         )
 
+        # Feature store (ADR 003 Wave 0): derive per-entity rolling features from
+        # the durable narrative history (never raw) -> features/latest.json. Runs
+        # BEFORE synth in the pipeline so Wave 1 detectors can read it. No LLM.
+        feature_fn = lambda_.Function(
+            self,
+            "OncaFeatureStore",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.synth.feature_store.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.minutes(5),
+            memory_size=512,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+                "ONCA_ENTITIES_TABLE": entities_table.table_name,
+                "ONCA_FEATURE_WINDOW_DAYS": "90",
+            },
+        )
+        digests_bucket.grant_read(feature_fn)
+        digests_bucket.grant_put(feature_fn)
+        entities_table.grant_read_data(feature_fn)
+
         # Feed builder: aggregate recent narratives -> feed.json in the site bucket.
         feed_fn = lambda_.Function(
             self,
@@ -565,6 +587,19 @@ class OncaPrototypeStack(Stack):
             interval=Duration.seconds(30),
             backoff_rate=2.0,
         )
+        feature_task = sfn_tasks.LambdaInvoke(
+            self,
+            "FeatureTask",
+            lambda_function=feature_fn,
+            payload=sfn.TaskInput.from_object({}),
+            result_path="$.features",
+        )
+        feature_task.add_retry(
+            errors=["States.ALL"],
+            max_attempts=2,
+            interval=Duration.seconds(15),
+            backoff_rate=2.0,
+        )
         synth_task = sfn_tasks.LambdaInvoke(
             self,
             "SynthTask",
@@ -596,7 +631,7 @@ class OncaPrototypeStack(Stack):
             self,
             "OncaPipeline",
             definition_body=sfn.DefinitionBody.from_chainable(
-                ingest_task.next(synth_task).next(feed_task)
+                ingest_task.next(feature_task).next(synth_task).next(feed_task)
             ),
             # Budget for a 15-min ingest (plus a retry), then synth, then feed.
             timeout=Duration.minutes(45),
