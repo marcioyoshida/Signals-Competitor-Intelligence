@@ -83,6 +83,14 @@
   .flag.gap { background: rgba(220,38,38,.15); color: #dc2626; }
   .flag.low { background: rgba(217,119,6,.15); color: #d97706; }
   .flag.ok  { background: rgba(22,163,74,.13); color: #16a34a; }
+  .flag.none { background: rgba(121,129,140,.15); color: var(--muted); }
+  /* Tabbed lower section (industry coverage / reviews), well below the feed. */
+  .tabs { display: flex; gap: 2px; padding: 0 10px; border-bottom: 1px solid var(--border); }
+  .tab { border: 0; background: none; color: var(--muted); font-size: 13px; font-weight: 600;
+    padding: 12px 14px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tab:hover { color: var(--ink); }
+  .tab.active { color: var(--ink); border-bottom-color: var(--accent); }
+  .tabpane .hint { padding: 12px 16px 4px; }
   .legend { display: flex; gap: 12px; flex-wrap: wrap; padding: 0 16px 12px; color: var(--ink2); font-size: 12px; }
   .legend .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
   .feed { padding: 6px 10px 14px; }
@@ -175,16 +183,19 @@
     </div>
   </div>
 
-  <div class="panel" id="industryPanel" style="margin-top:14px;display:none">
-    <h2>Cobertura por indústria <span style="text-transform:none;letter-spacing:0">· volume de narrativas por módulo (período)</span></h2>
-    <div class="hint">Cada módulo de indústria é um add-on de assinatura. O volume indica quanto sinal ele agrega no período — módulos sem narrativas (vazio) ou com pouco volume ficam sinalizados, para não vender um feed vazio.</div>
-    <div id="industries"></div>
-  </div>
-
-  <div class="panel" id="reviewPanel" style="margin-top:14px;display:none">
-    <h2>Revisão de entidades <span style="text-transform:none;letter-spacing:0">· propostas aguardando curadoria</span></h2>
-    <div class="hint">Sugestões automáticas de vínculo entre entidades (ex.: mesmo controlador no QSA). Nada é mesclado automaticamente — cada proposta precisa de confirmação humana.</div>
-    <div id="reviews"></div>
+  <div class="panel" id="lowerPanel" style="margin-top:28px;display:none">
+    <div class="tabs" id="lowerTabs">
+      <button class="tab" data-tab="industries">Cobertura por indústria</button>
+      <button class="tab" data-tab="reviews">Revisão de entidades</button>
+    </div>
+    <div class="tabpane" id="tab-industries">
+      <div class="hint">Cada módulo de indústria é um add-on de assinatura. O volume indica quanto sinal ele agrega no período. Módulos <b>sem entidades</b> ou <b>sem cobertura</b> ficam sinalizados: são os candidatos a expandir a watchlist para gerar narrativas.</div>
+      <div id="industries" style="padding:2px 6px 14px;overflow-x:auto"></div>
+    </div>
+    <div class="tabpane hidden" id="tab-reviews">
+      <div class="hint">Sugestões automáticas de vínculo entre entidades (ex.: mesmo controlador no QSA). Nada é mesclado automaticamente — cada proposta precisa de confirmação humana.</div>
+      <div id="reviews"></div>
+    </div>
   </div>
 
   <p class="est" style="margin:16px 6px">O nível de ameaça é uma estimativa heurística (não é um modelo validado). Cada afirmação tem link para a sua fonte.</p>
@@ -255,7 +266,7 @@ function fmtDateTime(iso) {
 
 let DATA = null;
 // "all" = flat list of distinct events (default); "entity" = one summary card per entity.
-const state = { entity: "", lens: "", date: "", alert: false, q: "", view: "all" };
+const state = { entity: "", lens: "", date: "", alert: false, q: "", view: "all", tab: "" };
 
 async function boot() {
   try {
@@ -270,30 +281,69 @@ async function boot() {
   const checked = DATA.generated_at ? ` · verificado ${fmtDateTime(DATA.generated_at)}` : "";
   document.getElementById("asof").textContent =
     `dados de ${fmtDate(DATA.as_of)}${checked} · ${DATA.feed.length} narrativas · janela de ${DATA.dates.length} dias`;
-  renderKpis(); renderLegend(); populateFilters(); renderEntities(); renderIndustries(); renderReviews(); render();
+  renderKpis(); renderLegend(); populateFilters(); renderEntities(); renderLower(); render();
+}
+
+// Status flag per industry module. "sem entidades" (0 tracked) is the primary
+// signal for watchlist expansion — no entities means no narratives can ever come.
+function industryFlag(i) {
+  if ((i.entities || 0) === 0)
+    return `<span class="flag none" title="Nenhuma entidade monitorada — adicionar à watchlist para gerar narrativas">sem entidades</span>`;
+  if (i.coverage_gap)
+    return `<span class="flag gap" title="Entidades monitoradas, mas nenhuma narrativa no período">sem cobertura</span>`;
+  if (i.low_volume)
+    return `<span class="flag low" title="Volume abaixo do mínimo para um add-on">baixo volume</span>`;
+  if (i.covered) return `<span class="flag ok">ok</span>`;
+  return "";
 }
 
 function renderIndustries() {
-  const panel = document.getElementById("industryPanel");
+  const el = document.getElementById("industries");
   const list = DATA.industries || [];
-  if (!list.length) { panel.style.display = "none"; return; }
+  if (!list.length) { el.innerHTML = ""; return; }
+  const num = (n) => `<td style="text-align:right;font-variant-numeric:tabular-nums">${n}</td>`;
+  const rows = list.map(i => `<tr>
+    <td>${esc(i.display_name)}</td>
+    ${num(i.narratives || 0)}${num(i.entities || 0)}${num(i.alerts || 0)}
+    ${num((i.peak_score ?? 0).toFixed(1))}
+    <td>${i.tier ? esc(i.tier) : "—"}</td>
+    <td>${industryFlag(i)}</td>
+  </tr>`).join("");
+  el.innerHTML = `<table class="tv"><thead><tr>
+    <th>Indústria</th>
+    <th style="text-align:right">Narrativas</th><th style="text-align:right">Entidades</th>
+    <th style="text-align:right">Alertas</th><th style="text-align:right">Pico</th>
+    <th>Módulo</th><th>Situação</th>
+  </tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+// The lower section is tabbed (industry coverage / reviews) and shows only when
+// at least one tab has data; the active tab persists across re-renders.
+function setTab(name) {
+  state.tab = name;
+  document.querySelectorAll("#lowerTabs .tab").forEach(b =>
+    b.classList.toggle("active", b.dataset.tab === name));
+  document.getElementById("tab-industries").classList.toggle("hidden", name !== "industries");
+  document.getElementById("tab-reviews").classList.toggle("hidden", name !== "reviews");
+}
+
+function renderLower() {
+  const hasInd = (DATA.industries || []).length > 0;
+  const hasRev = (DATA.reviews || []).length > 0;
+  const panel = document.getElementById("lowerPanel");
+  if (!hasInd && !hasRev) { panel.style.display = "none"; return; }
   panel.style.display = "";
-  const maxN = Math.max(1, ...list.map(i => i.narratives || 0));
-  document.getElementById("industries").innerHTML = list.map(i => {
-    const flag = i.coverage_gap
-      ? `<span class="flag gap" title="Entidades monitoradas, mas nenhuma narrativa no período">sem cobertura</span>`
-      : i.low_volume
-        ? `<span class="flag low" title="Volume abaixo do mínimo para um add-on">baixo volume</span>`
-        : i.covered ? `<span class="flag ok">ok</span>` : "";
-    const tier = i.tier ? ` · ${esc(i.tier)}` : "";
-    const w = Math.round(100 * (i.narratives || 0) / maxN);
-    return `<div class="ind">
-      <span class="iname">${esc(i.display_name)}</span>
-      <span class="ibar"><span style="width:${w}%"></span></span>
-      <span class="imeta">${i.narratives} narrativa(s) · ${i.entities} entidade(s)${i.alerts ? ` · ${i.alerts} alerta(s)` : ""}${tier}</span>
-      ${flag}
-    </div>`;
-  }).join("");
+  const tabInd = document.querySelector('#lowerTabs .tab[data-tab="industries"]');
+  const tabRev = document.querySelector('#lowerTabs .tab[data-tab="reviews"]');
+  tabInd.classList.toggle("hidden", !hasInd);
+  tabRev.classList.toggle("hidden", !hasRev);
+  tabRev.textContent = hasRev
+    ? `Revisão de entidades (${DATA.reviews.length})` : "Revisão de entidades";
+  renderIndustries(); renderReviews();
+  let want = state.tab;
+  if ((want === "industries" && !hasInd) || (want === "reviews" && !hasRev) || !want)
+    want = hasInd ? "industries" : "reviews";
+  setTab(want);
 }
 
 function industryOptionsHtml(selected) {
@@ -303,11 +353,10 @@ function industryOptionsHtml(selected) {
 }
 
 function renderReviews() {
-  const panel = document.getElementById("reviewPanel");
   const list = DATA.reviews || [];
-  if (!list.length) { panel.style.display = "none"; return; }
-  panel.style.display = "";
-  document.getElementById("reviews").innerHTML = list.map(r => {
+  const el = document.getElementById("reviews");
+  if (!list.length) { el.innerHTML = ""; return; }
+  el.innerHTML = list.map(r => {
     let desc, pick = "";
     if (r.kind === "group_merge")
       desc = `Agrupar <b>${esc(r.member_label || r.member || "?")}</b> sob <b>${esc(r.leader_label || r.leader || "?")}</b>`;
@@ -352,7 +401,7 @@ async function decideReview(reviewId, decision, btn) {
     // optimistic: drop the decided item; the server rebuilds feed.json in the
     // background, so the next natural load stays consistent.
     DATA.reviews = (DATA.reviews || []).filter(x => x.review_id !== reviewId);
-    renderReviews();
+    renderLower();
   } catch (e) {
     box.innerHTML = `<span class="rmeta">Erro: ${esc(e.message)}</span>`;
   }
@@ -645,6 +694,11 @@ document.getElementById("tableToggle").onclick = (e) => {
 document.addEventListener("click", e => {
   const b = e.target.closest(".rbtn");
   if (b) decideReview(b.dataset.id, b.dataset.dec, b);
+});
+
+document.getElementById("lowerTabs").addEventListener("click", e => {
+  const b = e.target.closest(".tab");
+  if (b && !b.classList.contains("hidden")) setTab(b.dataset.tab);
 });
 
 boot();
