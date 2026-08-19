@@ -109,7 +109,12 @@ flowchart TB
 | ① SaaS dashboard | Vendor | Module subscription | Lowest | D → E |
 | ② Feed API | Tenant's own app | Subscription / metered | Low (scoped payload) | D |
 | ③ Marketplace | Vendor API, AWS billing | Metered per-lookup **or** subscription | Low | E |
-| ④ Embedded / BYO-bucket | Tenant account (thin) | Enterprise contract | Low (thin stack calls vendor API; no registry) | E+ |
+| ④ Tenant-hosted dashboard (**premium**) | Tenant account (thin) | Premium / enterprise | Low (glass only; no registry, no superset) | E+ |
+
+Channel ④ is sold as a **premium tier** (own domain, own account, own SSO, and —
+at the top end — data residency). It ships in **two options** (§3b) that host the
+glass tenant-side *without* forfeiting entitlement enforcement or telemetry — a
+premium tier must never have worse analytics than base SaaS.
 
 The decision that keeps all four honest: **entitlement is server-authoritative
 and enforced at the data boundary, never client-side** (ADR 002 Decision 3).
@@ -164,6 +169,76 @@ flowchart LR
 Load-bearing: the arrow from `THIN` to `API` only ever *points inward*. The
 registry, pipeline, raw/digest S3, and synthesis never deploy into a tenant
 account. The most a tenant hosts is glass and a login redirect.
+
+**Precise tenant-side footprint.** In the default SaaS path (channels ①–③)
+*nothing* is tenant-side — not even auth. The Cognito user pool, the token
+issuer, and the entitlement source of truth (`onca-tenant-config`) are all
+vendor-side; tenant users are merely pool members. A footprint appears **only in
+channel ④**, as up to three *independent, optional* pieces — and the auth
+**authority** is never one of them:
+
+| Optional tenant-side piece | What it is | What it is **not** |
+|---|---|---|
+| Thin dashboard host | CFN stack serving the warroom glass, that only *calls* the vendor API | Not the pipeline, registry, or data |
+| SSO **shim** | Federation redirect from the tenant's IdP into the vendor pool | Not the auth *authority* — Cognito + entitlement stay vendor-side |
+| BYO-bucket | Tenant-owned S3 the vendor writes the **scoped, projected** feed into | Not raw/digest S3, not the superset, not the registry |
+
+So the maximum tenant footprint is *glass + optionally an SSO shim + optionally a
+scoped-feed bucket*. "Auth" as an authority is always vendor-side.
+
+---
+
+## 3b. Premium tier — tenant-hosted dashboard (two options)
+
+Channel ④ is the premium. The design constraint: **a premium tier must not have
+worse analytics than base SaaS**, which naive tenant-hosting would cause (the
+vendor edge drops out of the request path — see §8b). These two options host the
+glass tenant-side while keeping entitlement enforcement and telemetry intact.
+
+### Option A — tenant glass, vendor data plane (thin premium; **default**)
+The tenant hosts only the glass (CloudFront + static UI on their domain/branding,
+optional SSO shim). **Every data read still goes to the vendor feed API**
+(Pattern A). Nothing is stored tenant-side.
+- **Entitlement:** at read, vendor-side — unchanged from base SaaS.
+- **Analytics:** **full** — the vendor API stays in path, every call attributable.
+- **Residency:** partial — glass/domain/SSO are theirs; data transits the vendor
+  edge (projected/scoped, never the registry).
+
+### Option B — full residency + consented beacon (data-resident premium; add-on)
+The tenant hosts the glass **and** a tenant-owned S3 bucket the vendor writes the
+scoped feed into cross-account (BYO-bucket). The dashboard reads its own bucket —
+works offline of the vendor API; data at rest in the tenant region/account.
+- **Entitlement:** at **write** — the vendor only ever writes entitled, scoped
+  narratives; a module change re-writes the bucket. Still no superset/registry.
+- **Analytics:** via a **consented client-side telemetry beacon** to a vendor
+  endpoint (governed by the DPA); disabling it degrades analytics to delivery
+  events only.
+- **Residency:** **maximal** — data at rest in the tenant account/region.
+
+```mermaid
+flowchart LR
+  subgraph OA["Option A — thin premium (default)"]
+    A1["Tenant: CloudFront + glass + SSO shim"] -->|every read| AV["Vendor feed API (Pattern A)"]
+    AV -->|"entitlement @ read · full telemetry"| A1
+  end
+  subgraph OB["Option B — data-resident premium (add-on)"]
+    BV["Vendor: writes scoped feed"] -->|"cross-account @ write"| BB[("Tenant S3 bucket")]
+    BB --> B1["Tenant: CloudFront + glass"]
+    B1 -.->|consented beacon| BT["Vendor telemetry"]
+  end
+```
+
+| | Entitlement | Analytics | Residency | Complexity |
+|---|---|---|---|---|
+| **A — thin** | At read (vendor API) | Full, always | Partial | Lower |
+| **B — resident** | At write (scoped bucket) | Consent-based beacon | Maximal | Higher |
+
+**Recommendation:** default the premium to **A** (keeps analytics, simplest,
+delivers the "our account + our SSO + our domain" value most premium buyers
+actually want); offer **B** as a higher enterprise/residency add-on for
+hard-mandate tenants who knowingly trade telemetry for at-rest residency. Neither
+ships the registry or the superset — the premium is *hosting, branding, and
+residency*, never more data.
 
 ---
 
@@ -324,6 +399,39 @@ Decision 5): concentration (distinct entities/industry) and richness
 already computes (`build_industry_volume` → `industries[]` with `covered` /
 `low_volume` / `coverage_gap`). Every provisional figure ships labeled
 "estimated"; no fabricated numbers.
+
+---
+
+## 8b. Analytics, telemetry & consent
+
+Vendor-hosted CloudFront + the scoped feed Lambda make every read attributable to
+a Cognito identity at the vendor boundary — the substrate for usage analytics,
+and the *same* instrumentation ADR 002 already needs for anti-exfiltration
+(breadth/volume anomaly detection). One pipe, two uses.
+
+**Three purposes, three legal bases (LGPD applies — Brazilian FS):**
+1. **Operational/security telemetry** (rate limiting, anti-scrape, metering) —
+   the service functioning; contractual necessity, not a separate consent gate.
+2. **Engagement analytics served back to that tenant** about its own users —
+   tenant is the controller, vendor the processor (DPA); consent lives between
+   the tenant and its users. This is a feature.
+3. **Cross-tenant benchmarking / vendor product analytics** — requires **explicit
+   tenant consent**, and must be aggregated/anonymized. Never expose one tenant's
+   usage to another.
+
+**Telemetry richness is inversely proportional to how tenant-side the channel
+is** — the tension to price into channel ④:
+
+```mermaid
+flowchart LR
+  A["① SaaS / ④A thin premium<br/>vendor edge in path"] -->|"every view, drill-down, session"| RICH["Richest analytics"]
+  B["② Feed API<br/>vendor API in path"] -->|"every call, per-entity"| RICH
+  C["④B data-resident<br/>vendor writes a file, then blind"] -->|"consented beacon only"| LOW["Consent-based / near-zero"]
+```
+
+The choice that buys a tenant residency (Option B) *costs* them engagement
+analytics — the vendor edge drops out of the path. State this explicitly when
+pricing ④B. Option A is the sweet spot: tenant-hosted glass, full telemetry.
 
 ---
 
