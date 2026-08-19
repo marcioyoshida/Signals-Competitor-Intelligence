@@ -80,6 +80,23 @@ def _trust_map() -> dict[str, bool]:
     return {}
 
 
+def _ambiguous_tokens() -> frozenset[str]:
+    """Bare tokens that are common words (resolve only in structured sources).
+
+    Registry-backed (per-entity ``ambiguous`` flag) when the table is configured,
+    else the built-in AMBIGUOUS_TOKENS seed. Data, not code — API-editable."""
+    if os.environ.get("ONCA_ENTITIES_TABLE"):
+        try:
+            from src.synth import entity_registry
+
+            toks = entity_registry.load_ambiguous_tokens()
+            if toks:
+                return frozenset(toks)
+        except Exception as exc:  # pragma: no cover - graceful fallback
+            print(f"Warning: ambiguous-token map unavailable, using built-in: {exc}")
+    return AMBIGUOUS_TOKENS
+
+
 def signal_blob(item: dict[str, Any]) -> str:
     parts = [
         str(item.get(k) or "")
@@ -161,7 +178,11 @@ def _word_match(token: str, blob: str) -> bool:
 
 
 def _match_kinds(
-    aliases: list[str], blob: str, blob_nospace: str, trusted: bool = True
+    aliases: list[str],
+    blob: str,
+    blob_nospace: str,
+    trusted: bool = True,
+    ambiguous_tokens: frozenset[str] | set[str] = AMBIGUOUS_TOKENS,
 ) -> set[str]:
     """Classify how an entity's aliases hit the blob:
     'strong'  — the item's own ticker field (TICKER:XXX) is present (authoritative);
@@ -171,6 +192,8 @@ def _match_kinds(
     ``trusted`` is False for entities no human has vouched for (auto-created, not
     yet news_safe): their bare single-token brand is treated as ambiguous, so a
     new common-word-brand fintech can't false-match in free text before review.
+    ``ambiguous_tokens`` is the set of common-word bare tokens; registry-backed
+    (per-entity ``ambiguous`` flag) when configured, else the built-in seed.
     """
     kinds: set[str] = set()
     for alias in aliases:
@@ -182,12 +205,12 @@ def _match_kinds(
             if token.replace(" ", "") in blob_nospace:
                 kinds.add("strong")  # from item.ticker — unambiguous
             elif _word_match(sym, blob):
-                kinds.add("ambiguous" if sym in AMBIGUOUS_TOKENS else "distinct")
+                kinds.add("ambiguous" if sym in ambiguous_tokens else "distinct")
             continue
         if _word_match(token, blob):
             if " " in token:
                 kinds.add("distinct")  # multi-token names are always distinctive
-            elif trusted and token not in AMBIGUOUS_TOKENS:
+            elif trusted and token not in ambiguous_tokens:
                 kinds.add("distinct")
             else:
                 kinds.add("ambiguous")
@@ -208,11 +231,15 @@ def resolve_entities(item: dict[str, Any]) -> list[str]:
     blob_nospace = blob.replace(" ", "")
     free_text = str(item.get("source") or "").upper() in _FREE_TEXT_SOURCES
     trust = _trust_map()
+    ambig = _ambiguous_tokens()
     found: list[str] = []
     for entity_id, aliases in _alias_map().items():
         # Default trusted=True: the built-in seed is all curated, and a registry
         # entity absent from the trust map shouldn't be silently muted.
-        kinds = _match_kinds(aliases, blob, blob_nospace, trusted=trust.get(entity_id, True))
+        kinds = _match_kinds(
+            aliases, blob, blob_nospace,
+            trusted=trust.get(entity_id, True), ambiguous_tokens=ambig,
+        )
         if not kinds:
             continue
         if "strong" in kinds or "distinct" in kinds:

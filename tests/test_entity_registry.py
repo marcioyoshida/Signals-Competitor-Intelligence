@@ -76,6 +76,66 @@ def test_news_terms_only_trusted_and_deduped():
     assert "NewCo Pay" in er.news_terms(table=t, trusted_only=False)
 
 
+def test_put_entity_stores_search_curation():
+    t = FakeTable()
+    er.put_entity("stone", "Stone / StoneCo", ["STONECO", "STONE "],
+                  news_term="Stone", ambiguous_tokens=["STONE"],
+                  confidence="curated", table=t)
+    ent = er.get_entity("stone", table=t)
+    assert ent["news_term"] == "Stone"
+    assert ent["ambiguous_tokens"] == ["STONE"] and ent["ambiguous"] is True
+
+
+def test_seed_populates_news_term_and_ambiguous():
+    t = FakeTable()
+    er.seed(table=t)
+    stone = er.get_entity("stone", table=t)
+    c6 = er.get_entity("c6", table=t)
+    xp = er.get_entity("xp", table=t)
+    # ambiguous migrated from AMBIGUOUS_TOKENS: only the common-word token "STONE"
+    # (not the distinctive STONECO/STNE); c6 has none.
+    assert stone["ambiguous_tokens"] == ["STONE"] and stone["ambiguous"] is True
+    assert c6["ambiguous_tokens"] == [] and c6["ambiguous"] is False
+    # XP's ambiguous token lives only on its ticker (TICKER:XP) — still captured.
+    assert xp["ambiguous_tokens"] == ["XP"] and xp["ambiguous"] is True
+    # news_term migrated from overrides/derivation.
+    assert xp["news_term"] == "XP Inc" and c6["news_term"] == "C6 Bank"
+
+
+def test_news_terms_prefers_stored_over_derivation():
+    t = FakeTable()
+    er.put_entity("c6", "C6 Bank", ["C6 BANK"], confidence="curated",
+                  news_term="Banco C6", table=t)   # an operator's API edit
+    assert "Banco C6" in er.news_terms(table=t)     # stored wins
+    assert "C6 Bank" not in er.news_terms(table=t)
+
+
+def test_load_ambiguous_tokens_from_registry():
+    t = FakeTable()
+    er.put_entity("stone", "Stone", ["STONECO", "STONE "], ambiguous_tokens=["STONE"],
+                  confidence="curated", table=t)
+    er.put_entity("c6", "C6 Bank", ["C6 BANK"], ambiguous_tokens=[],
+                  confidence="curated", table=t)
+    toks = er.load_ambiguous_tokens(table=t, force=True)
+    # only the curated common-word token; STONECO stays distinctive.
+    assert "STONE" in toks and "STONECO" not in toks and "C6 BANK" not in toks
+
+
+def test_backfill_curation_is_nondestructive():
+    t = FakeTable()
+    # An entity seeded before the migration (no news_term/ambiguous), later vetted.
+    er.put_entity("newco", "NewCo Pay", ["NEWCO"], confidence="cnpj", table=t)
+    er.set_news_safe("newco", True, table=t)
+    n = er.backfill_curation(table=t)
+    ent = er.get_entity("newco", table=t)
+    assert n == 1
+    assert ent["news_term"] == "NewCo Pay" and ent["ambiguous_tokens"] == []
+    assert ent["ambiguous"] is False
+    assert ent["news_safe"] is True          # preserved — not clobbered
+    # idempotent second run
+    assert er.backfill_curation(table=t) == 0
+
+
 def test_seed_from_curated_aliases_populates_registry():
     t = FakeTable()
     n = er.seed(table=t)

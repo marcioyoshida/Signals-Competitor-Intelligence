@@ -6,6 +6,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from src.synth.entities import primary_entity, resolve_entities
 
 
+def test_match_kinds_uses_provided_ambiguous_set():
+    from src.synth.entities import _match_kinds
+
+    blob = " STONE ANUNCIA RESULTADO "
+    # With STONE ambiguous, the bare token needs structured context.
+    k1 = _match_kinds(["STONE"], blob, blob.replace(" ", ""),
+                      trusted=True, ambiguous_tokens=frozenset({"STONE"}))
+    assert k1 == {"ambiguous"}
+    # With an empty ambiguity set (e.g. registry did not flag it), it is distinct.
+    k2 = _match_kinds(["STONE"], blob, blob.replace(" ", ""),
+                      trusted=True, ambiguous_tokens=frozenset())
+    assert k2 == {"distinct"}
+
+
 def test_resolve_sec_ticker_nu():
     item = {"ticker": "NU", "company": "Nu Holdings Ltd.", "form": "6-K"}
     assert "nubank" in resolve_entities(item)

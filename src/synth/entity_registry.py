@@ -54,6 +54,8 @@ def put_entity(
     controllers: list[str] | None = None,
     confidence: str = "cnpj",
     canonical_id: str | None = None,
+    news_term: str | None = None,
+    ambiguous_tokens: Iterable[str] | None = None,
     table: Any | None = None,
 ) -> dict[str, Any]:
     """Upsert an entity + its ALIAS#/CNPJ# lookup items. Returns the entity item.
@@ -90,6 +92,25 @@ def put_entity(
         entity["license_class"] = license_class
     if ticker:
         entity["ticker"] = ticker
+    # Curation for SEARCH, held on the entity record so it is API-editable with no
+    # code deploy (was hardcoded NEWS_TERM_OVERRIDES / AMBIGUOUS_TOKENS):
+    #  - news_term: the Google-News query phrase (overrides the display_name default),
+    #  - ambiguous_tokens: this entity's bare tokens that are common words, so they
+    #    may resolve only from a structured identity source, never a free-text
+    #    headline (e.g. "STONE"; but "STONECO" stays distinctive). `ambiguous` is a
+    #    convenience flag = the list is non-empty.
+    if news_term:
+        entity["news_term"] = str(news_term)
+    if ambiguous_tokens is not None:
+        toks = sorted(
+            {
+                str(a).upper().strip()
+                for a in ambiguous_tokens
+                if str(a).strip() and " " not in str(a).strip()
+            }
+        )
+        entity["ambiguous_tokens"] = toks
+        entity["ambiguous"] = bool(toks)
     t.put_item(Item=entity)
     for na in norm:
         t.put_item(Item={"pk": f"ALIAS#{na}", "type": "alias", "entity_id": entity_id})
@@ -542,10 +563,17 @@ def _clean_news_term(display_name: str | None) -> str:
     return re.sub(r"\s+", " ", term).strip()
 
 
-def news_query_term(entity_id: str | None, display_name: str | None) -> str:
-    """Best Google-News query phrase for an entity (override or cleaned name)."""
+def news_query_term(
+    entity_id: str | None, display_name: str | None, *, stored: str | None = None
+) -> str:
+    """Best Google-News query phrase for an entity.
+
+    Precedence: the registry's own ``news_term`` (``stored`` — API-editable data)
+    → the code override map (seed/fallback) → a cleaned display_name → the id.
+    """
     return (
-        NEWS_TERM_OVERRIDES.get(str(entity_id or ""))
+        stored
+        or NEWS_TERM_OVERRIDES.get(str(entity_id or ""))
         or _clean_news_term(display_name)
         or str(entity_id or "")
     )
@@ -568,7 +596,9 @@ def news_terms(table: Any | None = None, *, trusted_only: bool = True) -> list[s
             e.get("confidence") == "curated" or e.get("news_safe")
         ):
             continue
-        term = news_query_term(e.get("entity_id"), e.get("display_name"))
+        term = news_query_term(
+            e.get("entity_id"), e.get("display_name"), stored=e.get("news_term")
+        )
         key = term.lower()
         if term and key not in seen:
             seen.add(key)
@@ -614,9 +644,34 @@ def industry_rollup(table: Any | None = None) -> dict[str, dict[str, Any]]:
     return rollup
 
 
+def _seed_ambiguous_tokens(aliases: Iterable[str]) -> list[str]:
+    """This entity's bare tokens that are common words (its ⊆ of AMBIGUOUS_TOKENS).
+
+    Migration source for the per-entity ``ambiguous_tokens`` field — reads the
+    hardcoded AMBIGUOUS_TOKENS set once, at seed time, so it becomes registry data.
+    Only the actual common-word token is captured (STONE), not the entity's other
+    distinctive single-token aliases (STONECO, STNE).
+    """
+    from src.synth.entities import AMBIGUOUS_TOKENS
+
+    out: set[str] = set()
+    for a in aliases:
+        s = str(a).upper().strip()
+        if not s:
+            continue
+        # A ticker symbol (TICKER:XP) is itself a bare token — its symbol can be a
+        # common word (XP), so unwrap it before the common-word check.
+        tok = s.split(":", 1)[1] if s.startswith("TICKER:") else s
+        if tok and " " not in tok and tok in AMBIGUOUS_TOKENS:
+            out.add(tok)
+    return sorted(out)
+
+
 def seed(table: Any | None = None) -> int:
     """Populate the registry from the curated ENTITY_ALIASES (confidence=curated)
-    and the canonical IND# taxonomy, with curated entity→industry tags."""
+    and the canonical IND# taxonomy, with curated entity→industry tags. Also seeds
+    the per-entity SEARCH curation (news_term, ambiguous) from the code fixtures —
+    after which the registry, not the code, is authoritative (API-editable)."""
     from src.synth.entities import ENTITY_ALIASES, ENTITY_INDUSTRIES
     from src.synth.synthesize import ENTITY_LABELS
 
@@ -632,18 +687,51 @@ def seed(table: Any | None = None) -> int:
                 names.append(ticker)
             else:
                 names.append(str(alias))
+        display_name = ENTITY_LABELS.get(entity_id, entity_id.replace("_", " ").title())
         put_entity(
             entity_id,
-            ENTITY_LABELS.get(entity_id, entity_id.replace("_", " ").title()),
+            display_name,
             names,
             alias_forms=list(aliases),  # exact curated forms for substring matching
             ticker=ticker,
             industries=ENTITY_INDUSTRIES.get(entity_id),
             confidence="curated",
+            news_term=news_query_term(entity_id, display_name),
+            ambiguous_tokens=_seed_ambiguous_tokens(aliases),
             table=t,
         )
         count += 1
     return count
+
+
+def backfill_curation(table: Any | None = None, *, force: bool = False) -> int:
+    """Non-destructive migration: set news_term + ambiguous on EXISTING entities
+    without a full reseed, so runtime-set fields (news_safe, accumulated aliases,
+    industry assignments) are preserved. Idempotent. Returns entities updated.
+
+    ``force`` re-derives both fields from code (ignoring stored values) — a
+    "resync from code" after the seed logic changes; without it, an already-set
+    field is left as-is (so a human/API edit is never clobbered)."""
+    t = _table(table)
+    updated = 0
+    for e in _scan_type(t, "entity"):
+        eid = e.get("entity_id")
+        if not eid:
+            continue
+        alias_forms = e.get("alias_forms") or e.get("aliases") or []
+        stored_term = None if force else e.get("news_term")
+        news_term = news_query_term(eid, e.get("display_name"), stored=stored_term)
+        toks = e.get("ambiguous_tokens")
+        if toks is None or force:
+            toks = _seed_ambiguous_tokens(alias_forms)
+        changed = e.get("news_term") != news_term or e.get("ambiguous_tokens") != toks
+        if changed:
+            e["news_term"] = news_term
+            e["ambiguous_tokens"] = list(toks)
+            e["ambiguous"] = bool(toks)
+            t.put_item(Item=e)
+            updated += 1
+    return updated
 
 
 # Cached maps for resolve_entities, built in ONE scan and reused per Lambda
@@ -652,31 +740,45 @@ def seed(table: Any | None = None) -> int:
 # a bare single-token alias may resolve from free-text (news/DOU); see ADR 002.
 _ALIAS_MAP_CACHE: dict[str, list[str]] | None = None
 _TRUST_MAP_CACHE: dict[str, bool] | None = None
+_AMBIG_TOKENS_CACHE: set[str] | None = None
 
 
 def _load_maps(
     table: Any | None = None, force: bool = False
-) -> tuple[dict[str, list[str]], dict[str, bool]]:
-    global _ALIAS_MAP_CACHE, _TRUST_MAP_CACHE
-    if _ALIAS_MAP_CACHE is not None and _TRUST_MAP_CACHE is not None and not force:
-        return _ALIAS_MAP_CACHE, _TRUST_MAP_CACHE
+) -> tuple[dict[str, list[str]], dict[str, bool], set[str]]:
+    global _ALIAS_MAP_CACHE, _TRUST_MAP_CACHE, _AMBIG_TOKENS_CACHE
+    if (
+        _ALIAS_MAP_CACHE is not None
+        and _TRUST_MAP_CACHE is not None
+        and _AMBIG_TOKENS_CACHE is not None
+        and not force
+    ):
+        return _ALIAS_MAP_CACHE, _TRUST_MAP_CACHE, _AMBIG_TOKENS_CACHE
     t = _table(table)
     aliases: dict[str, list[str]] = {}
     trust: dict[str, bool] = {}
+    ambig: set[str] = set()
     kwargs: dict[str, Any] = {}
     while True:
         resp = t.scan(**kwargs)
         for it in resp.get("Items", []):
             if it.get("type") == "entity" and it.get("entity_id"):
                 eid = it["entity_id"]
-                aliases[eid] = list(it.get("alias_forms") or it.get("aliases") or [])
+                forms = list(it.get("alias_forms") or it.get("aliases") or [])
+                aliases[eid] = forms
                 trust[eid] = it.get("confidence") == "curated" or bool(it.get("news_safe"))
+                # The entity's own common-word tokens feed the free-text
+                # ambiguity set (precise: STONE, not the distinctive STONECO).
+                for tok in it.get("ambiguous_tokens") or []:
+                    t2 = str(tok).upper().strip()
+                    if t2:
+                        ambig.add(t2)
         start = resp.get("LastEvaluatedKey")
         if not start:
             break
         kwargs["ExclusiveStartKey"] = start
-    _ALIAS_MAP_CACHE, _TRUST_MAP_CACHE = aliases, trust
-    return aliases, trust
+    _ALIAS_MAP_CACHE, _TRUST_MAP_CACHE, _AMBIG_TOKENS_CACHE = aliases, trust, ambig
+    return aliases, trust, ambig
 
 
 def load_alias_map(table: Any | None = None, force: bool = False) -> dict[str, list[str]]:
@@ -687,6 +789,13 @@ def load_alias_map(table: Any | None = None, force: bool = False) -> dict[str, l
 def load_trust_map(table: Any | None = None, force: bool = False) -> dict[str, bool]:
     """Return {entity_id: trusted-for-free-text}. Trusted iff curated or news_safe."""
     return _load_maps(table, force)[1]
+
+
+def load_ambiguous_tokens(table: Any | None = None, force: bool = False) -> set[str]:
+    """Return the set of bare tokens that are common words (registry-flagged
+    ``ambiguous`` entities) — the free-text resolution guardrail as registry data
+    rather than the hardcoded AMBIGUOUS_TOKENS set."""
+    return _load_maps(table, force)[2]
 
 
 def set_news_safe(entity_id: str, value: bool = True, table: Any | None = None) -> bool:
