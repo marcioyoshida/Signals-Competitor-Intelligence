@@ -105,51 +105,80 @@ def known_parents(item: dict[str, Any]) -> list[str]:
     return parents
 
 
-# Homonym phrases that VETO an ambiguous *name-substring* match — common-word
-# brands collide with unrelated proper nouns (e.g. "Stone" the acquirer vs.
-# "Rolling Stone" the magazine's music "Sessions"). Ticker/CNPJ matches are
-# unambiguous and never vetoed. Accent-fold-uppercase; extend as collisions surface.
-ENTITY_NEGATIVE_ALIASES: dict[str, tuple[str, ...]] = {
-    "stone": ("ROLLING STONE",),
-}
+# Bare single-token aliases that are also common words / surnames / too-short —
+# they collide with unrelated free text ("Stone" vs "Rolling Stone", "caixa" =
+# cashbox, "nu" = nude in pt, "nomad"/"neon" everyday words). Each of these
+# entities ALSO has a distinctive multi-token or ticker alias, so gating the bare
+# token barely costs recall. (Nomad's only alias is the bare word — it is the one
+# entity that loses free-text recall; add a distinctive alias if that matters.)
+AMBIGUOUS_TOKENS: frozenset[str] = frozenset(
+    {"STONE", "NEON", "NOMAD", "NU", "BB", "CAIXA", "XP"}
+)
+
+# Sources whose entity mentions are FREE TEXT (headlines), where a bare ambiguous
+# token is untrustworthy. Keyed on `source` because DOU carries kind="regulatory"
+# like BCB, yet its body is prose. Everything else is treated as a structured
+# identity source (the field itself asserts "this is a company").
+_FREE_TEXT_SOURCES: frozenset[str] = frozenset({"NEWS", "DOU"})
+
+# Word chars for boundary tests: letters (incl. pt accents), digits, underscore.
+_WORD = r"[0-9A-Za-zÁÉÍÓÚÂÊÔÃÕÇÀÜáéíóúâêôãõçàü_]"
 
 
-def _alias_hit(aliases: list[str], blob: str) -> str | None:
-    """How an entity's aliases match ``blob``: 'ticker' (exact/unambiguous),
-    'name' (substring), or None. Ticker wins if both hit."""
-    name_hit = False
+def _word_match(token: str, blob: str) -> bool:
+    """Whole-word (boundary-anchored) match of an uppercase token/phrase — so
+    STONE does not match STONEX/LIMESTONE, and ação does not match celebração."""
+    return re.search(rf"(?<!{_WORD}){re.escape(token)}(?!{_WORD})", blob) is not None
+
+
+def _match_kinds(aliases: list[str], blob: str, blob_nospace: str) -> set[str]:
+    """Classify how an entity's aliases hit the blob:
+    'strong'  — the item's own ticker field (TICKER:XXX) is present (authoritative);
+    'distinct'— a distinctive alias (multi-token, or a non-common ticker symbol);
+    'ambiguous'— only a bare common-word token matched (needs structured context)."""
+    kinds: set[str] = set()
     for alias in aliases:
-        token = alias.upper()
+        token = alias.upper().strip()
+        if not token:
+            continue
         if token.startswith("TICKER:"):
-            t = token.split(":", 1)[1]
-            if token in blob.replace(" ", "") or re.search(
-                rf"(^|[^A-Z0-9]){re.escape(t)}([^A-Z0-9]|$)", blob
-            ):
-                return "ticker"
-        elif token in blob:
-            name_hit = True
-    return "name" if name_hit else None
+            sym = token.split(":", 1)[1]
+            if token.replace(" ", "") in blob_nospace:
+                kinds.add("strong")  # from item.ticker — unambiguous
+            elif _word_match(sym, blob):
+                kinds.add("ambiguous" if sym in AMBIGUOUS_TOKENS else "distinct")
+            continue
+        if _word_match(token, blob):
+            if " " not in token and token in AMBIGUOUS_TOKENS:
+                kinds.add("ambiguous")
+            else:
+                kinds.add("distinct")
+    return kinds
 
 
 def resolve_entities(item: dict[str, Any]) -> list[str]:
     """Return canonical entity ids matched in an item (may be multiple).
 
-    Includes parents linked via an entrant's QSA controllers, so a new fintech
-    controlled by a known player clusters into that player's narrative. An
-    ambiguous name-only match is vetoed when a homonym phrase is present (so
-    "Rolling Stone" music news does not cluster into Stone the acquirer).
+    Identity is established by anchored, context-gated matches (not raw
+    substrings): a strong identifier (ticker) or a distinctive alias resolves
+    anywhere; a bare *ambiguous* common-word token resolves only in a structured
+    identity source — never from a free-text headline (so "Rolling Stone" music
+    news does not cluster into Stone the acquirer). Also links QSA-controller
+    parents so a new fintech clusters into a known player's narrative.
     """
     blob = f" {signal_blob(item)} "
+    blob_nospace = blob.replace(" ", "")
+    free_text = str(item.get("source") or "").upper() in _FREE_TEXT_SOURCES
     found: list[str] = []
     for entity_id, aliases in _alias_map().items():
-        hit = _alias_hit(aliases, blob)
-        if not hit:
+        kinds = _match_kinds(aliases, blob, blob_nospace)
+        if not kinds:
             continue
-        if hit == "name":
-            negatives = ENTITY_NEGATIVE_ALIASES.get(entity_id)
-            if negatives and any(n in blob for n in negatives):
-                continue  # homonym collision — needs a ticker/CNPJ to confirm
-        found.append(entity_id)
+        if "strong" in kinds or "distinct" in kinds:
+            found.append(entity_id)
+        elif not free_text:
+            found.append(entity_id)  # ambiguous, but a structured field asserts it
+        # else: ambiguous token in free text → dropped (precision over recall)
     for parent in known_parents(item):
         if parent not in found:
             found.append(parent)

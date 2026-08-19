@@ -71,3 +71,14 @@ def test_direct_outlet_feed_matches_full_phrase_and_sets_publisher():
     assert n["publisher"] == "Valor Econômico"
     assert n["company"] == "Nubank"                    # matched the full brand phrase
     assert n["url"] == "https://valor.globo.com/n/1"    # direct publisher link
+
+
+def test_finance_context_word_start_not_mid_word():
+    # deeper-fix regression: "ação" (share) must not match inside "celebração"
+    from src.ingest.trade_press import _has_finance_context
+    assert not _has_finance_context("Blue Note recebe Rolling Stone Sessions e celebração dos 60 anos")
+    assert not _has_finance_context("informação sobre a situação da educação")
+    # real finance words / stems still match at a word start
+    assert _has_finance_context("StoneCo divulga lucro e receita do trimestre")
+    assert _has_finance_context("Nubank amplia pagamentos e crédito")  # stems pagament/credito
+    assert _has_finance_context("ação da empresa sobe na bolsa")       # standalone ação

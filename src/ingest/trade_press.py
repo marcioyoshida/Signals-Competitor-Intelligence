@@ -57,6 +57,18 @@ FINANCE_TERMS = frozenset({
     "titulos", "debênture", "debenture", "fundo", "susep", "cade", "bacen",
 })
 
+# Terms are word-STEM prefixes ("pagament" -> "pagamentos"), matched at a word
+# start only. Anchoring the left boundary stops a term matching mid-word — e.g.
+# "ação" (share) must NOT match inside "celebração" (celebration), the exact
+# false positive that let a music headline through.
+_FINANCE_RE = re.compile(
+    r"(?<![0-9a-zà-ÿ])(?:" + "|".join(re.escape(k) for k in FINANCE_TERMS) + r")"
+)
+
+
+def _has_finance_context(text: str) -> bool:
+    return bool(_FINANCE_RE.search((text or "").lower()))
+
 
 def fetch_news(
     terms: Iterable[str],
@@ -94,10 +106,8 @@ def fetch_news(
             if term_f and term_f not in _fold(title):
                 continue
             # and it must be business news (drops band/stadium/culture noise)
-            if require_finance_context:
-                low = title.lower()
-                if not any(k in low for k in FINANCE_TERMS):
-                    continue
+            if require_finance_context and not _has_finance_context(title):
+                continue
             if rec["id"] in seen:
                 continue
             seen.add(rec["id"])
@@ -121,8 +131,8 @@ def fetch_news(
                 date = _parse_date(rec.get("date"))
                 if not date or date < cutoff:
                     continue
-                if require_finance_context and not any(
-                    k in (rec.get("title") or "").lower() for k in FINANCE_TERMS
+                if require_finance_context and not _has_finance_context(
+                    rec.get("title") or ""
                 ):
                     continue
                 if rec["id"] in seen:

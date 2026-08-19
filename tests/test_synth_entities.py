@@ -61,17 +61,42 @@ def test_stone_alias_excludes_unrelated_stonex():
     assert "stone" not in resolve_entities({"institution": "STONEX DISTRIBUIDORA DE TVM LTDA."})
 
 
-def test_stone_name_match_vetoed_by_rolling_stone_homonym():
+# --- Deeper fix regression harness: anchored, context-gated resolution ---
+
+def test_word_boundary_kills_substring_false_positives():
     from src.synth.entities import resolve_entities
-    # "Rolling Stone" music news must not cluster into Stone the acquirer
-    music = {"title": "Blue Note SP celebra 60 anos do MPB4 nas Rolling Stone Sessions"}
+    # STONE must not match inside STONEX / LIMESTONE (right/left boundary)
+    assert "stone" not in resolve_entities({"institution": "STONEX DTVM LTDA."})
+    assert "stone" not in resolve_entities({"subject": "estudo sobre limestone mining"})
+
+
+def test_ambiguous_token_dropped_in_free_text_news():
+    from src.synth.entities import resolve_entities
+    # the live bug: "Rolling Stone" music headline (source=News) must NOT cluster
+    music = {"source": "News", "kind": "competitor", "company": "Stone", "name": "Stone",
+             "title": "Blue Note SP recebe 'Rolling Stone Sessions' e 60 anos do MPB4"}
     assert "stone" not in resolve_entities(music)
-    # but a ticker mention (STNE) is unambiguous — veto does not apply
-    earnings = {"ticker": "STNE", "title": "StoneCo (STNE) divulga lucro do 2T26",
-                "company": "StoneCo Ltd."}
-    assert "stone" in resolve_entities(earnings)
-    # and a legitimate bare-name Stone finance mention still resolves
-    assert "stone" in resolve_entities({"institution": "STONE INSTITUIÇÃO DE PAGAMENTO S.A."})
+    # bare common words in news never resolve their brand
+    assert "caixa" not in resolve_entities({"source": "News", "title": "como organizar o fluxo de caixa"})
+    assert "nubank" not in resolve_entities({"source": "News", "title": "homem nu detido em protesto"})
+
+
+def test_strong_and_distinct_aliases_resolve_even_in_news():
+    from src.synth.entities import resolve_entities
+    # a ticker mention is authoritative
+    assert "stone" in resolve_entities({"source": "News", "title": "StoneCo (STNE) reporta lucro"})
+    # a distinctive alias resolves anywhere
+    assert "nubank" in resolve_entities({"source": "News", "title": "Nubank lança conta global"})
+    assert "caixa" in resolve_entities({"source": "News", "title": "Caixa Econômica anuncia crédito"})
+    assert "stone" in resolve_entities({"source": "News", "title": "StoneCo expande maquininhas"})
+
+
+def test_ambiguous_token_accepted_in_structured_identity_source():
+    from src.synth.entities import resolve_entities, primary_entity
+    # a bare Stone in a BCB/entrant institution field IS an identity assertion
+    assert primary_entity({"name": "STONE INSTITUIÇÃO DE PAGAMENTO S.A."}) == "stone"
+    # SEC ticker field is strong regardless of source
+    assert "stone" in resolve_entities({"ticker": "STNE", "company": "StoneCo Ltd.", "form": "6-K"})
 
 
 def test_parent_link_via_cloudwalk_controller():
