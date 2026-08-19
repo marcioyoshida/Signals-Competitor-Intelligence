@@ -105,29 +105,51 @@ def known_parents(item: dict[str, Any]) -> list[str]:
     return parents
 
 
+# Homonym phrases that VETO an ambiguous *name-substring* match — common-word
+# brands collide with unrelated proper nouns (e.g. "Stone" the acquirer vs.
+# "Rolling Stone" the magazine's music "Sessions"). Ticker/CNPJ matches are
+# unambiguous and never vetoed. Accent-fold-uppercase; extend as collisions surface.
+ENTITY_NEGATIVE_ALIASES: dict[str, tuple[str, ...]] = {
+    "stone": ("ROLLING STONE",),
+}
+
+
+def _alias_hit(aliases: list[str], blob: str) -> str | None:
+    """How an entity's aliases match ``blob``: 'ticker' (exact/unambiguous),
+    'name' (substring), or None. Ticker wins if both hit."""
+    name_hit = False
+    for alias in aliases:
+        token = alias.upper()
+        if token.startswith("TICKER:"):
+            t = token.split(":", 1)[1]
+            if token in blob.replace(" ", "") or re.search(
+                rf"(^|[^A-Z0-9]){re.escape(t)}([^A-Z0-9]|$)", blob
+            ):
+                return "ticker"
+        elif token in blob:
+            name_hit = True
+    return "name" if name_hit else None
+
+
 def resolve_entities(item: dict[str, Any]) -> list[str]:
     """Return canonical entity ids matched in an item (may be multiple).
 
     Includes parents linked via an entrant's QSA controllers, so a new fintech
-    controlled by a known player clusters into that player's narrative.
+    controlled by a known player clusters into that player's narrative. An
+    ambiguous name-only match is vetoed when a homonym phrase is present (so
+    "Rolling Stone" music news does not cluster into Stone the acquirer).
     """
     blob = f" {signal_blob(item)} "
     found: list[str] = []
     for entity_id, aliases in _alias_map().items():
-        for alias in aliases:
-            token = alias.upper()
-            if token.startswith("TICKER:"):
-                if token in blob.replace(" ", ""):
-                    found.append(entity_id)
-                    break
-                # also plain ticker word boundary-ish
-                t = token.split(":", 1)[1]
-                if re.search(rf"(^|[^A-Z0-9]){re.escape(t)}([^A-Z0-9]|$)", blob):
-                    found.append(entity_id)
-                    break
-            elif token in blob:
-                found.append(entity_id)
-                break
+        hit = _alias_hit(aliases, blob)
+        if not hit:
+            continue
+        if hit == "name":
+            negatives = ENTITY_NEGATIVE_ALIASES.get(entity_id)
+            if negatives and any(n in blob for n in negatives):
+                continue  # homonym collision — needs a ticker/CNPJ to confirm
+        found.append(entity_id)
     for parent in known_parents(item):
         if parent not in found:
             found.append(parent)

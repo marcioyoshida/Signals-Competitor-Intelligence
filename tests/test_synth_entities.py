@@ -61,6 +61,19 @@ def test_stone_alias_excludes_unrelated_stonex():
     assert "stone" not in resolve_entities({"institution": "STONEX DISTRIBUIDORA DE TVM LTDA."})
 
 
+def test_stone_name_match_vetoed_by_rolling_stone_homonym():
+    from src.synth.entities import resolve_entities
+    # "Rolling Stone" music news must not cluster into Stone the acquirer
+    music = {"title": "Blue Note SP celebra 60 anos do MPB4 nas Rolling Stone Sessions"}
+    assert "stone" not in resolve_entities(music)
+    # but a ticker mention (STNE) is unambiguous — veto does not apply
+    earnings = {"ticker": "STNE", "title": "StoneCo (STNE) divulga lucro do 2T26",
+                "company": "StoneCo Ltd."}
+    assert "stone" in resolve_entities(earnings)
+    # and a legitimate bare-name Stone finance mention still resolves
+    assert "stone" in resolve_entities({"institution": "STONE INSTITUIÇÃO DE PAGAMENTO S.A."})
+
+
 def test_parent_link_via_cloudwalk_controller():
     from src.synth.entities import known_parents
     e = {"name": "NOVA SCD S.A.", "controllers": ["CLOUDWALK FINANCEIRA S.A."]}
