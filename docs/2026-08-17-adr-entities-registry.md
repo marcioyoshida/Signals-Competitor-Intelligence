@@ -1,6 +1,8 @@
 # ADR 001 — Entities registry, per-tenant watchlists, and auto-mapping
 
-- Status: **Accepted** — rollout steps 1–4 shipped (2026-08-18); 5–7 pending
+- Status: **Accepted** — rollout steps 1–5 shipped (2026-08-18); 6–7 pending.
+  Commercial/multi-tenant/IP-protection concerns for steps 6–7 are recorded in
+  [ADR 002](2026-08-18-adr-commercial-multitenancy.md).
 - Supersedes the hardcoded `config/watchlist.yaml` entity lists and the static
   `ENTITY_ALIASES` dict in `src/synth/entities.py`.
 
