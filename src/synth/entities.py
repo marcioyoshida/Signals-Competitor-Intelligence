@@ -35,6 +35,21 @@ ENTITY_ALIASES: dict[str, list[str]] = {
     "nomad": ["NOMAD"],
 }
 
+# Curated entity -> industry module(s) (ADR 002 Phase B). Entities can span
+# several; kept deliberately small and human-assigned (the trusted classification
+# auto-tagging cannot infer). Slugs must exist in entity_registry.INDUSTRIES.
+ENTITY_INDUSTRIES: dict[str, list[str]] = {
+    "itau": ["banking"], "bb": ["banking"], "bradesco": ["banking"],
+    "santander": ["banking"], "caixa": ["banking"], "c6": ["banking"],
+    "original": ["banking"],
+    "nubank": ["banking", "fintech"], "inter": ["banking", "fintech"],
+    "btg": ["investment-banking", "asset-management"],
+    "xp": ["asset-management", "investment-banking"],
+    "stone": ["fintech"], "pagseguro": ["fintech"], "mercado_pago": ["fintech"],
+    "picpay": ["fintech"], "neon": ["fintech"], "creditas": ["fintech"],
+    "recargapay": ["fintech"], "infinitepay": ["fintech"], "nomad": ["fintech"],
+}
+
 
 def _alias_map() -> dict[str, list[str]]:
     """Effective {entity_id: aliases} — the DynamoDB registry when configured

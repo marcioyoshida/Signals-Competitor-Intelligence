@@ -47,6 +47,7 @@ def put_entity(
     *,
     alias_forms: Iterable[str] | None = None,
     sector: str | None = None,
+    industries: Iterable[str] | None = None,
     license_class: str | None = None,
     cnpj_roots: Iterable[str] = (),
     ticker: str | None = None,
@@ -80,6 +81,9 @@ def put_entity(
         "active": True,
         "canonical_id": canonical_id or entity_id,
     }
+    inds = sorted({str(i).strip().lower() for i in (industries or ()) if str(i).strip()})
+    if inds:
+        entity["industries"] = inds
     if sector:
         entity["sector"] = sector
     if license_class:
@@ -153,6 +157,7 @@ def auto_create_from_entrant(entrant: dict[str, Any], *, table: Any | None = Non
     if existing and root not in (existing.get("cnpj_roots") or []):
         entity_id = f"{entity_id}_{root}"  # never clobber a different entity
 
+    inds, _needs_review = classify_industries(entrant)
     put_entity(
         entity_id,
         display,
@@ -162,6 +167,7 @@ def auto_create_from_entrant(entrant: dict[str, Any], *, table: Any | None = Non
         controllers=entrant.get("controllers") or None,
         license_class=entrant.get("license_class"),
         sector="fintech" if entrant.get("is_fintech") else None,
+        industries=inds or None,
         confidence="cnpj",
         table=t,
     )
@@ -394,12 +400,93 @@ def propose_group_merges(table: Any | None = None) -> int:
     return queued
 
 
+# --- Industry taxonomy (ADR 002 Phase B) --------------------------------------
+# Canonical modules under the "financial-services" umbrella. Slug -> display +
+# provisional pricing tier (NOT final — set from measured volume/concentration).
+# Stored as IND#<slug> items so the taxonomy is editable without a redeploy.
+INDUSTRIES: dict[str, dict[str, str]] = {
+    "banking": {"display_name": "Banking", "tier": "premium"},
+    "investment-banking": {"display_name": "Investment Banking", "tier": "premium"},
+    "insurance": {"display_name": "Insurance", "tier": "mid"},
+    "asset-management": {"display_name": "Asset Management", "tier": "mid"},
+    "wealth-management": {"display_name": "Wealth Management", "tier": "mid"},
+    "private-markets": {"display_name": "Private Markets (VC/PE)", "tier": "premium"},
+    "fintech": {"display_name": "Fintech", "tier": "entry"},
+    "financial-data-analytics": {"display_name": "Financial Data & Analytics", "tier": "mid"},
+    "advisory": {"display_name": "Advisory", "tier": "entry"},
+}
+_PARENT_SECTOR = "financial-services"
+
+# License class -> industry, SAFE subset only (unambiguous). Others (Corretora/
+# DTVM, Leasing, Cooperativa, …) are left for review — they don't map 1:1.
+LICENSE_INDUSTRY: dict[str, str] = {
+    "Instituição de Pagamento": "fintech",
+    "Crédito Direto (SCD)": "fintech",
+    "Empréstimo P2P (SEP)": "fintech",
+    "Financeira (SCFI)": "fintech",
+    "Microcrédito (SCMEPP)": "fintech",
+    "Banco": "banking",
+}
+
+
+def classify_industries(entrant: dict[str, Any]) -> tuple[list[str], bool]:
+    """Auto-tag the SAFE case only. Returns (industries, needs_review):
+    a clear license → its industry; anything ambiguous → ([], needs_review=True)
+    so a curator assigns it (reuses the step-5 review queue)."""
+    lic = str(entrant.get("license_class") or "").strip()
+    if lic in LICENSE_INDUSTRY:
+        return [LICENSE_INDUSTRY[lic]], False
+    if entrant.get("is_fintech"):
+        return ["fintech"], False
+    return [], True  # unknown/ambiguous — propose for review
+
+
+def seed_industries(table: Any | None = None) -> int:
+    """Write the canonical IND# taxonomy items. Idempotent."""
+    t = _table(table)
+    for slug, meta in INDUSTRIES.items():
+        t.put_item(
+            Item={
+                "pk": f"IND#{slug}",
+                "type": "industry",
+                "slug": slug,
+                "display_name": meta["display_name"],
+                "parent": _PARENT_SECTOR,
+                "tier": meta["tier"],
+            }
+        )
+    return len(INDUSTRIES)
+
+
+def industry_rollup(table: Any | None = None) -> dict[str, dict[str, Any]]:
+    """Per-industry CONCENTRATION measurement: distinct tracked entities per
+    industry (few players = concentrated = premium). One input to data-driven
+    pricing; the other (signal/narrative volume) is measured downstream from
+    narratives. Untagged entities count under '_unclassified'."""
+    rollup: dict[str, dict[str, Any]] = {
+        slug: {"display_name": meta["display_name"], "tier": meta["tier"], "entities": 0}
+        for slug, meta in INDUSTRIES.items()
+    }
+    rollup["_unclassified"] = {"display_name": "(unclassified)", "tier": None, "entities": 0}
+    for e in _scan_type(_table(table), "entity"):
+        inds = e.get("industries") or []
+        if not inds:
+            rollup["_unclassified"]["entities"] += 1
+        for slug in inds:
+            rollup.setdefault(
+                slug, {"display_name": slug, "tier": None, "entities": 0}
+            )["entities"] += 1
+    return rollup
+
+
 def seed(table: Any | None = None) -> int:
-    """Populate the registry from the curated ENTITY_ALIASES (confidence=curated)."""
-    from src.synth.entities import ENTITY_ALIASES
+    """Populate the registry from the curated ENTITY_ALIASES (confidence=curated)
+    and the canonical IND# taxonomy, with curated entity→industry tags."""
+    from src.synth.entities import ENTITY_ALIASES, ENTITY_INDUSTRIES
     from src.synth.synthesize import ENTITY_LABELS
 
     t = _table(table)
+    seed_industries(table=t)
     count = 0
     for entity_id, aliases in ENTITY_ALIASES.items():
         names: list[str] = []
@@ -416,6 +503,7 @@ def seed(table: Any | None = None) -> int:
             names,
             alias_forms=list(aliases),  # exact curated forms for substring matching
             ticker=ticker,
+            industries=ENTITY_INDUSTRIES.get(entity_id),
             confidence="curated",
             table=t,
         )

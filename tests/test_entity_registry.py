@@ -205,6 +205,55 @@ def test_propose_group_merges_from_shared_controller():
     assert er.propose_group_merges(table=t) == 0
 
 
+def test_classify_industries_safe_case_and_review():
+    # clear license -> its industry, no review
+    assert er.classify_industries({"license_class": "Banco"}) == (["banking"], False)
+    assert er.classify_industries({"license_class": "Instituição de Pagamento"}) == (["fintech"], False)
+    assert er.classify_industries({"is_fintech": True}) == (["fintech"], False)
+    # ambiguous -> no auto-tag, needs review
+    assert er.classify_industries({"license_class": "Corretora/DTVM"}) == ([], True)
+    assert er.classify_industries({}) == ([], True)
+
+
+def test_seed_industries_and_put_entity_industries():
+    t = FakeTable()
+    n = er.seed_industries(table=t)
+    assert n == len(er.INDUSTRIES)
+    assert t.items["IND#banking"]["display_name"] == "Banking"
+    assert t.items["IND#banking"]["parent"] == "financial-services"
+    er.put_entity("x", "X", ["XCO"], industries=["Banking", "FINTECH"], table=t)
+    assert er.get_entity("x", table=t)["industries"] == ["banking", "fintech"]  # normalized
+
+
+def test_auto_create_tags_industry_from_license():
+    t = FakeTable()
+    eid = er.auto_create_from_entrant(_entrant(license_class="Banco", is_fintech=False), table=t)
+    assert er.get_entity(eid, table=t)["industries"] == ["banking"]
+    eid2 = er.auto_create_from_entrant(
+        _entrant(cnpj="55.666.777/0001-00", is_fintech=True, license_class="Crédito Direto (SCD)"), table=t)
+    assert er.get_entity(eid2, table=t)["industries"] == ["fintech"]
+
+
+def test_industry_rollup_counts_entities_per_industry():
+    t = FakeTable()
+    er.put_entity("a", "A", ["ACO"], industries=["banking"], table=t)
+    er.put_entity("b", "B", ["BCO"], industries=["banking", "fintech"], table=t)
+    er.put_entity("c", "C", ["CCO"], table=t)  # untagged
+    r = er.industry_rollup(table=t)
+    assert r["banking"]["entities"] == 2
+    assert r["fintech"]["entities"] == 1
+    assert r["_unclassified"]["entities"] == 1
+    assert r["banking"]["tier"] == "premium"
+
+
+def test_seed_assigns_curated_industries():
+    t = FakeTable()
+    er.seed(table=t)
+    assert er.get_entity("itau", table=t)["industries"] == ["banking"]
+    assert set(er.get_entity("nubank", table=t)["industries"]) == {"banking", "fintech"}
+    assert t.items.get("IND#fintech") is not None  # taxonomy seeded too
+
+
 def test_load_trust_map_reflects_confidence_and_news_safe():
     t = FakeTable()
     er.put_entity("cur", "Curated", ["CURATED"], confidence="curated", table=t)
