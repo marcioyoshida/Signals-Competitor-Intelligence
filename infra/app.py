@@ -588,9 +588,49 @@ class OncaPrototypeStack(Stack):
         review_url = review_fn.add_function_url(
             auth_type=lambda_.FunctionUrlAuthType.NONE
         )
-        # Route /api/* to the action Lambda, gated by the same basic-auth edge
-        # function, POST allowed, caching off, and the origin secret injected so
-        # direct Function-URL calls (no secret) are rejected by the Lambda.
+
+        # Registry CRUD API (operator control plane): full curation over the ENT#
+        # records. Same auth model as the review endpoint (basic-auth edge +
+        # origin secret). CloudFront matches cache behaviors by INSERTION ORDER,
+        # not specificity — so the more-specific /api/registry/* MUST be added
+        # BEFORE the /api/* catch-all below, or registry calls fall through to the
+        # review action. (This ordering is load-bearing; do not reorder.)
+        registry_fn = lambda_.Function(
+            self,
+            "OncaRegistryApi",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.dashboard.registry_api.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.seconds(30),
+            memory_size=256,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_ENTITIES_TABLE": entities_table.table_name,
+                "ONCA_ORIGIN_SECRET": origin_secret,
+            },
+        )
+        entities_table.grant_read_write_data(registry_fn)
+        registry_url = registry_fn.add_function_url(
+            auth_type=lambda_.FunctionUrlAuthType.NONE
+        )
+        distribution.add_behavior(
+            "/api/registry/*",
+            cf_origins.FunctionUrlOrigin(
+                registry_url, custom_headers={"X-Onca-Origin": origin_secret}
+            ),
+            viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+            allowed_methods=cloudfront.AllowedMethods.ALLOW_ALL,
+            cache_policy=cloudfront.CachePolicy.CACHING_DISABLED,
+            origin_request_policy=cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+            function_associations=[
+                cloudfront.FunctionAssociation(
+                    function=auth_fn,
+                    event_type=cloudfront.FunctionEventType.VIEWER_REQUEST,
+                )
+            ],
+        )
+        # /api/* catch-all (review action) — registered AFTER /api/registry/* so
+        # the specific pattern wins; everything else under /api/ lands here.
         distribution.add_behavior(
             "/api/*",
             cf_origins.FunctionUrlOrigin(

@@ -812,9 +812,80 @@ def set_news_safe(entity_id: str, value: bool = True, table: Any | None = None) 
 
 
 def clear_cache() -> None:
-    global _ALIAS_MAP_CACHE, _TRUST_MAP_CACHE
+    global _ALIAS_MAP_CACHE, _TRUST_MAP_CACHE, _AMBIG_TOKENS_CACHE
     _ALIAS_MAP_CACHE = None
     _TRUST_MAP_CACHE = None
+    _AMBIG_TOKENS_CACHE = None
+
+
+# --- Curation CRUD (operator API surface) --------------------------------------
+# Primitives for the registry-as-API-product: read/list/create/patch/deactivate
+# the ENT# curation records. Aliases are NOT patched here (they need ALIAS#
+# reindexing) — use accumulate_aliases via the dedicated aliases endpoint.
+
+# Fields an operator may PATCH, with how each is normalized. Protected keys
+# (pk, type, entity_id, canonical_id, aliases, alias_forms, cnpj_roots) are never
+# writable through the patch path.
+_PATCH_STR = frozenset({"display_name", "news_term", "confidence", "sector", "license_class", "ticker"})
+_PATCH_BOOL = frozenset({"news_safe", "active"})
+
+
+def list_entities(
+    table: Any | None = None, *, include_inactive: bool = False
+) -> list[dict[str, Any]]:
+    """All entity curation records, sorted by id (inactive excluded by default)."""
+    out = [
+        e
+        for e in _scan_type(_table(table), "entity")
+        if include_inactive or e.get("active", True)
+    ]
+    out.sort(key=lambda e: str(e.get("entity_id") or ""))
+    return out
+
+
+def update_entity(
+    entity_id: str, patch: dict[str, Any], table: Any | None = None
+) -> dict[str, Any] | None:
+    """Apply a whitelisted partial update to an entity; return it, or None if
+    absent. Preserves every field not named in ``patch``. Unknown/protected keys
+    are ignored. ``ambiguous_tokens`` also refreshes the ``ambiguous`` flag."""
+    t = _table(table)
+    ent = get_entity(entity_id, table=t)
+    if not ent:
+        return None
+    for key, val in (patch or {}).items():
+        if key in _PATCH_STR:
+            if val in (None, ""):
+                ent.pop(key, None)
+            else:
+                ent[key] = str(val)
+        elif key in _PATCH_BOOL:
+            ent[key] = bool(val)
+        elif key == "ambiguous_tokens":
+            toks = sorted(
+                {
+                    str(x).upper().strip()
+                    for x in (val or [])
+                    if str(x).strip() and " " not in str(x).strip()
+                }
+            )
+            ent["ambiguous_tokens"] = toks
+            ent["ambiguous"] = bool(toks)
+        elif key == "industries":
+            ent["industries"] = sorted(
+                {str(i).strip().lower() for i in (val or []) if str(i).strip()}
+            )
+            ent["needs_review"] = False
+        elif key == "controllers":
+            ent["controllers"] = [str(c) for c in (val or [])]
+        # else: unknown/protected key — ignored
+    t.put_item(Item=ent)
+    return ent
+
+
+def deactivate_entity(entity_id: str, table: Any | None = None) -> dict[str, Any] | None:
+    """Soft-delete: set active=False (curation is never hard-deleted)."""
+    return update_entity(entity_id, {"active": False}, table=table)
 
 
 if __name__ == "__main__":
