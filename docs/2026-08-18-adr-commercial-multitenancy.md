@@ -156,19 +156,22 @@ Live audit: all buckets have full Block Public Access; site bucket is locked to
 CloudFront OAC + TLS-only; `digests`/`raw` are SSE-S3 with **no bucket policy**
 (IAM-only); **account-level** Block Public Access is **not set**. Actions:
 
-- **Applied 2026-08-18 (Phase A, zero-risk, additive — no data touched):**
-  TLS-only (`aws:SecureTransport=false` deny) bucket policies on `digests`/`raw`
-  (neither had a prior policy), and S3 server access logging on both → a
-  locked-down `onca-s3-access-logs-<acct>` bucket (BPA + SSE + log-delivery
-  policy). These buckets predate the CDK stack (imported by name), so the steps
-  live in `infra/harden_buckets.sh` (idempotent) as their IaC-equivalent.
-  Verified: policies read back, logging set, HTTPS reads intact.
-- **Still pending (need a decision — deliberately not auto-applied):** explicit
-  principal-allowlist Deny (needs exact principal enumeration + testing); a
-  lifecycle rule to expire old `raw` corpus (**deletes data** — retention call).
-- **Confirm first (account-wide):** turn on account-level Block Public Access.
-- **Optional:** SSE-KMS CMK on `digests`/`raw` (read then also needs
-  `kms:Decrypt` — a separately-granted barrier).
+- **Applied 2026-08-18 (Phase A — all additive; no bucket dropped, no data
+  deleted).** Steps live in `infra/harden_buckets.sh` (idempotent) since these
+  buckets predate the stack (imported by name):
+  - Bucket policy on `digests`/`raw`: **Deny non-TLS** + **Deny cross-account**
+    (`aws:PrincipalAccount != this account`). Same-account form, so it cannot lock
+    out the in-account Lambda/Bedrock roles — verified: feed-builder still reads
+    digests (feed_count 72) and in-account reads intact on both.
+  - **S3 server access logging** on both → locked-down `onca-s3-access-logs-<acct>`
+    (BPA + SSE + log-delivery-only policy).
+  - **Account-level Block Public Access** enabled (account-wide guardrail).
+  - **Lifecycle:** expire `onca-raw` objects after **180 days** (raw corpus only,
+    not digests/narratives). Forward-looking — oldest object was ~37 days old at
+    apply time, so nothing deleted then.
+- **Still pending (need a decision — not auto-applied):** per-role principal
+  allowlist (tighter than same-account; needs enumeration + testing); SSE-KMS CMK
+  on `digests`/`raw` (read then also needs `kms:Decrypt` — a second gate).
 - **Strategic:** make the **registry the single source of truth** for the curated
   list; leave only a minimal bootstrap seed in git (removes the repo as a leak
   surface). `config/watchlist.yaml` + `ENTITY_ALIASES` shrink to a seed.
