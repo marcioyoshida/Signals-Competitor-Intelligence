@@ -156,9 +156,16 @@ Live audit: all buckets have full Block Public Access; site bucket is locked to
 CloudFront OAC + TLS-only; `digests`/`raw` are SSE-S3 with **no bucket policy**
 (IAM-only); **account-level** Block Public Access is **not set**. Actions:
 
-- **Now (zero-risk):** TLS-only (`aws:SecureTransport=false` deny) + explicit
-  principal allowlist bucket policies on `digests`/`raw`; S3 access logging /
-  CloudTrail data events on both; a lifecycle rule to expire old `raw` corpus.
+- **Applied 2026-08-18 (Phase A, zero-risk, additive — no data touched):**
+  TLS-only (`aws:SecureTransport=false` deny) bucket policies on `digests`/`raw`
+  (neither had a prior policy), and S3 server access logging on both → a
+  locked-down `onca-s3-access-logs-<acct>` bucket (BPA + SSE + log-delivery
+  policy). These buckets predate the CDK stack (imported by name), so the steps
+  live in `infra/harden_buckets.sh` (idempotent) as their IaC-equivalent.
+  Verified: policies read back, logging set, HTTPS reads intact.
+- **Still pending (need a decision — deliberately not auto-applied):** explicit
+  principal-allowlist Deny (needs exact principal enumeration + testing); a
+  lifecycle rule to expire old `raw` corpus (**deletes data** — retention call).
 - **Confirm first (account-wide):** turn on account-level Block Public Access.
 - **Optional:** SSE-KMS CMK on `digests`/`raw` (read then also needs
   `kms:Decrypt` — a separately-granted barrier).
