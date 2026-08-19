@@ -495,16 +495,26 @@ def _soft_related(
             continue
         if sig.get("_lens") == seed.get("_lens") and not sig.get("is_new"):
             continue
-        score = 0
         sig_ents = set(resolve_entities(sig))
+        # Payments domain boost: pix regulatory + acquirer SEC.
+        blob = signal_blob(seed) + " " + signal_blob(sig)
+        domain_link = "PIX" in blob and sig.get("_lens") in ("sec", "ofertas", "pix", "juros")
+        # Guard against a fabricated cross-entity nexus. A signal that belongs to a
+        # DIFFERENT tracked entity than the seed must not be attached as "related"
+        # on a coincidental shared token alone — that stapled an unrelated insurer's
+        # earnings news onto a BCB cancellation (and, on an entity-less regulatory
+        # seed, any competitor's news as free "color"). It attaches only if it
+        # shares the seed's entity or there is a genuine domain link. Signals with
+        # no tracked entity (e.g. another regulatory act) still fuse on topic.
+        if sig_ents and not (seed_ents & sig_ents) and not domain_link:
+            continue
+        score = 0
         if seed_ents and seed_ents & sig_ents:
             score += 3
         overlap = seed_toks & tokens_for_match(sig)
         if len(overlap) >= 1:
             score += min(2, len(overlap))
-        # Payments domain boost: pix regulatory + acquirer SEC
-        blob = signal_blob(seed) + " " + signal_blob(sig)
-        if "PIX" in blob and sig.get("_lens") in ("sec", "ofertas", "pix", "juros"):
+        if domain_link:
             score += 1
         if score <= 0:
             continue

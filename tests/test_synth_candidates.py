@@ -477,3 +477,41 @@ def test_news_only_item_is_suppressed_at_prod_defaults():
         "subject": "Nomad autorizada", "url": "https://bcb/9", "is_new": True}], "context": []}
     cands2 = extract_candidates(d, max_candidates=5)
     assert any("nomad" in (c.get("entities") or []) for c in cands2)
+
+
+def test_regulatory_fusion_does_not_absorb_unrelated_entity_news():
+    """An entity-less regulatory card must not staple on an unrelated tracked
+    entity's news via a coincidental shared token (the Oppens-cancellation card
+    that pulled in Caixa Seguridade earnings as false 'color')."""
+    digest = {
+        "regulatory": {
+            "items": [
+                {
+                    "id": "bcb:cancel",
+                    "doc_type": "Comunicado",
+                    "subject": "Pedido de cancelamento de autorizacao de sociedade de credito",
+                    "url": "https://www.bcb.gov.br/x",
+                    "is_new": True,
+                }
+            ],
+            "context": [],
+        },
+        "news": {
+            "items": [
+                {
+                    "id": "news:nubank",
+                    "title": "Nubank amplia credito e lucro cresce no trimestre",
+                    "publisher": "Valor",
+                    "url": "https://valor.example/n",
+                    "is_new": True,
+                }
+            ],
+            "context": [],
+        },
+    }
+    cands = extract_candidates(digest, max_candidates=10, min_lenses=2, min_score=0.0)
+    # No entity-less card (e.g. the regulatory one) may carry the Nubank news.
+    for c in cands:
+        if not c.get("entities"):
+            src_ids = {s.get("id") for s in (c.get("sources") or [])}
+            assert "news:nubank" not in src_ids
