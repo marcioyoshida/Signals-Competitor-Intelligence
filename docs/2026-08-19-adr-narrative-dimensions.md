@@ -226,6 +226,19 @@ have tickers, so the bar is higher.
   axis/type facet.
 - **Cost/latency.** A stateful pre-synthesis step + multiple producers multiply
   work; hold the line with deterministic nomination, LLM only on gated survivors.
+- **KB grounding horizon vs. retention (S3 Vectors).** The Bedrock KB's *only*
+  data source is the **raw** bucket, and a sync runs every ingest — so raw's
+  lifecycle expiry *is* the KB's retrievable horizon (deletions are reconciled out
+  of the S3 Vectors index within hours, not lagged). The long-lookback axes
+  (longitudinal seasonality, YoY comparative, annual-cadence silence) need a full
+  prior year to *ground* their strongest claims, so raw retention was raised
+  **180 → 395 days** (one YoY cycle + margin). Two design consequences: **(a)**
+  build the axis **feature store from `digests/` (durable), never by re-reading
+  raw** — so axis *computation* is retention-independent and only *grounding depth*
+  is bounded by raw; **(b)** extending retention is **forward-only** — the deep KB
+  window refills over ~13 months, while the durable digests keep the analytical
+  memory intact meanwhile. Multi-year cohort/vintage is served by durable registry
+  facts + digests, not by keeping raw for years.
 
 ## Classification — effort, challenge, risk, enabler, value
 

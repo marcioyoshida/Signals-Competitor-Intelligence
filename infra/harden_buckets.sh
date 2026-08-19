@@ -13,9 +13,13 @@
 #      feed-builder Lambda still reads digests after applying).
 #   2. S3 server access logging -> a locked-down access-logs bucket.
 #   3. Account-level Block Public Access (account-wide guardrail).
-#   4. Lifecycle: expire onca-raw objects after 180 days (raw corpus only;
-#      NOT digests/narratives). Forward-looking — nothing is old enough to
-#      delete at apply time.
+#   4. Lifecycle: expire onca-raw objects after 395 days (raw corpus only;
+#      NOT digests/narratives). raw IS the Bedrock KB's only data source and a
+#      sync runs every ingest, so this retention == the KB's grounding horizon.
+#      395d = one full year-over-year cycle + ~30d margin, so YoY comparison and
+#      annual-cadence "silence" narratives (ADR 003) can retrieve the prior-year
+#      primary doc. Forward-only: the deep window refills over ~13 months; the
+#      durable digests/ narratives are the analytical memory and are untouched.
 #
 # NOT here (need a decision — see ADR 002 §6):
 #   - SSE-KMS CMK on the data buckets (adds kms:Decrypt as a second gate).
@@ -28,7 +32,7 @@ ACCOUNT="${ONCA_ACCOUNT:-668449743071}"
 DATA_BUCKETS=("onca-digests-${ACCOUNT}" "onca-raw-${ACCOUNT}")
 RAW_BUCKET="onca-raw-${ACCOUNT}"
 LOG_BUCKET="onca-s3-access-logs-${ACCOUNT}"
-RAW_RETENTION_DAYS="${ONCA_RAW_RETENTION_DAYS:-180}"
+RAW_RETENTION_DAYS="${ONCA_RAW_RETENTION_DAYS:-395}"  # KB grounding horizon; see [4]
 REGION="${AWS_REGION:-us-east-1}"
 
 data_bucket_policy() {  # $1 = bucket
@@ -74,7 +78,7 @@ done
 echo ">> [4] Lifecycle: expire $RAW_BUCKET objects after ${RAW_RETENTION_DAYS}d (raw corpus only)"
 aws s3api put-bucket-lifecycle-configuration --bucket "$RAW_BUCKET" \
   --lifecycle-configuration "$(cat <<JSON
-{"Rules":[{"ID":"expire-raw-corpus-${RAW_RETENTION_DAYS}d","Status":"Enabled","Filter":{"Prefix":""},"Expiration":{"Days":${RAW_RETENTION_DAYS}},"AbortIncompleteMultipartUpload":{"DaysAfterInitiation":7}}]}
+{"Rules":[{"ID":"expire-raw-corpus-${RAW_RETENTION_DAYS}d","Status":"Enabled","Filter":{"Prefix":""},"Expiration":{"Days":${RAW_RETENTION_DAYS}},"NoncurrentVersionExpiration":{"NoncurrentDays":30},"AbortIncompleteMultipartUpload":{"DaysAfterInitiation":7}}]}
 JSON
 )"
 echo ">> Done."
