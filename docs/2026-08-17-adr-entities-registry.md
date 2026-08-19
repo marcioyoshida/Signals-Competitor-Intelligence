@@ -138,9 +138,17 @@ parts):
    the feed builder reads pending `REVIEW#` items (`entities_table` read grant),
    resolves slugs to display names, and rides them on `feed.json` as `reviews[]`;
    the dashboard shows a "Revisão de entidades" panel (visible only when
-   proposals exist), stating nothing is auto-merged. *Still deferred:* the
-   browser approve/reject **write-path** (needs an authenticated action endpoint)
-   — curation runs via the backend functions until that lands.
+   proposals exist), stating nothing is auto-merged. **Write-path shipped
+   2026-08-18** — step 5 complete: a `review_action` Lambda (Function URL) behind
+   a CloudFront `/api/*` behavior gated by the *same* basic-auth edge function as
+   the dashboard, so the browser's existing credentials authorize approve/reject
+   (Aprovar/Rejeitar buttons POST to `/api/review`); the action applies via
+   `resolve_review` and triggers a feed rebuild. The Function URL is AuthType
+   NONE with a shared origin secret (CloudFront-injected header) so direct calls
+   are rejected. Verified live: approve via CloudFront+basic-auth applied the
+   `canonical_id` merge (200); direct Function-URL call → 403; no-auth → 401.
+   Chose reused basic-auth over Cognito to keep step 5 self-contained; full
+   accounts/identity remains step 7.
 6. `onca-tenant-config` + read-layer personalization (scoring/filter/alerts).
 7. Manage-entities UI (with the Cognito accounts layer).
 

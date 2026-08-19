@@ -70,6 +70,8 @@
   .review { padding: 10px 16px; border-top: 1px solid var(--border); }
   .review:first-child { border-top: 0; }
   .review .rmeta { color: var(--muted); font-size: 12px; margin-top: 3px; }
+  .ractions { margin-top: 6px; display: flex; gap: 6px; align-items: center; }
+  .rbtn { font-size: 12px; padding: 3px 10px; }
   .legend { display: flex; gap: 12px; flex-wrap: wrap; padding: 0 16px 12px; color: var(--ink2); font-size: 12px; }
   .legend .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
   .feed { padding: 6px 10px 14px; }
@@ -261,11 +263,33 @@ function renderReviews() {
       ? `Agrupar <b>${esc(r.member_label || r.member || "?")}</b> sob <b>${esc(r.leader_label || r.leader || "?")}</b>`
       : `Adicionar nome <b>${esc(r.proposed || "?")}</b> a <b>${esc(r.member_label || r.member || "?")}</b>`;
     const when = fmtDate(String(r.created_at || "").slice(0, 10));
-    return `<div class="review">
+    return `<div class="review" data-rid="${esc(r.review_id)}">
       <div>${desc}</div>
       <div class="rmeta">${esc(r.reason || "")} · <span class="chip">${esc(r.confidence || "")}</span> · <span class="date">${esc(when)}</span></div>
+      <div class="ractions">
+        <button class="btn rbtn" data-id="${esc(r.review_id)}" data-dec="approved">Aprovar</button>
+        <button class="btn rbtn" data-id="${esc(r.review_id)}" data-dec="rejected">Rejeitar</button>
+      </div>
     </div>`;
   }).join("");
+}
+
+async function decideReview(reviewId, decision, btn) {
+  const box = btn.closest(".ractions");
+  box.innerHTML = "Enviando…";
+  try {
+    const r = await fetch("api/review", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ review_id: reviewId, decision }),
+    });
+    if (!r.ok && r.status !== 409) throw new Error("HTTP " + r.status);
+    // optimistic: drop the decided item; the server rebuilds feed.json in the
+    // background, so the next natural load stays consistent.
+    DATA.reviews = (DATA.reviews || []).filter(x => x.review_id !== reviewId);
+    renderReviews();
+  } catch (e) {
+    box.innerHTML = `<span class="rmeta">Erro: ${esc(e.message)}</span>`;
+  }
 }
 
 function renderKpis() {
@@ -541,6 +565,11 @@ document.getElementById("tableToggle").onclick = (e) => {
   document.getElementById("feed").classList.toggle("hidden", !hidden);
   e.target.textContent = hidden ? "Tabela" : "Cartões";
 };
+
+document.addEventListener("click", e => {
+  const b = e.target.closest(".rbtn");
+  if (b) decideReview(b.dataset.id, b.dataset.dec, b);
+});
 
 boot();
 </script>
