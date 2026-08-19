@@ -111,10 +111,13 @@ flowchart TB
 | ③ Marketplace | Vendor API, AWS billing | Metered per-lookup **or** subscription | Low | E |
 | ④ Tenant-hosted dashboard (**premium**) | Tenant account (thin) | Premium / enterprise | Low (glass only; no registry, no superset) | E+ |
 
-Channel ④ is sold as a **premium tier** (own domain, own account, own SSO, and —
-at the top end — data residency). It ships in **two options** (§3b) that host the
-glass tenant-side *without* forfeiting entitlement enforcement or telemetry — a
-premium tier must never have worse analytics than base SaaS.
+Channel ④ is sold as a **premium tier** whose defining value is **strategic
+independence**: the tenant runs their own CloudFront, so the vendor is *not*
+following their team's usage. For a competitive-intelligence product that
+non-surveillance is a feature worth paying for. It ships in **two options** (§3b);
+reduced vendor telemetry is the sold benefit, not a defect (§8b). The
+base/majority deliberately stays on vendor-hosted ① so product telemetry is
+retained where most subs are.
 
 The decision that keeps all four honest: **entitlement is server-authoritative
 and enforced at the data boundary, never client-side** (ADR 002 Decision 3).
@@ -190,17 +193,27 @@ scoped-feed bucket*. "Auth" as an authority is always vendor-side.
 
 ## 3b. Premium tier — tenant-hosted dashboard (two options)
 
-Channel ④ is the premium. The design constraint: **a premium tier must not have
-worse analytics than base SaaS**, which naive tenant-hosting would cause (the
-vendor edge drops out of the request path — see §8b). These two options host the
-glass tenant-side while keeping entitlement enforcement and telemetry intact.
+Channel ④ is the premium, and its defining value is **strategic independence**:
+the tenant runs their own CloudFront so the vendor is *not* watching their team's
+usage. For a competitive-intelligence product that non-surveillance is worth
+paying for — a bank does not want the vendor seeing which rivals its strategy desk
+studies most. So tenant-hosting **loses in-glass vendor telemetry by design**
+(§8b), and that is priced as a benefit, not a defect. The constraint that *does*
+hold: entitlement enforcement stays intact and the registry/superset never ship.
+**Keep the base/majority on vendor-hosted ①** so product telemetry is retained
+across most subs; tenant-run CloudFront is deliberately gated behind premium
+pricing precisely so it stays a minority — if it became the default, vendor-side
+analytics would erode. A and B are two *depths of independence*.
 
-### Option A — tenant glass, vendor data plane (thin premium; **default**)
+### Option A — tenant glass, vendor data plane (thin premium; **default premium**)
 The tenant hosts only the glass (CloudFront + static UI on their domain/branding,
 optional SSO shim). **Every data read still goes to the vendor feed API**
 (Pattern A). Nothing is stored tenant-side.
 - **Entitlement:** at read, vendor-side — unchanged from base SaaS.
-- **Analytics:** **full** — the vendor API stays in path, every call attributable.
+- **Analytics:** partial — the vendor still sees **server-side read patterns**
+  (which modules/entities are fetched, cadence, because reads hit its API) but
+  **not in-glass behavior** (clicks, drill-downs, dwell): that needs a beacon the
+  tenant now hosts and, as a premium buyer, will typically strip.
 - **Residency:** partial — glass/domain/SSO are theirs; data transits the vendor
   edge (projected/scoped, never the registry).
 
@@ -210,16 +223,16 @@ scoped feed into cross-account (BYO-bucket). The dashboard reads its own bucket 
 works offline of the vendor API; data at rest in the tenant region/account.
 - **Entitlement:** at **write** — the vendor only ever writes entitled, scoped
   narratives; a module change re-writes the bucket. Still no superset/registry.
-- **Analytics:** via a **consented client-side telemetry beacon** to a vendor
-  endpoint (governed by the DPA); disabling it degrades analytics to delivery
-  events only.
+- **Analytics:** the vendor is **fully blind after the scoped write** — engagement
+  data exists only via a **consented client-side beacon** to a vendor endpoint
+  (governed by the DPA); disable it and the vendor sees nothing but the write.
 - **Residency:** **maximal** — data at rest in the tenant account/region.
 
 ```mermaid
 flowchart LR
   subgraph OA["Option A — thin premium (default)"]
     A1["Tenant: CloudFront + glass + SSO shim"] -->|every read| AV["Vendor feed API (Pattern A)"]
-    AV -->|"entitlement @ read · full telemetry"| A1
+    AV -->|"entitlement @ read · read patterns only, no in-glass"| A1
   end
   subgraph OB["Option B — data-resident premium (add-on)"]
     BV["Vendor: writes scoped feed"] -->|"cross-account @ write"| BB[("Tenant S3 bucket")]
@@ -228,17 +241,20 @@ flowchart LR
   end
 ```
 
-| | Entitlement | Analytics | Residency | Complexity |
+| | Entitlement | Vendor still sees | Residency | Complexity |
 |---|---|---|---|---|
-| **A — thin** | At read (vendor API) | Full, always | Partial | Lower |
-| **B — resident** | At write (scoped bucket) | Consent-based beacon | Maximal | Higher |
+| **A — thin** | At read (vendor API) | Read patterns (what you pull) | Partial | Lower |
+| **B — resident** | At write (scoped bucket) | Nothing (beacon-only, consented) | Maximal | Higher |
 
-**Recommendation:** default the premium to **A** (keeps analytics, simplest,
-delivers the "our account + our SSO + our domain" value most premium buyers
-actually want); offer **B** as a higher enterprise/residency add-on for
-hard-mandate tenants who knowingly trade telemetry for at-rest residency. Neither
-ships the registry or the superset — the premium is *hosting, branding, and
-residency*, never more data.
+**Recommendation:** keep the **majority on base SaaS ①** (vendor CloudFront,
+consented telemetry retained) — that is where product analytics live, and it must
+stay the default. Sell tenant-run CloudFront as the **premium**, positioned as
+independence / non-surveillance: **A** (own glass + live vendor data — no in-glass
+vendor tracking, though the vendor still sees which data you pull) as the default
+premium; **B** (own glass + own bucket — vendor fully blind, plus data residency)
+as the enterprise top tier and the truest expression of "no vendor telemetry
+follow-up." The premium is *hosting, branding, independence, and residency* —
+never more data. Neither option ships the registry or the superset.
 
 ---
 
@@ -419,19 +435,26 @@ and the *same* instrumentation ADR 002 already needs for anti-exfiltration
    tenant consent**, and must be aggregated/anonymized. Never expose one tenant's
    usage to another.
 
-**Telemetry richness is inversely proportional to how tenant-side the channel
-is** — the tension to price into channel ④:
+**In-glass telemetry requires the vendor to host the instrumented app; the edge
+alone does not capture it.** A drill-down into an already-loaded card is a
+client-side render with no network call — the vendor sees it only if the app it
+*ships and hosts* beacons the event. So richness tracks *who hosts the glass*,
+not who is nominally "in path":
 
 ```mermaid
 flowchart LR
-  A["① SaaS / ④A thin premium<br/>vendor edge in path"] -->|"every view, drill-down, session"| RICH["Richest analytics"]
-  B["② Feed API<br/>vendor API in path"] -->|"every call, per-entity"| RICH
-  C["④B data-resident<br/>vendor writes a file, then blind"] -->|"consented beacon only"| LOW["Consent-based / near-zero"]
+  A["① SaaS — vendor hosts the instrumented glass"] -->|"every view, drill-down, session (consented)"| RICH["Richest"]
+  B["② Feed API / ④A — vendor data plane, tenant glass"] -->|"server read patterns only; no in-glass events"| MID["Partial — what data is pulled, not how it's used"]
+  C["④B — vendor writes scoped feed, then blind"] -->|"consented beacon or nothing"| LOW["Near-zero, by design (the premium)"]
 ```
 
-The choice that buys a tenant residency (Option B) *costs* them engagement
-analytics — the vendor edge drops out of the path. State this explicitly when
-pricing ④B. Option A is the sweet spot: tenant-hosted glass, full telemetry.
+Tenant-run CloudFront (**both** ④ options) removes the vendor from the in-glass
+path, so in-glass engagement telemetry is lost **by design** — that
+non-surveillance is the premium's selling point, not a regression. The vendor
+retains rich (consented) telemetry across the **base/majority on ①**; ④A still
+leaks *server read patterns*, ④B leaves the vendor fully blind. Keeping the
+majority on ① is precisely what preserves product analytics overall — so ④ must
+stay premium-gated, never the default.
 
 ---
 
