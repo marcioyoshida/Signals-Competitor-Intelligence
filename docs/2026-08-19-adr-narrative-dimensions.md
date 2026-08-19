@@ -296,8 +296,13 @@ S3 store, registry + industries, review queue, threat scoring, ~14-day window).
   Lambda) as the first detector — proves the pattern: deterministic gate on the
   feature store, LLM-free, labeled inference, its own absence-tuned emit-on-change,
   and a feedback-loop guard (derived axes excluded from feature-store "activity").
-  Next: *Longitudinal* (reads `score_z`, already computed) or *Comparative* (reads
-  the `cohorts` block) — same enabler, no new machinery.
+  **Longitudinal ✅ shipped 2026-08-19** (`src/synth/longitudinal.py`,
+  `OncaLongitudinal` Lambda) as the second — reads `score_z` for a trajectory
+  break in either direction (escalation z≥+2 / cooling z≤−2), recomputes features
+  fresh (lag-free) so a break surfaces the day it happens, and — unlike silence —
+  is **grounded**: it cites the driving narrative as evidence while still labeled
+  inference. Gated on recency so it never overlaps silence. Next: *Comparative*
+  (reads the `cohorts` block — peer-outlier) or *Cohort* — same enabler.
 - **Wave 2 — new stores, moderate risk.** *Threaded / incident* (event identity +
   thread store); the full *Regulatory-lifecycle* thread; *Behavioral*.
 - **Wave 3 — graph + legal risk, review-gated from day one.** *Relational*, then

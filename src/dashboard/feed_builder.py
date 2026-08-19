@@ -189,6 +189,9 @@ def build_feed(
                 "axis": n.get("axis"),
                 "subject_type": n.get("subject_type"),
                 "is_inference": bool(n.get("is_inference")),
+                # direction distinguishes escalation/cooling on trajectory breaks;
+                # None for axes without a polarity.
+                "direction": n.get("direction"),
                 "entity": n.get("entity"),
                 "entity_label": display_label(n.get("entity"), n.get("kind")),
                 "entities": n.get("entities") or [],

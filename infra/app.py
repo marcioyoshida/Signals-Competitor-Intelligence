@@ -516,6 +516,28 @@ class OncaPrototypeStack(Stack):
         # same-day silence cards (retraction) — grant_read_write covers all three.
         digests_bucket.grant_read_write(silence_fn)
 
+        # Longitudinal detector (ADR 003 Wave 1): recomputes fresh features from
+        # history and writes derived "broke its own pattern" narratives. Needs the
+        # entities table for the industry map on the recompute; digests read/write
+        # (put break cards + retract normalized same-day ones).
+        longitudinal_fn = lambda_.Function(
+            self,
+            "OncaLongitudinal",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.synth.longitudinal.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.minutes(5),
+            memory_size=512,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+                "ONCA_ENTITIES_TABLE": entities_table.table_name,
+                "ONCA_FEATURE_WINDOW_DAYS": "90",
+            },
+        )
+        digests_bucket.grant_read_write(longitudinal_fn)
+        entities_table.grant_read_data(longitudinal_fn)
+
         # Feed builder: aggregate recent narratives -> feed.json in the site bucket.
         feed_fn = lambda_.Function(
             self,
@@ -647,6 +669,19 @@ class OncaPrototypeStack(Stack):
             interval=Duration.seconds(15),
             backoff_rate=2.0,
         )
+        longitudinal_task = sfn_tasks.LambdaInvoke(
+            self,
+            "LongitudinalTask",
+            lambda_function=longitudinal_fn,
+            payload=sfn.TaskInput.from_object({}),
+            result_path="$.longitudinal",
+        )
+        longitudinal_task.add_retry(
+            errors=["States.ALL"],
+            max_attempts=2,
+            interval=Duration.seconds(15),
+            backoff_rate=2.0,
+        )
         feed_task = sfn_tasks.LambdaInvoke(
             self,
             "FeedTask",
@@ -668,6 +703,7 @@ class OncaPrototypeStack(Stack):
                 ingest_task.next(feature_task)
                 .next(synth_task)
                 .next(silence_task)
+                .next(longitudinal_task)
                 .next(feed_task)
             ),
             # Budget for a 15-min ingest (plus a retry), then synth, then feed.

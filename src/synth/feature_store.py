@@ -32,7 +32,7 @@ FEATURES_KEY = "features/latest.json"
 # emitting a "went quiet" silence card would itself reset the entity's
 # days_since_last and cadence, a feedback loop. Freshness/cadence are built from
 # activity narratives only.
-DERIVED_AXES = frozenset({"silence"})
+DERIVED_AXES = frozenset({"silence", "longitudinal"})
 
 # Noise floor for the break z-score denominator: threat scores are 0..1, so a
 # baseline std below this is treated as ~0.05 to avoid a div-by-zero (a flat

@@ -471,8 +471,14 @@ function citationFooter(model) {
   }).join("");
 }
 
-const AXIS_LABELS = { silence: "Silêncio" };
+const AXIS_LABELS = { silence: "Silêncio", longitudinal: "Quebra de padrão" };
 function axisLabel(axis) { return AXIS_LABELS[axis] || "Derivado"; }
+// Badge label — trajectory breaks show their polarity (↑ alta / ↓ recuo).
+function inferBadge(f) {
+  if (f.axis === "longitudinal" && f.direction)
+    return f.direction === "escalation" ? "Quebra ↑ alta" : "Quebra ↓ recuo";
+  return axisLabel(f.axis);
+}
 
 function cardHtml(f, group) {
   const t = tierOf(f.threat_score);
@@ -490,7 +496,7 @@ function cardHtml(f, group) {
       <span class="tier" style="background:${cssvar(t.var)}">${t.label}</span>
       <span class="entity">${esc(f.entity_label)}</span>
       ${f.is_alert ? '<span class="alert">ALERTA</span>' : ''}
-      ${f.is_inference ? `<span class="infer" title="Indicador derivado (ex.: silêncio de sinal) — inferência, não um fato reportado. Sem fonte citável.">${esc(axisLabel(f.axis))} · inferência</span>` : ''}
+      ${f.is_inference ? `<span class="infer" title="Indicador derivado (silêncio de sinal, quebra de padrão) — inferência sobre o histórico do concorrente, não um fato novo reportado.">${esc(inferBadge(f))} · inferência</span>` : ''}
       <span class="spacer" style="flex:1"></span>
       <span class="date">${esc(fmtDate(f.date))}${fmtTime(f.run_at) ? ` · ${esc(fmtTime(f.run_at))}` : ""}</span>
     </div>
