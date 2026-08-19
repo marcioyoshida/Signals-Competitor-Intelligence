@@ -38,17 +38,38 @@ The five seed examples the product owner raised are precisely the narratives tha
 
 ## The underlying reframe
 
-A narrative has three coordinates, of which we currently vary only the first two
-poorly: **subject_type**, **subject_key**, **axis** (temporal shape). Generalize:
+A narrative has three coordinates — **subject_type**, **subject_key**, **axis**.
+The *axis* is where the power is, and it is itself a point in a small **design
+space** of four knobs:
 
-| Axis | subject | temporal scope | what it answers | new machinery |
+- **Subject** — entity · pair · person · **set/cohort** · **theme** · **instrument**
+  (a norm) · **hub** (infrastructure) · **absence**
+- **Temporal stance** — past (descriptive) · present (state) · **future**
+  (forecast / deadline)
+- **Polarity** — presence-of-signal · **absence-of-expected-signal**
+- **Baseline** — self · **peer / cohort** · **expectation** · none
+
+Everything shipped or first-proposed sits in the corner
+`{past–present, presence, self-or-pair baseline}`. The unexplored, high-value
+territory is **future tense**, **absence polarity**, and **peer / expectation
+baselines** — the later axes below are chosen to light those up. Each axis is one
+such choice of knobs:
+
+| Axis | subject | unlocks (knob) | what it answers | new machinery |
 |---|---|---|---|---|
-| **Cross-sectional** *(today)* | entity / signal | one run | "what's happening to X now" | — (built) |
-| **Longitudinal / trajectory** (#1) | entity | rolling window | "X broke its own pattern" | rolling per-entity **feature store** + anomaly detector |
-| **Threaded / incident** (#2) | an **incident** (event with identity) | open-ended, **updated in place** | "here's case Y and its latest development" | **event identity** + thread store + `emit-on-update` |
-| **Behavioral / campaign** (#3) | (entity, pattern template) | window | "X is running an event/marketing cadence" | pattern templates / classifier |
-| **Relational / dyadic** (#4, #5) | **entity pair** (+ relation type) | window | "A and B are converging / in dispute" | **relationship graph** (typed co-occurrence + evidence) |
-| **Operative / person** (§ operatives) | **individual** | window / open-ended | "who is X, where have they been, who do they bridge" | **person nodes** + entity↔individual role edges over the same graph |
+| **Cross-sectional** *(today)* | entity / signal | — | "what's happening to X now" | — (built) |
+| **Longitudinal / trajectory** (#1) | entity | self baseline | "X broke its own pattern" | rolling per-entity **feature store** + anomaly detector |
+| **Comparative / peer-cohort** | (entity, peer set) | **peer baseline** | "X is an outlier vs. its cohort" | feature store + **Phase B industries as cohorts** |
+| **Cohort / vintage** | a **set** (by entry/attribute) | set + long time | "how the 2024 SCD cohort is faring" | set-longitudinal over registry + feature store |
+| **Counterfactual / silence** | an **expected-but-missing** signal | **absence** | "who did *not* act / who went quiet" | **expected-signal (cadence) model** — inverts emit-on-change |
+| **Thematic / sector-current** | a **theme** | many-entity subject | "what the sector is collectively doing about X" | topic tagging + cross-entity aggregation |
+| **Regulatory-lifecycle / deadline** | a **policy instrument** | **future** (deadline) | "what's due, and who hasn't complied" | instrument thread + deadline extraction + affected-entity map |
+| **Behavioral / campaign** (#3) | (entity, pattern template) | pattern | "X is running an event/marketing cadence" | pattern templates / classifier |
+| **Threaded / incident** (#2) | an **incident** (event identity) | in-place update | "here's case Y and its latest development" | **event identity** + thread store + `emit-on-update` |
+| **Relational / dyadic** (#4, #5) | **entity pair** (+ relation) | pair subject | "A and B are converging / in dispute" | **relationship graph** (typed co-occurrence + evidence) |
+| **Operative / person** (§ operatives) | **individual** | person subject | "who is X, where have they been, who do they bridge" | **person nodes** + entity↔person role edges |
+| **Ecosystem / dependency** | infra **hub** / directed edge | hub subject | "who's exposed if hub Z breaks" | **dependency ingestion (new source)** + contagion over edges |
+| **Predictive / leading-indicator** | (entity, anticipated event) | **future** (forecast) | "what X is likely to do next" | historical pattern→outcome model (**needs data maturity**) |
 
 Two structural shifts unify every row:
 
@@ -206,22 +227,63 @@ have tickers, so the bar is higher.
 - **Cost/latency.** A stateful pre-synthesis step + multiple producers multiply
   work; hold the line with deterministic nomination, LLM only on gated survivors.
 
-## Suggested sequencing (dependency order, not committed)
+## Classification — effort, challenge, risk, enabler, value
 
-1. **Longitudinal / trajectory (#1)** and **behavioral (#3)** — need only
-   per-entity history; buildable on the existing single-entity store. Lowest risk,
-   no new identity problem. *Start here.*
-2. **Threaded / incident (#2)** — introduces event identity + the thread store +
-   `emit-on-update`; the first mutable-document narrative.
-3. **Relational / dyadic (#4, #5)** — needs the relationship graph and carries the
-   defamation risk; heaviest and last. Review-gated from day one.
-4. **Operatives / person layer (Shift 3)** — depends on the relationship-graph
-   machinery and carries the LGPD + defamation risk, so the *full* operative
-   network comes last. **But there is a safe beachhead first:** promote the QSA
-   **controller-person behind a new entrant** into a node (public, already
-   ingested by `known_parents`, low homonym risk because it's keyed by the
-   entrant's own filing) — "who's behind this SCD" — before the broader
-   movement/interlock/revolving-door axes.
+Effort/risk are relative to *today's* infrastructure (per-entity narratives,
+S3 store, registry + industries, review queue, threat scoring, ~14-day window).
+
+| Axis | Effort | Key challenge | Risk | Enabler / dependency | CI value |
+|---|---|---|---|---|---|
+| Comparative / peer-cohort | **Low** | choosing comparable metrics; normalizing heterogeneous entities | Low | feature store; **cohorts already exist** (Phase B industries) | Med |
+| Longitudinal / trajectory | **Low–Med** | thin history (cold-start); threshold tuning vs. false alarms | Low | feature store | Med |
+| Cohort / vintage | **Low–Med** | defining dormancy/attrition; needs history | Low | registry + feature store | Med |
+| Counterfactual / silence | **Med** | modelling the *expected* signal (cadence); inverts emit-on-change | Low | expected-signal/cadence store (shares feature store) | **High** |
+| Thematic / sector-current | **Med** | topic tagging without drift; theme taxonomy | Low–Med | topic classifier (keyword taxonomy → LLM) | **High** |
+| Regulatory-lifecycle / deadline | **Med** | deadline extraction from legal text; mapping *affected* entities | Low | instrument thread + LLM extraction | **High** |
+| Behavioral / campaign | **Med–High** | defining pattern templates; ambiguous, needs curation/labels | Low–Med | pattern templates / classifier | Med (weakest value/effort for FS) |
+| Threaded / incident | **High** | **event identity** (a new false-nexus problem); `emit-on-update` + lifecycle | Med (mis-threading) | thread store | **High** |
+| Relational / dyadic | **High** | false edges from coincidence; **defamation** | **High (legal)** | relationship graph | **High** |
+| Operative / person — *beachhead* | **Med** | bounded homonyms (keyed by the entrant's filing) | Med | `known_parents` (**exists**) | **High** |
+| Operative / person — *full network* | **Highest** | person identity (no CPF, homonyms); **LGPD** | **Highest (legal/PII)** | relationship graph + person nodes | **High** |
+| Ecosystem / dependency | **High** | **data gap** — dependency edges rarely in public filings; ingestion is the blocker | Med | **new ingestion source** | **High (but blocked)** |
+| Predictive / leading-indicator | **High** | needs labelled history + validation; spurious patterns | **High (inference)** | data maturity + longitudinal history | Highest (**premature**) |
+
+### Others to consider (the leverage points)
+
+- **One investment unlocks four axes: the per-entity feature store** (rolling
+  stats + cadence). It is cheap, deterministic, low-risk, and it is the common
+  dependency of *longitudinal, comparative, silence, and cohort*. Build it first —
+  no user-facing axis, but it de-risks the entire low-risk wave.
+- **The thread/edge store** (`emit-on-update` + lifecycle) is the second enabler —
+  shared by *incident, regulatory-lifecycle,* and (with the graph) *relational*.
+- **The relationship graph** is the third — shared by *relational* and *operatives*.
+- **Some axes are gated by inputs, not effort.** *Predictive* is **time-gated**:
+  it cannot be forced, it accrues as history accumulates — so treat it as a
+  by-product of running the feature store for months, not a scheduled build.
+  *Ecosystem* is **source-gated**: the work is finding a dependency-data source,
+  not the synthesis.
+- **Solve the cross-cutting concerns once, not per axis:** per-axis threat scoring
+  (shared 0–1 + factors), dashboard card shapes, and the inference-labeling
+  guardrail apply to *every* new axis.
+- **Risk clusters at the top of the value column.** The highest-value axes
+  (relational, operatives, predictive) carry the legal/PII/inference risk; the
+  cheap axes (comparative, longitudinal, cohort) are the safest. Silence,
+  thematic, and regulatory-deadline are the sweet spot — **high value, low risk,
+  medium effort**.
+
+## Suggested sequencing (waves, not committed)
+
+- **Wave 0 — enabler.** Build the **per-entity feature store** (rolling stats +
+  cadence). No user-facing axis; unlocks Wave 1.
+- **Wave 1 — cheap, low-risk, high-leverage.** *Comparative, Longitudinal, Silence,
+  Cohort* (all ride the feature store) + *Thematic* and *Regulatory-deadline*
+  (independent, high value, low risk). This is the value sweet spot.
+- **Wave 2 — new stores, moderate risk.** *Threaded / incident* (event identity +
+  thread store); the full *Regulatory-lifecycle* thread; *Behavioral*.
+- **Wave 3 — graph + legal risk, review-gated from day one.** *Relational*, then
+  *Operatives* (beachhead "who's behind this SCD" → full network).
+- **Opportunistic / gated.** *Predictive* when history matures; *Ecosystem* if a
+  dependency-data source appears.
 
 Independent of Phase C. Nothing here is implemented yet — this ADR records the
-model and the open decisions for a later build.
+model, the classification, and the open decisions for a later build.
