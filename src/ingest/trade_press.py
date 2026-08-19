@@ -42,6 +42,14 @@ OUTLET_FEEDS: list[tuple[str, str]] = [
     ("Valor Econômico", "https://pox.globo.com/rss/valor/empresas/"),
     ("Money Times", "https://www.moneytimes.com.br/feed/"),
     ("Money Times", "https://www.moneytimes.com.br/tag/mercados/feed/"),
+    # Insurance trade press — the domain's real signal lives in specialist outlets,
+    # so the news-dependent insurers (not separately B3-listed: SulAmérica,
+    # Bradesco Seguros, Icatu) get corroborating distinct publishers here. Canonical
+    # (post-redirect) feed URLs so no 301 hop is needed.
+    ("CQCS", "https://cqcs.com.br/feed/"),
+    ("Revista Apólice", "https://revistaapolice.com.br/feed/"),
+    ("Revista Cobertura", "https://www.revistacobertura.com.br/feed/"),
+    ("Sonho Seguro", "https://www.sonhoseguro.com.br/feed/"),
 ]
 
 # Ambiguous single-word brands (Stone, Nubank, Inter) pull band/stadium/culture

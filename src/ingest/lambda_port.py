@@ -273,6 +273,24 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     fatos_watch = _csv_env("ONCA_FATOS_WATCHLIST")
     if os.environ.get("ONCA_FATOS_USE_COMPETITORS", "true").lower() in ("1", "true", "yes"):
         fatos_watch = list(dict.fromkeys(fatos_watch + competitors))
+    # Derive the structured (Fato Relevante / Comunicado ao Mercado) watchlist from
+    # the registry too, so a newly curated B3-listed entity (one carrying a
+    # fatos_term) gets a STRUCTURED lens with no redeploy — mirrors the news-terms
+    # derivation below. Structured identity means such an entity resolves from its
+    # CVM filing and does not depend on the fragile news-only corroboration gate
+    # (nor on an ambiguous place-name brand like "Porto Seguro").
+    if os.environ.get("ONCA_ENTITIES_TABLE") and os.environ.get(
+        "ONCA_FATOS_USE_REGISTRY", "true"
+    ).lower() in ("1", "true", "yes"):
+        try:
+            from src.synth import entity_registry
+
+            reg_fatos = entity_registry.fatos_terms()
+            have = {t.lower() for t in fatos_watch}
+            fatos_watch = fatos_watch + [t for t in reg_fatos if t.lower() not in have]
+            print(f"Fatos terms: {len(reg_fatos)} from registry, {len(fatos_watch)} total")
+        except Exception as exc:  # pragma: no cover - best-effort, config still works
+            print(f"Warning: registry fatos terms unavailable, using config: {exc}")
     fatos_categories = _csv_env("ONCA_FATOS_CATEGORIES") or None
 
     # Diário Oficial (DOU) — SUSEP / CADE / BACEN acts mentioning a competitor.

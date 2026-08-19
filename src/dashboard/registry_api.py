@@ -118,12 +118,16 @@ def _entities(method: str, rest: list[str], event: dict[str, Any], reg: Any) -> 
                 return _resp(400, {"error": "entity_id, display_name and aliases[] required"})
             if reg.get_entity(eid) is not None:
                 return _resp(409, {"error": "entity exists", "entity_id": eid})
+            news_search = body.get("news_search", True)
+            news_search = str(news_search).lower() not in ("false", "0", "no")
             ent = reg.put_entity(
                 eid, name, [str(a) for a in aliases],
                 industries=body.get("industries") or (),
                 confidence=str(body.get("confidence") or "curated"),
                 news_term=body.get("news_term"),
                 ambiguous_tokens=body.get("ambiguous_tokens"),
+                fatos_term=body.get("fatos_term"),
+                news_search=news_search,
                 controllers=body.get("controllers"),
             )
             return _resp(201, {"entity": ent})

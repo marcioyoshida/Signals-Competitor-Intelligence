@@ -56,6 +56,8 @@ def put_entity(
     canonical_id: str | None = None,
     news_term: str | None = None,
     ambiguous_tokens: Iterable[str] | None = None,
+    fatos_term: str | None = None,
+    news_search: bool = True,
     table: Any | None = None,
 ) -> dict[str, Any]:
     """Upsert an entity + its ALIAS#/CNPJ# lookup items. Returns the entity item.
@@ -101,6 +103,17 @@ def put_entity(
     #    convenience flag = the list is non-empty.
     if news_term:
         entity["news_term"] = str(news_term)
+    #  - fatos_term: the CVM issuer-name phrase used to pull this entity's material
+    #    facts (Fato Relevante / Comunicado ao Mercado) — a STRUCTURED identity
+    #    source, so a B3-listed entity resolves from its filing, not a fragile
+    #    news headline. Only set for entities that actually file (listed issuers).
+    #  - news_search: False makes the entity structured-only for news — it is not
+    #    added to the Google-News query set (e.g. "Porto Seguro" collides with the
+    #    Bahia city; its identity comes from the fatos_term instead).
+    if fatos_term:
+        entity["fatos_term"] = str(fatos_term)
+    if not news_search:
+        entity["news_search"] = False
     if ambiguous_tokens is not None:
         toks = sorted(
             {
@@ -592,6 +605,10 @@ def news_terms(table: Any | None = None, *, trusted_only: bool = True) -> list[s
     for e in _scan_type(_table(table), "entity"):
         if not e.get("active", True):
             continue
+        # Structured-only entities (news_search=False) are excluded from the news
+        # query set — their identity comes from a structured source (fatos_term).
+        if e.get("news_search", True) is False:
+            continue
         if trusted_only and not (
             e.get("confidence") == "curated" or e.get("news_safe")
         ):
@@ -601,6 +618,33 @@ def news_terms(table: Any | None = None, *, trusted_only: bool = True) -> list[s
         )
         key = term.lower()
         if term and key not in seen:
+            seen.add(key)
+            out.append(term)
+    return sorted(out)
+
+
+def fatos_terms(table: Any | None = None, *, trusted_only: bool = True) -> list[str]:
+    """Derive CVM material-fact (Fato Relevante) issuer-name phrases from the
+    registry — the STRUCTURED lens for B3-listed entities.
+
+    Only entities with an explicit ``fatos_term`` (set for listed issuers) are
+    included, so an entity resolves from its filing rather than a fragile news
+    headline (and a place-name brand like "Porto Seguro" stops depending on news).
+    Mirrors :func:`news_terms`' trust gate. Sorted, de-duplicated (case-fold)."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for e in _scan_type(_table(table), "entity"):
+        if not e.get("active", True):
+            continue
+        term = str(e.get("fatos_term") or "").strip()
+        if not term:
+            continue
+        if trusted_only and not (
+            e.get("confidence") == "curated" or e.get("news_safe")
+        ):
+            continue
+        key = term.lower()
+        if key not in seen:
             seen.add(key)
             out.append(term)
     return sorted(out)
@@ -826,8 +870,8 @@ def clear_cache() -> None:
 # Fields an operator may PATCH, with how each is normalized. Protected keys
 # (pk, type, entity_id, canonical_id, aliases, alias_forms, cnpj_roots) are never
 # writable through the patch path.
-_PATCH_STR = frozenset({"display_name", "news_term", "confidence", "sector", "license_class", "ticker"})
-_PATCH_BOOL = frozenset({"news_safe", "active"})
+_PATCH_STR = frozenset({"display_name", "news_term", "fatos_term", "confidence", "sector", "license_class", "ticker"})
+_PATCH_BOOL = frozenset({"news_safe", "active", "news_search"})
 
 
 def list_entities(

@@ -76,6 +76,40 @@ def test_news_terms_only_trusted_and_deduped():
     assert "NewCo Pay" in er.news_terms(table=t, trusted_only=False)
 
 
+def test_fatos_terms_only_flagged_and_trusted():
+    t = FakeTable()
+    er.put_entity("bb_seg", "BB Seguridade", ["BB SEGURIDADE"], confidence="curated",
+                  fatos_term="BB SEGURIDADE", table=t)
+    er.put_entity("c6", "C6 Bank", ["C6 BANK"], confidence="curated", table=t)  # no fatos_term
+    er.put_entity("newco", "NewCo Seg", ["NEWCO SEG"], confidence="cnpj",
+                  fatos_term="NEWCO SEG", table=t)  # untrusted
+    assert er.fatos_terms(table=t) == ["BB SEGURIDADE"]   # only flagged + trusted
+    assert "NEWCO SEG" in er.fatos_terms(table=t, trusted_only=False)
+
+
+def test_news_search_false_excludes_from_news_but_keeps_structured():
+    t = FakeTable()
+    er.put_entity("porto", "Porto Seguro", ["PORTO SEGURO"], confidence="curated",
+                  news_term="Porto Seguro", fatos_term="PORTO SEGURO",
+                  news_search=False, table=t)
+    er.put_entity("c6", "C6 Bank", ["C6 BANK"], confidence="curated", table=t)
+    terms = er.news_terms(table=t)
+    assert "Porto Seguro" not in terms    # structured-only: out of the news query set
+    assert "C6 Bank" in terms
+    assert "PORTO SEGURO" in er.fatos_terms(table=t)   # still has the structured lens
+
+
+def test_patch_fatos_term_and_news_search():
+    t = FakeTable()
+    er.put_entity("porto", "Porto Seguro", ["PORTO SEGURO"], confidence="curated",
+                  news_term="Porto Seguro", table=t)
+    er.update_entity("porto", {"fatos_term": "PORTO SEGURO", "news_search": False}, table=t)
+    ent = er.get_entity("porto", table=t)
+    assert ent["fatos_term"] == "PORTO SEGURO" and ent["news_search"] is False
+    assert er.fatos_terms(table=t) == ["PORTO SEGURO"]
+    assert "Porto Seguro" not in er.news_terms(table=t)
+
+
 def test_put_entity_stores_search_curation():
     t = FakeTable()
     er.put_entity("stone", "Stone / StoneCo", ["STONECO", "STONE "],
