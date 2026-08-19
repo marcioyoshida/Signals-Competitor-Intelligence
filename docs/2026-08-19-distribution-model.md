@@ -66,9 +66,13 @@ distribution is where it is monetized many times. That asymmetry is the margin.
 
 ## 2. Channels — one product core, four ways to consume it
 
-Every channel consumes the **same** derived scoped feed. They differ only in
-*who hosts the glass* and *how the bytes are metered*. No channel gets a
-different, richer dataset — that would fork the moat.
+Every channel consumes the **same** derived scoped feed — no channel gets a
+richer dataset (that would fork the moat). They vary on **two independent axes**:
+*who hosts the glass* (vendor vs tenant thin-glass — the **hosting topology**) and
+*how it is procured and billed* (direct vs AWS Marketplace — the **rail**). These
+are orthogonal: **Marketplace is a billing rail, not a hosting model**, so it can
+wrap any of the others (§2b). Below, ①②④ are hosting/delivery channels; ③
+(Marketplace) is the rail, drawn as an overlay, not a hosting sibling.
 
 ```mermaid
 flowchart TB
@@ -76,40 +80,44 @@ flowchart TB
 
   CORE --> C1
   CORE --> C2
-  CORE --> C3
   CORE --> C4
 
-  subgraph C1["① SaaS dashboard — DEFAULT"]
+  subgraph C1["① SaaS dashboard — DEFAULT (vendor glass)"]
     direction TB
     C1a["Vendor-hosted warroom UI<br/>CloudFront + Cognito login"]
-    C1b["Best IP protection · zero tenant footprint"]
+    C1b["Richest telemetry · zero tenant footprint"]
   end
-  subgraph C2["② Feed API — headless"]
+  subgraph C2["② Feed API — headless (vendor data plane)"]
     direction TB
     C2a["Authenticated GET /feed<br/>token carries modules[]"]
     C2b["For tenant BI / their own UI"]
   end
-  subgraph C3["③ AWS Marketplace"]
+  subgraph C4["④ Tenant thin-glass — PREMIUM (tenant glass)"]
     direction TB
-    C3a["Metered per-lookup<br/>or module subscription"]
-    C3b["Marketplace does billing/entitlement;<br/>data protection stays with us"]
+    C4a["Thin CFN stack in tenant account<br/>A: vendor data plane · B: BYO-bucket"]
+    C4b["Independence · residency · never the registry"]
   end
-  subgraph C4["④ Embedded / BYO-bucket — enterprise"]
-    direction TB
-    C4a["Thin CFN stack in tenant account<br/>OR scoped feed written cross-account"]
-    C4b["Data residency · SSO · never the registry"]
-  end
+
+  RAIL{{"③ Procurement / billing rail (orthogonal)<br/>Direct subscription  ·  AWS Marketplace"}}
+  RAIL -. bills + entitles .-> C1
+  RAIL -. bills + entitles .-> C2
+  RAIL -. bills + entitles .-> C4
 
   classDef core fill:#0b3d2e,stroke:#10b981,color:#d1fae5;
+  classDef rail fill:#1e3a5f,stroke:#38bdf8,color:#e0f2fe;
   class CORE core;
+  class RAIL rail;
 ```
 
-| Channel | Who hosts glass | Billing | IP exposure | ADR 002 phase |
+| Channel | Who hosts glass | Billing | Telemetry | ADR 002 phase |
 |---|---|---|---|---|
-| ① SaaS dashboard | Vendor | Module subscription | Lowest | D → E |
-| ② Feed API | Tenant's own app | Subscription / metered | Low (scoped payload) | D |
-| ③ Marketplace | Vendor API, AWS billing | Metered per-lookup **or** subscription | Low | E |
-| ④ Tenant-hosted dashboard (**premium**) | Tenant account (thin) | Premium / enterprise | Low (glass only; no registry, no superset) | E+ |
+| ① SaaS dashboard | Vendor | Module subscription | Richest (consented) | D → E |
+| ② Feed API | Tenant's own app | Subscription / metered | Read patterns | D |
+| ④ Tenant thin-glass (**premium**) | Tenant account (thin) | Premium / enterprise | Independence — degraded by design | E+ |
+| ③ AWS Marketplace | *n/a — billing rail, wraps ①/②/④* | On the customer's AWS bill (metered or subscription) | *unchanged — enforcement stays vendor-side (§2b)* | E |
+
+IP exposure is *Low across every row* — the registry and superset never ship,
+regardless of hosting or rail (§4–5).
 
 Channel ④ is sold as a **premium tier** whose defining value is **strategic
 independence**: the tenant runs their own CloudFront, so the vendor is *not*
@@ -124,13 +132,70 @@ and enforced at the data boundary, never client-side** (ADR 002 Decision 3).
 Client-side filtering is obfuscation — the superset would already be in the
 browser. So every channel resolves through the same authorization gate.
 
+## 2b. Procurement rail vs hosting topology (orthogonal)
+
+A recurring confusion: "a simple hosted subscribed page" and "a thin-glass AWS
+Marketplace offer" are **not** two points on one line — they sit at opposite
+corners of a 2×2, because they differ on **both** axes at once. Marketplace is a
+*rail*, so the same hosted page can be sold direct **or** through Marketplace, and
+the same thin glass likewise.
+
+|  | **Vendor-hosted glass** | **Tenant thin-glass** |
+|---|---|---|
+| **Direct subscription** | *simple hosted subscribed page* (base SaaS ①) | thin glass on a direct contract |
+| **AWS Marketplace** | base SaaS billed via Marketplace (vendor still hosts) | *thin-glass Marketplace offer* |
+
+**Axis 1 — the rail (direct → Marketplace)** changes *how it is bought and how
+entitlement is triggered*, nothing about the data:
+
+- **Procurement:** direct = vendor MSA/signup; Marketplace = 1-click on the
+  customer's existing AWS account, **Private Offers** for negotiated terms, spend
+  **draws down their AWS committed-spend / EDP** (often the decisive enterprise
+  pull).
+- **Billing:** direct = vendor Stripe/invoice; Marketplace = charges on the
+  customer's consolidated AWS bill, **AWS takes a cut**, vendor reconciles from
+  Marketplace reports.
+- **Entitlement trigger** — the concrete backend delta; both rails converge on the
+  *same* source of truth and the *same* enforcement:
+
+```mermaid
+flowchart LR
+  subgraph D["Direct subscription"]
+    D1["Vendor signup / checkout"] --> D2["Vendor writes onca-tenant-config<br/>tenant → modules[]"]
+  end
+  subgraph M["AWS Marketplace"]
+    M1["Customer subscribes on Marketplace"] --> M2["Marketplace fires SNS:<br/>subscribe / entitlement-updated"]
+    M2 --> M3["Vendor handler translates →<br/>writes onca-tenant-config"]
+  end
+  D2 --> SOT[("Same entitlement SoT →<br/>same server-side enforcement (§4)")]
+  M3 --> SOT
+```
+
+- **What Marketplace does NOT do:** it handles billing + the entitlement
+  *handshake*, but **not** your data boundary — "data protection stays with the
+  seller" (ADR 002 §4). Both rails end at `onca-tenant-config` and the same
+  Pattern-A/B enforcement; the moat story is identical.
+
+**Axis 2 — the hosting topology (vendor glass → thin glass)** is everything in
+§3/§3b/§8b: rich (consented) telemetry vs sold independence, tenant footprint,
+residency, SSO — unchanged by which rail sold it. Where the two axes *reinforce*
+each other: a Marketplace **CloudFormation/container** listing can ship the thin
+stack **and** the entitlement handshake together — the natural packaging for the
+④ premium.
+
+So the one-liner: a hosted subscribed page differs from a thin-glass Marketplace
+offer on **two** independent moves — *who runs the glass* (rich telemetry vs
+independence) and *how it's billed* (vendor invoice vs the customer's AWS bill).
+Both end at the same entitlement record behind the same enforced boundary.
+
 ---
 
 ## 3. Delivery topology — the account boundary
 
 The tenancy rule (ADR 002 Decision 8): **anything that could reconstruct the
 registry stays vendor-side; tenants receive only scoped, projected,
-entitlement-gated outputs.** Channels ①–③ are pure SaaS (tenant owns nothing).
+entitlement-gated outputs.** The vendor-hosted channels ①–② are pure SaaS
+(tenant owns nothing) on either rail (③).
 Channel ④ is the only one with a tenant-side footprint — and it is deliberately
 thin: a dashboard host and/or an SSO shim that *only calls the vendor API*.
 
@@ -173,7 +238,8 @@ Load-bearing: the arrow from `THIN` to `API` only ever *points inward*. The
 registry, pipeline, raw/digest S3, and synthesis never deploy into a tenant
 account. The most a tenant hosts is glass and a login redirect.
 
-**Precise tenant-side footprint.** In the default SaaS path (channels ①–③)
+**Precise tenant-side footprint.** In the default SaaS path (the vendor-hosted
+channels ①–②, on either rail)
 *nothing* is tenant-side — not even auth. The Cognito user pool, the token
 issuer, and the entitlement source of truth (`onca-tenant-config`) are all
 vendor-side; tenant users are merely pool members. A footprint appears **only in
