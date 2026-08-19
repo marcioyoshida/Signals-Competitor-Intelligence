@@ -70,8 +70,19 @@
   .review { padding: 10px 16px; border-top: 1px solid var(--border); }
   .review:first-child { border-top: 0; }
   .review .rmeta { color: var(--muted); font-size: 12px; margin-top: 3px; }
-  .ractions { margin-top: 6px; display: flex; gap: 6px; align-items: center; }
+  .ractions { margin-top: 6px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
   .rbtn { font-size: 12px; padding: 3px 10px; }
+  .rpick { font-size: 12px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg2); color: var(--ink); }
+  .ind { display: flex; align-items: center; gap: 10px; padding: 9px 16px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+  .ind:first-child { border-top: 0; }
+  .ind .iname { font-weight: 600; min-width: 150px; }
+  .ind .imeta { color: var(--muted); font-size: 12px; }
+  .ind .ibar { flex: 1; min-width: 90px; height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
+  .ind .ibar > span { display: block; height: 100%; background: var(--accent); }
+  .flag { font-size: 11px; padding: 1px 7px; border-radius: 999px; font-weight: 600; }
+  .flag.gap { background: rgba(220,38,38,.15); color: #dc2626; }
+  .flag.low { background: rgba(217,119,6,.15); color: #d97706; }
+  .flag.ok  { background: rgba(22,163,74,.13); color: #16a34a; }
   .legend { display: flex; gap: 12px; flex-wrap: wrap; padding: 0 16px 12px; color: var(--ink2); font-size: 12px; }
   .legend .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
   .feed { padding: 6px 10px 14px; }
@@ -159,6 +170,12 @@
       <h2>Monitor de entidades <span style="text-transform:none;letter-spacing:0">· pico de ameaça no período</span></h2>
       <div id="entities"></div>
     </div>
+  </div>
+
+  <div class="panel" id="industryPanel" style="margin-top:14px;display:none">
+    <h2>Cobertura por indústria <span style="text-transform:none;letter-spacing:0">· volume de narrativas por módulo (período)</span></h2>
+    <div class="hint">Cada módulo de indústria é um add-on de assinatura. O volume indica quanto sinal ele agrega no período — módulos sem narrativas (vazio) ou com pouco volume ficam sinalizados, para não vender um feed vazio.</div>
+    <div id="industries"></div>
   </div>
 
   <div class="panel" id="reviewPanel" style="margin-top:14px;display:none">
@@ -250,7 +267,36 @@ async function boot() {
   const checked = DATA.generated_at ? ` · verificado ${fmtDateTime(DATA.generated_at)}` : "";
   document.getElementById("asof").textContent =
     `dados de ${fmtDate(DATA.as_of)}${checked} · ${DATA.feed.length} narrativas · janela de ${DATA.dates.length} dias`;
-  renderKpis(); renderLegend(); populateFilters(); renderEntities(); renderReviews(); render();
+  renderKpis(); renderLegend(); populateFilters(); renderEntities(); renderIndustries(); renderReviews(); render();
+}
+
+function renderIndustries() {
+  const panel = document.getElementById("industryPanel");
+  const list = DATA.industries || [];
+  if (!list.length) { panel.style.display = "none"; return; }
+  panel.style.display = "";
+  const maxN = Math.max(1, ...list.map(i => i.narratives || 0));
+  document.getElementById("industries").innerHTML = list.map(i => {
+    const flag = i.coverage_gap
+      ? `<span class="flag gap" title="Entidades monitoradas, mas nenhuma narrativa no período">sem cobertura</span>`
+      : i.low_volume
+        ? `<span class="flag low" title="Volume abaixo do mínimo para um add-on">baixo volume</span>`
+        : i.covered ? `<span class="flag ok">ok</span>` : "";
+    const tier = i.tier ? ` · ${esc(i.tier)}` : "";
+    const w = Math.round(100 * (i.narratives || 0) / maxN);
+    return `<div class="ind">
+      <span class="iname">${esc(i.display_name)}</span>
+      <span class="ibar"><span style="width:${w}%"></span></span>
+      <span class="imeta">${i.narratives} narrativa(s) · ${i.entities} entidade(s)${i.alerts ? ` · ${i.alerts} alerta(s)` : ""}${tier}</span>
+      ${flag}
+    </div>`;
+  }).join("");
+}
+
+function industryOptionsHtml(selected) {
+  const opts = DATA.industry_options || [];
+  return `<option value="">— escolher indústria —</option>` +
+    opts.map(o => `<option value="${esc(o.slug)}"${o.slug === selected ? " selected" : ""}>${esc(o.display_name)}</option>`).join("");
 }
 
 function renderReviews() {
@@ -259,18 +305,22 @@ function renderReviews() {
   if (!list.length) { panel.style.display = "none"; return; }
   panel.style.display = "";
   document.getElementById("reviews").innerHTML = list.map(r => {
-    let desc;
+    let desc, pick = "";
     if (r.kind === "group_merge")
       desc = `Agrupar <b>${esc(r.member_label || r.member || "?")}</b> sob <b>${esc(r.leader_label || r.leader || "?")}</b>`;
     else if (r.kind === "news_safe")
       desc = `Liberar a marca <b>${esc(r.proposed || r.member_label || r.member || "?")}</b> em notícias/DOU`;
-    else
+    else if (r.kind === "industry") {
+      desc = `Atribuir módulo de indústria a <b>${esc(r.member_label || r.member || "?")}</b>`;
+      pick = `<select class="rpick">${industryOptionsHtml(r.proposed)}</select>`;
+    } else
       desc = `Adicionar nome <b>${esc(r.proposed || "?")}</b> a <b>${esc(r.member_label || r.member || "?")}</b>`;
     const when = fmtDate(String(r.created_at || "").slice(0, 10));
-    return `<div class="review" data-rid="${esc(r.review_id)}">
+    return `<div class="review" data-rid="${esc(r.review_id)}" data-kind="${esc(r.kind || "")}">
       <div>${desc}</div>
-      <div class="rmeta">${esc(r.reason || "")} · <span class="chip">${esc(r.confidence || "")}</span> · <span class="date">${esc(when)}</span></div>
+      <div class="rmeta">${esc(r.reason || r.hint || "")} · <span class="chip">${esc(r.confidence || "")}</span> · <span class="date">${esc(when)}</span></div>
       <div class="ractions">
+        ${pick}
         <button class="btn rbtn" data-id="${esc(r.review_id)}" data-dec="approved">Aprovar</button>
         <button class="btn rbtn" data-id="${esc(r.review_id)}" data-dec="rejected">Rejeitar</button>
       </div>
@@ -280,11 +330,20 @@ function renderReviews() {
 
 async function decideReview(reviewId, decision, btn) {
   const box = btn.closest(".ractions");
+  const review = btn.closest(".review");
+  const kind = review ? review.dataset.kind : "";
+  const body = { review_id: reviewId, decision, kind };
+  if (kind === "industry" && decision === "approved") {
+    const sel = review.querySelector(".rpick");
+    const slug = sel && sel.value;
+    if (!slug) { if (sel) sel.style.borderColor = "var(--t-crit)"; return; }
+    body.industries = [slug];
+  }
   box.innerHTML = "Enviando…";
   try {
     const r = await fetch("api/review", {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ review_id: reviewId, decision }),
+      body: JSON.stringify(body),
     });
     if (!r.ok && r.status !== 409) throw new Error("HTTP " + r.status);
     // optimistic: drop the decided item; the server rebuilds feed.json in the

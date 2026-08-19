@@ -246,6 +246,46 @@ def test_industry_rollup_counts_entities_per_industry():
     assert r["banking"]["tier"] == "premium"
 
 
+def test_set_industries_assigns_and_clears_needs_review():
+    t = FakeTable()
+    er.put_entity("x", "X", ["XCO"], table=t)
+    assert er.set_industries("x", ["Banking", " ", "fintech"], table=t) is True
+    ent = er.get_entity("x", table=t)
+    assert ent["industries"] == ["banking", "fintech"]  # normalized + sorted
+    assert ent["needs_review"] is False
+    assert er.set_industries("missing", ["banking"], table=t) is False
+
+
+def test_entity_industry_map_lists_industries_per_entity():
+    t = FakeTable()
+    er.put_entity("a", "A", ["ACO"], industries=["banking"], table=t)
+    er.put_entity("b", "B", ["BCO"], table=t)  # untagged -> []
+    m = er.entity_industry_map(table=t)
+    assert m == {"a": ["banking"], "b": []}
+
+
+def test_industry_review_proposes_and_assigns_chosen_module():
+    t = FakeTable()
+    er.put_entity("newco", "NewCo", ["NEWCO"], confidence="cnpj", table=t)
+    rid = er.propose_industry("newco", "NewCo", table=t)
+    assert rid == "industry:newco"
+    # idempotent: a second proposal for the same entity is a no-op
+    assert er.propose_industry("newco", "NewCo", table=t) is None
+    # curator picks a module at approval time -> entity gets it, review closes
+    item = er.resolve_review("industry:newco", "approved", table=t,
+                             payload={"industries": ["insurance"]})
+    assert item["status"] == "approved"
+    assert er.get_entity("newco", table=t)["industries"] == ["insurance"]
+
+
+def test_auto_create_leaves_ambiguous_license_unclassified():
+    t = FakeTable()
+    # a license not in LICENSE_INDUSTRY -> no industries auto-assigned (review path)
+    eid = er.auto_create_from_entrant(
+        _entrant(license_class="Corretora/DTVM", is_fintech=False), table=t)
+    assert "industries" not in er.get_entity(eid, table=t)
+
+
 def test_seed_assigns_curated_industries():
     t = FakeTable()
     er.seed(table=t)

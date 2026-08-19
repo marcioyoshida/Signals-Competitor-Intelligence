@@ -25,6 +25,11 @@ NARRATIVES_PREFIX = "narratives/"
 # Published to the static site bucket root; index.html fetches "feed.json".
 FEED_KEY = "feed.json"
 
+# Below this many narratives over the window, an industry module aggregates too
+# little to feel worth an add-on subscription — flagged so we don't sell a thin
+# feed. Zero narratives while entities are tracked is a coverage_gap (worse).
+LOW_VOLUME_NARRATIVES = 3
+
 
 def _score(value: Any) -> float:
     try:
@@ -63,11 +68,98 @@ def _source_of(citation: dict[str, Any]) -> str | None:
     return None
 
 
+def build_industry_volume(
+    items: list[dict[str, Any]],
+    industry_map: dict[str, list[str]] | None,
+    industry_meta: dict[str, dict[str, Any]] | None,
+    *,
+    latest: str | None,
+) -> list[dict[str, Any]]:
+    """Per-industry narrative VOLUME + coverage over the window.
+
+    Attributes each feed item to the industry module(s) of the entities it names
+    (via ``industry_map``), counting each narrative once per touched industry.
+    Answers the packaging question: does an industry add-on actually aggregate
+    signals, or would a subscriber see an empty feed?
+
+    - ``entities``: distinct tracked entities in this module (concentration).
+    - ``narratives``/``alerts``/``peak_score``: signal volume in the window.
+    - ``covered``: produced at least one narrative.
+    - ``low_volume``: produced some, but below the worth-selling floor.
+    - ``coverage_gap``: entities are tracked yet zero narratives surfaced — a
+      module we'd bill for that went silent this window (a gap to investigate).
+    """
+    industry_map = industry_map or {}
+    industry_meta = industry_meta or {}
+
+    # Concentration: tracked entities per module (registry side).
+    ent_count: dict[str, int] = {}
+    for inds in industry_map.values():
+        for slug in inds:
+            ent_count[slug] = ent_count.get(slug, 0) + 1
+
+    # Volume: narratives per module (narrative side).
+    vol: dict[str, dict[str, Any]] = {}
+
+    def bucket(slug: str) -> dict[str, Any]:
+        return vol.setdefault(
+            slug,
+            {"narratives": 0, "narratives_latest": 0, "alerts": 0,
+             "peak_score": 0.0, "active": set()},
+        )
+
+    for x in items:
+        ents = set(x.get("entities") or [])
+        if x.get("entity"):
+            ents.add(x["entity"])
+        touched: dict[str, set[str]] = {}
+        for ent in ents:
+            for slug in industry_map.get(ent, []):
+                touched.setdefault(slug, set()).add(ent)
+        for slug, slug_ents in touched.items():
+            b = bucket(slug)
+            b["narratives"] += 1
+            if x["date"] and x["date"] == latest:
+                b["narratives_latest"] += 1
+            if x.get("is_alert"):
+                b["alerts"] += 1
+            b["peak_score"] = max(b["peak_score"], x.get("threat_score") or 0.0)
+            b["active"].update(slug_ents)
+
+    slugs = set(industry_meta) | set(ent_count) | set(vol)
+    out: list[dict[str, Any]] = []
+    for slug in slugs:
+        meta = industry_meta.get(slug) or {}
+        b = vol.get(slug) or {}
+        narratives = int(b.get("narratives", 0))
+        entities = ent_count.get(slug, 0)
+        out.append(
+            {
+                "slug": slug,
+                "display_name": meta.get("display_name") or slug.replace("-", " ").title(),
+                "tier": meta.get("tier"),
+                "entities": entities,
+                "active_entities": len(b.get("active", ())),
+                "narratives": narratives,
+                "narratives_latest": int(b.get("narratives_latest", 0)),
+                "alerts": int(b.get("alerts", 0)),
+                "peak_score": round(float(b.get("peak_score", 0.0)), 1),
+                "covered": narratives > 0,
+                "low_volume": 0 < narratives < LOW_VOLUME_NARRATIVES,
+                "coverage_gap": entities > 0 and narratives == 0,
+            }
+        )
+    out.sort(key=lambda r: (r["narratives"], r["entities"], r["slug"]), reverse=True)
+    return out
+
+
 def build_feed(
     narratives: list[dict[str, Any]],
     *,
     generated_at: str | None = None,
     reviews: list[dict[str, Any]] | None = None,
+    industry_map: dict[str, list[str]] | None = None,
+    industry_meta: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Pure aggregation: narratives -> feed payload. No I/O.
 
@@ -166,6 +258,16 @@ def build_feed(
         },
         "feed": items,
         "entities": entities,
+        # Per-industry volume + coverage (ADR 002 Phase B): drives module
+        # packaging and flags add-ons that would aggregate too little.
+        "industries": build_industry_volume(
+            items, industry_map, industry_meta, latest=latest
+        ),
+        # Industry taxonomy for the review-queue pick control (slug -> label).
+        "industry_options": [
+            {"slug": s, "display_name": (m or {}).get("display_name") or s}
+            for s, m in sorted((industry_meta or {}).items())
+        ],
         # Pending entity-registry review proposals (ADR step 5), read-only surface.
         "reviews": reviews or [],
     }
@@ -238,6 +340,7 @@ def load_pending_reviews(*, limit: int = 50) -> list[dict[str, Any]]:
                     "leader_label": label(r.get("target_id")),
                     "proposed": r.get("proposed"),
                     "reason": r.get("reason"),
+                    "hint": r.get("hint"),
                     "confidence": r.get("confidence"),
                     "created_at": r.get("created_at"),
                 }
@@ -246,6 +349,22 @@ def load_pending_reviews(*, limit: int = 50) -> list[dict[str, Any]]:
     except Exception as exc:  # pragma: no cover - best-effort, read-only
         print(f"Warning: load pending reviews failed: {exc}")
         return []
+
+
+def load_industry_data() -> tuple[dict[str, list[str]], dict[str, dict[str, Any]]]:
+    """Read the entity→industry map and the industry taxonomy from the registry.
+
+    Best-effort and read-only: any failure (no table, no access) yields empty
+    maps so the feed still publishes (industries section simply empty)."""
+    if not os.environ.get("ONCA_ENTITIES_TABLE"):
+        return {}, {}
+    try:
+        from src.synth import entity_registry
+
+        return entity_registry.entity_industry_map(), dict(entity_registry.INDUSTRIES)
+    except Exception as exc:  # pragma: no cover - best-effort, read-only
+        print(f"Warning: load industry data failed: {exc}")
+        return {}, {}
 
 
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
@@ -258,7 +377,13 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         return {"statusCode": 200, "body": json.dumps({"status": "no_digests_bucket"})}
 
     narratives = load_recent_narratives(digests_bucket, window_days)
-    feed = build_feed(narratives, reviews=load_pending_reviews())
+    industry_map, industry_meta = load_industry_data()
+    feed = build_feed(
+        narratives,
+        reviews=load_pending_reviews(),
+        industry_map=industry_map,
+        industry_meta=industry_meta,
+    )
     body = json.dumps(feed, ensure_ascii=False).encode("utf-8")
 
     published = None
@@ -283,6 +408,10 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 "as_of": feed["as_of"],
                 "feed_count": len(feed["feed"]),
                 "entities": len(feed["entities"]),
+                "industries_covered": sum(1 for i in feed["industries"] if i["covered"]),
+                "industry_coverage_gaps": [
+                    i["slug"] for i in feed["industries"] if i["coverage_gap"]
+                ],
                 "reviews_pending": len(feed["reviews"]),
                 "published": published,
             }

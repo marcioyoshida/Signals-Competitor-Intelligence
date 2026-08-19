@@ -310,9 +310,13 @@ def list_reviews(status: str | None = "pending", table: Any | None = None) -> li
     return items
 
 
-def _apply_review(item: dict[str, Any], *, table: Any) -> None:
+def _apply_review(
+    item: dict[str, Any], *, table: Any, payload: dict[str, Any] | None = None
+) -> None:
     """Commit an approved proposal. Group-merge links a member under the group
-    leader via ``canonical_id``; fuzzy/nickname promote the proposed alias."""
+    leader via ``canonical_id``; fuzzy/nickname promote the proposed alias;
+    industry assigns the curator-chosen module(s) (from ``payload['industries']``,
+    falling back to the ``proposed`` hint)."""
     kind = item.get("kind")
     if kind == "group_merge" and item.get("entity_id") and item.get("target_id"):
         ent = get_entity(item["entity_id"], table=table)
@@ -325,11 +329,27 @@ def _apply_review(item: dict[str, Any], *, table: Any) -> None:
     elif kind == "news_safe" and item.get("entity_id"):
         # promote a vetted new entity so its bare brand resolves from news/DOU
         set_news_safe(item["entity_id"], True, table=table)
+    elif kind == "industry" and item.get("entity_id"):
+        # curator picks the industry module(s) for an entrant we couldn't classify
+        chosen = list((payload or {}).get("industries") or [])
+        if not chosen and item.get("proposed"):
+            chosen = [item["proposed"]]
+        if chosen:
+            set_industries(item["entity_id"], chosen, table=table)
 
 
-def resolve_review(review_id: str, decision: str, table: Any | None = None) -> dict[str, Any] | None:
+def resolve_review(
+    review_id: str,
+    decision: str,
+    table: Any | None = None,
+    *,
+    payload: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
     """Approve (apply the proposal) or reject a pending review. No-op if the
-    review is missing or already decided. Returns the updated item."""
+    review is missing or already decided. Returns the updated item.
+
+    ``payload`` carries decision-time input for reviews whose approval needs a
+    choice (industry: ``{"industries": [...]}``)."""
     if decision not in ("approved", "rejected"):
         raise ValueError("decision must be 'approved' or 'rejected'")
     t = _table(table)
@@ -337,7 +357,7 @@ def resolve_review(review_id: str, decision: str, table: Any | None = None) -> d
     if not item or item.get("status") != "pending":
         return None
     if decision == "approved":
-        _apply_review(item, table=t)
+        _apply_review(item, table=t, payload=payload)
     item["status"] = decision
     item["decided_at"] = _now_iso()
     t.put_item(Item=item)
@@ -354,6 +374,24 @@ def propose_news_safe(entity_id: str, brand: str, *, table: Any | None = None) -
         entity_id=entity_id,
         proposed=brand,
         reason="novo entrante — liberar a marca em notícias/DOU?",
+        confidence="fuzzy",
+        table=table,
+    )
+
+
+def propose_industry(
+    entity_id: str, brand: str, *, hint: str = "", table: Any | None = None
+) -> str | None:
+    """Queue a review to assign an industry module to an entrant whose license
+    did not map cleanly (ADR 002 Phase B). Idempotent by entity_id; the curator
+    picks the module(s) at approval time. Returns the review_id if queued."""
+    return propose_review(
+        "industry",
+        key=entity_id,
+        entity_id=entity_id,
+        proposed=None,
+        reason="entrante sem licença classificável — atribuir módulo de indústria",
+        hint=hint,
         confidence="fuzzy",
         table=table,
     )
@@ -439,6 +477,38 @@ def classify_industries(entrant: dict[str, Any]) -> tuple[list[str], bool]:
     if entrant.get("is_fintech"):
         return ["fintech"], False
     return [], True  # unknown/ambiguous — propose for review
+
+
+def set_industries(
+    entity_id: str, industries: Iterable[str], table: Any | None = None
+) -> bool:
+    """Assign an entity's industry module(s) and clear its needs_review flag —
+    the review-queue action for an entrant we couldn't auto-classify. Returns
+    True if the entity existed and was updated."""
+    t = _table(table)
+    ent = get_entity(entity_id, table=t)
+    if not ent:
+        return False
+    inds = sorted({str(i).strip().lower() for i in industries if str(i).strip()})
+    if inds:
+        ent["industries"] = inds
+    else:
+        ent.pop("industries", None)
+    ent["needs_review"] = False
+    t.put_item(Item=ent)
+    return True
+
+
+def entity_industry_map(table: Any | None = None) -> dict[str, list[str]]:
+    """{entity_id: [industry slugs]} for every tracked entity. Used downstream
+    (feed builder) to attribute narrative volume to industry modules without a
+    second registry scan per narrative."""
+    out: dict[str, list[str]] = {}
+    for e in _scan_type(_table(table), "entity"):
+        eid = e.get("entity_id")
+        if eid:
+            out[eid] = list(e.get("industries") or [])
+    return out
 
 
 def seed_industries(table: Any | None = None) -> int:

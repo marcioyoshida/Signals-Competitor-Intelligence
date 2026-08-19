@@ -43,9 +43,18 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     if not review_id or decision not in ("approved", "rejected"):
         return _resp(400, {"error": "review_id and decision (approved|rejected) required"})
 
+    # Decision-time input for reviews whose approval needs a choice (industry:
+    # the curator-picked module slugs). Ignored by kinds that don't use it.
+    extra: dict[str, Any] = {}
+    inds = payload.get("industries")
+    if isinstance(inds, list):
+        extra["industries"] = [str(i) for i in inds if str(i).strip()]
+    if decision == "approved" and payload.get("kind") == "industry" and not extra.get("industries"):
+        return _resp(400, {"error": "industry approval requires industries[]"})
+
     from src.synth import entity_registry
 
-    item = entity_registry.resolve_review(review_id, decision)
+    item = entity_registry.resolve_review(review_id, decision, payload=extra or None)
     if item is None:
         return _resp(409, {"status": "noop", "detail": "missing or already decided"})
 

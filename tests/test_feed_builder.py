@@ -193,3 +193,49 @@ def test_build_feed_labels_entity_less_narratives():
          "as_of": "2026-08-13", "threat_score": 0.9},
     ])
     assert feed["feed"][0]["entity_label"] == "Regulatório"
+
+
+def test_industry_volume_covered_low_and_gap():
+    # itau -> banking, nubank -> fintech; insurance has an entity but no narrative.
+    imap = {"itau": ["banking"], "nubank": ["fintech"], "acme": ["insurance"]}
+    meta = {
+        "banking": {"display_name": "Banking", "tier": "premium"},
+        "fintech": {"display_name": "Fintech", "tier": "entry"},
+        "insurance": {"display_name": "Insurance", "tier": "mid"},
+    }
+    narratives = [
+        _narr("a", "itau", "2026-08-12", 0.4),
+        _narr("b", "itau", "2026-08-13", 0.7, is_alert=True),
+        _narr("c", "itau", "2026-08-13", 0.9),
+        _narr("d", "nubank", "2026-08-13", 0.5),  # fintech: single narrative
+    ]
+    feed = feed_builder.build_feed(narratives, industry_map=imap, industry_meta=meta)
+    by = {i["slug"]: i for i in feed["industries"]}
+
+    assert by["banking"]["narratives"] == 3 and by["banking"]["covered"]
+    assert by["banking"]["alerts"] == 1
+    assert by["banking"]["narratives_latest"] == 2  # latest date = 2026-08-13
+    assert not by["banking"]["low_volume"]
+
+    assert by["fintech"]["narratives"] == 1 and by["fintech"]["low_volume"]
+    assert by["fintech"]["covered"] and not by["fintech"]["coverage_gap"]
+
+    # insurance: an entity is tracked but nothing surfaced -> coverage gap
+    assert by["insurance"]["entities"] == 1
+    assert by["insurance"]["narratives"] == 0
+    assert by["insurance"]["coverage_gap"] and not by["insurance"]["covered"]
+
+    # taxonomy exposed for the review-queue pick control
+    assert {"slug": "insurance", "display_name": "Insurance"} in feed["industry_options"]
+
+
+def test_industry_volume_counts_each_narrative_once_per_module():
+    # a narrative naming two banking entities counts once for banking.
+    imap = {"itau": ["banking"], "bb": ["banking"]}
+    meta = {"banking": {"display_name": "Banking", "tier": "premium"}}
+    n = _narr("a", "itau", "2026-08-13", 0.5)
+    n["entities"] = ["itau", "bb"]
+    feed = feed_builder.build_feed([n], industry_map=imap, industry_meta=meta)
+    banking = feed["industries"][0]
+    assert banking["narratives"] == 1
+    assert banking["active_entities"] == 2

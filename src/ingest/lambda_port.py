@@ -378,6 +378,15 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                         brand = str(e.get("trade_name") or e.get("name") or "").strip()
                         if review_on and brand and " " not in brand:
                             entity_registry.propose_news_safe(eid, brand)
+                        # Ambiguous license → industry couldn't be auto-assigned.
+                        # Queue a curator pick so an add-on for this module still
+                        # aggregates the entrant's signals (ADR 002 Phase B).
+                        if review_on:
+                            _inds, needs = entity_registry.classify_industries(e)
+                            if needs:
+                                entity_registry.propose_industry(
+                                    eid, brand or str(e.get("name") or "")
+                                )
                 if created:
                     print(f"entities: auto-created {created} from new entrants")
                     # ADR step 5: a fresh entity may share a QSA controller with
