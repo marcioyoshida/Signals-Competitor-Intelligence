@@ -50,6 +50,14 @@ OUTLET_FEEDS: list[tuple[str, str]] = [
     ("Revista Apólice", "https://revistaapolice.com.br/feed/"),
     ("Revista Cobertura", "https://www.revistacobertura.com.br/feed/"),
     ("Sonho Seguro", "https://www.sonhoseguro.com.br/feed/"),
+    # VC / PE / startup trade press — private-markets firms (Pátria, Vinci, Kinea,
+    # Kaszek, Monashees, Igah) are private/foreign-listed with no CVM filing, so
+    # their signal is episodic news; these outlets carry funding rounds and fund
+    # closes, giving those entities distinct-publisher corroboration when news breaks.
+    ("Brazil Journal", "https://braziljournal.com/feed/"),
+    ("NeoFeed", "https://neofeed.com.br/feed/"),
+    ("Startups", "https://startups.com.br/feed/"),
+    ("Startupi", "https://startupi.com.br/feed/"),
 ]
 
 # Ambiguous single-word brands (Stone, Nubank, Inter) pull band/stadium/culture
