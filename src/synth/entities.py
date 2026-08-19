@@ -217,6 +217,47 @@ def _match_kinds(
     return kinds
 
 
+# Cited-source constructions (pt-BR): when an entity is named only as the SOURCE
+# of a figure — "segundo a Serasa", "dados da Economatica", "levantamento da X" —
+# it is not the subject of the story. Data-vendor/bureau names (Serasa, Boa Vista,
+# Economatica, Quod) are constantly cited this way in market/credit news, so a raw
+# match mis-frames them as the subject. The cue is matched immediately BEFORE the
+# entity mention; if every mention is source-cued, the entity is dropped.
+_SOURCE_CUE = re.compile(
+    r"(?:SEGUNDO|CONFORME|DE ACORDO COM|DADOS|LEVANTAMENTO|PESQUISA|ESTUDO|"
+    r"MONITOR|BOLETIM|PAINEL|[IÍ]NDICE|RELAT[OÓ]RIO|C[AÁ]LCULO|N[UÚ]MEROS)"
+    r"(?:\s+D[AEO]S?| COM| POR| SOBRE)?"
+    r"(?:\s+(?:A|O|AS|OS))?"
+    r"\s+$"
+)
+
+
+def _source_attribution_only(token: str, blob: str) -> bool:
+    """True iff every whole-word occurrence of ``token`` in ``blob`` is immediately
+    preceded by a cited-source cue (so the entity is the source, not the subject)."""
+    anchored = re.compile(rf"(?<!{_WORD}){re.escape(token)}(?!{_WORD})")
+    any_occ = False
+    for m in anchored.finditer(blob):
+        any_occ = True
+        if not _SOURCE_CUE.search(blob[: m.start()]):
+            return False  # a subject-position mention exists → keep the entity
+    return any_occ
+
+
+def _entity_source_only(aliases: list[str], blob: str) -> bool:
+    """True iff the entity matches the blob only in cited-source position."""
+    matched = False
+    for alias in aliases:
+        token = alias.upper().strip()
+        if not token or token.startswith("TICKER:"):
+            continue
+        if _word_match(token, blob):
+            matched = True
+            if not _source_attribution_only(token, blob):
+                return False
+    return matched
+
+
 def resolve_entities(item: dict[str, Any]) -> list[str]:
     """Return canonical entity ids matched in an item (may be multiple).
 
@@ -224,8 +265,9 @@ def resolve_entities(item: dict[str, Any]) -> list[str]:
     substrings): a strong identifier (ticker) or a distinctive alias resolves
     anywhere; a bare *ambiguous* common-word token resolves only in a structured
     identity source — never from a free-text headline (so "Rolling Stone" music
-    news does not cluster into Stone the acquirer). Also links QSA-controller
-    parents so a new fintech clusters into a known player's narrative.
+    news does not cluster into Stone the acquirer). A free-text match that is only
+    a cited data source ("segundo a Serasa") is likewise dropped. Also links
+    QSA-controller parents so a new fintech clusters into a known player's narrative.
     """
     blob = f" {signal_blob(item)} "
     blob_nospace = blob.replace(" ", "")
@@ -242,11 +284,15 @@ def resolve_entities(item: dict[str, Any]) -> list[str]:
         )
         if not kinds:
             continue
-        if "strong" in kinds or "distinct" in kinds:
-            found.append(entity_id)
-        elif not free_text:
-            found.append(entity_id)  # ambiguous, but a structured field asserts it
-        # else: ambiguous token in free text → dropped (precision over recall)
+        resolve = ("strong" in kinds or "distinct" in kinds) or (not free_text)
+        if not resolve:
+            continue  # ambiguous token in free text → dropped (precision over recall)
+        # Source-attribution guard: a free-text distinct match that appears only as
+        # a cited data source is not the story's subject. A strong ticker id (a
+        # structured assertion) is exempt.
+        if free_text and "strong" not in kinds and _entity_source_only(aliases, blob):
+            continue
+        found.append(entity_id)
     for parent in known_parents(item):
         if parent not in found:
             found.append(parent)

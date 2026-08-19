@@ -149,3 +149,26 @@ def test_resolve_falls_back_to_builtin_without_registry(monkeypatch):
     from src.synth import entities
     monkeypatch.delenv("ONCA_ENTITIES_TABLE", raising=False)
     assert "nubank" in entities.resolve_entities({"name": "NUBANK PAGAMENTOS"})
+
+
+def test_source_attribution_guard_drops_cited_source_in_news():
+    """A data vendor named only as a cited source ('segundo a X', 'dados da X')
+    is not the story's subject — dropped in free-text; kept when it IS the subject."""
+    def news(title):
+        return resolve_entities({"source": "News", "_lens": "news", "title": title})
+    # cited as source -> dropped
+    assert news("Segundo a Nubank, a inadimplencia subiu 5%") == []
+    assert news("Empresa X teve prejuizo, segundo dados da Nubank") == []
+    assert news("Levantamento da Nubank aponta queda no credito") == []
+    # genuine subject -> kept
+    assert "nubank" in news("Nubank lanca nova conta digital")
+    # mixed: at least one subject mention -> kept
+    assert "nubank" in news("Dados da Nubank mostram alta; Nubank anuncia lucro")
+
+
+def test_source_attribution_guard_is_free_text_only():
+    """A structured identity field asserts the subject — the guard must not fire
+    there (only free-text headlines carry cited-source constructions)."""
+    assert "nubank" in resolve_entities(
+        {"source": "CVM-FatoRelevante", "company": "NUBANK"}
+    )
