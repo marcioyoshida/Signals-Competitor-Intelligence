@@ -125,6 +125,33 @@ def test_build_narrative_is_labeled_inference_without_citations():
     assert "21 dias" in card["narrative"] and "Itaú" in card["narrative"]
 
 
+def test_retract_same_day_removes_only_recovered_cards():
+    # itau recovered today (has a stale same-day silence card); btg still silent.
+    deleted, heads = [], set()
+
+    class FakeS3:
+        def head_object(self, Bucket, Key):
+            if Key not in store:
+                raise KeyError(Key)
+            return {}
+
+        def delete_object(self, Bucket, Key):
+            deleted.append(Key)
+            store.discard(Key)
+
+    store = {
+        "narratives/2026-07-01/silence-itau.json",
+        "narratives/2026-07-01/silence-btg.json",
+    }
+    out = silence._retract_same_day(
+        "onca-digests", FakeS3(), "2026-07-01", recovered={"itau", "nubank"}
+    )
+    # itau's card retracted; nubank had none; btg untouched (still silent).
+    assert out == ["itau"]
+    assert deleted == ["narratives/2026-07-01/silence-itau.json"]
+    assert "narratives/2026-07-01/silence-btg.json" in store
+
+
 def test_feature_store_excludes_silence_from_activity():
     # A silence card mixed into history must not register as activity.
     activity = [_narr("itau", "2026-06-10")]

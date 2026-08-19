@@ -57,6 +57,7 @@ def extract_candidates(
     min_pl: float | None = None,
     min_score: float | None = None,
     require_change: bool | None = None,
+    min_news_publishers: int | None = None,
 ) -> list[dict[str, Any]]:
     """Build correlation candidates from digest sections + context.
 
@@ -87,6 +88,16 @@ def extract_candidates(
         if min_score is not None
         else float(os.environ.get("ONCA_SYNTH_MIN_SCORE", "0.40"))
     )
+    # A news-only entity cluster surfaces when this many DISTINCT publishers
+    # independently report it in the run — the line between a lone promo headline
+    # (noise, stays out) and a materially-covered event (e.g. an earnings result).
+    # Essential for privately-held entities (C6, PicPay) whose only channel is the
+    # press — they have no B3 Fato Relevante to corroborate against.
+    min_news_publishers = (
+        min_news_publishers
+        if min_news_publishers is not None
+        else int(os.environ.get("ONCA_SYNTH_NEWS_MIN_PUBLISHERS", "3"))
+    )
 
     as_of = _digest_as_of(digest)
     signals = _collect_signals(digest, min_pl=min_pl)
@@ -94,7 +105,9 @@ def extract_candidates(
         return []
 
     # 1) Entity clusters (multi-lens fusion) — primary product unit
-    clusters = _cluster_by_entity(signals, min_lenses=min_lenses)
+    clusters = _cluster_by_entity(
+        signals, min_lenses=min_lenses, min_news_publishers=min_news_publishers
+    )
     candidates: list[dict[str, Any]] = []
     used_ids: set[str] = set()
 
@@ -181,7 +194,12 @@ def extract_candidates(
     candidates = [
         c
         for c in candidates
-        if _passes_quality_gate(c, min_lenses=min_lenses, min_score=min_score)
+        if _passes_quality_gate(
+            c,
+            min_lenses=min_lenses,
+            min_score=min_score,
+            min_news_publishers=min_news_publishers,
+        )
         and (not require_change or _has_change(c))
     ]
 
@@ -201,11 +219,26 @@ def _has_change(cand: dict[str, Any]) -> bool:
     return any(s.get("is_new") for s in (cand.get("sources") or []))
 
 
+def _distinct_news_publishers(sources: list[dict[str, Any]]) -> int:
+    """Count distinct publishers among the NEW news sources — the corroboration
+    measure. Multiple independent outlets on one entity/event = material, not a
+    single reposted promo."""
+    pubs = {
+        str(s.get("publisher") or "").strip().lower()
+        for s in sources
+        if s.get("_lens") == "news" and s.get("is_new")
+    }
+    pubs.discard("")
+    pubs.discard("imprensa")  # the generic fallback label is not a distinct outlet
+    return len(pubs)
+
+
 def _passes_quality_gate(
     cand: dict[str, Any],
     *,
     min_lenses: int,
     min_score: float,
+    min_news_publishers: int = 3,
 ) -> bool:
     lenses = [x for x in (cand.get("lenses") or []) if x not in BACKDROP_LENSES]
     # Counting backdrop separately: multi-lens can include market as 3rd
@@ -221,6 +254,19 @@ def _passes_quality_gate(
         return False
     if n_core == 0 and n_all <= 1:
         return False
+
+    # Corroborated news: a news-only cluster surfaces when enough distinct
+    # outlets independently report it (material event, not a lone promo). The
+    # only path for privately-held entities with no official-filing channel.
+    # Purely additive — it admits corroborated news, but falls through (never
+    # rejects) so an operator lowering min_lenses/min_score still admits solo news.
+    if (
+        all_lenses
+        and all(l == "news" for l in all_lenses)
+        and _distinct_news_publishers(cand.get("sources") or []) >= min_news_publishers
+        and score >= min_score * 0.75
+    ):
+        return True
 
     # Prefer multi-lens product unit
     if n_all >= min_lenses and score >= min_score * 0.85:
@@ -358,6 +404,7 @@ def _cluster_by_entity(
     signals: list[dict[str, Any]],
     *,
     min_lenses: int = 2,
+    min_news_publishers: int = 3,
 ) -> dict[str, list[dict[str, Any]]]:
     clusters: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for sig in signals:
@@ -383,6 +430,9 @@ def _cluster_by_entity(
             kept[ent] = members
         elif has_move and len(core) >= 1 and len(lenses) >= 2:
             kept[ent] = members
+        # News-only, but corroborated by enough distinct outlets (material event).
+        elif core == {"news"} and _distinct_news_publishers(members) >= min_news_publishers:
+            kept[ent] = members
     return kept
 
 
@@ -406,18 +456,25 @@ def _candidate_from_cluster(
     related = ordered[1:]
     sources = ordered
     threat, factors = _score_threat(sources)
+    lenses = _lenses(sources)
+    core = [l for l in lenses if l not in BACKDROP_LENSES]
+    news_only = core == ["news"]
     return {
         "id": f"cand-ent-{entity_id}",
-        "kind": "entity_fusion",
+        # A corroborated news-only cluster is press coverage, not a cross-source
+        # fusion — label it honestly so the card/scoring reflect that.
+        "kind": "news_corroborated" if news_only else "entity_fusion",
         "entity": entity_id,
         "seed": seed,
         "related": related,
         "sources": sources,
         "entities": [entity_id],
-        "lenses": _lenses(sources),
+        "lenses": lenses,
         "threat_score": threat,
         "threat_factors": factors,
-        "is_alert": any(m.get("is_new") for m in members),
+        # News alone is "color": surface it, but never as a red alert (it lacks an
+        # official-source delta). Cross-source clusters keep their is_new alert.
+        "is_alert": (not news_only) and any(m.get("is_new") for m in members),
         "as_of": as_of,
         "data_as_of": _sources_as_of(sources, as_of),
     }

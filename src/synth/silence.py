@@ -267,7 +267,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         return {"statusCode": 200, "body": json.dumps({"status": "no_features"})}
 
     recent = feature_store.load_history(digests_bucket, window_days, s3=s3)
-    cands = nominate(features, recent_narratives=recent)
+    run_date = run_date_today()
+    cands = nominate(features, recent_narratives=recent, as_of=run_date)
 
     keys: list[str] = []
     for cand in cands:
@@ -275,6 +276,15 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         key = _write(narrative, digests_bucket, s3)
         if key:
             keys.append(key)
+
+    # Same-day retraction: an entity that produced REAL activity today cannot be
+    # silent today. If an earlier run (e.g. 06:45, before the news landed) wrote a
+    # silence card for it, that card is now false — retract it. Derived cards are
+    # recomputable, so removing a superseded same-day one is legitimate; prior
+    # days are left untouched as history.
+    fresh = activity_freshness(recent, as_of=run_date)
+    recovered = {ent for ent, (date, _dsl) in fresh.items() if date == run_date}
+    retracted = _retract_same_day(digests_bucket, s3, run_date, recovered)
 
     return {
         "statusCode": 200,
@@ -287,9 +297,27 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 "emitted": len(keys),
                 "entities": [c["entity"] for c in cands],
                 "keys": keys,
+                "retracted": retracted,
             }
         ),
     }
+
+
+def _retract_same_day(bucket: str, s3: Any, run_date: str, recovered: set[str]) -> list[str]:
+    """Delete same-day silence cards for entities that became active today."""
+    out: list[str] = []
+    for ent in sorted(recovered):
+        key = f"{feature_store.NARRATIVES_PREFIX}{run_date}/silence-{ent}.json"
+        try:
+            s3.head_object(Bucket=bucket, Key=key)
+        except Exception:
+            continue  # no same-day silence card for this entity — nothing to retract
+        try:
+            s3.delete_object(Bucket=bucket, Key=key)
+            out.append(ent)
+        except Exception as exc:  # pragma: no cover - best-effort
+            print(f"Warning: retract silence card {key} failed: {exc}")
+    return out
 
 
 def _write(narrative: dict[str, Any], bucket: str, s3: Any) -> str | None:

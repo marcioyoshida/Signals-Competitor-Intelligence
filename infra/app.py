@@ -512,8 +512,9 @@ class OncaPrototypeStack(Stack):
                 "ONCA_FEATURE_WINDOW_DAYS": "90",
             },
         )
-        digests_bucket.grant_read(silence_fn)
-        digests_bucket.grant_put(silence_fn)
+        # read features + history, put silence cards, and DELETE superseded
+        # same-day silence cards (retraction) — grant_read_write covers all three.
+        digests_bucket.grant_read_write(silence_fn)
 
         # Feed builder: aggregate recent narratives -> feed.json in the site bucket.
         feed_fn = lambda_.Function(

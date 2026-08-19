@@ -390,6 +390,58 @@ def test_dou_act_is_high_value_and_resolves_entity():
     assert txt.startswith("Diário Oficial") and "(CADE)" in txt
 
 
+def _c6_news(title, publisher, url, *, is_new=True):
+    return {
+        "id": f"news:{publisher}:{title[:8]}", "source": "News", "kind": "competitor",
+        "_lens": "news", "company": "C6 Bank", "name": "C6 Bank",
+        "title": title, "subject": title, "publisher": publisher, "url": url,
+        "is_new": is_new,
+    }
+
+
+def test_corroborated_news_surfaces_for_private_entity():
+    # C6 is privately held (no Fato Relevante) — earnings arrive only via press.
+    # Six distinct outlets on the same result => material, must surface.
+    items = [
+        _c6_news("C6 Bank tem lucro de R$ 1,25 bi", "NeoFeed", "https://neofeed.com.br/a"),
+        _c6_news("C6 Bank ve inadimplencia subir", "InfoMoney", "https://infomoney.com.br/b"),
+        _c6_news("C6 Bank receita recorde", "Valor", "https://valor.globo.com/c"),
+        _c6_news("C6 Bank lucro liquido R$1,3bi", "Exame", "https://exame.com/d"),
+        _c6_news("C6 Bank amplia lucro", "Brazil Journal", "https://braziljournal.com/e"),
+        _c6_news("No C6 Bank, salto de 20%", "NeoFeed", "https://neofeed.com.br/f"),
+    ]
+    cands = extract_candidates({"news": {"items": items, "context": []}}, max_candidates=10)
+    assert len(cands) == 1
+    c = cands[0]
+    assert c["kind"] == "news_corroborated" and c["entity"] == "c6"
+    assert c["lenses"] == ["news"]
+    assert c["is_alert"] is False          # news is color, never a red alert
+    assert 0.3 < c["threat_score"] < 0.6   # surfaces, but below an official delta
+
+
+def test_lone_promo_headline_stays_out():
+    # One outlet, two promo headlines -> not corroborated -> dropped (default gate).
+    items = [
+        _c6_news("C6 Bank cashback em dobro", "NeoFeed", "https://neofeed.com.br/p1"),
+        _c6_news("C6 Bank promo de cartao", "NeoFeed", "https://neofeed.com.br/p2"),
+    ]
+    assert extract_candidates({"news": {"items": items, "context": []}}, max_candidates=10) == []
+
+
+def test_news_publisher_threshold_is_tunable():
+    items = [
+        _c6_news("C6 Bank lucro", "NeoFeed", "https://neofeed.com.br/a"),
+        _c6_news("C6 Bank receita", "Valor", "https://valor.globo.com/b"),
+    ]
+    # default threshold (3) drops 2 outlets ...
+    assert extract_candidates({"news": {"items": items, "context": []}}) == []
+    # ... lowering it to 2 admits them.
+    cands = extract_candidates(
+        {"news": {"items": items, "context": []}}, min_news_publishers=2
+    )
+    assert len(cands) == 1 and cands[0]["kind"] == "news_corroborated"
+
+
 def test_news_item_surfaces_but_scores_below_official():
     from src.synth.synthesize import _describe_signal
     d = {"news": {"items": [{
