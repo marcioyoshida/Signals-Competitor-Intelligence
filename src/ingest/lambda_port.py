@@ -389,6 +389,15 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     dou_terms = _csv_env("ONCA_DOU_WATCHLIST")
     if os.environ.get("ONCA_DOU_USE_COMPETITORS", "true").lower() in ("1", "true", "yes"):
         dou_terms = list(dict.fromkeys(dou_terms + fatos_watch))
+    # Betting/iGaming structured lens: the SPA (Secretaria de Prêmios e Apostas,
+    # Min. Fazenda) publishes NO clean list API — its authorisations/sanctions
+    # are published as SPA/MF acts in the DOU, which we already parse. These
+    # thematic terms surface those acts (the new-authorisation event) and tag an
+    # operator when the act names one. Toggle with ONCA_DOU_BETTING.
+    if os.environ.get("ONCA_DOU_BETTING", "true").lower() in ("1", "true", "yes"):
+        dou_terms = list(dict.fromkeys(
+            dou_terms + ["Secretaria de Prêmios e Apostas", "apostas de quota fixa"]
+        ))
 
     # Trade-press news is fetched by _news_slice (its own parallel branch); see
     # the mode dispatch at the top of lambda_handler.

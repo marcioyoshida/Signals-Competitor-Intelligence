@@ -118,3 +118,12 @@ def test_finance_context_crypto_and_consorcio_sectors():
     assert _has_finance_context("Embracon registra recorde de cartas contempladas")  # contemplad
     # and a plain culture headline still does not
     assert not _has_finance_context("banda faz show de rock no fim de semana")
+
+
+def test_finance_context_betting_sector():
+    from src.ingest.trade_press import _has_finance_context
+    assert _has_finance_context("Betano fecha maior patrocínio de apostas do Brasil")   # aposta stem
+    assert _has_finance_context("Superbet amplia operação de cassino online")           # cassino
+    assert _has_finance_context("SPA autoriza nova casa de apostas de quota fixa")       # aposta
+    assert _has_finance_context("bet365 registra alta no GGR do trimestre")             # ggr
+    assert not _has_finance_context("time anuncia novo uniforme para a temporada")

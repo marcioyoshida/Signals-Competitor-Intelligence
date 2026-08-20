@@ -64,6 +64,11 @@ OUTLET_FEEDS: list[tuple[str, str]] = [
     ("Livecoins", "https://livecoins.com.br/feed/"),
     ("CriptoFácil", "https://www.criptofacil.com/feed/"),
     ("Cointelegraph Brasil", "https://cointelegraph.com.br/rss"),
+    # Betting / iGaming trade press — the regulated bet operators (Betano, bet365,
+    # Superbet, …) are news-only; this specialist outlet plus mainstream sports
+    # coverage (via Google News) gives distinct-publisher corroboration. Verified
+    # live 2026-08-19.
+    ("iGaming Brazil", "https://igamingbrazil.com/feed/"),
 ]
 
 # Ambiguous single-word brands (Stone, Nubank, Inter) pull band/stadium/culture
@@ -85,6 +90,11 @@ FINANCE_TERMS = frozenset({
     # Consórcio context — likewise, an "Ademicon"/"Embracon" headline needs a
     # sector cue to pass. Stems: consorci(o/ado/os), contemplad(o/os/ção).
     "consorci", "consórci", "contemplad", "carta de créd", "carta de cred",
+    # Betting / iGaming context — a "Betano"/"Superbet" headline (sponsorship,
+    # GGR, SPA authorisation, market share) needs a sector cue. "aposta" stem
+    # covers aposta(s)/apostador; the rest are distinctive single words.
+    "aposta", "cassino", "casino", "igaming", "sportsbook", "loteria",
+    "bookmaker", "bet.br", "ggr",
 })
 
 # Terms are word-STEM prefixes ("pagament" -> "pagamentos"), matched at a word
