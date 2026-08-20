@@ -127,3 +127,12 @@ def test_finance_context_betting_sector():
     assert _has_finance_context("SPA autoriza nova casa de apostas de quota fixa")       # aposta
     assert _has_finance_context("bet365 registra alta no GGR do trimestre")             # ggr
     assert not _has_finance_context("time anuncia novo uniforme para a temporada")
+
+
+def test_finance_context_fund_sector():
+    from src.ingest.trade_press import _has_finance_context
+    assert _has_finance_context("MXRF11 anuncia rendimento mensal de R$ 0,10 por cota")   # rendiment/cota
+    assert _has_finance_context("HGLG11 amplia portfólio imobiliário logístico")          # imobili
+    assert _has_finance_context("KNCA11 é o maior FIAGRO de crédito do agro")             # fiagro
+    assert _has_finance_context("Fundo imobiliário eleva aluguéis e dividendos")          # imobili/alugu
+    assert not _has_finance_context("prefeitura inaugura praça no centro da cidade")

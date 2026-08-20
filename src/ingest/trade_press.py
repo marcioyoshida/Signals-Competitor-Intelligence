@@ -69,6 +69,10 @@ OUTLET_FEEDS: list[tuple[str, str]] = [
     # coverage (via Google News) gives distinct-publisher corroboration. Verified
     # live 2026-08-19.
     ("iGaming Brazil", "https://igamingbrazil.com/feed/"),
+    # Fundos Imobiliários / FIAGRO trade press — FII/FIAGRO news is ticker-centric
+    # and abundant here; gives distinct-publisher corroboration for the fund
+    # tickers. Verified live 2026-08-19.
+    ("Funds Explorer", "https://www.fundsexplorer.com.br/feed"),
 ]
 
 # Ambiguous single-word brands (Stone, Nubank, Inter) pull band/stadium/culture
@@ -95,6 +99,10 @@ FINANCE_TERMS = frozenset({
     # covers aposta(s)/apostador; the rest are distinctive single words.
     "aposta", "cassino", "casino", "igaming", "sportsbook", "loteria",
     "bookmaker", "bet.br", "ggr",
+    # Fund context (FII / FIAGRO) — a "MXRF11"/"KNRI11" headline needs a sector
+    # cue. "imobili" covers imobiliário/-a/-os; "rendiment" the monthly yield;
+    # "cota"/"cotista"; "alugu" aluguel/aluguéis. "fii"/"fiagro" standalone.
+    "fii", "fiagro", "cota", "rendiment", "imobili", "alugu",
 })
 
 # Terms are word-STEM prefixes ("pagament" -> "pagamentos"), matched at a word
