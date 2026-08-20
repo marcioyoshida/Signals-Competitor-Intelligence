@@ -586,6 +586,9 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                     categories=fatos_categories,
                 )
                 new_fatos = _new_since_last_run("cvm_fatos", fatos, seed_if_empty=True)
+                # Governance events are the strategic ones — float them to the
+                # front so they survive the digest item cap and reach synth.
+                new_fatos.sort(key=lambda f: not f.get("governance"))
         except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
             print(f"Warning: CVM fatos relevantes fetch failed: {exc}")
 
@@ -752,7 +755,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         "fatos": {
             "count": len(fatos),
             "new_count": len(new_fatos),
-            "items": _tag_new(new_fatos[:10]),
+            "governance_count": sum(1 for f in new_fatos if f.get("governance")),
+            "items": _tag_new(new_fatos[:12]),
             "context": _strip_raw(fatos[:15]),
         },
         "dou": {

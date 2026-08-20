@@ -80,3 +80,33 @@ def test_crosses_year_boundary_fetches_prior_year():
         fetcher=lambda y: calls.append(y) or None,
     )
     assert set(calls) == {2025, 2026}  # 30-day window from Jan 10 spans 2025
+
+
+def test_is_governance_classifier():
+    g = cvm_ipe.is_governance
+    # governance events (control / board / executive / statute / auditor)
+    assert g("Alteração de Controle Acionário")
+    assert g("Eleição de membros do Conselho de Administração")
+    assert g("Renúncia do Diretor Presidente")
+    assert g("Celebração de Acordo de Acionistas")
+    assert g("Substituição dos Auditores Independentes")
+    assert g("Reforma do Estatuto Social")
+    # non-governance material facts
+    assert not g("Aquisição de carteira de crédito")
+    assert not g("Distribuição de dividendos")
+    assert not g("Lançamento de novo produto de pagamentos")
+    assert not g("Remuneração Complementar aos Acionistas 2T26")  # dividends, not governance
+    assert not g("Remuneração dos Acionistas — Juros sobre Capital Próprio")
+
+
+def test_normalize_tags_governance_records():
+    row = {
+        "Nome_Companhia": "Banco X S.A.", "Categoria": "Fato Relevante",
+        "Assunto": "Renúncia de Diretor", "Protocolo_Entrega": "P9",
+        "Data_Entrega": "2026-08-15", "Link_Download": "https://rad.cvm.gov.br/x",
+    }
+    rec = cvm_ipe._normalize(row)
+    assert rec["governance"] is True and rec["topic"] == "governance"
+    row2 = {**row, "Assunto": "Emissão de debêntures", "Protocolo_Entrega": "P10"}
+    rec2 = cvm_ipe._normalize(row2)
+    assert rec2["governance"] is False and rec2["topic"] is None

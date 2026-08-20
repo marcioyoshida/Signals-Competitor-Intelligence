@@ -22,10 +22,42 @@ from __future__ import annotations
 import csv
 import datetime as dt
 import io
+import re
+import unicodedata
 import zipfile
 from typing import Any, Iterable
 
 import requests
+
+
+def _fold(s: Any) -> str:
+    """Accent-stripped uppercase, for robust keyword matching on PT subjects."""
+    nfkd = unicodedata.normalize("NFKD", str(s or ""))
+    return "".join(c for c in nfkd if not unicodedata.combining(c)).upper()
+
+
+# Governance-event cues (ADR narrative-dimensions: the *governance* axis). A
+# Fato Relevante / Comunicado carrying one of these in its Assunto/Espécie/Tipo
+# is a corporate-governance event on a tracked entity — control changes, board /
+# executive moves, shareholder agreements, bylaw/auditor changes. Matched on the
+# accent-folded text so "eleição"/"renúncia"/"governança" hit. Anchored at a
+# word start to avoid mid-word collisions.
+_GOVERNANCE_CUES = re.compile(
+    r"(?<![A-Z])(?:"
+    r"CONTROLE|ACORDO DE ACIONISTAS|CONSELHO DE ADMINISTRACAO|CONSELHO FISCAL|"
+    r"DIRETORIA|DIRETOR|ADMINISTRADOR|ELEICAO|RENUNCIA|DESTITUICAO|RECONDUCAO|"
+    r"NOMEACAO|SUBSTITUICAO|AFASTAMENTO|POSSE|GOVERNANCA|ESTATUTO|AUDITOR|"
+    r"PRESIDENTE|CEO|CFO"
+    r")"
+    # "remuneração dos administradores" (exec comp) is governance but collides
+    # with "remuneração aos/dos acionistas" (dividends) — omitted to avoid the
+    # false positive; control/board/exec/auditor/statute cues cover the rest.
+)
+
+
+def is_governance(subject: Any, especie: Any = None, tipo: Any = None) -> bool:
+    """True if a material fact is a corporate-governance event (by its topic)."""
+    return bool(_GOVERNANCE_CUES.search(_fold(f"{subject} {especie or ''} {tipo or ''}")))
 
 ZIP_URL_TMPL = (
     "https://dados.cvm.gov.br/dados/CIA_ABERTA/DOC/IPE/DADOS/ipe_cia_aberta_{year}.zip"
@@ -110,17 +142,24 @@ def _normalize(row: dict[str, Any]) -> dict[str, Any]:
     category = (row.get("Categoria") or "").strip()
     subject = (row.get("Assunto") or "").strip() or (row.get("Tipo") or "").strip() or category
     ident = proto or f"{cnpj}:{date}:{subject}"[:80]
+    especie = (row.get("Especie") or "").strip() or None
+    tipo = (row.get("Tipo") or "").strip() or None
+    governance = is_governance(subject, especie, tipo)
     return {
         "id": f"cvm-fato:{ident}",
         "source": "CVM-FatoRelevante",
         "kind": "competitor",
         "doc_type": category,
         "category": category,
+        # Governance axis: recognised control/board/executive/statute/auditor
+        # events, so a strategic leadership move isn't lost among routine facts.
+        "governance": governance,
+        "topic": "governance" if governance else None,
         "subject": subject,
         "company": company,
         "name": company,
         "cnpj": cnpj,
-        "especie": (row.get("Especie") or "").strip() or None,
+        "especie": especie,
         "date": date,
         "event_date": date,
         "reference_date": (row.get("Data_Referencia") or "")[:10] or None,
