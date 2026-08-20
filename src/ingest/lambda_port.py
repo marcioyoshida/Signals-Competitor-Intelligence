@@ -234,8 +234,99 @@ def _populate_corpus_and_sync(new_docs: list[dict[str, Any]]) -> None:
         print(f"Warning: KB ingestion sync failed: {exc}")
 
 
+def _news_slice(context: Any) -> dict[str, Any]:
+    """Trade-press (Google News RSS + outlet feeds) news slice of the digest.
+
+    Factored out so it can run as its OWN parallel Step Functions branch: news
+    is the only source that scales linearly with the registry (one HTTP per
+    term), so it no longer shares a wall-clock budget with the fixed-cost
+    structured sources. News is not written to the corpus, so this path has no
+    corpus/state coupling with the structured branch (disjoint diff sources)."""
+    news_lookback = int(os.environ.get("ONCA_NEWS_LOOKBACK_DAYS", "14"))
+    competitors = _csv_env("ONCA_COMPETITORS")
+    news_terms = _csv_env("ONCA_NEWS_WATCHLIST")
+    if os.environ.get("ONCA_NEWS_USE_COMPETITORS", "true").lower() in ("1", "true", "yes"):
+        news_terms = list(dict.fromkeys(news_terms + competitors))
+    # Derive news terms from the registry (source of truth for tracked entities)
+    # so the news set can't drift out of sync with it (the C6/PicPay silence bug).
+    if os.environ.get("ONCA_ENTITIES_TABLE") and os.environ.get(
+        "ONCA_NEWS_USE_REGISTRY", "true"
+    ).lower() in ("1", "true", "yes"):
+        try:
+            from src.synth import entity_registry
+
+            reg_terms = entity_registry.news_terms()
+            have = {t.lower() for t in news_terms}
+            news_terms = news_terms + [t for t in reg_terms if t.lower() not in have]
+            print(f"News terms: {len(reg_terms)} from registry, {len(news_terms)} total")
+        except Exception as exc:  # pragma: no cover - best-effort, config still works
+            print(f"Warning: registry news terms unavailable, using config: {exc}")
+
+    deadline = _ingest_deadline(context)
+    per_source = int(os.environ.get("ONCA_SOURCE_TIMEOUT_SEC", "90"))
+    news_items: list[dict[str, Any]] = []
+    new_news: list[dict[str, Any]] = []
+    if news_terms:
+        try:
+            with _source_budget("Trade press", deadline, per_source):
+                news_items = trade_press.fetch_news(
+                    news_terms,
+                    lookback_days=news_lookback,
+                    max_terms=int(os.environ.get("ONCA_NEWS_MAX_TERMS", "80")),
+                )
+                new_news = _new_since_last_run("trade_press", news_items, seed_if_empty=True)
+        except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
+            print(f"Warning: trade-press fetch failed: {exc}")
+    return {
+        "count": len(news_items),
+        "new_count": len(new_news),
+        # These caps bound what SYNTH can see. The old 12/15 were sized for a
+        # ~15-entity watchlist; at registry scale (60+ entities) the most-recent
+        # slice is monopolised by a few high-volume names (BTG, BB, Bradesco),
+        # starving low-volume entities (crypto, consórcio, advisory) of synth
+        # visibility even when their news clears the corroboration gate. Persist
+        # ALL new items (env-tunable) + a broad context sample; rows are compact.
+        "items": _tag_new(new_news[: int(os.environ.get("ONCA_NEWS_DIGEST_ITEMS", "150"))]),
+        "context": _strip_raw(news_items[: int(os.environ.get("ONCA_NEWS_DIGEST_CONTEXT", "60"))]),
+    }
+
+
+def _empty_news_slice() -> dict[str, Any]:
+    return {"count": 0, "new_count": 0, "items": [], "context": []}
+
+
+def _write_news_digest(slice_: dict[str, Any], context: Any) -> dict[str, Any]:
+    """Persist the news slice to its own S3 prefix so synth can overlay it onto
+    the structured base digest (the two branches write disjoint objects)."""
+    payload = {"news": slice_, "source": "news_ingest"}
+    bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
+    if bucket:
+        try:
+            s3 = boto3.client("s3")
+            key = f"lambda-digests/news/{getattr(context, 'aws_request_id', 'local')}.json"
+            s3.put_object(
+                Bucket=bucket,
+                Key=key,
+                Body=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            )
+        except Exception as exc:  # pragma: no cover - defensive handling for S3 write failures
+            print(f"Warning: S3 news upload failed: {exc}")
+    return {"statusCode": 200, "body": json.dumps(payload, ensure_ascii=False)}
+
+
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
-    """Return a small digest payload for downstream Lambda/CDK wiring."""
+    """Return a small digest payload for downstream Lambda/CDK wiring.
+
+    ``mode`` (event or ONCA_INGEST_MODE) splits the work into parallel branches:
+      - "news":       fetch only trade-press → write the news slice to S3.
+      - "structured": fetch every structured source (+ corpus) → write the base
+                      digest to S3 with an empty news slice (news arrives via the
+                      parallel news branch and is overlaid at synth time).
+      - "all" (default): both, in one invocation (local / back-compat)."""
+    mode = (event or {}).get("mode") or os.environ.get("ONCA_INGEST_MODE", "all")
+    if mode == "news":
+        return _write_news_digest(_news_slice(context), context)
+
     lookback_days = int(os.environ.get("ONCA_LOOKBACK_DAYS", "7"))
     competitors = _csv_env("ONCA_COMPETITORS")
     competitor_ispb = _csv_env("ONCA_COMPETITOR_ISPB")
@@ -299,28 +390,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     if os.environ.get("ONCA_DOU_USE_COMPETITORS", "true").lower() in ("1", "true", "yes"):
         dou_terms = list(dict.fromkeys(dou_terms + fatos_watch))
 
-    # Trade-press (Google News RSS) — brand-name queries for qualitative color.
-    news_lookback = int(os.environ.get("ONCA_NEWS_LOOKBACK_DAYS", "14"))
-    news_terms = _csv_env("ONCA_NEWS_WATCHLIST")
-    if os.environ.get("ONCA_NEWS_USE_COMPETITORS", "true").lower() in ("1", "true", "yes"):
-        news_terms = list(dict.fromkeys(news_terms + competitors))
-    # Derive news terms from the registry (the source of truth for the tracked
-    # entities) so the news set can't drift out of sync with it again — the
-    # C6/PicPay false-silence root cause. Config ONCA_NEWS_WATCHLIST remains a
-    # manual supplement (non-entity/thematic terms); the registry covers entities.
-    if os.environ.get("ONCA_ENTITIES_TABLE") and os.environ.get(
-        "ONCA_NEWS_USE_REGISTRY", "true"
-    ).lower() in ("1", "true", "yes"):
-        try:
-            from src.synth import entity_registry
-
-            reg_terms = entity_registry.news_terms()
-            # Case-fold dedup so a config/registry overlap isn't searched twice.
-            have = {t.lower() for t in news_terms}
-            news_terms = news_terms + [t for t in reg_terms if t.lower() not in have]
-            print(f"News terms: {len(reg_terms)} from registry, {len(news_terms)} total")
-        except Exception as exc:  # pragma: no cover - best-effort, config still works
-            print(f"Warning: registry news terms unavailable, using config: {exc}")
+    # Trade-press news is fetched by _news_slice (its own parallel branch); see
+    # the mode dispatch at the top of lambda_handler.
 
     # Wall-clock guards: bound each source and stop starting new work before the
     # Lambda times out, so ingest always returns a (possibly partial) digest.
@@ -552,17 +623,6 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
             print(f"Warning: Diário Oficial fetch failed: {exc}")
 
-    # Trade-press headlines (Google News RSS) — qualitative color, lower authority.
-    news_items: list[dict[str, Any]] = []
-    new_news: list[dict[str, Any]] = []
-    if news_terms:
-        try:
-            with _source_budget("Trade press", deadline, per_source):
-                news_items = trade_press.fetch_news(news_terms, lookback_days=news_lookback)
-                new_news = _new_since_last_run("trade_press", news_items, seed_if_empty=True)
-        except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
-            print(f"Warning: trade-press fetch failed: {exc}")
-
     # SEC EDGAR — US-listed payments/fintech disclosures (seed on first run).
     # Metadata first (submissions JSON), then primary-document bodies for the
     # diffed set + a small context sample so digests/corpus carry text not only URLs.
@@ -692,12 +752,9 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             "items": _tag_new(new_dou[:10]),
             "context": _strip_raw(dou_acts[:15]),
         },
-        "news": {
-            "count": len(news_items),
-            "new_count": len(new_news),
-            "items": _tag_new(new_news[:12]),
-            "context": _strip_raw(news_items[:15]),
-        },
+        # In "all" mode news is fetched inline here; in "structured" mode the news
+        # slice is empty and the parallel news branch supplies it (overlaid at synth).
+        "news": _news_slice(context) if mode == "all" else _empty_news_slice(),
         "inf_diario_moves": {
             "funds_tracked": len(inf_diario_rows),
             "as_of": (inf_diario_rows[0].get("date") if inf_diario_rows else None),

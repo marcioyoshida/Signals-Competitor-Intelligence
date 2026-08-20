@@ -58,6 +58,12 @@ OUTLET_FEEDS: list[tuple[str, str]] = [
     ("NeoFeed", "https://neofeed.com.br/feed/"),
     ("Startups", "https://startups.com.br/feed/"),
     ("Startupi", "https://startupi.com.br/feed/"),
+    # Crypto & digital-assets trade press — the crypto module is news-only (BR
+    # exchanges/asset managers don't file CVM material facts), so distinct-publisher
+    # corroboration comes from these specialist outlets. Verified live 2026-08-19.
+    ("Livecoins", "https://livecoins.com.br/feed/"),
+    ("CriptoFácil", "https://www.criptofacil.com/feed/"),
+    ("Cointelegraph Brasil", "https://cointelegraph.com.br/rss"),
 ]
 
 # Ambiguous single-word brands (Stone, Nubank, Inter) pull band/stadium/culture
@@ -71,6 +77,14 @@ FINANCE_TERMS = frozenset({
     "fraude", "golpe", "aporte", "rodada", "funding", "ceo", "cfo", "expansã",
     "expansao", "digital", "unicórnio", "unicornio", "financeir", "títulos",
     "titulos", "debênture", "debenture", "fundo", "susep", "cade", "bacen",
+    # Crypto & digital-assets context — a "Mercado Bitcoin"/"Binance" headline
+    # otherwise fails the finance gate (none of the above tokens appear). Stems
+    # cover cripto/criptoativo/criptomoeda; the rest are single distinctive words.
+    "cripto", "bitcoin", "blockchain", "token", "exchange", "stablecoin",
+    "ethereum", "web3", "corretora", "custódia", "custodia", "tokeniza",
+    # Consórcio context — likewise, an "Ademicon"/"Embracon" headline needs a
+    # sector cue to pass. Stems: consorci(o/ado/os), contemplad(o/os/ção).
+    "consorci", "consórci", "contemplad", "carta de créd", "carta de cred",
 })
 
 # Terms are word-STEM prefixes ("pagament" -> "pagamentos"), matched at a word
@@ -98,7 +112,7 @@ def fetch_news(
     fetcher: Callable[[str], bytes] | None = None,
     outlet_fetcher: Callable[[str], bytes] | None = None,
     pause_sec: float = 0.3,
-    max_terms: int = 25,
+    max_terms: int = 80,
 ) -> list[dict[str, Any]]:
     """Recent headlines mentioning a competitor in the title (higher precision)."""
     today = today or dt.date.today()
@@ -106,7 +120,11 @@ def fetch_news(
     fetch = fetcher or _fetch_rss
     out: list[dict[str, Any]] = []
     seen: set[str] = set()
-    uniq = [t for t in dict.fromkeys(str(t).strip() for t in terms) if t][:max_terms]
+    # Full deduped set drives the (cheap, bounded) outlet-feed matching so EVERY
+    # tracked entity gets outlet coverage; the expensive one-HTTP-per-term Google
+    # News loop is capped at max_terms (registry-scale safety, budget-bounded).
+    uniq_all = [t for t in dict.fromkeys(str(t).strip() for t in terms) if t]
+    uniq = uniq_all[:max_terms]
     for term in uniq:
         term_f = _fold(term)
         kept = 0
@@ -135,7 +153,7 @@ def fetch_news(
     # Named outlets pulled directly, filtered to headlines naming a competitor.
     if include_outlets:
         ofetch = outlet_fetcher or _fetch_url
-        term_folded = {t: _fold(t) for t in uniq}
+        term_folded = {t: _fold(t) for t in uniq_all}
         for publisher, feed_url in (outlet_feeds if outlet_feeds is not None else OUTLET_FEEDS):
             for rec in _parse_feed(ofetch(feed_url), publisher):
                 title_f = _fold(rec.get("title") or "")

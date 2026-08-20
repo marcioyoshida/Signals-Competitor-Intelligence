@@ -486,6 +486,8 @@ INDUSTRIES: dict[str, dict[str, str]] = {
     "fintech": {"display_name": "Fintech", "tier": "entry"},
     "financial-data-analytics": {"display_name": "Financial Data & Analytics", "tier": "mid"},
     "advisory": {"display_name": "Advisory", "tier": "entry"},
+    "crypto": {"display_name": "Crypto & Digital Assets", "tier": "mid"},
+    "consorcio": {"display_name": "Consórcios", "tier": "entry"},
 }
 _PARENT_SECTOR = "financial-services"
 

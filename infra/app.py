@@ -657,19 +657,40 @@ class OncaPrototypeStack(Stack):
         # KB-ingestion wait: synth is digest-first and KB Retrieve only enriches
         # the already-embedded corpus, so today's newest docs lagging one run is
         # acceptable.
-        ingest_task = sfn_tasks.LambdaInvoke(
+        # Ingest is split into two PARALLEL branches on the same Lambda (mode via
+        # payload): the fixed-cost STRUCTURED sources and the registry-linear NEWS
+        # fetch. News no longer shares a wall-clock budget with structured, so the
+        # news path scales with the registry without starving structured. Each
+        # branch writes a disjoint S3 object; synth overlays them (digest_io).
+        structured_ingest = sfn_tasks.LambdaInvoke(
             self,
-            "IngestTask",
+            "StructuredIngest",
             lambda_function=func,
-            payload=sfn.TaskInput.from_object({}),
-            result_path="$.ingest",
+            payload=sfn.TaskInput.from_object({"mode": "structured"}),
+            result_path=sfn.JsonPath.DISCARD,
         )
-        ingest_task.add_retry(
+        structured_ingest.add_retry(
             errors=["States.ALL"],
             max_attempts=2,
             interval=Duration.seconds(30),
             backoff_rate=2.0,
         )
+        news_ingest = sfn_tasks.LambdaInvoke(
+            self,
+            "NewsIngest",
+            lambda_function=func,
+            payload=sfn.TaskInput.from_object({"mode": "news"}),
+            result_path=sfn.JsonPath.DISCARD,
+        )
+        news_ingest.add_retry(
+            errors=["States.ALL"],
+            max_attempts=2,
+            interval=Duration.seconds(30),
+            backoff_rate=2.0,
+        )
+        ingest_task = sfn.Parallel(self, "Ingest", result_path=sfn.JsonPath.DISCARD)
+        ingest_task.branch(structured_ingest)
+        ingest_task.branch(news_ingest)
         feature_task = sfn_tasks.LambdaInvoke(
             self,
             "FeatureTask",

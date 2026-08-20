@@ -40,17 +40,35 @@ def load_latest_digest_from_s3(
     except Exception as exc:  # pragma: no cover
         print(f"Warning: list digests failed: {exc}")
         return None
-    contents = resp.get("Contents") or []
+    contents = [o for o in (resp.get("Contents") or []) if o["Key"].endswith(".json")]
     if not contents:
         return None
-    latest = max(contents, key=lambda o: o["LastModified"])
-    key = latest["Key"]
-    try:
-        obj = s3.get_object(Bucket=bucket, Key=key)
-        return json.loads(obj["Body"].read().decode("utf-8"))
-    except Exception as exc:  # pragma: no cover
-        print(f"Warning: read digest s3://{bucket}/{key} failed: {exc}")
+    # The ingest is split into parallel branches that write disjoint objects:
+    # the STRUCTURED base digest at ``lambda-digests/<id>.json`` and the NEWS
+    # slice at ``lambda-digests/news/<id>.json``. Load the latest base and overlay
+    # the latest news slice so synth sees a single merged digest.
+    news_prefix = prefix + "news/"
+    base = [o for o in contents if not o["Key"].startswith(news_prefix)]
+    news = [o for o in contents if o["Key"].startswith(news_prefix)]
+    if not base:
         return None
+
+    def _read(key: str) -> dict[str, Any] | None:
+        try:
+            obj = s3.get_object(Bucket=bucket, Key=key)
+            return json.loads(obj["Body"].read().decode("utf-8"))
+        except Exception as exc:  # pragma: no cover
+            print(f"Warning: read digest s3://{bucket}/{key} failed: {exc}")
+            return None
+
+    digest = _read(max(base, key=lambda o: o["LastModified"])["Key"])
+    if digest is None:
+        return None
+    if news:
+        news_obj = _read(max(news, key=lambda o: o["LastModified"])["Key"]) or {}
+        if isinstance(news_obj.get("news"), dict):
+            digest["news"] = news_obj["news"]
+    return digest
 
 
 def write_narrative(

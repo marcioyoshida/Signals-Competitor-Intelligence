@@ -73,6 +73,30 @@ def test_direct_outlet_feed_matches_full_phrase_and_sets_publisher():
     assert n["url"] == "https://valor.globo.com/n/1"    # direct publisher link
 
 
+def test_outlet_matching_covers_terms_beyond_google_cap():
+    # Registry-scale regression: a term past max_terms is NOT queried on Google
+    # News (expensive per-term loop is capped), but the cheap outlet-feed path
+    # must still match the FULL term set — else late-alphabet entities lose all
+    # news coverage once the registry grows past the cap.
+    google_hits = {"queried": []}
+
+    def _google(term):
+        google_hits["queried"].append(term)
+        return b"<rss><channel></channel></rss>"  # no per-term results
+
+    outlet_items = [("Ripio expande exchange de cripto no Brasil", "https://lc/1", "Thu, 14 Aug 2026 10:00:00 GMT", "")]
+    news = trade_press.fetch_news(
+        ["Alpha", "Beta", "Ripio"], lookback_days=30, today=dt.date(2026, 8, 16),
+        max_terms=2,  # only Alpha, Beta hit Google; Ripio is past the cap
+        fetcher=_google,
+        include_outlets=True, outlet_feeds=[("Livecoins", "http://feed")],
+        outlet_fetcher=lambda url: _rss(outlet_items), pause_sec=0,
+    )
+    assert google_hits["queried"] == ["Alpha", "Beta"]      # Ripio never queried on Google
+    assert [n["company"] for n in news] == ["Ripio"]        # but resolved via the outlet
+    assert news[0]["publisher"] == "Livecoins"
+
+
 def test_finance_context_word_start_not_mid_word():
     # deeper-fix regression: "ação" (share) must not match inside "celebração"
     from src.ingest.trade_press import _has_finance_context
@@ -82,3 +106,15 @@ def test_finance_context_word_start_not_mid_word():
     assert _has_finance_context("StoneCo divulga lucro e receita do trimestre")
     assert _has_finance_context("Nubank amplia pagamentos e crédito")  # stems pagament/credito
     assert _has_finance_context("ação da empresa sobe na bolsa")       # standalone ação
+
+
+def test_finance_context_crypto_and_consorcio_sectors():
+    # crypto / consórcio headlines carry no banking token — the sector cue itself
+    # must satisfy the finance gate, else the new modules' news is silently dropped.
+    from src.ingest.trade_press import _has_finance_context
+    assert _has_finance_context("Mercado Bitcoin amplia oferta de criptoativos")   # cripto stem
+    assert _has_finance_context("Binance lança nova exchange no Brasil")           # exchange
+    assert _has_finance_context("Ademicon lidera vendas de consórcio no trimestre")  # consorci stem
+    assert _has_finance_context("Embracon registra recorde de cartas contempladas")  # contemplad
+    # and a plain culture headline still does not
+    assert not _has_finance_context("banda faz show de rock no fim de semana")

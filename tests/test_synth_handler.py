@@ -10,7 +10,15 @@ from src.synth import lambda_handler
 def test_handler_produces_cited_narratives_without_bedrock(monkeypatch):
     monkeypatch.setenv("ONCA_SYNTH_USE_LLM", "false")
     monkeypatch.setenv("ONCA_SYNTH_USE_KB", "false")
-    monkeypatch.setattr(lambda_handler.digest_io, "write_narrative", lambda *a, **k: None)
+    # The handler returns a COMPACT payload (counts + S3 keys, no inline
+    # narratives — see the Step Functions size-limit note), so capture the
+    # written narrative to assert on its content.
+    written = []
+    monkeypatch.setattr(
+        lambda_handler.digest_io,
+        "write_narrative",
+        lambda n, **k: written.append(n) or f"narratives/x/{n.get('id')}.json",
+    )
 
     event = {
         "digest": {
@@ -35,7 +43,8 @@ def test_handler_produces_cited_narratives_without_bedrock(monkeypatch):
     body = json.loads(resp["body"])
     assert body["status"] == "ok"
     assert body["narrative_count"] >= 1
-    narr = body["narratives"][0]
+    assert body["keys"]  # narratives persisted to S3, not echoed inline
+    narr = written[0]
     assert narr["citations"]
     assert narr["narrative"]
     assert narr.get("threat_score_note") == "estimated_v1"

@@ -63,11 +63,14 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         "min_score": float(os.environ.get("ONCA_SYNTH_MIN_SCORE", "0.45")),
     }
     status = "ok" if narratives else "ok_empty"
+    # Return a COMPACT result: narratives are persisted to S3 (``keys``) and the
+    # feed builder reads them from there — echoing the full list inline as well
+    # blows the Step Functions 256 KB task-result limit once a run synthesises
+    # more than a handful (States.DataLimitExceeded). Keep counts + keys only.
     payload = {
         "status": status,
         "candidate_count": len(cands),
         "narrative_count": len(narratives),
-        "narratives": narratives,
         "keys": keys,
         "fusion": fusion,
         "as_of": next((n.get("as_of") for n in narratives if n.get("as_of")), None),
@@ -75,7 +78,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     }
     return {
         "statusCode": 200,
-        "body": json.dumps(payload, ensure_ascii=False, indent=2),
+        "body": json.dumps(payload, ensure_ascii=False),
     }
 
 

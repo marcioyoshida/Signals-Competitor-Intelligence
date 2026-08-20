@@ -877,3 +877,50 @@ def test_handler_degrades_when_a_source_exceeds_its_budget(monkeypatch):
     # normativos was cut by its budget -> empty, not the slow-return sentinel.
     assert payload["regulatory"]["count"] == 0
     assert elapsed < 4  # cut at ~1s, did not wait the full 5s
+
+
+def test_lambda_handler_news_mode_writes_news_slice(monkeypatch):
+    """mode=news -> only trade-press runs; slice written to lambda-digests/news/."""
+    monkeypatch.setattr(
+        lambda_port.trade_press, "fetch_news",
+        lambda terms, **k: [{"id": "news:1", "company": "Binance", "title": "Binance x", "publisher": "P"}],
+    )
+    monkeypatch.setattr(lambda_port, "_new_since_last_run", lambda source, docs, seed_if_empty=False: docs)
+    monkeypatch.setenv("ONCA_NEWS_WATCHLIST", "Binance")
+    monkeypatch.setenv("ONCA_NEWS_USE_REGISTRY", "false")
+    monkeypatch.setenv("ONCA_DIGESTS_BUCKET", "b")
+    puts = []
+
+    class _S3:
+        def put_object(self, **kw):
+            puts.append(kw)
+
+    monkeypatch.setattr(lambda_port.boto3, "client", lambda name: _S3())
+
+    class _Ctx:
+        aws_request_id = "req-news"
+
+    resp = lambda_port.lambda_handler({"mode": "news"}, _Ctx())
+    body = json.loads(resp["body"])
+    assert body["source"] == "news_ingest"
+    assert body["news"]["count"] == 1 and body["news"]["new_count"] == 1
+    assert puts and puts[0]["Key"] == "lambda-digests/news/req-news.json"
+
+
+def test_lambda_handler_structured_mode_skips_news(monkeypatch):
+    """mode=structured -> news is NOT fetched; the news slice is empty (the
+    parallel news branch supplies it, overlaid at synth time)."""
+    monkeypatch.setattr(lambda_port, "_new_since_last_run", lambda source, docs, seed_if_empty=False: docs)
+    monkeypatch.setattr(lambda_port, "_moves_since_last_run", lambda *a, **k: [])
+    _stub_core_ingesters(monkeypatch)
+
+    def _boom(*a, **k):
+        raise AssertionError("news must not be fetched in structured mode")
+
+    monkeypatch.setattr(lambda_port.trade_press, "fetch_news", _boom)
+    monkeypatch.setenv("ONCA_NEWS_WATCHLIST", "Binance")  # would trigger news if it ran
+
+    resp = lambda_port.lambda_handler({"mode": "structured"}, None)
+    body = json.loads(resp["body"])
+    assert body["source"] == "lambda_port"
+    assert body["news"] == {"count": 0, "new_count": 0, "items": [], "context": []}
