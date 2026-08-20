@@ -87,6 +87,7 @@ from src.ingest import (
     bcb_autorizacoes,
     bcb_ifdata,
     bcb_juros,
+    bcb_macro,
     bcb_normativos,
     bcb_pix,
     cvm_fundos,
@@ -635,6 +636,18 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
             print(f"Warning: Diário Oficial fetch failed: {exc}")
 
+    # BCB macro — Copom/Selic decision + weekly Focus expectations (market-wide,
+    # not entity-tied; surfaces as standalone "macro" cards). Best-effort.
+    macro_selic: dict[str, Any] | None = None
+    macro_focus: list[dict[str, Any]] = []
+    if os.environ.get("ONCA_MACRO", "true").lower() in ("1", "true", "yes"):
+        try:
+            with _source_budget("BCB macro", deadline, per_source):
+                macro_selic = bcb_macro.fetch_selic()
+                macro_focus = bcb_macro.fetch_focus()
+        except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
+            print(f"Warning: BCB macro fetch failed: {exc}")
+
     # SEC EDGAR — US-listed payments/fintech disclosures (seed on first run).
     # Metadata first (submissions JSON), then primary-document bodies for the
     # diffed set + a small context sample so digests/corpus carry text not only URLs.
@@ -768,6 +781,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         # In "all" mode news is fetched inline here; in "structured" mode the news
         # slice is empty and the parallel news branch supplies it (overlaid at synth).
         "news": _news_slice(context) if mode == "all" else _empty_news_slice(),
+        # Market-wide macro (Copom/Selic + Focus) — standalone macro cards.
+        "macro": {"selic": macro_selic, "focus": macro_focus},
         "inf_diario_moves": {
             "funds_tracked": len(inf_diario_rows),
             "as_of": (inf_diario_rows[0].get("date") if inf_diario_rows else None),

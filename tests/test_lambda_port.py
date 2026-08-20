@@ -24,6 +24,8 @@ def _auto_stub_external_sources(monkeypatch):
     monkeypatch.setattr(lambda_port.sec_filings, "fetch_filings", lambda *a, **k: [])
     monkeypatch.setattr(lambda_port.cvm_inf_diario, "fetch_latest", lambda **kwargs: [])
     monkeypatch.setattr(lambda_port.cvm_inf_diario, "for_moves", lambda rows: rows)
+    monkeypatch.setattr(lambda_port.bcb_macro, "fetch_selic", lambda *a, **k: None)
+    monkeypatch.setattr(lambda_port.bcb_macro, "fetch_focus", lambda *a, **k: [])
 
 
 class FakeStateTable:

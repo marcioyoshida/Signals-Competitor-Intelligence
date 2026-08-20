@@ -153,6 +153,67 @@ def build_industry_volume(
     return out
 
 
+_FOCUS_LABELS = {"IPCA": "IPCA", "Selic": "Selic", "PIB Total": "PIB", "Câmbio": "Câmbio (R$/US$)"}
+
+
+def _is_recent(iso_date: str | None, *, days: int) -> bool:
+    try:
+        return (dt.date.today() - dt.date.fromisoformat(str(iso_date)[:10])).days <= days
+    except (TypeError, ValueError):
+        return False
+
+
+def build_macro(macro: dict[str, Any] | None) -> dict[str, Any]:
+    """Turn the digest's macro slice into the standalone Macro-panel payload:
+    current Selic + last Copom decision, and the Focus medians with WoW shifts.
+    A recent Copom decision or a notable Focus shift becomes an alert card."""
+    macro = macro or {}
+    selic = macro.get("selic") or None
+    focus = [f for f in (macro.get("focus") or []) if f.get("median") is not None]
+    cards: list[dict[str, Any]] = []
+
+    if selic:
+        d = selic.get("last_decision") or {}
+        recent = _is_recent(d.get("date"), days=12)
+        arrow = {"alta": "↑", "baixa": "↓"}.get(d.get("direction"), "→")
+        if d.get("direction") in ("alta", "baixa"):
+            detail = (
+                f"Copom {'elevou' if d['direction'] == 'alta' else 'reduziu'} a Selic "
+                f"em {abs(int(d.get('bps') or 0))} bps ({d.get('previous')}% → {d.get('value')}%) "
+                f"em {d.get('date')}."
+            )
+        else:
+            detail = f"Copom manteve a Selic em {selic.get('current')}% (última mudança em {d.get('date')})."
+        cards.append({
+            "kind": "selic",
+            "title": f"Selic {selic.get('current')}% a.a. {arrow}",
+            "detail": detail,
+            "is_alert": recent,
+            "as_of": selic.get("as_of"),
+        })
+
+    # Focus: one card per indicator/year with a notable WoW shift (threshold by
+    # indicator scale). PIB/Câmbio move on a larger scale than IPCA/Selic.
+    thresh = {"IPCA": 0.05, "Selic": 0.05, "PIB Total": 0.1, "Câmbio": 0.03}
+    for f in focus:
+        delta = f.get("delta")
+        if delta is None or abs(delta) < thresh.get(f["indicator"], 0.05):
+            continue
+        up = delta > 0
+        cards.append({
+            "kind": "focus",
+            "title": f"Focus: {_FOCUS_LABELS.get(f['indicator'], f['indicator'])} {f['ref_year']} → {f['median']}%",
+            "detail": (
+                f"Mediana das expectativas {'subiu' if up else 'caiu'} "
+                f"{abs(delta):+.2f} p.p. na semana (para {f['ref_year']})."
+            ),
+            "is_alert": False,
+            "as_of": f.get("date"),
+        })
+
+    return {"selic": selic, "focus": focus, "cards": cards}
+
+
 def build_feed(
     narratives: list[dict[str, Any]],
     *,
@@ -160,6 +221,7 @@ def build_feed(
     reviews: list[dict[str, Any]] | None = None,
     industry_map: dict[str, list[str]] | None = None,
     industry_meta: dict[str, dict[str, Any]] | None = None,
+    macro: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Pure aggregation: narratives -> feed payload. No I/O.
 
@@ -279,6 +341,8 @@ def build_feed(
         ],
         # Pending entity-registry review proposals (ADR step 5), read-only surface.
         "reviews": reviews or [],
+        # Standalone Macro panel: Copom/Selic + Focus (market-wide context).
+        "macro": build_macro(macro),
     }
 
 
@@ -376,6 +440,18 @@ def load_industry_data() -> tuple[dict[str, list[str]], dict[str, dict[str, Any]
         return {}, {}
 
 
+def _load_macro() -> dict[str, Any] | None:
+    """Read the macro slice from the latest structured digest (best-effort)."""
+    try:
+        from src.synth import digest_io
+
+        digest = digest_io.load_latest_digest_from_s3()
+        return (digest or {}).get("macro")
+    except Exception as exc:  # pragma: no cover - best-effort, read-only
+        print(f"Warning: load macro slice failed: {exc}")
+        return None
+
+
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """Build feed.json from recent narratives and publish it to the site bucket."""
     digests_bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
@@ -392,6 +468,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         reviews=load_pending_reviews(),
         industry_map=industry_map,
         industry_meta=industry_meta,
+        macro=_load_macro(),
     )
     body = json.dumps(feed, ensure_ascii=False).encode("utf-8")
 

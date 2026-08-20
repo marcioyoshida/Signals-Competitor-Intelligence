@@ -142,6 +142,15 @@
   table.tv { width: 100%; border-collapse: collapse; font-size: 13px; }
   table.tv th, table.tv td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); }
   table.tv th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; }
+  table.tv td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  table.tv td.num.up { color: #dc2626; } table.tv td.num.down { color: #16a34a; }
+  .macrocards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 10px; padding: 6px 16px 4px; }
+  .mcard { border: 1px solid var(--border); border-radius: 10px; padding: 11px 13px; background: var(--panel2); }
+  .mcard.alert { border-color: rgba(220,38,38,.5); box-shadow: 0 0 0 1px rgba(220,38,38,.2) inset; }
+  .mcard .mtitle { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+  .mcard .mdetail { color: var(--muted); font-size: 12.5px; line-height: 1.4; }
+  .mcard .mmeta { color: var(--muted); font-size: 11px; margin-top: 6px; }
   .empty { padding: 40px; text-align: center; color: var(--muted); }
   .hidden { display: none !important; }
   .tip { position: fixed; pointer-events: none; background: var(--ink); color: var(--bg);
@@ -185,8 +194,13 @@
 
   <div class="panel" id="lowerPanel" style="margin-top:28px;display:none">
     <div class="tabs" id="lowerTabs">
+      <button class="tab" data-tab="macro">Macro (Copom &amp; Focus)</button>
       <button class="tab" data-tab="industries">Cobertura por indústria</button>
       <button class="tab" data-tab="reviews">Revisão de entidades</button>
+    </div>
+    <div class="tabpane hidden" id="tab-macro">
+      <div class="hint">Contexto macro do mercado (BCB): decisão do Copom / Selic e as expectativas do Relatório Focus. Sinais amplos de mercado — não são de um concorrente específico.</div>
+      <div id="macro"></div>
     </div>
     <div class="tabpane" id="tab-industries">
       <div class="hint">Cada módulo de indústria é um add-on de assinatura. O volume indica quanto sinal ele agrega no período. Módulos <b>sem entidades</b> ou <b>sem cobertura</b> ficam sinalizados: são os candidatos a expandir a watchlist para gerar narrativas.</div>
@@ -323,27 +337,70 @@ function setTab(name) {
   state.tab = name;
   document.querySelectorAll("#lowerTabs .tab").forEach(b =>
     b.classList.toggle("active", b.dataset.tab === name));
+  document.getElementById("tab-macro").classList.toggle("hidden", name !== "macro");
   document.getElementById("tab-industries").classList.toggle("hidden", name !== "industries");
   document.getElementById("tab-reviews").classList.toggle("hidden", name !== "reviews");
 }
 
+function macroHasData() {
+  const m = DATA.macro || {};
+  return !!(m.selic || (m.focus && m.focus.length) || (m.cards && m.cards.length));
+}
+
 function renderLower() {
+  const hasMac = macroHasData();
   const hasInd = (DATA.industries || []).length > 0;
   const hasRev = (DATA.reviews || []).length > 0;
   const panel = document.getElementById("lowerPanel");
-  if (!hasInd && !hasRev) { panel.style.display = "none"; return; }
+  if (!hasMac && !hasInd && !hasRev) { panel.style.display = "none"; return; }
   panel.style.display = "";
+  const tabMac = document.querySelector('#lowerTabs .tab[data-tab="macro"]');
   const tabInd = document.querySelector('#lowerTabs .tab[data-tab="industries"]');
   const tabRev = document.querySelector('#lowerTabs .tab[data-tab="reviews"]');
+  tabMac.classList.toggle("hidden", !hasMac);
   tabInd.classList.toggle("hidden", !hasInd);
   tabRev.classList.toggle("hidden", !hasRev);
   tabRev.textContent = hasRev
     ? `Revisão de entidades (${DATA.reviews.length})` : "Revisão de entidades";
-  renderIndustries(); renderReviews();
+  renderMacro(); renderIndustries(); renderReviews();
   let want = state.tab;
-  if ((want === "industries" && !hasInd) || (want === "reviews" && !hasRev) || !want)
-    want = hasInd ? "industries" : "reviews";
+  const ok = { macro: hasMac, industries: hasInd, reviews: hasRev };
+  if (!want || !ok[want])
+    want = hasInd ? "industries" : (hasMac ? "macro" : "reviews");
   setTab(want);
+}
+
+function renderMacro() {
+  const m = DATA.macro || {};
+  const el = document.getElementById("macro");
+  if (!el) return;
+  if (!macroHasData()) { el.innerHTML = ""; return; }
+  let html = "";
+  const cards = m.cards || [];
+  if (cards.length) {
+    html += `<div class="macrocards">` + cards.map(c =>
+      `<div class="mcard${c.is_alert ? " alert" : ""}">
+        <div class="mtitle">${esc(c.title || "")}</div>
+        <div class="mdetail">${esc(c.detail || "")}</div>
+        ${c.as_of ? `<div class="mmeta">${esc(fmtDate(String(c.as_of).slice(0,10)))}</div>` : ""}
+      </div>`).join("") + `</div>`;
+  }
+  const focus = m.focus || [];
+  if (focus.length) {
+    const rows = focus.map(f => {
+      const d = (f.delta === null || f.delta === undefined) ? "—"
+        : (f.delta > 0 ? "+" : "") + f.delta.toFixed(2);
+      const cls = (f.delta > 0) ? "up" : (f.delta < 0 ? "down" : "");
+      return `<tr><td>${esc(f.indicator)}</td><td>${esc(String(f.ref_year))}</td>
+        <td class="num">${f.median != null ? f.median : "—"}</td>
+        <td class="num ${cls}">${d}</td></tr>`;
+    }).join("");
+    html += `<div class="hint" style="margin-top:12px">Relatório Focus — mediana das expectativas (variação na semana):</div>
+      <div style="overflow-x:auto"><table class="tv"><thead><tr>
+        <th>Indicador</th><th>Ano ref.</th><th>Mediana</th><th>Δ semana</th>
+      </tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+  el.innerHTML = html;
 }
 
 function industryOptionsHtml(selected) {

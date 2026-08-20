@@ -239,3 +239,35 @@ def test_industry_volume_counts_each_narrative_once_per_module():
     banking = feed["industries"][0]
     assert banking["narratives"] == 1
     assert banking["active_entities"] == 2
+
+
+def test_build_macro_selic_decision_and_focus_shift():
+    import datetime as dt
+    from src.dashboard.feed_builder import build_macro
+    macro = {
+        "selic": {"current": 14.0, "as_of": "2026-08-19",
+                  "last_decision": {"date": dt.date.today().isoformat(),
+                                    "previous": 14.25, "value": 14.0,
+                                    "direction": "baixa", "bps": -25}},
+        "focus": [
+            {"indicator": "IPCA", "ref_year": 2026, "median": 5.05, "prev_median": 4.90, "delta": 0.15, "date": "2026-08-18"},
+            {"indicator": "Selic", "ref_year": 2026, "median": 14.0, "prev_median": 14.0, "delta": 0.0, "date": "2026-08-18"},
+        ],
+    }
+    out = build_macro(macro)
+    assert out["selic"]["current"] == 14.0
+    kinds = [c["kind"] for c in out["cards"]]
+    assert "selic" in kinds                     # a decision card
+    selic_card = next(c for c in out["cards"] if c["kind"] == "selic")
+    assert selic_card["is_alert"] is True       # decision dated today -> recent
+    assert "reduziu" in selic_card["detail"]
+    # IPCA shifted 0.15 (>=0.05) -> a focus card; Selic flat -> none
+    focus_titles = [c["title"] for c in out["cards"] if c["kind"] == "focus"]
+    assert any("IPCA" in t for t in focus_titles)
+    assert not any("Selic" in t for t in focus_titles)
+
+
+def test_build_macro_empty_is_safe():
+    from src.dashboard.feed_builder import build_macro
+    out = build_macro(None)
+    assert out == {"selic": None, "focus": [], "cards": []}
