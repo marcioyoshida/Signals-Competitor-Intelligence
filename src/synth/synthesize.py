@@ -33,8 +33,37 @@ SYSTEM = (
     "'<BCB-Autorizacoes>', or a placeholder such as '(URL: ...)'. "
     "Do not invent URLs or numbers. If uncertain, say so. "
     "Prefer Portuguese for regulatory titles when present. "
+    "The briefing is standalone: do NOT open with a connective such as "
+    "'Além disso', 'Ademais', 'Também' or 'Por fim' — there is no prior text. "
     "Return only the briefing prose — no title, heading, or markdown."
 )
+
+# pt-BR discourse connectors that presume preceding text. When the LLM opens a
+# (often single-signal) narrative with one of these, the card reads as truncated
+# ("Além disso, o fundo Kinea…" with nothing before it). Stripped post-hoc — the
+# prompt asks the model to avoid them, but the model doesn't always comply.
+_DANGLING_OPENERS = (
+    "além do mais", "além disso", "da mesma forma", "de igual modo",
+    "por sua vez", "por outro lado", "dessa forma", "desse modo",
+    "por último", "por fim", "adicionalmente", "outrossim", "igualmente",
+    "ademais", "também", "assim", "ainda", "ademais disso",
+)
+
+
+def _strip_dangling_opener(text: str) -> str:
+    """Drop a leading connective ('Além disso,') that presumes prior text.
+
+    Only strips when the connector is immediately followed by a comma — the
+    unambiguous discourse-marker form — so subordinating uses ('Ainda que…',
+    'Assim como…') are left intact. Re-capitalizes the new first word.
+    """
+    s = (text or "").lstrip()
+    low = s.lower()
+    for op in _DANGLING_OPENERS:
+        if low.startswith(op) and s[len(op):len(op) + 1] == ",":
+            rest = s[len(op) + 1:].lstrip()
+            return (rest[0].upper() + rest[1:]) if rest else s
+    return s
 
 ENTITY_LABELS = {
     "nubank": "Nubank / Nu Holdings",
@@ -118,7 +147,7 @@ def synthesize_candidate(
         "threat_score": candidate.get("threat_score"),
         "threat_factors": candidate.get("threat_factors") or {},
         "threat_score_note": "estimated_v1",
-        "narrative": guarded["narrative"],
+        "narrative": _strip_dangling_opener(guarded["narrative"]),
         "citations": guarded["citations"],
         "dropped_urls": guarded["dropped_urls"],
         "mode": mode,

@@ -730,11 +730,26 @@ function syncEntityHighlight() {
     r.classList.toggle("active", r.dataset.entity === state.entity && state.entity !== ""));
 }
 
-document.getElementById("themeToggle").onclick = (e) => {
-  const dark = document.documentElement.getAttribute("data-theme") === "dark";
-  document.documentElement.setAttribute("data-theme", dark ? "light" : "dark");
-  e.target.textContent = dark ? "Escuro" : "Claro";
+// Theme follows the time of day: claro das 06:00 às 17:59, escuro das 18:00 às
+// 05:59. A manual toggle overrides for the current session only (não persiste),
+// so each visit reflects the hour; a background check keeps it current if the
+// tab stays open across the 06:00/18:00 boundary.
+let themeManual = false;
+function autoTheme() {
+  const h = new Date().getHours();
+  return (h >= 6 && h < 18) ? "light" : "dark";
+}
+function applyTheme(t) {
+  document.documentElement.setAttribute("data-theme", t);
+  const btn = document.getElementById("themeToggle");
+  if (btn) btn.textContent = t === "dark" ? "Claro" : "Escuro";
   if (DATA) { renderLegend(); renderEntities(); render(); syncEntityHighlight(); }
+}
+applyTheme(autoTheme());
+setInterval(() => { if (!themeManual) applyTheme(autoTheme()); }, 600000);
+document.getElementById("themeToggle").onclick = () => {
+  themeManual = true;
+  applyTheme(document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark");
 };
 document.getElementById("viewToggle").onclick = (e) => {
   state.view = state.view === "entity" ? "all" : "entity";
