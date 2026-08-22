@@ -103,6 +103,11 @@ FINANCE_TERMS = frozenset({
     # cue. "imobili" covers imobiliário/-a/-os; "rendiment" the monthly yield;
     # "cota"/"cotista"; "alugu" aluguel/aluguéis. "fii"/"fiagro" standalone.
     "fii", "fiagro", "cota", "rendiment", "imobili", "alugu",
+    # Acquiring / maquininhas context — a "Cielo"/"Getnet"/"Rede" headline about
+    # merchant acquiring needs a sector cue beyond the generic "pagament"/"cartão".
+    # "adquir" covers adquirência/adquirente; "credenciad" credenciadora; MDR/TPV
+    # are the industry's KPIs.
+    "adquir", "maquininha", "credenciad", "mdr", "tpv",
 })
 
 # Terms are word-STEM prefixes ("pagament" -> "pagamentos"), matched at a word

@@ -136,3 +136,12 @@ def test_finance_context_fund_sector():
     assert _has_finance_context("KNCA11 é o maior FIAGRO de crédito do agro")             # fiagro
     assert _has_finance_context("Fundo imobiliário eleva aluguéis e dividendos")          # imobili/alugu
     assert not _has_finance_context("prefeitura inaugura praça no centro da cidade")
+
+
+def test_finance_context_acquiring_sector():
+    from src.ingest.trade_press import _has_finance_context
+    assert _has_finance_context("Cielo perde participação no mercado de adquirência")     # adquir stem
+    assert _has_finance_context("Getnet lança nova maquininha para lojistas")             # maquininha
+    assert _has_finance_context("Rede reduz MDR para pequenos comerciantes")              # mdr
+    assert _has_finance_context("Credenciadora eleva TPV no trimestre")                   # credenciad/tpv
+    assert not _has_finance_context("rede de apoio comunitário abre inscrições")

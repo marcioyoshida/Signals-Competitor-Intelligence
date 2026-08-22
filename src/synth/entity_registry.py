@@ -491,6 +491,7 @@ INDUSTRIES: dict[str, dict[str, str]] = {
     "betting": {"display_name": "Betting & iGaming", "tier": "mid"},
     "real-estate-funds": {"display_name": "Fundos Imobiliários (FIIs)", "tier": "mid"},
     "agri-funds": {"display_name": "Fundos do Agro (FIAGRO)", "tier": "mid"},
+    "acquiring": {"display_name": "Adquirência (Maquininhas)", "tier": "mid"},
 }
 _PARENT_SECTOR = "financial-services"
 
