@@ -172,6 +172,7 @@
   <h1>🐆 Onça <span style="color:var(--muted);font-weight:500">— Sala de Guerra</span></h1>
   <span class="sub" id="asof"></span>
   <span class="spacer"></span>
+  <button class="btn" id="runBtn" title="Agenda uma execução do pipeline no topo da próxima hora (evita execuções repetidas)">Executar</button>
   <button class="btn" id="tableToggle">Tabela</button>
   <button class="btn" id="themeToggle">Claro</button>
 </header>
@@ -751,6 +752,21 @@ document.getElementById("viewToggle").onclick = (e) => {
   state.view = state.view === "entity" ? "all" : "entity";
   e.target.textContent = state.view === "entity" ? "Atualizações" : "Por entidade";
   render();
+};
+// Ad-hoc run: schedules ONE pipeline run at the top of the next hour; repeated
+// clicks are debounced server-side (fixed-name one-shot schedule).
+document.getElementById("runBtn").onclick = async (e) => {
+  const btn = e.target, prev = btn.textContent;
+  btn.disabled = true; btn.textContent = "Agendando…";
+  try {
+    const r = await fetch("/api/run/", { method: "POST" });
+    const j = await r.json();
+    if (r.ok && j.status === "scheduled") {
+      const hh = (j.at || "").slice(11, 16);
+      btn.textContent = j.debounced ? `Já agendado · ${hh}` : `Agendado · ${hh}`;
+    } else { btn.textContent = "Falhou"; }
+  } catch { btn.textContent = "Falhou"; }
+  setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 5000);
 };
 document.getElementById("tableToggle").onclick = (e) => {
   const tv = document.getElementById("tableView");

@@ -629,8 +629,46 @@ class OncaPrototypeStack(Stack):
                 )
             ],
         )
-        # /api/* catch-all (review action) — registered AFTER /api/registry/* so
-        # the specific pattern wins; everything else under /api/ lands here.
+        # Ad-hoc "run soon" trigger: schedules ONE pipeline run at the top of the
+        # next hour, debounced (fixed-name EventBridge Scheduler one-shot). Same
+        # auth model; registered BEFORE the /api/* catch-all (insertion order).
+        # Pipeline-dependent env (ONCA_PIPELINE_ARN / ONCA_SCHEDULER_ROLE_ARN) is
+        # attached after the state machine is defined, below.
+        run_fn = lambda_.Function(
+            self,
+            "OncaRunTrigger",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.dashboard.run_trigger.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.seconds(30),
+            memory_size=256,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_ORIGIN_SECRET": origin_secret,
+                "ONCA_SCHEDULE_NAME": "onca-adhoc-run",
+            },
+        )
+        run_url = run_fn.add_function_url(
+            auth_type=lambda_.FunctionUrlAuthType.NONE
+        )
+        distribution.add_behavior(
+            "/api/run/*",
+            cf_origins.FunctionUrlOrigin(
+                run_url, custom_headers={"X-Onca-Origin": origin_secret}
+            ),
+            viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+            allowed_methods=cloudfront.AllowedMethods.ALLOW_ALL,
+            cache_policy=cloudfront.CachePolicy.CACHING_DISABLED,
+            origin_request_policy=cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+            function_associations=[
+                cloudfront.FunctionAssociation(
+                    function=auth_fn,
+                    event_type=cloudfront.FunctionEventType.VIEWER_REQUEST,
+                )
+            ],
+        )
+        # /api/* catch-all (review action) — registered AFTER /api/registry/* and
+        # /api/run/* so the specific patterns win; everything else under /api/ lands here.
         distribution.add_behavior(
             "/api/*",
             cf_origins.FunctionUrlOrigin(
@@ -769,6 +807,42 @@ class OncaPrototypeStack(Stack):
             ),
             # Budget for a 15-min ingest (plus a retry), then synth, then feed.
             timeout=Duration.minutes(45),
+        )
+
+        # Ad-hoc run trigger (OncaRunTrigger, defined above): the Lambda creates a
+        # one-shot EventBridge Scheduler that StartExecutions this pipeline. The
+        # Scheduler assumes this role; the Lambda may create/update/read that one
+        # named schedule and pass this role to the scheduler service.
+        scheduler_role = iam.Role(
+            self,
+            "OncaAdhocSchedulerRole",
+            assumed_by=iam.ServicePrincipal("scheduler.amazonaws.com"),
+        )
+        pipeline.grant_start_execution(scheduler_role)
+        run_fn.add_environment("ONCA_PIPELINE_ARN", pipeline.state_machine_arn)
+        run_fn.add_environment("ONCA_SCHEDULER_ROLE_ARN", scheduler_role.role_arn)
+        adhoc_schedule_arn = Stack.of(self).format_arn(
+            service="scheduler",
+            resource="schedule",
+            resource_name="default/onca-adhoc-run",
+        )
+        run_fn.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=[
+                    "scheduler:CreateSchedule",
+                    "scheduler:UpdateSchedule",
+                    "scheduler:GetSchedule",
+                    "scheduler:DeleteSchedule",
+                ],
+                resources=[adhoc_schedule_arn],
+            )
+        )
+        run_fn.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["iam:PassRole"],
+                resources=[scheduler_role.role_arn],
+                conditions={"StringEquals": {"iam:PassedToService": "scheduler.amazonaws.com"}},
+            )
         )
 
         # Intraday triggers. Brazil is UTC-3 year-round (no DST since 2019), so
