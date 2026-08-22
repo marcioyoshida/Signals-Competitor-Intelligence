@@ -647,6 +647,41 @@ def _score_threat(sources: list[dict[str, Any]]) -> tuple[float, dict[str, float
     return round(min(1.0, score), 3), factors
 
 
+def score_from_lenses(
+    lenses: list[str] | None, is_alert: bool
+) -> tuple[float, dict[str, float]]:
+    """Blended score from recorded lenses + the alert flag only.
+
+    For **legacy** narratives persisted before ``threat_factors`` existed: they carry
+    a stale, often-saturated score from a superseded heuristic but no source-level
+    detail (``pct_change``/``is_new``). Recomputing through the *current* model on the
+    recorded lenses de-saturates them so old cards rank on the same scale as new ones.
+    ``magnitude`` is unrecoverable historically → 0 (conservative). Uses the same
+    ``STRATEGIC_WEIGHT`` / ``_score_weights`` as the live path, so it is the current
+    model, not a second heuristic.
+    """
+    ls = [str(x) for x in (lenses or [])]
+    core = [l for l in ls if l not in BACKDROP_LENSES]
+    signal = max((STRATEGIC_WEIGHT.get(l, 0.4) for l in ls), default=0.3)
+    novelty = 1.0 if is_alert else 0.3
+    n = len(core) or (1 if ls else 0)
+    breadth = 1.0 - 0.6 ** n if n else 0.0
+    w = _score_weights()
+    score = (
+        w["signal"] * signal
+        + w["magnitude"] * 0.0
+        + w["novelty"] * novelty
+        + w["breadth"] * breadth
+    )
+    factors = {
+        "signal": round(signal, 3),
+        "magnitude": 0.0,
+        "novelty": round(novelty, 3),
+        "breadth": round(breadth, 3),
+    }
+    return round(min(1.0, score), 3), factors
+
+
 def _signal_rank(sig: dict[str, Any]) -> float:
     base = LENS_WEIGHT.get(str(sig.get("_lens")), 0.05)
     if sig.get("is_new"):

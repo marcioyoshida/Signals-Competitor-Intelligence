@@ -3,7 +3,31 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.synth.candidates import extract_candidates
+from src.synth.candidates import extract_candidates, score_from_lenses
+
+
+def test_score_from_lenses_desaturates_legacy():
+    # A legacy narrative that once scored ~1.0 with a strong multi-lens cluster
+    # recomputes to a bounded, sub-1.0 value on the current model.
+    score, factors = score_from_lenses(
+        ["entrants", "ofertas", "pix", "inf_diario", "market"], is_alert=True)
+    assert 0.5 < score < 0.75          # de-saturated (was 1.0)
+    assert factors["signal"] == 0.9    # entrants is the strongest lens
+    assert factors["magnitude"] == 0.0  # unrecoverable historically
+
+
+def test_score_from_lenses_ranks_strength_and_breadth():
+    strong_broad, _ = score_from_lenses(["regulatory", "fatos", "sec"], is_alert=True)
+    weak_narrow, _ = score_from_lenses(["funds"], is_alert=False)
+    single_strong, _ = score_from_lenses(["regulatory"], is_alert=True)
+    assert strong_broad > single_strong > weak_narrow
+    assert weak_narrow < 0.4           # a lone routine filing stays low
+
+
+def test_score_from_lenses_handles_empty():
+    score, factors = score_from_lenses([], is_alert=False)
+    assert 0.0 <= score <= 1.0
+    assert factors["breadth"] == 0.0
 
 
 def test_inf_diario_drops_subfloor_aum_even_when_new():

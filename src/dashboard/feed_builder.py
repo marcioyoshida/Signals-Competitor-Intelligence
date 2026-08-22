@@ -21,6 +21,11 @@ try:  # reuse the display-name map Stage B already maintains
 except Exception:  # pragma: no cover - dashboard must build even if synth import shifts
     ENTITY_LABELS = {}
 
+try:  # recompute legacy (factor-less) scores through the current blended model
+    from src.synth.candidates import score_from_lenses
+except Exception:  # pragma: no cover - degrade to stored score if synth import shifts
+    score_from_lenses = None
+
 NARRATIVES_PREFIX = "narratives/"
 # Published to the static site bucket root; index.html fetches "feed.json".
 FEED_KEY = "feed.json"
@@ -233,6 +238,16 @@ def build_feed(
     for n in narratives:
         if not isinstance(n, dict):
             continue
+        # Legacy narratives (persisted before threat_factors) carry a stale,
+        # saturated score from a superseded heuristic. Recompute through the current
+        # blended model from their recorded lenses so they rank on one scale; new
+        # narratives (which already have factors) are untouched. Non-destructive —
+        # display only; auto-noops once legacy objects age out of the window.
+        tfactors = n.get("threat_factors") or {}
+        if tfactors or score_from_lenses is None or not n.get("lenses"):
+            tscore = _score(n.get("threat_score"))
+        else:
+            tscore, tfactors = score_from_lenses(n.get("lenses"), bool(n.get("is_alert")))
         items.append(
             {
                 "id": n.get("id"),
@@ -259,8 +274,8 @@ def build_feed(
                 "entities": n.get("entities") or [],
                 "lenses": n.get("lenses") or [],
                 "is_alert": bool(n.get("is_alert")),
-                "threat_score": _score(n.get("threat_score")),
-                "threat_factors": n.get("threat_factors") or {},
+                "threat_score": tscore,
+                "threat_factors": tfactors,
                 "threat_score_note": n.get("threat_score_note"),
                 "narrative": n.get("narrative") or "",
                 "citations": [c for c in (n.get("citations") or []) if isinstance(c, dict)],

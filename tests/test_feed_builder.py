@@ -14,6 +14,9 @@ def _narr(id, entity, date, score, *, is_alert=False, lenses=None, citations=Non
         "entities": [entity] if entity else [],
         "as_of": date,
         "threat_score": score,
+        # Modern narratives carry threat_factors; presence keeps the score as-is
+        # (only factor-less legacy narratives are recomputed on read).
+        "threat_factors": {"signal": 0.6, "magnitude": 0.0, "novelty": 1.0, "breadth": 0.4},
         "is_alert": is_alert,
         "lenses": lenses or ["ofertas", "pix"],
         "narrative": f"{entity} did something on {date}.",
@@ -286,6 +289,20 @@ def test_entities_carry_their_industry_slugs():
 def test_entities_industries_empty_without_map():
     feed = feed_builder.build_feed([_narr("a", "itau", "2026-08-13", 0.5)])
     assert feed["entities"][0]["industries"] == []
+
+
+def test_legacy_scores_recomputed_new_scores_kept():
+    # A legacy narrative (no threat_factors, stale saturated score) is recomputed
+    # through the current model; a modern narrative (with factors) is left as-is.
+    legacy = {"id": "L", "entity": "itau", "entities": ["itau"], "as_of": "2026-08-13",
+              "run_date": "2026-08-13", "threat_score": 1.0, "is_alert": True,
+              "lenses": ["entrants", "ofertas", "pix", "inf_diario", "market"]}
+    modern = {**_narr("M", "bb", "2026-08-13", 0.62), "threat_factors": {"signal": 0.88}}
+    feed = feed_builder.build_feed([legacy, modern])
+    by = {f["id"]: f for f in feed["feed"]}
+    assert by["L"]["threat_score"] < 0.8          # de-saturated from 1.0
+    assert by["L"]["threat_factors"]              # now populated
+    assert by["M"]["threat_score"] == 0.62        # modern score untouched
 
 
 def test_build_macro_empty_is_safe():
