@@ -139,6 +139,23 @@
     border-radius: 6px; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--ink);
     border: 1px solid var(--border); }
   .spark { display: block; }
+  /* Fused coverage + monitor: industries stacked, compact stats, click to expand
+     the entities' peak-score graphs. No horizontal scroll. */
+  .indgroup { border-bottom: 1px solid var(--border); }
+  .indhead { display: grid; grid-template-columns: 1fr 16px; column-gap: 8px; row-gap: 3px;
+    padding: 9px 16px; cursor: pointer; }
+  .indhead:hover { background: var(--panel2); }
+  .indtitle { grid-column: 1; grid-row: 1; align-self: center; font-size: 13px; font-weight: 600;
+    display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .indtitle .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .indcar { grid-column: 2; grid-row: 1 / 3; align-self: center; color: var(--muted); font-size: 12px; text-align: center; }
+  .indstats { grid-column: 1; grid-row: 2; display: flex; gap: 8px; flex-wrap: wrap; }
+  .istat { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .istat b { color: var(--ink); font-weight: 650; }
+  .istat.up b { color: #dc2626; }
+  .indbody { display: none; }
+  .indgroup.open .indbody { display: block; padding-bottom: 4px; }
+  .indempty { padding: 8px 16px 10px; color: var(--muted); font-size: 12px; }
   table.tv { width: 100%; border-collapse: collapse; font-size: 13px; }
   table.tv th, table.tv td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); }
   table.tv th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; }
@@ -199,21 +216,15 @@
 
     <div class="rail">
       <div class="panel">
-        <h2>Monitor de entidades <span style="text-transform:none;letter-spacing:0">· pico de ameaça no período</span></h2>
-        <div id="entities"></div>
+        <h2>Cobertura &amp; monitor <span style="text-transform:none;letter-spacing:0">· entidades por indústria</span></h2>
+        <div class="hint">Cada indústria é um add-on de assinatura. Os números resumem o período; abra uma indústria para ver o pico de ameaça de cada entidade.</div>
+        <div id="indmon"></div>
       </div>
       <section class="panel railcard collapsed" id="railMacro" style="display:none">
         <h2 class="railhead">Macro · Copom &amp; Focus <button class="railtog" aria-label="Mostrar/ocultar">▸</button></h2>
         <div class="railbody">
           <div class="hint">Contexto macro do mercado (BCB): decisão do Copom / Selic e as expectativas do Relatório Focus. Sinais amplos de mercado — não são de um concorrente específico.</div>
           <div id="macro"></div>
-        </div>
-      </section>
-      <section class="panel railcard collapsed" id="railInd" style="display:none">
-        <h2 class="railhead">Cobertura por indústria <button class="railtog" aria-label="Mostrar/ocultar">▸</button></h2>
-        <div class="railbody">
-          <div class="hint">Cada módulo de indústria é um add-on de assinatura. O volume indica quanto sinal ele agrega no período. Módulos <b>sem entidades</b> ou <b>sem cobertura</b> ficam sinalizados: são os candidatos a expandir a watchlist para gerar narrativas.</div>
-          <div id="industries" style="padding:2px 0 8px;overflow-x:auto"></div>
         </div>
       </section>
     </div>
@@ -293,7 +304,7 @@ function fmtDateTime(iso) {
 
 let DATA = null;
 // "all" = flat list of distinct events (default); "entity" = one summary card per entity.
-const state = { entity: "", lens: "", date: "", alert: false, q: "", view: "all", tab: "" };
+const state = { entity: "", lens: "", date: "", alert: false, q: "", view: "all", indOpen: new Set() };
 
 async function boot() {
   try {
@@ -308,7 +319,7 @@ async function boot() {
   const checked = DATA.generated_at ? ` · verificado ${fmtDateTime(DATA.generated_at)}` : "";
   document.getElementById("asof").textContent =
     `dados de ${fmtDate(DATA.as_of)}${checked} · ${DATA.feed.length} narrativas · janela de ${DATA.dates.length} dias`;
-  renderKpis(); renderLegend(); populateFilters(); renderEntities(); renderLower(); render();
+  renderKpis(); renderLegend(); populateFilters(); renderIndustryMonitor(); renderLower(); render();
 }
 
 // Status flag per industry module. "sem entidades" (0 tracked) is the primary
@@ -324,24 +335,86 @@ function industryFlag(i) {
   return "";
 }
 
-function renderIndustries() {
-  const el = document.getElementById("industries");
-  const list = DATA.industries || [];
-  if (!list.length) { el.innerHTML = ""; return; }
-  const num = (n) => `<td style="text-align:right;font-variant-numeric:tabular-nums">${n}</td>`;
-  const rows = list.map(i => `<tr>
-    <td>${esc(i.display_name)}</td>
-    ${num(i.narratives || 0)}${num(i.entities || 0)}${num(i.alerts || 0)}
-    ${num((i.peak_score ?? 0).toFixed(1))}
-    <td>${i.tier ? esc(i.tier) : "—"}</td>
-    <td>${industryFlag(i)}</td>
-  </tr>`).join("");
-  el.innerHTML = `<table class="tv"><thead><tr>
-    <th>Indústria</th>
-    <th style="text-align:right">Narrativas</th><th style="text-align:right">Entidades</th>
-    <th style="text-align:right">Alertas</th><th style="text-align:right">Pico</th>
-    <th>Módulo</th><th>Situação</th>
-  </tr></thead><tbody>${rows}</tbody></table>`;
+// One entity row (name · peak-score sparkline · heat cell) — shared by the
+// expanded industry groups.
+function entRowHtml(e) {
+  const t = tierOf(e.peak_score);
+  const bg = hexToRgba(cssvar(t.var), 0.18 + 0.55 * (e.peak_score ?? 0));
+  return `<div class="ent-row" data-entity="${esc(e.entity)}">
+    <div class="ent-name" title="${esc(e.label)}">${esc(e.label)}</div>
+    <div>${sparkline(e.timeline)}</div>
+    <div class="ent-meta"><span class="heat" title="Pico de ameaça: ${t.label}"
+      style="background:${bg}">${e.peak_score.toFixed(2)}</span></div>
+  </div>`;
+}
+
+// Fused coverage + entity monitor: industries stacked with compact stats; open
+// one to reveal its entities' peak-score graphs (like the old entity monitor).
+function renderIndustryMonitor() {
+  const el = document.getElementById("indmon");
+  const inds = (DATA.industries || []).filter(i => (i.entities || 0) > 0);
+  const placed = new Set();
+  const groups = inds.map(ind => {
+    const ents = (DATA.entities || []).filter(e => (e.industries || []).includes(ind.slug));
+    ents.forEach(e => placed.add(e.entity));
+    return { ind, ents };
+  });
+  const orphans = (DATA.entities || []).filter(e => !placed.has(e.entity));
+  if (!groups.length && !orphans.length) {
+    el.innerHTML = `<div class="indempty">Sem dados de cobertura no período.</div>`;
+    return;
+  }
+  const stat = (label, val, cls) => `<span class="istat ${cls || ""}"><b>${val}</b> ${label}</span>`;
+  const group = (id, title, statline, ents, situ) => {
+    const open = state.indOpen.has(id);
+    const body = ents.length ? ents.map(entRowHtml).join("")
+      : `<div class="indempty">sem narrativas no período</div>`;
+    return `<div class="indgroup ${open ? "open" : ""}" data-ind="${esc(id)}">
+      <div class="indhead">
+        <div class="indtitle"><span class="nm">${esc(title)}</span>${situ || ""}</div>
+        <div class="indstats">${statline}</div>
+        <span class="indcar">${open ? "▾" : "▸"}</span>
+      </div>
+      <div class="indbody">${body}</div>
+    </div>`;
+  };
+  let html = groups.map(({ ind, ents }) => group(
+    ind.slug, ind.display_name,
+    stat("narr", ind.narratives || 0) + stat("ent", ind.entities || 0) +
+    stat("alrt", ind.alerts || 0, (ind.alerts || 0) > 0 ? "up" : "") +
+    stat("pico", (ind.peak_score ?? 0).toFixed(1)),
+    ents, industryFlag(ind),
+  )).join("");
+  if (orphans.length) {
+    html += group("__outras__", "Outras entidades",
+      stat("ent", orphans.length), orphans, "");
+  }
+  el.innerHTML = html;
+  wireIndMonitor(el);
+}
+
+function wireIndMonitor(el) {
+  el.querySelectorAll(".indhead").forEach(h => h.onclick = () => {
+    const g = h.closest(".indgroup"), id = g.dataset.ind;
+    if (state.indOpen.has(id)) state.indOpen.delete(id); else state.indOpen.add(id);
+    const open = g.classList.toggle("open");
+    h.querySelector(".indcar").textContent = open ? "▾" : "▸";
+  });
+  el.querySelectorAll(".ent-row").forEach(r => r.onclick = () => {
+    const en = r.dataset.entity;
+    state.entity = state.entity === en ? "" : en;
+    document.getElementById("fEntity").value = state.entity;
+    syncEntityHighlight(); render();
+  });
+  const tip = document.getElementById("tip");
+  el.querySelectorAll("circle").forEach(c => {
+    c.onmousemove = ev => {
+      tip.textContent = `${fmtDate(c.dataset.d)}: ${c.dataset.v}`;
+      tip.style.left = (ev.clientX + 12) + "px"; tip.style.top = (ev.clientY - 10) + "px";
+      tip.style.opacity = 1;
+    };
+    c.onmouseleave = () => tip.style.opacity = 0;
+  });
 }
 
 function macroHasData() {
@@ -349,22 +422,20 @@ function macroHasData() {
   return !!(m.selic || (m.focus && m.focus.length) || (m.cards && m.cards.length));
 }
 
-// Supportive panels: macro + industry coverage live in the right rail (collapsible,
-// off by default); the entity-review queue stays in the lower panel. Each shows only
-// when it has data.
+// Macro lives in a collapsible right-rail card (off by default); the entity-review
+// queue stays in the lower panel. Each shows only when it has data. (Industry
+// coverage is now fused into the Cobertura & monitor panel — renderIndustryMonitor.)
 function renderLower() {
   const hasMac = macroHasData();
-  const hasInd = (DATA.industries || []).length > 0;
   const hasRev = (DATA.reviews || []).length > 0;
   document.getElementById("railMacro").style.display = hasMac ? "" : "none";
-  document.getElementById("railInd").style.display = hasInd ? "" : "none";
   const low = document.getElementById("lowerPanel");
   low.style.display = hasRev ? "" : "none";
   if (hasRev) {
     const h = low.querySelector("h2");
     if (h) h.textContent = `Revisão de entidades (${DATA.reviews.length})`;
   }
-  renderMacro(); renderIndustries(); renderReviews();
+  renderMacro(); renderReviews();
 }
 
 function renderMacro() {
@@ -692,36 +763,6 @@ function sparkline(timeline) {
       stroke-linejoin="round" stroke-linecap="round"/>${dots}</svg>`;
 }
 
-function renderEntities() {
-  const el = document.getElementById("entities");
-  el.innerHTML = DATA.entities.map(e => {
-    // Heatmap peak cell: tint intensity scales with the score; number stays readable.
-    const t = tierOf(e.peak_score);
-    const bg = hexToRgba(cssvar(t.var), 0.18 + 0.55 * (e.peak_score ?? 0));
-    return `<div class="ent-row" data-entity="${esc(e.entity)}">
-      <div class="ent-name" title="${esc(e.label)}">${esc(e.label)}</div>
-      <div>${sparkline(e.timeline)}</div>
-      <div class="ent-meta"><span class="heat" title="Pico de ameaça: ${t.label}"
-        style="background:${bg}">${e.peak_score.toFixed(2)}</span></div>
-    </div>`;
-  }).join("");
-  el.querySelectorAll(".ent-row").forEach(r => r.onclick = () => {
-    const en = r.dataset.entity;
-    state.entity = state.entity === en ? "" : en;
-    document.getElementById("fEntity").value = state.entity;
-    syncEntityHighlight(); render();
-  });
-  const tip = document.getElementById("tip");
-  el.querySelectorAll("circle").forEach(c => {
-    c.onmousemove = ev => {
-      tip.textContent = `${fmtDate(c.dataset.d)}: ${c.dataset.v}`;
-      tip.style.left = (ev.clientX + 12) + "px"; tip.style.top = (ev.clientY - 10) + "px";
-      tip.style.opacity = 1;
-    };
-    c.onmouseleave = () => tip.style.opacity = 0;
-  });
-}
-
 function syncEntityHighlight() {
   document.querySelectorAll(".ent-row").forEach(r =>
     r.classList.toggle("active", r.dataset.entity === state.entity && state.entity !== ""));
@@ -740,7 +781,7 @@ function applyTheme(t) {
   document.documentElement.setAttribute("data-theme", t);
   const btn = document.getElementById("themeToggle");
   if (btn) btn.textContent = t === "dark" ? "Claro" : "Escuro";
-  if (DATA) { renderLegend(); renderEntities(); render(); syncEntityHighlight(); }
+  if (DATA) { renderLegend(); renderIndustryMonitor(); render(); syncEntityHighlight(); }
 }
 applyTheme(autoTheme());
 setInterval(() => { if (!themeManual) applyTheme(autoTheme()); }, 600000);

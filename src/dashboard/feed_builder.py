@@ -292,6 +292,7 @@ def build_feed(
         day["count"] += 1
         day["max_score"] = max(day["max_score"], x["threat_score"])
 
+    imap = industry_map or {}
     entities: list[dict[str, Any]] = []
     for rec in by_entity.values():
         timeline = [rec["by_date"][d] for d in sorted(rec["by_date"])]
@@ -302,6 +303,9 @@ def build_feed(
                 "timeline": timeline,
                 "peak_score": max((t["max_score"] for t in timeline), default=0.0),
                 "total": sum(t["count"] for t in timeline),
+                # industry slugs this entity belongs to — lets the dashboard group
+                # the entity monitor under each industry (fused coverage panel).
+                "industries": sorted(imap.get(rec["entity"], [])),
             }
         )
     entities.sort(key=lambda r: (r["peak_score"], r["total"]), reverse=True)

@@ -267,6 +267,27 @@ def test_build_macro_selic_decision_and_focus_shift():
     assert not any("Selic" in t for t in focus_titles)
 
 
+def test_entities_carry_their_industry_slugs():
+    # The fused coverage panel groups the entity monitor by industry, so each
+    # entity must expose the industry slugs it belongs to.
+    imap = {"itau": ["banking"], "nubank": ["fintech", "banking"]}
+    meta = {"banking": {"display_name": "Banking", "tier": "premium"},
+            "fintech": {"display_name": "Fintech", "tier": "entry"}}
+    narratives = [
+        _narr("a", "itau", "2026-08-13", 0.5),
+        _narr("b", "nubank", "2026-08-13", 0.7),
+    ]
+    feed = feed_builder.build_feed(narratives, industry_map=imap, industry_meta=meta)
+    by = {e["entity"]: e for e in feed["entities"]}
+    assert by["itau"]["industries"] == ["banking"]
+    assert by["nubank"]["industries"] == ["banking", "fintech"]  # sorted
+
+
+def test_entities_industries_empty_without_map():
+    feed = feed_builder.build_feed([_narr("a", "itau", "2026-08-13", 0.5)])
+    assert feed["entities"][0]["industries"] == []
+
+
 def test_build_macro_empty_is_safe():
     from src.dashboard.feed_builder import build_macro
     out = build_macro(None)
