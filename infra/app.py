@@ -718,6 +718,45 @@ class OncaPrototypeStack(Stack):
         digests_bucket.grant_read_write(behavioral_fn)
         entities_table.grant_read_data(behavioral_fn)
 
+        # Relational graph (ADR 003 Wave 3): builds typed entity-pair edges from the
+        # durable narratives (co_mention/convergence/dispute); factual co_mention edges
+        # become cards, interpretive edges (convergence/dispute) are PROPOSED only into
+        # a review queue (never auto-published — defamation guardrail). Deterministic.
+        relational_fn = lambda_.Function(
+            self,
+            "OncaRelational",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.synth.relational.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.minutes(5),
+            memory_size=512,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+                "ONCA_FEATURE_WINDOW_DAYS": "90",
+            },
+        )
+        digests_bucket.grant_read_write(relational_fn)
+
+        # Operatives / person layer (ADR 003 Wave 3, Shift 3): promotes public-record
+        # person names (QSA sócios, DOU parties) into review-gated person nodes + role
+        # edges, LGPD-scoped (no CPF, public professional roles only). Source-gated
+        # today (ingestion carries no person names yet); activates when they land.
+        operatives_fn = lambda_.Function(
+            self,
+            "OncaOperatives",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.synth.operatives.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.minutes(5),
+            memory_size=512,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+            },
+        )
+        digests_bucket.grant_read_write(operatives_fn)
+
         # Feed builder: aggregate recent narratives -> feed.json in the site bucket.
         feed_fn = lambda_.Function(
             self,
@@ -1065,6 +1104,32 @@ class OncaPrototypeStack(Stack):
             interval=Duration.seconds(15),
             backoff_rate=2.0,
         )
+        relational_task = sfn_tasks.LambdaInvoke(
+            self,
+            "RelationalTask",
+            lambda_function=relational_fn,
+            payload=sfn.TaskInput.from_object({}),
+            result_path="$.relational",
+        )
+        relational_task.add_retry(
+            errors=["States.ALL"],
+            max_attempts=2,
+            interval=Duration.seconds(15),
+            backoff_rate=2.0,
+        )
+        operatives_task = sfn_tasks.LambdaInvoke(
+            self,
+            "OperativesTask",
+            lambda_function=operatives_fn,
+            payload=sfn.TaskInput.from_object({}),
+            result_path="$.operatives",
+        )
+        operatives_task.add_retry(
+            errors=["States.ALL"],
+            max_attempts=2,
+            interval=Duration.seconds(15),
+            backoff_rate=2.0,
+        )
         feed_task = sfn_tasks.LambdaInvoke(
             self,
             "FeedTask",
@@ -1095,6 +1160,8 @@ class OncaPrototypeStack(Stack):
                 .next(reconcile_task)
                 .next(threads_task)
                 .next(behavioral_task)
+                .next(relational_task)
+                .next(operatives_task)
                 .next(feed_task)
             ),
             # Budget for a 15-min ingest (plus a retry), then synth, then feed.

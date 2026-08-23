@@ -674,8 +674,9 @@ const AXIS_LABELS = {
   silence: "Silêncio", longitudinal: "Quebra de padrão", comparative: "Comparativo setorial",
   thematic: "Corrente setorial", regulatory: "Radar regulatório", cohort: "Movimento de cohort",
   threaded: "Fio de incidente", regulatory_lifecycle: "Ciclo regulatório",
-  behavioral: "Padrão de comportamento",
+  behavioral: "Padrão de comportamento", relational: "Relacional",
 };
+const RELATION_PT = { co_mention: "citados juntos", convergence: "convergência", dispute: "disputa" };
 const BEHAVIOR_PT = { drumbeat: "cadência regular", multi_front: "múltiplas frentes" };
 const STATUS_PT = { open: "em aberto", developing: "em desenvolvimento", resolved: "encerrado" };
 const REG_STAGE_PT = { consulta: "consulta", publicacao: "publicação", vigencia: "vigência", fiscalizacao: "fiscalização" };
@@ -696,6 +697,8 @@ function inferBadge(f) {
     return `Ciclo · ${REG_STAGE_PT[f.current_stage] || f.current_stage || "regulatório"}`;
   if (f.axis === "behavioral")
     return `Comportamento · ${BEHAVIOR_PT[f.pattern] || f.pattern || ""}`;
+  if (f.axis === "relational")
+    return `Relacional · ${RELATION_PT[f.relation] || f.relation || ""}`;
   return axisLabel(f.axis);
 }
 
@@ -795,11 +798,22 @@ function renderSwot() {
           <span class="pmeta">confiança stance ${Math.round((p.stance_conf ?? 0) * 100)}% · ${esc(p.date || "")}</span>${tgt}</div>`;
       }).join("") + `</div>`;
   }
+  // ADR 003 Wave 3: pending relationship-graph proposals touching this entity (review-gated).
+  const gp = (DATA.graph_proposals || []).filter(p =>
+    (p.entities || []).includes(state.entity) || p.a === state.entity || p.b === state.entity);
+  let graphHtml = "";
+  if (gp.length) {
+    graphHtml = `<div class="swot-props"><h4>Grafo de relações — propostas
+      <span class="infer" title="Arestas do grafo de relacionamento (convergência de arena, disputa, controle comum) e nós de operadores (pessoas em papéis públicos). Alto risco jurídico/LGPD — nunca publicadas automaticamente; aguardam curadoria.">grafo · revisão</span></h4>` +
+      gp.map(p => `<div class="prop"><span class="pk ${p.kind === 'dispute' ? 'chal' : 'new'}">${RELATION_PT[p.relation] || p.kind}</span>
+        <span class="pt">${esc(p.text || "")}</span>
+        <span class="pmeta">${esc((p.themes || []).join(', '))}${p.n_dates ? ` · ${p.n_dates} dias` : ""}</span></div>`).join("") + `</div>`;
+  }
   el.innerHTML = `<div class="swot">
     <h3>Tese competitiva — ${esc(sw.label)}
       <span class="infer" title="Crenças derivadas dos indicadores (comparativo, corrente setorial, cohort, trajetória, silêncio) e corroboradas/contestadas por notícias via reconciliação por LLM — inferência com evidência ligada, não fato reportado. Contradições são marcadas, nunca apagadas.">SWOT · inferência</span></h3>
     <div class="swot-grid">${quad('S')}${quad('W')}${quad('O')}${quad('T')}</div>
-    ${propHtml}
+    ${propHtml}${graphHtml}
   </div>`;
 }
 

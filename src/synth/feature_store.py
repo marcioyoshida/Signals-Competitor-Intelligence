@@ -34,7 +34,7 @@ FEATURES_KEY = "features/latest.json"
 # activity narratives only.
 DERIVED_AXES = frozenset(
     {"silence", "longitudinal", "comparative", "thematic", "regulatory", "cohort",
-     "behavioral"}
+     "behavioral", "relational"}
 )
 
 # Noise floor for the break z-score denominator: threat scores are 0..1, so a

@@ -66,6 +66,8 @@ def subject_label(n: dict[str, Any]) -> str:
     theme/instrument/set axes) so entity-less cards still title legibly."""
     if n.get("incident_title"):
         return f"Incidente · {n['incident_title']}"
+    if n.get("pair_label"):
+        return f"Relacional · {n['pair_label']}"
     if n.get("entity"):
         return display_label(n.get("entity"), n.get("kind"))
     if n.get("theme_display"):
@@ -275,6 +277,7 @@ def _project_item(n: dict[str, Any]) -> dict[str, Any]:
         "n_developments": n.get("n_developments"),
         "current_stage": n.get("current_stage"),
         "pattern": n.get("pattern"),  # behavioral axis: drumbeat / multi_front
+        "relation": n.get("relation"),  # relational axis: co_mention / convergence / dispute
         "entities": n.get("entities") or [],
         "lenses": n.get("lenses") or [],
         "is_alert": bool(n.get("is_alert")),
@@ -298,6 +301,7 @@ def build_feed(
     macro: dict[str, Any] | None = None,
     swot: dict[str, Any] | None = None,
     swot_proposals: list[dict[str, Any]] | None = None,
+    graph_proposals: list[dict[str, Any]] | None = None,
     thread_cards: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Pure aggregation: narratives -> feed payload. No I/O.
@@ -404,6 +408,12 @@ def build_feed(
         # LLM stance loop) — surfaced read-only for the review queue (never auto-applied).
         "swot_proposals": [
             p for p in (swot_proposals or []) if p.get("status", "pending") == "pending"
+        ],
+        # ADR 003 Wave 3: pending relationship-graph proposals (relational convergence/
+        # dispute + operative common-control/person). Review-gated, never auto-published
+        # — surfaced read-only until the Phase C vetting UI.
+        "graph_proposals": [
+            p for p in (graph_proposals or []) if p.get("status", "pending") == "pending"
         ],
     }
 
@@ -542,6 +552,39 @@ def _load_reg_lifecycles(digests_bucket: str) -> list[dict[str, Any]]:
         return []
 
 
+def _load_relational(digests_bucket: str) -> list[dict[str, Any]]:
+    """Read factual relational (co_mention) cards (ADR 003 Wave 3), best-effort. [] if absent."""
+    try:
+        from src.synth import relational
+
+        body = boto3.client("s3").get_object(
+            Bucket=digests_bucket, Key=relational.GRAPH_INDEX_KEY
+        )["Body"].read()
+        return json.loads(body.decode("utf-8")).get("cards", [])
+    except Exception as exc:  # pragma: no cover - best-effort, read-only
+        print(f"Warning: load relational cards failed: {exc}")
+        return []
+
+
+def _load_graph_proposals(digests_bucket: str) -> list[dict[str, Any]]:
+    """Read pending graph proposals: relational edges + operative persons (Wave 3)."""
+    out: list[dict[str, Any]] = []
+    try:
+        from src.synth import operatives, relational
+
+        s3 = boto3.client("s3")
+        for key in (relational.RELATIONAL_PROPOSALS_KEY,
+                    operatives.PERSON_PROPOSALS_KEY):
+            try:
+                body = s3.get_object(Bucket=digests_bucket, Key=key)["Body"].read()
+                out.extend(json.loads(body.decode("utf-8")).get("proposals", []))
+            except Exception:
+                continue
+    except Exception as exc:  # pragma: no cover - best-effort, read-only
+        print(f"Warning: load graph proposals failed: {exc}")
+    return out
+
+
 def _load_swot_proposals(digests_bucket: str) -> list[dict[str, Any]]:
     """Read pending SWOT reconcile proposals (ADR 004 step 3), best-effort. [] if absent."""
     try:
@@ -589,7 +632,9 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         macro=_load_macro(),
         swot=_load_swot(digests_bucket),
         swot_proposals=_load_swot_proposals(digests_bucket),
-        thread_cards=_load_threads(digests_bucket) + _load_reg_lifecycles(digests_bucket),
+        graph_proposals=_load_graph_proposals(digests_bucket),
+        thread_cards=(_load_threads(digests_bucket) + _load_reg_lifecycles(digests_bucket)
+                      + _load_relational(digests_bucket)),
     )
     body = json.dumps(feed, ensure_ascii=False).encode("utf-8")
 
