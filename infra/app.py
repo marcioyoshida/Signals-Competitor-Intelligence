@@ -676,6 +676,40 @@ class OncaPrototypeStack(Stack):
             )
         )
 
+        # SWOT cold-start seeding (ADR 004 step 4): for a thin, well-grounded
+        # competitor (few/no belief bullets), LLM-draft an initial SWOT from its own
+        # narrative history + registry dossier. PROPOSED only (swot/seed_proposals.json)
+        # — never an active bullet; the Phase C vetting UI promotes accepted drafts.
+        # Cold-start only, drafted once per entity (idempotent). Needs Bedrock
+        # (Converse) + read on the entities table for the dossier.
+        seed_fn = lambda_.Function(
+            self,
+            "OncaSwotSeed",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.synth.swot_seed.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.minutes(5),
+            memory_size=512,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+                "ONCA_ENTITIES_TABLE": entities_table.table_name,
+                "ONCA_SEED_ENABLED": "1",
+                "ONCA_SYNTH_MODEL_ID": "amazon.nova-lite-v1:0",
+            },
+        )
+        digests_bucket.grant_read_write(seed_fn)
+        entities_table.grant_read_data(seed_fn)
+        seed_fn.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["bedrock:InvokeModel", "bedrock:Converse"],
+                resources=[
+                    f"arn:aws:bedrock:{self.region}::foundation-model/*",
+                    f"arn:aws:bedrock:{self.region}:{self.account}:inference-profile/*",
+                ],
+            )
+        )
+
         # Incident thread store (ADR 003 Wave 2): threads related developments into
         # living incident docs (event identity by entity+event-type) with an
         # open/developing/resolved lifecycle; publishes threads/{id}.json + a
@@ -1121,6 +1155,19 @@ class OncaPrototypeStack(Stack):
             interval=Duration.seconds(15),
             backoff_rate=2.0,
         )
+        seed_task = sfn_tasks.LambdaInvoke(
+            self,
+            "SwotSeedTask",
+            lambda_function=seed_fn,
+            payload=sfn.TaskInput.from_object({}),
+            result_path="$.swot_seed",
+        )
+        seed_task.add_retry(
+            errors=["States.ALL"],
+            max_attempts=2,
+            interval=Duration.seconds(15),
+            backoff_rate=2.0,
+        )
         threads_task = sfn_tasks.LambdaInvoke(
             self,
             "ThreadsTask",
@@ -1227,6 +1274,7 @@ class OncaPrototypeStack(Stack):
                 .next(cohort_task)
                 .next(swot_task)
                 .next(reconcile_task)
+                .next(seed_task)
                 .next(threads_task)
                 .next(behavioral_task)
                 .next(relational_task)

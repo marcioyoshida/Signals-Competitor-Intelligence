@@ -591,17 +591,19 @@ def _load_graph_proposals(digests_bucket: str) -> list[dict[str, Any]]:
 
 
 def _load_swot_proposals(digests_bucket: str) -> list[dict[str, Any]]:
-    """Read pending SWOT reconcile proposals (ADR 004 step 3), best-effort. [] if absent."""
-    try:
-        from src.synth import swot_reconcile
+    """Read pending SWOT proposals — reconcile (ADR 004 step 3) + cold-start seeds
+    (step 4). Both are review-gated and render in the same war-room panel."""
+    out: list[dict[str, Any]] = []
+    s3 = boto3.client("s3")
+    from src.synth import swot_reconcile, swot_seed
 
-        body = boto3.client("s3").get_object(
-            Bucket=digests_bucket, Key=swot_reconcile.PROPOSALS_KEY
-        )["Body"].read()
-        return json.loads(body.decode("utf-8")).get("proposals", [])
-    except Exception as exc:  # pragma: no cover - best-effort, read-only
-        print(f"Warning: load SWOT proposals failed: {exc}")
-        return []
+    for key in (swot_reconcile.PROPOSALS_KEY, swot_seed.SEED_PROPOSALS_KEY):
+        try:
+            body = s3.get_object(Bucket=digests_bucket, Key=key)["Body"].read()
+            out.extend(json.loads(body.decode("utf-8")).get("proposals", []))
+        except Exception:  # pragma: no cover - best-effort, read-only (may be absent)
+            continue
+    return out
 
 
 def _load_swot(digests_bucket: str) -> dict[str, Any] | None:

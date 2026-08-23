@@ -3,10 +3,31 @@
 Status: **Accepted (2026-08-22)** — step 1 (Comparative axis) SHIPPED 2026-08-23;
 **step 2 (SWOT belief store v1, deterministic feeders) SHIPPED 2026-08-23**;
 **step 3 (reconcile-against-belief — LLM stance + embeddings) SHIPPED & VERIFIED
-LIVE 2026-08-23 (`25d88f1`)**. Extends
-[ADR 003](2026-08-19-adr-narrative-dimensions.md). Step 4 (seeding) remains
-design-only. The step-3 vetting UI (accept/reject proposals) is gated on Phase C;
-the proposal *queue* ships now, read-only.
+LIVE 2026-08-23 (`25d88f1`)**; **step 4 (cold-start seeding — LLM-drafted,
+analyst-vetted) SHIPPED 2026-08-23**. Extends
+[ADR 003](2026-08-19-adr-narrative-dimensions.md). The vetting UI (accept/reject
+proposals) is gated on Phase C; every proposal *queue* (reconcile + seed) ships now,
+read-only.
+
+> **Step 4 built (2026-08-23).** `src/synth/swot_seed.py` (`OncaSwotSeed` Lambda,
+> wired `… → swot → swot_reconcile → swot_seed → threads → feed`) solves the ADR's
+> cold-start problem (hard-parts #3): a freshly-tracked competitor starts with an
+> empty belief store and bottom-up growth is slow. So for a **thin** entity (≤
+> `ONCA_SEED_MAX_EXISTING` active bullets) that is **grounded** (≥ `ONCA_SEED_MIN_HISTORY`
+> real activity narratives), it makes **one bounded nova-lite Converse call** to draft
+> an initial SWOT from that entity's own narrative history (highest-threat claims,
+> deduped) + its registry dossier (sector, industries, license, controllers). The
+> draft is **PROPOSED only** (`swot/seed_proposals.json`, `kind:"seed"`) — never an
+> `active` bullet, exactly as the ADR requires ("No un-vetted bullet is ever
+> asserted"). Precision-first guardrails: cold-start only, drafted **once per entity**
+> (idempotent — an entity already carrying a seed proposal is skipped), each drafted
+> bullet must **cite ≥1 real narrative** (evidence-linked or dropped — no hallucination),
+> capped `ONCA_SEED_MAX_ENTITIES`/run and `ONCA_SEED_MAX_PER_DIM`/dimension, labeled
+> inference, no claims about named individuals. The core `seed_entities()` is pure
+> (`draft_fn` injected → tests use fakes, no Bedrock). Seed proposals ride the same
+> `feed.swot_proposals` path and render in the war room's "Propostas pendentes de
+> revisão" panel with a distinct "tese inicial" badge. The Phase C vetting UI promotes
+> an accepted draft into the belief store; step 3's reconcile then maintains it.
 
 > **Step 3 built (2026-08-23).** `src/synth/swot_reconcile.py` (`OncaSwotReconcile`
 > Lambda, wired `… → swot → swot_reconcile → threads → feed`) closes the loop for the
@@ -173,7 +194,10 @@ step — they map to a dimension by rule, attaching as structured evidence.
    folded by the belief builder), **contradict & new go through the review queue**
    (`swot/proposals.json`, surfaced read-only). The *vetting UI* (accept/reject) is
    still gated on Phase C (accounts); the queue and the reconcile engine ship now.
-4. **Seeding** (LLM-drafted, analyst-vetted) lands with the Phase C vetting UI.
+4. **Seeding** (LLM-drafted, analyst-vetted) — ✅ SHIPPED 2026-08-23. Drafts a
+   cold-start SWOT for thin, grounded entities as review-gated `seed` proposals
+   (`src/synth/swot_seed.py`); the *promotion* into active bullets is the Phase C
+   vetting UI's job — the queue and the draft engine ship now, read-only.
 
 Independent of the other roadmap tracks; v2 depends on Phase C. Nothing here is
 committed — this ADR records the model, the fit with ADR 003, and the guardrails.
