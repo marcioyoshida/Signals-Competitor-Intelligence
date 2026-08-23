@@ -135,7 +135,21 @@
     white-space: nowrap; max-width: 100%; border-left: 2px solid var(--qc); padding-left: 6px; }
   .thesis .ttop.S { --qc: #2e9e6b; } .thesis .ttop.W { --qc: var(--t-crit); }
   .thesis .ttop.O { --qc: var(--accent); } .thesis .ttop.T { --qc: var(--t-high); }
-  /* ADR 004: per-entity SWOT belief panel (derived, evidence-linked, labeled inference). */
+  /* ADR 006: framework card tabs — collapsible cards for SWOT, TOWS, Porter, etc. */
+  .fw-tabs { display: flex; flex-direction: column; gap: 6px; margin: 0 0 12px; }
+  .fw-card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .fw-hdr { margin: 0; padding: 10px 16px; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 8px; user-select: none; }
+  .fw-hdr:hover { background: var(--panel2); }
+  .fw-tog { font-size: 10px; color: var(--muted); transition: transform .15s; flex-shrink: 0; }
+  .fw-card.open .fw-tog { transform: rotate(90deg); }
+  .fw-name { font-weight: 700; }
+  .fw-chips { display: flex; gap: 4px; flex-wrap: wrap; margin-left: auto; }
+  .fw-chip { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 5px; border-left: 2px solid var(--qc); background: var(--panel2); color: var(--ink2); }
+  .fw-pcount { font-size: 10px; color: var(--muted); font-style: italic; }
+  .fw-body { display: none; border-top: 1px solid var(--border); }
+  .fw-card.open .fw-body { display: block; }
+  .fw-hdr .infer { margin-left: 8px; }
+  /* Legacy: per-entity SWOT belief panel (derived, evidence-linked, labeled inference). */
   .swot { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; margin: 0 0 12px; }
   .swot > h3 { margin: 0; padding: 12px 16px; font-size: 13px; border-bottom: 1px solid var(--border); }
   .swot > h3 .infer { margin-left: 8px; }
@@ -161,9 +175,14 @@
   .swot-props .pk.seed { background: rgba(120,110,200,.16); color: #6c63c4; }
   .swot-props .pk.stale { background: rgba(200,150,40,.16); color: #b9820f; }
   .swot-props .pk.tows { background: rgba(60,140,200,.14); color: #1a7ab5; }
+  .swot-props .pk.porter { background: rgba(200,90,40,.14); color: #c25a28; }
   /* ADR 006: TOWS posture quadrants reuse the swot-q card style with distinct colors. */
   .swot-q.SO { --qc: #1a7ab5; } .swot-q.ST { --qc: #6c63c4; }
   .swot-q.WO { --qc: #b9820f; } .swot-q.WT { --qc: var(--t-crit); }
+  /* ADR 006: Porter's Five Forces quadrant colors. */
+  .swot-q.rivalry { --qc: var(--t-high); } .swot-q.new_entrants { --qc: #b9820f; }
+  .swot-q.substitutes { --qc: #6c63c4; } .swot-q.buyer_power { --qc: var(--accent); }
+  .swot-q.supplier_power { --qc: var(--t-crit); }
   .swot-props .pt { font-size: 12.5px; color: var(--ink); }
   .swot-props .pmeta { display: block; color: var(--muted); font-size: 11px; margin-top: 3px; }
   .swot-props .ptgt { display: block; color: var(--muted); font-size: 11px; font-style: italic; margin-top: 2px; }
@@ -264,8 +283,7 @@
       </div>
       <div class="hint">Cada cartão reúne sinais de várias fontes (as “lentes”) sobre a mesma entidade e traz o link de cada fonte. O nível de ameaça é uma estimativa que combina quantas fontes e quão relevantes são.</div>
       <div class="legend" id="legend"></div>
-      <div id="swotPanel"></div>
-      <div id="towsPanel"></div>
+      <div id="frameworksPanel"></div>
       <div class="feed" id="feed"></div>
       <div id="tableView" class="hidden" style="padding:6px 12px 16px"></div>
     </div>
@@ -623,7 +641,7 @@ async function decideProposal(pid, queue, decision, btn) {
     const drop = x => x.id !== pid;
     DATA.swot_proposals = (DATA.swot_proposals || []).filter(drop);
     DATA.graph_proposals = (DATA.graph_proposals || []).filter(drop);
-    renderSwot();
+    renderFrameworks();
   } catch (e) {
     box.innerHTML = `<span class="pmeta">Erro: ${esc(e.message)}</span>`;
   }
@@ -870,113 +888,169 @@ function collapseByEntity(rows) {
 
 const SWOT_LABELS = { S: "Forças", W: "Fraquezas", O: "Oportunidades", T: "Ameaças" };
 const TOWS_LABELS = { SO: "Maximizar (F×O)", ST: "Contra-atacar (F×A)", WO: "Superar (Fr×O)", WT: "Evitar (Fr×A)" };
-// Per-entity SWOT belief panel (ADR 004) — shown when a single entity is selected.
-function renderSwot() {
-  const el = document.getElementById("swotPanel");
-  const sw = (DATA.swot || {})[state.entity];
-  if (!state.entity || !sw) { el.innerHTML = ""; return; }
-  const quad = dim => {
-    const bullets = (sw.dimensions[dim] || []);
-    const body = bullets.length
-      ? bullets.map(b => {
-          const news = (b.news_evidence || 0) > 0
-            ? ` · <span class="corrob" title="Corroborada por ${b.news_evidence} sinal(is) de notícia via reconciliação (LLM)">✔ notícias ${b.news_evidence}</span>` : "";
-          return `<div class="swot-b ${b.status === 'challenged' ? 'chal' : ''}">${esc(b.text)}
-          <span class="meta">confiança ${Math.round((b.confidence ?? 0) * 100)}% · ${b.evidence_count} evidência(s)${news}${b.status === 'challenged' ? ' · contestada' : ''}</span></div>`;
-        }).join("")
-      : `<div class="none">—</div>`;
-    return `<div class="swot-q ${dim}"><div class="qh">${SWOT_LABELS[dim]}</div>${body}</div>`;
-  };
-  // ADR 004 step 3: pending reconcile proposals for this entity (review-gated).
-  const props = (DATA.swot_proposals || []).filter(p => p.entity === state.entity);
-  let propHtml = "";
-  if (props.length) {
-    propHtml = `<div class="swot-props"><h4>Propostas pendentes de revisão
-      <span class="infer" title="Sugestões da reconciliação por LLM sobre notícias (contradições e novas crenças) e teses iniciais rascunhadas por LLM para competidores ainda sem cobertura (partida a frio). Nunca aplicadas automaticamente — aguardam curadoria.">reconciliação · LLM</span></h4>` +
-      props.map(p => {
-        const kind = p.kind === 'challenge'
-          ? `<span class="pk chal">contesta ${p.dimension}</span>`
-          : p.kind === 'seed'
-          ? `<span class="pk seed">tese inicial ${p.dimension}</span>`
-          : p.kind === 'stale'
-          ? `<span class="pk stale">revalidar ${p.dimension}</span>`
-          : p.kind === 'tows'
-          ? `<span class="pk tows">TOWS ${TOWS_LABELS[p.dimension] || p.dimension}</span>`
-          : `<span class="pk new">nova ${SWOT_LABELS[p.dimension] ? p.dimension : p.dimension}</span>`;
-        const tgt = (p.kind === 'challenge' || p.kind === 'stale') && p.target_text
-          ? `<span class="ptgt">↳ crença: ${esc(p.target_text)}</span>` : "";
-        let meta;
-        if (p.kind === 'stale') meta = `sem corroboração há ${p.days_stale} dias · ${esc(p.date || "")}`;
-        else {
-          const confLabel = p.kind === 'seed' ? 'confiança rascunho' : 'confiança stance';
-          const conf = p.kind === 'seed' ? (p.confidence ?? 0) : (p.stance_conf ?? 0);
-          meta = `${confLabel} ${Math.round(conf * 100)}% · ${esc(p.date || "")}`;
-        }
-        // A staleness re-review reframes the choice: aposentar (retire) vs manter (keep).
-        const labels = p.kind === 'stale' ? { approved: "Aposentar", rejected: "Manter" } : null;
-        return `<div class="prop">${kind} <span class="pt">${esc(p.text)}</span>
-          <span class="pmeta">${meta}</span>${tgt}
-          ${propActions(p.id, 'swot', labels)}</div>`;
-      }).join("") + `</div>`;
-  }
-  // ADR 003 Wave 3: pending relationship-graph proposals touching this entity (review-gated).
-  const gp = (DATA.graph_proposals || []).filter(p =>
-    (p.entities || []).includes(state.entity) || p.a === state.entity || p.b === state.entity);
-  let graphHtml = "";
-  if (gp.length) {
-    graphHtml = `<div class="swot-props"><h4>Grafo de relações — propostas
-      <span class="infer" title="Arestas do grafo de relacionamento (convergência de arena, disputa, controle comum) e nós de operadores (pessoas em papéis públicos). Alto risco jurídico/LGPD — nunca publicadas automaticamente; aguardam curadoria.">grafo · revisão</span></h4>` +
-      gp.map(p => `<div class="prop"><span class="pk ${p.kind === 'dispute' ? 'chal' : 'new'}">${RELATION_PT[p.relation] || p.kind}</span>
-        <span class="pt">${esc(p.text || "")}</span>
-        <span class="pmeta">${esc((p.themes || []).join(', '))}${p.n_dates ? ` · ${p.n_dates} dias` : ""}</span>
-        ${propActions(p.id, 'graph')}</div>`).join("") + `</div>`;
-  }
-  el.innerHTML = `<div class="swot">
-    <h3>Tese competitiva — ${esc(sw.label)}
-      <span class="infer" title="Crenças derivadas dos indicadores (comparativo, corrente setorial, cohort, trajetória, silêncio) e corroboradas/contestadas por notícias via reconciliação por LLM — inferência com evidência ligada, não fato reportado. Contradições são marcadas, nunca apagadas.">SWOT · inferência</span></h3>
-    <div class="swot-grid">${quad('S')}${quad('W')}${quad('O')}${quad('T')}</div>
-    ${propHtml}${graphHtml}
-  </div>`;
+const PORTER_LABELS = { rivalry: "Rivalidade", new_entrants: "Novos entrantes", substitutes: "Substitutos", buyer_power: "Poder do comprador", supplier_power: "Poder do fornecedor" };
+const FW_DIM_LABELS = { swot: SWOT_LABELS, tows: TOWS_LABELS, porter: PORTER_LABELS };
+const FW_DIM_ORDER = { swot: ["S","W","O","T"], tows: ["SO","ST","WO","WT"], porter: ["rivalry","new_entrants","substitutes","buyer_power","supplier_power"] };
+const FW_NAMES = { swot: "SWOT", tows: "TOWS", porter: "Porter" };
+
+function _fwProposalBadge(p) {
+  if (p.kind === 'challenge') return `<span class="pk chal">contesta ${p.dimension}</span>`;
+  if (p.kind === 'seed') return `<span class="pk seed">tese inicial ${p.dimension}</span>`;
+  if (p.kind === 'stale') return `<span class="pk stale">revalidar ${p.dimension}</span>`;
+  if (p.kind === 'tows') return `<span class="pk tows">TOWS ${TOWS_LABELS[p.dimension] || p.dimension}</span>`;
+  if (p.kind === 'porter') return `<span class="pk porter">${PORTER_LABELS[p.dimension] || p.dimension}</span>`;
+  return `<span class="pk new">nova ${p.dimension}</span>`;
+}
+function _fwProposalMeta(p) {
+  if (p.kind === 'stale') return `sem corroboração há ${p.days_stale} dias · ${esc(p.date || "")}`;
+  const confLabel = p.kind === 'seed' ? 'confiança rascunho' : 'confiança';
+  const conf = p.confidence ?? p.stance_conf ?? 0;
+  return `${confLabel} ${Math.round(conf * 100)}% · ${esc(p.date || "")}`;
+}
+function _fwProposals(proposals, queue) {
+  if (!proposals.length) return "";
+  return `<div class="swot-props"><h4>Propostas pendentes de revisão</h4>` +
+    proposals.map(p => {
+      const tgt = (p.kind === 'challenge' || p.kind === 'stale') && p.target_text
+        ? `<span class="ptgt">↳ crença: ${esc(p.target_text)}</span>` : "";
+      const labels = p.kind === 'stale' ? { approved: "Aposentar", rejected: "Manter" } : null;
+      return `<div class="prop">${_fwProposalBadge(p)} <span class="pt">${esc(p.text)}</span>
+        <span class="pmeta">${_fwProposalMeta(p)}</span>${tgt}
+        ${propActions(p.id, queue, labels)}</div>`;
+    }).join("") + `</div>`;
 }
 
-function renderTows() {
-  const el = document.getElementById("towsPanel");
+function _fwSwotBullet(b) {
+  const news = (b.news_evidence || 0) > 0
+    ? ` · <span class="corrob" title="Corroborada por ${b.news_evidence} sinal(is) de notícia via reconciliação (LLM)">✔ notícias ${b.news_evidence}</span>` : "";
+  return `<div class="swot-b ${b.status === 'challenged' ? 'chal' : ''}">${esc(b.text)}
+    <span class="meta">confiança ${Math.round((b.confidence ?? 0) * 100)}%${b.evidence_count ? ` · ${b.evidence_count} evidência(s)` : ""}${news}${b.status === 'challenged' ? ' · contestada' : ''}</span></div>`;
+}
+
+function _fwChips(dimLabels, counts) {
+  return Object.entries(dimLabels)
+    .filter(([d]) => (counts[d] || 0) > 0)
+    .map(([d]) => `<span class="fw-chip ${d}" style="--qc:${_dimColor(d)}">${d} ${counts[d]}</span>`)
+    .join("");
+}
+
+function _dimColor(d) {
+  const map = { S:"#2e9e6b", W:"var(--t-crit)", O:"var(--accent)", T:"var(--t-high)",
+    SO:"#1a7ab5", ST:"#6c63c4", WO:"#b9820f", WT:"var(--t-crit)",
+    rivalry:"var(--t-high)", new_entrants:"#b9820f", substitutes:"#6c63c4", buyer_power:"var(--accent)", supplier_power:"var(--t-crit)" };
+  return map[d] || "var(--muted)";
+}
+
+function renderFrameworks() {
+  const el = document.getElementById("frameworksPanel");
   if (!state.entity) { el.innerHTML = ""; return; }
-  const curated = (DATA.tows || {})[state.entity] || [];
-  const props = (DATA.swot_proposals || []).filter(p => p.entity === state.entity && p.kind === "tows");
-  if (!curated.length && !props.length) { el.innerHTML = ""; return; }
-  const quad = dim => {
-    const bullets = curated.filter(b => b.dimension === dim);
-    const body = bullets.length
-      ? bullets.map(b => `<div class="swot-b">${esc(b.text)}
-          <span class="meta">confiança ${Math.round((b.confidence ?? 0) * 100)}%</span></div>`).join("")
-      : `<div class="none">—</div>`;
-    return `<div class="swot-q ${dim}"><div class="qh">${TOWS_LABELS[dim]}</div>${body}</div>`;
-  };
-  let propHtml = "";
-  if (props.length) {
-    propHtml = `<div class="swot-props"><h4>Posturas estratégicas propostas
-      <span class="infer" title="Cruzamento TOWS das crenças SWOT vetadas — proposto por LLM, aguarda curadoria.">TOWS · LLM</span></h4>` +
-      props.map(p => {
-        const kind = `<span class="pk tows">TOWS ${TOWS_LABELS[p.dimension] || p.dimension}</span>`;
-        const meta = `confiança ${Math.round((p.confidence ?? 0) * 100)}% · ${esc(p.date || "")}`;
-        return `<div class="prop">${kind} <span class="pt">${esc(p.text)}</span>
-          <span class="pmeta">${meta}</span>
-          ${propActions(p.id, 'swot')}</div>`;
-      }).join("") + `</div>`;
+  const cards = [];
+
+  // SWOT card
+  const sw = (DATA.swot || {})[state.entity];
+  if (sw) {
+    const counts = sw.counts || {};
+    const dims = sw.dimensions || {};
+    const swotProps = (DATA.swot_proposals || []).filter(p => p.entity === state.entity && p.kind !== "tows" && p.kind !== "porter");
+    const total = Object.values(counts).reduce((a,b) => a+b, 0);
+    const gridHtml = FW_DIM_ORDER.swot.map(dim => {
+      const bullets = dims[dim] || [];
+      const body = bullets.length ? bullets.map(_fwSwotBullet).join("") : `<div class="none">—</div>`;
+      return `<div class="swot-q ${dim}"><div class="qh">${SWOT_LABELS[dim]}</div>${body}</div>`;
+    }).join("");
+    // Graph proposals inside SWOT card
+    const gp = (DATA.graph_proposals || []).filter(p =>
+      (p.entities || []).includes(state.entity) || p.a === state.entity || p.b === state.entity);
+    let graphHtml = "";
+    if (gp.length) {
+      graphHtml = `<div class="swot-props"><h4>Grafo de relações — propostas
+        <span class="infer" title="Arestas do grafo de relacionamento (convergência de arena, disputa, controle comum) e nós de operadores (pessoas em papéis públicos). Alto risco jurídico/LGPD — nunca publicadas automaticamente; aguardam curadoria.">grafo · revisão</span></h4>` +
+        gp.map(p => `<div class="prop"><span class="pk ${p.kind === 'dispute' ? 'chal' : 'new'}">${RELATION_PT[p.relation] || p.kind}</span>
+          <span class="pt">${esc(p.text || "")}</span>
+          <span class="pmeta">${esc((p.themes || []).join(', '))}${p.n_dates ? ` · ${p.n_dates} dias` : ""}</span>
+          ${propActions(p.id, 'graph')}</div>`).join("") + `</div>`;
+    }
+    const pcount = swotProps.length ? `<span class="fw-pcount">${swotProps.length} proposta(s)</span>` : "";
+    cards.push({fw: "swot", html: `<div class="fw-card" data-fw="swot">
+      <div class="fw-hdr"><span class="fw-tog">▸</span><span class="fw-name">SWOT</span>
+        <span class="fw-chips">${_fwChips(SWOT_LABELS, counts)}</span>${pcount}
+        <span class="infer">inferência</span></div>
+      <div class="fw-body"><div class="swot-grid">${gridHtml}</div>
+        ${_fwProposals(swotProps, 'swot')}${graphHtml}</div></div>`});
   }
-  el.innerHTML = `<div class="swot">
-    <h3>Matriz TOWS — ${esc((DATA.swot || {})[state.entity]?.label || state.entity)}
-      <span class="infer" title="Cruzamento estratégico das forças/fraquezas (SWOT) com oportunidades/ameaças — crenças curadas pelo analista.">TOWS · curadoria</span></h3>
-    <div class="swot-grid">${quad('SO')}${quad('ST')}${quad('WO')}${quad('WT')}</div>
-    ${propHtml}
-  </div>`;
+
+  // TOWS card
+  const towsCurated = (DATA.tows || {})[state.entity] || [];
+  const towsProps = (DATA.swot_proposals || []).filter(p => p.entity === state.entity && p.kind === "tows");
+  if (towsCurated.length || towsProps.length) {
+    const towsCounts = {};
+    for (const b of towsCurated) towsCounts[b.dimension] = (towsCounts[b.dimension] || 0) + 1;
+    const gridHtml = FW_DIM_ORDER.tows.map(dim => {
+      const bullets = towsCurated.filter(b => b.dimension === dim);
+      const body = bullets.length
+        ? bullets.map(b => `<div class="swot-b">${esc(b.text)}
+            <span class="meta">confiança ${Math.round((b.confidence ?? 0) * 100)}%</span></div>`).join("")
+        : `<div class="none">—</div>`;
+      return `<div class="swot-q ${dim}"><div class="qh">${TOWS_LABELS[dim]}</div>${body}</div>`;
+    }).join("");
+    const pcount = towsProps.length ? `<span class="fw-pcount">${towsProps.length} proposta(s)</span>` : "";
+    cards.push({fw: "tows", html: `<div class="fw-card" data-fw="tows">
+      <div class="fw-hdr"><span class="fw-tog">▸</span><span class="fw-name">TOWS</span>
+        <span class="fw-chips">${_fwChips(TOWS_LABELS, towsCounts)}</span>${pcount}
+        <span class="infer">curadoria</span></div>
+      <div class="fw-body"><div class="swot-grid">${gridHtml}</div>
+        ${_fwProposals(towsProps, 'swot')}</div></div>`});
+  }
+
+  // Porter card (ADR 006 — rendered when data arrives)
+  const porterCurated = (DATA.porter || {})[state.entity] || [];
+  const porterProps = (DATA.swot_proposals || []).filter(p => p.entity === state.entity && p.kind === "porter");
+  if (porterCurated.length || porterProps.length) {
+    const porterCounts = {};
+    for (const b of porterCurated) porterCounts[b.dimension] = (porterCounts[b.dimension] || 0) + 1;
+    const gridHtml = FW_DIM_ORDER.porter.map(dim => {
+      const bullets = porterCurated.filter(b => b.dimension === dim);
+      const body = bullets.length
+        ? bullets.map(b => `<div class="swot-b">${esc(b.text)}
+            <span class="meta">confiança ${Math.round((b.confidence ?? 0) * 100)}%</span></div>`).join("")
+        : `<div class="none">—</div>`;
+      return `<div class="swot-q ${dim}"><div class="qh">${PORTER_LABELS[dim]}</div>${body}</div>`;
+    }).join("");
+    const pcount = porterProps.length ? `<span class="fw-pcount">${porterProps.length} proposta(s)</span>` : "";
+    cards.push({fw: "porter", html: `<div class="fw-card" data-fw="porter">
+      <div class="fw-hdr"><span class="fw-tog">▸</span><span class="fw-name">Porter</span>
+        <span class="fw-chips">${_fwChips(PORTER_LABELS, porterCounts)}</span>${pcount}
+        <span class="infer">cinco forças</span></div>
+      <div class="fw-body"><div class="swot-grid" style="grid-template-columns:1fr 1fr 1fr">${gridHtml}</div>
+        ${_fwProposals(porterProps, 'swot')}</div></div>`});
+  }
+
+  if (!cards.length) { el.innerHTML = ""; return; }
+  el.innerHTML = `<div class="fw-tabs">${cards.map(c => c.html).join("")}</div>`;
+
+  // Accordion: click header toggles this card open, closes others.
+  el.querySelectorAll(".fw-hdr").forEach(hdr => {
+    hdr.onclick = () => {
+      const card = hdr.parentElement;
+      const wasOpen = card.classList.contains("open");
+      el.querySelectorAll(".fw-card.open").forEach(c => c.classList.remove("open"));
+      if (!wasOpen) card.classList.add("open");
+    };
+  });
+  // Restore previously-open framework tab.
+  if (state._openFw) {
+    const prev = el.querySelector(`.fw-card[data-fw="${state._openFw}"]`);
+    if (prev) prev.classList.add("open");
+  }
+  el.querySelectorAll(".fw-hdr").forEach(hdr => {
+    const origClick = hdr.onclick;
+    hdr.onclick = () => { origClick(); state._openFw = hdr.parentElement.classList.contains("open") ? hdr.parentElement.dataset.fw : null; };
+  });
 }
 
 function render() {
   const rows = filtered();
-  renderSwot();
-  renderTows();
+  renderFrameworks();
   const feed = document.getElementById("feed");
   // Collapse repeats per entity only when opted in; a date already scopes to one day.
   const collapse = state.view === "entity" && !state.date;
@@ -999,7 +1073,9 @@ function render() {
     state.entity = en;
     document.getElementById("fEntity").value = en;
     syncEntityHighlight(); render();
-    document.querySelector(".swot")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    state._openFw = "swot";
+    const fp = document.getElementById("frameworksPanel");
+    if (fp) { fp.querySelector('.fw-card[data-fw="swot"]')?.classList.add("open"); fp.scrollIntoView({ behavior: "smooth", block: "nearest" }); }
   });
   renderTable(rows);
 }
@@ -1071,7 +1147,7 @@ const PIPELINE_STEPS = [
   ["SilenceTask", "Silêncio"], ["LongitudinalTask", "Longitudinal"], ["ComparativeTask", "Comparativo"],
   ["ThematicTask", "Temático"], ["RegulatoryTask", "Regulatório"], ["CohortTask", "Cohort"],
   ["SwotTask", "SWOT"], ["SwotReconcileTask", "SWOT · reconciliação"], ["SwotSeedTask", "SWOT · seeding"],
-  ["SwotMaintenanceTask", "SWOT · manutenção"], ["TowsTask", "TOWS"],
+  ["SwotMaintenanceTask", "SWOT · manutenção"], ["TowsTask", "TOWS"], ["PorterTask", "Porter"],
   ["ThreadsTask", "Fios de incidente"],
   ["BehavioralTask", "Comportamento"], ["RelationalTask", "Relacional"],
   ["WatchlistQsaTask", "QSA"], ["OperativesTask", "Operadores"],

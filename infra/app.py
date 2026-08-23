@@ -758,6 +758,36 @@ class OncaPrototypeStack(Stack):
             )
         )
 
+        # Porter's Five Forces (ADR 006 Phase 2): analyzes competitive-structure forces
+        # for each entity (rivalry, new_entrants, substitutes, buyer_power, supplier_power)
+        # via a bounded LLM call over SWOT beliefs + narrative evidence + industry context.
+        # Proposed only — flows through Phase C vetting. Needs Bedrock for the draft +
+        # entities table for industry membership.
+        porter_fn = lambda_.Function(
+            self,
+            "OncaPorter",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.synth.porter.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.minutes(3),
+            memory_size=256,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+                "ONCA_ENTITIES_TABLE": entities_table.table_name,
+                "ONCA_PORTER_ENABLED": "1",
+                "ONCA_PORTER_MAX_ENTITIES": "8",
+            },
+        )
+        digests_bucket.grant_read_write(porter_fn)
+        entities_table.grant_read_data(porter_fn)
+        porter_fn.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["bedrock:InvokeModel"],
+                resources=["*"],
+            )
+        )
+
         # Incident thread store (ADR 003 Wave 2): threads related developments into
         # living incident docs (event identity by entity+event-type) with an
         # open/developing/resolved lifecycle; publishes threads/{id}.json + a
@@ -1270,6 +1300,19 @@ class OncaPrototypeStack(Stack):
             interval=Duration.seconds(15),
             backoff_rate=2.0,
         )
+        porter_task = sfn_tasks.LambdaInvoke(
+            self,
+            "PorterTask",
+            lambda_function=porter_fn,
+            payload=sfn.TaskInput.from_object({}),
+            result_path="$.porter",
+        )
+        porter_task.add_retry(
+            errors=["States.ALL"],
+            max_attempts=2,
+            interval=Duration.seconds(15),
+            backoff_rate=2.0,
+        )
         threads_task = sfn_tasks.LambdaInvoke(
             self,
             "ThreadsTask",
@@ -1392,6 +1435,7 @@ class OncaPrototypeStack(Stack):
                 .next(seed_task)
                 .next(maintenance_task)
                 .next(tows_task)
+                .next(porter_task)
                 .next(threads_task)
                 .next(behavioral_task)
                 .next(relational_task)

@@ -53,10 +53,11 @@ def _save(bucket: str, key: str, obj: dict[str, Any], s3: Any) -> None:
 
 
 def _swot_stores() -> list[str]:
-    from src.synth import swot_maintenance, swot_reconcile, swot_seed, tows
+    from src.synth import porter, swot_maintenance, swot_reconcile, swot_seed, tows
 
     return [swot_reconcile.PROPOSALS_KEY, swot_seed.SEED_PROPOSALS_KEY,
-            swot_maintenance.MAINTENANCE_PROPOSALS_KEY, tows.TOWS_PROPOSALS_KEY]
+            swot_maintenance.MAINTENANCE_PROPOSALS_KEY, tows.TOWS_PROPOSALS_KEY,
+            porter.PORTER_PROPOSALS_KEY]
 
 
 def _graph_stores() -> list[str]:

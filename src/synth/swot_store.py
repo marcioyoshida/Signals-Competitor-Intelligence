@@ -53,6 +53,7 @@ _OPPOSITE = {"S": "W", "W": "S", "O": "T", "T": "O"}
 FRAMEWORK_DIMENSIONS: dict[str, tuple[str, ...]] = {
     "swot": ("S", "W", "O", "T"),
     "tows": ("SO", "ST", "WO", "WT"),
+    "porter": ("rivalry", "new_entrants", "substitutes", "buyer_power", "supplier_power"),
 }
 DEFAULT_FRAMEWORK = "swot"
 

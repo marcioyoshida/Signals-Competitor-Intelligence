@@ -1,6 +1,6 @@
 # ADR 006 — Beyond SWOT: a framework-parametric belief store (TOWS, Porter, PESTLE, 7S, Four Corners, Ansoff, BCG)
 
-- Status: **TOWS shipped** (2026-08-23); Porter/PESTLE/Ansoff/BCG/Four Corners/7S proposed
+- Status: **TOWS shipped** (2026-08-23); **Porter shipped** (2026-08-23); PESTLE/Ansoff/BCG/Four Corners/7S proposed
 - Sourced from **issue #3 — "Add new Strategy Frameworks"** (owner-filed): six
   candidate frameworks scored by adoption / strengths / weaknesses / **OSINT
   feasibility** (TOWS, PESTLE, Porter's Five Forces, SOAR, NOISE, McKinsey 7S).
@@ -233,3 +233,18 @@ follows the phasing.
 > `framework` when non-default. Dashboard renders a TOWS panel (`renderTows()`) with
 > curated postures + pending proposals, reusing the SWOT card styling with
 > quadrant-colored borders (SO=blue, ST=purple, WO=amber, WT=red).
+>
+> **Porter shipped (2026-08-23).** `src/synth/porter.py` (`OncaPorter` Lambda,
+> wired `… → tows → porter → threads → …`): analyzes competitive-structure forces
+> (rivalry, new_entrants, substitutes, buyer_power, supplier_power) per entity via
+> one bounded LLM call that reads active SWOT beliefs + narrative evidence + industry
+> membership from entity_registry. Propose-only, Phase C vetting. `eligible_entities`
+> requires ≥3 combined signals (SWOT bullets + narratives); `already_proposed`
+> idempotency; capped at `ONCA_PORTER_MAX_ENTITIES` (8). Each assessment carries an
+> intensity (high/medium/low) and evidence indices. Store: `porter/proposals.json`.
+> Approved Porter bullets carry `framework: "porter"` in `swot/curated.json`. Dashboard
+> renders Porter as a collapsible card tab alongside SWOT and TOWS (accordion pattern).
+> **UI refactor:** all framework panels (SWOT, TOWS, Porter) now use collapsible card
+> tabs (`.fw-card`/`.fw-hdr`/`.fw-body`): header always visible with dimension chips +
+> proposal count, click toggles the body, accordion (one open at a time) to avoid
+> pollution.

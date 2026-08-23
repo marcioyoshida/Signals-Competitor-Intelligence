@@ -119,3 +119,27 @@ def test_curated_tows_bullets_excluded_from_swot_beliefs():
     curated_bullets = [bl for bl in b["x"]["bullets"] if bl.get("curated")]
     assert len(curated_bullets) == 1
     assert curated_bullets[0]["text"] == "Força curada"
+
+
+def test_curated_porter_bullets_excluded_from_swot_beliefs():
+    """ADR 006: curated Porter bullets must not leak into the SWOT belief file."""
+    curated = {
+        "bullets": [
+            {"id": "porter:x:rivalry:abc", "entity": "x", "dimension": "rivalry",
+             "text": "Intensa concorrência no segmento", "framework": "porter",
+             "date": "2026-08-23", "approved_at": "2026-08-23"},
+            {"id": "seed:x:W:def", "entity": "x", "dimension": "W",
+             "text": "Fraqueza curada", "date": "2026-08-23",
+             "approved_at": "2026-08-23"},
+        ],
+        "retirements": [],
+    }
+    b = swot_store.build_beliefs(
+        [_comparative("x", "W", "banking", date="2026-08-23")],
+        as_of="2026-08-23", curated=curated)
+    dims = {bl["dimension"] for bl in b["x"]["bullets"]}
+    assert "rivalry" not in dims
+    assert "W" in dims
+    curated_bullets = [bl for bl in b["x"]["bullets"] if bl.get("curated")]
+    assert len(curated_bullets) == 1
+    assert curated_bullets[0]["text"] == "Fraqueza curada"
