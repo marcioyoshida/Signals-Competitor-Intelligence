@@ -1,8 +1,22 @@
 # ADR 004 — Competitive thesis: a per-entity SWOT belief store that narratives reinforce or contradict
 
-Status: **Accepted (2026-08-22)** — the model and phased build are committed; **step 1
-(Comparative axis) SHIPPED 2026-08-23**. Extends [ADR 003](2026-08-19-adr-narrative-dimensions.md).
-Steps 2–4 (the SWOT store, LLM reconcile) remain design-only until their turn.
+Status: **Accepted (2026-08-22)** — step 1 (Comparative axis) SHIPPED 2026-08-23;
+**step 2 (SWOT belief store v1, deterministic feeders) SHIPPED 2026-08-23**. Extends
+[ADR 003](2026-08-19-adr-narrative-dimensions.md). Steps 3–4 (LLM reconcile-against-
+belief + seeding) remain design-only until their turn (gated on Phase C).
+
+> **Step 2 shipped (2026-08-23).** `src/synth/swot_store.py` (`OncaSwot` Lambda, wired
+> `… → cohort → swot → feed`) rebuilds a per-entity S/W/O/T belief file each run from
+> ALL six Wave-1 axes' `swot_hint`s — deterministic, **no LLM, no embeddings** (embeddings
+> earn their place only in step 3's cosine retrieval, so v1 keys bullets deterministically
+> by `(entity, dimension, source-key)` instead — see note below). Evidence accrues,
+> confidence grows with corroboration / decays with staleness, and a deterministic
+> **reconcile** marks a bullet `challenged` when the opposite dimension for the same claim
+> has fresher evidence (never auto-retired — precision-first). Publishes
+> `swot/{entity}.json` (full, evidence-linked — the durable belief file / API product) +
+> `swot/index.json` (compact); the war room renders a 4-quadrant "Tese competitiva" panel
+> for the selected entity. Verified live (e.g. Itaú: S outperforms banking peers · W own
+> trajectory cooling · O FII + expansão currents · T crédito & inadimplência).
 
 > **Step 1 verified live (2026-08-23).** `OncaComparative` deployed and wired into
 > `OncaPipeline` (… → longitudinal → comparative → feed); a full run SUCCEEDED and
@@ -117,10 +131,16 @@ step — they map to a dimension by rule, attaching as structured evidence.
    the belief store can consume it verbatim in step 2 — a peer *outperformance* reads
    as a competitor **Strength** (a Threat to our client); *underperformance* as a
    **Weakness** (an Opportunity). No LLM: the sign comes from the peer-z direction.
-2. **SWOT store v1 — read-mostly, deterministic feeders only.** Build
-   `swot/{entity}.json` + embeddings; let the deterministic axes (comparative,
-   longitudinal, silence) attach as evidence. No LLM stance yet. Surfaces a
-   per-entity SWOT panel on the dashboard (evidence-linked, labeled inference).
+2. **SWOT store v1 — read-mostly, deterministic feeders only. ✅ SHIPPED 2026-08-23.**
+   Built `swot/{entity}.json`; ALL six Wave-1 axes attach as evidence via their
+   `swot_hint` (comparative/cohort/thematic) or a derived dimension (longitudinal/
+   silence). No LLM stance. Surfaces the per-entity SWOT panel on the dashboard
+   (evidence-linked, labeled inference).
+   **Deviation from the original sketch — embeddings deferred to v2.** The sketch said
+   "build swot/{entity}.json **+ embeddings**". In v1 the reconcile is deterministic
+   (bullets keyed by `(entity, dimension, source-key)`), so embeddings would be computed
+   but unused. They are the retrieval substrate for step 3's LLM stance (embed the
+   narrative → cosine top-k bullets), so they land there, where they earn their cost.
 3. **SWOT v2 — reconcile-against-belief (LLM stance).** Add embed-retrieve + stance
    classification for news/fatos narratives; reinforce auto-applies, **contradict &
    new go through the review queue**. Gated on Phase C (accounts) for vetting.
