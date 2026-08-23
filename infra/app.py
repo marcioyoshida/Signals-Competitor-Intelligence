@@ -559,6 +559,26 @@ class OncaPrototypeStack(Stack):
         digests_bucket.grant_read_write(comparative_fn)
         entities_table.grant_read_data(comparative_fn)
 
+        # Thematic detector (ADR 003 Wave 1 / ADR 004 O-T feeder): tags recent activity
+        # with a keyword theme taxonomy and writes cross-entity "sector current"
+        # narratives (subject = theme). Deterministic, LLM-free; digests read/write
+        # (put current cards + retract themes that fell below threshold same-day).
+        thematic_fn = lambda_.Function(
+            self,
+            "OncaThematic",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.synth.thematic.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.minutes(5),
+            memory_size=512,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+                "ONCA_FEATURE_WINDOW_DAYS": "90",
+            },
+        )
+        digests_bucket.grant_read_write(thematic_fn)
+
         # Feed builder: aggregate recent narratives -> feed.json in the site bucket.
         feed_fn = lambda_.Function(
             self,
@@ -815,6 +835,19 @@ class OncaPrototypeStack(Stack):
             interval=Duration.seconds(15),
             backoff_rate=2.0,
         )
+        thematic_task = sfn_tasks.LambdaInvoke(
+            self,
+            "ThematicTask",
+            lambda_function=thematic_fn,
+            payload=sfn.TaskInput.from_object({}),
+            result_path="$.thematic",
+        )
+        thematic_task.add_retry(
+            errors=["States.ALL"],
+            max_attempts=2,
+            interval=Duration.seconds(15),
+            backoff_rate=2.0,
+        )
         feed_task = sfn_tasks.LambdaInvoke(
             self,
             "FeedTask",
@@ -838,6 +871,7 @@ class OncaPrototypeStack(Stack):
                 .next(silence_task)
                 .next(longitudinal_task)
                 .next(comparative_task)
+                .next(thematic_task)
                 .next(feed_task)
             ),
             # Budget for a 15-min ingest (plus a retry), then synth, then feed.
