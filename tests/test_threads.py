@@ -28,6 +28,27 @@ def test_event_types_of_tags_by_keyword():
     assert "authorization" in threads.event_types_of(_card("x", "Recebeu autorização para banco múltiplo.", 1))
 
 
+def test_primary_event_type_picks_dominant_and_avoids_duplicate_threads():
+    # A bundled card touching authorization (3 hits) AND expansion (1 hit): breadth
+    # still sees both, but it threads into ONLY the dominant primary (authorization).
+    bundle = _card("itau",
+                   "Itaú recebeu autorização preliminar para operar como banco múltiplo "
+                   "nos EUA, conforme aprovação preliminar.", 1)
+    assert set(threads.event_types_of(bundle)) == {"authorization", "expansion"}
+    assert threads.primary_event_type(bundle) == "authorization"
+
+
+def test_bundle_card_seeds_only_primary_thread():
+    # 3 days of the same bundle (authorization-dominant: autoriza + banco multiplo +
+    # aprovacao preliminar = 3 hits vs expansion's 1 'nos eua') -> ONE thread, not two.
+    narrs = [_card("itau", "Itaú recebeu autorização preliminar para operar como banco "
+                           "múltiplo nos EUA, conforme aprovação preliminar.", d)
+             for d in (6, 3, 1)]
+    th = threads.build_threads(narrs, as_of=AS_OF)
+    assert list(th.keys()) == ["itau--authorization"]      # no itau--expansion shadow
+    assert th["itau--authorization"]["n_developments"] == 3
+
+
 def test_thread_needs_multiple_dates():
     # two cards same day -> one date -> not a thread
     narrs = [_card("itau", "aquisição em curso", 1, nid="a"),

@@ -111,11 +111,39 @@ _EVENT_PATS = {k: [re.compile(p) for p in v["patterns"]] for k, v in EVENT_TYPES
 _STATUS_PT = {"open": "Em aberto", "developing": "Em desenvolvimento", "resolved": "Encerrado"}
 
 
-def event_types_of(narrative: dict[str, Any]) -> list[str]:
+# Taxonomy order = salience priority (earlier = stronger), used to break ties when a
+# card matches several event types with the same number of pattern hits.
+_EVENT_PRIORITY = {et: i for i, et in enumerate(EVENT_TYPES)}
+
+
+def event_type_matches(narrative: dict[str, Any]) -> dict[str, int]:
+    """{event_type: number of distinct patterns that hit} for the narrative text."""
     text = _norm(narrative.get("narrative") or "")
     if not text:
-        return []
-    return [et for et, pats in _EVENT_PATS.items() if any(p.search(text) for p in pats)]
+        return {}
+    out = {et: sum(1 for p in pats if p.search(text)) for et, pats in _EVENT_PATS.items()}
+    return {et: c for et, c in out.items() if c}
+
+
+def event_types_of(narrative: dict[str, Any]) -> list[str]:
+    """ALL event types the narrative touches — breadth (behavioral multi-front,
+    relational dispute, predictive precursors want every type)."""
+    return list(event_type_matches(narrative).keys())
+
+
+def primary_event_type(narrative: dict[str, Any]) -> str | None:
+    """The single event type a (bundled) card is most *about*, for thread identity.
+
+    A daily entity-fusion card bundles many signals and often matches several event
+    types (e.g. 'autorização … banco múltiplo nos EUA' hits both authorization AND
+    expansion). Threading it into every match makes the same bundle the latest
+    development of multiple incidents — near-duplicate cards. So a card seeds exactly
+    ONE thread: the type with the most pattern hits (specificity), ties broken by
+    taxonomy salience (acquisition/litigation/… before expansion/product_launch)."""
+    matches = event_type_matches(narrative)
+    if not matches:
+        return None
+    return min(matches, key=lambda et: (-matches[et], _EVENT_PRIORITY[et]))
 
 
 def _score(value: Any) -> float:
@@ -148,27 +176,32 @@ def build_threads(
         date = feature_store._date_of(n)
         if not ent or not date:
             continue
-        for et in event_types_of(n):
-            g = groups.setdefault((ent, et), {
-                "entity": ent, "event_type": et, "label": _entity_label(ent, n),
-                "devs": {}, "lenses": set()})
-            # One development per DATE — the day's card advances the story. (The daily
-            # fusion card reuses a stable id across dates, so we key by date, not id,
-            # or a multi-day arc would collapse into one development.) Keep the day's
-            # highest-threat card as that date's development.
-            summary = (n.get("narrative") or "").strip()
-            score = _score(n.get("threat_score"))
-            dev = g["devs"].get(date)
-            if dev is None or score > dev["threat_score"]:
-                g["devs"][date] = {
-                    "date": date, "narrative_id": n.get("id"), "summary": summary,
-                    "threat_score": score,
-                    "citations": [c for c in (n.get("citations") or []) if isinstance(c, dict)],
-                    "source_ids": list(n.get("source_ids") or []),
-                    "is_alert": bool(n.get("is_alert")),
-                }
-            for lens in n.get("lenses") or []:
-                g["lenses"].add(lens)
+        # A card seeds exactly ONE thread — its PRIMARY event type — so a bundled
+        # fusion card that touches several types no longer becomes the latest
+        # development of multiple incidents (the near-duplicate-cards bug).
+        et = primary_event_type(n)
+        if not et:
+            continue
+        g = groups.setdefault((ent, et), {
+            "entity": ent, "event_type": et, "label": _entity_label(ent, n),
+            "devs": {}, "lenses": set()})
+        # One development per DATE — the day's card advances the story. (The daily
+        # fusion card reuses a stable id across dates, so we key by date, not id,
+        # or a multi-day arc would collapse into one development.) Keep the day's
+        # highest-threat card as that date's development.
+        summary = (n.get("narrative") or "").strip()
+        score = _score(n.get("threat_score"))
+        dev = g["devs"].get(date)
+        if dev is None or score > dev["threat_score"]:
+            g["devs"][date] = {
+                "date": date, "narrative_id": n.get("id"), "summary": summary,
+                "threat_score": score,
+                "citations": [c for c in (n.get("citations") or []) if isinstance(c, dict)],
+                "source_ids": list(n.get("source_ids") or []),
+                "is_alert": bool(n.get("is_alert")),
+            }
+        for lens in n.get("lenses") or []:
+            g["lenses"].add(lens)
 
     out: dict[str, dict[str, Any]] = {}
     for (ent, et), g in groups.items():
