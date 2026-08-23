@@ -663,9 +663,10 @@ function citationFooter(model) {
 const AXIS_LABELS = {
   silence: "Silêncio", longitudinal: "Quebra de padrão", comparative: "Comparativo setorial",
   thematic: "Corrente setorial", regulatory: "Radar regulatório", cohort: "Movimento de cohort",
-  threaded: "Fio de incidente",
+  threaded: "Fio de incidente", regulatory_lifecycle: "Ciclo regulatório",
 };
 const STATUS_PT = { open: "em aberto", developing: "em desenvolvimento", resolved: "encerrado" };
+const REG_STAGE_PT = { consulta: "consulta", publicacao: "publicação", vigencia: "vigência", fiscalizacao: "fiscalização" };
 function axisLabel(axis) { return AXIS_LABELS[axis] || "Derivado"; }
 // Badge label — axes with a polarity show their direction.
 function inferBadge(f) {
@@ -679,6 +680,8 @@ function inferBadge(f) {
     return f.days_to_deadline != null ? `Prazo · ${f.days_to_deadline}d` : "Radar regulatório";
   if (f.axis === "threaded")
     return `Fio · ${f.n_developments || 0} devs${f.status ? ` · ${STATUS_PT[f.status] || f.status}` : ""}`;
+  if (f.axis === "regulatory_lifecycle")
+    return `Ciclo · ${REG_STAGE_PT[f.current_stage] || f.current_stage || "regulatório"}`;
   return axisLabel(f.axis);
 }
 

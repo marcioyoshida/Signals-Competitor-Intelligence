@@ -179,6 +179,40 @@ def _future_deadline(text: str, as_of: str, horizon: int) -> str | None:
     return future[0].isoformat() if future else None
 
 
+# --- Lifecycle stages (Wave 2: the full regulatory-lifecycle thread) --------
+# An instrument moves proposal → publication → in-force → enforcement. Each mention
+# is classified by cue precedence (enforcement > in-force > consultation > default
+# publication). Data-gated today (our ingestion captures BCB notices sporadically,
+# not each instrument's full pipeline), so lifecycles are few until richer regulatory
+# ingestion lands — but stage classification adds a "where in the lifecycle" read now.
+REG_LIFECYCLE_PREFIX = "reg_lifecycle/"
+REG_LIFECYCLE_INDEX_KEY = "reg_lifecycle/index.json"
+STAGE_ORDER = ["consulta", "publicacao", "vigencia", "fiscalizacao"]
+STAGE_LABELS = {
+    "consulta": "Consulta pública", "publicacao": "Publicação",
+    "vigencia": "Vigência / prazo", "fiscalizacao": "Fiscalização",
+}
+_STAGE_CUES = [
+    ("fiscalizacao", [r"fiscaliza", r"autuac", r"penalidade", r"descumprimento",
+                      r"\bsancao\b", r"multa por", r"punic", r"irregularidad"]),
+    ("vigencia", [r"entra em vigor", r"entrar[aã] em vigor", r"vig[eê]ncia",
+                  r"a partir de", r"passa a valer", r"\bprazo\b", r"obrigatori"]),
+    ("consulta", [r"consulta publica", r"audiencia publica", r"\bminuta\b",
+                  r"proposta de", r"edital de consulta", r"tomada de subsidios",
+                  r"em discussao", r"em consulta"]),
+]
+_STAGE_PATS = [(s, [re.compile(p) for p in pats]) for s, pats in _STAGE_CUES]
+
+
+def stage_of(ctx: str) -> str:
+    """Classify a mention's context window into a lifecycle stage (default publicação)."""
+    t = _norm(ctx)
+    for stage, pats in _STAGE_PATS:
+        if any(p.search(t) for p in pats):
+            return stage
+    return "publicacao"
+
+
 def prior_instruments(narratives: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     """Most-recent prior regulatory card per instrument: {key: {run_date, signature}}."""
     out: dict[str, dict[str, Any]] = {}
@@ -224,7 +258,8 @@ def threads(narratives: list[dict[str, Any]], *, as_of: str, recency: int,
             # elsewhere in a dense multi-instrument card can't attach to every ref.
             ctx = norm[max(0, start - _CONTEXT_WINDOW): end + _CONTEXT_WINDOW]
             g = groups.setdefault(
-                key, {"label": disp, "cards": [], "latest": "", "deadline": None, "domain": None}
+                key, {"label": disp, "cards": [], "latest": "", "deadline": None,
+                      "domain": None, "mentions": []}
             )
             if len(disp) > len(g["label"]):
                 g["label"] = disp
@@ -238,6 +273,11 @@ def threads(narratives: list[dict[str, Any]], *, as_of: str, recency: int,
             dl = _future_deadline(ctx, as_of, horizon)
             if dl and (g["deadline"] is None or dl < g["deadline"]):
                 g["deadline"] = dl
+            # Lifecycle timeline material (Wave 2): stage of this mention + its evidence.
+            g["mentions"].append({
+                "date": d, "stage": stage_of(ctx), "summary": raw.strip()[:220],
+                "citations": [c for c in (n.get("citations") or []) if isinstance(c, dict)],
+            })
     for g in groups.values():
         if not g["latest"]:
             g["latest"] = max((feature_store._date_of(c) for c in g["cards"]), default="")
@@ -398,6 +438,140 @@ def build_narrative(cand: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# --- Full regulatory-lifecycle thread (Wave 2) ------------------------------
+def build_lifecycles(
+    narratives: list[dict[str, Any]], *, as_of: str | None = None, window: int = 90
+) -> dict[str, dict[str, Any]]:
+    """Per-instrument lifecycle thread: stage progression over time (deterministic)."""
+    as_of = as_of or run_date_today()
+    horizon = int(_f("ONCA_REG_DEADLINE_HORIZON", DEADLINE_HORIZON))
+    include_com = bool(int(_f("ONCA_REG_INCLUDE_COMUNICADOS", 0)))
+    min_dates = int(_f("ONCA_REG_LIFECYCLE_MIN_DATES", 2))
+
+    groups = threads(narratives, as_of=as_of, recency=window,
+                     include_comunicados=include_com, horizon=horizon)
+    out: dict[str, dict[str, Any]] = {}
+    for key, g in groups.items():
+        # one timeline entry per (date, stage)
+        seen: set[tuple[str, str]] = set()
+        timeline: list[dict[str, Any]] = []
+        for m in sorted(g.get("mentions") or [], key=lambda x: x["date"]):
+            k = (m["date"], m["stage"])
+            if k in seen:
+                continue
+            seen.add(k)
+            timeline.append(m)
+        dates = {m["date"] for m in timeline}
+        if len(dates) < min_dates:
+            continue  # a lifecycle needs a real multi-date arc (data-gated today)
+
+        stages_seen = [s for s in STAGE_ORDER if any(m["stage"] == s for m in timeline)]
+        current = stages_seen[-1] if stages_seen else "publicacao"
+        deadline = g.get("deadline")
+        dtd = _days_between(deadline, as_of) if deadline else None
+        if (dtd is not None and dtd < 0) or current == "fiscalizacao":
+            status = "resolved"
+        elif len(stages_seen) >= 2:
+            status = "developing"
+        else:
+            status = "open"
+        out[key] = {
+            "instrument": key, "label": g["label"], "domain": g["domain"],
+            "deadline": deadline, "days_to_deadline": dtd,
+            "stages_seen": stages_seen, "current_stage": current, "status": status,
+            "first_seen": min(dates), "last_updated": max(dates),
+            "n_dates": len(dates), "timeline": timeline,
+        }
+    return out
+
+
+def build_lifecycle_card(lc: dict[str, Any]) -> dict[str, Any]:
+    """A feed-ready card for one instrument's lifecycle thread (grounded, labeled)."""
+    def _fmt(d: str) -> str:
+        try:
+            return feature_store._parse(d).strftime("%d/%m")
+        except Exception:
+            return d
+
+    score = _reg_score({"days_to_deadline": lc["days_to_deadline"]})
+    dtd, deadline = lc["days_to_deadline"], lc["deadline"]
+    alert = bool(deadline and dtd is not None and 0 <= dtd <= ALERT_WITHIN)
+    arc = " → ".join(
+        f"{STAGE_LABELS[s]} ({_fmt(next(m['date'] for m in lc['timeline'] if m['stage'] == s))})"
+        for s in lc["stages_seen"]
+    )
+    head = f"Ciclo regulatório: {lc['label']} — estágio atual {STAGE_LABELS[lc['current_stage']]}."
+    if arc:
+        head += f" Progressão: {arc}."
+    if deadline:
+        head += f" Prazo: vence em {_fmt(deadline)}" + (f" (faltam {dtd} dias)." if dtd is not None else ".")
+    head += f" Afeta: {lc['domain']}."
+    tail = (" Ciclo derivado do encadeamento de menções ao instrumento na fonte "
+            "reguladora — estágio e urgência são inferência; cada menção cita a fonte.")
+
+    citations = _agg_citations(list(reversed(lc["timeline"])))
+    return {
+        "id": f"reg-lifecycle-{lc['instrument']}",
+        "kind": "regulatory_lifecycle",
+        "axis": "regulatory_lifecycle",
+        "subject_type": "instrument",
+        "instrument": lc["instrument"],
+        "instrument_label": lc["label"],
+        "domain": lc["domain"],
+        "deadline": deadline,
+        "days_to_deadline": dtd,
+        "status": lc["status"],
+        "current_stage": lc["current_stage"],
+        "stages_seen": lc["stages_seen"],
+        "n_developments": lc["n_dates"],
+        "entity": None,
+        "entities": [],
+        "lenses": ["regulatory"],
+        "is_alert": alert,
+        "is_inference": True,
+        "threat_score": score,
+        "threat_factors": {"current_stage": lc["current_stage"],
+                           "stages": len(lc["stages_seen"]), "n_dates": lc["n_dates"]},
+        "threat_score_note": "estimated_v1_reg_lifecycle",
+        "swot_hint": {"dimension": "T", "sign": "-", "instrument": lc["instrument"],
+                      "domain": lc["domain"]},
+        "narrative": head + tail,
+        "citations": citations,
+        "source_ids": [],
+        "mode": "derived",
+        "run_date": lc["last_updated"],
+        "run_at": run_at_now(),
+        "as_of": lc["last_updated"],
+        "data_as_of": {"first_seen": lc["first_seen"], "last_updated": lc["last_updated"]},
+    }
+
+
+def publish_lifecycles(lifecycles: dict[str, dict[str, Any]], bucket: str, *,
+                       s3: Any | None = None, as_of: str | None = None) -> int:
+    """Overwrite reg_lifecycle/{id}.json (full) + reg_lifecycle/index.json (feed cards)."""
+    import datetime as _dt
+    s3 = s3 or boto3.client("s3")
+    as_of = as_of or run_date_today()
+    cards = []
+    for key, lc in lifecycles.items():
+        s3.put_object(
+            Bucket=bucket, Key=f"{REG_LIFECYCLE_PREFIX}{key}.json",
+            Body=json.dumps(lc, ensure_ascii=False, indent=2).encode("utf-8"),
+            ContentType="application/json", CacheControl="no-cache",
+        )
+        cards.append(build_lifecycle_card(lc))
+    cards.sort(key=lambda c: (c["run_date"], c["threat_score"]), reverse=True)
+    s3.put_object(
+        Bucket=bucket, Key=REG_LIFECYCLE_INDEX_KEY,
+        Body=json.dumps({
+            "generated_at": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"),
+            "as_of": as_of, "cards": cards,
+        }, ensure_ascii=False).encode("utf-8"),
+        ContentType="application/json", CacheControl="no-cache",
+    )
+    return len(cards)
+
+
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """Load recent history, emit regulatory-instrument radar narratives."""
     digests_bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
@@ -427,6 +601,14 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                              include_comunicados=include_com, horizon=horizon).keys())
     retracted = _retract_same_day(digests_bucket, s3, run_date, qualifying)
 
+    # Wave 2: the full regulatory-lifecycle thread — stage progression per instrument.
+    n_lifecycles = 0
+    try:
+        lifecycles = build_lifecycles(recent, as_of=run_date, window=window_days)
+        n_lifecycles = publish_lifecycles(lifecycles, digests_bucket, s3=s3, as_of=run_date)
+    except Exception as exc:  # pragma: no cover - best-effort
+        print(f"Warning: regulatory lifecycle publish failed: {exc}")
+
     return {
         "statusCode": 200,
         "body": json.dumps(
@@ -436,6 +618,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 "window_days": window_days,
                 "nominated": len(cands),
                 "emitted": len(keys),
+                "lifecycles": n_lifecycles,
                 "instruments": [
                     f"{c['instrument']}"
                     + (f"@{c['deadline']}" if c["deadline"] else "")

@@ -270,9 +270,10 @@ def _project_item(n: dict[str, Any]) -> dict[str, Any]:
         "swot_hint": n.get("swot_hint"),
         "deadline": n.get("deadline"),
         "days_to_deadline": n.get("days_to_deadline"),
-        # incident-thread payload (Wave 2): status + development count for the UI.
+        # thread payload (Wave 2): status + development count + reg-lifecycle stage.
         "status": n.get("status"),
         "n_developments": n.get("n_developments"),
+        "current_stage": n.get("current_stage"),
         "entities": n.get("entities") or [],
         "lenses": n.get("lenses") or [],
         "is_alert": bool(n.get("is_alert")),
@@ -520,6 +521,20 @@ def _load_threads(digests_bucket: str) -> list[dict[str, Any]]:
         return []
 
 
+def _load_reg_lifecycles(digests_bucket: str) -> list[dict[str, Any]]:
+    """Read regulatory-lifecycle thread cards (ADR 003 Wave 2), best-effort. [] if absent."""
+    try:
+        from src.synth import regulatory
+
+        body = boto3.client("s3").get_object(
+            Bucket=digests_bucket, Key=regulatory.REG_LIFECYCLE_INDEX_KEY
+        )["Body"].read()
+        return json.loads(body.decode("utf-8")).get("cards", [])
+    except Exception as exc:  # pragma: no cover - best-effort, read-only
+        print(f"Warning: load reg-lifecycle index failed: {exc}")
+        return []
+
+
 def _load_swot(digests_bucket: str) -> dict[str, Any] | None:
     """Read the compact SWOT belief index (ADR 004 step 2), best-effort. None if absent."""
     try:
@@ -552,7 +567,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         industry_meta=industry_meta,
         macro=_load_macro(),
         swot=_load_swot(digests_bucket),
-        thread_cards=_load_threads(digests_bucket),
+        thread_cards=_load_threads(digests_bucket) + _load_reg_lifecycles(digests_bucket),
     )
     body = json.dumps(feed, ensure_ascii=False).encode("utf-8")
 

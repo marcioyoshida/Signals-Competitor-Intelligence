@@ -87,6 +87,37 @@ def test_no_deadline_instrument_is_context_not_alert():
     assert n["threat_score"] == 0.25
 
 
+def test_stage_of_classifies_by_cue_precedence():
+    assert regulatory.stage_of("a norma entra em vigor em 01/09") == "vigencia"
+    assert regulatory.stage_of("aberta consulta publica sobre a minuta") == "consulta"
+    assert regulatory.stage_of("BCB abre fiscalizacao e autuacao por descumprimento") == "fiscalizacao"
+    assert regulatory.stage_of("o BCB publicou a resolucao") == "publicacao"  # default
+
+
+def test_build_lifecycles_threads_stage_progression():
+    narrs = [
+        _card("Consulta pública sobre a minuta da Resolução BCB 999.", date="2026-07-10"),
+        _card("BCB publicou a Resolução BCB 999.", date="2026-07-25"),
+        _card("A Resolução BCB 999 entra em vigor em 30/11/2026.", date="2026-08-15"),
+    ]
+    lc = regulatory.build_lifecycles(narrs, as_of="2026-08-23", window=90)
+    t = lc["res-bcb-999"]
+    assert t["stages_seen"] == ["consulta", "publicacao", "vigencia"]
+    assert t["current_stage"] == "vigencia" and t["status"] == "developing"
+    assert t["deadline"] == "2026-11-30" and t["n_dates"] == 3
+    c = regulatory.build_lifecycle_card(t)
+    assert c["axis"] == "regulatory_lifecycle" and c["subject_type"] == "instrument"
+    assert c["is_inference"] and "Ciclo regulatório" in c["narrative"]
+    assert "Progressão:" in c["narrative"]
+
+
+def test_single_date_instrument_is_not_a_lifecycle():
+    # one mention on one date -> tracked by the radar, not a lifecycle thread
+    assert regulatory.build_lifecycles(
+        [_card("BCB publicou a Instrução Normativa BCB 770.", date="2026-08-20")],
+        as_of="2026-08-23") == {}
+
+
 def test_emit_on_change_suppresses_unchanged_and_refires_on_new_deadline():
     base = _card("Instrução Normativa BCB 770; entra em vigor em 30/11/2026.",
                  date="2026-08-22")
