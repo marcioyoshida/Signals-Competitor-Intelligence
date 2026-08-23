@@ -42,6 +42,55 @@ def _method(event: dict[str, Any]) -> str:
     return str(ctx.get("method") or "POST").upper()
 
 
+def _current_step(sfn: Any, execution_arn: str) -> str | None:
+    """Name of the most recent state the running execution entered, else None.
+
+    Walks the execution history from the newest event and returns the `name`
+    carried by the first state-entry event (Task/Pass/Wait/Choice/Map/Succeed/
+    Fail all surface a `*StateEnteredEventDetails.name`). Guaranteed once the
+    engine has dispatched the first state; None only while it is initializing.
+    """
+    try:
+        hist = sfn.get_execution_history(
+            executionArn=execution_arn, reverseOrder=True, maxResults=50
+        )
+    except Exception:
+        return None
+    for ev in hist.get("events") or []:
+        for key, details in (ev.get("eventDetails") or {}).items():
+            if key.endswith("StateEnteredEventDetails") and isinstance(details, dict):
+                return details.get("name")
+    return None
+
+
+def _latest_execution(sfn: Any, pipeline_arn: str) -> dict[str, Any] | None:
+    """Latest pipeline run as {status, started_at, current_step?}, or None.
+
+    status mirrors Execution::Status (RUNNING/SUCCEEDED/FAILED/ABORTED/…). The
+    current step is reported only while RUNNING — a finished run's last state
+    bears no progress meaning.
+    """
+    try:
+        lst = sfn.list_executions(stateMachineArn=pipeline_arn, maxResults=1)
+        executions = lst.get("executions") or []
+        if not executions:
+            return None
+        latest = executions[0]
+        desc = sfn.describe_execution(executionArn=latest["executionArn"])
+        started = desc.get("startDate")
+        info: dict[str, Any] = {
+            "status": desc.get("status"),
+            # boto returns a datetime; the JSON response must carry a string.
+            "started_at": started.isoformat() if hasattr(started, "isoformat") else started,
+        }
+        if desc.get("status") == "RUNNING":
+            step = _current_step(sfn, latest["executionArn"])
+            info["current_step"] = step or "running"
+        return info
+    except Exception:
+        return None
+
+
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     secret = os.environ.get("ONCA_ORIGIN_SECRET")
     headers = {str(k).lower(): v for k, v in (event.get("headers") or {}).items()}
@@ -49,6 +98,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         return _resp(403, {"error": "forbidden"})
 
     name = os.environ.get("ONCA_SCHEDULE_NAME", "onca-adhoc-run")
+    pipeline_arn = os.environ.get("ONCA_PIPELINE_ARN")
     import boto3
 
     sch = boto3.client("scheduler")
@@ -56,13 +106,22 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     if _method(event) == "GET":
         try:
             g = sch.get_schedule(Name=name)
-            return _resp(200, {
+            pending: dict[str, Any] = {
                 "pending": True,
                 "at": g.get("ScheduleExpression"),
                 "timezone": g.get("ScheduleExpressionTimezone"),
-            })
+            }
         except sch.exceptions.ResourceNotFoundException:
-            return _resp(200, {"pending": False})
+            pending = {"pending": False}
+        # Latest pipeline execution (any source), live step while running.
+        execution: dict[str, Any] = {"status": "UNKNOWN"}
+        if pipeline_arn:
+            got = _latest_execution(boto3.client("stepfunctions"), pipeline_arn)
+            if got:
+                execution = got
+            else:
+                execution = {"status": "NONE"}
+        return _resp(200, {**pending, "execution": execution})
 
     pipeline_arn = os.environ.get("ONCA_PIPELINE_ARN")
     role_arn = os.environ.get("ONCA_SCHEDULER_ROLE_ARN")

@@ -53,10 +53,32 @@ def _env(monkeypatch):
     monkeypatch.setenv("ONCA_SCHEDULE_NAME", "onca-adhoc-run")
 
 
-def _install(monkeypatch, fake):
+class _FakeSfn:
+    """Minimal Step Functions client for the GET execution-status path."""
+    def __init__(self, status=None, started=None, step=None):
+        self.status = status
+        self.started = started
+        self.step = step
+
+    def list_executions(self, stateMachineArn, maxResults=1):
+        return {"executions": ([{"executionArn": "arn:exec"}] if self.status else [])}
+
+    def describe_execution(self, executionArn):
+        return {"status": self.status, "startDate": self.started}
+
+    def get_execution_history(self, executionArn, reverseOrder=True, maxResults=50):
+        if not self.step:
+            return {"events": []}
+        return {"events": [{"eventDetails": {"taskStateEnteredEventDetails": {"name": self.step}}}]}
+
+
+def _install(monkeypatch, fake, sfn=None):
     import types
 
-    monkeypatch.setitem(sys.modules, "boto3", types.SimpleNamespace(client=lambda svc: fake))
+    def client(svc):
+        return sfn if (svc == "stepfunctions" and sfn is not None) else fake
+
+    monkeypatch.setitem(sys.modules, "boto3", types.SimpleNamespace(client=client))
 
 
 def _event(method="POST", secret="sec"):
@@ -117,6 +139,30 @@ def test_get_reports_none_when_absent(_env, monkeypatch):
     _install(monkeypatch, _FakeScheduler(existing=None))
     out = run_trigger.lambda_handler(_event(method="GET"), None)
     assert json.loads(out["body"])["pending"] is False
+
+
+def test_get_running_execution_serializes_datetime(_env, monkeypatch):
+    # regression: describe_execution returns a datetime startDate — the JSON response
+    # must not blow up (it did: "Object of type datetime is not JSON serializable").
+    sfn = _FakeSfn(status="RUNNING",
+                   started=dt.datetime(2026, 8, 23, 14, 0, tzinfo=dt.timezone.utc),
+                   step="SwotSeedTask")
+    _install(monkeypatch, _FakeScheduler(existing=None), sfn=sfn)
+    out = run_trigger.lambda_handler(_event(method="GET"), None)
+    assert out["statusCode"] == 200
+    body = json.loads(out["body"])                      # would raise if not serializable
+    assert body["execution"]["status"] == "RUNNING"
+    assert isinstance(body["execution"]["started_at"], str)
+    assert body["execution"]["current_step"] == "SwotSeedTask"
+
+
+def test_get_finished_execution_omits_step(_env, monkeypatch):
+    sfn = _FakeSfn(status="SUCCEEDED",
+                   started=dt.datetime(2026, 8, 23, 14, 0, tzinfo=dt.timezone.utc))
+    _install(monkeypatch, _FakeScheduler(existing=None), sfn=sfn)
+    body = json.loads(run_trigger.lambda_handler(_event(method="GET"), None)["body"])
+    assert body["execution"]["status"] == "SUCCEEDED"
+    assert "current_step" not in body["execution"]      # progress only while RUNNING
 
 
 def test_missing_config_returns_500(monkeypatch):

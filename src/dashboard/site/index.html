@@ -117,6 +117,15 @@
   .thesis { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 8px 0 2px;
     padding: 6px 8px; background: var(--panel2); border-radius: 8px; cursor: pointer; }
   .thesis:hover { outline: 1px solid var(--border); }
+  /* Live pipeline-follow chip next to the run button. */
+  .runstatus { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px; margin-left: 8px; white-space: nowrap; }
+  .runstatus:empty { display: none; }
+  .runstatus.run { color: var(--accent); border: 1px solid var(--accent); }
+  .runstatus.run::before { content: "●"; margin-right: 4px; animation: rspulse 1.2s ease-in-out infinite; }
+  @keyframes rspulse { 0%,100% { opacity: .35; } 50% { opacity: 1; } }
+  .runstatus.pend { color: var(--muted); border: 1px solid var(--border); }
+  .runstatus.ok { color: #2e9e6b; border: 1px solid currentColor; }
+  .runstatus.err { color: var(--t-crit); border: 1px solid currentColor; }
   .thesis .tlabel { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); }
   .thesis .tc { font-size: 10.5px; font-weight: 700; padding: 0 5px; border-radius: 5px;
     color: var(--qc); border: 1px solid var(--qc); }
@@ -348,20 +357,32 @@ let DATA = null;
 // "all" = flat list of distinct events (default); "entity" = one summary card per entity.
 const state = { entity: "", lens: "", date: "", alert: false, q: "", view: "all", indOpen: new Set() };
 
-async function boot() {
+function applyFeed(initial) {
+  const checked = DATA.generated_at ? ` · verificado ${fmtDateTime(DATA.generated_at)}` : "";
+  document.getElementById("asof").textContent =
+    `dados de ${fmtDate(DATA.as_of)}${checked} · ${DATA.feed.length} narrativas · janela de ${DATA.dates.length} dias`;
+  renderKpis(); renderLegend();
+  if (initial) populateFilters();   // populateFilters appends options — run once
+  renderIndustryMonitor(); renderLower(); render();
+}
+// Re-fetch feed.json (used at boot AND when a followed run completes) without dropping
+// the user's current filters. Only the first load surfaces the empty-state message.
+async function loadFeed(initial) {
   try {
     const r = await fetch("feed.json", { cache: "no-store" });
     if (!r.ok) throw new Error(r.status);
     DATA = await r.json();
   } catch (e) {
-    document.getElementById("feed").innerHTML =
+    if (initial) document.getElementById("feed").innerHTML =
       `<div class="empty">Ainda não há feed. Ele é publicado após a execução diária do pipeline.<br><small>(${esc(e.message)})</small></div>`;
-    return;
+    return false;
   }
-  const checked = DATA.generated_at ? ` · verificado ${fmtDateTime(DATA.generated_at)}` : "";
-  document.getElementById("asof").textContent =
-    `dados de ${fmtDate(DATA.as_of)}${checked} · ${DATA.feed.length} narrativas · janela de ${DATA.dates.length} dias`;
-  renderKpis(); renderLegend(); populateFilters(); renderIndustryMonitor(); renderLower(); render();
+  applyFeed(initial);
+  return true;
+}
+async function boot() {
+  await loadFeed(true);
+  pollRunStatus();          // start following the pipeline (reflects any in-flight run)
 }
 
 // Status flag per industry module. "sem entidades" (0 tracked) is the primary
@@ -999,6 +1020,65 @@ document.getElementById("viewToggle").onclick = (e) => {
   e.target.textContent = state.view === "entity" ? "Atualizações" : "Por entidade";
   render();
 };
+// Follow the pipeline live: the run endpoint's GET reports the running execution's
+// status + current Step Functions state, so the war room can track a run through its
+// 20 stages and auto-refresh the enhanced feed the moment it publishes.
+const PIPELINE_STEPS = [
+  ["Ingest", "Coleta"], ["FeatureTask", "Feature store"], ["SynthTask", "Síntese"],
+  ["SilenceTask", "Silêncio"], ["LongitudinalTask", "Longitudinal"], ["ComparativeTask", "Comparativo"],
+  ["ThematicTask", "Temático"], ["RegulatoryTask", "Regulatório"], ["CohortTask", "Cohort"],
+  ["SwotTask", "SWOT"], ["SwotReconcileTask", "SWOT · reconciliação"], ["SwotSeedTask", "SWOT · seeding"],
+  ["SwotMaintenanceTask", "SWOT · manutenção"], ["ThreadsTask", "Fios de incidente"],
+  ["BehavioralTask", "Comportamento"], ["RelationalTask", "Relacional"], ["OperativesTask", "Operadores"],
+  ["PredictiveTask", "Preditivo"], ["EcosystemTask", "Ecossistema"], ["FeedTask", "Publicação do feed"],
+];
+const STEP_IDX = Object.fromEntries(PIPELINE_STEPS.map(([k], i) => [k, i]));
+function stepLabel(name) {
+  const i = STEP_IDX[name];
+  return i == null ? (name || "…") : `${PIPELINE_STEPS[i][1]} · ${i + 1}/${PIPELINE_STEPS.length}`;
+}
+function runStatusEl() {
+  let el = document.getElementById("runStatus");
+  if (!el) {
+    el = document.createElement("span");
+    el.id = "runStatus"; el.className = "runstatus";
+    document.getElementById("runBtn").insertAdjacentElement("afterend", el);
+  }
+  return el;
+}
+let lastRunStatus = null, pollTimer = null;
+async function pollRunStatus() {
+  let next = 30000;
+  try {
+    const r = await fetch("/api/run/", { cache: "no-store" });
+    const j = r.ok ? await r.json() : {};
+    const ex = j.execution || {};
+    const chip = runStatusEl();
+    if (ex.status === "RUNNING") {
+      chip.className = "runstatus run";
+      chip.textContent = `Executando · ${stepLabel(ex.current_step)}`;
+      next = 6000;                                    // follow closely while running
+    } else if (j.pending) {
+      chip.className = "runstatus pend";
+      chip.textContent = `Agendado · ${(j.at || "").slice(11, 16)}`;
+      next = 15000;
+    } else if (ex.status === "SUCCEEDED") {
+      chip.className = "runstatus ok"; chip.textContent = "Feed atualizado";
+    } else if (["FAILED", "ABORTED", "TIMED_OUT"].includes(ex.status)) {
+      chip.className = "runstatus err"; chip.textContent = "Execução falhou";
+    } else {
+      chip.textContent = ""; chip.className = "runstatus";
+    }
+    // A run just finished -> pull the fresh enhanced feed once (keeps filters).
+    if (lastRunStatus === "RUNNING" && ex.status && ex.status !== "RUNNING") {
+      if (ex.status === "SUCCEEDED") await loadFeed(false);
+    }
+    lastRunStatus = ex.status || lastRunStatus;
+  } catch { /* transient — just retry */ }
+  clearTimeout(pollTimer);
+  pollTimer = setTimeout(pollRunStatus, next);
+}
+
 // Ad-hoc run: schedules ONE pipeline run at the top of the next hour; repeated
 // clicks are debounced server-side (fixed-name one-shot schedule).
 document.getElementById("runBtn").onclick = async (e) => {
@@ -1010,6 +1090,7 @@ document.getElementById("runBtn").onclick = async (e) => {
     if (r.ok && j.status === "scheduled") {
       const hh = (j.at || "").slice(11, 16);
       btn.textContent = j.debounced ? `Já agendado · ${hh}` : `Agendado · ${hh}`;
+      pollRunStatus();                 // start following immediately
     } else { btn.textContent = "Falhou"; }
   } catch { btn.textContent = "Falhou"; }
   setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 5000);
