@@ -23,6 +23,48 @@ def _resp(status: int, body: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _rebuild_feed() -> bool:
+    """Best-effort async feed rebuild so a decided item drops from the panel."""
+    fb = os.environ.get("ONCA_FEED_BUILDER_NAME")
+    if not fb:
+        return False
+    try:
+        import boto3
+
+        boto3.client("lambda").invoke(FunctionName=fb, InvocationType="Event", Payload=b"{}")
+        return True
+    except Exception as exc:  # pragma: no cover - rebuild is best-effort
+        print(f"Warning: feed rebuild invoke failed: {exc}")
+        return False
+
+
+def _vet_proposal(payload: dict[str, Any]) -> dict[str, Any]:
+    """Approve/reject a queued SWOT or graph proposal (ADR 004 Phase C)."""
+    proposal_id = payload.get("proposal_id")
+    decision = payload.get("decision")
+    queue = payload.get("queue")
+    if not proposal_id or decision not in ("approved", "rejected"):
+        return _resp(400, {"error": "proposal_id and decision (approved|rejected) required"})
+    if queue not in ("swot", "graph"):
+        return _resp(400, {"error": "queue must be 'swot' or 'graph'"})
+
+    bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
+    if not bucket:
+        return _resp(500, {"error": "no digests bucket configured"})
+
+    import boto3
+
+    from src.synth import curate
+
+    result = curate.vet(bucket, proposal_id, decision, queue=queue, s3=boto3.client("s3"))
+    if result.get("status") == "error":
+        return _resp(400, result)
+    if result.get("status") == "noop":
+        return _resp(409, result)
+    result["feed_rebuild"] = _rebuild_feed()
+    return _resp(200, result)
+
+
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # Origin secret: present only when the request came through CloudFront.
     secret = os.environ.get("ONCA_ORIGIN_SECRET")
@@ -37,6 +79,13 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         payload = json.loads(raw)
     except (ValueError, TypeError):
         return _resp(400, {"error": "invalid JSON body"})
+
+    # ADR 004 Phase C: vet a queued proposal (SWOT reconcile/seed or graph). Distinct
+    # from the entity-registry review queue below (that's DynamoDB REVIEW# items; these
+    # are the S3 proposal stores). Approving a SWOT proposal promotes it into the
+    # durable curated-belief store; rejecting suppresses it. Idempotent.
+    if payload.get("proposal_id"):
+        return _vet_proposal(payload)
 
     review_id = payload.get("review_id")
     decision = payload.get("decision")
@@ -59,17 +108,5 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         return _resp(409, {"status": "noop", "detail": "missing or already decided"})
 
     # Republish feed.json (async) so the read-only panel drops the decided item.
-    rebuilt = False
-    fb = os.environ.get("ONCA_FEED_BUILDER_NAME")
-    if fb:
-        try:
-            import boto3
-
-            boto3.client("lambda").invoke(
-                FunctionName=fb, InvocationType="Event", Payload=b"{}"
-            )
-            rebuilt = True
-        except Exception as exc:  # pragma: no cover - rebuild is best-effort
-            print(f"Warning: feed rebuild invoke failed: {exc}")
-
-    return _resp(200, {"status": decision, "review_id": review_id, "feed_rebuild": rebuilt})
+    return _resp(200, {"status": decision, "review_id": review_id,
+                       "feed_rebuild": _rebuild_feed()})

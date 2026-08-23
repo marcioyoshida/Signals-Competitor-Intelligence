@@ -38,6 +38,11 @@ from src.synth.synthesize import ENTITY_LABELS, run_at_now, run_date_today
 
 SWOT_PREFIX = "swot/"
 INDEX_KEY = "swot/index.json"
+# ADR 004 Phase C: durable store of ANALYST-APPROVED bullets + retirements. The
+# belief file is recomputed each run (derived state), so an approved seed/new bullet
+# must live here to survive the rebuild — folded in on every pass, like reinforcements.
+CURATED_KEY = "swot/curated.json"
+CURATED_CONFIDENCE = 0.9  # a human vetted it — high, stable (no staleness decay)
 
 DIMENSIONS = ("S", "W", "O", "T")
 _OPPOSITE = {"S": "W", "W": "S", "O": "T", "T": "O"}
@@ -149,6 +154,7 @@ def _confidence(n_evidence: int, days_since_latest: int | None, window: int) -> 
 def build_beliefs(
     narratives: list[dict[str, Any]], *, as_of: str | None = None, window: int = 90,
     reinforcements: list[dict[str, Any]] | None = None,
+    curated: dict[str, Any] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Pure: narratives -> {entity: belief-file dict}. Deterministic, no I/O.
 
@@ -157,6 +163,13 @@ def build_beliefs(
     dim) bullet as extra evidence, so a corroborating news signal raises that
     bullet's confidence. They attach only to bullets the deterministic axes still
     produce this run (recomputable, self-consistent belief file).
+
+    `curated` (ADR 004 Phase C) is the analyst-vetting outcome: `{"bullets": [...],
+    "retirements": [...]}`. Approved seed/new proposals become durable **curated
+    bullets** appended here as `active` (high, stable confidence, `curated=True`) so
+    a human-approved belief survives the recompute; approved challenges become
+    **retirements** that mark the target bullet `retired`. This is the ONLY path that
+    asserts an interpretive bullet — nothing the LLM produces is active until vetted.
     """
     as_of = as_of or run_date_today()
 
@@ -231,8 +244,40 @@ def build_beliefs(
         }
         per_entity.setdefault(ent, []).append(bullet)
 
+    # Fold analyst-vetted outcomes (Phase C): approved bullets become durable active
+    # beliefs; approved challenges retire the target bullet by id.
+    retired_ids = {r.get("target_bullet_id") for r in (curated or {}).get("retirements", [])
+                   if r.get("target_bullet_id")}
+    for cb in (curated or {}).get("bullets", []):
+        ent = cb.get("entity")
+        dim = cb.get("dimension")
+        if not ent or dim not in DIMENSIONS or not cb.get("text"):
+            continue
+        labels.setdefault(ent, cb.get("label") or str(ent).replace("_", " ").title())
+        ev = [{"id": nid, "date": str(cb.get("date") or "")[:10], "axis": "curated"}
+              for nid in (cb.get("evidence") or [])]
+        per_entity.setdefault(ent, []).append({
+            "id": cb.get("id"),
+            "dimension": dim,
+            "text": str(cb["text"]),
+            "confidence": CURATED_CONFIDENCE,
+            "status": "active",
+            "source_key": cb.get("source_key") or cb.get("id"),
+            "curated": True,
+            "origin": cb.get("origin"),
+            "evidence": ev,
+            "evidence_count": len(ev),
+            "news_evidence": len(ev),
+            "latest": cb.get("approved_at", "")[:10] or (max((e["date"] for e in ev), default="")),
+        })
+
     beliefs: dict[str, dict[str, Any]] = {}
     for ent, bullets in per_entity.items():
+        # A retired-by-analyst bullet is kept for audit but never counts as active.
+        for b in bullets:
+            if b["id"] in retired_ids and b["status"] != "retired":
+                b["status"] = "retired"
+                b["confidence"] = round(b["confidence"] * 0.4, 2)
         # strongest first: active before challenged, then confidence, then recency
         bullets.sort(key=lambda x: (x["status"] == "active", x["confidence"], x["latest"]),
                      reverse=True)
@@ -301,6 +346,16 @@ def _load_reinforcements(bucket: str, *, s3: Any) -> list[dict[str, Any]]:
         return []
 
 
+def _load_curated(bucket: str, *, s3: Any) -> dict[str, Any]:
+    """Read the durable Phase-C curated store (analyst-approved bullets/retirements)."""
+    try:
+        body = s3.get_object(Bucket=bucket, Key=CURATED_KEY)["Body"].read()
+        data = json.loads(body.decode("utf-8"))
+        return {"bullets": data.get("bullets", []), "retirements": data.get("retirements", [])}
+    except Exception:  # pragma: no cover - absent until the first approval
+        return {"bullets": [], "retirements": []}
+
+
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """Rebuild the per-entity SWOT belief store from the durable narrative history."""
     digests_bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
@@ -313,8 +368,9 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     narratives = feature_store.load_history(digests_bucket, window, s3=s3)
     reinforcements = _load_reinforcements(digests_bucket, s3=s3)
+    curated = _load_curated(digests_bucket, s3=s3)
     beliefs = build_beliefs(narratives, as_of=run_date, window=window,
-                            reinforcements=reinforcements)
+                            reinforcements=reinforcements, curated=curated)
 
     published = None
     try:

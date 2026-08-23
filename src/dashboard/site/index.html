@@ -131,6 +131,8 @@
   .swot-props { border-top: 1px dashed var(--border); margin: 0 16px; padding: 10px 0 14px; }
   .swot-props > h4 { margin: 4px 0 8px; font-size: 12px; color: var(--ink2); font-weight: 700; }
   .swot-props .prop { border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px; margin: 6px 0; background: var(--bg); }
+  .pactions { display: flex; gap: 6px; margin-top: 7px; }
+  .pbtn { font-size: 11px; padding: 2px 9px; }
   .swot-props .pk { display: inline-block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; padding: 1px 6px; border-radius: 5px; margin-right: 6px; }
   .swot-props .pk.new { background: rgba(46,158,107,.16); color: #2e9e6b; }
   .swot-props .pk.chal { background: rgba(200,60,60,.14); color: var(--t-crit); }
@@ -558,6 +560,34 @@ async function decideReview(reviewId, decision, btn) {
   }
 }
 
+// ADR 004 Phase C: analyst accept/reject on a queued proposal (SWOT or graph).
+function propActions(pid, queue) {
+  if (!pid) return "";
+  return `<div class="pactions" data-pid="${esc(pid)}" data-queue="${esc(queue)}">
+    <button class="btn pbtn" data-dec="approved">Aprovar</button>
+    <button class="btn pbtn" data-dec="rejected">Rejeitar</button></div>`;
+}
+
+async function decideProposal(pid, queue, decision, btn) {
+  const box = btn.closest(".pactions");
+  box.innerHTML = "Enviando…";
+  try {
+    const r = await fetch("api/review", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ proposal_id: pid, queue, decision }),
+    });
+    if (!r.ok && r.status !== 409) throw new Error("HTTP " + r.status);
+    // optimistic: drop the decided proposal from whichever queue holds it, then
+    // re-render the war-room panel. The server rebuilds feed.json in the background.
+    const drop = x => x.id !== pid;
+    DATA.swot_proposals = (DATA.swot_proposals || []).filter(drop);
+    DATA.graph_proposals = (DATA.graph_proposals || []).filter(drop);
+    renderSwot();
+  } catch (e) {
+    box.innerHTML = `<span class="pmeta">Erro: ${esc(e.message)}</span>`;
+  }
+}
+
 function renderKpis() {
   const k = DATA.kpis;
   const tiles = [
@@ -805,7 +835,8 @@ function renderSwot() {
         const confLabel = p.kind === 'seed' ? 'confiança rascunho' : 'confiança stance';
         const conf = p.kind === 'seed' ? (p.confidence ?? 0) : (p.stance_conf ?? 0);
         return `<div class="prop">${kind} <span class="pt">${esc(p.text)}</span>
-          <span class="pmeta">${confLabel} ${Math.round(conf * 100)}% · ${esc(p.date || "")}</span>${tgt}</div>`;
+          <span class="pmeta">${confLabel} ${Math.round(conf * 100)}% · ${esc(p.date || "")}</span>${tgt}
+          ${propActions(p.id, 'swot')}</div>`;
       }).join("") + `</div>`;
   }
   // ADR 003 Wave 3: pending relationship-graph proposals touching this entity (review-gated).
@@ -817,7 +848,8 @@ function renderSwot() {
       <span class="infer" title="Arestas do grafo de relacionamento (convergência de arena, disputa, controle comum) e nós de operadores (pessoas em papéis públicos). Alto risco jurídico/LGPD — nunca publicadas automaticamente; aguardam curadoria.">grafo · revisão</span></h4>` +
       gp.map(p => `<div class="prop"><span class="pk ${p.kind === 'dispute' ? 'chal' : 'new'}">${RELATION_PT[p.relation] || p.kind}</span>
         <span class="pt">${esc(p.text || "")}</span>
-        <span class="pmeta">${esc((p.themes || []).join(', '))}${p.n_dates ? ` · ${p.n_dates} dias` : ""}</span></div>`).join("") + `</div>`;
+        <span class="pmeta">${esc((p.themes || []).join(', '))}${p.n_dates ? ` · ${p.n_dates} dias` : ""}</span>
+        ${propActions(p.id, 'graph')}</div>`).join("") + `</div>`;
   }
   el.innerHTML = `<div class="swot">
     <h3>Tese competitiva — ${esc(sw.label)}
@@ -933,6 +965,11 @@ document.getElementById("tableToggle").onclick = (e) => {
 document.addEventListener("click", e => {
   const b = e.target.closest(".rbtn");
   if (b) decideReview(b.dataset.id, b.dataset.dec, b);
+  const pb = e.target.closest(".pbtn");
+  if (pb) {
+    const box = pb.closest(".pactions");
+    decideProposal(box.dataset.pid, box.dataset.queue, pb.dataset.dec, pb);
+  }
 });
 
 // Collapse/expand a rail card by clicking its header.

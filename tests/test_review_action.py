@@ -4,8 +4,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import boto3
+
 from src.dashboard import review_action as ra
+from src.synth import curate
 from src.synth import entity_registry as er
+
+
+def _stub_s3(monkeypatch):
+    """No real AWS: the handler builds an s3 client before delegating to curate.vet."""
+    monkeypatch.setattr(boto3, "client", lambda *a, **k: object())
 
 
 def _event(body, headers=None, b64=False):
@@ -74,3 +82,49 @@ def test_industry_approval_passes_payload(monkeypatch):
     })), None)
     assert resp["statusCode"] == 200
     assert seen["payload"] == {"industries": ["fintech"]}
+
+
+# --- Phase C: proposal vetting branch --------------------------------------
+def test_proposal_vetting_dispatches_to_curate(monkeypatch):
+    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.delenv("ONCA_FEED_BUILDER_NAME", raising=False)
+    monkeypatch.setenv("ONCA_DIGESTS_BUCKET", "onca-digests")
+    _stub_s3(monkeypatch)
+    seen = {}
+    monkeypatch.setattr(curate, "vet", lambda bucket, pid, dec, *, queue, s3:
+                        seen.update(bucket=bucket, pid=pid, dec=dec, queue=queue)
+                        or {"status": dec, "proposal_id": pid})
+    resp = ra.lambda_handler(_event(json.dumps({
+        "proposal_id": "seed:nubank:S:abc", "queue": "swot", "decision": "approved"})), None)
+    assert resp["statusCode"] == 200
+    assert seen == {"bucket": "onca-digests", "pid": "seed:nubank:S:abc",
+                    "dec": "approved", "queue": "swot"}
+    assert json.loads(resp["body"])["status"] == "approved"
+
+
+def test_proposal_vetting_bad_input(monkeypatch):
+    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_DIGESTS_BUCKET", "onca-digests")
+    # missing queue
+    assert ra.lambda_handler(_event(json.dumps({
+        "proposal_id": "x", "decision": "approved"})), None)["statusCode"] == 400
+    # bad decision
+    assert ra.lambda_handler(_event(json.dumps({
+        "proposal_id": "x", "queue": "swot", "decision": "maybe"})), None)["statusCode"] == 400
+
+
+def test_proposal_vetting_noop_returns_409(monkeypatch):
+    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_DIGESTS_BUCKET", "onca-digests")
+    _stub_s3(monkeypatch)
+    monkeypatch.setattr(curate, "vet", lambda *a, **k: {"status": "noop", "detail": "missing"})
+    resp = ra.lambda_handler(_event(json.dumps({
+        "proposal_id": "ghost", "queue": "swot", "decision": "approved"})), None)
+    assert resp["statusCode"] == 409
+
+
+def test_proposal_vetting_honors_origin_secret(monkeypatch):
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", "s3cr3t")
+    resp = ra.lambda_handler(_event(json.dumps({
+        "proposal_id": "x", "queue": "swot", "decision": "approved"})), None)
+    assert resp["statusCode"] == 403

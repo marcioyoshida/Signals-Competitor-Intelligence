@@ -875,11 +875,13 @@ class OncaPrototypeStack(Stack):
             environment={
                 "PYTHONPATH": "/var/task",
                 "ONCA_ENTITIES_TABLE": entities_table.table_name,
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
                 "ONCA_FEED_BUILDER_NAME": feed_fn.function_name,
                 "ONCA_ORIGIN_SECRET": origin_secret,
             },
         )
         entities_table.grant_read_write_data(review_fn)
+        digests_bucket.grant_read_write(review_fn)  # Phase C: vet SWOT/graph proposal stores
         feed_fn.grant_invoke(review_fn)
         review_url = review_fn.add_function_url(
             auth_type=lambda_.FunctionUrlAuthType.NONE

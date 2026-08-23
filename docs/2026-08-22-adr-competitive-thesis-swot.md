@@ -4,10 +4,27 @@ Status: **Accepted (2026-08-22)** — step 1 (Comparative axis) SHIPPED 2026-08-
 **step 2 (SWOT belief store v1, deterministic feeders) SHIPPED 2026-08-23**;
 **step 3 (reconcile-against-belief — LLM stance + embeddings) SHIPPED & VERIFIED
 LIVE 2026-08-23 (`25d88f1`)**; **step 4 (cold-start seeding — LLM-drafted,
-analyst-vetted) SHIPPED 2026-08-23**. Extends
-[ADR 003](2026-08-19-adr-narrative-dimensions.md). The vetting UI (accept/reject
-proposals) is gated on Phase C; every proposal *queue* (reconcile + seed) ships now,
-read-only.
+analyst-vetted) SHIPPED 2026-08-23**; **Phase C vetting UI (analyst accept/reject →
+promote/suppress) SHIPPED 2026-08-23**. Extends
+[ADR 003](2026-08-19-adr-narrative-dimensions.md). Every proposal queue (reconcile +
+seed + relationship-graph) is now actionable from the war room.
+
+> **Phase C built (2026-08-23).** The reconcile (step 3), seed (step 4), and graph
+> (ADR-003 Wave 3) producers all emit review-gated proposals into durable S3 stores.
+> Phase C makes them **actionable**: the war-room proposal panels grew Aprovar/Rejeitar
+> buttons that POST to the existing CloudFront-fronted vetting endpoint (origin-secret
+> gated, same as the entity-registry review queue). The decision layer is
+> `src/synth/curate.py` (`vet_swot`/`vet_graph`, idempotent): every decision flips
+> `status` in the proposal's own store (so the panel drops it) and, for an **approved
+> SWOT new/seed**, PROMOTES the claim into a durable curated-bullet store
+> (`swot/curated.json`) that `swot_store.build_beliefs(curated=…)` folds into every
+> rebuild — the key mechanic, since the belief file is recomputed each run, so an
+> approved belief must live in a durable store to SURVIVE the recompute (mirrors how
+> reinforcements already fold in). An **approved challenge** records a retirement that
+> marks the target bullet `retired` (kept for audit, dropped from active counts).
+> Graph approvals record durable status (the producers' merge preserves it). This is
+> the ONLY path that turns an interpretive LLM claim into an asserted (`active`) belief
+> — nothing auto-applies, exactly as the ADR's precision-first stance requires.
 
 > **Step 4 built (2026-08-23).** `src/synth/swot_seed.py` (`OncaSwotSeed` Lambda,
 > wired `… → swot → swot_reconcile → swot_seed → threads → feed`) solves the ADR's
