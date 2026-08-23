@@ -110,6 +110,38 @@ licensed aggregator (People Data Labs / Explorium), never scraped.
   `docs/2026-08-14-phase3-dashboard-plan.md`. `threat_score` is still a
   placeholder heuristic (labeled "estimated" in the UI) — real threat
   scoring is separate future work. Remaining Phase 3: SNS/email alerts.
+- **Synthesis-layer evolution (on `main` 2026-08-23)** — narratives grew
+  from cross-sectional to longitudinal/threaded/relational, and gained a
+  per-entity competitive thesis. Pipeline order is now
+  `ingest → synth → swot → swot_reconcile → swot_seed → threads → feed`.
+  - **ADR-003 (fully built 2026-08-23)** — narrative dimensions: multi-axis
+    synthesis across a `(subject_type, subject_key, axis)` design space.
+    Shipped Wave 1 (comparative/peer-cohort, thematic/sector,
+    regulatory-lifecycle/deadline, cohort/vintage), Wave 2 (incident
+    threading + shared thread store, reg-lifecycle thread, behavioral/
+    campaign), Wave 3 (relational graph + operatives/person layer,
+    review-gated), and Opportunistic axes (predictive time-gated, ecosystem
+    source-gated). See `docs/2026-08-19-adr-narrative-dimensions.md`.
+  - **ADR-004 (built 2026-08-23)** — per-entity SWOT belief store that
+    narratives reinforce/contradict. `src/synth/swot_store.py` (beliefs
+    rebuilt each run from deterministic feeders + durable curated store),
+    `swot_reconcile.py` (LLM stance + embeddings), `swot_seed.py`
+    (cold-start LLM draft, evidence-cited, proposed-only), plus belief
+    maintenance (drift/staleness re-review). Precision-first: no un-vetted
+    bullet is ever `active`. See
+    `docs/2026-08-22-adr-competitive-thesis-swot.md`.
+  - **Analyst vetting UI (Phase C, 2026-08-23)** — war-room proposal panels
+    (SWOT reconcile/seed + relationship graph) gained Aprovar/Rejeitar
+    buttons POSTing to the CloudFront-fronted, origin-secret-gated vetting
+    endpoint; decisions in `src/synth/curate.py` promote approved claims
+    into durable stores so they survive each rebuild.
+  - **Operatives / person-graph (2026-08-23)** — watchlist QSA ingestion +
+    masked-CPF control cohorting; curated CNPJ-roots registry widened
+    QSA/person-graph coverage 3→25. See
+    `docs/2026-08-23-story-operatives-ingestion.md`.
+  - Living backlog: `docs/2026-08-16-roadmap.md`. Source lenses added
+    2026-08-16: CVM/B3 material facts (`fatos`), DOU (SUSEP/CADE/PREVIC),
+    trade press/news RSS.
 - **Phase 4** — design partners, then Marketplace SaaS listing
 
 ## Conventions
