@@ -274,6 +274,7 @@ def _project_item(n: dict[str, Any]) -> dict[str, Any]:
         "status": n.get("status"),
         "n_developments": n.get("n_developments"),
         "current_stage": n.get("current_stage"),
+        "pattern": n.get("pattern"),  # behavioral axis: drumbeat / multi_front
         "entities": n.get("entities") or [],
         "lenses": n.get("lenses") or [],
         "is_alert": bool(n.get("is_alert")),

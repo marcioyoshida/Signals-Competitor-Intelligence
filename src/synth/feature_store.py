@@ -33,7 +33,8 @@ FEATURES_KEY = "features/latest.json"
 # days_since_last and cadence, a feedback loop. Freshness/cadence are built from
 # activity narratives only.
 DERIVED_AXES = frozenset(
-    {"silence", "longitudinal", "comparative", "thematic", "regulatory", "cohort"}
+    {"silence", "longitudinal", "comparative", "thematic", "regulatory", "cohort",
+     "behavioral"}
 )
 
 # Noise floor for the break z-score denominator: threat scores are 0..1, so a

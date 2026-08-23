@@ -662,6 +662,28 @@ class OncaPrototypeStack(Stack):
         )
         digests_bucket.grant_read_write(threads_fn)
 
+        # Behavioral detector (ADR 003 Wave 2): matches an entity's own activity against
+        # pattern templates (drumbeat = regular cadence; multi-front = breadth of event
+        # types) and writes derived behavioral-signature cards. Needs the entities table
+        # for the industry map on the feature recompute.
+        behavioral_fn = lambda_.Function(
+            self,
+            "OncaBehavioral",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.synth.behavioral.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.minutes(5),
+            memory_size=512,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+                "ONCA_ENTITIES_TABLE": entities_table.table_name,
+                "ONCA_FEATURE_WINDOW_DAYS": "90",
+            },
+        )
+        digests_bucket.grant_read_write(behavioral_fn)
+        entities_table.grant_read_data(behavioral_fn)
+
         # Feed builder: aggregate recent narratives -> feed.json in the site bucket.
         feed_fn = lambda_.Function(
             self,
@@ -983,6 +1005,19 @@ class OncaPrototypeStack(Stack):
             interval=Duration.seconds(15),
             backoff_rate=2.0,
         )
+        behavioral_task = sfn_tasks.LambdaInvoke(
+            self,
+            "BehavioralTask",
+            lambda_function=behavioral_fn,
+            payload=sfn.TaskInput.from_object({}),
+            result_path="$.behavioral",
+        )
+        behavioral_task.add_retry(
+            errors=["States.ALL"],
+            max_attempts=2,
+            interval=Duration.seconds(15),
+            backoff_rate=2.0,
+        )
         feed_task = sfn_tasks.LambdaInvoke(
             self,
             "FeedTask",
@@ -1011,6 +1046,7 @@ class OncaPrototypeStack(Stack):
                 .next(cohort_task)
                 .next(swot_task)
                 .next(threads_task)
+                .next(behavioral_task)
                 .next(feed_task)
             ),
             # Budget for a 15-min ingest (plus a retry), then synth, then feed.
