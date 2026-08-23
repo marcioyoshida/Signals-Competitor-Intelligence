@@ -538,6 +538,27 @@ class OncaPrototypeStack(Stack):
         digests_bucket.grant_read_write(longitudinal_fn)
         entities_table.grant_read_data(longitudinal_fn)
 
+        # Comparative detector (ADR 003 Wave 1 / ADR 004 SWOT feeder): recomputes
+        # fresh features and writes derived "vs. its industry peers" narratives, each
+        # carrying a swot_hint for the belief store. Same access as longitudinal.
+        comparative_fn = lambda_.Function(
+            self,
+            "OncaComparative",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.synth.comparative.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.minutes(5),
+            memory_size=512,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+                "ONCA_ENTITIES_TABLE": entities_table.table_name,
+                "ONCA_FEATURE_WINDOW_DAYS": "90",
+            },
+        )
+        digests_bucket.grant_read_write(comparative_fn)
+        entities_table.grant_read_data(comparative_fn)
+
         # Feed builder: aggregate recent narratives -> feed.json in the site bucket.
         feed_fn = lambda_.Function(
             self,
@@ -781,6 +802,19 @@ class OncaPrototypeStack(Stack):
             interval=Duration.seconds(15),
             backoff_rate=2.0,
         )
+        comparative_task = sfn_tasks.LambdaInvoke(
+            self,
+            "ComparativeTask",
+            lambda_function=comparative_fn,
+            payload=sfn.TaskInput.from_object({}),
+            result_path="$.comparative",
+        )
+        comparative_task.add_retry(
+            errors=["States.ALL"],
+            max_attempts=2,
+            interval=Duration.seconds(15),
+            backoff_rate=2.0,
+        )
         feed_task = sfn_tasks.LambdaInvoke(
             self,
             "FeedTask",
@@ -803,6 +837,7 @@ class OncaPrototypeStack(Stack):
                 .next(synth_task)
                 .next(silence_task)
                 .next(longitudinal_task)
+                .next(comparative_task)
                 .next(feed_task)
             ),
             # Budget for a 15-min ingest (plus a retry), then synth, then feed.

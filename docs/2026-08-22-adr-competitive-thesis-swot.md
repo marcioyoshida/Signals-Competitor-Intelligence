@@ -1,7 +1,8 @@
 # ADR 004 — Competitive thesis: a per-entity SWOT belief store that narratives reinforce or contradict
 
-Status: **Proposed** (2026-08-22). Extends [ADR 003](2026-08-19-adr-narrative-dimensions.md).
-No code yet — this records the model, how it fits ADR 003, the design, and the risks.
+Status: **Accepted (2026-08-22)** — the model and phased build are committed; **step 1
+(Comparative axis) is in progress**. Extends [ADR 003](2026-08-19-adr-narrative-dimensions.md).
+Steps 2–4 (the SWOT store, LLM reconcile) remain design-only until their turn.
 
 ## Context — where this came from
 
@@ -99,11 +100,14 @@ step — they map to a dimension by rule, attaching as structured evidence.
 
 ## Decision (proposed) & sequencing
 
-Record as **proposed**; do not build the full store yet. Phased path that de-risks:
+**Committed** to the phased path that de-risks; **step 1 building now**:
 
-1. **Ship the Comparative axis first** (already the next ADR-003 item) — standalone
-   value *and* the first structured SWOT feeder. Emit its output in a
-   SWOT-mappable shape (dimension + sign + evidence) so it slots in later.
+1. **Ship the Comparative axis first — IN PROGRESS 2026-08-22** (already the next
+   ADR-003 item) — standalone value *and* the first structured SWOT feeder. It emits
+   a **`swot_hint`** on each card (`dimension: S|W|O|T`, `sign: +/−`, `evidence`) so
+   the belief store can consume it verbatim in step 2 — a peer *outperformance* reads
+   as a competitor **Strength** (a Threat to our client); *underperformance* as a
+   **Weakness** (an Opportunity). No LLM: the sign comes from the peer-z direction.
 2. **SWOT store v1 — read-mostly, deterministic feeders only.** Build
    `swot/{entity}.json` + embeddings; let the deterministic axes (comparative,
    longitudinal, silence) attach as evidence. No LLM stance yet. Surfaces a

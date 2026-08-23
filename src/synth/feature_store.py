@@ -32,7 +32,7 @@ FEATURES_KEY = "features/latest.json"
 # emitting a "went quiet" silence card would itself reset the entity's
 # days_since_last and cadence, a feedback loop. Freshness/cadence are built from
 # activity narratives only.
-DERIVED_AXES = frozenset({"silence", "longitudinal"})
+DERIVED_AXES = frozenset({"silence", "longitudinal", "comparative"})
 
 # Noise floor for the break z-score denominator: threat scores are 0..1, so a
 # baseline std below this is treated as ~0.05 to avoid a div-by-zero (a flat
@@ -190,7 +190,10 @@ def build_features(
             c["score_max"] = max(c["score_max"], e["score_max"])
     for slug, c in cohorts.items():
         means = c.pop("_means")
-        c["score_mean"] = round(sum(means) / len(means), 4) if means else 0.0
+        c_mean, c_std = _mean_std(means) if means else (0.0, 0.0)
+        c["score_mean"] = round(c_mean, 4)
+        # std of member means — the denominator for a peer-outlier z (comparative axis).
+        c["score_std"] = round(c_std, 4)
 
     return {
         "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
