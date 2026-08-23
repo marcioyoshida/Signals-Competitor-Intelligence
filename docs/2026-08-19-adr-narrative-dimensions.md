@@ -1,6 +1,10 @@
 # ADR 003 — Narrative dimensions: longitudinal, threaded, and relational synthesis
 
-- Status: **Proposed** (2026-08-19)
+- Status: **Accepted — fully built (2026-08-23)**. All waves shipped: Wave 0
+  (feature store) → Wave 1 (6 axes) → Wave 2 (threaded/reg-lifecycle/behavioral) →
+  Wave 3 (relational + operatives, review-gated) → Opportunistic (predictive
+  time-gated, ecosystem source-gated). See the sequencing section for the per-axis
+  status and the live pipeline order.
 - Builds on [ADR 001](2026-08-17-adr-entities-registry.md) (entity identity /
   registry) and [ADR 002](2026-08-18-adr-commercial-multitenancy.md) (industry
   modules / entitlement). Independent of Phase C (Cognito) — this is a
@@ -355,10 +359,34 @@ S3 store, registry + industries, review queue, threat scoring, ~14-day window).
   multi-front (5 fronts), BTG/BB multi-front, bb_seguridade drumbeat.
   Next: Wave 3 (relational/operatives — graph + legal/LGPD risk, review-gated) or
   ADR 004 step 3 (LLM reconcile-against-belief + embeddings, gated on Phase C).
-- **Wave 3 — graph + legal risk, review-gated from day one.** *Relational*, then
-  *Operatives* (beachhead "who's behind this SCD" → full network).
-- **Opportunistic / gated.** *Predictive* when history matures; *Ecosystem* if a
-  dependency-data source appears.
+- **Wave 3 — graph + legal risk, review-gated from day one. ✅ SHIPPED 2026-08-23.**
+  **Relational** (`src/synth/relational.py`, `OncaRelational`) — the relationship
+  graph: typed entity-pair edges from the durable narratives — **co_mention** (factual)
+  → labeled card; **convergence** (persistent niche-theme co-membership) & **dispute**
+  (litigation/investigation naming both) → **PROPOSED only** into a review queue
+  (`graph/relational_proposals.json`), never auto-published (defamation guardrail,
+  Decision 5). Full graph → `graph/edges.json`. Verified live: 19 convergence edges
+  detected, 0 proposals yet (needs ≥2 distinct dates of co-membership — thematic
+  history is one day old; accrues daily). **Operatives** (`src/synth/operatives.py`,
+  `OncaOperatives`) — promotes public-record person names (QSA sócios, DOU parties)
+  into review-gated person nodes + role edges + a `common_control` edge when one person
+  bridges ≥2 tracked entities; LGPD-scoped (Decision 6): public professional roles only,
+  no CPF, name+role+document required, every node pending review, institutional names
+  excluded. **Source-gated** live (the ingestion carries no person names yet — verified
+  against the digest); activates when they land, no code change.
+- **Opportunistic / gated. ✅ SHIPPED 2026-08-23 (as gated mechanisms).**
+  **Predictive** (`src/synth/predictive.py`, `OncaPredictive`) — deterministic
+  precursor rules (momentum_buildup, launch_precursor) behind a **maturity gate**
+  (history span ≥120d + explicitly enabled); a forecast is heavily labeled inference
+  ("estimativa, NÃO previsão validada"). Live: `time_gated` (depth 35d; rules would fire
+  2 precursors once mature). **Ecosystem** (`src/synth/ecosystem.py`, `OncaEcosystem`) —
+  pure contagion over directed dependency edges + a dependency-graph builder (external
+  source via `ONCA_ECOSYSTEM_SOURCE`, plus a weak admin/manager proxy); emits an exposure
+  card only on a hub incident. Live: `source_gated`. Both accrue/activate with no code
+  change when history matures / a dependency source is wired — the ADR's gating exactly.
 
-Independent of Phase C. Nothing here is implemented yet — this ADR records the
-model, the classification, and the open decisions for a later build.
+Independent of Phase C. **The full axis taxonomy is now built** — every row of the
+table ships (the highest-value/highest-risk axes review-gated; the input-gated axes as
+honest, tested, self-activating mechanisms). Pipeline order: ingest→feature→synth→
+silence→longitudinal→comparative→thematic→regulatory→cohort→swot→swot_reconcile→
+threads→behavioral→relational→operatives→predictive→ecosystem→feed.
