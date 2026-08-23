@@ -333,8 +333,28 @@ S3 store, registry + industries, review queue, threat scoring, ~14-day window).
   Silence, Thematic, Regulatory-lifecycle, Cohort/vintage). Next: Wave 2
   (threaded/incident, full regulatory thread, behavioral) or ADR 004 step 2 (the SWOT
   belief store, which the O/T/S/W `swot_hint`s from these axes now feed).
-- **Wave 2 — new stores, moderate risk.** *Threaded / incident* (event identity +
-  thread store); the full *Regulatory-lifecycle* thread; *Behavioral*.
+- **Wave 2 — new stores, moderate risk. ✅ COMPLETE 2026-08-23.**
+  **Threaded / incident ✅** (`src/synth/threads.py`, `OncaThreads` Lambda) — the shared
+  **thread store**: developments are threaded into living incident docs keyed by
+  `(entity, event_type)` (the deterministic v1 answer to event identity) with an
+  `open → developing → resolved` lifecycle (ADR Shift 1's "never prune, but *close*"),
+  rebuilt each run into `threads/{id}.json` + `threads/index.json` (= emit-on-update).
+  Gated to ≥2 developments across ≥2 dates; grounded, labeled inference; merged into the
+  feed without double-counting the daily developments (verified live: Itaú US
+  banco-múltiplo saga = 16 developments, developing).
+  **Full Regulatory-lifecycle thread ✅** (extends `regulatory.py`, same Lambda) — each
+  instrument mention is stage-classified (consulta → publicação → vigência →
+  fiscalização) and threaded per instrument into a lifecycle with progression + current
+  stage; `reg_lifecycle/index.json`. **Data-gated** today (instruments rarely recur
+  across dates in current ingestion — 1 live: Resolução CMN 533); scales when richer
+  regulatory ingestion lands.
+  **Behavioral / campaign ✅** (`src/synth/behavioral.py`, `OncaBehavioral` Lambda) — the
+  entity's activity *signature* via pattern templates, kept cross-cutting so it never
+  duplicates an incident: **drumbeat** (regular cadence, from the feature store) +
+  **multi-front** (breadth across ≥3 event types); `swot_hint` S. Live: Bradesco
+  multi-front (5 fronts), BTG/BB multi-front, bb_seguridade drumbeat.
+  Next: Wave 3 (relational/operatives — graph + legal/LGPD risk, review-gated) or
+  ADR 004 step 3 (LLM reconcile-against-belief + embeddings, gated on Phase C).
 - **Wave 3 — graph + legal risk, review-gated from day one.** *Relational*, then
   *Operatives* (beachhead "who's behind this SCD" → full network).
 - **Opportunistic / gated.** *Predictive* when history matures; *Ecosystem* if a
