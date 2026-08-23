@@ -1,7 +1,36 @@
 # Story — Operatives / person-graph ingestion (+ added-coverage eligibility)
 
-Status: **Proposed (2026-08-23)**. Builds on [ADR 003](2026-08-19-adr-narrative-dimensions.md)
-Wave 3 (the operatives axis) and the ingestion reference [DATA_SOURCES.md](DATA_SOURCES.md).
+Status: **P1 SHIPPED (2026-08-23)**; P2–P4 proposed. Builds on
+[ADR 003](2026-08-19-adr-narrative-dimensions.md) Wave 3 (the operatives axis) and the
+ingestion reference [DATA_SOURCES.md](DATA_SOURCES.md).
+
+> **P1 built (2026-08-23).** `src/ingest/watchlist_qsa.py` (`OncaWatchlistQsa` Lambda,
+> wired `… → relational → watchlist_qsa → operatives → …`) fetches each tracked entity's
+> QSA (BrasilAPI, by the registry's CNPJ roots) and writes `graph/watchlist_qsa.json`
+> — TTL-gated (30d) + bounded (10 lookups/run, so a cold start spreads gently). Only PF
+> sócios (`identificador_de_socio == 2`), control-role-first, capped per entity. It emits
+> the **masked** CPF only (`***XXXXXX**`) — `_safe_mask` re-masks defensively so a full
+> CPF can never be persisted. `operatives` now reads that slice and keys persons by
+> **(name, masked-CPF)**, which (a) separates homonyms — two different "João Silva" no
+> longer merge into a false common-control edge — and (b) grounds a genuine **control
+> cohort** (same name + same masked CPF across ≥2 entities) as a resolved fact, not a
+> guess. Full CPF is never fetched, reconstructed (6 of 11 digits), or stored; everything
+> stays review-gated. This takes operatives out of `source_gated` for the real watchlist.
+>
+> The review queue is **gated to control-cohort-relevant people** — a control-role sócio
+> or someone bridging ≥2 entities — so a big bank's whole statutory board doesn't flood
+> it; the full persons graph still resolves everyone (for cohort math). `_merge` is now
+> **self-healing**: a pending proposal the tightened gate no longer produces is dropped,
+> while human-decided ones persist.
+>
+> **Live (2026-08-23):** operatives is now `ok`, not `source_gated`. Coverage finding —
+> only **3** tracked entities (cielo/getnet/rede) currently carry a **CNPJ root** in the
+> registry, so QSA fetched for those 3 (41 sócios; masked docs verified, no full CPF).
+> They share no individual controller (subsidiaries of different banks) → 0 common-control,
+> honestly. The gated queue holds **1** control-role person. **Follow-up:** populate
+> `cnpj_roots` on the curated entities (a registry-curation task) to widen QSA coverage —
+> that is the real lever on person-graph reach, and where cross-entity control cohorts
+> will actually surface (shared sócios among smaller fintechs).
 
 ## The story
 

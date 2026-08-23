@@ -798,6 +798,32 @@ class OncaPrototypeStack(Stack):
         # person names (QSA sócios, DOU parties) into review-gated person nodes + role
         # edges, LGPD-scoped (no CPF, public professional roles only). Source-gated
         # today (ingestion carries no person names yet); activates when they land.
+        # P1 — watchlist QSA enrichment (the person-layer INPUT for operatives): fetches
+        # the tracked entities' quadro de sócios (BrasilAPI) and writes
+        # graph/watchlist_qsa.json with MASKED docs only (never a full CPF). TTL-gated +
+        # bounded per run (QSA is slow-changing). Runs BEFORE operatives so the person
+        # axis leaves source_gated. Needs registry read (CNPJ roots) + bucket + egress.
+        qsa_fn = lambda_.Function(
+            self,
+            "OncaWatchlistQsa",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.ingest.watchlist_qsa.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.minutes(5),
+            memory_size=256,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+                "ONCA_ENTITIES_TABLE": entities_table.table_name,
+                "ONCA_QSA_ENABLED": "1",
+                "ONCA_QSA_TTL_DAYS": "30",
+                "ONCA_QSA_MAX_LOOKUPS": "10",
+                "ONCA_QSA_MAX_PERSONS": "20",
+            },
+        )
+        digests_bucket.grant_read_write(qsa_fn)
+        entities_table.grant_read_data(qsa_fn)
+
         operatives_fn = lambda_.Function(
             self,
             "OncaOperatives",
@@ -1244,6 +1270,19 @@ class OncaPrototypeStack(Stack):
             interval=Duration.seconds(15),
             backoff_rate=2.0,
         )
+        qsa_task = sfn_tasks.LambdaInvoke(
+            self,
+            "WatchlistQsaTask",
+            lambda_function=qsa_fn,
+            payload=sfn.TaskInput.from_object({}),
+            result_path="$.watchlist_qsa",
+        )
+        qsa_task.add_retry(
+            errors=["States.ALL"],
+            max_attempts=2,
+            interval=Duration.seconds(15),
+            backoff_rate=2.0,
+        )
         operatives_task = sfn_tasks.LambdaInvoke(
             self,
             "OperativesTask",
@@ -1316,6 +1355,7 @@ class OncaPrototypeStack(Stack):
                 .next(threads_task)
                 .next(behavioral_task)
                 .next(relational_task)
+                .next(qsa_task)
                 .next(operatives_task)
                 .next(predictive_task)
                 .next(ecosystem_task)

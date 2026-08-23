@@ -13,7 +13,12 @@ Person narratives are about *named humans*, so:
 - **Scope is strictly public professional roles from public records** (QSA, CVM, DOU,
   court dockets) — a **public figure acting in a corporate capacity**, never a private
   individual incidentally named, never private-life inference.
-- **No CPF is stored or keyed on** (protected/masked, unlike the public CNPJ).
+- **No full CPF is ever stored or keyed on.** The *public masked* CPF that Receita
+  itself publishes in the QSA (`***XXXXXX**`, only the middle six digits) is used
+  strictly as a **homonym-disambiguation / control-cohort key** — it separates two
+  different "João Silva" and cohorts genuine same-person control across entities, which
+  a name alone cannot. It is shown masked for vetting and never reconstructed into a
+  full CPF (P1 ingestion force-masks defensively; see `ingest/watchlist_qsa.py`).
 - Person resolution is **more conservative than entity resolution**: a node is only
   minted with **name + role + affiliating document** (all three), and **every person
   node is review-gated from day one** — nothing is ever auto-asserted. A false "person
@@ -105,11 +110,22 @@ def _document_of(signal: dict[str, Any]) -> str | None:
     return None
 
 
-def iter_person_roles(signals: list[dict[str, Any]]) -> Iterator[tuple[str, str, str | None, str]]:
-    """Yield (person_name, role, affiliating_entity, document) from public-record fields.
+def _mask_digits(doc_mask: str | None) -> str:
+    """Public middle-six digits of a masked CPF — the disambiguation key (never full)."""
+    m = re.search(r"\*+\s*(\d{6})\s*\*+", str(doc_mask or ""))
+    return m.group(1) if m else ""
+
+
+def iter_person_roles(
+    signals: list[dict[str, Any]],
+) -> Iterator[tuple[str, str, str | None, str, str]]:
+    """Yield (person_name, role, affiliating_entity, document, doc_mask) from
+    public-record fields.
 
     Only fields in PERSON_ROLE_FIELDS, only strings that look like a human name, only
-    with an affiliating document. This is the whole LGPD surface — kept narrow.
+    with an affiliating document. A dict item may carry its own `role` (e.g. a QSA
+    sócio's qualificação) and a masked `doc_mask` (public partial CPF); both override
+    the field defaults. This is the whole LGPD surface — kept narrow.
     """
     for sig in signals:
         if not isinstance(sig, dict):
@@ -124,10 +140,13 @@ def iter_person_roles(signals: list[dict[str, Any]]) -> Iterator[tuple[str, str,
                 continue
             names = val if isinstance(val, list) else [val]
             for nm in names:
+                item_role, mask = role, ""
                 if isinstance(nm, dict):
+                    item_role = str(nm.get("role") or role)
+                    mask = _mask_digits(nm.get("doc_mask"))
                     nm = nm.get("name") or nm.get("nome")
                 if nm and _is_person_name(str(nm)):
-                    yield str(nm).strip(), role, ent, doc
+                    yield str(nm).strip(), item_role, ent, doc, mask
 
 
 def resolve_persons(signals: list[dict[str, Any]], *, run_date: str) -> dict[str, Any]:
@@ -138,14 +157,17 @@ def resolve_persons(signals: list[dict[str, Any]], *, run_date: str) -> dict[str
     silently. A person affiliated (as controller/sócio) to >=2 tracked entities yields
     a **common_control** edge proposal that grounds a relational edge as a sourced fact.
     """
-    # normalized-name -> aggregate
-    acc: dict[str, dict[str, Any]] = {}
-    for name, role, ent, doc in iter_person_roles(signals):
-        key = _norm_name(name)
-        if not key:
+    # (normalized-name, masked-CPF-digits) -> aggregate. The masked-CPF component
+    # separates homonyms and cohorts genuine same-person control; when absent, the key
+    # falls back to name alone (and such a node is flagged ambiguous below).
+    acc: dict[tuple[str, str], dict[str, Any]] = {}
+    for name, role, ent, doc, mask in iter_person_roles(signals):
+        nkey = _norm_name(name)
+        if not nkey:
             continue
-        p = acc.setdefault(key, {"key": key, "display": name.strip(), "roles": set(),
-                                 "entities": set(), "documents": set()})
+        key = (nkey, mask)
+        p = acc.setdefault(key, {"nkey": nkey, "mask": mask, "display": name.strip(),
+                                 "roles": set(), "entities": set(), "documents": set()})
         p["roles"].add(role)
         if ent:
             p["entities"].add(ent)
@@ -156,53 +178,94 @@ def resolve_persons(signals: list[dict[str, Any]], *, run_date: str) -> dict[str
     control_edges: list[dict[str, Any]] = []
     _controllers = {"controlador", "sócio"}
 
-    for key, p in sorted(acc.items()):
+    for (nkey, mask), p in sorted(acc.items()):
         ents = sorted(p["entities"])
         roles = sorted(p["roles"])
         docs = sorted(p["documents"])
-        ambiguous = len(docs) > 1 and len(ents) != 1  # possible homonym / needs care
+        # Ambiguous only when we LACK the disambiguator: no masked CPF, yet the same
+        # name spans multiple documents/entities (possible homonym). A shared masked
+        # CPF across entities is a resolved cohort, not an ambiguity.
+        ambiguous = not mask and len(docs) > 1 and len(ents) != 1
+        doc_mask = f"***{mask}**" if mask else None
         node = {
-            "id": f"person:{key.lower().replace(' ', '_')}",
+            "id": f"person:{nkey.lower().replace(' ', '_')}" + (f":{mask}" if mask else ""),
             "display": p["display"],
             "roles": roles,
             "entities": ents,
             "n_documents": len(docs),
+            "doc_mask": doc_mask,          # public masked CPF (partial) — never full
             "ambiguous": ambiguous,
             "status": "pending",           # ALWAYS review-gated — never auto-asserted
             "lgpd_scope": "public_professional_role",
             "created": run_date,
         }
-        persons.append(node)
-        proposals.append({
-            "id": f"person:{node['id']}",
-            "kind": "person",
-            "person": p["display"],
-            "roles": roles,
-            "entities": ents,
-            "ambiguous": ambiguous,
-            "text": (f"{p['display']} — {', '.join(roles)}"
-                     + (f" de {', '.join(ents)}" if ents else "")
-                     + ". Papel profissional público; requer curadoria (LGPD)."),
-            "evidence_ids": docs[:12],
-            "status": "pending",
-            "created": run_date,
-        })
-        # person behind >=2 tracked entities in a control role -> common_control edge
+        persons.append(node)  # the full resolved graph knows everyone (cohort math)
+        # Relevance gate for the REVIEW QUEUE: only surface control-cohort-relevant
+        # people — someone in a control role (sócio/controlador) OR bridging >=2 tracked
+        # entities. A lone statutory director of one entity is resolved but not queued,
+        # so the analyst sees control signals, not every name on a big bank's board.
+        control = bool(p["roles"] & _controllers)
+        bridges = len(ents) >= 2
+        if control or bridges:
+            doc_hint = f" (doc {doc_mask})" if doc_mask else ""
+            proposals.append({
+                "id": f"person:{node['id']}",
+                "kind": "person",
+                "person": p["display"],
+                "roles": roles,
+                "entities": ents,
+                "doc_mask": doc_mask,
+                "ambiguous": ambiguous,
+                "text": (f"{p['display']}{doc_hint} — {', '.join(roles)}"
+                         + (f" de {', '.join(ents)}" if ents else "")
+                         + ". Papel profissional público; requer curadoria (LGPD)."),
+                "evidence_ids": docs[:12],
+                "status": "pending",
+                "created": run_date,
+            })
+        # person behind >=2 tracked entities in a control role -> common_control edge.
+        # A shared masked CPF makes this a resolved control cohort, not a homonym guess.
         if len(ents) >= 2 and (p["roles"] & _controllers):
+            ctrl = sorted(p["roles"] & _controllers)
+            ground = (f"mesmo CPF (mascarado {doc_mask})" if mask
+                      else "mesmo nome — sem CPF para confirmar; possível homônimo")
             control_edges.append({
                 "id": f"common_control:{'-'.join(ents)}:{node['id']}",
                 "kind": "common_control",
                 "entities": ents,
                 "via_person": p["display"],
-                "roles": sorted(p["roles"] & _controllers),
-                "text": (f"{p['display']} figura como {', '.join(sorted(p['roles'] & _controllers))} "
-                         f"em {', '.join(ents)} — controle comum (fonte pública)."),
+                "roles": ctrl,
+                "doc_mask": doc_mask,
+                "grounded": bool(mask),
+                "text": (f"{p['display']} figura como {', '.join(ctrl)} em {', '.join(ents)} "
+                         f"— controle comum ({ground}; fonte pública)."),
                 "evidence_ids": docs[:12],
                 "status": "pending",
                 "created": run_date,
             })
 
     return {"persons": persons, "proposals": proposals, "common_control": control_edges}
+
+
+def _qsa_signals(bucket: str, s3: Any) -> list[dict[str, Any]]:
+    """Turn the P1 watchlist-QSA slice into per-entity person signals for resolution.
+
+    Each entity's sócios become one signal carrying the `socios` field (list of
+    {name, role, doc_mask}); the affiliating document is the entity's Receita QSA URL.
+    """
+    try:
+        from src.ingest import watchlist_qsa
+
+        slice_ = _load_json(bucket, watchlist_qsa.WATCHLIST_QSA_KEY, s3)
+    except Exception:  # pragma: no cover - absent before P1 first runs
+        return []
+    out: list[dict[str, Any]] = []
+    for ent, rec in (slice_.get("entities") or {}).items():
+        socios = rec.get("socios") or []
+        if socios:
+            out.append({"entity": ent, "id": f"qsa:{rec.get('cnpj') or ent}",
+                        "url": rec.get("url"), "socios": socios})
+    return out
 
 
 def _collect_signals(digest: dict[str, Any]) -> list[dict[str, Any]]:
@@ -219,12 +282,23 @@ def _collect_signals(digest: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _merge(existing: list[dict[str, Any]], fresh: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    by_id = {p["id"]: p for p in (existing or []) if p.get("id")}
+    """Idempotent + self-healing. Freshly-generated proposals inherit any human status
+    from a prior version; a prior proposal the generator NO LONGER produces is dropped
+    if still pending (a tightened gate should clear stale machine noise) but KEPT if a
+    human already decided it (audit trail)."""
+    prior_by_id = {p["id"]: p for p in (existing or []) if p.get("id")}
+    out: dict[str, dict[str, Any]] = {}
     for p in fresh:
-        prior = by_id.get(p["id"])
-        by_id[p["id"]] = ({**p, "status": prior.get("status", "pending"),
-                           "created": prior.get("created", p.get("created"))} if prior else p)
-    return sorted(by_id.values(), key=lambda p: p.get("id", ""))
+        pid = p.get("id")
+        if not pid:
+            continue
+        prior = prior_by_id.get(pid)
+        out[pid] = ({**p, "status": prior.get("status", "pending"),
+                     "created": prior.get("created", p.get("created"))} if prior else p)
+    for pid, p in prior_by_id.items():
+        if pid not in out and p.get("status") in ("approved", "rejected"):
+            out[pid] = p  # decided-but-no-longer-generated: keep for audit
+    return sorted(out.values(), key=lambda p: p.get("id", ""))
 
 
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
@@ -243,7 +317,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         print(f"Warning: operatives digest load failed: {exc}")
         digest = {}
 
-    signals = _collect_signals(digest)
+    signals = _collect_signals(digest) + _qsa_signals(digests_bucket, s3)
     resolved = resolve_persons(signals, run_date=run_date)
     now = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
 

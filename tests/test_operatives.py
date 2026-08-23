@@ -56,6 +56,80 @@ def test_homonym_across_documents_is_flagged_ambiguous():
     assert r["common_control"] == []
 
 
+def test_review_queue_gated_to_control_relevant_people():
+    # a lone statutory director of ONE entity is resolved but NOT queued; a control-role
+    # sócio IS queued; the full persons graph still knows everyone.
+    sigs = [
+        {"directors": ["Ana Lima Costa"], "entity": "a", "id": "d1"},   # lone director
+        {"socios": ["Bruno Alves Reis"], "entity": "a", "id": "d1"},    # control role
+    ]
+    r = operatives.resolve_persons(sigs, run_date="2026-08-23")
+    assert len(r["persons"]) == 2                        # both resolved
+    queued = {p["person"] for p in r["proposals"]}
+    assert queued == {"Bruno Alves Reis"}               # only the control-role one
+
+
+def test_bridging_person_is_queued_even_if_not_control_role():
+    sigs = [
+        {"directors": [{"name": "Ana Lima Costa", "doc_mask": "***265018**"}], "entity": "a", "id": "d1"},
+        {"directors": [{"name": "Ana Lima Costa", "doc_mask": "***265018**"}], "entity": "b", "id": "d2"},
+    ]
+    r = operatives.resolve_persons(sigs, run_date="2026-08-23")
+    assert {p["person"] for p in r["proposals"]} == {"Ana Lima Costa"}  # bridges -> queued
+
+
+def test_masked_cpf_separates_homonyms():
+    # same name, DIFFERENT masked CPFs -> two distinct people, NO false control edge
+    sigs = [
+        {"socios": [{"name": "João Pereira", "role": "sócio", "doc_mask": "***111111**"}],
+         "entity": "a", "id": "d1"},
+        {"socios": [{"name": "João Pereira", "role": "sócio", "doc_mask": "***222222**"}],
+         "entity": "b", "id": "d2"},
+    ]
+    r = operatives.resolve_persons(sigs, run_date="2026-08-23")
+    assert len(r["persons"]) == 2
+    assert r["common_control"] == []                       # not the same person
+
+
+def test_shared_masked_cpf_grounds_control_cohort():
+    # same name AND same masked CPF across two entities -> resolved cohort of control
+    sigs = [
+        {"socios": [{"name": "João Pereira", "role": "sócio", "doc_mask": "***265018**"}],
+         "entity": "a", "id": "d1"},
+        {"socios": [{"name": "João Pereira", "role": "sócio", "doc_mask": "***265018**"}],
+         "entity": "b", "id": "d2"},
+    ]
+    r = operatives.resolve_persons(sigs, run_date="2026-08-23")
+    assert len(r["persons"]) == 1
+    p = r["persons"][0]
+    assert p["doc_mask"] == "***265018**" and p["ambiguous"] is False
+    assert len(r["common_control"]) == 1
+    edge = r["common_control"][0]
+    assert edge["grounded"] is True and edge["doc_mask"] == "***265018**"
+    assert "CPF" in edge["text"]
+
+
+def test_person_node_never_carries_a_full_cpf():
+    sigs = [{"socios": [{"name": "Maria Silva", "role": "sócio", "doc_mask": "***265018**"}],
+             "entity": "a", "id": "d1"}]
+    node = operatives.resolve_persons(sigs, run_date="2026-08-23")["persons"][0]
+    import json
+    blob = json.dumps(node)
+    assert node["doc_mask"] == "***265018**" and blob.count(str(2)) >= 0  # masked only
+    assert "*" in node["doc_mask"]                          # never a full 11-digit CPF
+
+
+def test_merge_drops_stale_pending_keeps_decided():
+    existing = [
+        {"id": "person:a", "status": "pending"},      # no longer generated -> drop
+        {"id": "person:b", "status": "approved"},     # decided -> keep for audit
+        {"id": "person:c", "status": "pending"},       # regenerated -> keep
+    ]
+    fresh = [{"id": "person:c", "status": "pending"}, {"id": "person:d", "status": "pending"}]
+    ids = {p["id"] for p in operatives._merge(existing, fresh)}
+    assert ids == {"person:b", "person:c", "person:d"}
+
+
 def test_institutional_fields_never_yield_persons():
     # admin/manager/leader are NOT scanned (institutional in this pipeline)
     sigs = [{"admin": "ITAU UNIBANCO S.A.", "manager": "BTG GESTORA LTDA", "id": "d1",
