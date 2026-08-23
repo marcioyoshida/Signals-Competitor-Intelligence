@@ -127,6 +127,16 @@
   .swot-b.chal { opacity: .55; text-decoration: line-through solid var(--muted) 1px; }
   .swot-b .meta { display: block; color: var(--muted); font-size: 11px; text-decoration: none; margin-top: 1px; }
   .swot-q .none { color: var(--muted); font-size: 12px; font-style: italic; }
+  .swot-b .corrob { color: #2e9e6b; font-weight: 600; }
+  .swot-props { border-top: 1px dashed var(--border); margin: 0 16px; padding: 10px 0 14px; }
+  .swot-props > h4 { margin: 4px 0 8px; font-size: 12px; color: var(--ink2); font-weight: 700; }
+  .swot-props .prop { border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px; margin: 6px 0; background: var(--bg); }
+  .swot-props .pk { display: inline-block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; padding: 1px 6px; border-radius: 5px; margin-right: 6px; }
+  .swot-props .pk.new { background: rgba(46,158,107,.16); color: #2e9e6b; }
+  .swot-props .pk.chal { background: rgba(200,60,60,.14); color: var(--t-crit); }
+  .swot-props .pt { font-size: 12.5px; color: var(--ink); }
+  .swot-props .pmeta { display: block; color: var(--muted); font-size: 11px; margin-top: 3px; }
+  .swot-props .ptgt { display: block; color: var(--muted); font-size: 11px; font-style: italic; margin-top: 2px; }
   .score { font-variant-numeric: tabular-nums; font-size: 12px; color: var(--ink2); }
   .est { color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: .4px; }
   .lenses { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
@@ -760,15 +770,36 @@ function renderSwot() {
   const quad = dim => {
     const bullets = (sw.dimensions[dim] || []);
     const body = bullets.length
-      ? bullets.map(b => `<div class="swot-b ${b.status === 'challenged' ? 'chal' : ''}">${esc(b.text)}
-          <span class="meta">confiança ${Math.round((b.confidence ?? 0) * 100)}% · ${b.evidence_count} evidência(s)${b.status === 'challenged' ? ' · contestada' : ''}</span></div>`).join("")
+      ? bullets.map(b => {
+          const news = (b.news_evidence || 0) > 0
+            ? ` · <span class="corrob" title="Corroborada por ${b.news_evidence} sinal(is) de notícia via reconciliação (LLM)">✔ notícias ${b.news_evidence}</span>` : "";
+          return `<div class="swot-b ${b.status === 'challenged' ? 'chal' : ''}">${esc(b.text)}
+          <span class="meta">confiança ${Math.round((b.confidence ?? 0) * 100)}% · ${b.evidence_count} evidência(s)${news}${b.status === 'challenged' ? ' · contestada' : ''}</span></div>`;
+        }).join("")
       : `<div class="none">—</div>`;
     return `<div class="swot-q ${dim}"><div class="qh">${SWOT_LABELS[dim]}</div>${body}</div>`;
   };
+  // ADR 004 step 3: pending reconcile proposals for this entity (review-gated).
+  const props = (DATA.swot_proposals || []).filter(p => p.entity === state.entity);
+  let propHtml = "";
+  if (props.length) {
+    propHtml = `<div class="swot-props"><h4>Propostas pendentes de revisão
+      <span class="infer" title="Sugestões da reconciliação por LLM sobre notícias: contradições a crenças existentes e novas crenças candidatas. Nunca aplicadas automaticamente — aguardam curadoria.">reconciliação · LLM</span></h4>` +
+      props.map(p => {
+        const kind = p.kind === 'challenge'
+          ? `<span class="pk chal">contesta ${p.dimension}</span>`
+          : `<span class="pk new">nova ${SWOT_LABELS[p.dimension] ? p.dimension : p.dimension}</span>`;
+        const tgt = p.kind === 'challenge' && p.target_text
+          ? `<span class="ptgt">↳ crença: ${esc(p.target_text)}</span>` : "";
+        return `<div class="prop">${kind} <span class="pt">${esc(p.text)}</span>
+          <span class="pmeta">confiança stance ${Math.round((p.stance_conf ?? 0) * 100)}% · ${esc(p.date || "")}</span>${tgt}</div>`;
+      }).join("") + `</div>`;
+  }
   el.innerHTML = `<div class="swot">
     <h3>Tese competitiva — ${esc(sw.label)}
-      <span class="infer" title="Crenças derivadas dos indicadores (comparativo, corrente setorial, cohort, trajetória, silêncio) — inferência com evidência ligada, não fato reportado. Contradições são marcadas, nunca apagadas.">SWOT · inferência</span></h3>
+      <span class="infer" title="Crenças derivadas dos indicadores (comparativo, corrente setorial, cohort, trajetória, silêncio) e corroboradas/contestadas por notícias via reconciliação por LLM — inferência com evidência ligada, não fato reportado. Contradições são marcadas, nunca apagadas.">SWOT · inferência</span></h3>
     <div class="swot-grid">${quad('S')}${quad('W')}${quad('O')}${quad('T')}</div>
+    ${propHtml}
   </div>`;
 }
 

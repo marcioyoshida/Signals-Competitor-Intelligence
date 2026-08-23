@@ -642,6 +642,40 @@ class OncaPrototypeStack(Stack):
         )
         digests_bucket.grant_read_write(swot_fn)
 
+        # SWOT reconcile-against-belief (ADR 004 step 3): embeds today's free-text
+        # narratives (Titan), retrieves the top-k nearest belief bullets, and LLM
+        # stance-classifies each pair. Reinforcements auto-apply (durable evidence
+        # the swot store folds in next rebuild); contradictions & new bullets are
+        # PROPOSED only (swot/proposals.json) — never auto-applied. Needs Bedrock
+        # (Converse for stance + InvokeModel for Titan embeddings).
+        reconcile_fn = lambda_.Function(
+            self,
+            "OncaSwotReconcile",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.synth.swot_reconcile.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.minutes(5),
+            memory_size=512,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+                "ONCA_RECONCILE_ENABLED": "1",
+                "ONCA_RECONCILE_WINDOW_DAYS": "3",
+                "ONCA_SYNTH_MODEL_ID": "amazon.nova-lite-v1:0",
+                "ONCA_EMBED_MODEL_ID": "amazon.titan-embed-text-v2:0",
+            },
+        )
+        digests_bucket.grant_read_write(reconcile_fn)
+        reconcile_fn.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["bedrock:InvokeModel", "bedrock:Converse"],
+                resources=[
+                    f"arn:aws:bedrock:{self.region}::foundation-model/*",
+                    f"arn:aws:bedrock:{self.region}:{self.account}:inference-profile/*",
+                ],
+            )
+        )
+
         # Incident thread store (ADR 003 Wave 2): threads related developments into
         # living incident docs (event identity by entity+event-type) with an
         # open/developing/resolved lifecycle; publishes threads/{id}.json + a
@@ -992,6 +1026,19 @@ class OncaPrototypeStack(Stack):
             interval=Duration.seconds(15),
             backoff_rate=2.0,
         )
+        reconcile_task = sfn_tasks.LambdaInvoke(
+            self,
+            "SwotReconcileTask",
+            lambda_function=reconcile_fn,
+            payload=sfn.TaskInput.from_object({}),
+            result_path="$.reconcile",
+        )
+        reconcile_task.add_retry(
+            errors=["States.ALL"],
+            max_attempts=2,
+            interval=Duration.seconds(15),
+            backoff_rate=2.0,
+        )
         threads_task = sfn_tasks.LambdaInvoke(
             self,
             "ThreadsTask",
@@ -1045,6 +1092,7 @@ class OncaPrototypeStack(Stack):
                 .next(regulatory_task)
                 .next(cohort_task)
                 .next(swot_task)
+                .next(reconcile_task)
                 .next(threads_task)
                 .next(behavioral_task)
                 .next(feed_task)
@@ -1063,6 +1111,10 @@ class OncaPrototypeStack(Stack):
             assumed_by=iam.ServicePrincipal("scheduler.amazonaws.com"),
         )
         pipeline.grant_start_execution(scheduler_role)
+        # Live status read for the dashboard's "Executar" button: ListExecutions /
+        # DescribeExecution / GetExecutionHistory so the latest run's current step
+        # can be surfaced (GET /api/run/). Read-only — write stays with the scheduler.
+        pipeline.grant_read(run_fn)
         run_fn.add_environment("ONCA_PIPELINE_ARN", pipeline.state_machine_arn)
         run_fn.add_environment("ONCA_SCHEDULER_ROLE_ARN", scheduler_role.role_arn)
         adhoc_schedule_arn = Stack.of(self).format_arn(

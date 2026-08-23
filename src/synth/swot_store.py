@@ -147,9 +147,17 @@ def _confidence(n_evidence: int, days_since_latest: int | None, window: int) -> 
 
 
 def build_beliefs(
-    narratives: list[dict[str, Any]], *, as_of: str | None = None, window: int = 90
+    narratives: list[dict[str, Any]], *, as_of: str | None = None, window: int = 90,
+    reinforcements: list[dict[str, Any]] | None = None,
 ) -> dict[str, dict[str, Any]]:
-    """Pure: narratives -> {entity: belief-file dict}. Deterministic, no I/O."""
+    """Pure: narratives -> {entity: belief-file dict}. Deterministic, no I/O.
+
+    `reinforcements` (ADR 004 step 3) are durable news-evidence records the LLM
+    reconcile loop auto-applied: each folds onto the matching (entity, base_key,
+    dim) bullet as extra evidence, so a corroborating news signal raises that
+    bullet's confidence. They attach only to bullets the deterministic axes still
+    produce this run (recomputable, self-consistent belief file).
+    """
     as_of = as_of or run_date_today()
 
     # (entity, base_key, dim) -> bullet accumulator
@@ -175,6 +183,20 @@ def build_beliefs(
                 b["evidence"][nid] = {"id": nid, "date": date, "axis": n.get("axis")}
             if date > b["latest"]:
                 b["latest"] = date
+
+    # Fold LLM-reconcile reinforcements onto existing (deterministic) bullets.
+    for r in reinforcements or []:
+        key = (r.get("entity"), r.get("base_key"), r.get("dimension"))
+        b = acc.get(key)
+        if not b:
+            continue  # only reinforce bullets the axes still assert this run
+        nid = r.get("narrative_id")
+        date = str(r.get("date") or "")[:10]
+        if nid:
+            b["evidence"][nid] = {"id": nid, "date": date, "axis": "news",
+                                  "stance": r.get("stance_conf")}
+        if date > b["latest"]:
+            b["latest"] = date
 
     # Assemble per-entity bullets + deterministic reconcile.
     per_entity: dict[str, list[dict[str, Any]]] = {}
@@ -204,6 +226,7 @@ def build_beliefs(
             "source_key": base_key,
             "evidence": ev,
             "evidence_count": len(ev),
+            "news_evidence": sum(1 for e in ev if e.get("axis") == "news"),
             "latest": b["latest"],
         }
         per_entity.setdefault(ent, []).append(bullet)
@@ -236,6 +259,7 @@ def _compact(belief: dict[str, Any]) -> dict[str, Any]:
             "confidence": b["confidence"],
             "status": b["status"],
             "evidence_count": b["evidence_count"],
+            "news_evidence": b.get("news_evidence", 0),
             "latest": b["latest"],
         })
     return {"entity": belief["entity"], "label": belief["label"],
@@ -266,6 +290,17 @@ def publish(beliefs: dict[str, dict[str, Any]], bucket: str, *, s3: Any | None =
     return index
 
 
+def _load_reinforcements(bucket: str, *, s3: Any) -> list[dict[str, Any]]:
+    """Read the durable step-3 reconcile reinforcements (news auto-corroborations)."""
+    try:
+        from src.synth import swot_reconcile
+
+        body = s3.get_object(Bucket=bucket, Key=swot_reconcile.REINFORCEMENTS_KEY)["Body"].read()
+        return json.loads(body.decode("utf-8")).get("reinforcements", [])
+    except Exception:  # pragma: no cover - absent before step 3 first runs
+        return []
+
+
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """Rebuild the per-entity SWOT belief store from the durable narrative history."""
     digests_bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
@@ -277,7 +312,9 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     run_date = run_date_today()
 
     narratives = feature_store.load_history(digests_bucket, window, s3=s3)
-    beliefs = build_beliefs(narratives, as_of=run_date, window=window)
+    reinforcements = _load_reinforcements(digests_bucket, s3=s3)
+    beliefs = build_beliefs(narratives, as_of=run_date, window=window,
+                            reinforcements=reinforcements)
 
     published = None
     try:

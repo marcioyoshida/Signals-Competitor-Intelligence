@@ -297,6 +297,7 @@ def build_feed(
     industry_meta: dict[str, dict[str, Any]] | None = None,
     macro: dict[str, Any] | None = None,
     swot: dict[str, Any] | None = None,
+    swot_proposals: list[dict[str, Any]] | None = None,
     thread_cards: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Pure aggregation: narratives -> feed payload. No I/O.
@@ -399,6 +400,11 @@ def build_feed(
         # ADR 004 step 2: per-entity SWOT belief store (compact index) — the war
         # room renders a S/W/O/T panel for the selected entity. {} when absent.
         "swot": (swot or {}).get("entities", {}) if swot else {},
+        # ADR 004 step 3: pending reconcile proposals (contradict/new bullets from the
+        # LLM stance loop) — surfaced read-only for the review queue (never auto-applied).
+        "swot_proposals": [
+            p for p in (swot_proposals or []) if p.get("status", "pending") == "pending"
+        ],
     }
 
 
@@ -536,6 +542,20 @@ def _load_reg_lifecycles(digests_bucket: str) -> list[dict[str, Any]]:
         return []
 
 
+def _load_swot_proposals(digests_bucket: str) -> list[dict[str, Any]]:
+    """Read pending SWOT reconcile proposals (ADR 004 step 3), best-effort. [] if absent."""
+    try:
+        from src.synth import swot_reconcile
+
+        body = boto3.client("s3").get_object(
+            Bucket=digests_bucket, Key=swot_reconcile.PROPOSALS_KEY
+        )["Body"].read()
+        return json.loads(body.decode("utf-8")).get("proposals", [])
+    except Exception as exc:  # pragma: no cover - best-effort, read-only
+        print(f"Warning: load SWOT proposals failed: {exc}")
+        return []
+
+
 def _load_swot(digests_bucket: str) -> dict[str, Any] | None:
     """Read the compact SWOT belief index (ADR 004 step 2), best-effort. None if absent."""
     try:
@@ -568,6 +588,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         industry_meta=industry_meta,
         macro=_load_macro(),
         swot=_load_swot(digests_bucket),
+        swot_proposals=_load_swot_proposals(digests_bucket),
         thread_cards=_load_threads(digests_bucket) + _load_reg_lifecycles(digests_bucket),
     )
     body = json.dumps(feed, ensure_ascii=False).encode("utf-8")
