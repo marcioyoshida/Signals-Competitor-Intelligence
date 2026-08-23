@@ -76,6 +76,8 @@ def subject_label(n: dict[str, Any]) -> str:
         return f"Regulatório · {n['instrument_label']}"
     if n.get("cohort_label"):
         return f"Setor · {n['cohort_label']}"
+    if n.get("hub"):
+        return f"Ecossistema · {n['hub']}"
     return display_label(None, n.get("kind"))
 
 
@@ -278,6 +280,9 @@ def _project_item(n: dict[str, Any]) -> dict[str, Any]:
         "current_stage": n.get("current_stage"),
         "pattern": n.get("pattern"),  # behavioral axis: drumbeat / multi_front
         "relation": n.get("relation"),  # relational axis: co_mention / convergence / dispute
+        "horizon_days": n.get("horizon_days"),  # predictive axis: forecast window
+        "hub": n.get("hub"),  # ecosystem axis: the infrastructure hub
+        "n_dependents": n.get("n_dependents"),  # ecosystem axis: exposed count
         "entities": n.get("entities") or [],
         "lenses": n.get("lenses") or [],
         "is_alert": bool(n.get("is_alert")),

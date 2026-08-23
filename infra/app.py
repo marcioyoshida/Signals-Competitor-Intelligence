@@ -757,6 +757,49 @@ class OncaPrototypeStack(Stack):
         )
         digests_bucket.grant_read_write(operatives_fn)
 
+        # Predictive / leading-indicator (ADR 003 Opportunistic, TIME-GATED): ships the
+        # precursor-rule mechanism but publishes forecasts only once the feature store
+        # holds enough history AND the axis is enabled — otherwise reports time_gated.
+        predictive_fn = lambda_.Function(
+            self,
+            "OncaPredictive",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.synth.predictive.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.minutes(5),
+            memory_size=512,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+                "ONCA_ENTITIES_TABLE": entities_table.table_name,
+                "ONCA_FEATURE_WINDOW_DAYS": "90",
+                "ONCA_PREDICTIVE_ENABLED": "0",          # accrues with history; off until mature
+                "ONCA_PREDICTIVE_MIN_HISTORY_DAYS": "120",
+            },
+        )
+        digests_bucket.grant_read_write(predictive_fn)
+        entities_table.grant_read_data(predictive_fn)
+
+        # Ecosystem / dependency (ADR 003 Opportunistic, SOURCE-GATED): ships the
+        # contagion synthesis + dependency-graph builder; emits exposure cards only when
+        # a hub with dependents has an incident (or an external dependency source is
+        # wired via ONCA_ECOSYSTEM_SOURCE) — otherwise reports source_gated.
+        ecosystem_fn = lambda_.Function(
+            self,
+            "OncaEcosystem",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.synth.ecosystem.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.minutes(5),
+            memory_size=512,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+                "ONCA_FEATURE_WINDOW_DAYS": "90",
+            },
+        )
+        digests_bucket.grant_read_write(ecosystem_fn)
+
         # Feed builder: aggregate recent narratives -> feed.json in the site bucket.
         feed_fn = lambda_.Function(
             self,
@@ -1130,6 +1173,32 @@ class OncaPrototypeStack(Stack):
             interval=Duration.seconds(15),
             backoff_rate=2.0,
         )
+        predictive_task = sfn_tasks.LambdaInvoke(
+            self,
+            "PredictiveTask",
+            lambda_function=predictive_fn,
+            payload=sfn.TaskInput.from_object({}),
+            result_path="$.predictive",
+        )
+        predictive_task.add_retry(
+            errors=["States.ALL"],
+            max_attempts=2,
+            interval=Duration.seconds(15),
+            backoff_rate=2.0,
+        )
+        ecosystem_task = sfn_tasks.LambdaInvoke(
+            self,
+            "EcosystemTask",
+            lambda_function=ecosystem_fn,
+            payload=sfn.TaskInput.from_object({}),
+            result_path="$.ecosystem",
+        )
+        ecosystem_task.add_retry(
+            errors=["States.ALL"],
+            max_attempts=2,
+            interval=Duration.seconds(15),
+            backoff_rate=2.0,
+        )
         feed_task = sfn_tasks.LambdaInvoke(
             self,
             "FeedTask",
@@ -1162,6 +1231,8 @@ class OncaPrototypeStack(Stack):
                 .next(behavioral_task)
                 .next(relational_task)
                 .next(operatives_task)
+                .next(predictive_task)
+                .next(ecosystem_task)
                 .next(feed_task)
             ),
             # Budget for a 15-min ingest (plus a retry), then synth, then feed.

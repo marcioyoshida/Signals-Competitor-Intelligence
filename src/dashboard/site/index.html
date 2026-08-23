@@ -675,6 +675,7 @@ const AXIS_LABELS = {
   thematic: "Corrente setorial", regulatory: "Radar regulatório", cohort: "Movimento de cohort",
   threaded: "Fio de incidente", regulatory_lifecycle: "Ciclo regulatório",
   behavioral: "Padrão de comportamento", relational: "Relacional",
+  predictive: "Indicador antecedente", ecosystem: "Exposição de ecossistema",
 };
 const RELATION_PT = { co_mention: "citados juntos", convergence: "convergência", dispute: "disputa" };
 const BEHAVIOR_PT = { drumbeat: "cadência regular", multi_front: "múltiplas frentes" };
@@ -699,6 +700,10 @@ function inferBadge(f) {
     return `Comportamento · ${BEHAVIOR_PT[f.pattern] || f.pattern || ""}`;
   if (f.axis === "relational")
     return `Relacional · ${RELATION_PT[f.relation] || f.relation || ""}`;
+  if (f.axis === "predictive")
+    return `Antecedente${f.horizon_days ? ` · ~${f.horizon_days}d` : ""}`;
+  if (f.axis === "ecosystem")
+    return `Exposição · ${f.n_dependents || 0} dep.`;
   return axisLabel(f.axis);
 }
 
