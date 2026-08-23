@@ -1,6 +1,6 @@
 # ADR 006 — Beyond SWOT: a framework-parametric belief store (TOWS, Porter, PESTLE, 7S, Four Corners, Ansoff, BCG)
 
-- Status: **Proposed** (2026-08-23)
+- Status: **TOWS shipped** (2026-08-23); Porter/PESTLE/Ansoff/BCG/Four Corners/7S proposed
 - Sourced from **issue #3 — "Add new Strategy Frameworks"** (owner-filed): six
   candidate frameworks scored by adoption / strengths / weaknesses / **OSINT
   feasibility** (TOWS, PESTLE, Porter's Five Forces, SOAR, NOISE, McKinsey 7S).
@@ -216,3 +216,20 @@ value but label-heavy, so after the sourced frameworks are stable), then
 until either a Private tenant (ADR 005) supplies internal data or the evidence base
 clears the citation bar. Closes issue #3 as the design decision; implementation
 follows the phasing.
+
+## Implementation notes
+
+> **TOWS shipped (2026-08-23).** `src/synth/tows.py` (`OncaTows` Lambda, wired
+> `… → maintenance → tows → threads → …`): reads each entity's active SWOT
+> beliefs, synthesizes SO/ST/WO/WT strategic postures via one bounded LLM call per
+> entity (propose-only, Phase C vetting). Each TOWS bullet inherits citations from
+> the paired SWOT beliefs it draws from. `eligible_entities` requires ≥1 internal
+> (S/W) + ≥1 external (O/T) active bullet; `already_proposed` idempotency prevents
+> re-drafting; capped at `ONCA_TOWS_MAX_ENTITIES` (8). Store: `tows/proposals.json`
+> (idempotent via `swot_reconcile.merge_proposals`). Approved TOWS bullets carry
+> `framework: "tows"` in `swot/curated.json`. **Generalization:** `swot_store.py`
+> now defines `FRAMEWORK_DIMENSIONS` and `DEFAULT_FRAMEWORK`; `build_beliefs`
+> filters curated bullets by framework; `curate._curated_bullet` carries
+> `framework` when non-default. Dashboard renders a TOWS panel (`renderTows()`) with
+> curated postures + pending proposals, reusing the SWOT card styling with
+> quadrant-colored borders (SO=blue, ST=purple, WO=amber, WT=red).

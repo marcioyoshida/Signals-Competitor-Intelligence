@@ -95,3 +95,27 @@ def test_compact_groups_by_dimension():
     assert set(comp["dimensions"]) == {"S", "W", "O", "T"}
     assert len(comp["dimensions"]["S"]) == 1 and len(comp["dimensions"]["W"]) == 1
     assert "confidence" in comp["dimensions"]["S"][0] and "evidence_count" in comp["dimensions"]["S"][0]
+
+
+def test_curated_tows_bullets_excluded_from_swot_beliefs():
+    """ADR 006: curated TOWS bullets must not leak into the SWOT belief file."""
+    curated = {
+        "bullets": [
+            {"id": "tows:x:SO:abc", "entity": "x", "dimension": "SO",
+             "text": "Postura TOWS SO", "framework": "tows",
+             "date": "2026-08-22", "approved_at": "2026-08-22"},
+            {"id": "seed:x:S:def", "entity": "x", "dimension": "S",
+             "text": "Força curada", "date": "2026-08-22",
+             "approved_at": "2026-08-22"},
+        ],
+        "retirements": [],
+    }
+    b = swot_store.build_beliefs(
+        [_comparative("x", "S", "banking", date="2026-08-22")],
+        as_of="2026-08-23", curated=curated)
+    dims = {bl["dimension"] for bl in b["x"]["bullets"]}
+    assert "SO" not in dims
+    assert "S" in dims
+    curated_bullets = [bl for bl in b["x"]["bullets"] if bl.get("curated")]
+    assert len(curated_bullets) == 1
+    assert curated_bullets[0]["text"] == "Força curada"

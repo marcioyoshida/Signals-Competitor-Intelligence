@@ -47,6 +47,15 @@ CURATED_CONFIDENCE = 0.9  # a human vetted it — high, stable (no staleness dec
 DIMENSIONS = ("S", "W", "O", "T")
 _OPPOSITE = {"S": "W", "W": "S", "O": "T", "T": "O"}
 
+# ADR 006: framework-parametric belief store. Each framework defines its valid
+# dimensions and subject type. The SWOT store generalizes to serve all frameworks
+# through the same reconcile/seed/vetting/curation machinery.
+FRAMEWORK_DIMENSIONS: dict[str, tuple[str, ...]] = {
+    "swot": ("S", "W", "O", "T"),
+    "tows": ("SO", "ST", "WO", "WT"),
+}
+DEFAULT_FRAMEWORK = "swot"
+
 
 def _f(env: str, default: float) -> float:
     try:
@@ -256,6 +265,8 @@ def build_beliefs(
         if bid:
             reinf_by_bullet.setdefault(bid, []).append(r)
     for cb in (curated or {}).get("bullets", []):
+        if cb.get("framework", DEFAULT_FRAMEWORK) != DEFAULT_FRAMEWORK:
+            continue
         ent = cb.get("entity")
         dim = cb.get("dimension")
         if not ent or dim not in DIMENSIONS or not cb.get("text"):

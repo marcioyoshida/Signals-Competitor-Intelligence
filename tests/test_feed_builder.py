@@ -309,3 +309,35 @@ def test_build_macro_empty_is_safe():
     from src.dashboard.feed_builder import build_macro
     out = build_macro(None)
     assert out == {"selic": None, "focus": [], "cards": []}
+
+
+def _thread(incident_id, entity, date, *, latest_dev_id, score=0.6):
+    return {
+        "id": f"threaded-{incident_id}", "kind": "threaded", "axis": "threaded",
+        "subject_type": "incident", "entity": entity, "entities": [entity],
+        "is_inference": True, "is_alert": False, "threat_score": score,
+        "run_date": date, "as_of": date, "narrative": "Fio de incidente…",
+        "lenses": ["news"], "citations": [], "source_ids": ["news:x"],
+        "n_developments": 2, "status": "open",
+        "latest_dev_id": latest_dev_id, "latest_dev_date": date,
+    }
+
+
+def test_thread_dropped_when_latest_dev_already_standalone():
+    # the daily fusion card IS in the feed; the thread's latest dev re-shows it -> drop
+    narratives = [_narr("cand-ent-bradesco", "bradesco", "2026-08-23", 0.6)]
+    th = _thread("bradesco--restructuring", "bradesco", "2026-08-23",
+                 latest_dev_id="cand-ent-bradesco")
+    feed = feed_builder.build_feed(narratives, thread_cards=[th])
+    ids = [x["id"] for x in feed["feed"]]
+    assert "cand-ent-bradesco" in ids
+    assert "threaded-bradesco--restructuring" not in ids   # suppressed as duplicate
+
+
+def test_thread_kept_when_latest_dev_not_in_feed():
+    # latest dev card is NOT independently in the feed (e.g. outside window) -> keep
+    narratives = [_narr("cand-ent-bradesco", "bradesco", "2026-08-10", 0.6)]
+    th = _thread("bradesco--restructuring", "bradesco", "2026-08-23",
+                 latest_dev_id="cand-ent-bradesco")  # date 23 not present for this id
+    feed = feed_builder.build_feed(narratives, thread_cards=[th])
+    assert "threaded-bradesco--restructuring" in [x["id"] for x in feed["feed"]]

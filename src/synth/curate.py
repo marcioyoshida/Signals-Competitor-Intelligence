@@ -53,10 +53,10 @@ def _save(bucket: str, key: str, obj: dict[str, Any], s3: Any) -> None:
 
 
 def _swot_stores() -> list[str]:
-    from src.synth import swot_maintenance, swot_reconcile, swot_seed
+    from src.synth import swot_maintenance, swot_reconcile, swot_seed, tows
 
     return [swot_reconcile.PROPOSALS_KEY, swot_seed.SEED_PROPOSALS_KEY,
-            swot_maintenance.MAINTENANCE_PROPOSALS_KEY]
+            swot_maintenance.MAINTENANCE_PROPOSALS_KEY, tows.TOWS_PROPOSALS_KEY]
 
 
 def _graph_stores() -> list[str]:
@@ -76,8 +76,8 @@ def _find(bucket: str, keys: list[str], proposal_id: str, s3: Any):
 
 
 def _curated_bullet(p: dict[str, Any], *, at: str) -> dict[str, Any]:
-    """Turn an approved new/seed proposal into a durable curated bullet record."""
-    return {
+    """Turn an approved new/seed/tows proposal into a durable curated bullet record."""
+    bullet = {
         "id": p["id"],
         "entity": p.get("entity"),
         "label": p.get("label"),
@@ -89,6 +89,10 @@ def _curated_bullet(p: dict[str, Any], *, at: str) -> dict[str, Any]:
         "date": p.get("date"),
         "approved_at": at,
     }
+    fw = p.get("framework")
+    if fw and fw != swot_store.DEFAULT_FRAMEWORK:
+        bullet["framework"] = fw
+    return bullet
 
 
 def _retire(retirements: list[dict[str, Any]], p: dict[str, Any], at: str) -> str:

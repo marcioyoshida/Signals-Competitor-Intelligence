@@ -277,6 +277,8 @@ def _project_item(n: dict[str, Any]) -> dict[str, Any]:
         # thread payload (Wave 2): status + development count + reg-lifecycle stage.
         "status": n.get("status"),
         "n_developments": n.get("n_developments"),
+        "latest_dev_id": n.get("latest_dev_id"),      # thread: the card its latest dev shows
+        "latest_dev_date": n.get("latest_dev_date"),
         "current_stage": n.get("current_stage"),
         "pattern": n.get("pattern"),  # behavioral axis: drumbeat / multi_front
         "relation": n.get("relation"),  # relational axis: co_mention / convergence / dispute
@@ -305,6 +307,7 @@ def build_feed(
     industry_meta: dict[str, dict[str, Any]] | None = None,
     macro: dict[str, Any] | None = None,
     swot: dict[str, Any] | None = None,
+    tows_curated: dict[str, list[dict[str, Any]]] | None = None,
     swot_proposals: list[dict[str, Any]] | None = None,
     graph_proposals: list[dict[str, Any]] | None = None,
     thread_cards: list[dict[str, Any]] | None = None,
@@ -322,6 +325,17 @@ def build_feed(
     # They join the feed (filterable/sortable) but are kept out of KPI/timeline
     # aggregation below so they never double-count a story's daily developments.
     thread_items = [_project_item(c) for c in (thread_cards or []) if isinstance(c, dict)]
+    # Drop a grouping/thread card when its latest development is a card ALREADY
+    # standalone in the feed (same id + date) — else the thread re-displays today's
+    # daily fusion narrative verbatim and reads as a duplicate. A thread whose latest
+    # development is NOT independently in the feed (older than the window, or a card
+    # type not surfaced) still adds genuinely new content and is kept.
+    present = {(x["id"], x["date"]) for x in items if x.get("id")}
+    thread_items = [
+        t for t in thread_items
+        if not (t.get("latest_dev_id")
+                and (t["latest_dev_id"], t.get("latest_dev_date")) in present)
+    ]
 
     items.sort(key=lambda x: (x["date"], x["threat_score"]), reverse=True)
     dates = sorted({x["date"] for x in items if x["date"]})
@@ -409,6 +423,8 @@ def build_feed(
         # ADR 004 step 2: per-entity SWOT belief store (compact index) — the war
         # room renders a S/W/O/T panel for the selected entity. {} when absent.
         "swot": (swot or {}).get("entities", {}) if swot else {},
+        # ADR 006: curated TOWS postures, grouped by entity.
+        "tows": tows_curated or {},
         # ADR 004 step 3: pending reconcile proposals (contradict/new bullets from the
         # LLM stance loop) — surfaced read-only for the review queue (never auto-applied).
         "swot_proposals": [
@@ -596,10 +612,10 @@ def _load_swot_proposals(digests_bucket: str) -> list[dict[str, Any]]:
     render in the same war-room panel."""
     out: list[dict[str, Any]] = []
     s3 = boto3.client("s3")
-    from src.synth import swot_maintenance, swot_reconcile, swot_seed
+    from src.synth import swot_maintenance, swot_reconcile, swot_seed, tows
 
     for key in (swot_reconcile.PROPOSALS_KEY, swot_seed.SEED_PROPOSALS_KEY,
-                swot_maintenance.MAINTENANCE_PROPOSALS_KEY):
+                swot_maintenance.MAINTENANCE_PROPOSALS_KEY, tows.TOWS_PROPOSALS_KEY):
         try:
             body = s3.get_object(Bucket=digests_bucket, Key=key)["Body"].read()
             out.extend(json.loads(body.decode("utf-8")).get("proposals", []))
@@ -622,6 +638,37 @@ def _load_swot(digests_bucket: str) -> dict[str, Any] | None:
         return None
 
 
+def _load_tows_curated(digests_bucket: str) -> dict[str, list[dict[str, Any]]]:
+    """ADR 006: load curated TOWS beliefs from swot/curated.json, grouped by entity."""
+    try:
+        from src.synth import swot_store
+
+        body = boto3.client("s3").get_object(
+            Bucket=digests_bucket, Key=swot_store.CURATED_KEY
+        )["Body"].read()
+        data = json.loads(body.decode("utf-8"))
+        retired = {r.get("target_bullet_id") for r in data.get("retirements", [])
+                   if r.get("target_bullet_id")}
+        by_ent: dict[str, list[dict[str, Any]]] = {}
+        for b in data.get("bullets", []):
+            if b.get("framework") != "tows":
+                continue
+            if b.get("id") in retired:
+                continue
+            ent = b.get("entity")
+            if ent:
+                by_ent.setdefault(ent, []).append({
+                    "dimension": b.get("dimension"),
+                    "text": b.get("text"),
+                    "confidence": swot_store.CURATED_CONFIDENCE,
+                    "status": "active",
+                    "origin": b.get("origin"),
+                })
+        return by_ent
+    except Exception:
+        return {}
+
+
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """Build feed.json from recent narratives and publish it to the site bucket."""
     digests_bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
@@ -640,6 +687,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         industry_meta=industry_meta,
         macro=_load_macro(),
         swot=_load_swot(digests_bucket),
+        tows_curated=_load_tows_curated(digests_bucket),
         swot_proposals=_load_swot_proposals(digests_bucket),
         graph_proposals=_load_graph_proposals(digests_bucket),
         thread_cards=(_load_threads(digests_bucket) + _load_reg_lifecycles(digests_bucket)

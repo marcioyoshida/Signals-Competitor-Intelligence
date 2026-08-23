@@ -308,6 +308,11 @@ def build_card(thread: dict[str, Any]) -> dict[str, Any]:
         },
         "threat_score_note": "estimated_v1_threaded",
         "n_developments": thread["n_developments"],
+        # The card this thread's latest development re-displays — so the feed builder
+        # can drop the thread when that exact card is already standalone in the feed
+        # (else the thread reads as a verbatim duplicate of today's daily card).
+        "latest_dev_id": devs[-1].get("narrative_id"),
+        "latest_dev_date": devs[-1].get("date"),
         "narrative": head + tail,
         "citations": _agg_citations(devs),
         "source_ids": sorted({s for d in devs for s in d.get("source_ids") or []}),

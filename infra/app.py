@@ -732,6 +732,32 @@ class OncaPrototypeStack(Stack):
         )
         digests_bucket.grant_read_write(maintenance_fn)
 
+        # TOWS strategic posture pairing (ADR 006): reads active SWOT beliefs and
+        # pairs S×O/S×T/W×O/W×T strategic postures via a bounded LLM call. Proposed
+        # only — flows through Phase C vetting. Needs Bedrock for the draft.
+        tows_fn = lambda_.Function(
+            self,
+            "OncaTows",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.synth.tows.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.minutes(3),
+            memory_size=256,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+                "ONCA_TOWS_ENABLED": "1",
+                "ONCA_TOWS_MAX_ENTITIES": "8",
+            },
+        )
+        digests_bucket.grant_read_write(tows_fn)
+        tows_fn.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["bedrock:InvokeModel"],
+                resources=["*"],
+            )
+        )
+
         # Incident thread store (ADR 003 Wave 2): threads related developments into
         # living incident docs (event identity by entity+event-type) with an
         # open/developing/resolved lifecycle; publishes threads/{id}.json + a
@@ -1231,6 +1257,19 @@ class OncaPrototypeStack(Stack):
             interval=Duration.seconds(15),
             backoff_rate=2.0,
         )
+        tows_task = sfn_tasks.LambdaInvoke(
+            self,
+            "TowsTask",
+            lambda_function=tows_fn,
+            payload=sfn.TaskInput.from_object({}),
+            result_path="$.tows",
+        )
+        tows_task.add_retry(
+            errors=["States.ALL"],
+            max_attempts=2,
+            interval=Duration.seconds(15),
+            backoff_rate=2.0,
+        )
         threads_task = sfn_tasks.LambdaInvoke(
             self,
             "ThreadsTask",
@@ -1352,6 +1391,7 @@ class OncaPrototypeStack(Stack):
                 .next(reconcile_task)
                 .next(seed_task)
                 .next(maintenance_task)
+                .next(tows_task)
                 .next(threads_task)
                 .next(behavioral_task)
                 .next(relational_task)

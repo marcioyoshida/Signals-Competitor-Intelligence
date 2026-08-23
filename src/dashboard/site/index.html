@@ -160,6 +160,10 @@
   .swot-props .pk.chal { background: rgba(200,60,60,.14); color: var(--t-crit); }
   .swot-props .pk.seed { background: rgba(120,110,200,.16); color: #6c63c4; }
   .swot-props .pk.stale { background: rgba(200,150,40,.16); color: #b9820f; }
+  .swot-props .pk.tows { background: rgba(60,140,200,.14); color: #1a7ab5; }
+  /* ADR 006: TOWS posture quadrants reuse the swot-q card style with distinct colors. */
+  .swot-q.SO { --qc: #1a7ab5; } .swot-q.ST { --qc: #6c63c4; }
+  .swot-q.WO { --qc: #b9820f; } .swot-q.WT { --qc: var(--t-crit); }
   .swot-props .pt { font-size: 12.5px; color: var(--ink); }
   .swot-props .pmeta { display: block; color: var(--muted); font-size: 11px; margin-top: 3px; }
   .swot-props .ptgt { display: block; color: var(--muted); font-size: 11px; font-style: italic; margin-top: 2px; }
@@ -261,6 +265,7 @@
       <div class="hint">Cada cartão reúne sinais de várias fontes (as “lentes”) sobre a mesma entidade e traz o link de cada fonte. O nível de ameaça é uma estimativa que combina quantas fontes e quão relevantes são.</div>
       <div class="legend" id="legend"></div>
       <div id="swotPanel"></div>
+      <div id="towsPanel"></div>
       <div class="feed" id="feed"></div>
       <div id="tableView" class="hidden" style="padding:6px 12px 16px"></div>
     </div>
@@ -864,6 +869,7 @@ function collapseByEntity(rows) {
 }
 
 const SWOT_LABELS = { S: "Forças", W: "Fraquezas", O: "Oportunidades", T: "Ameaças" };
+const TOWS_LABELS = { SO: "Maximizar (F×O)", ST: "Contra-atacar (F×A)", WO: "Superar (Fr×O)", WT: "Evitar (Fr×A)" };
 // Per-entity SWOT belief panel (ADR 004) — shown when a single entity is selected.
 function renderSwot() {
   const el = document.getElementById("swotPanel");
@@ -894,6 +900,8 @@ function renderSwot() {
           ? `<span class="pk seed">tese inicial ${p.dimension}</span>`
           : p.kind === 'stale'
           ? `<span class="pk stale">revalidar ${p.dimension}</span>`
+          : p.kind === 'tows'
+          ? `<span class="pk tows">TOWS ${TOWS_LABELS[p.dimension] || p.dimension}</span>`
           : `<span class="pk new">nova ${SWOT_LABELS[p.dimension] ? p.dimension : p.dimension}</span>`;
         const tgt = (p.kind === 'challenge' || p.kind === 'stale') && p.target_text
           ? `<span class="ptgt">↳ crença: ${esc(p.target_text)}</span>` : "";
@@ -931,9 +939,44 @@ function renderSwot() {
   </div>`;
 }
 
+function renderTows() {
+  const el = document.getElementById("towsPanel");
+  if (!state.entity) { el.innerHTML = ""; return; }
+  const curated = (DATA.tows || {})[state.entity] || [];
+  const props = (DATA.swot_proposals || []).filter(p => p.entity === state.entity && p.kind === "tows");
+  if (!curated.length && !props.length) { el.innerHTML = ""; return; }
+  const quad = dim => {
+    const bullets = curated.filter(b => b.dimension === dim);
+    const body = bullets.length
+      ? bullets.map(b => `<div class="swot-b">${esc(b.text)}
+          <span class="meta">confiança ${Math.round((b.confidence ?? 0) * 100)}%</span></div>`).join("")
+      : `<div class="none">—</div>`;
+    return `<div class="swot-q ${dim}"><div class="qh">${TOWS_LABELS[dim]}</div>${body}</div>`;
+  };
+  let propHtml = "";
+  if (props.length) {
+    propHtml = `<div class="swot-props"><h4>Posturas estratégicas propostas
+      <span class="infer" title="Cruzamento TOWS das crenças SWOT vetadas — proposto por LLM, aguarda curadoria.">TOWS · LLM</span></h4>` +
+      props.map(p => {
+        const kind = `<span class="pk tows">TOWS ${TOWS_LABELS[p.dimension] || p.dimension}</span>`;
+        const meta = `confiança ${Math.round((p.confidence ?? 0) * 100)}% · ${esc(p.date || "")}`;
+        return `<div class="prop">${kind} <span class="pt">${esc(p.text)}</span>
+          <span class="pmeta">${meta}</span>
+          ${propActions(p.id, 'swot')}</div>`;
+      }).join("") + `</div>`;
+  }
+  el.innerHTML = `<div class="swot">
+    <h3>Matriz TOWS — ${esc((DATA.swot || {})[state.entity]?.label || state.entity)}
+      <span class="infer" title="Cruzamento estratégico das forças/fraquezas (SWOT) com oportunidades/ameaças — crenças curadas pelo analista.">TOWS · curadoria</span></h3>
+    <div class="swot-grid">${quad('SO')}${quad('ST')}${quad('WO')}${quad('WT')}</div>
+    ${propHtml}
+  </div>`;
+}
+
 function render() {
   const rows = filtered();
   renderSwot();
+  renderTows();
   const feed = document.getElementById("feed");
   // Collapse repeats per entity only when opted in; a date already scopes to one day.
   const collapse = state.view === "entity" && !state.date;
@@ -1028,8 +1071,10 @@ const PIPELINE_STEPS = [
   ["SilenceTask", "Silêncio"], ["LongitudinalTask", "Longitudinal"], ["ComparativeTask", "Comparativo"],
   ["ThematicTask", "Temático"], ["RegulatoryTask", "Regulatório"], ["CohortTask", "Cohort"],
   ["SwotTask", "SWOT"], ["SwotReconcileTask", "SWOT · reconciliação"], ["SwotSeedTask", "SWOT · seeding"],
-  ["SwotMaintenanceTask", "SWOT · manutenção"], ["ThreadsTask", "Fios de incidente"],
-  ["BehavioralTask", "Comportamento"], ["RelationalTask", "Relacional"], ["OperativesTask", "Operadores"],
+  ["SwotMaintenanceTask", "SWOT · manutenção"], ["TowsTask", "TOWS"],
+  ["ThreadsTask", "Fios de incidente"],
+  ["BehavioralTask", "Comportamento"], ["RelationalTask", "Relacional"],
+  ["WatchlistQsaTask", "QSA"], ["OperativesTask", "Operadores"],
   ["PredictiveTask", "Preditivo"], ["EcosystemTask", "Ecossistema"], ["FeedTask", "Publicação do feed"],
 ];
 const STEP_IDX = Object.fromEntries(PIPELINE_STEPS.map(([k], i) => [k, i]));
