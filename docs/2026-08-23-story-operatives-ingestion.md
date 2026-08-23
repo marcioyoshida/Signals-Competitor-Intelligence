@@ -31,6 +31,20 @@ ingestion reference [DATA_SOURCES.md](DATA_SOURCES.md).
 > `cnpj_roots` on the curated entities (a registry-curation task) to widen QSA coverage —
 > that is the real lever on person-graph reach, and where cross-entity control cohorts
 > will actually surface (shared sócios among smaller fintechs).
+>
+> **CNPJ-root curation done (2026-08-23).** `src/synth/entity_registry.add_cnpj_roots`
+> (non-destructive, CNPJ# reindex, never steals a root) + a **verified** curation tool
+> `src/synth/cnpj_curation.py` (seed map → fetch BrasilAPI → the entity's own registry
+> aliases must appear in the razão social → only then write; `python -m
+> src.synth.cnpj_curation [--apply]`). The verification gate earned its keep: of 25
+> seeded roots it **rejected 2 wrong ones** (`creditas` resolved to a person, IALDO
+> MARQUES FALCÃO; `caixa_seguridade` to ALMEIDA PRODUÇÕES) — never written — and wrote
+> **22** verified. Registry `cnpj_roots` coverage **3 → 25**; QSA then fetched 306 sócios;
+> operatives resolved **297 persons**, queued **37** control-relevant, **0 false
+> common-control**, **0 full CPFs**. Masked-CPF cohorting confirmed genuine same-person
+> bridges (e.g. shared *directors* across Itaú and its acquirer Rede, same `***225618**`).
+> Remaining: correct CNPJs for creditas/caixa_seguridade, and roots for the other
+> Brazilian FS entities lacking them (betting/crypto/FII tickers intentionally skipped).
 
 ## The story
 

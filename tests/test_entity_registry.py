@@ -461,3 +461,34 @@ def test_load_alias_map_returns_raw_forms():
     m = er.load_alias_map(table=t)
     assert m["nubank"] == ["NUBANK", " NU ", "TICKER:NU"]  # raw curated forms preserved
     er.clear_cache()
+
+
+def test_add_cnpj_roots_writes_lookup_and_is_idempotent():
+    t = FakeTable()
+    er.put_entity("nubank", "Nubank", ["NUBANK"], confidence="curated", table=t)
+    added = er.add_cnpj_roots("nubank", ["18.236.120/0001-58"], table=t)
+    assert added == ["18236120"]
+    assert er.get_entity("nubank", table=t)["cnpj_roots"] == ["18236120"]
+    assert er.resolve_by_cnpj("18236120", table=t) == "nubank"
+    # idempotent: adding the same root again writes nothing new
+    assert er.add_cnpj_roots("nubank", ["18236120"], table=t) == []
+
+
+def test_add_cnpj_roots_never_steals_another_entitys_root():
+    t = FakeTable()
+    er.put_entity("a", "A", ["A CO"], cnpj_roots=["12345678"], confidence="curated", table=t)
+    er.put_entity("b", "B", ["B CO"], confidence="curated", table=t)
+    assert er.add_cnpj_roots("b", ["12345678"], table=t) == []      # owned by a
+    assert er.resolve_by_cnpj("12345678", table=t) == "a"
+    assert er.get_entity("b", table=t).get("cnpj_roots", []) == []
+
+
+def test_add_cnpj_roots_preserves_other_fields():
+    t = FakeTable()
+    er.put_entity("inter", "Banco Inter", ["INTER"], confidence="curated",
+                  news_term="Banco Inter", table=t)
+    er.set_news_safe("inter", True, table=t)
+    er.add_cnpj_roots("inter", ["00416968"], table=t)
+    ent = er.get_entity("inter", table=t)
+    assert ent["cnpj_roots"] == ["00416968"]
+    assert ent["news_safe"] is True and ent["news_term"] == "Banco Inter"  # not clobbered

@@ -264,6 +264,44 @@ def accumulate_aliases(
     return added
 
 
+def add_cnpj_roots(
+    entity_id: str,
+    roots: Iterable[str],
+    *,
+    table: Any | None = None,
+) -> list[str]:
+    """Attach CNPJ 8-digit roots to an entity, writing the CNPJ# lookup items.
+
+    The counterpart of :func:`accumulate_aliases` for the exact join key. Needed
+    because ``cnpj_roots`` is protected from the generic patch path (it requires the
+    CNPJ# reindex done here). Non-destructive (preserves every other field), idempotent
+    (skips roots the entity already has), and it never **steals** a root already owned
+    by a *different* entity (returns it unwritten). Returns the roots actually added.
+    """
+    t = _table(table)
+    ent = get_entity(entity_id, table=t)
+    if not ent:
+        return []
+    cur = set(ent.get("cnpj_roots") or [])
+    added: list[str] = []
+    for r in roots:
+        root = "".join(ch for ch in str(r or "") if ch.isdigit())[:8]
+        if len(root) < 8 or root in cur:
+            continue
+        owner = t.get_item(Key={"pk": f"CNPJ#{root}"}).get("Item")
+        if owner and owner.get("entity_id") not in (None, entity_id):
+            continue  # another entity owns this CNPJ — never steal it
+        cur.add(root)
+        added.append(root)
+    if not added:
+        return []
+    ent["cnpj_roots"] = sorted(cur)
+    t.put_item(Item=ent)
+    for root in added:
+        t.put_item(Item={"pk": f"CNPJ#{root}", "type": "cnpj", "entity_id": entity_id})
+    return added
+
+
 # --- Review queue (ADR step 5) -------------------------------------------------
 # The "propose, don't auto-commit" cases (grouping CNPJs under one brand, fuzzy
 # name matches, colloquial nicknames) never mutate an entity directly. They queue
