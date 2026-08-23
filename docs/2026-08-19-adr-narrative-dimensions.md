@@ -307,6 +307,16 @@ S3 store, registry + industries, review queue, threat scoring, ~14-day window).
   belief store — see [ADR 004](2026-08-22-adr-competitive-thesis-swot.md)** (a new
   qualitative tier of the Shift-2 derived-state layer; a "reconcile-against-belief"
   synthesis mode where narratives reinforce/contradict evidence-linked SWOT bullets).
+  **Comparative ✅ shipped 2026-08-23** (`src/synth/comparative.py`, `OncaComparative`
+  Lambda) — verified live (Itaú outperform vs banking, peer_z +1.75, swot_hint S).
+  **Thematic ✅ shipped 2026-08-23** (`src/synth/thematic.py`, `OncaThematic` Lambda) —
+  the first **cross-entity** axis (subject = theme, not entity): a keyword taxonomy
+  tags recent activity and a theme becomes a "corrente setorial" when ≥ MIN_ENTITIES
+  distinct competitors + ≥ MIN_MENTIONS cards touch it in a recency window. Emits an
+  **O/T `swot_hint`** (ADR 004 note #7 — the SWOT store's Opportunity/Threat feeder),
+  verified live (7 currents: crypto O, crédito & inadimplência T ×11 firms, resultados
+  trimestrais data-cadence/no-hint, …). Remaining Wave 1: **Cohort/vintage** and the
+  independent **Regulatory-lifecycle/deadline**.
 - **Wave 2 — new stores, moderate risk.** *Threaded / incident* (event identity +
   thread store); the full *Regulatory-lifecycle* thread; *Behavioral*.
 - **Wave 3 — graph + legal risk, review-gated from day one.** *Relational*, then

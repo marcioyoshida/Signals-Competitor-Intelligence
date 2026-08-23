@@ -579,6 +579,27 @@ class OncaPrototypeStack(Stack):
         )
         digests_bucket.grant_read_write(thematic_fn)
 
+        # Regulatory-lifecycle detector (ADR 003 Wave 1 / ADR 004 T feeder): threads
+        # normative instruments (IN BCB, Resolução, Regulamento do Pix) out of the
+        # regulatory narratives, extracts best-effort deadlines, infers the affected
+        # domain, and writes "radar regulatório" cards (subject = instrument).
+        # Deterministic/LLM-free; digests read/write (put + same-day retract).
+        regulatory_fn = lambda_.Function(
+            self,
+            "OncaRegulatory",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.synth.regulatory.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.minutes(5),
+            memory_size=512,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+                "ONCA_FEATURE_WINDOW_DAYS": "90",
+            },
+        )
+        digests_bucket.grant_read_write(regulatory_fn)
+
         # Feed builder: aggregate recent narratives -> feed.json in the site bucket.
         feed_fn = lambda_.Function(
             self,
@@ -848,6 +869,19 @@ class OncaPrototypeStack(Stack):
             interval=Duration.seconds(15),
             backoff_rate=2.0,
         )
+        regulatory_task = sfn_tasks.LambdaInvoke(
+            self,
+            "RegulatoryTask",
+            lambda_function=regulatory_fn,
+            payload=sfn.TaskInput.from_object({}),
+            result_path="$.regulatory",
+        )
+        regulatory_task.add_retry(
+            errors=["States.ALL"],
+            max_attempts=2,
+            interval=Duration.seconds(15),
+            backoff_rate=2.0,
+        )
         feed_task = sfn_tasks.LambdaInvoke(
             self,
             "FeedTask",
@@ -872,6 +906,7 @@ class OncaPrototypeStack(Stack):
                 .next(longitudinal_task)
                 .next(comparative_task)
                 .next(thematic_task)
+                .next(regulatory_task)
                 .next(feed_task)
             ),
             # Budget for a 15-min ingest (plus a retry), then synth, then feed.
