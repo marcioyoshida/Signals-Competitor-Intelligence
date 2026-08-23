@@ -600,6 +600,29 @@ class OncaPrototypeStack(Stack):
         )
         digests_bucket.grant_read_write(regulatory_fn)
 
+        # Cohort/vintage detector (ADR 003 Wave 1 / ADR 004 O-T feeder): set-longitudinal
+        # over industry cohorts — recomputes each segment's recent-vs-baseline threat
+        # "temperature" from the narrative history + registry industry map and writes
+        # derived "movimento de cohort" narratives (subject = a set). Needs the entities
+        # table for the industry map; digests read/write (put + same-day retract).
+        cohort_fn = lambda_.Function(
+            self,
+            "OncaCohort",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.synth.cohort.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.minutes(5),
+            memory_size=512,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+                "ONCA_ENTITIES_TABLE": entities_table.table_name,
+                "ONCA_FEATURE_WINDOW_DAYS": "90",
+            },
+        )
+        digests_bucket.grant_read_write(cohort_fn)
+        entities_table.grant_read_data(cohort_fn)
+
         # Feed builder: aggregate recent narratives -> feed.json in the site bucket.
         feed_fn = lambda_.Function(
             self,
@@ -882,6 +905,19 @@ class OncaPrototypeStack(Stack):
             interval=Duration.seconds(15),
             backoff_rate=2.0,
         )
+        cohort_task = sfn_tasks.LambdaInvoke(
+            self,
+            "CohortTask",
+            lambda_function=cohort_fn,
+            payload=sfn.TaskInput.from_object({}),
+            result_path="$.cohort",
+        )
+        cohort_task.add_retry(
+            errors=["States.ALL"],
+            max_attempts=2,
+            interval=Duration.seconds(15),
+            backoff_rate=2.0,
+        )
         feed_task = sfn_tasks.LambdaInvoke(
             self,
             "FeedTask",
@@ -907,6 +943,7 @@ class OncaPrototypeStack(Stack):
                 .next(comparative_task)
                 .next(thematic_task)
                 .next(regulatory_task)
+                .next(cohort_task)
                 .next(feed_task)
             ),
             # Budget for a 15-min ingest (plus a retry), then synth, then feed.

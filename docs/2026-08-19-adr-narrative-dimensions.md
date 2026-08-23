@@ -315,8 +315,24 @@ S3 store, registry + industries, review queue, threat scoring, ~14-day window).
   distinct competitors + ≥ MIN_MENTIONS cards touch it in a recency window. Emits an
   **O/T `swot_hint`** (ADR 004 note #7 — the SWOT store's Opportunity/Threat feeder),
   verified live (7 currents: crypto O, crédito & inadimplência T ×11 firms, resultados
-  trimestrais data-cadence/no-hint, …). Remaining Wave 1: **Cohort/vintage** and the
-  independent **Regulatory-lifecycle/deadline**.
+  trimestrais data-cadence/no-hint, …).
+  **Regulatory-lifecycle ✅ shipped 2026-08-23** (`src/synth/regulatory.py`,
+  `OncaRegulatory` Lambda) — subject = a **policy instrument**: regexes thread IN BCB /
+  Resolução / Regulamento do Pix out of the regulatory narratives, extract best-effort
+  pt-BR deadlines (future date + cue, bound to a window around each mention) and infer
+  the affected domain; alert only within 30 days; **T `swot_hint`**. Verified live
+  (Regulamento do Pix v2.10.0 → Pagamentos/PIX, IN BCB 770 → Crédito, compromissadas
+  → Câmbio).
+  **Cohort/vintage ✅ shipped 2026-08-23** (`src/synth/cohort.py`, `OncaCohort` Lambda)
+  — the first **set** subject, narrated over time (**set-longitudinal**): each industry
+  cohort's recent member-day threat "temperature" is z-scored window-vs-window against
+  its own baseline → heating (**T**) / cooling (**O**), with a vintage read (new
+  entrants in the window). Robust on thin history (window-vs-window, not a per-day
+  series).
+  **Wave 1 is now complete** — all six axes shipped (Comparative, Longitudinal,
+  Silence, Thematic, Regulatory-lifecycle, Cohort/vintage). Next: Wave 2
+  (threaded/incident, full regulatory thread, behavioral) or ADR 004 step 2 (the SWOT
+  belief store, which the O/T/S/W `swot_hint`s from these axes now feed).
 - **Wave 2 — new stores, moderate risk.** *Threaded / incident* (event identity +
   thread store); the full *Regulatory-lifecycle* thread; *Behavioral*.
 - **Wave 3 — graph + legal risk, review-gated from day one.** *Relational*, then
