@@ -37,6 +37,23 @@ def test_resolve_entities_end_to_end_adds_rede():
     assert "itau" in ents and "rede" in ents
 
 
+def test_cited_source_reporting_verb_is_dropped():
+    # Unit-test the guard directly (registry-independent): a data-source name in the
+    # "cue + reporting-verb + article" construction is source-only, so it's dropped.
+    from src.synth.entities import _entity_source_only
+
+    up = lambda s: " " + s.upper() + " "
+    # the reporting-verb form that used to leak
+    assert _entity_source_only(["SERASA"], up("crédito acelera, conforme aponta a Serasa"))
+    assert _entity_source_only(["SERASA"], up("o varejo recuou, segundo mostrou a Serasa"))
+    assert _entity_source_only(["SERASA"], up("inadimplência sobe, de acordo com estima a Serasa"))
+    # the plain cued form still caught (regression)
+    assert _entity_source_only(["SERASA"], up("crédito sobe, segundo a Serasa"))
+    # subject position (no cited-source cue) is NOT source-only -> entity kept
+    assert not _entity_source_only(["SERASA"], up("a Serasa lançou uma plataforma de crédito"))
+    assert not _entity_source_only(["SERASA"], up("Serasa registra alta na inadimplência"))
+
+
 def test_match_kinds_uses_provided_ambiguous_set():
     from src.synth.entities import _match_kinds
 

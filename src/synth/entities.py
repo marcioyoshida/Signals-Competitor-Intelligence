@@ -267,6 +267,11 @@ def _match_kinds(
 _SOURCE_CUE = re.compile(
     r"(?:SEGUNDO|CONFORME|DE ACORDO COM|DADOS|LEVANTAMENTO|PESQUISA|ESTUDO|"
     r"MONITOR|BOLETIM|PAINEL|[IÍ]NDICE|RELAT[OÓ]RIO|C[AÁ]LCULO|N[UÚ]MEROS)"
+    # Optional reporting verb between the cue and the source name — the common
+    # "conforme APONTA a Serasa" / "segundo MOSTROU a X" form. Stems cover the
+    # conjugations (aponta/apontou/apontam, indica/indicou, …).
+    r"(?:\s+(?:APONT|APUR|INDIC|MOSTR|REVEL|ESTIM|CALCUL|INFORM|DIVULG|REGISTR|"
+    r"PROJET|CONSTAT|SINALIZ|AFER|DETECT|IDENTIFIC)\w*)?"
     r"(?:\s+D[AEO]S?| COM| POR| SOBRE)?"
     r"(?:\s+(?:A|O|AS|OS))?"
     r"\s+$"
