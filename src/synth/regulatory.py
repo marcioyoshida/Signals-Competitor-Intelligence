@@ -73,18 +73,28 @@ def _days_between(a: str, b: str) -> int | None:
 
 
 # --- Instrument extraction --------------------------------------------------
-# (key_template, display_template, regex on accent-stripped lowercase text).
+# Numbers may carry a pt-BR thousands separator ("5.333"); _num strips it so
+# "Resolução CMN 5.333" threads as one instrument, not "5333" AND "5".
+_NUM = r"(\d{1,3}(?:\.\d{3})*|\d{1,5})"
+
 _INSTRUMENTS = [
-    ("in-bcb-{0}", "Instrução Normativa BCB {0}",
-     re.compile(r"instrucao normativa\s*bcb[:\s]*(\d{1,4})")),
-    ("res-{0}-{1}", "Resolução {0} {1}",
-     re.compile(r"resolucao\s+(bcb|cmn|cvm)\s*(?:n[o]?\s*)?[:\s]*(\d{1,5})")),
-    ("circ-{0}", "Circular BCB {0}",
-     re.compile(r"circular\s+(?:bcb\s+)?(\d{2,5})")),
+    ("in-bcb", "Instrução Normativa BCB {n}", re.compile(r"instrucao normativa\s*bcb[:\s]*" + _NUM)),
+    ("res-bcb", "Resolução BCB {n}", re.compile(r"resolucao\s+bcb\s*(?:n[o]?\s*)?[:\s]*" + _NUM)),
+    ("res-cmn", "Resolução CMN {n}", re.compile(r"resolucao\s+cmn\s*(?:n[o]?\s*)?[:\s]*" + _NUM)),
+    ("res-cvm", "Resolução CVM {n}", re.compile(r"resolucao\s+cvm\s*(?:n[o]?\s*)?[:\s]*" + _NUM)),
+    ("circ", "Circular BCB {n}", re.compile(r"circular\s+(?:bcb\s+)?" + _NUM)),
 ]
 _PIX_REGULAMENTO = re.compile(r"(manual de padroes[^.]{0,40}pix|regulamento do pix)")
 _PIX_VERSION = re.compile(r"vers[aã]o\s*([\d.]+)")
 _COMUNICADO = re.compile(r"comunicado[s]?\s*(\d{4,6})")
+
+# How many chars around an instrument mention bind its deadline/domain — so a date
+# or topic elsewhere in a dense multi-instrument card does not attach to every ref.
+_CONTEXT_WINDOW = 220
+
+
+def _num(raw: str) -> str:
+    return raw.replace(".", "").strip()
 
 _DEADLINE_CUE = re.compile(
     r"(a partir de|ate\s+\d|ate\s+o dia|entra em vigor|entrar[aã] em vigor|"
@@ -108,26 +118,32 @@ _DOMAINS = [
 _DOMAIN_PATS = [(label, [re.compile(p) for p in pats]) for label, pats in _DOMAINS]
 
 
+def _mentions(text: str, *, include_comunicados: bool) -> list[tuple[str, str, int, int]]:
+    """Every instrument mention as (key, display_label, start, end) on normalized text."""
+    out: list[tuple[str, str, int, int]] = []
+    for prefix, disp_t, rx in _INSTRUMENTS:
+        for m in rx.finditer(text):
+            num = _num(m.group(1))
+            out.append((f"{prefix}-{num}", disp_t.format(n=num), m.start(), m.end()))
+    for m in _PIX_REGULAMENTO.finditer(text):
+        vm = _PIX_VERSION.search(text)
+        ver = vm.group(1) if vm else None
+        disp = "Regulamento do Pix" + (f" (v{ver})" if ver else "")
+        out.append(("regulamento-pix", disp, m.start(), m.end()))
+    if include_comunicados:
+        for m in _COMUNICADO.finditer(text):
+            out.append((f"comunicado-{m.group(1)}", f"Comunicado BCB {m.group(1)}",
+                        m.start(), m.end()))
+    return out
+
+
 def instruments_in(narrative: dict[str, Any], *, include_comunicados: bool = False) -> dict[str, str]:
     """{instrument_key: display_label} referenced by this narrative."""
     text = _norm(narrative.get("narrative") or "")
     found: dict[str, str] = {}
-    if not text:
-        return found
-    for key_t, disp_t, rx in _INSTRUMENTS:
-        for m in rx.finditer(text):
-            g = m.groups()
-            key = key_t.format(*[str(x).strip() for x in g])
-            disp = disp_t.format(*[str(x).strip().upper() if len(str(x)) <= 3 else str(x).strip() for x in g])
+    for key, disp, _s, _e in _mentions(text, include_comunicados=include_comunicados):
+        if len(disp) > len(found.get(key, "")):
             found[key] = disp
-    if _PIX_REGULAMENTO.search(text):
-        vm = _PIX_VERSION.search(text)
-        ver = vm.group(1) if vm else None
-        found["regulamento-pix"] = "Regulamento do Pix" + (f" (v{ver})" if ver else "")
-    if include_comunicados:
-        for m in _COMUNICADO.finditer(text):
-            n = m.group(1)
-            found[f"comunicado-{n}"] = f"Comunicado BCB {n}"
     return found
 
 
@@ -199,27 +215,34 @@ def threads(narratives: list[dict[str, Any]], *, as_of: str, recency: int,
         gap = _days_between(as_of, d)
         if gap is None or gap < 0 or gap > recency:
             continue
-        refs = instruments_in(n, include_comunicados=include_comunicados)
-        if not refs:
-            continue
-        text = n.get("narrative") or ""
-        for key, disp in refs.items():
+        raw = n.get("narrative") or ""
+        norm = _norm(raw)
+        mentions = _mentions(norm, include_comunicados=include_comunicados)
+        seen_here: set[str] = set()
+        for key, disp, start, end in mentions:
+            # Bind deadline/domain to a window AROUND this mention, so a date or topic
+            # elsewhere in a dense multi-instrument card can't attach to every ref.
+            ctx = norm[max(0, start - _CONTEXT_WINDOW): end + _CONTEXT_WINDOW]
             g = groups.setdefault(
                 key, {"label": disp, "cards": [], "latest": "", "deadline": None, "domain": None}
             )
-            # keep the richest label (a versioned Pix regulamento beats the bare one)
             if len(disp) > len(g["label"]):
                 g["label"] = disp
-            g["cards"].append(n)
-            if d > g["latest"]:
+            if key not in seen_here:  # count a card once per instrument
+                g["cards"].append(n)
+                seen_here.add(key)
+            local_domain = _domain_of(ctx)
+            if d >= g["latest"] and (g["domain"] is None or local_domain != "Setor financeiro"):
                 g["latest"] = d
-                g["domain"] = _domain_of(text)
-            dl = _future_deadline(text, as_of, horizon)
+                g["domain"] = local_domain
+            dl = _future_deadline(ctx, as_of, horizon)
             if dl and (g["deadline"] is None or dl < g["deadline"]):
                 g["deadline"] = dl
     for g in groups.values():
+        if not g["latest"]:
+            g["latest"] = max((feature_store._date_of(c) for c in g["cards"]), default="")
         if g["domain"] is None:
-            g["domain"] = _domain_of(" ".join(c.get("narrative") or "" for c in g["cards"]))
+            g["domain"] = "Setor financeiro"
     return groups
 
 
