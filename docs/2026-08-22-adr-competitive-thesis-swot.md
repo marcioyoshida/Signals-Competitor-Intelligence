@@ -1,9 +1,29 @@
 # ADR 004 — Competitive thesis: a per-entity SWOT belief store that narratives reinforce or contradict
 
 Status: **Accepted (2026-08-22)** — step 1 (Comparative axis) SHIPPED 2026-08-23;
-**step 2 (SWOT belief store v1, deterministic feeders) SHIPPED 2026-08-23**. Extends
-[ADR 003](2026-08-19-adr-narrative-dimensions.md). Steps 3–4 (LLM reconcile-against-
-belief + seeding) remain design-only until their turn (gated on Phase C).
+**step 2 (SWOT belief store v1, deterministic feeders) SHIPPED 2026-08-23**;
+**step 3 (reconcile-against-belief — LLM stance + embeddings) BUILT & COMMITTED
+2026-08-23 (`25d88f1`), deploy pending approval**. Extends
+[ADR 003](2026-08-19-adr-narrative-dimensions.md). Step 4 (seeding) remains
+design-only. The step-3 vetting UI (accept/reject proposals) is gated on Phase C;
+the proposal *queue* ships now, read-only.
+
+> **Step 3 built (2026-08-23).** `src/synth/swot_reconcile.py` (`OncaSwotReconcile`
+> Lambda, wired `… → swot → swot_reconcile → threads → feed`) closes the loop for the
+> free-text news/fatos narratives that carry no deterministic `swot_hint`. Per entity,
+> for narratives surfaced this run: embed the key claim (`src/synth/embeddings.py`,
+> Titan v2, content-hash cached in `swot/embcache.json`) → cosine top-k nearest belief
+> bullets → **one bounded nova-lite Converse stance call** per narrative over only the
+> k near bullets → `reinforces | contradicts | unrelated` (+ optional new bullet).
+> **reinforces auto-applies** as a durable evidence record (`swot/reinforcements.json`)
+> that `swot_store` folds onto the matching bullet next rebuild (confidence up, a
+> `news_evidence` count on the bullet); **contradicts & new are PROPOSED only**
+> (`swot/proposals.json`) — never auto-applied (a wrong NLI must not retire a true
+> belief). The core `reconcile()` is pure (embed/stance fns injected) so tests drive it
+> with deterministic fakes. Cost is bounded exactly as this ADR prescribes: only today's
+> narratives (highest-threat first, env-capped), top-k not all-pairs, cached embeddings.
+> The war room shows news corroboration on each bullet and a per-entity "Propostas
+> pendentes de revisão" panel (read-only until the Phase C vetting UI).
 
 > **Step 2 shipped (2026-08-23).** `src/synth/swot_store.py` (`OncaSwot` Lambda, wired
 > `… → cohort → swot → feed`) rebuilds a per-entity S/W/O/T belief file each run from
@@ -141,10 +161,13 @@ step — they map to a dimension by rule, attaching as structured evidence.
    (bullets keyed by `(entity, dimension, source-key)`), so embeddings would be computed
    but unused. They are the retrieval substrate for step 3's LLM stance (embed the
    narrative → cosine top-k bullets), so they land there, where they earn their cost.
-3. **SWOT v2 — reconcile-against-belief (LLM stance).** Add embed-retrieve + stance
-   classification for news/fatos narratives; reinforce auto-applies, **contradict &
-   new go through the review queue**. Gated on Phase C (accounts) for vetting.
-4. **Seeding** (LLM-drafted, analyst-vetted) lands with v2.
+3. **SWOT v2 — reconcile-against-belief (LLM stance). ✅ BUILT & COMMITTED 2026-08-23
+   (`25d88f1`), deploy pending.** Added embed-retrieve + stance classification for
+   news/fatos narratives; reinforce auto-applies (durable `swot/reinforcements.json`
+   folded by the belief builder), **contradict & new go through the review queue**
+   (`swot/proposals.json`, surfaced read-only). The *vetting UI* (accept/reject) is
+   still gated on Phase C (accounts); the queue and the reconcile engine ship now.
+4. **Seeding** (LLM-drafted, analyst-vetted) lands with the Phase C vetting UI.
 
 Independent of the other roadmap tracks; v2 depends on Phase C. Nothing here is
 committed — this ADR records the model, the fit with ADR 003, and the guardrails.
