@@ -2,8 +2,8 @@
 
 Status: **Accepted (2026-08-22)** — step 1 (Comparative axis) SHIPPED 2026-08-23;
 **step 2 (SWOT belief store v1, deterministic feeders) SHIPPED 2026-08-23**;
-**step 3 (reconcile-against-belief — LLM stance + embeddings) BUILT & COMMITTED
-2026-08-23 (`25d88f1`), deploy pending approval**. Extends
+**step 3 (reconcile-against-belief — LLM stance + embeddings) SHIPPED & VERIFIED
+LIVE 2026-08-23 (`25d88f1`)**. Extends
 [ADR 003](2026-08-19-adr-narrative-dimensions.md). Step 4 (seeding) remains
 design-only. The step-3 vetting UI (accept/reject proposals) is gated on Phase C;
 the proposal *queue* ships now, read-only.
@@ -24,6 +24,12 @@ the proposal *queue* ships now, read-only.
 > narratives (highest-threat first, env-capped), top-k not all-pairs, cached embeddings.
 > The war room shows news corroboration on each bullet and a per-entity "Propostas
 > pendentes de revisão" panel (read-only until the Phase C vetting UI).
+>
+> Verified live (2026-08-23, real Bedrock): 3 candidates → PicPay's credit-risk news
+> *reinforced* its `theme:credit_risk` T belief (stance 0.95; the bullet now carries
+> `news_evidence:1`, confidence 0.61), while Itaú's US banco-múltiplo authorization and
+> Caixa Seguridade's expansion became *new-O proposals* (stance 0.85, pending) — both
+> surfaced in `feed.swot_proposals`, neither auto-applied.
 
 > **Step 2 shipped (2026-08-23).** `src/synth/swot_store.py` (`OncaSwot` Lambda, wired
 > `… → cohort → swot → feed`) rebuilds a per-entity S/W/O/T belief file each run from
@@ -161,8 +167,8 @@ step — they map to a dimension by rule, attaching as structured evidence.
    (bullets keyed by `(entity, dimension, source-key)`), so embeddings would be computed
    but unused. They are the retrieval substrate for step 3's LLM stance (embed the
    narrative → cosine top-k bullets), so they land there, where they earn their cost.
-3. **SWOT v2 — reconcile-against-belief (LLM stance). ✅ BUILT & COMMITTED 2026-08-23
-   (`25d88f1`), deploy pending.** Added embed-retrieve + stance classification for
+3. **SWOT v2 — reconcile-against-belief (LLM stance). ✅ SHIPPED & VERIFIED LIVE
+   2026-08-23 (`25d88f1`).** Added embed-retrieve + stance classification for
    news/fatos narratives; reinforce auto-applies (durable `swot/reinforcements.json`
    folded by the belief builder), **contradict & new go through the review queue**
    (`swot/proposals.json`, surfaced read-only). The *vetting UI* (accept/reject) is
