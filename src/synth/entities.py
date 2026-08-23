@@ -151,6 +151,47 @@ def known_parents(item: dict[str, Any]) -> list[str]:
     return parents
 
 
+# Acquiring stems (uppercase, accent-folded not needed — matched as substrings on
+# the already-uppercased blob). Distinctive to merchant acquiring, so they gate the
+# ambiguous "Rede" (=network) without catching card *issuing* ("cartão").
+_ACQ_TERMS = ("ADQUIR", "MAQUININHA", "CREDENCIAD", "MDR", "TPV")
+
+# Bank-owned acquiring subsidiaries. A parent-bank signal that is specifically about
+# its acquiring arm also surfaces under the subsidiary, so the Adquirência module
+# captures the parent's acquiring-segment activity (the only channel for Rede, which
+# is delisted, internal to Itaú, and can't resolve on its own). Attach only when the
+# parent is present AND a distinctive subsidiary name appears; for an ambiguous name
+# ("Rede" = network) also require an acquiring term, so "rede de agências" (branch
+# network) never false-matches. This is resolution *logic* (like known_parents), kept
+# in code; the parent/child identities live in the registry.
+ACQUIRING_SUBSIDIARIES: dict[str, dict[str, tuple[str, ...]]] = {
+    "cielo": {"parents": ("bradesco", "bb"), "names": ("CIELO",), "ambiguous_names": ()},
+    "getnet": {"parents": ("santander",), "names": ("GETNET",), "ambiguous_names": ()},
+    "rede": {"parents": ("itau",), "names": ("REDECARD",), "ambiguous_names": ("REDE",)},
+}
+
+
+def _word_present(token: str, blob: str) -> bool:
+    return re.search(r"(?<![0-9A-ZÀ-Ÿ])" + re.escape(token) + r"(?![0-9A-ZÀ-Ÿ])", blob) is not None
+
+
+def acquiring_cross_refs(item: dict[str, Any], found: list[str]) -> list[str]:
+    """Bank-owned acquiring subsidiaries to attach when a parent's signal is about
+    its acquiring arm. Returns subsidiaries not already in ``found``."""
+    blob = " " + signal_blob(item) + " "
+    has_term = any(t in blob for t in _ACQ_TERMS)
+    out: list[str] = []
+    for sub, cfg in ACQUIRING_SUBSIDIARIES.items():
+        if sub in found or not any(p in found for p in cfg["parents"]):
+            continue
+        hit = any(_word_present(n, blob) for n in cfg["names"])
+        if not hit and has_term:
+            hit = any(_word_present(n, blob) for n in cfg.get("ambiguous_names", ()))
+        if hit:
+            out.append(sub)
+    return out
+
+
 # Bare single-token aliases that are also common words / surnames / too-short —
 # they collide with unrelated free text ("Stone" vs "Rolling Stone", "caixa" =
 # cashbox, "nu" = nude in pt, "nomad"/"neon" everyday words). Each of these
@@ -296,6 +337,10 @@ def resolve_entities(item: dict[str, Any]) -> list[str]:
     for parent in known_parents(item):
         if parent not in found:
             found.append(parent)
+    # A parent bank's acquiring-segment signal also surfaces under its acquiring
+    # subsidiary (the only channel for Rede; corroboration for Cielo/Getnet).
+    for sub in acquiring_cross_refs(item, found):
+        found.append(sub)
     return found
 
 

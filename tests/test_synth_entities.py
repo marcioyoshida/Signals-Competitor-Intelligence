@@ -3,7 +3,38 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.synth.entities import primary_entity, resolve_entities
+from src.synth.entities import primary_entity, resolve_entities, acquiring_cross_refs
+
+
+def test_acquiring_cross_ref_attaches_rede_to_itau_acquiring_signal():
+    # Itaú's acquiring arm ("Rede" + an acquiring term) surfaces under `rede`.
+    assert acquiring_cross_refs(
+        {"subject": "Itaú expande maquininhas da Rede"}, ["itau"]) == ["rede"]
+    # A DOU/news blob naming Redecard needs no acquiring term (distinctive name).
+    assert acquiring_cross_refs(
+        {"subject": "Itaú reorganiza a Redecard"}, ["itau"]) == ["rede"]
+
+
+def test_acquiring_cross_ref_ignores_branch_network_and_missing_parent():
+    # "rede de agências" (branch network) is not acquiring — no acquiring term.
+    assert acquiring_cross_refs(
+        {"subject": "Itaú amplia rede de agências no Nordeste"}, ["itau"]) == []
+    # Ambiguous "Rede" + acquiring term but WITHOUT the parent present → nothing.
+    assert acquiring_cross_refs(
+        {"subject": "nova maquininha da Rede"}, []) == []
+
+
+def test_acquiring_cross_ref_not_duplicated_when_already_resolved():
+    # Bradesco signal naming Cielo: cielo already resolves directly, so the
+    # cross-ref does not double-add it.
+    assert "cielo" not in acquiring_cross_refs(
+        {"subject": "Bradesco fala da Cielo"}, ["bradesco", "cielo"])
+
+
+def test_resolve_entities_end_to_end_adds_rede():
+    ents = resolve_entities({"source": "trade_press",
+                             "subject": "Itaú investe em maquininhas e adquirência da Rede"})
+    assert "itau" in ents and "rede" in ents
 
 
 def test_match_kinds_uses_provided_ambiguous_set():
