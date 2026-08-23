@@ -157,6 +157,74 @@ def test_curated_bullet_folds_into_beliefs_as_active():
     assert beliefs["nubank"]["counts"]["O"] == 1
 
 
+# --- belief maintenance: stale re-review vetting --------------------------
+def _seed_curated(s3, bullets, retirements=None):
+    s3.put_object(Bucket=BUCKET, Key=swot_store.CURATED_KEY,
+                  Body=json.dumps({"bullets": bullets,
+                                   "retirements": retirements or []}).encode())
+
+
+def test_approve_stale_retires_the_bullet():
+    from src.synth import swot_maintenance
+    s3 = FakeS3()
+    _seed_curated(s3, [{"id": "seed:nubank:S:abc", "entity": "nubank", "dimension": "S",
+                        "text": "t", "approved_at": "2026-01-01T00:00:00+00:00"}])
+    _seed_store(s3, swot_maintenance.MAINTENANCE_PROPOSALS_KEY,
+                [_prop("stale:seed:nubank:S:abc:2026-01-01", kind="stale",
+                       target_bullet_id="seed:nubank:S:abc")])
+    r = curate.vet_swot(BUCKET, "stale:seed:nubank:S:abc:2026-01-01", "approved", s3=s3)
+    assert r["effect"] == "retirement"
+    cur = _curated(s3)
+    assert cur["retirements"][0]["target_bullet_id"] == "seed:nubank:S:abc"
+
+
+def test_reject_stale_reaffirms_the_bullet():
+    from src.synth import swot_maintenance
+    s3 = FakeS3()
+    _seed_curated(s3, [{"id": "seed:nubank:S:abc", "entity": "nubank", "dimension": "S",
+                        "text": "t", "approved_at": "2026-01-01T00:00:00+00:00"}])
+    _seed_store(s3, swot_maintenance.MAINTENANCE_PROPOSALS_KEY,
+                [_prop("stale:seed:nubank:S:abc:2026-01-01", kind="stale",
+                       target_bullet_id="seed:nubank:S:abc")])
+    r = curate.vet_swot(BUCKET, "stale:seed:nubank:S:abc:2026-01-01", "rejected", s3=s3)
+    assert r["status"] == "rejected" and r["effect"] == "reaffirm"
+    b = _curated(s3)["bullets"][0]
+    assert b["reaffirmed_at"]                       # clock reset
+    assert b["id"] == "seed:nubank:S:abc"           # bullet kept, not retired
+    assert _curated(s3)["retirements"] == []
+
+
+def test_reaffirm_then_not_stale():
+    # end-to-end: reject a stale proposal -> reaffirmed -> find_stale no longer flags it
+    from src.synth import swot_maintenance
+    s3 = FakeS3()
+    old = "2026-01-01T00:00:00+00:00"
+    _seed_curated(s3, [{"id": "b1", "entity": "nubank", "dimension": "S", "text": "t",
+                        "approved_at": old}])
+    _seed_store(s3, swot_maintenance.MAINTENANCE_PROPOSALS_KEY,
+                [_prop("stale:b1:2026-01-01", kind="stale", target_bullet_id="b1")])
+    curate.vet_swot(BUCKET, "stale:b1:2026-01-01", "rejected", s3=s3)
+    cur = _curated(s3)
+    # reaffirmed today -> not stale under any sane window
+    assert swot_maintenance.find_stale(cur, [], as_of="2026-08-23", stale_days=90) == []
+
+
+def test_reinforcement_folds_onto_curated_bullet():
+    # news corroboration targeting a curated bullet by id raises its news_evidence
+    curated = {"bullets": [{
+        "id": "seed:nubank:O:xyz", "entity": "nubank", "label": "Nubank",
+        "dimension": "O", "text": "Expansão internacional.", "evidence": ["n1"],
+        "origin": "seed", "date": "2026-06-01", "approved_at": "2026-06-01T00:00:00+00:00",
+    }], "retirements": []}
+    reinf = [{"bullet_id": "seed:nubank:O:xyz", "narrative_id": "news-9",
+              "date": "2026-08-20", "stance_conf": 0.9}]
+    beliefs = swot_store.build_beliefs([], as_of="2026-08-23", reinforcements=reinf,
+                                       curated=curated)
+    b = beliefs["nubank"]["bullets"][0]
+    assert b["news_evidence"] == 1 and b["evidence_count"] == 2
+    assert b["latest"] == "2026-08-20"             # freshened by the reinforcement
+
+
 def test_curated_retirement_marks_target_retired():
     # an axis-derived bullet whose id the analyst retired -> status retired, not active
     narr = {"id": "c1", "entity": "itau", "axis": "comparative",

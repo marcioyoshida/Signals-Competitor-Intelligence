@@ -248,6 +248,13 @@ def build_beliefs(
     # beliefs; approved challenges retire the target bullet by id.
     retired_ids = {r.get("target_bullet_id") for r in (curated or {}).get("retirements", [])
                    if r.get("target_bullet_id")}
+    # News reinforcements that target a curated bullet by id (so an approved belief
+    # accrues corroboration and counts as fresh for staleness maintenance).
+    reinf_by_bullet: dict[str, list[dict[str, Any]]] = {}
+    for r in reinforcements or []:
+        bid = r.get("bullet_id")
+        if bid:
+            reinf_by_bullet.setdefault(bid, []).append(r)
     for cb in (curated or {}).get("bullets", []):
         ent = cb.get("entity")
         dim = cb.get("dimension")
@@ -256,6 +263,14 @@ def build_beliefs(
         labels.setdefault(ent, cb.get("label") or str(ent).replace("_", " ").title())
         ev = [{"id": nid, "date": str(cb.get("date") or "")[:10], "axis": "curated"}
               for nid in (cb.get("evidence") or [])]
+        for r in reinf_by_bullet.get(cb.get("id"), []):
+            nid = r.get("narrative_id")
+            if nid:
+                ev.append({"id": nid, "date": str(r.get("date") or "")[:10],
+                           "axis": "news", "stance": r.get("stance_conf")})
+        # affirmation recency: last human affirmation OR last news corroboration.
+        dates = [e["date"] for e in ev if e.get("date")]
+        dates += [str(cb.get("reaffirmed_at") or "")[:10], str(cb.get("approved_at") or "")[:10]]
         per_entity.setdefault(ent, []).append({
             "id": cb.get("id"),
             "dimension": dim,
@@ -267,8 +282,8 @@ def build_beliefs(
             "origin": cb.get("origin"),
             "evidence": ev,
             "evidence_count": len(ev),
-            "news_evidence": len(ev),
-            "latest": cb.get("approved_at", "")[:10] or (max((e["date"] for e in ev), default="")),
+            "news_evidence": sum(1 for e in ev if e.get("axis") == "news"),
+            "latest": max([d for d in dates if d], default=""),
         })
 
     beliefs: dict[str, dict[str, Any]] = {}

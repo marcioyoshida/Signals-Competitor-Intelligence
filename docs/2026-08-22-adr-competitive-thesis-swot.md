@@ -5,7 +5,8 @@ Status: **Accepted (2026-08-22)** — step 1 (Comparative axis) SHIPPED 2026-08-
 **step 3 (reconcile-against-belief — LLM stance + embeddings) SHIPPED & VERIFIED
 LIVE 2026-08-23 (`25d88f1`)**; **step 4 (cold-start seeding — LLM-drafted,
 analyst-vetted) SHIPPED 2026-08-23**; **Phase C vetting UI (analyst accept/reject →
-promote/suppress) SHIPPED 2026-08-23**. Extends
+promote/suppress) SHIPPED 2026-08-23**; **belief maintenance (drift/staleness
+re-review, open question #4) SHIPPED 2026-08-23**. Extends
 [ADR 003](2026-08-19-adr-narrative-dimensions.md). Every proposal queue (reconcile +
 seed + relationship-graph) is now actionable from the war room.
 
@@ -176,8 +177,16 @@ step — they map to a dimension by rule, attaching as structured evidence.
    entity's narrative history + dossier, analyst-vetted; (b) pure bottom-up growth
    (slow). Recommend hybrid: drafted, vetted, then evidence-updated. No un-vetted
    bullet is ever asserted.
-4. **Drift & staleness.** Beliefs decay; a 2023 Strength may be stale. Confidence
-   carries a recency half-life; long-unreinforced bullets auto-`challenged`.
+4. **Drift & staleness.** ✅ ADDRESSED 2026-08-23 (`src/synth/swot_maintenance.py`,
+   `OncaSwotMaintenance`). Derived axis bullets self-maintain (they decay and vanish
+   when their axis stops firing — silence even narrates the absence), so only the
+   **curated** (analyst-pinned) bullets are a drift surface — pinned at 0.9 with no
+   decay. A curated bullet unaffirmed for `ONCA_MAINT_STALE_DAYS` (90) — no human
+   re-affirmation, no news corroboration reaching it — emits a **`stale` re-review
+   proposal** through the same Phase C queue: **approve → retire**, **reject →
+   re-affirm** (resets the staleness clock). Idempotent by affirmation epoch. News
+   reinforcements now also fold onto curated bullets, so corroboration keeps a belief
+   fresh (and raises its evidence). No belief is ever auto-retired — precision-first.
 5. **Cost/latency.** Bounded by embed-retrieve-then-judge-top-k (not all-pairs) and
    by only reconciling narratives that actually surfaced. Fits the ~$100/mo envelope.
 6. **Feedback loop.** SWOT updates are derived state, **not** activity narratives —

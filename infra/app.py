@@ -710,6 +710,28 @@ class OncaPrototypeStack(Stack):
             )
         )
 
+        # SWOT belief maintenance (ADR 004 open question #4): a curated (analyst-pinned)
+        # bullet unreinforced for ONCA_MAINT_STALE_DAYS earns a `stale` re-review proposal
+        # so drift is caught. Deterministic, LLM-free; approve retires the bullet, reject
+        # re-affirms it (via the Phase C vetting endpoint). Reads the durable curated +
+        # reinforcement stores; writes swot/maintenance_proposals.json.
+        maintenance_fn = lambda_.Function(
+            self,
+            "OncaSwotMaintenance",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.synth.swot_maintenance.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.minutes(2),
+            memory_size=256,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+                "ONCA_MAINT_ENABLED": "1",
+                "ONCA_MAINT_STALE_DAYS": "90",
+            },
+        )
+        digests_bucket.grant_read_write(maintenance_fn)
+
         # Incident thread store (ADR 003 Wave 2): threads related developments into
         # living incident docs (event identity by entity+event-type) with an
         # open/developing/resolved lifecycle; publishes threads/{id}.json + a
@@ -1170,6 +1192,19 @@ class OncaPrototypeStack(Stack):
             interval=Duration.seconds(15),
             backoff_rate=2.0,
         )
+        maintenance_task = sfn_tasks.LambdaInvoke(
+            self,
+            "SwotMaintenanceTask",
+            lambda_function=maintenance_fn,
+            payload=sfn.TaskInput.from_object({}),
+            result_path="$.swot_maintenance",
+        )
+        maintenance_task.add_retry(
+            errors=["States.ALL"],
+            max_attempts=2,
+            interval=Duration.seconds(15),
+            backoff_rate=2.0,
+        )
         threads_task = sfn_tasks.LambdaInvoke(
             self,
             "ThreadsTask",
@@ -1277,6 +1312,7 @@ class OncaPrototypeStack(Stack):
                 .next(swot_task)
                 .next(reconcile_task)
                 .next(seed_task)
+                .next(maintenance_task)
                 .next(threads_task)
                 .next(behavioral_task)
                 .next(relational_task)

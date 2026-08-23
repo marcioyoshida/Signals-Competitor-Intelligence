@@ -591,13 +591,15 @@ def _load_graph_proposals(digests_bucket: str) -> list[dict[str, Any]]:
 
 
 def _load_swot_proposals(digests_bucket: str) -> list[dict[str, Any]]:
-    """Read pending SWOT proposals — reconcile (ADR 004 step 3) + cold-start seeds
-    (step 4). Both are review-gated and render in the same war-room panel."""
+    """Read pending SWOT proposals — reconcile (ADR 004 step 3), cold-start seeds
+    (step 4), and staleness re-reviews (belief maintenance). All are review-gated and
+    render in the same war-room panel."""
     out: list[dict[str, Any]] = []
     s3 = boto3.client("s3")
-    from src.synth import swot_reconcile, swot_seed
+    from src.synth import swot_maintenance, swot_reconcile, swot_seed
 
-    for key in (swot_reconcile.PROPOSALS_KEY, swot_seed.SEED_PROPOSALS_KEY):
+    for key in (swot_reconcile.PROPOSALS_KEY, swot_seed.SEED_PROPOSALS_KEY,
+                swot_maintenance.MAINTENANCE_PROPOSALS_KEY):
         try:
             body = s3.get_object(Bucket=digests_bucket, Key=key)["Body"].read()
             out.extend(json.loads(body.decode("utf-8")).get("proposals", []))
