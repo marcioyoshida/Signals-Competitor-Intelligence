@@ -113,6 +113,19 @@
     letter-spacing: .4px; border: 1px dashed currentColor; padding: 1px 6px; border-radius: 6px; }
   .bar { height: 6px; border-radius: 999px; background: var(--panel2); margin: 9px 0 8px; overflow: hidden; }
   .bar > span { display: block; height: 100%; border-radius: 999px; }
+  /* ADR 004: maintained-thesis context strip on a signal card (clickable -> panel). */
+  .thesis { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 8px 0 2px;
+    padding: 6px 8px; background: var(--panel2); border-radius: 8px; cursor: pointer; }
+  .thesis:hover { outline: 1px solid var(--border); }
+  .thesis .tlabel { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); }
+  .thesis .tc { font-size: 10.5px; font-weight: 700; padding: 0 5px; border-radius: 5px;
+    color: var(--qc); border: 1px solid var(--qc); }
+  .thesis .tc.S { --qc: #2e9e6b; } .thesis .tc.W { --qc: var(--t-crit); }
+  .thesis .tc.O { --qc: var(--accent); } .thesis .tc.T { --qc: var(--t-high); }
+  .thesis .ttop { font-size: 11.5px; color: var(--ink); overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; max-width: 100%; border-left: 2px solid var(--qc); padding-left: 6px; }
+  .thesis .ttop.S { --qc: #2e9e6b; } .thesis .ttop.W { --qc: var(--t-crit); }
+  .thesis .ttop.O { --qc: var(--accent); } .thesis .ttop.T { --qc: var(--t-high); }
   /* ADR 004: per-entity SWOT belief panel (derived, evidence-linked, labeled inference). */
   .swot { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; margin: 0 0 12px; }
   .swot > h3 { margin: 0; padding: 12px 16px; font-size: 13px; border-bottom: 1px solid var(--border); }
@@ -740,6 +753,32 @@ function inferBadge(f) {
   return axisLabel(f.axis);
 }
 
+// ADR 004: the maintained competitive thesis as CONTEXT on a signal card — read the
+// signal against the standing belief. Sourced from feed.swot (already shipped); shown
+// only in the cross-entity feed (once filtered to an entity, the war-room panel owns
+// the full SWOT, so the strip would be redundant). Clicking it opens that panel.
+function thesisContext(entity) {
+  if (!entity || state.entity === entity) return "";
+  const sw = DATA.swot && DATA.swot[entity];
+  if (!sw) return "";
+  const counts = sw.counts || {}, dims = sw.dimensions || {};
+  let top = null, topDim = null;
+  for (const d of ["S", "W", "O", "T"]) {
+    for (const b of (dims[d] || [])) {
+      if (b.status !== "active") continue;
+      if (!top || (b.confidence ?? 0) > (top.confidence ?? 0)) { top = b; topDim = d; }
+    }
+  }
+  const chips = ["S", "W", "O", "T"].filter(d => (counts[d] || 0) > 0)
+    .map(d => `<span class="tc ${d}">${d} ${counts[d]}</span>`).join("");
+  if (!chips && !top) return "";
+  const topHtml = top
+    ? `<span class="ttop ${topDim}" title="${esc(top.text)}">${esc(top.text)}</span>` : "";
+  return `<div class="thesis" data-entity="${esc(entity)}"
+    title="Tese competitiva mantida para esta entidade (SWOT · inferência) — clique para abrir o painel completo">
+    <span class="tlabel">Tese</span>${chips}${topHtml}</div>`;
+}
+
 function cardHtml(f, group) {
   const t = tierOf(f.threat_score);
   const pct = Math.round((f.threat_score ?? 0) * 100);
@@ -764,6 +803,7 @@ function cardHtml(f, group) {
     <div><span class="score" style="cursor:help" title="${esc(factorsTip(f.threat_factors))}">${(f.threat_score ?? 0).toFixed(2)} ameaça</span> <span class="est">· est.</span> ${multi}</div>
     <div class="lenses">${f.lenses.map(l => `<span class="chip" title="Fonte: ${esc(lensLabel(l))}">${esc(lensLabel(l))}</span>`).join("")}</div>
     <p class="narr clamp">${narr}</p>
+    ${thesisContext(f.entity)}
     <div class="cites">${cites}
       ${nSinais ? `<span class="src">· ${nSinais} sinais</span>` : ""}</div>
   </div>`;
@@ -888,6 +928,14 @@ function render() {
   feed.innerHTML = html;
   feed.querySelectorAll(".card").forEach(c => c.onclick = () => {
     c.querySelector(".narr").classList.toggle("clamp");
+  });
+  feed.querySelectorAll(".thesis").forEach(t => t.onclick = ev => {
+    ev.stopPropagation();                 // don't also toggle the narrative clamp
+    const en = t.dataset.entity;
+    state.entity = en;
+    document.getElementById("fEntity").value = en;
+    syncEntityHighlight(); render();
+    document.querySelector(".swot")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   });
   renderTable(rows);
 }
