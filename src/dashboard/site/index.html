@@ -889,9 +889,14 @@ function collapseByEntity(rows) {
 const SWOT_LABELS = { S: "Forças", W: "Fraquezas", O: "Oportunidades", T: "Ameaças" };
 const TOWS_LABELS = { SO: "Maximizar (F×O)", ST: "Contra-atacar (F×A)", WO: "Superar (Fr×O)", WT: "Evitar (Fr×A)" };
 const PORTER_LABELS = { rivalry: "Rivalidade", new_entrants: "Novos entrantes", substitutes: "Substitutos", buyer_power: "Poder do comprador", supplier_power: "Poder do fornecedor" };
-const FW_DIM_LABELS = { swot: SWOT_LABELS, tows: TOWS_LABELS, porter: PORTER_LABELS };
-const FW_DIM_ORDER = { swot: ["S","W","O","T"], tows: ["SO","ST","WO","WT"], porter: ["rivalry","new_entrants","substitutes","buyer_power","supplier_power"] };
-const FW_NAMES = { swot: "SWOT", tows: "TOWS", porter: "Porter" };
+const PESTLE_LABELS = { political: "Político", economic: "Econômico", social: "Social", technological: "Tecnológico", legal: "Legal", environmental: "Ambiental" };
+const ANSOFF_LABELS = { penetration: "Penetração", market_dev: "Desenv. mercado", product_dev: "Desenv. produto", diversification: "Diversificação" };
+const BCG_LABELS = { star: "Estrela", cash_cow: "Vaca leiteira", question_mark: "Interrogação", dog: "Abacaxi" };
+const FOUR_CORNERS_LABELS = { drivers: "Motivações", assumptions: "Premissas", current_strategy: "Estratégia atual", capabilities: "Capacidades", response_profile: "Resposta provável" };
+const SEVEN_S_LABELS = { structure: "Estrutura", systems: "Sistemas", strategy: "Estratégia" };
+const FW_DIM_LABELS = { swot: SWOT_LABELS, tows: TOWS_LABELS, porter: PORTER_LABELS, pestle: PESTLE_LABELS, ansoff: ANSOFF_LABELS, bcg: BCG_LABELS, four_corners: FOUR_CORNERS_LABELS, seven_s: SEVEN_S_LABELS };
+const FW_DIM_ORDER = { swot: ["S","W","O","T"], tows: ["SO","ST","WO","WT"], porter: ["rivalry","new_entrants","substitutes","buyer_power","supplier_power"], pestle: ["political","economic","social","technological","legal","environmental"], ansoff: ["penetration","market_dev","product_dev","diversification"], bcg: ["star","cash_cow","question_mark","dog"], four_corners: ["drivers","assumptions","current_strategy","capabilities","response_profile"], seven_s: ["structure","systems","strategy"] };
+const FW_NAMES = { swot: "SWOT", tows: "TOWS", porter: "Porter", pestle: "PESTLE", ansoff: "Ansoff", bcg: "BCG", four_corners: "4 Corners", seven_s: "7S" };
 
 function _fwProposalBadge(p) {
   if (p.kind === 'challenge') return `<span class="pk chal">contesta ${p.dimension}</span>`;
@@ -899,6 +904,11 @@ function _fwProposalBadge(p) {
   if (p.kind === 'stale') return `<span class="pk stale">revalidar ${p.dimension}</span>`;
   if (p.kind === 'tows') return `<span class="pk tows">TOWS ${TOWS_LABELS[p.dimension] || p.dimension}</span>`;
   if (p.kind === 'porter') return `<span class="pk porter">${PORTER_LABELS[p.dimension] || p.dimension}</span>`;
+  if (p.kind === 'pestle') return `<span class="pk pestle">${PESTLE_LABELS[p.dimension] || p.dimension}</span>`;
+  if (p.kind === 'ansoff') return `<span class="pk ansoff">${ANSOFF_LABELS[p.dimension] || p.dimension}</span>`;
+  if (p.kind === 'bcg') return `<span class="pk bcg">${BCG_LABELS[p.dimension] || p.dimension}</span>`;
+  if (p.kind === 'four_corners') return `<span class="pk four_corners">${FOUR_CORNERS_LABELS[p.dimension] || p.dimension}</span>`;
+  if (p.kind === 'seven_s') return `<span class="pk seven_s">${SEVEN_S_LABELS[p.dimension] || p.dimension}</span>`;
   return `<span class="pk new">nova ${p.dimension}</span>`;
 }
 function _fwProposalMeta(p) {
@@ -937,7 +947,12 @@ function _fwChips(dimLabels, counts) {
 function _dimColor(d) {
   const map = { S:"#2e9e6b", W:"var(--t-crit)", O:"var(--accent)", T:"var(--t-high)",
     SO:"#1a7ab5", ST:"#6c63c4", WO:"#b9820f", WT:"var(--t-crit)",
-    rivalry:"var(--t-high)", new_entrants:"#b9820f", substitutes:"#6c63c4", buyer_power:"var(--accent)", supplier_power:"var(--t-crit)" };
+    rivalry:"var(--t-high)", new_entrants:"#b9820f", substitutes:"#6c63c4", buyer_power:"var(--accent)", supplier_power:"var(--t-crit)",
+    political:"#6c63c4", economic:"#1a7ab5", social:"#2e9e6b", technological:"var(--accent)", legal:"var(--t-high)", environmental:"#b9820f",
+    penetration:"#1a7ab5", market_dev:"#2e9e6b", product_dev:"var(--accent)", diversification:"#6c63c4",
+    star:"#b9820f", cash_cow:"#2e9e6b", question_mark:"var(--accent)", dog:"var(--t-crit)",
+    drivers:"#1a7ab5", assumptions:"#6c63c4", current_strategy:"#2e9e6b", capabilities:"var(--accent)", response_profile:"var(--t-high)",
+    structure:"#1a7ab5", systems:"var(--accent)", strategy:"#2e9e6b" };
   return map[d] || "var(--muted)";
 }
 
@@ -1023,6 +1038,37 @@ function renderFrameworks() {
         <span class="infer">cinco forças</span></div>
       <div class="fw-body"><div class="swot-grid" style="grid-template-columns:1fr 1fr 1fr">${gridHtml}</div>
         ${_fwProposals(porterProps, 'swot')}</div></div>`});
+  }
+
+  // Generic framework card renderer for PESTLE, Ansoff, BCG, Four Corners, 7S
+  for (const [fwKey, fwLabels, fwName, fwTag, gridCols] of [
+    ["pestle", PESTLE_LABELS, "PESTLE", "macro-ambiental", "1fr 1fr 1fr"],
+    ["ansoff", ANSOFF_LABELS, "Ansoff", "matriz de crescimento", "1fr 1fr"],
+    ["bcg", BCG_LABELS, "BCG", "crescimento × participação", "1fr 1fr"],
+    ["four_corners", FOUR_CORNERS_LABELS, "4 Corners", "predição competitiva", "1fr 1fr"],
+    ["seven_s", SEVEN_S_LABELS, "7S", "visível", "1fr 1fr 1fr"],
+  ]) {
+    const fwCurated = (DATA[fwKey] || {})[state.entity] || [];
+    const fwProps = (DATA.swot_proposals || []).filter(p => p.entity === state.entity && p.kind === fwKey);
+    if (fwCurated.length || fwProps.length) {
+      const fwCounts = {};
+      for (const b of fwCurated) fwCounts[b.dimension] = (fwCounts[b.dimension] || 0) + 1;
+      const gridHtml = FW_DIM_ORDER[fwKey].map(dim => {
+        const bullets = fwCurated.filter(b => b.dimension === dim);
+        const body = bullets.length
+          ? bullets.map(b => `<div class="swot-b">${esc(b.text)}
+              <span class="meta">confiança ${Math.round((b.confidence ?? 0) * 100)}%</span></div>`).join("")
+          : `<div class="none">—</div>`;
+        return `<div class="swot-q ${dim}"><div class="qh">${fwLabels[dim]}</div>${body}</div>`;
+      }).join("");
+      const pcount = fwProps.length ? `<span class="fw-pcount">${fwProps.length} proposta(s)</span>` : "";
+      cards.push({fw: fwKey, html: `<div class="fw-card" data-fw="${fwKey}">
+        <div class="fw-hdr"><span class="fw-tog">▸</span><span class="fw-name">${fwName}</span>
+          <span class="fw-chips">${_fwChips(fwLabels, fwCounts)}</span>${pcount}
+          <span class="infer">${fwTag}</span></div>
+        <div class="fw-body"><div class="swot-grid" style="grid-template-columns:${gridCols}">${gridHtml}</div>
+          ${_fwProposals(fwProps, 'swot')}</div></div>`});
+    }
   }
 
   if (!cards.length) { el.innerHTML = ""; return; }
@@ -1148,6 +1194,8 @@ const PIPELINE_STEPS = [
   ["ThematicTask", "Temático"], ["RegulatoryTask", "Regulatório"], ["CohortTask", "Cohort"],
   ["SwotTask", "SWOT"], ["SwotReconcileTask", "SWOT · reconciliação"], ["SwotSeedTask", "SWOT · seeding"],
   ["SwotMaintenanceTask", "SWOT · manutenção"], ["TowsTask", "TOWS"], ["PorterTask", "Porter"],
+  ["PestleTask", "PESTLE"], ["AnsoffTask", "Ansoff"], ["BcgTask", "BCG"],
+  ["FourCornersTask", "4 Corners"], ["SevenSTask", "7S"],
   ["ThreadsTask", "Fios de incidente"],
   ["BehavioralTask", "Comportamento"], ["RelationalTask", "Relacional"],
   ["WatchlistQsaTask", "QSA"], ["OperativesTask", "Operadores"],

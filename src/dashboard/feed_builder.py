@@ -309,6 +309,11 @@ def build_feed(
     swot: dict[str, Any] | None = None,
     tows_curated: dict[str, list[dict[str, Any]]] | None = None,
     porter_curated: dict[str, list[dict[str, Any]]] | None = None,
+    pestle_curated: dict[str, list[dict[str, Any]]] | None = None,
+    ansoff_curated: dict[str, list[dict[str, Any]]] | None = None,
+    bcg_curated: dict[str, list[dict[str, Any]]] | None = None,
+    four_corners_curated: dict[str, list[dict[str, Any]]] | None = None,
+    seven_s_curated: dict[str, list[dict[str, Any]]] | None = None,
     swot_proposals: list[dict[str, Any]] | None = None,
     graph_proposals: list[dict[str, Any]] | None = None,
     thread_cards: list[dict[str, Any]] | None = None,
@@ -428,6 +433,12 @@ def build_feed(
         "tows": tows_curated or {},
         # ADR 006: curated Porter assessments, grouped by entity.
         "porter": porter_curated or {},
+        # ADR 006: curated PESTLE/Ansoff/BCG/Four Corners/7S, grouped by entity.
+        "pestle": pestle_curated or {},
+        "ansoff": ansoff_curated or {},
+        "bcg": bcg_curated or {},
+        "four_corners": four_corners_curated or {},
+        "seven_s": seven_s_curated or {},
         # ADR 004 step 3: pending reconcile proposals (contradict/new bullets from the
         # LLM stance loop) — surfaced read-only for the review queue (never auto-applied).
         "swot_proposals": [
@@ -615,11 +626,14 @@ def _load_swot_proposals(digests_bucket: str) -> list[dict[str, Any]]:
     render in the same war-room panel."""
     out: list[dict[str, Any]] = []
     s3 = boto3.client("s3")
-    from src.synth import porter, swot_maintenance, swot_reconcile, swot_seed, tows
+    from src.synth import (ansoff, bcg, four_corners, pestle, porter,
+                           seven_s, swot_maintenance, swot_reconcile, swot_seed, tows)
 
     for key in (swot_reconcile.PROPOSALS_KEY, swot_seed.SEED_PROPOSALS_KEY,
                 swot_maintenance.MAINTENANCE_PROPOSALS_KEY, tows.TOWS_PROPOSALS_KEY,
-                porter.PORTER_PROPOSALS_KEY):
+                porter.PORTER_PROPOSALS_KEY, pestle.PESTLE_PROPOSALS_KEY,
+                ansoff.ANSOFF_PROPOSALS_KEY, bcg.BCG_PROPOSALS_KEY,
+                four_corners.FOUR_CORNERS_PROPOSALS_KEY, seven_s.SEVEN_S_PROPOSALS_KEY):
         try:
             body = s3.get_object(Bucket=digests_bucket, Key=key)["Body"].read()
             out.extend(json.loads(body.decode("utf-8")).get("proposals", []))
@@ -675,6 +689,11 @@ def _load_tows_curated(digests_bucket: str) -> dict[str, list[dict[str, Any]]]:
 
 def _load_porter_curated(digests_bucket: str) -> dict[str, list[dict[str, Any]]]:
     """ADR 006: load curated Porter beliefs from swot/curated.json, grouped by entity."""
+    return _load_fw_curated(digests_bucket, "porter")
+
+
+def _load_fw_curated(digests_bucket: str, framework: str) -> dict[str, list[dict[str, Any]]]:
+    """ADR 006: load curated beliefs for a framework from swot/curated.json, grouped by entity."""
     try:
         from src.synth import swot_store
 
@@ -686,7 +705,7 @@ def _load_porter_curated(digests_bucket: str) -> dict[str, list[dict[str, Any]]]
                    if r.get("target_bullet_id")}
         by_ent: dict[str, list[dict[str, Any]]] = {}
         for b in data.get("bullets", []):
-            if b.get("framework") != "porter":
+            if b.get("framework") != framework:
                 continue
             if b.get("id") in retired:
                 continue
@@ -724,6 +743,11 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         swot=_load_swot(digests_bucket),
         tows_curated=_load_tows_curated(digests_bucket),
         porter_curated=_load_porter_curated(digests_bucket),
+        pestle_curated=_load_fw_curated(digests_bucket, "pestle"),
+        ansoff_curated=_load_fw_curated(digests_bucket, "ansoff"),
+        bcg_curated=_load_fw_curated(digests_bucket, "bcg"),
+        four_corners_curated=_load_fw_curated(digests_bucket, "four_corners"),
+        seven_s_curated=_load_fw_curated(digests_bucket, "seven_s"),
         swot_proposals=_load_swot_proposals(digests_bucket),
         graph_proposals=_load_graph_proposals(digests_bucket),
         thread_cards=(_load_threads(digests_bucket) + _load_reg_lifecycles(digests_bucket)

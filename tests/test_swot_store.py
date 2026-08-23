@@ -143,3 +143,88 @@ def test_curated_porter_bullets_excluded_from_swot_beliefs():
     curated_bullets = [bl for bl in b["x"]["bullets"] if bl.get("curated")]
     assert len(curated_bullets) == 1
     assert curated_bullets[0]["text"] == "Fraqueza curada"
+
+
+def test_curated_pestle_bullets_excluded_from_swot_beliefs():
+    """ADR 006: curated PESTLE bullets must not leak into the SWOT belief file."""
+    curated = {
+        "bullets": [
+            {"id": "pestle:x:legal:abc", "entity": "x", "dimension": "legal",
+             "text": "Nova regulação impacta operações", "framework": "pestle",
+             "date": "2026-08-23", "approved_at": "2026-08-23"},
+            {"id": "seed:x:S:def", "entity": "x", "dimension": "S",
+             "text": "Força curada", "date": "2026-08-23",
+             "approved_at": "2026-08-23"},
+        ],
+        "retirements": [],
+    }
+    b = swot_store.build_beliefs(
+        [_comparative("x", "S", "banking", date="2026-08-23")],
+        as_of="2026-08-23", curated=curated)
+    dims = {bl["dimension"] for bl in b["x"]["bullets"]}
+    assert "legal" not in dims
+    assert "S" in dims
+
+
+def test_curated_ansoff_bullets_excluded_from_swot_beliefs():
+    curated = {
+        "bullets": [
+            {"id": "ansoff:x:penetration:abc", "entity": "x", "dimension": "penetration",
+             "text": "Expansão no segmento atual", "framework": "ansoff",
+             "date": "2026-08-23", "approved_at": "2026-08-23"},
+        ],
+        "retirements": [],
+    }
+    b = swot_store.build_beliefs(
+        [_comparative("x", "S", "banking", date="2026-08-23")],
+        as_of="2026-08-23", curated=curated)
+    dims = {bl["dimension"] for bl in b["x"]["bullets"]}
+    assert "penetration" not in dims
+
+
+def test_curated_bcg_bullets_excluded_from_swot_beliefs():
+    curated = {
+        "bullets": [
+            {"id": "bcg:x:star:abc", "entity": "x", "dimension": "star",
+             "text": "Estrela em pagamentos", "framework": "bcg",
+             "date": "2026-08-23", "approved_at": "2026-08-23"},
+        ],
+        "retirements": [],
+    }
+    b = swot_store.build_beliefs(
+        [_comparative("x", "S", "banking", date="2026-08-23")],
+        as_of="2026-08-23", curated=curated)
+    dims = {bl["dimension"] for bl in b["x"]["bullets"]}
+    assert "star" not in dims
+
+
+def test_curated_four_corners_bullets_excluded_from_swot_beliefs():
+    curated = {
+        "bullets": [
+            {"id": "four_corners:x:drivers:abc", "entity": "x", "dimension": "drivers",
+             "text": "Busca liderança em pagamentos", "framework": "four_corners",
+             "date": "2026-08-23", "approved_at": "2026-08-23"},
+        ],
+        "retirements": [],
+    }
+    b = swot_store.build_beliefs(
+        [_comparative("x", "S", "banking", date="2026-08-23")],
+        as_of="2026-08-23", curated=curated)
+    dims = {bl["dimension"] for bl in b["x"]["bullets"]}
+    assert "drivers" not in dims
+
+
+def test_curated_seven_s_bullets_excluded_from_swot_beliefs():
+    curated = {
+        "bullets": [
+            {"id": "seven_s:x:structure:abc", "entity": "x", "dimension": "structure",
+             "text": "Estrutura holding", "framework": "seven_s",
+             "date": "2026-08-23", "approved_at": "2026-08-23"},
+        ],
+        "retirements": [],
+    }
+    b = swot_store.build_beliefs(
+        [_comparative("x", "S", "banking", date="2026-08-23")],
+        as_of="2026-08-23", curated=curated)
+    dims = {bl["dimension"] for bl in b["x"]["bullets"]}
+    assert "structure" not in dims

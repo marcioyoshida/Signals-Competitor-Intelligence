@@ -1,6 +1,6 @@
 # ADR 006 — Beyond SWOT: a framework-parametric belief store (TOWS, Porter, PESTLE, 7S, Four Corners, Ansoff, BCG)
 
-- Status: **TOWS shipped** (2026-08-23); **Porter shipped** (2026-08-23); PESTLE/Ansoff/BCG/Four Corners/7S proposed
+- Status: **All shipped** (2026-08-23): TOWS, Porter, PESTLE, Ansoff, BCG, Four Corners, 7S-visible
 - Sourced from **issue #3 — "Add new Strategy Frameworks"** (owner-filed): six
   candidate frameworks scored by adoption / strengths / weaknesses / **OSINT
   feasibility** (TOWS, PESTLE, Porter's Five Forces, SOAR, NOISE, McKinsey 7S).
@@ -248,3 +248,32 @@ follows the phasing.
 > tabs (`.fw-card`/`.fw-hdr`/`.fw-body`): header always visible with dimension chips +
 > proposal count, click toggles the body, accordion (one open at a time) to avoid
 > pollution.
+>
+> **PESTLE shipped (2026-08-23).** `src/synth/pestle.py` (`OncaPestle` Lambda): analyzes
+> six macro-environmental factors (political, economic, social, technological, legal,
+> environmental) per entity via one bounded LLM call reading SWOT beliefs + narrative
+> evidence + industry context. Propose-only, Phase C vetting. Same eligibility/
+> idempotency/cap pattern as Porter. Store: `pestle/proposals.json`.
+>
+> **Ansoff shipped (2026-08-23).** `src/synth/ansoff.py` (`OncaAnsoff` Lambda): classifies
+> each entity's observable strategic moves into the four Ansoff growth vectors
+> (penetration, market_dev, product_dev, diversification) via one bounded LLM call.
+> Store: `ansoff/proposals.json`.
+>
+> **BCG shipped (2026-08-23).** `src/synth/bcg.py` (`OncaBcg` Lambda): classifies each
+> entity's portfolio position into the four BCG quadrants (star, cash_cow, question_mark,
+> dog) based on relative market share and growth. Store: `bcg/proposals.json`.
+>
+> **Four Corners shipped (2026-08-23).** `src/synth/four_corners.py` (`OncaFourCorners`
+> Lambda): analyzes competitor behavior through drivers, assumptions, current_strategy,
+> capabilities, and a derived response_profile (labeled as inference — never sourced fact).
+> Store: `four_corners/proposals.json`.
+>
+> **7S-visible shipped (2026-08-23).** `src/synth/seven_s.py` (`OncaSevenS` Lambda):
+> emits ONLY the three publicly-visible S dimensions (structure, systems, strategy). The
+> hidden three S's (shared_values, style, skills) are hard-dropped by `_parse_draft()` —
+> they require internal data unsourceable from public OSINT. Store:
+> `seven_s/proposals.json`.
+>
+> **Pipeline:** `…→tows→porter→pestle→ansoff→bcg→four_corners→seven_s→threads→…`
+> Dashboard renders all 8 frameworks as collapsible card tabs via a generic loop renderer.

@@ -788,6 +788,146 @@ class OncaPrototypeStack(Stack):
             )
         )
 
+        # PESTLE macro-environmental analysis (ADR 006): analyzes political, economic,
+        # social, technological, legal, environmental factors per entity via a bounded
+        # LLM call over SWOT beliefs + narrative evidence + industry context.
+        pestle_fn = lambda_.Function(
+            self,
+            "OncaPestle",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.synth.pestle.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.minutes(3),
+            memory_size=256,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+                "ONCA_ENTITIES_TABLE": entities_table.table_name,
+                "ONCA_PESTLE_ENABLED": "1",
+                "ONCA_PESTLE_MAX_ENTITIES": "8",
+            },
+        )
+        digests_bucket.grant_read_write(pestle_fn)
+        entities_table.grant_read_data(pestle_fn)
+        pestle_fn.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["bedrock:InvokeModel"],
+                resources=["*"],
+            )
+        )
+
+        # Ansoff Matrix growth-direction classification (ADR 006): classifies each
+        # entity's recent strategic moves into penetration/market_dev/product_dev/
+        # diversification via a bounded LLM call.
+        ansoff_fn = lambda_.Function(
+            self,
+            "OncaAnsoff",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.synth.ansoff.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.minutes(3),
+            memory_size=256,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+                "ONCA_ENTITIES_TABLE": entities_table.table_name,
+                "ONCA_ANSOFF_ENABLED": "1",
+                "ONCA_ANSOFF_MAX_ENTITIES": "8",
+            },
+        )
+        digests_bucket.grant_read_write(ansoff_fn)
+        entities_table.grant_read_data(ansoff_fn)
+        ansoff_fn.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["bedrock:InvokeModel"],
+                resources=["*"],
+            )
+        )
+
+        # BCG Growth-Share Matrix portfolio-position analysis (ADR 006): classifies
+        # each entity into star/cash_cow/question_mark/dog based on relative market
+        # share and market growth via a bounded LLM call.
+        bcg_fn = lambda_.Function(
+            self,
+            "OncaBcg",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.synth.bcg.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.minutes(3),
+            memory_size=256,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+                "ONCA_ENTITIES_TABLE": entities_table.table_name,
+                "ONCA_BCG_ENABLED": "1",
+                "ONCA_BCG_MAX_ENTITIES": "8",
+            },
+        )
+        digests_bucket.grant_read_write(bcg_fn)
+        entities_table.grant_read_data(bcg_fn)
+        bcg_fn.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["bedrock:InvokeModel"],
+                resources=["*"],
+            )
+        )
+
+        # Porter's Four Corners competitor-prediction analysis (ADR 006): analyzes
+        # drivers/assumptions/current_strategy/capabilities + derived response_profile
+        # per entity via a bounded LLM call.
+        four_corners_fn = lambda_.Function(
+            self,
+            "OncaFourCorners",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.synth.four_corners.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.minutes(3),
+            memory_size=256,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+                "ONCA_ENTITIES_TABLE": entities_table.table_name,
+                "ONCA_FOUR_CORNERS_ENABLED": "1",
+                "ONCA_FOUR_CORNERS_MAX_ENTITIES": "8",
+            },
+        )
+        digests_bucket.grant_read_write(four_corners_fn)
+        entities_table.grant_read_data(four_corners_fn)
+        four_corners_fn.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["bedrock:InvokeModel"],
+                resources=["*"],
+            )
+        )
+
+        # McKinsey 7S visible-only analysis (ADR 006): analyzes structure/systems/
+        # strategy per entity via a bounded LLM call. The hidden three S's
+        # (shared_values, style, skills) are omitted — unsourceable from public OSINT.
+        seven_s_fn = lambda_.Function(
+            self,
+            "OncaSevenS",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.synth.seven_s.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.minutes(3),
+            memory_size=256,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+                "ONCA_ENTITIES_TABLE": entities_table.table_name,
+                "ONCA_SEVEN_S_ENABLED": "1",
+                "ONCA_SEVEN_S_MAX_ENTITIES": "8",
+            },
+        )
+        digests_bucket.grant_read_write(seven_s_fn)
+        entities_table.grant_read_data(seven_s_fn)
+        seven_s_fn.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["bedrock:InvokeModel"],
+                resources=["*"],
+            )
+        )
+
         # Incident thread store (ADR 003 Wave 2): threads related developments into
         # living incident docs (event identity by entity+event-type) with an
         # open/developing/resolved lifecycle; publishes threads/{id}.json + a
@@ -1313,6 +1453,71 @@ class OncaPrototypeStack(Stack):
             interval=Duration.seconds(15),
             backoff_rate=2.0,
         )
+        pestle_task = sfn_tasks.LambdaInvoke(
+            self,
+            "PestleTask",
+            lambda_function=pestle_fn,
+            payload=sfn.TaskInput.from_object({}),
+            result_path="$.pestle",
+        )
+        pestle_task.add_retry(
+            errors=["States.ALL"],
+            max_attempts=2,
+            interval=Duration.seconds(15),
+            backoff_rate=2.0,
+        )
+        ansoff_task = sfn_tasks.LambdaInvoke(
+            self,
+            "AnsoffTask",
+            lambda_function=ansoff_fn,
+            payload=sfn.TaskInput.from_object({}),
+            result_path="$.ansoff",
+        )
+        ansoff_task.add_retry(
+            errors=["States.ALL"],
+            max_attempts=2,
+            interval=Duration.seconds(15),
+            backoff_rate=2.0,
+        )
+        bcg_task = sfn_tasks.LambdaInvoke(
+            self,
+            "BcgTask",
+            lambda_function=bcg_fn,
+            payload=sfn.TaskInput.from_object({}),
+            result_path="$.bcg",
+        )
+        bcg_task.add_retry(
+            errors=["States.ALL"],
+            max_attempts=2,
+            interval=Duration.seconds(15),
+            backoff_rate=2.0,
+        )
+        four_corners_task = sfn_tasks.LambdaInvoke(
+            self,
+            "FourCornersTask",
+            lambda_function=four_corners_fn,
+            payload=sfn.TaskInput.from_object({}),
+            result_path="$.four_corners",
+        )
+        four_corners_task.add_retry(
+            errors=["States.ALL"],
+            max_attempts=2,
+            interval=Duration.seconds(15),
+            backoff_rate=2.0,
+        )
+        seven_s_task = sfn_tasks.LambdaInvoke(
+            self,
+            "SevenSTask",
+            lambda_function=seven_s_fn,
+            payload=sfn.TaskInput.from_object({}),
+            result_path="$.seven_s",
+        )
+        seven_s_task.add_retry(
+            errors=["States.ALL"],
+            max_attempts=2,
+            interval=Duration.seconds(15),
+            backoff_rate=2.0,
+        )
         threads_task = sfn_tasks.LambdaInvoke(
             self,
             "ThreadsTask",
@@ -1436,6 +1641,11 @@ class OncaPrototypeStack(Stack):
                 .next(maintenance_task)
                 .next(tows_task)
                 .next(porter_task)
+                .next(pestle_task)
+                .next(ansoff_task)
+                .next(bcg_task)
+                .next(four_corners_task)
+                .next(seven_s_task)
                 .next(threads_task)
                 .next(behavioral_task)
                 .next(relational_task)

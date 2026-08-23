@@ -54,6 +54,11 @@ FRAMEWORK_DIMENSIONS: dict[str, tuple[str, ...]] = {
     "swot": ("S", "W", "O", "T"),
     "tows": ("SO", "ST", "WO", "WT"),
     "porter": ("rivalry", "new_entrants", "substitutes", "buyer_power", "supplier_power"),
+    "pestle": ("political", "economic", "social", "technological", "legal", "environmental"),
+    "ansoff": ("penetration", "market_dev", "product_dev", "diversification"),
+    "bcg": ("star", "cash_cow", "question_mark", "dog"),
+    "four_corners": ("drivers", "assumptions", "current_strategy", "capabilities", "response_profile"),
+    "seven_s": ("structure", "systems", "strategy"),
 }
 DEFAULT_FRAMEWORK = "swot"
 
