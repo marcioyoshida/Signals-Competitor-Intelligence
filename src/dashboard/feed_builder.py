@@ -241,6 +241,7 @@ def build_feed(
     industry_map: dict[str, list[str]] | None = None,
     industry_meta: dict[str, dict[str, Any]] | None = None,
     macro: dict[str, Any] | None = None,
+    swot: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Pure aggregation: narratives -> feed payload. No I/O.
 
@@ -383,6 +384,9 @@ def build_feed(
         "reviews": reviews or [],
         # Standalone Macro panel: Copom/Selic + Focus (market-wide context).
         "macro": build_macro(macro),
+        # ADR 004 step 2: per-entity SWOT belief store (compact index) — the war
+        # room renders a S/W/O/T panel for the selected entity. {} when absent.
+        "swot": (swot or {}).get("entities", {}) if swot else {},
     }
 
 
@@ -492,6 +496,20 @@ def _load_macro() -> dict[str, Any] | None:
         return None
 
 
+def _load_swot(digests_bucket: str) -> dict[str, Any] | None:
+    """Read the compact SWOT belief index (ADR 004 step 2), best-effort. None if absent."""
+    try:
+        from src.synth import swot_store
+
+        body = boto3.client("s3").get_object(
+            Bucket=digests_bucket, Key=swot_store.INDEX_KEY
+        )["Body"].read()
+        return json.loads(body.decode("utf-8"))
+    except Exception as exc:  # pragma: no cover - best-effort, read-only
+        print(f"Warning: load SWOT index failed: {exc}")
+        return None
+
+
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """Build feed.json from recent narratives and publish it to the site bucket."""
     digests_bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
@@ -509,6 +527,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         industry_map=industry_map,
         industry_meta=industry_meta,
         macro=_load_macro(),
+        swot=_load_swot(digests_bucket),
     )
     body = json.dumps(feed, ensure_ascii=False).encode("utf-8")
 

@@ -623,6 +623,25 @@ class OncaPrototypeStack(Stack):
         digests_bucket.grant_read_write(cohort_fn)
         entities_table.grant_read_data(cohort_fn)
 
+        # SWOT belief store (ADR 004 step 2 v1): rebuilds the per-entity S/W/O/T belief
+        # files from the Wave-1 axes' swot_hints (deterministic, no LLM/embeddings yet)
+        # and publishes swot/{entity}.json + swot/index.json into the digests bucket.
+        swot_fn = lambda_.Function(
+            self,
+            "OncaSwot",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.synth.swot_store.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.minutes(5),
+            memory_size=512,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+                "ONCA_FEATURE_WINDOW_DAYS": "90",
+            },
+        )
+        digests_bucket.grant_read_write(swot_fn)
+
         # Feed builder: aggregate recent narratives -> feed.json in the site bucket.
         feed_fn = lambda_.Function(
             self,
@@ -918,6 +937,19 @@ class OncaPrototypeStack(Stack):
             interval=Duration.seconds(15),
             backoff_rate=2.0,
         )
+        swot_task = sfn_tasks.LambdaInvoke(
+            self,
+            "SwotTask",
+            lambda_function=swot_fn,
+            payload=sfn.TaskInput.from_object({}),
+            result_path="$.swot",
+        )
+        swot_task.add_retry(
+            errors=["States.ALL"],
+            max_attempts=2,
+            interval=Duration.seconds(15),
+            backoff_rate=2.0,
+        )
         feed_task = sfn_tasks.LambdaInvoke(
             self,
             "FeedTask",
@@ -944,6 +976,7 @@ class OncaPrototypeStack(Stack):
                 .next(thematic_task)
                 .next(regulatory_task)
                 .next(cohort_task)
+                .next(swot_task)
                 .next(feed_task)
             ),
             # Budget for a 15-min ingest (plus a retry), then synth, then feed.
