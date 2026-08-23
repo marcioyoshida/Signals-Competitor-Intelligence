@@ -61,6 +61,20 @@ def display_label(entity: str | None, kind: str | None) -> str:
     return "Sinal de mercado"
 
 
+def subject_label(n: dict[str, Any]) -> str:
+    """Headline for a card — the entity, or the non-entity subject (ADR 003 Wave 1
+    theme/instrument/set axes) so entity-less cards still title legibly."""
+    if n.get("entity"):
+        return display_label(n.get("entity"), n.get("kind"))
+    if n.get("theme_display"):
+        return f"Tema · {n['theme_display']}"
+    if n.get("instrument_label"):
+        return f"Regulatório · {n['instrument_label']}"
+    if n.get("cohort_label"):
+        return f"Setor · {n['cohort_label']}"
+    return display_label(None, n.get("kind"))
+
+
 def _source_of(citation: dict[str, Any]) -> str | None:
     """Best-effort source label for a citation (explicit source or URL host)."""
     src = citation.get("source")
@@ -271,6 +285,13 @@ def build_feed(
                 "direction": n.get("direction"),
                 "entity": n.get("entity"),
                 "entity_label": display_label(n.get("entity"), n.get("kind")),
+                # subject_label headlines non-entity axes (theme/instrument/set) so
+                # they don't render blank; swot_hint + deadline carry the Wave 1 axis
+                # payload the war room needs to render them (and ADR 004 to consume).
+                "subject_label": subject_label(n),
+                "swot_hint": n.get("swot_hint"),
+                "deadline": n.get("deadline"),
+                "days_to_deadline": n.get("days_to_deadline"),
                 "entities": n.get("entities") or [],
                 "lenses": n.get("lenses") or [],
                 "is_alert": bool(n.get("is_alert")),

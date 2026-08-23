@@ -573,7 +573,7 @@ function filtered() {
     (!state.lens || f.lenses.includes(state.lens)) &&
     (!state.date || f.date === state.date) &&
     (!state.alert || f.is_alert) &&
-    (!state.q || (f.narrative || "").toLowerCase().includes(state.q) || (f.entity_label || "").toLowerCase().includes(state.q))
+    (!state.q || (f.narrative || "").toLowerCase().includes(state.q) || (f.entity_label || "").toLowerCase().includes(state.q) || (f.subject_label || "").toLowerCase().includes(state.q))
   );
 }
 
@@ -645,12 +645,21 @@ function citationFooter(model) {
   }).join("");
 }
 
-const AXIS_LABELS = { silence: "Silêncio", longitudinal: "Quebra de padrão" };
+const AXIS_LABELS = {
+  silence: "Silêncio", longitudinal: "Quebra de padrão", comparative: "Comparativo setorial",
+  thematic: "Corrente setorial", regulatory: "Radar regulatório", cohort: "Movimento de cohort",
+};
 function axisLabel(axis) { return AXIS_LABELS[axis] || "Derivado"; }
-// Badge label — trajectory breaks show their polarity (↑ alta / ↓ recuo).
+// Badge label — axes with a polarity show their direction.
 function inferBadge(f) {
   if (f.axis === "longitudinal" && f.direction)
     return f.direction === "escalation" ? "Quebra ↑ alta" : "Quebra ↓ recuo";
+  if (f.axis === "comparative" && f.direction)
+    return f.direction === "outperform" ? "Peer ↑ acima" : "Peer ↓ abaixo";
+  if (f.axis === "cohort" && f.direction)
+    return f.direction === "heating" ? "Setor ↑ aquece" : "Setor ↓ esfria";
+  if (f.axis === "regulatory")
+    return f.days_to_deadline != null ? `Prazo · ${f.days_to_deadline}d` : "Radar regulatório";
   return axisLabel(f.axis);
 }
 
@@ -668,9 +677,9 @@ function cardHtml(f, group) {
   return `<div class="card" data-id="${esc(f.id)}">
     <div class="row1">
       <span class="tier" style="background:${cssvar(t.var)}">${t.label}</span>
-      <span class="entity">${esc(f.entity_label)}</span>
+      <span class="entity">${esc(f.subject_label || f.entity_label)}</span>
       ${f.is_alert ? '<span class="alert">ALERTA</span>' : ''}
-      ${f.is_inference ? `<span class="infer" title="Indicador derivado (silêncio de sinal, quebra de padrão) — inferência sobre o histórico do concorrente, não um fato novo reportado.">${esc(inferBadge(f))} · inferência</span>` : ''}
+      ${f.is_inference ? `<span class="infer" title="Indicador derivado (silêncio, quebra de padrão, comparativo de pares, corrente setorial, radar regulatório, movimento de cohort) — inferência sobre o histórico/agregado, não um fato novo reportado.">${esc(inferBadge(f))} · inferência</span>` : ''}
       <span class="spacer" style="flex:1"></span>
       <span class="date">${esc(fmtDate(f.date))}${fmtTime(f.run_at) ? ` · ${esc(fmtTime(f.run_at))}` : ""}</span>
     </div>
@@ -706,7 +715,9 @@ function collapseByEntity(rows) {
   // per entity is the representative (latest) card; peak/count span the window.
   const groups = new Map();
   for (const f of rows) {
-    const key = f.entity || f.entity_label;
+    // Non-entity axis cards (theme/instrument/set) have no entity — key by id so
+    // they stay distinct instead of collapsing together under a shared blank label.
+    const key = f.entity || f.id;
     let g = groups.get(key);
     if (!g) { g = { item: f, count: 0, peak: 0 }; groups.set(key, g); }
     g.count++; g.peak = Math.max(g.peak, f.threat_score ?? 0);
@@ -739,7 +750,7 @@ function renderTable(rows) {
   document.getElementById("tableView").innerHTML =
     `<table class="tv"><thead><tr><th>Data</th><th>Entidade</th><th>Nível</th>
      <th>Ameaça (est.)</th><th>Alerta</th><th>Fontes</th></tr></thead><tbody>` +
-    rows.map(f => `<tr><td>${esc(fmtDate(f.date))}</td><td>${esc(f.entity_label)}</td>
+    rows.map(f => `<tr><td>${esc(fmtDate(f.date))}</td><td>${esc(f.subject_label || f.entity_label)}</td>
       <td>${tierOf(f.threat_score).label}</td><td>${(f.threat_score ?? 0).toFixed(2)}</td>
       <td>${f.is_alert ? "sim" : ""}</td><td>${esc(f.lenses.map(lensLabel).join(", "))}</td></tr>`).join("") +
     `</tbody></table>`;
