@@ -303,6 +303,10 @@ S3 store, registry + industries, review queue, threat scoring, ~14-day window).
   is **grounded**: it cites the driving narrative as evidence while still labeled
   inference. Gated on recency so it never overlaps silence. Next: *Comparative*
   (reads the `cohorts` block — peer-outlier) or *Cohort* — same enabler.
+  **Comparative is now also the first structured feeder into the per-entity SWOT
+  belief store — see [ADR 004](2026-08-22-adr-competitive-thesis-swot.md)** (a new
+  qualitative tier of the Shift-2 derived-state layer; a "reconcile-against-belief"
+  synthesis mode where narratives reinforce/contradict evidence-linked SWOT bullets).
 - **Wave 2 — new stores, moderate risk.** *Threaded / incident* (event identity +
   thread store); the full *Regulatory-lifecycle* thread; *Behavioral*.
 - **Wave 3 — graph + legal risk, review-gated from day one.** *Relational*, then
