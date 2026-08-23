@@ -642,6 +642,26 @@ class OncaPrototypeStack(Stack):
         )
         digests_bucket.grant_read_write(swot_fn)
 
+        # Incident thread store (ADR 003 Wave 2): threads related developments into
+        # living incident docs (event identity by entity+event-type) with an
+        # open/developing/resolved lifecycle; publishes threads/{id}.json + a
+        # threads/index.json of feed-ready cards. Deterministic, LLM-free.
+        threads_fn = lambda_.Function(
+            self,
+            "OncaThreads",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.synth.threads.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.minutes(5),
+            memory_size=512,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+                "ONCA_FEATURE_WINDOW_DAYS": "90",
+            },
+        )
+        digests_bucket.grant_read_write(threads_fn)
+
         # Feed builder: aggregate recent narratives -> feed.json in the site bucket.
         feed_fn = lambda_.Function(
             self,
@@ -950,6 +970,19 @@ class OncaPrototypeStack(Stack):
             interval=Duration.seconds(15),
             backoff_rate=2.0,
         )
+        threads_task = sfn_tasks.LambdaInvoke(
+            self,
+            "ThreadsTask",
+            lambda_function=threads_fn,
+            payload=sfn.TaskInput.from_object({}),
+            result_path="$.threads",
+        )
+        threads_task.add_retry(
+            errors=["States.ALL"],
+            max_attempts=2,
+            interval=Duration.seconds(15),
+            backoff_rate=2.0,
+        )
         feed_task = sfn_tasks.LambdaInvoke(
             self,
             "FeedTask",
@@ -977,6 +1010,7 @@ class OncaPrototypeStack(Stack):
                 .next(regulatory_task)
                 .next(cohort_task)
                 .next(swot_task)
+                .next(threads_task)
                 .next(feed_task)
             ),
             # Budget for a 15-min ingest (plus a retry), then synth, then feed.

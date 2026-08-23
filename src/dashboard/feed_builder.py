@@ -64,6 +64,8 @@ def display_label(entity: str | None, kind: str | None) -> str:
 def subject_label(n: dict[str, Any]) -> str:
     """Headline for a card — the entity, or the non-entity subject (ADR 003 Wave 1
     theme/instrument/set axes) so entity-less cards still title legibly."""
+    if n.get("incident_title"):
+        return f"Incidente · {n['incident_title']}"
     if n.get("entity"):
         return display_label(n.get("entity"), n.get("kind"))
     if n.get("theme_display"):
@@ -233,6 +235,57 @@ def build_macro(macro: dict[str, Any] | None) -> dict[str, Any]:
     return {"selic": selic, "focus": focus, "cards": cards}
 
 
+def _project_item(n: dict[str, Any]) -> dict[str, Any]:
+    """Project one narrative (or thread card) into a feed item — one shared schema."""
+    # Legacy narratives (persisted before threat_factors) carry a stale, saturated
+    # score from a superseded heuristic. Recompute through the current blended model
+    # from their recorded lenses so they rank on one scale; new narratives (which
+    # already have factors) are untouched. Non-destructive — display only.
+    tfactors = n.get("threat_factors") or {}
+    if tfactors or score_from_lenses is None or not n.get("lenses"):
+        tscore = _score(n.get("threat_score"))
+    else:
+        tscore, tfactors = score_from_lenses(n.get("lenses"), bool(n.get("is_alert")))
+    return {
+        "id": n.get("id"),
+        # date = run_date (when surfaced) — drives sort/window/timeline; data_date =
+        # source age ("dados de"). Legacy objects with no run_date fall back to as_of.
+        "date": (n.get("run_date") or n.get("as_of") or "")[:10],
+        # run_at = BRT timestamp of the run that last changed this narrative.
+        "run_at": n.get("run_at") or "",
+        "data_date": (n.get("as_of") or n.get("run_date") or "")[:10],
+        "kind": n.get("kind"),
+        # ADR 003: narrative-type facets. Cross-sectional cards carry no axis
+        # (implicitly "cross_sectional"); derived axes set them so the UI can filter
+        # and flag inference. is_inference => label, not fact.
+        "axis": n.get("axis"),
+        "subject_type": n.get("subject_type"),
+        "is_inference": bool(n.get("is_inference")),
+        "direction": n.get("direction"),
+        "entity": n.get("entity"),
+        "entity_label": display_label(n.get("entity"), n.get("kind")),
+        # subject_label headlines non-entity axes (theme/instrument/set/incident) so
+        # they don't render blank; swot_hint + deadline carry Wave 1 axis payload.
+        "subject_label": subject_label(n),
+        "swot_hint": n.get("swot_hint"),
+        "deadline": n.get("deadline"),
+        "days_to_deadline": n.get("days_to_deadline"),
+        # incident-thread payload (Wave 2): status + development count for the UI.
+        "status": n.get("status"),
+        "n_developments": n.get("n_developments"),
+        "entities": n.get("entities") or [],
+        "lenses": n.get("lenses") or [],
+        "is_alert": bool(n.get("is_alert")),
+        "threat_score": tscore,
+        "threat_factors": tfactors,
+        "threat_score_note": n.get("threat_score_note"),
+        "narrative": n.get("narrative") or "",
+        "citations": [c for c in (n.get("citations") or []) if isinstance(c, dict)],
+        "source_ids": n.get("source_ids") or [],
+        "mode": n.get("mode"),
+    }
+
+
 def build_feed(
     narratives: list[dict[str, Any]],
     *,
@@ -242,6 +295,7 @@ def build_feed(
     industry_meta: dict[str, dict[str, Any]] | None = None,
     macro: dict[str, Any] | None = None,
     swot: dict[str, Any] | None = None,
+    thread_cards: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Pure aggregation: narratives -> feed payload. No I/O.
 
@@ -249,62 +303,13 @@ def build_feed(
     timelines carry per-date count + peak score for compact sparklines. KPIs are
     scoped to the latest date, except entities/sources which span the window.
     """
-    items: list[dict[str, Any]] = []
-    for n in narratives:
-        if not isinstance(n, dict):
-            continue
-        # Legacy narratives (persisted before threat_factors) carry a stale,
-        # saturated score from a superseded heuristic. Recompute through the current
-        # blended model from their recorded lenses so they rank on one scale; new
-        # narratives (which already have factors) are untouched. Non-destructive —
-        # display only; auto-noops once legacy objects age out of the window.
-        tfactors = n.get("threat_factors") or {}
-        if tfactors or score_from_lenses is None or not n.get("lenses"):
-            tscore = _score(n.get("threat_score"))
-        else:
-            tscore, tfactors = score_from_lenses(n.get("lenses"), bool(n.get("is_alert")))
-        items.append(
-            {
-                "id": n.get("id"),
-                # date = run_date (when surfaced) — drives sort/window/timeline;
-                # data_date = source age, shown as "dados de". Legacy objects with
-                # no run_date fall back to as_of for both.
-                "date": (n.get("run_date") or n.get("as_of") or "")[:10],
-                # run_at = BRT timestamp of the run that last changed this
-                # narrative; card shows it as a time suffix (multiple runs/day).
-                "run_at": n.get("run_at") or "",
-                "data_date": (n.get("as_of") or n.get("run_date") or "")[:10],
-                "kind": n.get("kind"),
-                # ADR 003: narrative-type facets. Cross-sectional cards carry no
-                # axis (implicitly "cross_sectional"); silence &c set them so the
-                # UI can filter and flag inference. is_inference => label, not fact.
-                "axis": n.get("axis"),
-                "subject_type": n.get("subject_type"),
-                "is_inference": bool(n.get("is_inference")),
-                # direction distinguishes escalation/cooling on trajectory breaks;
-                # None for axes without a polarity.
-                "direction": n.get("direction"),
-                "entity": n.get("entity"),
-                "entity_label": display_label(n.get("entity"), n.get("kind")),
-                # subject_label headlines non-entity axes (theme/instrument/set) so
-                # they don't render blank; swot_hint + deadline carry the Wave 1 axis
-                # payload the war room needs to render them (and ADR 004 to consume).
-                "subject_label": subject_label(n),
-                "swot_hint": n.get("swot_hint"),
-                "deadline": n.get("deadline"),
-                "days_to_deadline": n.get("days_to_deadline"),
-                "entities": n.get("entities") or [],
-                "lenses": n.get("lenses") or [],
-                "is_alert": bool(n.get("is_alert")),
-                "threat_score": tscore,
-                "threat_factors": tfactors,
-                "threat_score_note": n.get("threat_score_note"),
-                "narrative": n.get("narrative") or "",
-                "citations": [c for c in (n.get("citations") or []) if isinstance(c, dict)],
-                "source_ids": n.get("source_ids") or [],
-                "mode": n.get("mode"),
-            }
-        )
+    items: list[dict[str, Any]] = [
+        _project_item(n) for n in narratives if isinstance(n, dict)
+    ]
+    # Wave 2 incident threads: grouping cards over signals ALREADY counted above.
+    # They join the feed (filterable/sortable) but are kept out of KPI/timeline
+    # aggregation below so they never double-count a story's daily developments.
+    thread_items = [_project_item(c) for c in (thread_cards or []) if isinstance(c, dict)]
 
     items.sort(key=lambda x: (x["date"], x["threat_score"]), reverse=True)
     dates = sorted({x["date"] for x in items if x["date"]})
@@ -355,6 +360,11 @@ def build_feed(
         if (s := _source_of(c))
     }
 
+    # Merge incident threads into the displayed feed (after KPI/entity aggregation).
+    feed_items = sorted(
+        items + thread_items, key=lambda x: (x["date"], x["threat_score"]), reverse=True
+    )
+
     return {
         "generated_at": generated_at
         or dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
@@ -368,7 +378,7 @@ def build_feed(
             "sources": len(sources),
             "narratives_total": len(items),
         },
-        "feed": items,
+        "feed": feed_items,
         "entities": entities,
         # Per-industry volume + coverage (ADR 002 Phase B): drives module
         # packaging and flags add-ons that would aggregate too little.
@@ -496,6 +506,20 @@ def _load_macro() -> dict[str, Any] | None:
         return None
 
 
+def _load_threads(digests_bucket: str) -> list[dict[str, Any]]:
+    """Read incident-thread feed cards (ADR 003 Wave 2), best-effort. [] if absent."""
+    try:
+        from src.synth import threads
+
+        body = boto3.client("s3").get_object(
+            Bucket=digests_bucket, Key=threads.INDEX_KEY
+        )["Body"].read()
+        return json.loads(body.decode("utf-8")).get("cards", [])
+    except Exception as exc:  # pragma: no cover - best-effort, read-only
+        print(f"Warning: load thread index failed: {exc}")
+        return []
+
+
 def _load_swot(digests_bucket: str) -> dict[str, Any] | None:
     """Read the compact SWOT belief index (ADR 004 step 2), best-effort. None if absent."""
     try:
@@ -528,6 +552,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         industry_meta=industry_meta,
         macro=_load_macro(),
         swot=_load_swot(digests_bucket),
+        thread_cards=_load_threads(digests_bucket),
     )
     body = json.dumps(feed, ensure_ascii=False).encode("utf-8")
 
