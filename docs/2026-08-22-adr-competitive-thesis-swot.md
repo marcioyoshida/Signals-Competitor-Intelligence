@@ -1,8 +1,17 @@
 # ADR 004 — Competitive thesis: a per-entity SWOT belief store that narratives reinforce or contradict
 
 Status: **Accepted (2026-08-22)** — the model and phased build are committed; **step 1
-(Comparative axis) is in progress**. Extends [ADR 003](2026-08-19-adr-narrative-dimensions.md).
+(Comparative axis) SHIPPED 2026-08-23**. Extends [ADR 003](2026-08-19-adr-narrative-dimensions.md).
 Steps 2–4 (the SWOT store, LLM reconcile) remain design-only until their turn.
+
+> **Step 1 verified live (2026-08-23).** `OncaComparative` deployed and wired into
+> `OncaPipeline` (… → longitudinal → comparative → feed); a full run SUCCEEDED and
+> emitted `narratives/2026-08-23/comparative-itau.json` — Itaú *outperform* vs the
+> banking cohort (peer_z +1.75, threat 0.55, `is_alert:false`, labeled inference),
+> carrying `swot_hint {dimension:"S", sign:"+", cohort:"banking", peer_z:1.75}` in the
+> durable store for step 2 to consume verbatim. (The dashboard feed whitelists fields
+> and does not surface `swot_hint`; step 2's belief store reads the durable narrative
+> store, not the feed, so no change is needed there yet.)
 
 ## Context — where this came from
 
@@ -102,7 +111,7 @@ step — they map to a dimension by rule, attaching as structured evidence.
 
 **Committed** to the phased path that de-risks; **step 1 building now**:
 
-1. **Ship the Comparative axis first — IN PROGRESS 2026-08-22** (already the next
+1. **Ship the Comparative axis first — ✅ SHIPPED 2026-08-23** (already the next
    ADR-003 item) — standalone value *and* the first structured SWOT feeder. It emits
    a **`swot_hint`** on each card (`dimension: S|W|O|T`, `sign: +/−`, `evidence`) so
    the belief store can consume it verbatim in step 2 — a peer *outperformance* reads
