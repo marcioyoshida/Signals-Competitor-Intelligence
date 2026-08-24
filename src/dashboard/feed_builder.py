@@ -295,6 +295,8 @@ def _project_item(n: dict[str, Any]) -> dict[str, Any]:
         "citations": [c for c in (n.get("citations") or []) if isinstance(c, dict)],
         "source_ids": n.get("source_ids") or [],
         "mode": n.get("mode"),
+        # ADR 006: frameworks this narrative updated (evidence-matched) -> on-card strips.
+        "fw_updates": n.get("fw_updates") or {},
     }
 
 
@@ -727,6 +729,41 @@ def _load_fw_curated(digests_bucket: str, framework: str) -> dict[str, list[dict
         return {}
 
 
+def _load_fw_updates_by_narrative(digests_bucket: str) -> dict[str, dict[str, list[dict[str, Any]]]]:
+    """Map narrative id -> {framework: [{dimension, text, confidence}]} for the
+    framework bullets that cite that narrative in their ``evidence``.
+
+    Powers the on-card framework strips: a card shows a framework strip ONLY when
+    that framework was actually updated by this narrative (its id is in a bullet's
+    evidence) — not merely because the entity has a standing belief. SWOT bullets
+    carry no ``framework`` key, so they are keyed as ``swot``."""
+    try:
+        from src.synth import swot_store
+
+        body = boto3.client("s3").get_object(
+            Bucket=digests_bucket, Key=swot_store.CURATED_KEY
+        )["Body"].read()
+        data = json.loads(body.decode("utf-8"))
+        retired = {r.get("target_bullet_id") for r in data.get("retirements", [])
+                   if r.get("target_bullet_id")}
+        out: dict[str, dict[str, list[dict[str, Any]]]] = {}
+        for b in data.get("bullets", []):
+            if b.get("id") in retired:
+                continue
+            fw = b.get("framework") or "swot"
+            row = {
+                "dimension": b.get("dimension"),
+                "text": b.get("text"),
+                "confidence": b.get("confidence", swot_store.CURATED_CONFIDENCE),
+            }
+            for nid in dict.fromkeys(b.get("evidence") or []):  # dedup, keep order
+                if nid:
+                    out.setdefault(nid, {}).setdefault(fw, []).append(row)
+        return out
+    except Exception:
+        return {}
+
+
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """Build feed.json from recent narratives and publish it to the site bucket."""
     digests_bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
@@ -737,6 +774,14 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         return {"statusCode": 200, "body": json.dumps({"status": "no_digests_bucket"})}
 
     narratives = load_recent_narratives(digests_bucket, window_days)
+    # Attach the frameworks each narrative actually updated (evidence-matched), so a
+    # card's strips reflect what THIS ticket changed, not the entity's whole belief set.
+    fw_updates = _load_fw_updates_by_narrative(digests_bucket)
+    for n in narratives:
+        if isinstance(n, dict):
+            upd = fw_updates.get(n.get("id"))
+            if upd:
+                n["fw_updates"] = upd
     industry_map, industry_meta = load_industry_data()
     feed = build_feed(
         narratives,
