@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 
 import yaml
-from aws_cdk import App, CfnOutput, Duration, Stack
+from aws_cdk import App, CfnOutput, Duration, Stack, Tags
 from aws_cdk import aws_bedrock as bedrock
 from aws_cdk import aws_cloudfront as cloudfront
 from aws_cdk import aws_cloudfront_origins as cf_origins
@@ -76,6 +76,13 @@ def dashboard_credentials() -> tuple[str, str]:
 class OncaPrototypeStack(Stack):
     def __init__(self, scope: object, id: str, **kwargs):
         super().__init__(scope, id, **kwargs)
+        # Cost Explorer groups Bedrock + other spend by this allocation tag
+        # (scripts/daily_cost_tracker.py --tag tr:project-name). Override the
+        # value per deploy with ONCA_PROJECT_NAME; activate the key in CE after
+        # the first tagged resource appears (~24h).
+        Tags.of(self).add(
+            "tr:project-name", os.environ.get("ONCA_PROJECT_NAME", "onca")
+        )
 
         state_table = dynamodb.Table(
             self,
@@ -336,6 +343,10 @@ class OncaPrototypeStack(Stack):
                 "ONCA_RAW_BUCKET": raw_bucket.bucket_name,
                 "ONCA_KB_ID": knowledge_base.attr_knowledge_base_id,
                 "ONCA_ENTITIES_TABLE": entities_table.table_name,
+                # Deferred news-commit (issue #23): synth marks the fetched news
+                # ids seen only after it has consumed the slice, so it needs the
+                # trade_press seen-set state table.
+                "ONCA_STATE_TABLE": state_table.table_name,
                 "ONCA_SYNTH_MAX_CANDIDATES": "10",
                 # Live synthesis on: Titan V2 embed quota (60 RPM, approved
                 # 2026-08-10) unblocked KB ingestion; nova-lite Converse + KB
@@ -359,6 +370,7 @@ class OncaPrototypeStack(Stack):
         digests_bucket.grant_put(synth)
         raw_bucket.grant_read(synth)
         entities_table.grant_read_write_data(synth)
+        state_table.grant_read_write_data(synth)  # deferred news seen-commit (#23)
         synth.add_to_role_policy(
             iam.PolicyStatement(
                 actions=[

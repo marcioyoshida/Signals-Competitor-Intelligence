@@ -71,7 +71,7 @@ def _stub_core_ingesters(monkeypatch):
 
 
 def test_lambda_handler_returns_digest_payload_when_ingesters_fail(monkeypatch):
-    monkeypatch.setattr(lambda_port, "_new_since_last_run", lambda source, docs, seed_if_empty=False: docs)
+    monkeypatch.setattr(lambda_port, "_new_since_last_run", lambda source, docs, seed_if_empty=False, commit=True: docs)
     monkeypatch.setattr(lambda_port, "_moves_since_last_run", lambda *a, **k: [])
     _stub_core_ingesters(monkeypatch)
 
@@ -108,7 +108,7 @@ def test_lambda_handler_passes_watchlist_config_to_ingesters(monkeypatch):
         captured["watchlist_ispb"] = watchlist_ispb
         return []
 
-    monkeypatch.setattr(lambda_port, "_new_since_last_run", lambda source, docs, seed_if_empty=False: docs)
+    monkeypatch.setattr(lambda_port, "_new_since_last_run", lambda source, docs, seed_if_empty=False, commit=True: docs)
     monkeypatch.setattr(lambda_port, "_moves_since_last_run", lambda *a, **k: [])
     monkeypatch.setattr(lambda_port.bcb_normativos, "fetch_recent", fake_fetch_recent)
     monkeypatch.setattr(lambda_port.cvm_fundos, "fetch_funds", fake_fetch_funds)
@@ -130,7 +130,7 @@ def test_lambda_handler_passes_watchlist_config_to_ingesters(monkeypatch):
 
 
 def test_lambda_handler_resolves_institution_names_in_market_share(monkeypatch):
-    monkeypatch.setattr(lambda_port, "_new_since_last_run", lambda source, docs, seed_if_empty=False: docs)
+    monkeypatch.setattr(lambda_port, "_new_since_last_run", lambda source, docs, seed_if_empty=False, commit=True: docs)
     monkeypatch.setattr(lambda_port, "_moves_since_last_run", lambda *a, **k: [])
     monkeypatch.setattr(lambda_port.bcb_normativos, "fetch_recent", lambda days=7, types=None: [])
     monkeypatch.setattr(lambda_port.cvm_fundos, "fetch_funds", lambda watchlist_admins=None: [])
@@ -157,7 +157,7 @@ def test_lambda_handler_continues_when_normativos_fetch_raises(monkeypatch):
     def broken_fetch_recent(days=7, types=None):
         raise RuntimeError("BCB search page is down")
 
-    monkeypatch.setattr(lambda_port, "_new_since_last_run", lambda source, docs, seed_if_empty=False: docs)
+    monkeypatch.setattr(lambda_port, "_new_since_last_run", lambda source, docs, seed_if_empty=False, commit=True: docs)
     monkeypatch.setattr(lambda_port, "_moves_since_last_run", lambda *a, **k: [])
     monkeypatch.setattr(lambda_port.bcb_normativos, "fetch_recent", broken_fetch_recent)
     monkeypatch.setattr(lambda_port.cvm_fundos, "fetch_funds", lambda watchlist_admins=None: [])
@@ -180,7 +180,7 @@ def test_lambda_handler_continues_when_cvm_funds_fetch_raises(monkeypatch):
     def broken_fetch_funds(watchlist_admins=None):
         raise RuntimeError("CVM CSV endpoint timed out")
 
-    monkeypatch.setattr(lambda_port, "_new_since_last_run", lambda source, docs, seed_if_empty=False: docs)
+    monkeypatch.setattr(lambda_port, "_new_since_last_run", lambda source, docs, seed_if_empty=False, commit=True: docs)
     monkeypatch.setattr(lambda_port, "_moves_since_last_run", lambda *a, **k: [])
     monkeypatch.setattr(lambda_port.bcb_normativos, "fetch_recent", lambda days=7, types=None: [])
     monkeypatch.setattr(lambda_port.cvm_fundos, "fetch_funds", broken_fetch_funds)
@@ -203,7 +203,7 @@ def test_lambda_handler_continues_when_ifdata_base_date_lookup_raises(monkeypatc
     def broken_latest_base_date():
         raise RuntimeError("Could not determine an IF.data base date")
 
-    monkeypatch.setattr(lambda_port, "_new_since_last_run", lambda source, docs, seed_if_empty=False: docs)
+    monkeypatch.setattr(lambda_port, "_new_since_last_run", lambda source, docs, seed_if_empty=False, commit=True: docs)
     monkeypatch.setattr(lambda_port, "_moves_since_last_run", lambda *a, **k: [])
     monkeypatch.setattr(lambda_port.bcb_normativos, "fetch_recent", lambda days=7, types=None: [])
     monkeypatch.setattr(lambda_port.cvm_fundos, "fetch_funds", lambda watchlist_admins=None: [])
@@ -224,7 +224,7 @@ def test_lambda_handler_continues_when_institution_names_lookup_raises(monkeypat
     def broken_fetch_institution_names(base_date):
         raise RuntimeError("IfDataCadastro endpoint timed out")
 
-    monkeypatch.setattr(lambda_port, "_new_since_last_run", lambda source, docs, seed_if_empty=False: docs)
+    monkeypatch.setattr(lambda_port, "_new_since_last_run", lambda source, docs, seed_if_empty=False, commit=True: docs)
     monkeypatch.setattr(lambda_port, "_moves_since_last_run", lambda *a, **k: [])
     monkeypatch.setattr(lambda_port.bcb_normativos, "fetch_recent", lambda days=7, types=None: [])
     monkeypatch.setattr(lambda_port.cvm_fundos, "fetch_funds", lambda watchlist_admins=None: [])
@@ -248,7 +248,7 @@ def test_lambda_handler_continues_when_institution_names_lookup_raises(monkeypat
 
 
 def test_lambda_handler_continues_when_all_ingesters_raise(monkeypatch):
-    monkeypatch.setattr(lambda_port, "_new_since_last_run", lambda source, docs, seed_if_empty=False: docs)
+    monkeypatch.setattr(lambda_port, "_new_since_last_run", lambda source, docs, seed_if_empty=False, commit=True: docs)
     monkeypatch.setattr(lambda_port, "_moves_since_last_run", lambda *a, **k: [])
     monkeypatch.setattr(
         lambda_port.bcb_normativos,
@@ -288,7 +288,7 @@ def test_lambda_handler_continues_when_all_ingesters_raise(monkeypatch):
 
 
 def test_lambda_handler_continues_when_s3_upload_fails(monkeypatch):
-    monkeypatch.setattr(lambda_port, "_new_since_last_run", lambda source, docs, seed_if_empty=False: docs)
+    monkeypatch.setattr(lambda_port, "_new_since_last_run", lambda source, docs, seed_if_empty=False, commit=True: docs)
     monkeypatch.setattr(lambda_port, "_moves_since_last_run", lambda *a, **k: [])
     _stub_core_ingesters(monkeypatch)
     monkeypatch.setenv("ONCA_DIGESTS_BUCKET", "test-bucket")
@@ -688,7 +688,7 @@ class FakeBedrockAgentClient:
 
 
 def _stub_all_ingesters(monkeypatch, normativos=None, funds=None, entrants=None):
-    monkeypatch.setattr(lambda_port, "_new_since_last_run", lambda source, docs, seed_if_empty=False: docs)
+    monkeypatch.setattr(lambda_port, "_new_since_last_run", lambda source, docs, seed_if_empty=False, commit=True: docs)
     monkeypatch.setattr(lambda_port, "_moves_since_last_run", lambda *a, **k: [])
     monkeypatch.setattr(lambda_port.bcb_normativos, "fetch_recent", lambda days=7, types=None: normativos or [])
     monkeypatch.setattr(lambda_port.cvm_fundos, "fetch_funds", lambda watchlist_admins=None: funds or [])
@@ -864,7 +864,7 @@ def test_handler_degrades_when_a_source_exceeds_its_budget(monkeypatch):
         _t.sleep(5)
         return [{"id": "should-not-appear"}]
 
-    monkeypatch.setattr(lambda_port, "_new_since_last_run", lambda source, docs, seed_if_empty=False: docs)
+    monkeypatch.setattr(lambda_port, "_new_since_last_run", lambda source, docs, seed_if_empty=False, commit=True: docs)
     monkeypatch.setattr(lambda_port, "_moves_since_last_run", lambda *a, **k: [])
     _stub_core_ingesters(monkeypatch)
     monkeypatch.setattr(lambda_port.bcb_normativos, "fetch_recent", _slow_normativos)
@@ -887,7 +887,7 @@ def test_lambda_handler_news_mode_writes_news_slice(monkeypatch):
         lambda_port.trade_press, "fetch_news",
         lambda terms, **k: [{"id": "news:1", "company": "Binance", "title": "Binance x", "publisher": "P"}],
     )
-    monkeypatch.setattr(lambda_port, "_new_since_last_run", lambda source, docs, seed_if_empty=False: docs)
+    monkeypatch.setattr(lambda_port, "_new_since_last_run", lambda source, docs, seed_if_empty=False, commit=True: docs)
     monkeypatch.setenv("ONCA_NEWS_WATCHLIST", "Binance")
     monkeypatch.setenv("ONCA_NEWS_USE_REGISTRY", "false")
     monkeypatch.setenv("ONCA_DIGESTS_BUCKET", "b")
@@ -906,13 +906,16 @@ def test_lambda_handler_news_mode_writes_news_slice(monkeypatch):
     body = json.loads(resp["body"])
     assert body["source"] == "news_ingest"
     assert body["news"]["count"] == 1 and body["news"]["new_count"] == 1
+    # Deferred commit (#23): the slice carries every fetched id so synth can
+    # commit the exact set it consumed (fetch here marks nothing seen).
+    assert body["news"]["fetched_ids"] == ["news:1"]
     assert puts and puts[0]["Key"] == "lambda-digests/news/req-news.json"
 
 
 def test_lambda_handler_structured_mode_skips_news(monkeypatch):
     """mode=structured -> news is NOT fetched; the news slice is empty (the
     parallel news branch supplies it, overlaid at synth time)."""
-    monkeypatch.setattr(lambda_port, "_new_since_last_run", lambda source, docs, seed_if_empty=False: docs)
+    monkeypatch.setattr(lambda_port, "_new_since_last_run", lambda source, docs, seed_if_empty=False, commit=True: docs)
     monkeypatch.setattr(lambda_port, "_moves_since_last_run", lambda *a, **k: [])
     _stub_core_ingesters(monkeypatch)
 
@@ -925,4 +928,4 @@ def test_lambda_handler_structured_mode_skips_news(monkeypatch):
     resp = lambda_port.lambda_handler({"mode": "structured"}, None)
     body = json.loads(resp["body"])
     assert body["source"] == "lambda_port"
-    assert body["news"] == {"count": 0, "new_count": 0, "items": [], "context": []}
+    assert body["news"] == {"count": 0, "new_count": 0, "items": [], "context": [], "fetched_ids": []}

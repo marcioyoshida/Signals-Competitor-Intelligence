@@ -107,19 +107,24 @@ def _new_since_last_run(
     docs: list[dict[str, Any]],
     *,
     seed_if_empty: bool = False,
+    commit: bool = True,
 ) -> list[dict[str, Any]]:
     """Diff docs against DynamoDB-backed state; degrade gracefully on failure.
 
     When seed_if_empty is True (autorizações registry), the first run with
     an empty state table seeds the baseline and reports nothing — otherwise
     every authorized institution would appear as a "new entrant".
+
+    ``commit=False`` computes the fresh set without marking anything seen; the
+    caller must commit later via ``diff.engine.commit_seen`` once the items are
+    actually consumed (the news → synth deferred-commit path, issue #23).
     """
     try:
         state = DynamoDbState(source)
         if hasattr(state, "load"):
             state.load()
         was_empty = len(state.seen) == 0
-        fresh = detect_new(source, docs, state=state)
+        fresh = detect_new(source, docs, state=state, commit=commit)
         if seed_if_empty and was_empty and docs:
             print(
                 f"Info: {source} baseline seeded ({len(docs)} items); "
@@ -275,7 +280,15 @@ def _news_slice(context: Any) -> dict[str, Any]:
                     lookback_days=news_lookback,
                     max_terms=int(os.environ.get("ONCA_NEWS_MAX_TERMS", "80")),
                 )
-                new_news = _new_since_last_run("trade_press", news_items, seed_if_empty=True)
+                # Deferred commit (issue #23): compute the fresh set but do NOT
+                # mark anything seen here. Synth commits ``fetched_ids`` only
+                # after it has consumed this slice, so a fetch-only run or a
+                # failed/retried synth never burns the news — the items simply
+                # re-surface next run instead of leaving the entity falsely
+                # silent. Seed suppression on a truly-empty state still holds.
+                new_news = _new_since_last_run(
+                    "trade_press", news_items, seed_if_empty=True, commit=False
+                )
         except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
             print(f"Warning: trade-press fetch failed: {exc}")
     return {
@@ -289,11 +302,15 @@ def _news_slice(context: Any) -> dict[str, Any]:
         # ALL new items (env-tunable) + a broad context sample; rows are compact.
         "items": _tag_new(new_news[: int(os.environ.get("ONCA_NEWS_DIGEST_ITEMS", "150"))]),
         "context": _strip_raw(news_items[: int(os.environ.get("ONCA_NEWS_DIGEST_CONTEXT", "60"))]),
+        # Every fetched id (not just the capped items/context) so synth commits
+        # the exact set it saw to the trade_press seen-set — the second phase of
+        # the deferred diff above. Compact: bare id strings.
+        "fetched_ids": [d["id"] for d in news_items if isinstance(d, dict) and d.get("id")],
     }
 
 
 def _empty_news_slice() -> dict[str, Any]:
-    return {"count": 0, "new_count": 0, "items": [], "context": []}
+    return {"count": 0, "new_count": 0, "items": [], "context": [], "fetched_ids": []}
 
 
 def _write_news_digest(slice_: dict[str, Any], context: Any) -> dict[str, Any]:

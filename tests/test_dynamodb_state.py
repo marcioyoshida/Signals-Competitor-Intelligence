@@ -3,7 +3,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.diff.engine import DynamoDbState, detect_new
+from src.diff.engine import DynamoDbState, commit_seen, detect_new
 
 
 class FakeTable:
@@ -39,6 +39,63 @@ def test_detect_new_uses_dynamodb_state_when_available():
     assert fresh == [{"id": "b"}]
     # Persisted (sharded) state carries both ids.
     assert _collect_seen(table, "demo") == {"a", "b"}
+
+
+def test_detect_new_commit_false_does_not_burn():
+    """commit=False computes fresh without marking anything seen (issue #23)."""
+    table = FakeTable()
+    state = DynamoDbState("trade_press", table=table)
+    state.seen = {"a"}
+    state.save()
+
+    docs = [{"id": "a"}, {"id": "b"}]
+    fresh = detect_new("trade_press", docs, state=state, commit=False)
+
+    # Fresh set is correct ...
+    assert fresh == [{"id": "b"}]
+    # ... but nothing new was persisted: 'b' is NOT burned, so a fetch-only run
+    # (or a synth that never consumed the slice) leaves it to re-surface.
+    assert _collect_seen(table, "trade_press") == {"a"}
+
+
+def test_commit_seen_marks_ids_after_consumption():
+    """The deferred second phase: commit_seen persists the consumed ids."""
+    table = FakeTable()
+    state = DynamoDbState("trade_press", table=table)
+    state.seen = {"a"}
+    state.save()
+
+    # Fresh computed without commit, then committed once consumed.
+    detect_new("trade_press", [{"id": "a"}, {"id": "b"}], state=state, commit=False)
+    size = commit_seen("trade_press", ["a", "b"], state=DynamoDbState("trade_press", table=table))
+
+    assert size == 2
+    assert _collect_seen(table, "trade_press") == {"a", "b"}
+    # Idempotent: re-committing the same ids is a no-op union.
+    assert commit_seen("trade_press", ["b"], state=DynamoDbState("trade_press", table=table)) == 2
+
+
+def test_deferred_commit_round_trip_no_burn_until_synth():
+    """End-to-end of the #23 fix: item stays fresh across fetch-only runs until
+    a consumer commits it, then it stops re-firing."""
+    table = FakeTable()
+    # Run 1 (fetch only, no synth): compute fresh, do not commit.
+    fresh1 = detect_new(
+        "trade_press", [{"id": "x"}], state=DynamoDbState("trade_press", table=table), commit=False
+    )
+    assert fresh1 == [{"id": "x"}]
+    # Run 2 (still no synth): 'x' is STILL fresh — never burned.
+    fresh2 = detect_new(
+        "trade_press", [{"id": "x"}], state=DynamoDbState("trade_press", table=table), commit=False
+    )
+    assert fresh2 == [{"id": "x"}]
+    # Synth consumes and commits.
+    commit_seen("trade_press", ["x"], state=DynamoDbState("trade_press", table=table))
+    # Run 3: now correctly not fresh (no re-fire).
+    fresh3 = detect_new(
+        "trade_press", [{"id": "x"}], state=DynamoDbState("trade_press", table=table), commit=False
+    )
+    assert fresh3 == []
 
 
 def test_dynamodb_state_shards_large_set_and_round_trips():

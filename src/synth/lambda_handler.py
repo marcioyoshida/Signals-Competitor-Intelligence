@@ -8,6 +8,27 @@ from typing import Any
 from src.synth import candidates, digest_io, synthesize
 
 
+def _commit_news_seen(digest: dict[str, Any]) -> int:
+    """Second phase of the deferred news diff (issue #23): mark the fetched news
+    ids seen now that synth has consumed them. Returns the number committed; 0
+    when there is nothing to commit or the state store is unavailable. Never
+    raises — an un-committed slice safely re-surfaces on the next run."""
+    news = digest.get("news") if isinstance(digest, dict) else None
+    ids = news.get("fetched_ids") if isinstance(news, dict) else None
+    if not ids:
+        return 0
+    try:
+        from src.diff.engine import DynamoDbState, commit_seen
+
+        # Must use the DynamoDB-backed state (same as the ingest branch): the
+        # JsonState default writes a local file, which is read-only on Lambda.
+        commit_seen("trade_press", ids, state=DynamoDbState("trade_press"))
+        return len(ids)
+    except Exception as exc:  # pragma: no cover - best-effort; safe to re-surface
+        print(f"Warning: news seen-commit failed (items will re-surface): {exc}")
+        return 0
+
+
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """Produce flagged narratives with citation guardrails.
 
@@ -54,6 +75,15 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             result["s3_key"] = key
         narratives.append(result)
 
+    # Deferred news-commit (issue #23): the news branch computed its fresh set
+    # WITHOUT marking anything seen. Now that synth has consumed the slice, mark
+    # exactly those fetched ids seen so they don't re-fire next run. Doing it here
+    # (not at fetch time) means a fetch-only run or a synth that never reached
+    # this point leaves the news un-burned, to re-surface next run — so an entity
+    # with real, multi-outlet news never looks falsely silent. Best-effort: a
+    # commit failure just means the items re-surface (safe), never a crash.
+    committed = _commit_news_seen(digest)
+
     fusion = {
         "entity_fusion": sum(1 for c in cands if c.get("kind") == "entity_fusion"),
         "regulatory_fusion": sum(1 for c in cands if c.get("kind") == "regulatory_fusion"),
@@ -61,6 +91,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         "multi_lens": sum(1 for c in cands if len(c.get("lenses") or []) >= 2),
         "min_lenses": int(os.environ.get("ONCA_SYNTH_MIN_LENSES", "2")),
         "min_score": float(os.environ.get("ONCA_SYNTH_MIN_SCORE", "0.45")),
+        "news_committed": committed,
     }
     status = "ok" if narratives else "ok_empty"
     # Return a COMPACT result: narratives are persisted to S3 (``keys``) and the

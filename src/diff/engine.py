@@ -9,7 +9,7 @@ import json
 import os
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 STATE_DIR = Path(__file__).resolve().parents[2] / "data" / "state"
 
@@ -90,16 +90,33 @@ class DynamoDbState:
         )
 
 
-def detect_new(source: str, docs: list[dict[str, Any]], state: Any | None = None) -> list[dict[str, Any]]:
+def detect_new(
+    source: str,
+    docs: list[dict[str, Any]],
+    state: Any | None = None,
+    *,
+    commit: bool = True,
+) -> list[dict[str, Any]]:
     """Return only docs not seen in previous runs, then persist state.
 
     For 'new item appeared' signals: fund filings, normativos, offerings,
     newly authorized entities.
+
+    ``commit=False`` computes the fresh set WITHOUT marking anything seen (no
+    ``state.save``) — a two-phase diff where the consumer commits later, via
+    :func:`commit_seen`, only once it has actually processed the items. This
+    prevents "burning" items that were fetched but never synthesised: a source
+    whose fetch and consumption run in separate Lambdas (news → synth) would
+    otherwise mark items seen on fetch and, if synth never ran on that slice
+    (a failed/retried synth, or a fetch-only run), lose them forever — an
+    entity then looks falsely silent though its news exists (issue #23).
     """
     state = state or JsonState(source)
     if hasattr(state, "load"):
         state.load()
     fresh = [d for d in docs if d["id"] not in state.seen]
+    if not commit:
+        return fresh
     state.seen.update(d["id"] for d in docs)
     # A persistence failure must not discard the correctly-computed fresh set.
     # Returning every doc as "new" here once flooded downstream corpus writes
@@ -109,6 +126,19 @@ def detect_new(source: str, docs: list[dict[str, Any]], state: Any | None = None
     except Exception as exc:  # pragma: no cover - defensive; state save is best-effort
         print(f"Warning: {source} state save failed (returning fresh anyway): {exc}")
     return fresh
+
+
+def commit_seen(source: str, ids: Iterable[str], state: Any | None = None) -> int:
+    """Mark ``ids`` seen for ``source`` — the deferred second phase of a
+    ``detect_new(..., commit=False)`` diff. Idempotent (set union); returns the
+    seen-set size after commit. Called by the consumer (synth) once it has
+    processed the fetched slice, so an un-consumed slice is never burned."""
+    state = state or JsonState(source)
+    if hasattr(state, "load"):
+        state.load()
+    state.seen.update(str(i) for i in ids if i)
+    state.save()
+    return len(state.seen)
 
 
 class ValueState:

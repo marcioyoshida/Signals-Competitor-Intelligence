@@ -141,6 +141,47 @@ def test_handler_suppresses_changeless_digest_by_default(monkeypatch):
     assert body["status"] == "ok_empty"
 
 
+def test_handler_commits_news_seen_after_consuming(monkeypatch):
+    """Deferred news-commit (#23): synth marks the fetched news ids seen only
+    after it has consumed the digest."""
+    monkeypatch.setenv("ONCA_SYNTH_USE_LLM", "false")
+    monkeypatch.setenv("ONCA_SYNTH_USE_KB", "false")
+    monkeypatch.setattr(
+        lambda_handler.digest_io, "write_narrative", lambda n, **k: None
+    )
+    committed = {}
+    import src.diff.engine as engine
+
+    monkeypatch.setattr(engine, "DynamoDbState", lambda *a, **k: None)
+    monkeypatch.setattr(
+        engine, "commit_seen", lambda source, ids, **k: committed.update({source: list(ids)})
+    )
+    event = {
+        "digest": {
+            "regulatory": {"items": []},
+            "news": {"items": [], "context": [], "fetched_ids": ["news:1", "news:2"]},
+        }
+    }
+    lambda_handler.lambda_handler(event, None)
+    assert committed == {"trade_press": ["news:1", "news:2"]}
+
+
+def test_handler_no_news_ids_commits_nothing(monkeypatch):
+    """No fetched_ids in the slice -> nothing to commit, no crash."""
+    monkeypatch.setenv("ONCA_SYNTH_USE_LLM", "false")
+    monkeypatch.setenv("ONCA_SYNTH_USE_KB", "false")
+    monkeypatch.setattr(lambda_handler.digest_io, "write_narrative", lambda n, **k: None)
+    calls = []
+    import src.diff.engine as engine
+
+    monkeypatch.setattr(engine, "commit_seen", lambda *a, **k: calls.append(a))
+    body = json.loads(
+        lambda_handler.lambda_handler({"digest": {"regulatory": {"items": []}}}, None)["body"]
+    )
+    assert calls == []
+    assert body["fusion"]["news_committed"] == 0
+
+
 def test_handler_no_digest(monkeypatch):
     monkeypatch.setattr(lambda_handler.digest_io, "load_digest_from_event", lambda e: None)
     resp = lambda_handler.lambda_handler({}, None)
