@@ -264,6 +264,12 @@ class OncaPrototypeStack(Stack):
                 ),
                 # Trade-press (Google News RSS) — brand-name queries.
                 "ONCA_NEWS_LOOKBACK_DAYS": str(watchlist.get("news_lookback_days", 14)),
+                # One Google-News HTTP per term: cap must cover the whole registry
+                # (121 terms and growing) or the newest entities past the cap are
+                # silently never queried. Budget raised to fit ~1.1s/term within
+                # the 900s Lambda timeout (news runs as its own branch).
+                "ONCA_NEWS_MAX_TERMS": str(watchlist.get("news_max_terms", 200)),
+                "ONCA_SOURCE_TIMEOUT_SEC": str(watchlist.get("source_timeout_sec", 300)),
                 "ONCA_NEWS_WATCHLIST": ",".join(
                     str(x) for x in (watchlist.get("news_watchlist") or [])
                 ),
