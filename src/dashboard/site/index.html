@@ -207,6 +207,41 @@
   .swot-q.rivalry { --qc: var(--t-high); } .swot-q.new_entrants { --qc: #b9820f; }
   .swot-q.substitutes { --qc: #6c63c4; } .swot-q.buyer_power { --qc: var(--accent); }
   .swot-q.supplier_power { --qc: var(--t-crit); }
+  /* ADR 006: canvas colors for PESTLE / Ansoff / BCG / 4 Corners / 7S quadrants
+     (parity with SWOT/TOWS/Porter — without these the boxes had no --qc, so no
+     colored border/header). One --qc per dimension, shared by the expanded box
+     (.swot-q.<dim>) and the on-card framework strip chip (.thesis .tc.<dim>). */
+  .swot-q.political,       .thesis .tc.political        { --qc: var(--t-high); }
+  .swot-q.economic,        .thesis .tc.economic         { --qc: var(--accent); }
+  .swot-q.social,          .thesis .tc.social           { --qc: #6c63c4; }
+  .swot-q.technological,   .thesis .tc.technological    { --qc: #1a7ab5; }
+  .swot-q.legal,           .thesis .tc.legal            { --qc: #b9820f; }
+  .swot-q.environmental,   .thesis .tc.environmental    { --qc: #2e9e6b; }
+  .swot-q.penetration,     .thesis .tc.penetration      { --qc: var(--accent); }
+  .swot-q.market_dev,      .thesis .tc.market_dev       { --qc: #1a7ab5; }
+  .swot-q.product_dev,     .thesis .tc.product_dev      { --qc: #6c63c4; }
+  .swot-q.diversification, .thesis .tc.diversification  { --qc: var(--t-high); }
+  .swot-q.star,            .thesis .tc.star             { --qc: #b9820f; }
+  .swot-q.cash_cow,        .thesis .tc.cash_cow         { --qc: #2e9e6b; }
+  .swot-q.question_mark,   .thesis .tc.question_mark    { --qc: #1a7ab5; }
+  .swot-q.dog,             .thesis .tc.dog              { --qc: var(--t-crit); }
+  .swot-q.drivers,         .thesis .tc.drivers          { --qc: var(--accent); }
+  .swot-q.assumptions,     .thesis .tc.assumptions      { --qc: #6c63c4; }
+  .swot-q.current_strategy,.thesis .tc.current_strategy { --qc: #1a7ab5; }
+  .swot-q.capabilities,    .thesis .tc.capabilities     { --qc: #2e9e6b; }
+  .swot-q.response_profile,.thesis .tc.response_profile { --qc: var(--t-high); }
+  .swot-q.structure,       .thesis .tc.structure        { --qc: #1a7ab5; }
+  .swot-q.systems,         .thesis .tc.systems          { --qc: #6c63c4; }
+  .swot-q.strategy,        .thesis .tc.strategy         { --qc: var(--accent); }
+  /* On-card strip chips for TOWS/Porter (their expanded boxes are already colored). */
+  .thesis .tc.SO { --qc: #1a7ab5; } .thesis .tc.ST { --qc: #6c63c4; }
+  .thesis .tc.WO { --qc: #b9820f; } .thesis .tc.WT { --qc: var(--t-crit); }
+  .thesis .tc.rivalry { --qc: var(--t-high); } .thesis .tc.new_entrants { --qc: #b9820f; }
+  .thesis .tc.substitutes { --qc: #6c63c4; } .thesis .tc.buyer_power { --qc: var(--accent); }
+  .thesis .tc.supplier_power { --qc: var(--t-crit); }
+  /* Several framework strips stacked on one card. */
+  .fw-strips { display: flex; flex-direction: column; gap: 5px; margin: 8px 0 2px; }
+  .fw-strips .thesis { margin: 0; }
   .swot-props .pt { font-size: 12.5px; color: var(--ink); }
   .swot-props .pmeta { display: block; color: var(--muted); font-size: 11px; margin-top: 3px; }
   .swot-props .ptgt { display: block; color: var(--muted); font-size: 11px; font-style: italic; margin-top: 2px; }
@@ -831,30 +866,57 @@ function inferBadge(f) {
   return axisLabel(f.axis);
 }
 
-// ADR 004: the maintained competitive thesis as CONTEXT on a signal card — read the
-// signal against the standing belief. Sourced from feed.swot (already shipped); shown
-// only in the cross-entity feed (once filtered to an entity, the war-room panel owns
-// the full SWOT, so the strip would be redundant). Clicking it opens that panel.
-function thesisContext(entity) {
+// ADR 004/006: framework context strips on a signal card — read the signal against
+// every standing framework belief for this entity. One clickable strip per framework
+// that carries curated content: SWOT (the "Tese" belief) plus any TOWS / Porter /
+// PESTLE / Ansoff / BCG / 4-Corners / 7S. Shown only in the cross-entity feed (once
+// filtered to an entity, the war-room panel owns the full detail). Clicking a strip
+// opens that framework's card in the panel.
+function _stripChips(fw, counts) {
+  // Per-dimension count chips, colored by dimension (--qc via .tc.<dim>). SWOT keeps
+  // its single-letter chips; other frameworks abbreviate the pt-BR label (full label
+  // in the tooltip) to stay compact.
+  const order = FW_DIM_ORDER[fw] || [], labels = FW_DIM_LABELS[fw] || {};
+  return order.filter(d => (counts[d] || 0) > 0).map(d => {
+    const lab = labels[d] || d;
+    const ab = fw === "swot" ? d : lab.replace(/[^A-Za-zÀ-ÿ]/g, "").slice(0, 3);
+    return `<span class="tc ${d}" title="${esc(lab)}">${esc(ab)} ${counts[d]}</span>`;
+  }).join("");
+}
+function frameworkStrips(entity) {
   if (!entity || state.entity === entity) return "";
+  const strips = [];
+  // SWOT (shape {counts, dimensions}) — keep the "Tese" label + top belief bullet.
   const sw = DATA.swot && DATA.swot[entity];
-  if (!sw) return "";
-  const counts = sw.counts || {}, dims = sw.dimensions || {};
-  let top = null, topDim = null;
-  for (const d of ["S", "W", "O", "T"]) {
-    for (const b of (dims[d] || [])) {
-      if (b.status !== "active") continue;
-      if (!top || (b.confidence ?? 0) > (top.confidence ?? 0)) { top = b; topDim = d; }
+  if (sw) {
+    const counts = sw.counts || {}, dims = sw.dimensions || {};
+    let top = null, topDim = null;
+    for (const d of FW_DIM_ORDER.swot)
+      for (const b of (dims[d] || [])) {
+        if (b.status !== "active") continue;
+        if (!top || (b.confidence ?? 0) > (top.confidence ?? 0)) { top = b; topDim = d; }
+      }
+    const chips = _stripChips("swot", counts);
+    if (chips || top) {
+      const topHtml = top ? `<span class="ttop ${topDim}" title="${esc(top.text)}">${esc(top.text)}</span>` : "";
+      strips.push(`<div class="thesis" data-entity="${esc(entity)}" data-fw="swot"
+        title="Tese competitiva mantida (SWOT · inferência) — clique para abrir o painel">
+        <span class="tlabel">Tese</span>${chips}${topHtml}</div>`);
     }
   }
-  const chips = ["S", "W", "O", "T"].filter(d => (counts[d] || 0) > 0)
-    .map(d => `<span class="tc ${d}">${d} ${counts[d]}</span>`).join("");
-  if (!chips && !top) return "";
-  const topHtml = top
-    ? `<span class="ttop ${topDim}" title="${esc(top.text)}">${esc(top.text)}</span>` : "";
-  return `<div class="thesis" data-entity="${esc(entity)}"
-    title="Tese competitiva mantida para esta entidade (SWOT · inferência) — clique para abrir o painel completo">
-    <span class="tlabel">Tese</span>${chips}${topHtml}</div>`;
+  // Array-shaped frameworks: one strip each when they carry curated bullets.
+  for (const fw of ["tows", "porter", "pestle", "ansoff", "bcg", "four_corners", "seven_s"]) {
+    const arr = (DATA[fw] || {})[entity] || [];
+    if (!arr.length) continue;
+    const counts = {};
+    for (const b of arr) counts[b.dimension] = (counts[b.dimension] || 0) + 1;
+    const chips = _stripChips(fw, counts);
+    if (!chips) continue;
+    strips.push(`<div class="thesis" data-entity="${esc(entity)}" data-fw="${fw}"
+      title="${esc(FW_NAMES[fw])} — clique para expandir o framework">
+      <span class="tlabel">${esc(FW_NAMES[fw])}</span>${chips}</div>`);
+  }
+  return strips.length ? `<div class="fw-strips">${strips.join("")}</div>` : "";
 }
 
 function cardHtml(f, group) {
@@ -881,7 +943,7 @@ function cardHtml(f, group) {
     <div><span class="score" style="cursor:help" title="${esc(factorsTip(f.threat_factors))}">${(f.threat_score ?? 0).toFixed(2)} ameaça</span> <span class="est">· est.</span> ${multi}</div>
     <div class="lenses">${f.lenses.map(l => `<span class="chip" title="Fonte: ${esc(lensLabel(l))}">${esc(lensLabel(l))}</span>`).join("")}</div>
     <p class="narr clamp">${narr}</p>
-    ${thesisContext(f.entity)}
+    ${frameworkStrips(f.entity)}
     <div class="cites">${cites}
       ${nSinais ? `<span class="src">· ${nSinais} sinais</span>` : ""}</div>
   </div>`;
@@ -1158,13 +1220,13 @@ function render() {
   });
   feed.querySelectorAll(".thesis").forEach(t => t.onclick = ev => {
     ev.stopPropagation();                 // don't also toggle the narrative clamp
-    const en = t.dataset.entity;
+    const en = t.dataset.entity, fw = t.dataset.fw || "swot";
     state.entity = en;
+    state._openFw = fw;                    // set before render so the right card opens
     document.getElementById("fEntity").value = en;
     syncEntityHighlight(); render();
-    state._openFw = "swot";
     const fp = document.getElementById("frameworksPanel");
-    if (fp) { fp.querySelector('.fw-card[data-fw="swot"]')?.classList.add("open"); fp.scrollIntoView({ behavior: "smooth", block: "nearest" }); }
+    if (fp) { fp.querySelector(`.fw-card[data-fw="${fw}"]`)?.classList.add("open"); fp.scrollIntoView({ behavior: "smooth", block: "nearest" }); }
   });
   renderTable(rows);
 }
