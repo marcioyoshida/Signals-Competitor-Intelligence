@@ -25,11 +25,19 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import os
 from typing import Any
 
 from src.synth import swot_store
 
 DECISIONS = ("approved", "rejected")
+
+# ADR 006: the strategy frameworks eligible for confidence-gated auto-approval.
+# SWOT reconcile/seed/challenge/stale are deliberately excluded — those stay
+# human-vetted (they assert or retire core beliefs).
+AUTO_APPROVE_FRAMEWORKS = ("tows", "porter", "pestle", "ansoff", "bcg",
+                           "four_corners", "seven_s")
+DEFAULT_AUTO_APPROVE_CONF = 0.70
 
 
 def _now() -> str:
@@ -187,3 +195,107 @@ def vet(bucket: str, proposal_id: str, decision: str, *, queue: str, s3: Any) ->
     if queue == "graph":
         return vet_graph(bucket, proposal_id, decision, s3=s3)
     return {"status": "error", "detail": f"unknown queue: {queue}"}
+
+
+# --- ADR 006: confidence-gated auto-approval of framework proposals ----------
+def _framework_stores() -> dict[str, str]:
+    """Map each strategy framework to its proposals.json S3 key."""
+    from src.synth import (ansoff, bcg, four_corners, pestle, porter,
+                           seven_s, tows)
+
+    return {
+        "tows": tows.TOWS_PROPOSALS_KEY,
+        "porter": porter.PORTER_PROPOSALS_KEY,
+        "pestle": pestle.PESTLE_PROPOSALS_KEY,
+        "ansoff": ansoff.ANSOFF_PROPOSALS_KEY,
+        "bcg": bcg.BCG_PROPOSALS_KEY,
+        "four_corners": four_corners.FOUR_CORNERS_PROPOSALS_KEY,
+        "seven_s": seven_s.SEVEN_S_PROPOSALS_KEY,
+    }
+
+
+def _as_confidence(value: Any) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def normalize_threshold(value: Any, *, default: float = DEFAULT_AUTO_APPROVE_CONF) -> float:
+    """Coerce a threshold input parameter to a 0..1 confidence. Accepts a fraction
+    (0.7) or a percentage (70); None/garbage falls back to `default`."""
+    if value is None or value == "":
+        return default
+    try:
+        t = float(value)
+    except (TypeError, ValueError):
+        return default
+    if t > 1.0:  # given as a percentage, e.g. 70 -> 0.70
+        t = t / 100.0
+    return max(0.0, min(1.0, t))
+
+
+def auto_approve_frameworks(
+    bucket: str, *, threshold: float, s3: Any,
+    frameworks: tuple[str, ...] = AUTO_APPROVE_FRAMEWORKS,
+) -> dict[str, Any]:
+    """Approve every PENDING framework proposal whose confidence >= threshold,
+    promoting each into swot/curated.json via the SAME path the vetting UI uses
+    (`_apply_curated`). Idempotent: proposals already decided (by a human or a
+    prior auto pass) are left untouched. Only the strategy frameworks are eligible
+    — SWOT reconcile/seed/challenge/stale are never auto-approved."""
+    stores = _framework_stores()
+    scanned = approved = promoted = 0
+    by_framework: dict[str, int] = {}
+    for fw in frameworks:
+        key = stores.get(fw)
+        if not key:
+            continue
+        store = _load(bucket, key, s3)
+        changed = False
+        for p in store.get("proposals", []):
+            if p.get("status") != "pending":
+                continue
+            scanned += 1
+            if _as_confidence(p.get("confidence")) < threshold:
+                continue
+            effect = _apply_curated(bucket, p, "approved", s3)
+            p["status"] = "approved"
+            p["decided_at"] = _now()
+            p["auto_approved"] = True
+            p["auto_approved_conf"] = threshold
+            approved += 1
+            by_framework[fw] = by_framework.get(fw, 0) + 1
+            if effect == "bullet":
+                promoted += 1
+            changed = True
+        if changed:
+            _save(bucket, key, store, s3)
+    return {"threshold": threshold, "scanned": scanned, "approved": approved,
+            "promoted": promoted, "by_framework": by_framework}
+
+
+def lambda_handler(event: dict[str, Any] | None, context: Any = None) -> dict[str, Any]:
+    """Pipeline step: auto-approve high-confidence framework proposals.
+
+    Threshold is an input parameter (default 0.70 / 70%): an execution/event
+    payload key (`threshold` or `autoapprove_threshold`, a fraction 0.7 or a
+    percentage 70) overrides env `ONCA_AUTOAPPROVE_CONF`. Disable the whole step
+    with `ONCA_AUTOAPPROVE_ENABLED=0`.
+    """
+    import boto3
+
+    bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
+    if not bucket:
+        return {"statusCode": 200, "body": json.dumps({"status": "no_digests_bucket"})}
+    if os.environ.get("ONCA_AUTOAPPROVE_ENABLED", "1") in ("0", "false", "False"):
+        return {"statusCode": 200, "body": json.dumps({"status": "disabled"})}
+
+    event = event or {}
+    raw = event.get("threshold", event.get("autoapprove_threshold"))
+    if raw is None:
+        raw = os.environ.get("ONCA_AUTOAPPROVE_CONF")
+    threshold = normalize_threshold(raw)
+
+    result = auto_approve_frameworks(bucket, threshold=threshold, s3=boto3.client("s3"))
+    return {"statusCode": 200, "body": json.dumps({"status": "ok", **result})}

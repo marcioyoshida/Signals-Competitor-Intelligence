@@ -928,6 +928,27 @@ class OncaPrototypeStack(Stack):
             )
         )
 
+        # Auto-approval (ADR 006): after every framework has published, approve the
+        # PENDING framework proposals whose confidence >= a threshold (input param,
+        # default 0.70 / 70%) and promote them into swot/curated.json — the same
+        # store the manual vetting UI writes. No LLM/Bedrock; touches S3 only.
+        autoapprove_fn = lambda_.Function(
+            self,
+            "OncaAutoApprove",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.synth.curate.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.minutes(2),
+            memory_size=256,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+                "ONCA_AUTOAPPROVE_ENABLED": "1",
+                "ONCA_AUTOAPPROVE_CONF": "0.70",
+            },
+        )
+        digests_bucket.grant_read_write(autoapprove_fn)
+
         # Incident thread store (ADR 003 Wave 2): threads related developments into
         # living incident docs (event identity by entity+event-type) with an
         # open/developing/resolved lifecycle; publishes threads/{id}.json + a
@@ -1518,6 +1539,19 @@ class OncaPrototypeStack(Stack):
             interval=Duration.seconds(15),
             backoff_rate=2.0,
         )
+        autoapprove_task = sfn_tasks.LambdaInvoke(
+            self,
+            "AutoApproveTask",
+            lambda_function=autoapprove_fn,
+            payload=sfn.TaskInput.from_object({}),
+            result_path="$.autoapprove",
+        )
+        autoapprove_task.add_retry(
+            errors=["States.ALL"],
+            max_attempts=2,
+            interval=Duration.seconds(15),
+            backoff_rate=2.0,
+        )
         threads_task = sfn_tasks.LambdaInvoke(
             self,
             "ThreadsTask",
@@ -1646,6 +1680,7 @@ class OncaPrototypeStack(Stack):
                 .next(bcg_task)
                 .next(four_corners_task)
                 .next(seven_s_task)
+                .next(autoapprove_task)
                 .next(threads_task)
                 .next(behavioral_task)
                 .next(relational_task)

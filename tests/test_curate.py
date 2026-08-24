@@ -5,7 +5,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.synth import curate, operatives, relational, swot_reconcile, swot_seed, swot_store
+from src.synth import (curate, operatives, pestle, porter, relational,
+                       swot_reconcile, swot_seed, swot_store)
 
 BUCKET = "onca-digests"
 
@@ -223,6 +224,89 @@ def test_reinforcement_folds_onto_curated_bullet():
     b = beliefs["nubank"]["bullets"][0]
     assert b["news_evidence"] == 1 and b["evidence_count"] == 2
     assert b["latest"] == "2026-08-20"             # freshened by the reinforcement
+
+
+# --- ADR 006: confidence-gated auto-approval of framework proposals --------
+def _fw_prop(pid, framework, dim, conf, **kw):
+    p = {"id": pid, "kind": framework, "framework": framework, "entity": "nubank",
+         "label": "Nubank", "dimension": dim, "text": f"{framework} {dim}.",
+         "confidence": conf, "status": "pending", "evidence": ["nubank-1"],
+         "date": "2026-08-23"}
+    p.update(kw)
+    return p
+
+
+def test_normalize_threshold_accepts_fraction_percentage_and_default():
+    assert curate.normalize_threshold(0.7) == 0.7
+    assert curate.normalize_threshold(70) == 0.7          # percentage form
+    assert curate.normalize_threshold(None) == curate.DEFAULT_AUTO_APPROVE_CONF
+    assert curate.normalize_threshold("") == curate.DEFAULT_AUTO_APPROVE_CONF
+    assert curate.normalize_threshold("garbage") == curate.DEFAULT_AUTO_APPROVE_CONF
+    assert curate.normalize_threshold(150) == 1.0         # clamped
+    assert curate.normalize_threshold("0.85") == 0.85     # string fraction
+
+
+def test_auto_approve_promotes_above_threshold_only():
+    s3 = FakeS3()
+    _seed_store(s3, porter.PORTER_PROPOSALS_KEY, [
+        _fw_prop("porter:nubank:rivalry:hi", "porter", "rivalry", 0.82),
+        _fw_prop("porter:nubank:substitutes:lo", "porter", "substitutes", 0.61),
+    ])
+    r = curate.auto_approve_frameworks(BUCKET, threshold=0.70, s3=s3)
+    assert r["approved"] == 1 and r["promoted"] == 1
+    store = json.loads(s3.store[(BUCKET, porter.PORTER_PROPOSALS_KEY)].decode())
+    by_id = {p["id"]: p for p in store["proposals"]}
+    assert by_id["porter:nubank:rivalry:hi"]["status"] == "approved"
+    assert by_id["porter:nubank:rivalry:hi"]["auto_approved"] is True
+    assert by_id["porter:nubank:substitutes:lo"]["status"] == "pending"  # below cut
+    cur = _curated(s3)
+    assert len(cur["bullets"]) == 1
+    assert cur["bullets"][0]["framework"] == "porter"       # framework preserved
+    assert cur["bullets"][0]["dimension"] == "rivalry"
+
+
+def test_auto_approve_spans_multiple_frameworks():
+    s3 = FakeS3()
+    _seed_store(s3, porter.PORTER_PROPOSALS_KEY,
+                [_fw_prop("porter:nubank:rivalry:a", "porter", "rivalry", 0.9)])
+    _seed_store(s3, pestle.PESTLE_PROPOSALS_KEY,
+                [_fw_prop("pestle:nubank:legal:b", "pestle", "legal", 0.75)])
+    r = curate.auto_approve_frameworks(BUCKET, threshold=0.70, s3=s3)
+    assert r["approved"] == 2
+    assert r["by_framework"] == {"porter": 1, "pestle": 1}
+    assert {b["framework"] for b in _curated(s3)["bullets"]} == {"porter", "pestle"}
+
+
+def test_auto_approve_is_idempotent():
+    s3 = FakeS3()
+    _seed_store(s3, porter.PORTER_PROPOSALS_KEY,
+                [_fw_prop("porter:nubank:rivalry:a", "porter", "rivalry", 0.9)])
+    curate.auto_approve_frameworks(BUCKET, threshold=0.70, s3=s3)
+    again = curate.auto_approve_frameworks(BUCKET, threshold=0.70, s3=s3)
+    assert again["approved"] == 0                    # nothing pending left
+    assert len(_curated(s3)["bullets"]) == 1         # not double-promoted
+
+
+def test_auto_approve_never_touches_swot_seed_store():
+    s3 = FakeS3()
+    # a high-confidence SWOT seed must NOT be auto-approved (human-vetted only)
+    _seed_store(s3, swot_seed.SEED_PROPOSALS_KEY,
+                [_prop("seed:nubank:S:abc", confidence=0.99)])
+    r = curate.auto_approve_frameworks(BUCKET, threshold=0.70, s3=s3)
+    assert r["approved"] == 0
+    store = json.loads(s3.store[(BUCKET, swot_seed.SEED_PROPOSALS_KEY)].decode())
+    assert store["proposals"][0]["status"] == "pending"
+    assert (BUCKET, swot_store.CURATED_KEY) not in s3.store
+
+
+def test_auto_approve_respects_human_decision():
+    s3 = FakeS3()
+    _seed_store(s3, porter.PORTER_PROPOSALS_KEY, [
+        _fw_prop("porter:nubank:rivalry:a", "porter", "rivalry", 0.95, status="rejected"),
+    ])
+    r = curate.auto_approve_frameworks(BUCKET, threshold=0.70, s3=s3)
+    assert r["approved"] == 0                         # already decided -> skipped
+    assert (BUCKET, swot_store.CURATED_KEY) not in s3.store
 
 
 def test_curated_retirement_marks_target_retired():
