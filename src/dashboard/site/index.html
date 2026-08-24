@@ -390,6 +390,16 @@ function fmtDateTime(iso) {
     return `${p.day}-${p.month}-${p.year} ${p.hour}:${p.minute}`;
   } catch (e) { return String(iso ?? "—"); }
 }
+// Clock (HH:MM) in São Paulo time. Unlike fmtTime's literal slice, this converts
+// the zone — generated_at is stamped in UTC, so a raw slice would show the wrong
+// hour. Used for the header "Feed atualizado" stamp (pipeline finish time).
+function fmtClock(iso) {
+  try {
+    return new Intl.DateTimeFormat("pt-BR", {
+      timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit", hour12: false,
+    }).format(new Date(iso));
+  } catch (e) { return ""; }
+}
 
 let DATA = null;
 // "all" = flat list of distinct events (default); "entity" = one summary card per entity.
@@ -1256,15 +1266,25 @@ async function pollRunStatus() {
       chip.textContent = `Agendado · ${(j.at || "").slice(11, 16)}`;
       next = 15000;
     } else if (ex.status === "SUCCEEDED") {
-      chip.className = "runstatus ok"; chip.textContent = "Feed atualizado";
+      // Stamp the last run's finish time (feed.json is written by the terminal
+      // feed-builder step, so DATA.generated_at ≈ pipeline finish). Just HH:MM.
+      const t = DATA && DATA.generated_at ? fmtClock(DATA.generated_at) : "";
+      chip.className = "runstatus ok";
+      chip.textContent = t ? `Feed atualizado · ${t}` : "Feed atualizado";
     } else if (["FAILED", "ABORTED", "TIMED_OUT"].includes(ex.status)) {
       chip.className = "runstatus err"; chip.textContent = "Execução falhou";
     } else {
       chip.textContent = ""; chip.className = "runstatus";
     }
-    // A run just finished -> pull the fresh enhanced feed once (keeps filters).
+    // A run just finished -> pull the fresh enhanced feed once (keeps filters),
+    // then re-stamp the chip with the NEW generated_at (loadFeed updates DATA
+    // after the chip was set above, so refresh the time now).
     if (lastRunStatus === "RUNNING" && ex.status && ex.status !== "RUNNING") {
-      if (ex.status === "SUCCEEDED") await loadFeed(false);
+      if (ex.status === "SUCCEEDED") {
+        await loadFeed(false);
+        const t = DATA && DATA.generated_at ? fmtClock(DATA.generated_at) : "";
+        chip.textContent = t ? `Feed atualizado · ${t}` : "Feed atualizado";
+      }
     }
     lastRunStatus = ex.status || lastRunStatus;
   } catch { /* transient — just retry */ }
