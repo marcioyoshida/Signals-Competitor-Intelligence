@@ -730,13 +730,14 @@ def _load_fw_curated(digests_bucket: str, framework: str) -> dict[str, list[dict
 
 
 def _load_fw_updates_by_narrative(digests_bucket: str) -> dict[str, dict[str, list[dict[str, Any]]]]:
-    """Map narrative id -> {framework: [{dimension, text, confidence}]} for the
+    """Map narrative id -> {framework: [{dimension, text, confidence, date}]} for the
     framework bullets that cite that narrative in their ``evidence``.
 
     Powers the on-card framework strips: a card shows a framework strip ONLY when
-    that framework was actually updated by this narrative (its id is in a bullet's
-    evidence) — not merely because the entity has a standing belief. SWOT bullets
-    carry no ``framework`` key, so they are keyed as ``swot``."""
+    that framework CHANGED for this narrative — the caller keeps rows whose bullet
+    ``date`` (the belief's change/draft date, stable across mere re-approvals)
+    equals the card's run date, so a standing-but-unchanged belief draws no strip.
+    SWOT bullets carry no ``framework`` key, so they are keyed as ``swot``."""
     try:
         from src.synth import swot_store
 
@@ -755,6 +756,7 @@ def _load_fw_updates_by_narrative(digests_bucket: str) -> dict[str, dict[str, li
                 "dimension": b.get("dimension"),
                 "text": b.get("text"),
                 "confidence": b.get("confidence", swot_store.CURATED_CONFIDENCE),
+                "date": str(b.get("date") or "")[:10],
             }
             for nid in dict.fromkeys(b.get("evidence") or []):  # dedup, keep order
                 if nid:
@@ -774,14 +776,27 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         return {"statusCode": 200, "body": json.dumps({"status": "no_digests_bucket"})}
 
     narratives = load_recent_narratives(digests_bucket, window_days)
-    # Attach the frameworks each narrative actually updated (evidence-matched), so a
-    # card's strips reflect what THIS ticket changed, not the entity's whole belief set.
+    # Attach the frameworks each narrative CHANGED on its run — a framework strip
+    # shows only when this ticket actually moved that framework (a bullet whose
+    # change-date matches the card's run date), not merely because the entity has a
+    # standing belief citing this narrative. Keeps cards showing only the few
+    # frameworks their signal touched (empty box filled / belief updated).
     fw_updates = _load_fw_updates_by_narrative(digests_bucket)
     for n in narratives:
-        if isinstance(n, dict):
-            upd = fw_updates.get(n.get("id"))
-            if upd:
-                n["fw_updates"] = upd
+        if not isinstance(n, dict):
+            continue
+        upd = fw_updates.get(n.get("id"))
+        if not upd:
+            continue
+        run_date = (n.get("run_date") or n.get("as_of") or "")[:10]
+        changed: dict[str, list[dict[str, Any]]] = {}
+        for fw, rows in upd.items():
+            fresh = [{"dimension": r["dimension"], "text": r["text"], "confidence": r["confidence"]}
+                     for r in rows if r.get("date") == run_date]
+            if fresh:
+                changed[fw] = fresh
+        if changed:
+            n["fw_updates"] = changed
     industry_map, industry_meta = load_industry_data()
     feed = build_feed(
         narratives,
