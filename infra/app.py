@@ -347,7 +347,12 @@ class OncaPrototypeStack(Stack):
                 # ids seen only after it has consumed the slice, so it needs the
                 # trade_press seen-set state table.
                 "ONCA_STATE_TABLE": state_table.table_name,
-                "ONCA_SYNTH_MAX_CANDIDATES": "10",
+                # Narratives synthesised per run. Raised 10->30 as the registry
+                # grew past 120 entities (#14/#16/#18/#25/#26/#27): a cap of 10
+                # starved lower-ranked entities of a narrative slot, so their
+                # (now un-burned, #23) news never surfaced and they read silent.
+                # Comfortably within the 5-min synth budget at nova-lite cost.
+                "ONCA_SYNTH_MAX_CANDIDATES": "30",
                 # Live synthesis on: Titan V2 embed quota (60 RPM, approved
                 # 2026-08-10) unblocked KB ingestion; nova-lite Converse + KB
                 # Retrieve verified against this account 2026-08-13.
