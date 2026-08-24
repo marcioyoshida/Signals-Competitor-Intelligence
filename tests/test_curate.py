@@ -263,6 +263,7 @@ def test_auto_approve_promotes_above_threshold_only():
     assert len(cur["bullets"]) == 1
     assert cur["bullets"][0]["framework"] == "porter"       # framework preserved
     assert cur["bullets"][0]["dimension"] == "rivalry"
+    assert cur["bullets"][0]["confidence"] == 0.82          # confidence carried through for the heatmap
 
 
 def test_auto_approve_spans_multiple_frameworks():
@@ -275,6 +276,20 @@ def test_auto_approve_spans_multiple_frameworks():
     assert r["approved"] == 2
     assert r["by_framework"] == {"porter": 1, "pestle": 1}
     assert {b["framework"] for b in _curated(s3)["bullets"]} == {"porter", "pestle"}
+
+
+def test_auto_approve_all_at_default_zero_threshold():
+    # default threshold 0.0 approves every framework proposal (approve-all mode)
+    s3 = FakeS3()
+    _seed_store(s3, porter.PORTER_PROPOSALS_KEY, [
+        _fw_prop("porter:nubank:rivalry:a", "porter", "rivalry", 0.95),
+        _fw_prop("porter:nubank:substitutes:b", "porter", "substitutes", 0.51),
+    ])
+    r = curate.auto_approve_frameworks(
+        BUCKET, threshold=curate.DEFAULT_AUTO_APPROVE_CONF, s3=s3)
+    assert curate.DEFAULT_AUTO_APPROVE_CONF == 0.0
+    assert r["approved"] == 2 and r["promoted"] == 2      # even the 0.51 one
+    assert {b["confidence"] for b in _curated(s3)["bullets"]} == {0.95, 0.51}
 
 
 def test_auto_approve_is_idempotent():

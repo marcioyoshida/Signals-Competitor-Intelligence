@@ -678,7 +678,9 @@ def _load_tows_curated(digests_bucket: str) -> dict[str, list[dict[str, Any]]]:
                 by_ent.setdefault(ent, []).append({
                     "dimension": b.get("dimension"),
                     "text": b.get("text"),
-                    "confidence": swot_store.CURATED_CONFIDENCE,
+                    # the drafter's own confidence (for the dashboard heatmap);
+                    # legacy bullets without it fall back to the curated pin.
+                    "confidence": b.get("confidence", swot_store.CURATED_CONFIDENCE),
                     "status": "active",
                     "origin": b.get("origin"),
                 })
@@ -714,7 +716,9 @@ def _load_fw_curated(digests_bucket: str, framework: str) -> dict[str, list[dict
                 by_ent.setdefault(ent, []).append({
                     "dimension": b.get("dimension"),
                     "text": b.get("text"),
-                    "confidence": swot_store.CURATED_CONFIDENCE,
+                    # the drafter's own confidence (for the dashboard heatmap);
+                    # legacy bullets without it fall back to the curated pin.
+                    "confidence": b.get("confidence", swot_store.CURATED_CONFIDENCE),
                     "status": "active",
                     "origin": b.get("origin"),
                 })

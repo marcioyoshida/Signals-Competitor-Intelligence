@@ -12,6 +12,7 @@
     --accent: #1f8f8a; /* single-hue sparkline accent */
     /* status tiers (severity) — reserved, always shown with a text label */
     --t-crit: #c62828; --t-high: #e06c00; --t-med: #b8860b; --t-low: #5b6673;
+    --heat-ring: rgba(11,11,11,.18); /* delineates the confidence heat chip */
     --shadow: 0 1px 2px rgba(20,25,35,.06), 0 2px 8px rgba(20,25,35,.05);
   }
   html[data-theme="dark"] {
@@ -19,6 +20,7 @@
     --ink: #e6e9ee; --ink2: #aeb6c2; --muted: #79818c;
     --accent: #3fbdb6;
     --t-crit: #ff6b6b; --t-high: #ffa04d; --t-med: #ffd166; --t-low: #8a95a5;
+    --heat-ring: rgba(255,255,255,.22); /* delineates the confidence heat chip */
     --shadow: none;
   }
   * { box-sizing: border-box; }
@@ -149,6 +151,19 @@
   .fw-body { display: none; border-top: 1px solid var(--border); }
   .fw-card.open .fw-body { display: block; }
   .fw-hdr .infer { margin-left: 8px; }
+  /* Confidence heatmap chip (sequential blue ramp, low->high = light->dark).
+     Fill carries the magnitude; a theme-adaptive ring keeps the chip off the
+     panel; the % label is the direct legend. Steps: blue 250/350/450/550/650. */
+  .conf-heat {
+    display: inline-block; min-width: 32px; text-align: center; padding: 0 5px;
+    border-radius: 4px; font-size: 11px; font-weight: 600; line-height: 16px;
+    font-variant-numeric: tabular-nums; border: 1px solid var(--heat-ring);
+  }
+  .conf-heat.t1 { background: #86b6ef; color: #0b0b0b; }
+  .conf-heat.t2 { background: #5598e7; color: #0b0b0b; }
+  .conf-heat.t3 { background: #2a78d6; color: #ffffff; }
+  .conf-heat.t4 { background: #1c5cab; color: #ffffff; }
+  .conf-heat.t5 { background: #104281; color: #ffffff; }
   /* Legacy: per-entity SWOT belief panel (derived, evidence-linked, labeled inference). */
   .swot { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; margin: 0 0 12px; }
   .swot > h3 { margin: 0; padding: 12px 16px; font-size: 13px; border-bottom: 1px solid var(--border); }
@@ -944,6 +959,15 @@ function _fwChips(dimLabels, counts) {
     .join("");
 }
 
+// Confidence -> heatmap chip. Sequential (magnitude): 5 ordinal tiers over the
+// 0.5–1.0 range the framework drafters emit; higher confidence reads darker.
+function _confHeat(conf) {
+  const c = conf ?? 0;
+  const pct = Math.round(c * 100);
+  const t = c >= 0.90 ? 5 : c >= 0.80 ? 4 : c >= 0.70 ? 3 : c >= 0.60 ? 2 : 1;
+  return `<span class="conf-heat t${t}" title="confiança ${pct}%">${pct}%</span>`;
+}
+
 function _dimColor(d) {
   const map = { S:"#2e9e6b", W:"var(--t-crit)", O:"var(--accent)", T:"var(--t-high)",
     SO:"#1a7ab5", ST:"#6c63c4", WO:"#b9820f", WT:"var(--t-crit)",
@@ -1004,7 +1028,7 @@ function renderFrameworks() {
       const bullets = towsCurated.filter(b => b.dimension === dim);
       const body = bullets.length
         ? bullets.map(b => `<div class="swot-b">${esc(b.text)}
-            <span class="meta">confiança ${Math.round((b.confidence ?? 0) * 100)}%</span></div>`).join("")
+            <span class="meta">confiança ${_confHeat(b.confidence)}</span></div>`).join("")
         : `<div class="none">—</div>`;
       return `<div class="swot-q ${dim}"><div class="qh">${TOWS_LABELS[dim]}</div>${body}</div>`;
     }).join("");
@@ -1027,7 +1051,7 @@ function renderFrameworks() {
       const bullets = porterCurated.filter(b => b.dimension === dim);
       const body = bullets.length
         ? bullets.map(b => `<div class="swot-b">${esc(b.text)}
-            <span class="meta">confiança ${Math.round((b.confidence ?? 0) * 100)}%</span></div>`).join("")
+            <span class="meta">confiança ${_confHeat(b.confidence)}</span></div>`).join("")
         : `<div class="none">—</div>`;
       return `<div class="swot-q ${dim}"><div class="qh">${PORTER_LABELS[dim]}</div>${body}</div>`;
     }).join("");
@@ -1057,7 +1081,7 @@ function renderFrameworks() {
         const bullets = fwCurated.filter(b => b.dimension === dim);
         const body = bullets.length
           ? bullets.map(b => `<div class="swot-b">${esc(b.text)}
-              <span class="meta">confiança ${Math.round((b.confidence ?? 0) * 100)}%</span></div>`).join("")
+              <span class="meta">confiança ${_confHeat(b.confidence)}</span></div>`).join("")
           : `<div class="none">—</div>`;
         return `<div class="swot-q ${dim}"><div class="qh">${fwLabels[dim]}</div>${body}</div>`;
       }).join("");

@@ -37,7 +37,10 @@ DECISIONS = ("approved", "rejected")
 # human-vetted (they assert or retire core beliefs).
 AUTO_APPROVE_FRAMEWORKS = ("tows", "porter", "pestle", "ansoff", "bcg",
                            "four_corners", "seven_s")
-DEFAULT_AUTO_APPROVE_CONF = 0.70
+# Default 0.0 == approve every framework proposal (they already cleared each
+# framework's MIN_CONF draft gate). Raise via ONCA_AUTOAPPROVE_CONF / event param
+# to re-gate. The chosen threshold is recorded on each auto-approved proposal.
+DEFAULT_AUTO_APPROVE_CONF = 0.0
 
 
 def _now() -> str:
@@ -101,6 +104,11 @@ def _curated_bullet(p: dict[str, Any], *, at: str) -> dict[str, Any]:
         "date": p.get("date"),
         "approved_at": at,
     }
+    # Preserve the drafter's own confidence so the dashboard can heatmap it. Absent
+    # on some legacy proposals -> the reader falls back to the curated pin.
+    conf = p.get("confidence", p.get("stance_conf"))
+    if conf is not None:
+        bullet["confidence"] = conf
     fw = p.get("framework")
     if fw and fw != swot_store.DEFAULT_FRAMEWORK:
         bullet["framework"] = fw

@@ -930,8 +930,9 @@ class OncaPrototypeStack(Stack):
 
         # Auto-approval (ADR 006): after every framework has published, approve the
         # PENDING framework proposals whose confidence >= a threshold (input param,
-        # default 0.70 / 70%) and promote them into swot/curated.json — the same
-        # store the manual vetting UI writes. No LLM/Bedrock; touches S3 only.
+        # default 0.0 == approve all; raise ONCA_AUTOAPPROVE_CONF to re-gate) and
+        # promote them into swot/curated.json — the same store the manual vetting UI
+        # writes. No LLM/Bedrock; touches S3 only.
         autoapprove_fn = lambda_.Function(
             self,
             "OncaAutoApprove",
@@ -944,7 +945,7 @@ class OncaPrototypeStack(Stack):
                 "PYTHONPATH": "/var/task",
                 "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
                 "ONCA_AUTOAPPROVE_ENABLED": "1",
-                "ONCA_AUTOAPPROVE_CONF": "0.70",
+                "ONCA_AUTOAPPROVE_CONF": "0.0",
             },
         )
         digests_bucket.grant_read_write(autoapprove_fn)
