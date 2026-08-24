@@ -48,6 +48,14 @@ HIGH_VALUE_SOLO_LENSES = frozenset(
 # Market is backdrop only — never a solo seed.
 BACKDROP_LENSES = frozenset({"market"})
 
+# Corroboration floor for a news-only (single-lens) cluster: how many DISTINCT
+# outlets must independently carry the genuinely-new story before it surfaces on
+# news alone. Lowered 3→2 (issue #9) to lift volume for privately-held firms
+# (advisory/PE, data vendors) that have no official-filing 2nd lens — 2 outlets
+# still filters lone single-outlet promos, and min_score + the cited-source drop
+# still guard noise. Tunable without a deploy via ONCA_SYNTH_NEWS_MIN_PUBLISHERS.
+DEFAULT_NEWS_MIN_PUBLISHERS = int(os.environ.get("ONCA_SYNTH_NEWS_MIN_PUBLISHERS", "2"))
+
 
 def extract_candidates(
     digest: dict[str, Any],
@@ -96,7 +104,7 @@ def extract_candidates(
     min_news_publishers = (
         min_news_publishers
         if min_news_publishers is not None
-        else int(os.environ.get("ONCA_SYNTH_NEWS_MIN_PUBLISHERS", "3"))
+        else DEFAULT_NEWS_MIN_PUBLISHERS
     )
 
     as_of = _digest_as_of(digest)
@@ -238,7 +246,7 @@ def _passes_quality_gate(
     *,
     min_lenses: int,
     min_score: float,
-    min_news_publishers: int = 3,
+    min_news_publishers: int = DEFAULT_NEWS_MIN_PUBLISHERS,
 ) -> bool:
     lenses = [x for x in (cand.get("lenses") or []) if x not in BACKDROP_LENSES]
     # Counting backdrop separately: multi-lens can include market as 3rd
@@ -404,7 +412,7 @@ def _cluster_by_entity(
     signals: list[dict[str, Any]],
     *,
     min_lenses: int = 2,
-    min_news_publishers: int = 3,
+    min_news_publishers: int = DEFAULT_NEWS_MIN_PUBLISHERS,
 ) -> dict[str, list[dict[str, Any]]]:
     clusters: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for sig in signals:

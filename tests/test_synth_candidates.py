@@ -3,7 +3,43 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.synth.candidates import extract_candidates, score_from_lenses
+from src.synth import candidates as _candidates
+from src.synth.candidates import (_passes_quality_gate, extract_candidates,
+                                  score_from_lenses)
+
+
+def _news_only_cand(*, is_new, publishers=1, score=0.5):
+    """A news-only candidate cluster (no official-filing 2nd lens)."""
+    sources = [{"_lens": "news", "is_new": is_new, "publisher": f"outlet{i}"}
+               for i in range(publishers)]
+    return {"lenses": ["news"], "sources": sources, "threat_score": score,
+            "is_alert": False, "seed": {"_lens": "news"}}
+
+
+def test_news_corroboration_floor_is_two_publishers():
+    # issue #9 lever: a genuinely-new news-only story surfaces at 2 distinct
+    # outlets (was 3) -> the volume path for privately-held firms.
+    assert _candidates.DEFAULT_NEWS_MIN_PUBLISHERS == 2
+    two = _news_only_cand(is_new=True, publishers=2, score=0.35)
+    assert _passes_quality_gate(two, min_lenses=2, min_score=0.40) is True
+
+
+def test_lone_single_outlet_news_still_dropped():
+    # one outlet is never enough — lone-promo protection preserved
+    one = _news_only_cand(is_new=True, publishers=1, score=0.60)
+    assert _passes_quality_gate(one, min_lenses=2, min_score=0.40) is False
+
+
+def test_news_corroboration_still_gates_on_score():
+    two_lowscore = _news_only_cand(is_new=True, publishers=2, score=0.20)
+    assert _passes_quality_gate(two_lowscore, min_lenses=2, min_score=0.40) is False
+
+
+def test_steady_state_news_not_counted_for_corroboration():
+    # _distinct_news_publishers counts only is_new outlets -> 2 steady-state
+    # outlets do not corroborate
+    steady = _news_only_cand(is_new=False, publishers=2, score=0.60)
+    assert _passes_quality_gate(steady, min_lenses=2, min_score=0.40) is False
 
 
 def test_score_from_lenses_desaturates_legacy():
@@ -457,13 +493,13 @@ def test_news_publisher_threshold_is_tunable():
         _c6_news("C6 Bank lucro", "NeoFeed", "https://neofeed.com.br/a"),
         _c6_news("C6 Bank receita", "Valor", "https://valor.globo.com/b"),
     ]
-    # default threshold (3) drops 2 outlets ...
-    assert extract_candidates({"news": {"items": items, "context": []}}) == []
-    # ... lowering it to 2 admits them.
-    cands = extract_candidates(
-        {"news": {"items": items, "context": []}}, min_news_publishers=2
-    )
+    # default threshold is now 2 (issue #9) -> 2 outlets admit ...
+    cands = extract_candidates({"news": {"items": items, "context": []}})
     assert len(cands) == 1 and cands[0]["kind"] == "news_corroborated"
+    # ... and raising it back to 3 drops them (still tunable).
+    assert extract_candidates(
+        {"news": {"items": items, "context": []}}, min_news_publishers=3
+    ) == []
 
 
 def test_news_item_surfaces_but_scores_below_official():
