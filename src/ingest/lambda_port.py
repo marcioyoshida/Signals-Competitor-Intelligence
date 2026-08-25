@@ -675,7 +675,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             with _source_budget("DataJud RJ", deadline, per_source):
                 tribs = _csv_env("ONCA_DATAJUD_TRIBUNALS") or list(datajud.DEFAULT_TRIBUNALS)
                 distress = datajud.fetch_recuperacao_judicial(
-                    tribs, lookback_days=int(os.environ.get("ONCA_DATAJUD_LOOKBACK_DAYS", "30"))
+                    tribs, lookback_days=int(os.environ.get("ONCA_DATAJUD_LOOKBACK_DAYS", "90"))
                 )
                 new_distress = _new_since_last_run("datajud_rj", distress, seed_if_empty=True)
                 distress_summary = {

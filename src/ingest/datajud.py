@@ -44,7 +44,9 @@ DISTRESS_CLASSES: dict[int, str] = {
 # Tribunals to sweep. TJSP alone dominates corporate RJ; keep the set small and
 # env-tunable (each is one HTTP call). Aliases are the api_publica_<trib> slugs.
 DEFAULT_TRIBUNALS = ("tjsp", "tjrj", "tjmg")
-DEFAULT_LOOKBACK_DAYS = 30
+# DataJud indexing lags materially (~2 months): a 30-day window comes back empty.
+# 90 days catches the lagging filings and suits a slow sector-distress *trend*.
+DEFAULT_LOOKBACK_DAYS = 90
 DEFAULT_MAX_PER_TRIB = 50
 
 
