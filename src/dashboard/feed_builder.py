@@ -322,6 +322,7 @@ def build_feed(
     distress: list[dict[str, Any]] | None = None,
     entity_attrs: dict[str, dict[str, Any]] | None = None,
     coverage_gaps: list[dict[str, Any]] | None = None,
+    reputation: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Pure aggregation: narratives -> feed payload. No I/O.
 
@@ -466,6 +467,8 @@ def build_feed(
         # ADR-014 coverage-gap loop: unanswered in-domain questions awaiting triage/
         # remediation. Read-only list (open + proposed), most-frequent first.
         "coverage_gaps": coverage_gaps or [],
+        # Reclame Aqui consumer-reputation snapshots (#31), worst-score first.
+        "reputation": reputation or [],
     }
 
 
@@ -626,6 +629,18 @@ def _load_distress(digests_bucket: str) -> list[dict[str, Any]]:
         return distress.list_records(idx)
     except Exception as exc:  # pragma: no cover - best-effort, read-only
         print(f"Warning: load distress index failed: {exc}")
+        return []
+
+
+def _load_reputation(digests_bucket: str) -> list[dict[str, Any]]:
+    """Read the Reclame Aqui reputation store (#31), best-effort. [] if absent."""
+    try:
+        from src.ingest import reclame_aqui
+
+        idx = reclame_aqui.load_index(digests_bucket)
+        return reclame_aqui.list_records(idx)
+    except Exception as exc:  # pragma: no cover - best-effort, read-only
+        print(f"Warning: load reputation store failed: {exc}")
         return []
 
 
@@ -871,6 +886,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         distress=_load_distress(digests_bucket),
         entity_attrs=load_entity_attributes(),
         coverage_gaps=_load_coverage_gaps(digests_bucket),
+        reputation=_load_reputation(digests_bucket),
     )
     body = json.dumps(feed, ensure_ascii=False).encode("utf-8")
 

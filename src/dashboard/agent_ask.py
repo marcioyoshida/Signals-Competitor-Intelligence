@@ -97,11 +97,16 @@ _DOMAIN_CUES = {
     # corporate distress (ADR-012): RJ/falência is in-domain (feed.json.distress).
     "recuperacao", "judicial", "extrajudicial", "falencia", "falida", "insolvencia",
     "distress", "empresa", "empresas",
+    # consumer reputation (Reclame Aqui, #31).
+    "reclamacao", "reclamacoes", "reclame", "reputacao", "consumidor", "atendimento",
     # entity classification attributes (ADR-013): ownership nature + compliance.
     "estatal", "estatais", "governamental", "publica", "publicas", "privada",
     "privadas", "mista", "economia", "controle", "capital", "natureza", "listada",
     "certificacao", "certificacoes", "certificada", "certificado", "compliance",
     "iso", "pci", "soc", "conformidade",
+    # consumer reputation (Reclame Aqui, #31).
+    "reclamacao", "reclamacoes", "reclame", "reputacao", "nota", "atendimento",
+    "cliente", "clientes", "consumidor", "satisfacao", "resolvidas",
 }
 # Hard off-domain / injection cues → refuse even if a domain word slips in.
 _REFUSE_CUES = {
@@ -422,6 +427,41 @@ def entity_fact_cards(feed: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
+def reputation_cards(feed: dict[str, Any]) -> list[dict[str, Any]]:
+    """Project feed.json.reputation (Reclame Aqui, #31) into citable cards so the
+    agent can ground reputation/complaint questions on the store."""
+    labels: dict[str, str] = {}
+    for e in (feed.get("entities") or []):
+        if e.get("entity"):
+            labels[e["entity"]] = e.get("label") or e["entity"]
+    out: list[dict[str, Any]] = []
+    for r in (feed.get("reputation") or []):
+        ent = r.get("entity")
+        label = labels.get(ent, r.get("company") or ent)
+        bits = [f"{label} — Reclame Aqui"]
+        if r.get("score") is not None:
+            bits.append(f"nota {r['score']}")
+        if r.get("status"):
+            bits.append(str(r["status"]))
+        if r.get("complaints") is not None:
+            bits.append(f"{r['complaints']} reclamações ({r.get('period','')})")
+        if r.get("solved_pct") is not None:
+            bits.append(f"{r['solved_pct']}% resolvidas")
+        out.append({
+            "id": f"reclameaqui:{ent}",
+            "date": r.get("date"),
+            "entity": ent,
+            "entity_label": label,
+            "entities": [ent],
+            "lenses": ["reputacao"],
+            "is_alert": False,
+            "threat_score": None,
+            "narrative": ". ".join(bits) + ".",
+            "citations": [{"url": r["url"]}] if r.get("url") else [],
+        })
+    return out
+
+
 # --- orchestrator (DI) ----------------------------------------------------
 
 def answer(
@@ -438,7 +478,8 @@ def answer(
     q = (q or "").strip()
     # Ground on the narrative feed, the durable distress store (ADR-012) AND the
     # per-entity classification facts (ADR-013: ownership/certifications).
-    feed_cards = list(feed.get("feed") or []) + distress_cards(feed) + entity_fact_cards(feed)
+    feed_cards = (list(feed.get("feed") or []) + distress_cards(feed)
+                  + entity_fact_cards(feed) + reputation_cards(feed))
     entity_vocab = set()
     for e in (feed.get("entities") or []):
         entity_vocab |= set(_tokens(e.get("entity") or ""))

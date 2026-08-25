@@ -98,6 +98,7 @@ from src.ingest import (
     dou,
     raw_writer,
     receita_cnpj,
+    reclame_aqui,
     sec_filings,
     trade_press,
 )
@@ -686,6 +687,29 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
             print(f"Warning: DataJud fetch failed: {exc}")
 
+    # Reclame Aqui — consumer-reputation snapshots for retail-facing banks/fintechs
+    # (issue #31). Unofficial source, so best-effort + off via env; writes a durable
+    # reputation/index.json (entity-tied), surfaced in the feed + agent. Requires the
+    # digests bucket (already available for the corpus/digest writes).
+    # Default OFF: the public RA origin is Cloudflare-gated (403). Enable only with
+    # an authorized/proxied endpoint via ONCA_RA_IOSEARCH (see reclame_aqui docstring).
+    reputation_summary: dict[str, Any] | None = None
+    if os.environ.get("ONCA_RECLAME_AQUI", "false").lower() in ("1", "true", "yes"):
+        bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
+        try:
+            with _source_budget("Reclame Aqui", deadline, per_source):
+                ids = _csv_env("ONCA_RA_ENTITY_IDS") or list(reclame_aqui.DEFAULT_ENTITY_IDS)
+                comps = reclame_aqui.companies_from_registry(ids)
+                snaps = reclame_aqui.fetch_reputation(comps)
+                if snaps and bucket:
+                    reclame_aqui.update_store(snaps, bucket)
+                reputation_summary = {
+                    **reclame_aqui.summarize(snaps),
+                    "items": snaps[:12],
+                }
+        except Exception as exc:  # pragma: no cover - defensive; unofficial upstream
+            print(f"Warning: Reclame Aqui fetch failed: {exc}")
+
     # SEC EDGAR — US-listed payments/fintech disclosures (seed on first run).
     # Metadata first (submissions JSON), then primary-document bodies for the
     # diffed set + a small context sample so digests/corpus carry text not only URLs.
@@ -821,6 +845,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         "news": _news_slice(context) if mode == "all" else _empty_news_slice(),
         # Market-wide macro (Copom/Selic + Focus) — standalone macro cards.
         "macro": {"selic": macro_selic, "focus": macro_focus, "distress": distress_summary},
+        # Consumer reputation (Reclame Aqui, #31) — entity-tied; store is authoritative.
+        "reputation": reputation_summary,
         "inf_diario_moves": {
             "funds_tracked": len(inf_diario_rows),
             "as_of": (inf_diario_rows[0].get("date") if inf_diario_rows else None),

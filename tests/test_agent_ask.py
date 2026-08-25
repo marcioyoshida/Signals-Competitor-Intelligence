@@ -149,6 +149,22 @@ def test_answer_no_grounding_short_circuits():
     assert r["answer"] == aa.NO_GROUND_TEXT
 
 
+def test_answer_grounds_on_reputation_store():
+    feed = _feed()
+    feed["reputation"] = [{"entity": "nubank", "company": "Nubank", "score": 7.8,
+                           "status": "BOM", "complaints": 15432, "period": "SIX_MONTHS",
+                           "solved_pct": 82.1, "date": "2026-08-24",
+                           "url": "https://reclameaqui.com.br/empresa/nubank/"}]
+    feed["entities"].append({"entity": "nubank", "label": "Nubank"})
+    cap = {}
+    def conv(user, system=None, max_tokens=700):
+        cap["u"] = user
+        return "O Nubank tem 15432 reclamações e nota 7.8 [reclameaqui:nubank]."
+    r = aa.answer("quantas reclamações o Nubank tem no Reclame Aqui?", feed=feed, converser=conv)
+    assert "reclameaqui:nubank" in cap["u"]
+    assert r["grounded"] and r["citations"][0]["id"] == "reclameaqui:nubank"
+
+
 def test_answer_grounds_on_distress_store():
     feed = _feed()
     feed["distress"] = [{
