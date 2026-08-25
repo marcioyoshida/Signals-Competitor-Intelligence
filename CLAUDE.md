@@ -110,6 +110,12 @@ licensed aggregator (People Data Labs / Explorium), never scraped.
   `docs/2026-08-14-phase3-dashboard-plan.md`. `threat_score` is still a
   placeholder heuristic (labeled "estimated" in the UI) — real threat
   scoring is separate future work. Remaining Phase 3: SNS/email alerts.
+- **Pipeline & CI/CD (2026-08-25)** — the Step Functions pipeline is now
+  **parallelized** (two-phase: BeliefAxes → Detectors incl. the SWOT+frameworks
+  fan-out; ~340s→273s; ingest/news is the remaining bottleneck) and CI/CD moved
+  to **AWS CodePipeline + CodeBuild** (`OncaCicdStack`, `buildspec.yml`), replacing
+  GitHub Actions — pending a one-time GitHub CodeStar-connection authorization.
+  Living backlog + shipped log: `docs/2026-08-16-roadmap.md`.
 - **Synthesis-layer evolution (on `main` 2026-08-23)** — narratives grew
   from cross-sectional to longitudinal/threaded/relational, and gained a
   per-entity competitive thesis. Pipeline order is now
