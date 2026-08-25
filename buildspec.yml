@@ -1,0 +1,26 @@
+version: 0.2
+
+# CodeBuild build for the CI/CD pipeline (issue #6, OncaCicdStack). Tests, stages
+# the Lambda asset, and `cdk deploy`s the app stack. Runs in-account on CodeBuild
+# (STANDARD_7_0: Ubuntu 22.04, Python 3.11, Node 20) — no GitHub-hosted runner.
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.11
+      nodejs: 20
+    commands:
+      - npm install -g aws-cdk@2
+      - python -m pip install --upgrade pip
+      - pip install -r requirements.txt -r requirements-dev.txt -r infra/requirements.txt
+  build:
+    commands:
+      # Deterministic unit tests gate the deploy. A few suites hit live upstreams
+      # (BCB/CVM/news); excluded here for reliability (follow-up: a `network` marker).
+      - pytest -q --ignore=tests/test_lambda_port.py
+      # Stage the Lambda asset: runtime deps + src (boto3 is provided by Lambda).
+      - rm -rf build/lambda && mkdir -p build/lambda
+      - pip install -r requirements.txt -t build/lambda
+      - rsync -a --delete --exclude=__pycache__ --exclude='*.pyc' src/ build/lambda/src/
+      # Deploy the app stack (NOT the CI/CD stack — that is managed out of band).
+      - cd infra && cdk deploy OncaPrototypeStack --require-approval never --app "python app.py"

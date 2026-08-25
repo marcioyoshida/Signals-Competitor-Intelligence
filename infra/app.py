@@ -1836,4 +1836,9 @@ class OncaPrototypeStack(Stack):
 
 app = App()
 OncaPrototypeStack(app, "OncaPrototypeStack")
+# AWS-native GitOps CI/CD (issue #6) — its own stack so the pipeline that deploys
+# the app stack is not part of it. Deploy once: `cdk deploy OncaCicdStack`.
+from cicd import OncaCicdStack  # noqa: E402  (local module, after app-stack def)
+
+OncaCicdStack(app, "OncaCicdStack")
 app.synth()
