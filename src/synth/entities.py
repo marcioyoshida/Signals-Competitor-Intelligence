@@ -354,6 +354,18 @@ def primary_entity(item: dict[str, Any]) -> str | None:
     return ents[0] if ents else None
 
 
+# ADR 011 §2 — B3 ticker shapes: 4 uppercase letters + a valid B3 suffix
+# (ON 3, PN 4/5/6, UNIT 11, BDR 31–35). Restricting the suffix (not any digit)
+# keeps precision — a random "ABCD9" is not a B3 ticker. Used by the entity-
+# discovery scan to harvest tickers from text and map them to issuers.
+B3_TICKER_RE = re.compile(r"\b([A-Z]{4}(?:3|4|5|6|11|31|32|33|34|35))\b")
+
+
+def detect_b3_tickers(text: str) -> list[str]:
+    """Distinct B3 ticker-shaped tokens found in ``text`` (order-stable)."""
+    return list(dict.fromkeys(B3_TICKER_RE.findall(text or "")))
+
+
 def tokens_for_match(item: dict[str, Any], min_len: int = 4) -> set[str]:
     """Generic tokens for soft matching when no alias hits."""
     blob = signal_blob(item)

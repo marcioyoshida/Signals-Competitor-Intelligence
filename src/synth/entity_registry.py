@@ -136,6 +136,75 @@ def get_entity(entity_id: str, table: Any | None = None) -> dict[str, Any] | Non
     return _table(table).get_item(Key={"pk": f"ENT#{entity_id}"}).get("Item")
 
 
+# ADR 011 §2 — B3 ticker → entity. Curated map of tracked, currently-B3-listed
+# entities to their primary B3 ticker (ON/PN/UNIT), or the B3 **BDR** code for the
+# foreign-primary fintechs (Nubank/XP/Stone/PagSeguro/Inter trade on Nasdaq/NYSE;
+# their B3 representation is a BDR). Conservative on purpose — only confident,
+# active listings (precision > recall; the discovery scan proposes the rest).
+B3_TICKERS: dict[str, str] = {
+    "itau": "ITUB4", "bb": "BBAS3", "bradesco": "BBDC4", "santander": "SANB11",
+    "btg": "BPAC11", "b3": "B3SA3", "porto_seguro": "PSSA3", "bb_seguridade": "BBSE3",
+    "caixa_seguridade": "CXSE3", "banco_pan": "BPAN4", "abc_brasil": "ABCB4",
+    "bmg": "BMGB4", "banco_pine": "PINE4",
+    # B3 BDRs of the foreign-listed fintechs:
+    "nubank": "ROXO34", "xp": "XPBR31", "stone": "STOC31", "pagseguro": "PAGS34",
+    "inter": "INBR32",
+}
+
+
+def assign_ticker(entity_id: str, ticker: str, *, table: Any | None = None) -> bool:
+    """Set an existing entity's B3 ``ticker`` and make the ticker resolvable.
+
+    Idempotent. Adds the ticker to the entity's aliases/alias_forms so ticker-keyed
+    news/filings ("...ITUB4...") cluster into the entity (a B3 ticker is a distinctive
+    4-letter+digit token, safe as a non-ambiguous alias). Returns True if it changed.
+    Enrichment of an EXISTING entity only — never creates one (that's the discovery
+    scan's curated path)."""
+    t = _table(table)
+    e = get_entity(entity_id, table=t)
+    if not e:
+        return False
+    ticker = str(ticker).strip().upper()
+    forms = list(e.get("alias_forms") or [])
+    if e.get("ticker") == ticker and ticker in forms:
+        return False  # already assigned
+    if ticker not in forms:
+        forms.append(ticker)
+    # Re-upsert through put_entity so the ALIAS# index + all curation fields are
+    # rebuilt consistently (put_entity is the single writer of the entity record).
+    put_entity(
+        entity_id,
+        e.get("display_name") or entity_id,
+        list(e.get("aliases") or []) + [ticker],
+        alias_forms=forms,
+        sector=e.get("sector"),
+        industries=e.get("industries"),
+        license_class=e.get("license_class"),
+        cnpj_roots=e.get("cnpj_roots") or [],
+        ticker=ticker,
+        controllers=e.get("controllers"),
+        confidence=e.get("confidence", "curated"),
+        canonical_id=e.get("canonical_id"),
+        news_term=e.get("news_term"),
+        ambiguous_tokens=e.get("ambiguous_tokens"),
+        fatos_term=e.get("fatos_term"),
+        news_search=e.get("news_search", True),
+        table=t,
+    )
+    return True
+
+
+def backfill_tickers(table: Any | None = None) -> list[tuple[str, str]]:
+    """Assign the curated B3 tickers to existing entities. Returns [(id, ticker)]
+    actually changed. Idempotent — safe to re-run (seed-style migration)."""
+    t = _table(table)
+    changed = []
+    for eid, ticker in B3_TICKERS.items():
+        if assign_ticker(eid, ticker, table=t):
+            changed.append((eid, ticker))
+    return changed
+
+
 def resolve_by_alias(name: str, table: Any | None = None) -> str | None:
     item = _table(table).get_item(Key={"pk": f"ALIAS#{normalize_alias(name)}"}).get("Item")
     return item.get("entity_id") if item else None
