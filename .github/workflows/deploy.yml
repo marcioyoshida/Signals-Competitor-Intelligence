@@ -1,0 +1,83 @@
+name: deploy
+
+# GitOps CD (issue #6): on push to main, test → stage the Lambda asset → cdk deploy
+# the OncaPrototypeStack. Auth is OIDC (no long-lived keys). One-time AWS + repo-var
+# setup is documented in docs/2026-08-25-cicd-setup.md.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'infra/**'
+      - 'requirements.txt'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+    inputs:
+      run_pipeline:
+        description: 'Start the OncaPipeline after a successful deploy'
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-oncaprototypestack
+  cancel-in-progress: false        # never interrupt an in-flight CloudFormation update
+
+permissions:
+  id-token: write                  # request the GitHub OIDC token
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'   # matches the Lambda runtime (PYTHON_3_11)
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install CDK CLI
+        run: npm install -g aws-cdk@2
+
+      - name: Install Python deps (app + dev + cdk)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt -r infra/requirements.txt
+
+      - name: Run tests
+        # Deterministic unit tests gate the deploy. A few suites hit live upstreams
+        # (BCB/CVM/news); they are excluded here for CI reliability and belong behind a
+        # `network` marker (follow-up). Everything else must pass.
+        run: pytest -q --ignore=tests/test_lambda_port.py
+
+      - name: Stage Lambda asset (build/lambda = deps + src)
+        run: |
+          rm -rf build/lambda && mkdir -p build/lambda
+          pip install -r requirements.txt -t build/lambda
+          rsync -a --delete --exclude=__pycache__ --exclude='*.pyc' src/ build/lambda/src/
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: CDK deploy
+        working-directory: infra
+        run: cdk deploy OncaPrototypeStack --require-approval never --app "python app.py"
+
+      - name: Start pipeline (manual dispatch only)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_pipeline }}
+        run: |
+          aws stepfunctions start-execution \
+            --state-machine-arn "${{ vars.ONCA_PIPELINE_ARN }}" \
+            --name "ci-$(date +%s)" \
+            --region "${{ env.AWS_REGION }}"
