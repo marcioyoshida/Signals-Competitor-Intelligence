@@ -1023,7 +1023,7 @@ function _fwSwotBullet(b) {
   const news = (b.news_evidence || 0) > 0
     ? ` · <span class="corrob" title="Corroborada por ${b.news_evidence} sinal(is) de notícia via reconciliação (LLM)">✔ notícias ${b.news_evidence}</span>` : "";
   return `<div class="swot-b ${b.status === 'challenged' ? 'chal' : ''}">${esc(b.text)}
-    <span class="meta">confiança ${Math.round((b.confidence ?? 0) * 100)}%${b.evidence_count ? ` · ${b.evidence_count} evidência(s)` : ""}${news}${b.status === 'challenged' ? ' · contestada' : ''}</span></div>`;
+    <span class="meta">confiança ${_confHeat(b.confidence)}${b.evidence_count ? ` · ${b.evidence_count} evidência(s)` : ""}${news}${b.status === 'challenged' ? ' · contestada' : ''}</span></div>`;
 }
 
 function _fwChips(dimLabels, counts) {
