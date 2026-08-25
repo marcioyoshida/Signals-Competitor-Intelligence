@@ -180,6 +180,18 @@ def _compact_card(card: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# Question tokens that signal a CLASSIFICATION intent (ownership / compliance) —
+# when present, the per-entity `fact:` cards must outrank the narrative cards that
+# merely name the same entity (which don't carry the classification).
+_CLASSIFICATION_CUES = {
+    "estatal", "estatais", "governamental", "governamentais", "publica", "publicas",
+    "publico", "privada", "privadas", "privado", "mista", "mistas", "economia",
+    "controle", "natureza", "capital", "listada", "estatizada", "aberto",
+    "certificacao", "certificacoes", "certificada", "certificado", "compliance",
+    "iso", "pci", "soc", "conformidade", "certificados",
+}
+
+
 def select_grounding(
     q: str,
     feed: list[dict[str, Any]],
@@ -192,6 +204,7 @@ def select_grounding(
     compact citable slices."""
     scope = scope or {}
     q_toks = set(_tokens(q))
+    classification_intent = bool(q_toks & _CLASSIFICATION_CUES)
     scope_entity = _fold(scope.get("entity") or "") or None
     scope_lens = _fold(scope.get("lens") or "") or None
     scope_date = str(scope.get("date") or "") or None
@@ -208,11 +221,21 @@ def select_grounding(
         score = float(overlap)
         # Naming a specific entity is a far stronger signal than a shared generic
         # keyword (e.g. "o Itaú é privado?" must rank Itaú's card over the 100+
-        # cards that merely contain the word "privado"). Boost by entity-name match.
-        ent_toks = set(_tokens(card.get("entity") or "")) | set(_tokens(card.get("entity_label") or ""))
-        ent_hits = len(q_toks & ent_toks)
-        if ent_hits:
-            score += 3.0 * ent_hits
+        # cards that merely contain the word "privado"). The CANONICAL id match is
+        # authoritative; a label-only mention is weak/incidental (a subsidiary
+        # labelled "Rede (Itaú)" must NOT outrank Itaú itself on an "Itaú" query).
+        id_toks = set(_tokens(card.get("entity") or ""))
+        label_extra = set(_tokens(card.get("entity_label") or "")) - id_toks
+        if q_toks & id_toks:
+            score += 4.0
+        elif q_toks & label_extra:
+            score += 1.0
+        # For an ownership/compliance question, the registry `fact:` card is the
+        # ONLY card that carries the answer — boost it above the entity's many
+        # narrative cards (which merely name it), so it survives the top-K cut.
+        if classification_intent and str(card.get("id") or "").startswith("fact:"):
+            score += 5.0
+            relevant = True
         if scope_entity and scope_entity in (_fold(card.get("entity")), _fold(card.get("entity_label"))):
             score += 3.0
             relevant = True
