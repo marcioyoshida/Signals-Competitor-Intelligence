@@ -8,6 +8,27 @@ from src.synth.candidates import (_passes_quality_gate, extract_candidates,
                                   score_from_lenses)
 
 
+def test_pixbet_seed_does_not_fuse_other_entities_sec():
+    """A 'PixBet' news seed must NOT staple another entity's SEC filing via a
+    false Pix domain-link — 'PixBet' contains the substring 'pix' but is not the
+    Pix payment system (regression: cross-entity nexus on cand-news card)."""
+    seed = {"id": "news:1", "_lens": "news", "is_new": True,
+            "title": "PF identifica conexão entre PixBet e advogado em lavagem de dinheiro"}
+    stone_sec = {"id": "sec:1", "_lens": "sec", "is_new": True, "company": "StoneCo Ltd.",
+                 "title": "StoneCo Ltd. reports Q2 2026 results"}
+    assert _candidates._soft_related(seed, [stone_sec], set()) == []
+
+
+def test_real_pix_seed_still_fuses_acquirer_sec():
+    """The Pix payment-system domain-link still works as a WORD match."""
+    seed = {"id": "bcb:1", "_lens": "regulatory", "is_new": True,
+            "subject": "Novas regras do Pix para instituições de pagamento"}
+    stone_sec = {"id": "sec:1", "_lens": "sec", "is_new": True, "company": "StoneCo Ltd.",
+                 "title": "StoneCo Ltd. Pix volumes rise in Q2 2026"}
+    rel = _candidates._soft_related(seed, [stone_sec], set())
+    assert [r["id"] for r in rel] == ["sec:1"]
+
+
 def _news_only_cand(*, is_new, publishers=1, score=0.5):
     """A news-only candidate cluster (no official-filing 2nd lens)."""
     sources = [{"_lens": "news", "is_new": is_new, "publisher": f"outlet{i}"}

@@ -181,6 +181,7 @@ def extract_candidates(
                 used_ids.add(str(r["id"]))
         sources = [sig, *related]
         threat, factors = _score_threat(sources)
+        seed_ents = resolve_entities(sig)
         candidates.append(
             {
                 "id": f"cand-{_short_id(sid or uuid4().hex)}",
@@ -188,7 +189,11 @@ def extract_candidates(
                 "seed": sig,
                 "related": related,
                 "sources": sources,
-                "entities": resolve_entities(sig),
+                # Attribute a single-entity alert to its subject so it "hits" that
+                # entity (filter/strips) instead of the generic "Sinal de concorrente";
+                # a genuinely multi-entity or entity-less seed stays unattributed.
+                "entity": seed_ents[0] if len(seed_ents) == 1 else None,
+                "entities": seed_ents,
                 "lenses": _lenses(sources),
                 "threat_score": threat,
                 "threat_factors": factors,
@@ -504,9 +509,12 @@ def _soft_related(
         if sig.get("_lens") == seed.get("_lens") and not sig.get("is_new"):
             continue
         sig_ents = set(resolve_entities(sig))
-        # Payments domain boost: pix regulatory + acquirer SEC.
-        blob = signal_blob(seed) + " " + signal_blob(sig)
-        domain_link = "PIX" in blob and sig.get("_lens") in ("sec", "ofertas", "pix", "juros")
+        # Payments domain boost: pix regulatory + acquirer SEC. Match PIX as a WORD,
+        # not a substring — "PixBet" (a betting brand) contains "pix" but is not the
+        # Pix payment system, and the substring match stapled unrelated SEC/pix
+        # signals from OTHER entities onto a PixBet news seed (false cross-entity nexus).
+        blob = (signal_blob(seed) + " " + signal_blob(sig)).upper()
+        domain_link = bool(re.search(r"\bPIX\b", blob)) and sig.get("_lens") in ("sec", "ofertas", "pix", "juros")
         # Guard against a fabricated cross-entity nexus. A signal that belongs to a
         # DIFFERENT tracked entity than the seed must not be attached as "related"
         # on a coincidental shared token alone — that stapled an unrelated insurer's
