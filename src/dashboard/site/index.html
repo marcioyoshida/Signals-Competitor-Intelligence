@@ -108,6 +108,8 @@
     border-radius: 999px; color: #fff; white-space: nowrap;
   }
   .entity { font-weight: 640; font-size: 15px; }
+  .entity-link { cursor: pointer; }
+  .entity-link:hover { text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 2px; }
   .date { color: var(--muted); font-size: 12px; }
   .alert { color: var(--t-crit); font-weight: 700; font-size: 11px; border: 1px solid currentColor; padding: 1px 6px; border-radius: 6px; }
   /* Derived/inference cards (silence &c): flagged, never shown as sourced fact. */
@@ -924,7 +926,7 @@ function cardHtml(f, group) {
   return `<div class="card" data-id="${esc(f.id)}">
     <div class="row1">
       <span class="tier" style="background:${cssvar(t.var)}">${t.label}</span>
-      <span class="entity">${esc(f.subject_label || f.entity_label)}</span>
+      <span class="entity${f.entity ? ' entity-link' : ''}"${f.entity ? ` data-entity="${esc(f.entity)}" title="Filtrar por ${esc(f.entity_label || f.entity)}"` : ''}>${esc(f.subject_label || f.entity_label)}</span>
       ${f.is_alert ? '<span class="alert">ALERTA</span>' : ''}
       ${f.is_inference ? `<span class="infer" title="Indicador derivado (silêncio, quebra de padrão, comparativo de pares, corrente setorial, radar regulatório, movimento de cohort) — inferência sobre o histórico/agregado, não um fato novo reportado.">${esc(inferBadge(f))} · inferência</span>` : ''}
       <span class="spacer" style="flex:1"></span>
@@ -1208,6 +1210,15 @@ function render() {
   feed.innerHTML = html;
   feed.querySelectorAll(".card").forEach(c => c.onclick = () => {
     c.querySelector(".narr").classList.toggle("clamp");
+  });
+  // Click the entity name in a card header -> filter the feed to that entity.
+  feed.querySelectorAll(".entity-link").forEach(el => el.onclick = ev => {
+    ev.stopPropagation();                 // don't also toggle the narrative clamp
+    const en = el.dataset.entity;
+    if (!en) return;
+    state.entity = en;
+    document.getElementById("fEntity").value = en;
+    syncEntityHighlight(); render();
   });
   feed.querySelectorAll(".thesis").forEach(t => t.onclick = ev => {
     ev.stopPropagation();                 // don't also toggle the narrative clamp
