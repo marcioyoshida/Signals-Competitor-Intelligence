@@ -1707,15 +1707,28 @@ class OncaPrototypeStack(Stack):
         )
         # QSA (Receita ownership) feeds the operatives person-graph.
         qsa_branch = qsa_task.next(operatives_task)
-        detectors = (
-            sfn.Parallel(self, "Detectors", result_path=sfn.JsonPath.DISCARD)
+
+        # Phase 1 — belief feeders. SwotTask builds beliefs from THIS run's axis
+        # narratives that carry a swot_hint (comparative/cohort/thematic) or derive
+        # S/W (longitudinal/silence) — swot_store._belief_from_narrative. So these
+        # five must finish BEFORE the SWOT branch, or SWOT (and the frameworks over
+        # it) miss this run's hints (they'd only land next run via the 90d window).
+        # They are independent of each other, so run them concurrently.
+        belief_axes = (
+            sfn.Parallel(self, "BeliefAxes", result_path=sfn.JsonPath.DISCARD)
             .branch(silence_task)
             .branch(longitudinal_task)
             .branch(comparative_task)
             .branch(thematic_task)
-            .branch(regulatory_task)
             .branch(cohort_task)
+        )
+        # Phase 2 — the SWOT+frameworks chain runs concurrently with the detectors
+        # that neither feed SWOT nor are read by it (regulatory, threads, behavioral,
+        # relational, qsa→operatives, predictive, ecosystem).
+        detectors = (
+            sfn.Parallel(self, "Detectors", result_path=sfn.JsonPath.DISCARD)
             .branch(swot_branch)
+            .branch(regulatory_task)
             .branch(threads_task)
             .branch(behavioral_task)
             .branch(relational_task)
@@ -1729,6 +1742,7 @@ class OncaPrototypeStack(Stack):
             definition_body=sfn.DefinitionBody.from_chainable(
                 ingest_task.next(feature_task)
                 .next(synth_task)
+                .next(belief_axes)
                 .next(detectors)
                 .next(feed_task)
             ),
