@@ -107,6 +107,24 @@
     font-size: 10.5px; font-weight: 700; letter-spacing: .5px; padding: 2px 7px;
     border-radius: 999px; color: #fff; white-space: nowrap;
   }
+  .askpanel { margin-bottom: 22px; }
+  .askbar { display: flex; gap: 8px; align-items: center; }
+  .askbar input { flex: 1; min-width: 160px; font: inherit; padding: 9px 12px;
+    border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--fg); }
+  .askbar input:focus { outline: none; border-color: var(--accent); }
+  .askex { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .askex .chip { cursor: pointer; font-size: 12px; color: var(--muted);
+    border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; }
+  .askex .chip:hover { color: var(--accent); border-color: var(--accent); }
+  .askans { margin-top: 14px; padding: 12px 14px; border: 1px solid var(--border);
+    border-radius: 10px; background: var(--bg); line-height: 1.5; }
+  .askans.refused { border-color: var(--muted); color: var(--muted); }
+  .askans .cites { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .askans .cite { cursor: pointer; font-size: 12px; font-weight: 600; color: var(--accent);
+    border: 1px solid var(--accent); border-radius: 6px; padding: 2px 8px; }
+  .askans .cite:hover { background: var(--accent); color: #fff; }
+  .askans .cref { color: var(--accent); font-weight: 600; cursor: pointer; }
+  .askans .thinking { color: var(--muted); }
   .entity { font-weight: 640; font-size: 15px; }
   .entity-link { cursor: pointer; }
   .entity-link:hover { text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 2px; }
@@ -333,6 +351,16 @@
 
 <div class="wrap">
   <div class="kpis" id="kpis"></div>
+
+  <section class="panel askpanel" id="askPanel">
+    <h2>Perguntar à Onça <span style="text-transform:none;letter-spacing:0;color:var(--muted);font-weight:500">· resposta fundamentada só nos dados da ferramenta</span></h2>
+    <div class="askbar">
+      <input type="search" id="askInput" placeholder="Ex.: o que o Itaú mudou esta semana? quem está exposto à regra do DICT?" />
+      <button class="btn" id="askBtn">Perguntar</button>
+    </div>
+    <div class="askex" id="askEx"></div>
+    <div class="askans" id="askAns" style="display:none"></div>
+  </section>
 
   <div class="cols">
     <div class="panel">
@@ -1399,6 +1427,84 @@ document.getElementById("tableToggle").onclick = (e) => {
   document.getElementById("feed").classList.toggle("hidden", !hidden);
   e.target.textContent = hidden ? "Tabela" : "Cartões";
 };
+
+// --- Ask panel (ADR 010): grounded, curated Q&A over the tool's own data ------
+const ASK_EXAMPLES = [
+  "O que o Itaú mudou recentemente?",
+  "Quais entidades estão em alerta esta semana?",
+  "Quem está exposto à regra do DICT?",
+  "Quais fintechs de adquirência estão aquecendo?",
+];
+function renderAskExamples() {
+  const box = document.getElementById("askEx");
+  if (!box) return;
+  box.innerHTML = ASK_EXAMPLES.map(q => `<span class="chip">${esc(q)}</span>`).join("");
+  box.querySelectorAll(".chip").forEach(c => c.onclick = () => {
+    document.getElementById("askInput").value = c.textContent; askOnca();
+  });
+}
+function askJumpToEntity(en) {
+  if (!en) return;
+  state.entity = en;
+  document.getElementById("fEntity").value = en;
+  syncEntityHighlight(); render();
+  document.getElementById("feed").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+function renderAnswer(res) {
+  const box = document.getElementById("askAns");
+  box.style.display = "block";
+  if (res.refused || !res.answer) {
+    box.className = "askans refused";
+    box.textContent = res.answer || "Não consegui responder.";
+    return;
+  }
+  box.className = "askans";
+  const cites = res.citations || [];
+  const byId = {}; cites.forEach((c, i) => { byId[c.id] = { n: i + 1, entity: c.entity }; });
+  // Turn inline [id] refs into clickable superscripts mapped to the citation list.
+  let html = esc(res.answer).replace(/\[([A-Za-z0-9:_\-]+)\]/g, (m, id) => {
+    const c = byId[id];
+    return c ? `<sup class="cref" data-entity="${esc(c.entity || "")}" title="${esc(id)}">[${c.n}]</sup>` : "";
+  });
+  if (cites.length) {
+    html += `<div class="cites">` + cites.map((c, i) =>
+      `<span class="cite" data-entity="${esc(c.entity || "")}">[${i + 1}] ${esc(c.entity_label || c.entity || (c.kb ? "base de conhecimento" : c.id))}</span>`
+    ).join("") + `</div>`;
+  } else {
+    html += `<div class="cites"><span style="color:var(--muted);font-size:12px">Sem fontes citadas — resposta não fundamentada, trate com cautela.</span></div>`;
+  }
+  box.innerHTML = html;
+  box.querySelectorAll("[data-entity]").forEach(el => el.onclick = () => askJumpToEntity(el.dataset.entity));
+}
+let askBusy = false;
+async function askOnca() {
+  if (askBusy) return;
+  const input = document.getElementById("askInput");
+  const q = (input.value || "").trim();
+  if (!q) return;
+  askBusy = true;
+  const btn = document.getElementById("askBtn"); const prev = btn.textContent;
+  btn.disabled = true; btn.textContent = "Pensando…";
+  const box = document.getElementById("askAns");
+  box.style.display = "block"; box.className = "askans"; box.innerHTML = `<span class="thinking">Consultando a base da Onça…</span>`;
+  const scope = {};
+  if (state.entity) scope.entity = state.entity;
+  if (state.lens) scope.lens = state.lens;
+  if (state.date) scope.date = state.date;
+  try {
+    const r = await fetch("/api/ask/", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ q, scope }),
+    });
+    const j = await r.json();
+    if (r.ok) renderAnswer(j);
+    else renderAnswer({ refused: true, answer: "Falha ao consultar. Tente novamente." });
+  } catch { renderAnswer({ refused: true, answer: "Falha de rede ao consultar." }); }
+  finally { btn.disabled = false; btn.textContent = prev; askBusy = false; }
+}
+document.getElementById("askBtn").onclick = askOnca;
+document.getElementById("askInput").addEventListener("keydown", e => { if (e.key === "Enter") askOnca(); });
+renderAskExamples();
 
 document.addEventListener("click", e => {
   const b = e.target.closest(".rbtn");

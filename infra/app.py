@@ -1254,6 +1254,61 @@ class OncaPrototypeStack(Stack):
                 )
             ],
         )
+        # Agent Q&A (ADR 010): read-only, grounded, curated NL question answering
+        # over the tool's own data (feed.json + KB). Same auth model; registered
+        # BEFORE the /api/* catch-all (insertion order). It reads the published
+        # feed.json from the site bucket and calls Bedrock Converse + KB Retrieve.
+        agent_fn = lambda_.Function(
+            self,
+            "OncaAgent",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.dashboard.agent_ask.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.seconds(60),
+            memory_size=512,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_ORIGIN_SECRET": origin_secret,
+                "ONCA_SITE_BUCKET": site_bucket.bucket_name,
+                "ONCA_KB_ID": knowledge_base.attr_knowledge_base_id,
+                "ONCA_SYNTH_MODEL_ID": os.environ.get("ONCA_SYNTH_MODEL_ID", "amazon.nova-lite-v1:0"),
+            },
+        )
+        site_bucket.grant_read(agent_fn)  # reads feed.json
+        agent_fn.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["bedrock:Retrieve"],
+                resources=[knowledge_base.attr_knowledge_base_arn],
+            )
+        )
+        agent_fn.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["bedrock:InvokeModel", "bedrock:Converse"],
+                resources=[
+                    f"arn:aws:bedrock:{self.region}::foundation-model/*",
+                    f"arn:aws:bedrock:{self.region}:{self.account}:inference-profile/*",
+                ],
+            )
+        )
+        agent_url = agent_fn.add_function_url(
+            auth_type=lambda_.FunctionUrlAuthType.NONE
+        )
+        distribution.add_behavior(
+            "/api/ask/*",
+            cf_origins.FunctionUrlOrigin(
+                agent_url, custom_headers={"X-Onca-Origin": origin_secret}
+            ),
+            viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+            allowed_methods=cloudfront.AllowedMethods.ALLOW_ALL,
+            cache_policy=cloudfront.CachePolicy.CACHING_DISABLED,
+            origin_request_policy=cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+            function_associations=[
+                cloudfront.FunctionAssociation(
+                    function=auth_fn,
+                    event_type=cloudfront.FunctionEventType.VIEWER_REQUEST,
+                )
+            ],
+        )
         # /api/* catch-all (review action) — registered AFTER /api/registry/* and
         # /api/run/* so the specific patterns win; everything else under /api/ lands here.
         distribution.add_behavior(

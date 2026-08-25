@@ -1,6 +1,11 @@
 # ADR 010 — Agent Chat in the dashboard: a curated, grounded Q&A over the tool's own data
 
-- Status: **Proposed (design only)** — 2026-08-25. Owner-requested. No code ships here.
+- Status: **Implemented (v1, read-only)** — 2026-08-25. Owner-requested.
+  `src/dashboard/agent_ask.py` (`OncaAgent` Lambda, `/api/ask/`) + the dashboard
+  "Perguntar" panel + `tests/test_agent_ask.py`. Grounds on the published
+  `feed.json` (scoped selective retrieval) + KB Retrieve; scope gate + grounded-only
+  citation contract; deployed behind the same edge auth. A write-capable Agent API
+  (#20) remains out of scope.
 - Delivers the UI + read-only inference behind **issue #21 (AI searchbar — infer against
   the database)** and a first read-only surface of **issue #20 (Agent API)**.
 - Builds on: the dashboard's **`/api/*` = Lambda Function URL + CloudFront behavior**
