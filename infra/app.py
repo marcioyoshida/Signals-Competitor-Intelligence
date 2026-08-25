@@ -1681,37 +1681,55 @@ class OncaPrototypeStack(Stack):
             backoff_rate=2.0,
         )
 
+        # Parallelised pipeline (issue #10). Every task takes an empty payload and
+        # coordinates ONLY through S3, so the only ordering constraints are data
+        # dependencies. Sequential prefix (ingest → feature → synth) produces the
+        # digest/features/narratives; then all axis + framework detectors run
+        # concurrently (they read features + this run's narratives, write disjoint
+        # outputs); FeedTask aggregates everything last. The critical path is the
+        # SWOT belief chain + framework fan-out, so wall-clock ≈ that branch, not the
+        # sum of ~24 steps. Fan-out concurrency is covered by each task's retry.
+        frameworks_parallel = (
+            sfn.Parallel(self, "Frameworks", result_path=sfn.JsonPath.DISCARD)
+            .branch(tows_task)
+            .branch(porter_task)
+            .branch(pestle_task)
+            .branch(ansoff_task)
+            .branch(bcg_task)
+            .branch(four_corners_task)
+            .branch(seven_s_task)
+        )
+        # SWOT store is sequential (build → reconcile → seed → maintenance); the
+        # framework drafters read it, then auto-approval folds their proposals in.
+        swot_branch = (
+            swot_task.next(reconcile_task).next(seed_task).next(maintenance_task)
+            .next(frameworks_parallel).next(autoapprove_task)
+        )
+        # QSA (Receita ownership) feeds the operatives person-graph.
+        qsa_branch = qsa_task.next(operatives_task)
+        detectors = (
+            sfn.Parallel(self, "Detectors", result_path=sfn.JsonPath.DISCARD)
+            .branch(silence_task)
+            .branch(longitudinal_task)
+            .branch(comparative_task)
+            .branch(thematic_task)
+            .branch(regulatory_task)
+            .branch(cohort_task)
+            .branch(swot_branch)
+            .branch(threads_task)
+            .branch(behavioral_task)
+            .branch(relational_task)
+            .branch(qsa_branch)
+            .branch(predictive_task)
+            .branch(ecosystem_task)
+        )
         pipeline = sfn.StateMachine(
             self,
             "OncaPipeline",
             definition_body=sfn.DefinitionBody.from_chainable(
                 ingest_task.next(feature_task)
                 .next(synth_task)
-                .next(silence_task)
-                .next(longitudinal_task)
-                .next(comparative_task)
-                .next(thematic_task)
-                .next(regulatory_task)
-                .next(cohort_task)
-                .next(swot_task)
-                .next(reconcile_task)
-                .next(seed_task)
-                .next(maintenance_task)
-                .next(tows_task)
-                .next(porter_task)
-                .next(pestle_task)
-                .next(ansoff_task)
-                .next(bcg_task)
-                .next(four_corners_task)
-                .next(seven_s_task)
-                .next(autoapprove_task)
-                .next(threads_task)
-                .next(behavioral_task)
-                .next(relational_task)
-                .next(qsa_task)
-                .next(operatives_task)
-                .next(predictive_task)
-                .next(ecosystem_task)
+                .next(detectors)
                 .next(feed_task)
             ),
             # Budget for a 15-min ingest (plus a retry), then synth, then feed.
