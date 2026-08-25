@@ -67,6 +67,7 @@ def _stub_core_ingesters(monkeypatch):
     monkeypatch.setattr(lambda_port.bcb_autorizacoes, "fetch_authorized", lambda: [])
     monkeypatch.setattr(lambda_port.bcb_pix, "fetch_recent", lambda anomes=None, resource=None, top=10000: [])
     monkeypatch.setattr(lambda_port.bcb_pix, "by_institution", lambda rows, watchlist_ispb=None: [])
+    monkeypatch.setattr(lambda_port.datajud, "fetch_recuperacao_judicial", lambda *a, **k: [])
     _stub_juros(monkeypatch)
 
 

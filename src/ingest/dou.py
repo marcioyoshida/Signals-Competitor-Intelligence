@@ -40,6 +40,11 @@ RELEVANT_ORGANS = (
     "Conselho Monetário Nacional",           # CMN
     "Conselho Nacional de Seguros",          # CNSP
     "Previdência Complementar",              # PREVIC
+    # CoAF / UIF (issue #24) — AML/PLD enforcement, sanctions and normative acts.
+    # CoAF has no clean public data API (dados.gov.br empty, UIF endpoint 404); its
+    # public acts are published here in the DOU, so one organ filter covers it.
+    "Controle de Atividades Financeiras",    # COAF
+    "Unidade de Inteligência Financeira",    # UIF (CoAF's current name)
 )
 
 

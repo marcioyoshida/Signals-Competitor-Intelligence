@@ -94,6 +94,7 @@ from src.ingest import (
     cvm_inf_diario,
     cvm_ipe,
     cvm_ofertas,
+    datajud,
     dou,
     raw_writer,
     receita_cnpj,
@@ -665,6 +666,26 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
             print(f"Warning: BCB macro fetch failed: {exc}")
 
+    # DataJud (CNJ) — corporate-distress filings (recuperação judicial / falência).
+    # Party-name-scrubbed public API, so this is a MACRO sector-distress signal
+    # (filing volume/trend), not entity-tied (issue #25). Best-effort; off via env.
+    distress_summary: dict[str, Any] | None = None
+    if os.environ.get("ONCA_DATAJUD", "true").lower() in ("1", "true", "yes"):
+        try:
+            with _source_budget("DataJud RJ", deadline, per_source):
+                tribs = _csv_env("ONCA_DATAJUD_TRIBUNALS") or list(datajud.DEFAULT_TRIBUNALS)
+                distress = datajud.fetch_recuperacao_judicial(
+                    tribs, lookback_days=int(os.environ.get("ONCA_DATAJUD_LOOKBACK_DAYS", "30"))
+                )
+                new_distress = _new_since_last_run("datajud_rj", distress, seed_if_empty=True)
+                distress_summary = {
+                    **datajud.summarize(distress),
+                    "new_count": len(new_distress),
+                    "items": _tag_new(new_distress[:12]),
+                }
+        except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
+            print(f"Warning: DataJud fetch failed: {exc}")
+
     # SEC EDGAR — US-listed payments/fintech disclosures (seed on first run).
     # Metadata first (submissions JSON), then primary-document bodies for the
     # diffed set + a small context sample so digests/corpus carry text not only URLs.
@@ -799,7 +820,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         # slice is empty and the parallel news branch supplies it (overlaid at synth).
         "news": _news_slice(context) if mode == "all" else _empty_news_slice(),
         # Market-wide macro (Copom/Selic + Focus) — standalone macro cards.
-        "macro": {"selic": macro_selic, "focus": macro_focus},
+        "macro": {"selic": macro_selic, "focus": macro_focus, "distress": distress_summary},
         "inf_diario_moves": {
             "funds_tracked": len(inf_diario_rows),
             "as_of": (inf_diario_rows[0].get("date") if inf_diario_rows else None),
