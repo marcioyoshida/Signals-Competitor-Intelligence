@@ -94,6 +94,7 @@ from src.ingest import (
     cvm_inf_diario,
     cvm_ipe,
     cvm_ofertas,
+    bcb_reclamacoes,
     datajud,
     dou,
     raw_writer,
@@ -687,6 +688,27 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
             print(f"Warning: DataJud fetch failed: {exc}")
 
+    # BCB complaints ranking — OFFICIAL quarterly consumer-complaints ranking per
+    # institution (issue #31, the Reclame Aqui alternative). Public Olinda OData,
+    # entity-tied; writes a durable bcb_reclamacoes/index.json store. Best-effort.
+    bcb_reclamacoes_summary: dict[str, Any] | None = None
+    if os.environ.get("ONCA_BCB_RECLAMACOES", "true").lower() in ("1", "true", "yes"):
+        bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
+        try:
+            with _source_budget("BCB reclamações", deadline, per_source):
+                from src.synth.entities import resolve_entities
+
+                rows = bcb_reclamacoes.fetch_ranking()
+                recs = bcb_reclamacoes.map_to_entities(rows, resolver=resolve_entities)
+                if recs and bucket:
+                    bcb_reclamacoes.update_store(recs, bucket)
+                bcb_reclamacoes_summary = {
+                    **bcb_reclamacoes.summarize(recs),
+                    "items": recs[:12],
+                }
+        except Exception as exc:  # pragma: no cover - defensive; upstream best-effort
+            print(f"Warning: BCB reclamações fetch failed: {exc}")
+
     # Reclame Aqui — consumer-reputation snapshots for retail-facing banks/fintechs
     # (issue #31). Unofficial source, so best-effort + off via env; writes a durable
     # reputation/index.json (entity-tied), surfaced in the feed + agent. Requires the
@@ -845,8 +867,9 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         "news": _news_slice(context) if mode == "all" else _empty_news_slice(),
         # Market-wide macro (Copom/Selic + Focus) — standalone macro cards.
         "macro": {"selic": macro_selic, "focus": macro_focus, "distress": distress_summary},
-        # Consumer reputation (Reclame Aqui, #31) — entity-tied; store is authoritative.
+        # Consumer reputation (#31) — entity-tied; stores are authoritative.
         "reputation": reputation_summary,
+        "bcb_reclamacoes": bcb_reclamacoes_summary,
         "inf_diario_moves": {
             "funds_tracked": len(inf_diario_rows),
             "as_of": (inf_diario_rows[0].get("date") if inf_diario_rows else None),

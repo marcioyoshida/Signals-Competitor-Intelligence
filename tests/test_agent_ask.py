@@ -151,7 +151,8 @@ def test_answer_no_grounding_short_circuits():
 
 def test_answer_grounds_on_reputation_store():
     feed = _feed()
-    feed["reputation"] = [{"entity": "nubank", "company": "Nubank", "score": 7.8,
+    feed["reputation"] = [{"id": "reclameaqui:nubank", "entity": "nubank",
+                           "company": "Nubank", "score": 7.8,
                            "status": "BOM", "complaints": 15432, "period": "SIX_MONTHS",
                            "solved_pct": 82.1, "date": "2026-08-24",
                            "url": "https://reclameaqui.com.br/empresa/nubank/"}]
@@ -163,6 +164,22 @@ def test_answer_grounds_on_reputation_store():
     r = aa.answer("quantas reclamações o Nubank tem no Reclame Aqui?", feed=feed, converser=conv)
     assert "reclameaqui:nubank" in cap["u"]
     assert r["grounded"] and r["citations"][0]["id"] == "reclameaqui:nubank"
+
+
+def test_answer_grounds_on_bcb_reclamacoes():
+    feed = _feed()
+    feed["reputation"] = [{"id": "bcb-reclamacoes:bradesco", "entity": "bradesco",
+                           "source": "BCB", "company": "BRADESCO", "rank": 1,
+                           "index": 84.9, "period": "2026-T2", "date": "2026-08-25",
+                           "url": "https://www.bcb.gov.br/estabilidadefinanceira/rankingreclamacoes"}]
+    feed["entities"].append({"entity": "bradesco", "label": "Bradesco"})
+    cap = {}
+    def conv(user, system=None, max_tokens=700):
+        cap["u"] = user
+        return "O Bradesco lidera o ranking de reclamações do BCB [bcb-reclamacoes:bradesco]."
+    r = aa.answer("quem lidera o ranking de reclamações do Banco Central?", feed=feed, converser=conv)
+    assert "bcb-reclamacoes:bradesco" in cap["u"] and "ranking de reclamações do Banco Central" in cap["u"]
+    assert r["grounded"] and r["citations"][0]["id"] == "bcb-reclamacoes:bradesco"
 
 
 def test_answer_grounds_on_distress_store():

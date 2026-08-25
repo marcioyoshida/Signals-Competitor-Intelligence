@@ -633,15 +633,22 @@ def _load_distress(digests_bucket: str) -> list[dict[str, Any]]:
 
 
 def _load_reputation(digests_bucket: str) -> list[dict[str, Any]]:
-    """Read the Reclame Aqui reputation store (#31), best-effort. [] if absent."""
+    """Read the consumer-reputation stores (#31): BCB complaints ranking (official)
+    + Reclame Aqui (when an authorized feed is configured). Best-effort."""
+    out: list[dict[str, Any]] = []
+    try:
+        from src.ingest import bcb_reclamacoes
+
+        out += bcb_reclamacoes.list_records(bcb_reclamacoes.load_index(digests_bucket))
+    except Exception as exc:  # pragma: no cover - best-effort, read-only
+        print(f"Warning: load BCB reclamações store failed: {exc}")
     try:
         from src.ingest import reclame_aqui
 
-        idx = reclame_aqui.load_index(digests_bucket)
-        return reclame_aqui.list_records(idx)
+        out += reclame_aqui.list_records(reclame_aqui.load_index(digests_bucket))
     except Exception as exc:  # pragma: no cover - best-effort, read-only
-        print(f"Warning: load reputation store failed: {exc}")
-        return []
+        print(f"Warning: load Reclame Aqui store failed: {exc}")
+    return out
 
 
 def _load_coverage_gaps(digests_bucket: str) -> list[dict[str, Any]]:

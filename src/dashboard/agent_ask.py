@@ -438,17 +438,25 @@ def reputation_cards(feed: dict[str, Any]) -> list[dict[str, Any]]:
     for r in (feed.get("reputation") or []):
         ent = r.get("entity")
         label = labels.get(ent, r.get("company") or ent)
-        bits = [f"{label} — Reclame Aqui"]
-        if r.get("score") is not None:
-            bits.append(f"nota {r['score']}")
-        if r.get("status"):
-            bits.append(str(r["status"]))
-        if r.get("complaints") is not None:
-            bits.append(f"{r['complaints']} reclamações ({r.get('period','')})")
-        if r.get("solved_pct") is not None:
-            bits.append(f"{r['solved_pct']}% resolvidas")
+        src = r.get("source") or "ReclameAqui"
+        if src == "BCB":
+            bits = [f"{label} — ranking de reclamações do Banco Central ({r.get('period','')})"]
+            if r.get("rank") is not None:
+                bits.append(f"{r['rank']}ª posição em reclamações")
+            if r.get("index") is not None:
+                bits.append(f"índice {r['index']} (reclamações por cliente)")
+        else:
+            bits = [f"{label} — Reclame Aqui"]
+            if r.get("score") is not None:
+                bits.append(f"nota {r['score']}")
+            if r.get("status"):
+                bits.append(str(r["status"]))
+            if r.get("complaints") is not None:
+                bits.append(f"{r['complaints']} reclamações ({r.get('period','')})")
+            if r.get("solved_pct") is not None:
+                bits.append(f"{r['solved_pct']}% resolvidas")
         out.append({
-            "id": f"reclameaqui:{ent}",
+            "id": r.get("id") or f"reputacao:{ent}",
             "date": r.get("date"),
             "entity": ent,
             "entity_label": label,
