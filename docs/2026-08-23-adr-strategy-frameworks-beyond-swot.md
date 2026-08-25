@@ -277,3 +277,37 @@ follows the phasing.
 >
 > **Pipeline:** `…→tows→porter→pestle→ansoff→bcg→four_corners→seven_s→threads→…`
 > Dashboard renders all 8 frameworks as collapsible card tabs via a generic loop renderer.
+
+## Backlog — framework belief maintenance (reconcile + staleness), proposed 2026-08-25
+
+The frameworks are **framework-parametric over the SWOT store** but do NOT yet get
+the SWOT store's full lifecycle. SWOT runs build → **reconcile** (embedding
+similarity + reinforce/contradict/new stance) → **seed** (cold-start) →
+**maintenance** (staleness/drift retirement). Frameworks run only **draft →
+auto-approve → append**: they dedup at the *entity* level (`already_proposed`) and
+always create *new* bullets (`target_bullet_id: None`) — no bullet-level
+supersession, no confidence evolution, no staleness decay.
+
+**Proposal (deferred, not dismissed):** generalize the existing SWOT machinery — do
+NOT fork it — to give frameworks the two high-value passes:
+
+- **Reconcile (framework-parametric).** `swot_reconcile.reconcile()` is embedding
+  similarity + a reinforce/contradict/new stance; nothing about it is SWOT-specific
+  except the `("S","W","O","T")` dimension set. Parameterize the dimensions per
+  framework so a new framework proposal reinforces (confidence↑) / supersedes /
+  contradicts existing bullets instead of appending a near-duplicate. This is the
+  biggest quality lever and it also makes the confidence-gated auto-approve (ADR-006
+  auto-approval step) safer, since proposals would arrive deduped and scored.
+- **Maintenance (staleness).** `swot_maintenance.find_stale()` (affirmation-epoch)
+  is already framework-agnostic; run it per framework to retire bullets no longer
+  backed by fresh evidence (e.g. a stale Porter "high rivalry").
+
+**Explicitly skip per-framework SEED.** Frameworks are *derived* from SWOT beliefs
+(and gate eligibility on SWOT evidence), so SWOT's seeding already covers cold start.
+Cold-starting *framework* claims for thin-evidence entities would fabricate strategic
+assertions from little data — against §Context's OSINT-feasibility / no-fabrication rule.
+
+**Cost / fit:** +2 passes × 7 frameworks (reconcile embeddings + staleness) per run;
+mostly absorbed by the parallelized pipeline (#10 — the framework fan-out already runs
+concurrently). Net: crisper, confidence-evolving, self-retiring frameworks instead of an
+append-only pile. A clean ADR-006 follow-up when picked up.
