@@ -48,6 +48,13 @@ def test_scope_accepts_entity_name():
     assert ok
 
 
+def test_scope_accepts_distress_question():
+    ok, _ = aa.classify_scope(
+        "quais empresas estão em recuperação judicial?",
+        entity_vocab=set(), lens_vocab=set())
+    assert ok
+
+
 def test_scope_rejects_off_domain():
     ok, why = aa.classify_scope(
         "me passa uma receita de bolo de cenoura",
@@ -121,6 +128,34 @@ def test_answer_no_grounding_short_circuits():
     r = aa.answer("banco zzzqqq inexistente", feed=_feed(), converser=conv)
     assert not r["grounded"] and calls == []
     assert r["answer"] == aa.NO_GROUND_TEXT
+
+
+def test_answer_grounds_on_distress_store():
+    feed = _feed()
+    feed["distress"] = [{
+        "entity": "banco_master", "kind": "recuperacao_judicial",
+        "label": "Recuperação Judicial", "first_seen": "2026-08-10",
+        "last_seen": "2026-08-24", "latest_title": "Banco Master pede RJ",
+        "latest_url": "http://x/rj",
+    }]
+    feed["entities"].append({"entity": "banco_master", "label": "Banco Master"})
+    captured = {}
+    def conv(user, system=None, max_tokens=700):
+        captured["user"] = user
+        return "Banco Master está em recuperação judicial [distress:banco_master:recuperacao_judicial]."
+    r = aa.answer("quais empresas estão em recuperação judicial?", feed=feed, converser=conv)
+    assert "distress:banco_master:recuperacao_judicial" in captured["user"]
+    assert r["grounded"] and r["citations"][0]["entity"] == "banco_master"
+
+
+def test_distress_cards_shape():
+    feed = {"entities": [{"entity": "z", "label": "Zé Cia"}],
+            "distress": [{"entity": "z", "kind": "falencia", "label": "Falência",
+                          "first_seen": "2026-01-01", "last_seen": "2026-08-01",
+                          "latest_title": "Z decreta falência", "latest_url": "u"}]}
+    cards = aa.distress_cards(feed)
+    assert cards[0]["id"] == "distress:z:falencia" and cards[0]["is_alert"] is True
+    assert cards[0]["entity_label"] == "Zé Cia" and cards[0]["citations"] == [{"url": "u"}]
 
 
 def test_answer_grounded_happy_path():

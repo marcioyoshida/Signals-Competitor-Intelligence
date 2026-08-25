@@ -94,6 +94,9 @@ _DOMAIN_CUES = {
     "alerta", "alertas", "feed", "sinal", "sinais", "tese", "selic", "juros",
     "industria", "setor", "vertical", "ticker", "b3", "acao", "acoes",
     "lucro", "balanco", "resultado", "captacao", "fatos", "relevante",
+    # corporate distress (ADR-012): RJ/falência is in-domain (feed.json.distress).
+    "recuperacao", "judicial", "extrajudicial", "falencia", "falida", "insolvencia",
+    "distress", "empresa", "empresas",
 }
 # Hard off-domain / injection cues → refuse even if a domain word slips in.
 _REFUSE_CUES = {
@@ -306,6 +309,35 @@ def validate_citations(
     return out
 
 
+def distress_cards(feed: dict[str, Any]) -> list[dict[str, Any]]:
+    """Turn feed.json.distress records (ADR-012) into citable cards so the agent
+    can ground RJ/falência questions on the durable distress store, not just the
+    narrative feed."""
+    labels: dict[str, str] = {}
+    for e in (feed.get("entities") or []):
+        if e.get("entity"):
+            labels[e["entity"]] = e.get("label") or e["entity"]
+    out: list[dict[str, Any]] = []
+    for rec in (feed.get("distress") or []):
+        ent = rec.get("entity")
+        label = labels.get(ent, ent)
+        kind_label = rec.get("label") or "Distress"
+        title = rec.get("latest_title") or ""
+        out.append({
+            "id": f"distress:{ent}:{rec.get('kind')}",
+            "date": rec.get("last_seen"),
+            "entity": ent,
+            "entity_label": label,
+            "entities": [ent],
+            "lenses": ["distress"],
+            "is_alert": rec.get("kind") == "falencia",
+            "threat_score": None,
+            "narrative": f"{label}: {kind_label} (desde {rec.get('first_seen')}). {title}".strip(),
+            "citations": [{"url": rec["latest_url"]}] if rec.get("latest_url") else [],
+        })
+    return out
+
+
 # --- orchestrator (DI) ----------------------------------------------------
 
 def answer(
@@ -320,7 +352,8 @@ def answer(
 ) -> dict[str, Any]:
     """Pure orchestration: scope gate → ground → generate → validate citations."""
     q = (q or "").strip()
-    feed_cards = feed.get("feed") or []
+    # Ground on the narrative feed AND the durable distress store (ADR-012).
+    feed_cards = list(feed.get("feed") or []) + distress_cards(feed)
     entity_vocab = set()
     for e in (feed.get("entities") or []):
         entity_vocab |= set(_tokens(e.get("entity") or ""))
