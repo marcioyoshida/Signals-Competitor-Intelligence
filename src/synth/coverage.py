@@ -277,6 +277,7 @@ def remediate(
     verifier: Callable[[str], bool] | None = None,
     autofixer: Callable[[], dict[str, Any]] = safe_autofix,
     issuer: Callable[[dict[str, Any], dict[str, Any]], str | None] = open_issue,
+    only_id: str | None = None,
     s3: Any | None = None,
     today: dt.date | None = None,
 ) -> dict[str, Any]:
@@ -284,7 +285,8 @@ def remediate(
     open an issue for the rest -> close what's now answerable.
 
     `verifier(question) -> bool` re-asks the agent and reports whether it now
-    grounds; injected so the driver is testable without live Bedrock.
+    grounds; injected so the driver is testable without live Bedrock. `only_id`
+    restricts the run to a single gap (the dashboard "Remediar" button).
     """
     index = load_index(bucket, s3=s3)
     records = index.get("records") or {}
@@ -292,6 +294,8 @@ def remediate(
     did_autofix = False
 
     for gid, rec in records.items():
+        if only_id is not None and gid != only_id:
+            continue
         if rec.get("status") not in (STATUS_OPEN, STATUS_PROPOSED):
             continue
         t = triage(rec["question"], resolver=resolver, known_entity_ids=known_entity_ids)

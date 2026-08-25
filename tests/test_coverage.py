@@ -115,3 +115,36 @@ def test_remediate_opens_issue_for_ingestion_gap():
 def test_auto_codegen_is_off():
     # the loop must never autonomously write+deploy new ingestion code
     assert cov.AUTO_CODEGEN is False
+
+
+def test_remediate_only_id_touches_one_gap():
+    s3 = FakeS3()
+    cov.record("o Itaú é público?", "b", s3=s3, today=dt.date(2026, 8, 25))
+    cov.record("quais têm ISO?", "b", s3=s3, today=dt.date(2026, 8, 25))
+    target = cov.gap_id("o Itaú é público?")
+    out = cov.remediate(
+        "b", resolver=_resolver({cov.normalize_q("o Itaú é público?"): ["itau"]}),
+        verifier=lambda x: True, autofixer=lambda: {"ownership": 1},
+        issuer=lambda g, t: "u", only_id=target, s3=s3, today=dt.date(2026, 8, 25))
+    assert out["triaged"] == 1  # only the targeted gap was processed
+    saved = json.loads(s3.store[cov.INDEX_KEY])
+    assert saved["records"][target]["status"] == cov.STATUS_RESOLVED
+    assert saved["records"][cov.gap_id("quais têm ISO?")]["status"] == cov.STATUS_OPEN
+
+
+# --- gaps API -------------------------------------------------------------
+def test_gaps_api_forbids_without_origin_secret(monkeypatch):
+    from src.dashboard import gaps_api
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", "s")
+    r = gaps_api.lambda_handler({"headers": {}, "body": "{}"}, None)
+    assert r["statusCode"] == 403
+
+
+def test_gaps_api_remediate_requires_id(monkeypatch):
+    from src.dashboard import gaps_api
+    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_DIGESTS_BUCKET", "b")
+    r = gaps_api.lambda_handler(
+        {"rawPath": "/api/gaps/remediate", "requestContext": {"http": {"method": "POST"}},
+         "body": json.dumps({})}, None)
+    assert r["statusCode"] == 400

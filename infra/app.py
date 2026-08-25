@@ -1311,6 +1311,64 @@ class OncaPrototypeStack(Stack):
                 )
             ],
         )
+        # Coverage-gap API (ADR-014): the "Pontos Cegos" dashboard surface + the
+        # Remediar button (single-gap remediation: triage → safe backfill → re-ask
+        # the agent → resolve). Needs the union of the agent's + registry's access
+        # (digests store, registry backfills, feed read, Bedrock verify). Registered
+        # BEFORE the /api/* catch-all (insertion order).
+        gaps_fn = lambda_.Function(
+            self,
+            "OncaGapsApi",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.dashboard.gaps_api.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.seconds(90),
+            memory_size=512,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_ORIGIN_SECRET": origin_secret,
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+                "ONCA_SITE_BUCKET": site_bucket.bucket_name,
+                "ONCA_ENTITIES_TABLE": entities_table.table_name,
+                "ONCA_KB_ID": knowledge_base.attr_knowledge_base_id,
+                "ONCA_SYNTH_MODEL_ID": os.environ.get("ONCA_SYNTH_MODEL_ID", "amazon.nova-lite-v1:0"),
+            },
+        )
+        digests_bucket.grant_read_write(gaps_fn)
+        site_bucket.grant_read(gaps_fn)
+        entities_table.grant_read_write_data(gaps_fn)  # safe-autofix backfills
+        gaps_fn.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["bedrock:Retrieve"],
+                resources=[knowledge_base.attr_knowledge_base_arn],
+            )
+        )
+        gaps_fn.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["bedrock:InvokeModel", "bedrock:Converse"],
+                resources=[
+                    f"arn:aws:bedrock:{self.region}::foundation-model/*",
+                    f"arn:aws:bedrock:{self.region}:{self.account}:inference-profile/*",
+                ],
+            )
+        )
+        gaps_url = gaps_fn.add_function_url(auth_type=lambda_.FunctionUrlAuthType.NONE)
+        distribution.add_behavior(
+            "/api/gaps/*",
+            cf_origins.FunctionUrlOrigin(
+                gaps_url, custom_headers={"X-Onca-Origin": origin_secret}
+            ),
+            viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+            allowed_methods=cloudfront.AllowedMethods.ALLOW_ALL,
+            cache_policy=cloudfront.CachePolicy.CACHING_DISABLED,
+            origin_request_policy=cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+            function_associations=[
+                cloudfront.FunctionAssociation(
+                    function=auth_fn,
+                    event_type=cloudfront.FunctionEventType.VIEWER_REQUEST,
+                )
+            ],
+        )
         # /api/* catch-all (review action) — registered AFTER /api/registry/* and
         # /api/run/* so the specific patterns win; everything else under /api/ lands here.
         distribution.add_behavior(

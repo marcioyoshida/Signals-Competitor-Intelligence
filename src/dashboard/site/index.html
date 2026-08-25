@@ -125,6 +125,14 @@
   .askans .cite:hover { background: var(--accent); color: #fff; }
   .askans .cref { color: var(--accent); font-weight: 600; cursor: pointer; }
   .askans .thinking { color: var(--muted); }
+  .gaprow { display: flex; align-items: center; gap: 10px; padding: 9px 4px; border-bottom: 1px solid var(--border); }
+  .gaprow .gq { flex: 1; font-size: 14px; }
+  .gaprow .gmeta { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  .gaprow .gtag { border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; }
+  .gaprow .gstat { border-radius: 6px; padding: 1px 7px; font-weight: 600; }
+  .gaprow .gstat.open { color: var(--accent); border: 1px solid var(--accent); }
+  .gaprow .gstat.prop { color: #b8860b; border: 1px solid currentColor; }
+  .gaprow .gbtn { font-size: 12px; padding: 4px 12px; }
   .entity { font-weight: 640; font-size: 15px; }
   .entity-link { cursor: pointer; }
   .entity-link:hover { text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 2px; }
@@ -402,6 +410,12 @@
     <div id="reviews"></div>
   </div>
 
+  <div class="panel" id="gapsPanel" style="margin-top:28px;display:none">
+    <h2>Pontos Cegos <span style="text-transform:none;letter-spacing:0;color:var(--muted);font-weight:500">· perguntas que a base ainda não responde</span></h2>
+    <div class="hint">Quando o agente não consegue responder uma pergunta dentro do escopo, ela vira um ponto cego rastreado. "Remediar" tenta corrigir o que é seguro (curadoria/atributos do registro) e reverifica; o que exige nova fonte/código vira issue no GitHub para revisão.</div>
+    <div id="gaps"></div>
+  </div>
+
   <p class="est" style="margin:16px 6px">O nível de ameaça é uma estimativa heurística (não é um modelo validado). Cada afirmação tem link para a sua fonte.</p>
 </div>
 
@@ -623,7 +637,55 @@ function renderLower() {
     const h = low.querySelector("h2");
     if (h) h.textContent = `Revisão de entidades (${DATA.reviews.length})`;
   }
-  renderMacro(); renderReviews();
+  renderMacro(); renderReviews(); renderGaps();
+}
+
+const GAP_CLASS_LABEL = {
+  curation_gap: "curadoria", discovery_gap: "descoberta",
+  ingestion_gap: "nova fonte", retrieval_gap: "recuperação",
+};
+function renderGaps() {
+  const list = DATA.coverage_gaps || [];
+  const panel = document.getElementById("gapsPanel");
+  panel.style.display = list.length ? "" : "none";
+  if (!list.length) { document.getElementById("gaps").innerHTML = ""; return; }
+  panel.querySelector("h2").innerHTML =
+    `Pontos Cegos (${list.length}) <span style="text-transform:none;letter-spacing:0;color:var(--muted);font-weight:500">· perguntas que a base ainda não responde</span>`;
+  document.getElementById("gaps").innerHTML = list.map(g => {
+    const cls = g.triage && g.triage.class ? GAP_CLASS_LABEL[g.triage.class] || g.triage.class : "";
+    const issue = g.issue_url ? `<a href="${esc(g.issue_url)}" target="_blank" rel="noopener">issue ↗</a>` : "";
+    const badge = cls ? `<span class="gtag">${esc(cls)}</span>` : "";
+    const st = g.status === "proposed" ? `<span class="gstat prop">proposto</span>` : `<span class="gstat open">aberto</span>`;
+    return `<div class="gaprow" data-id="${esc(g.id)}">
+      <div class="gq">${esc(g.question)}</div>
+      <div class="gmeta">${st}${badge}<span class="gcount">×${g.count||1}</span>${issue}</div>
+      <button class="btn gbtn" data-id="${esc(g.id)}">Remediar</button>
+    </div>`;
+  }).join("");
+  document.querySelectorAll("#gaps .gbtn").forEach(b => b.onclick = () => remediateGap(b));
+}
+async function remediateGap(btn) {
+  const id = btn.dataset.id, prev = btn.textContent;
+  btn.disabled = true; btn.textContent = "Remediando…";
+  try {
+    const r = await fetch("/api/gaps/remediate", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    const j = await r.json();
+    const gap = j.gap || {};
+    if (gap.status === "resolved") {
+      btn.textContent = "Resolvido ✓";
+      const row = btn.closest(".gaprow"); if (row) row.style.opacity = "0.5";
+      DATA.coverage_gaps = (DATA.coverage_gaps || []).filter(x => x.id !== id);
+      setTimeout(renderGaps, 1200);
+    } else {
+      // update the row's triage/issue in place
+      const i = (DATA.coverage_gaps || []).findIndex(x => x.id === id);
+      if (i >= 0) DATA.coverage_gaps[i] = gap;
+      renderGaps();
+    }
+  } catch { btn.textContent = "Falhou"; setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 2500); }
 }
 
 function renderMacro() {

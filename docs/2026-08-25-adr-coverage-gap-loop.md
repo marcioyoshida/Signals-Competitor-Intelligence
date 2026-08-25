@@ -65,10 +65,18 @@ This is reversible to widen later, but the default is safe.
 - The safe-autofix set grows naturally as new curated attributes/backfills land
   (ownership/ticker today; the ADR-013 recipe makes adding more cheap).
 
+## Dashboard
+
+A **"Pontos Cegos"** panel (war-room lower section) lists open/proposed gaps from
+`feed.json.coverage_gaps` with a **Remediar** button per gap → `POST /api/gaps/remediate`
+(`OncaGapsApi` Lambda) runs single-gap remediation (triage → safe backfill → re-ask the
+agent → resolve, or leave proposed). Same edge-auth as the other `/api/*` surfaces;
+`/api/gaps/*` behavior registered before the `/api/*` catch-all.
+
 ## Status / next steps
 
 Implemented v1: capture (deployed), triage, safe-autofix + re-verify, gh issue, feed
-surface. Next: (1) a dashboard "Lacunas" tab with a one-click "remediar" per gap; (2)
-schedule `run_pipeline` (EventBridge) or run it as a pipeline step; (3) widen the
-safe-autofix set (news_term fixes, enable-known-source); (4) an evidence-backed detector
-path for `ingestion_gap` classes (still issue-gated for the code itself).
+surface, **"Pontos Cegos" dashboard tab + Remediar button (deployed)**. Next: (1) schedule
+`run_pipeline` (EventBridge) or run it as a pipeline step; (2) widen the safe-autofix set
+(news_term fixes, enable-known-source); (3) an evidence-backed detector path for
+`ingestion_gap` classes (still issue-gated for the code itself).
