@@ -125,8 +125,35 @@
   .askans .cite:hover { background: var(--accent); color: #fff; }
   .askans .cref { color: var(--accent); font-weight: 600; cursor: pointer; }
   .askans .thinking { color: var(--muted); }
-  .gaprow { display: flex; align-items: center; gap: 10px; padding: 9px 4px; border-bottom: 1px solid var(--border); }
-  .gaprow .gq { flex: 1; font-size: 14px; }
+  /* Pontos Cegos — lateral vertical tab + slide-in drawer */
+  .gapstab { position: fixed; right: 0; top: 50%; transform: translateY(-50%);
+    z-index: 40; writing-mode: vertical-rl; text-orientation: mixed;
+    background: var(--accent); color: #fff; border: none; cursor: pointer;
+    padding: 16px 8px; border-radius: 10px 0 0 10px; font: inherit; font-weight: 700;
+    font-size: 13px; letter-spacing: .04em; box-shadow: -2px 0 10px rgba(0,0,0,.18); }
+  .gapstab:hover { filter: brightness(1.08); }
+  .gapstab .gcountbadge { display: block; margin-top: 8px; background: #fff; color: var(--accent);
+    border-radius: 999px; padding: 1px 6px; font-size: 11px; writing-mode: horizontal-tb; text-align: center; }
+  .gapstab .gcountbadge:empty { display: none; }
+  .gapsdrawer { position: fixed; top: 0; right: 0; height: 100vh; width: min(440px, 92vw);
+    z-index: 60; background: var(--panel); border-left: 1px solid var(--border);
+    box-shadow: -8px 0 28px rgba(0,0,0,.28); transform: translateX(100%);
+    transition: transform .22s ease; overflow-y: auto; }
+  .gapsdrawer.open { transform: translateX(0); }
+  .gdhead { display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 16px 4px; }
+  .gdhead h2 { margin: 0; }
+  .gdclose { background: none; border: none; color: var(--muted); font-size: 18px; cursor: pointer; }
+  .gdclose:hover { color: var(--fg); }
+  #gaps { padding: 8px 16px 24px; }
+  .gapsscrim { position: fixed; inset: 0; z-index: 55; background: rgba(0,0,0,.32);
+    opacity: 0; pointer-events: none; transition: opacity .22s ease; }
+  .gapsscrim.open { opacity: 1; pointer-events: auto; }
+  .gaprow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 11px 2px; border-bottom: 1px solid var(--border); }
+  .gaprow .gq { flex: 1 1 100%; font-size: 14px; font-weight: 500; }
+  .gaprow .gresult { flex: 1 1 100%; font-size: 12px; color: var(--muted); }
+  .gaprow .gresult.ok { color: #2e9e6b; }
+  .gaprow .gresult.warn { color: #b8860b; }
   .gaprow .gmeta { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
   .gaprow .gtag { border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; }
   .gaprow .gstat { border-radius: 6px; padding: 1px 7px; font-weight: 600; }
@@ -410,14 +437,22 @@
     <div id="reviews"></div>
   </div>
 
-  <div class="panel" id="gapsPanel" style="margin-top:28px;display:none">
-    <h2>Pontos Cegos <span style="text-transform:none;letter-spacing:0;color:var(--muted);font-weight:500">· perguntas que a base ainda não responde</span></h2>
-    <div class="hint">Quando o agente não consegue responder uma pergunta dentro do escopo, ela vira um ponto cego rastreado. "Remediar" tenta corrigir o que é seguro (curadoria/atributos do registro) e reverifica; o que exige nova fonte/código vira issue no GitHub para revisão.</div>
-    <div id="gaps"></div>
-  </div>
-
   <p class="est" style="margin:16px 6px">O nível de ameaça é uma estimativa heurística (não é um modelo validado). Cada afirmação tem link para a sua fonte.</p>
 </div>
+
+<!-- Pontos Cegos: lateral vertical tab + slide-in drawer -->
+<button class="gapstab" id="gapsTab" style="display:none" title="Perguntas que a base ainda não responde">
+  <span class="glabel">Pontos Cegos</span><span class="gcountbadge" id="gapsCount"></span>
+</button>
+<aside class="gapsdrawer" id="gapsDrawer" aria-hidden="true">
+  <div class="gdhead">
+    <h2>Pontos Cegos</h2>
+    <button class="gdclose" id="gapsClose" aria-label="Fechar">✕</button>
+  </div>
+  <div class="hint" style="padding:0 16px">Perguntas dentro do escopo que a base ainda não responde. <b>Remediar</b> corrige o que é seguro (curadoria/atributos do registro) e reverifica; o que exige nova fonte vira issue no GitHub.</div>
+  <div id="gaps"></div>
+</aside>
+<div class="gapsscrim" id="gapsScrim"></div>
 
 <div class="tip" id="tip"></div>
 
@@ -644,13 +679,19 @@ const GAP_CLASS_LABEL = {
   curation_gap: "curadoria", discovery_gap: "descoberta",
   ingestion_gap: "nova fonte", retrieval_gap: "recuperação",
 };
+// Explains WHY a remediation didn't auto-resolve (so the button always gives feedback).
+const GAP_CLASS_HINT = {
+  ingestion_gap: "Nenhuma fonte ingere esse dado — encaminhado para nova fonte (issue no GitHub).",
+  discovery_gap: "Possível entidade fora do registro — encaminhado para descoberta/curadoria.",
+  retrieval_gap: "Dado pode existir mas não foi recuperado — encaminhado para ajuste de grounding.",
+  curation_gap: "Curadoria aplicada, mas ainda sem resposta — encaminhado para revisão.",
+};
 function renderGaps() {
   const list = DATA.coverage_gaps || [];
-  const panel = document.getElementById("gapsPanel");
-  panel.style.display = list.length ? "" : "none";
-  if (!list.length) { document.getElementById("gaps").innerHTML = ""; return; }
-  panel.querySelector("h2").innerHTML =
-    `Pontos Cegos (${list.length}) <span style="text-transform:none;letter-spacing:0;color:var(--muted);font-weight:500">· perguntas que a base ainda não responde</span>`;
+  const tab = document.getElementById("gapsTab");
+  tab.style.display = list.length ? "" : "none";
+  document.getElementById("gapsCount").textContent = list.length ? String(list.length) : "";
+  if (!list.length) { document.getElementById("gaps").innerHTML = ""; toggleGaps(false); return; }
   document.getElementById("gaps").innerHTML = list.map(g => {
     const cls = g.triage && g.triage.class ? GAP_CLASS_LABEL[g.triage.class] || g.triage.class : "";
     const issue = g.issue_url ? `<a href="${esc(g.issue_url)}" target="_blank" rel="noopener">issue ↗</a>` : "";
@@ -660,13 +701,17 @@ function renderGaps() {
       <div class="gq">${esc(g.question)}</div>
       <div class="gmeta">${st}${badge}<span class="gcount">×${g.count||1}</span>${issue}</div>
       <button class="btn gbtn" data-id="${esc(g.id)}">Remediar</button>
+      <div class="gresult" data-for="${esc(g.id)}"></div>
     </div>`;
   }).join("");
   document.querySelectorAll("#gaps .gbtn").forEach(b => b.onclick = () => remediateGap(b));
 }
 async function remediateGap(btn) {
   const id = btn.dataset.id, prev = btn.textContent;
+  const row = btn.closest(".gaprow");
+  const out = row ? row.querySelector(".gresult") : null;
   btn.disabled = true; btn.textContent = "Remediando…";
+  if (out) { out.className = "gresult"; out.textContent = "Triando, corrigindo o que é seguro e reverificando…"; }
   try {
     const r = await fetch("/api/gaps/remediate", {
       method: "POST", headers: { "content-type": "application/json" },
@@ -676,16 +721,29 @@ async function remediateGap(btn) {
     const gap = j.gap || {};
     if (gap.status === "resolved") {
       btn.textContent = "Resolvido ✓";
-      const row = btn.closest(".gaprow"); if (row) row.style.opacity = "0.5";
+      const closed = gap.issue_closed ? " Issue fechada." : (gap.issue_url ? " Issue permanece aberta." : "");
+      if (out) { out.className = "gresult ok"; out.textContent = "Resolvido — a base já responde." + closed; }
+      if (row) row.style.opacity = "0.55";
       DATA.coverage_gaps = (DATA.coverage_gaps || []).filter(x => x.id !== id);
-      setTimeout(renderGaps, 1200);
+      setTimeout(renderGaps, 1500);
     } else {
-      // update the row's triage/issue in place
+      const cls = (gap.triage || {}).class;
+      if (out) { out.className = "gresult warn"; out.textContent = GAP_CLASS_HINT[cls] || "Não foi possível remediar automaticamente — encaminhado para revisão."; }
+      btn.textContent = "Encaminhado";
       const i = (DATA.coverage_gaps || []).findIndex(x => x.id === id);
-      if (i >= 0) DATA.coverage_gaps[i] = gap;
-      renderGaps();
+      if (i >= 0) { DATA.coverage_gaps[i] = gap; }
+      setTimeout(() => { btn.disabled = false; btn.textContent = prev; }, 2500);
     }
-  } catch { btn.textContent = "Falhou"; setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 2500); }
+  } catch {
+    if (out) { out.className = "gresult warn"; out.textContent = "Falha ao remediar. Tente novamente."; }
+    btn.textContent = "Falhou"; setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 2500);
+  }
+}
+function toggleGaps(open) {
+  const d = document.getElementById("gapsDrawer"), s = document.getElementById("gapsScrim");
+  const on = open === undefined ? !d.classList.contains("open") : open;
+  d.classList.toggle("open", on); s.classList.toggle("open", on);
+  d.setAttribute("aria-hidden", on ? "false" : "true");
 }
 
 function renderMacro() {
@@ -1567,6 +1625,12 @@ async function askOnca() {
 document.getElementById("askBtn").onclick = askOnca;
 document.getElementById("askInput").addEventListener("keydown", e => { if (e.key === "Enter") askOnca(); });
 renderAskExamples();
+
+// Pontos Cegos lateral drawer open/close.
+document.getElementById("gapsTab").onclick = () => toggleGaps(true);
+document.getElementById("gapsClose").onclick = () => toggleGaps(false);
+document.getElementById("gapsScrim").onclick = () => toggleGaps(false);
+document.addEventListener("keydown", e => { if (e.key === "Escape") toggleGaps(false); });
 
 document.addEventListener("click", e => {
   const b = e.target.closest(".rbtn");

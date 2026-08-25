@@ -268,6 +268,37 @@ def open_issue(gap: dict[str, Any], triage_result: dict[str, Any]) -> str | None
     return None
 
 
+def close_issue(issue_url: str | None, *, token: str | None = None) -> bool:
+    """Close a GitHub issue via the REST API (owner/repo/number parsed from the
+    url). Works anywhere `ONCA_GH_TOKEN` is set (incl. the Lambda) — no `gh` CLI.
+    Returns True if closed; False (no-op) when there's no url or token."""
+    token = token or os.environ.get("ONCA_GH_TOKEN")
+    if not issue_url or not token:
+        return False
+    m = re.search(r"github\.com/([^/]+)/([^/]+)/issues/(\d+)", str(issue_url))
+    if not m:
+        return False
+    owner, repo, number = m.group(1), m.group(2), m.group(3)
+    import urllib.request
+    req = urllib.request.Request(
+        f"https://api.github.com/repos/{owner}/{repo}/issues/{number}",
+        data=json.dumps({"state": "closed",
+                         "state_reason": "completed"}).encode("utf-8"),
+        method="PATCH",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "onca-coverage-loop",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            return 200 <= resp.status < 300
+    except Exception as exc:  # pragma: no cover - network best-effort
+        print(f"Warning: close_issue failed: {exc}")
+        return False
+
+
 # --- remediation driver (the pipeline) ------------------------------------
 
 def remediate(
@@ -277,6 +308,7 @@ def remediate(
     verifier: Callable[[str], bool] | None = None,
     autofixer: Callable[[], dict[str, Any]] = safe_autofix,
     issuer: Callable[[dict[str, Any], dict[str, Any]], str | None] = open_issue,
+    closer: Callable[[str | None], bool] = close_issue,
     only_id: str | None = None,
     s3: Any | None = None,
     today: dt.date | None = None,
@@ -310,6 +342,7 @@ def remediate(
             if verifier is not None and verifier(rec["question"]):
                 rec["status"] = STATUS_RESOLVED
                 rec["resolved_at"] = (today or dt.date.today()).isoformat()
+                rec["issue_closed"] = bool(rec.get("issue_url")) and closer(rec.get("issue_url"))
                 summary["auto_fixed"] += 1
                 summary["resolved"] += 1
             else:
@@ -323,6 +356,7 @@ def remediate(
             if verifier is not None and verifier(rec["question"]):
                 rec["status"] = STATUS_RESOLVED
                 rec["resolved_at"] = (today or dt.date.today()).isoformat()
+                rec["issue_closed"] = bool(rec.get("issue_url")) and closer(rec.get("issue_url"))
                 summary["resolved"] += 1
             else:
                 url = issuer(rec, t)

@@ -1332,6 +1332,10 @@ class OncaPrototypeStack(Stack):
                 "ONCA_ENTITIES_TABLE": entities_table.table_name,
                 "ONCA_KB_ID": knowledge_base.attr_knowledge_base_id,
                 "ONCA_SYNTH_MODEL_ID": os.environ.get("ONCA_SYNTH_MODEL_ID", "amazon.nova-lite-v1:0"),
+                # Optional: a fine-grained PAT (issues:write) lets Remediar CLOSE the
+                # GitHub issue when a gap resolves. Empty -> the gap resolves in the
+                # store and the issue is closed later by the CLI/scheduled pipeline.
+                "ONCA_GH_TOKEN": os.environ.get("ONCA_GH_TOKEN", ""),
             },
         )
         digests_bucket.grant_read_write(gaps_fn)

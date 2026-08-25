@@ -117,6 +117,29 @@ def test_auto_codegen_is_off():
     assert cov.AUTO_CODEGEN is False
 
 
+def test_close_issue_noop_without_token():
+    assert cov.close_issue("https://github.com/o/r/issues/5", token=None) is False
+    assert cov.close_issue(None, token="x") is False
+    assert cov.close_issue("not-a-github-url", token="x") is False
+
+
+def test_remediate_closes_issue_on_resolve():
+    s3 = FakeS3()
+    q = "o Itaú é público?"
+    cov.record(q, "b", s3=s3, today=dt.date(2026, 8, 25))
+    gid = cov.gap_id(q)
+    idx = json.loads(s3.store[cov.INDEX_KEY]); idx["records"][gid]["issue_url"] = "http://gh/1"
+    s3.store[cov.INDEX_KEY] = json.dumps(idx)
+    closed = []
+    cov.remediate(
+        "b", resolver=_resolver({cov.normalize_q(q): ["itau"]}),
+        verifier=lambda x: True, autofixer=lambda: {}, issuer=lambda g, t: "u",
+        closer=lambda url: closed.append(url) or True, only_id=gid,
+        s3=s3, today=dt.date(2026, 8, 25))
+    saved = json.loads(s3.store[cov.INDEX_KEY])
+    assert saved["records"][gid]["issue_closed"] is True and closed == ["http://gh/1"]
+
+
 def test_remediate_only_id_touches_one_gap():
     s3 = FakeS3()
     cov.record("o Itaú é público?", "b", s3=s3, today=dt.date(2026, 8, 25))
