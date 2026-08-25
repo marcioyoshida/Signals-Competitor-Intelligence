@@ -319,6 +319,7 @@ def build_feed(
     swot_proposals: list[dict[str, Any]] | None = None,
     graph_proposals: list[dict[str, Any]] | None = None,
     thread_cards: list[dict[str, Any]] | None = None,
+    distress: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Pure aggregation: narratives -> feed payload. No I/O.
 
@@ -452,6 +453,9 @@ def build_feed(
         "graph_proposals": [
             p for p in (graph_proposals or []) if p.get("status", "pending") == "pending"
         ],
+        # Option A (2026-08-25): entity-tagged corporate distress (RJ/falência) mined
+        # from news + persisted. Read-only list, most-recent first. [] when absent.
+        "distress": distress or [],
     }
 
 
@@ -586,6 +590,18 @@ def _load_reg_lifecycles(digests_bucket: str) -> list[dict[str, Any]]:
         return json.loads(body.decode("utf-8")).get("cards", [])
     except Exception as exc:  # pragma: no cover - best-effort, read-only
         print(f"Warning: load reg-lifecycle index failed: {exc}")
+        return []
+
+
+def _load_distress(digests_bucket: str) -> list[dict[str, Any]]:
+    """Read the entity-tagged distress store (option A), best-effort. [] if absent."""
+    try:
+        from src.synth import distress
+
+        idx = distress.load_index(digests_bucket)
+        return distress.list_records(idx)
+    except Exception as exc:  # pragma: no cover - best-effort, read-only
+        print(f"Warning: load distress index failed: {exc}")
         return []
 
 
@@ -816,6 +832,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         graph_proposals=_load_graph_proposals(digests_bucket),
         thread_cards=(_load_threads(digests_bucket) + _load_reg_lifecycles(digests_bucket)
                       + _load_relational(digests_bucket)),
+        distress=_load_distress(digests_bucket),
     )
     body = json.dumps(feed, ensure_ascii=False).encode("utf-8")
 

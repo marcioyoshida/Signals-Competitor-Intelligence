@@ -29,6 +29,27 @@ def _commit_news_seen(digest: dict[str, Any]) -> int:
         return 0
 
 
+def _update_distress(digest: dict[str, Any]) -> dict[str, Any]:
+    """Fold RJ/falência headlines from this run's news into the durable distress
+    store (option A). Best-effort — a failure never breaks synthesis."""
+    news = digest.get("news") if isinstance(digest, dict) else None
+    if not isinstance(news, dict):
+        return {"new_events": 0, "records": 0}
+    items = (news.get("items") or []) + (news.get("context") or [])
+    if not items:
+        return {"new_events": 0, "records": 0}
+    bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
+    if not bucket:
+        return {"new_events": 0, "records": 0}
+    try:
+        from src.synth import distress
+
+        return distress.update_from_news(items, bucket)
+    except Exception as exc:  # pragma: no cover - best-effort; never crash synth
+        print(f"Warning: distress update skipped: {exc}")
+        return {"new_events": 0, "records": 0}
+
+
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """Produce flagged narratives with citation guardrails.
 
@@ -84,6 +105,14 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # commit failure just means the items re-surface (safe), never a crash.
     committed = _commit_news_seen(digest)
 
+    # Entity-tagged distress store (option A, 2026-08-25): mine the news slice for
+    # RJ/falência headlines and fold them into a durable distress/index.json keyed
+    # by (entity, kind). News is the only channel that names the company (DataJud
+    # is party-scrubbed) and is otherwise ephemeral, so persist it here. Uses the
+    # FULL fetched news (not just the consumed candidates) so an RJ event that
+    # didn't clear the fusion floor is still recorded. Best-effort.
+    distress_summary = _update_distress(digest)
+
     fusion = {
         "entity_fusion": sum(1 for c in cands if c.get("kind") == "entity_fusion"),
         "regulatory_fusion": sum(1 for c in cands if c.get("kind") == "regulatory_fusion"),
@@ -92,6 +121,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         "min_lenses": int(os.environ.get("ONCA_SYNTH_MIN_LENSES", "2")),
         "min_score": float(os.environ.get("ONCA_SYNTH_MIN_SCORE", "0.45")),
         "news_committed": committed,
+        "distress": distress_summary,
     }
     status = "ok" if narratives else "ok_empty"
     # Return a COMPACT result: narratives are persisted to S3 (``keys``) and the
