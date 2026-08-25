@@ -321,6 +321,7 @@ def build_feed(
     thread_cards: list[dict[str, Any]] | None = None,
     distress: list[dict[str, Any]] | None = None,
     entity_attrs: dict[str, dict[str, Any]] | None = None,
+    coverage_gaps: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Pure aggregation: narratives -> feed payload. No I/O.
 
@@ -462,6 +463,9 @@ def build_feed(
         # + dashboard. Keyed by entity_id. Covers the WHOLE registry, not just
         # narrative-bearing entities.
         "entity_attrs": entity_attrs or {},
+        # ADR-014 coverage-gap loop: unanswered in-domain questions awaiting triage/
+        # remediation. Read-only list (open + proposed), most-frequent first.
+        "coverage_gaps": coverage_gaps or [],
     }
 
 
@@ -622,6 +626,18 @@ def _load_distress(digests_bucket: str) -> list[dict[str, Any]]:
         return distress.list_records(idx)
     except Exception as exc:  # pragma: no cover - best-effort, read-only
         print(f"Warning: load distress index failed: {exc}")
+        return []
+
+
+def _load_coverage_gaps(digests_bucket: str) -> list[dict[str, Any]]:
+    """Read the coverage-gap store (ADR-014), best-effort. [] if absent."""
+    try:
+        from src.synth import coverage
+
+        idx = coverage.load_index(digests_bucket)
+        return coverage.list_open(idx)
+    except Exception as exc:  # pragma: no cover - best-effort, read-only
+        print(f"Warning: load coverage gaps failed: {exc}")
         return []
 
 
@@ -854,6 +870,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                       + _load_relational(digests_bucket)),
         distress=_load_distress(digests_bucket),
         entity_attrs=load_entity_attributes(),
+        coverage_gaps=_load_coverage_gaps(digests_bucket),
     )
     body = json.dumps(feed, ensure_ascii=False).encode("utf-8")
 

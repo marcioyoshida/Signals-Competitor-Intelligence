@@ -1270,11 +1270,13 @@ class OncaPrototypeStack(Stack):
                 "PYTHONPATH": "/var/task",
                 "ONCA_ORIGIN_SECRET": origin_secret,
                 "ONCA_SITE_BUCKET": site_bucket.bucket_name,
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,  # coverage-gap store
                 "ONCA_KB_ID": knowledge_base.attr_knowledge_base_id,
                 "ONCA_SYNTH_MODEL_ID": os.environ.get("ONCA_SYNTH_MODEL_ID", "amazon.nova-lite-v1:0"),
             },
         )
         site_bucket.grant_read(agent_fn)  # reads feed.json
+        digests_bucket.grant_read_write(agent_fn)  # capture coverage gaps (ADR-014)
         agent_fn.add_to_role_policy(
             iam.PolicyStatement(
                 actions=["bedrock:Retrieve"],

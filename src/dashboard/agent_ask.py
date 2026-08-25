@@ -521,6 +521,21 @@ def _kb_retrieve(q: str, *, max_results: int = 4) -> list[dict[str, Any]]:
     return out
 
 
+def _record_gap(q: str, scope: dict[str, Any] | None, reason: str) -> None:
+    """Persist an unanswered in-domain question to the coverage-gap store (the
+    remediation loop reads it out-of-band). Writes to the digests bucket; no-op if
+    unconfigured. Best-effort."""
+    bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
+    if not bucket:
+        return
+    try:
+        from src.synth import coverage
+
+        coverage.record(q, bucket, scope=scope, reason=reason)
+    except Exception as exc:  # pragma: no cover - best-effort
+        print(f"Warning: coverage-gap record skipped: {exc}")
+
+
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # Origin secret: present only when the request came through CloudFront.
     secret = os.environ.get("ONCA_ORIGIN_SECRET")
@@ -548,6 +563,11 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             q, feed=feed, scope=scope, converser=converse,
             kb_retrieve=_kb_retrieve if os.environ.get("ONCA_KB_ID") else None,
         )
+        # Coverage-gap loop (capture stage): an IN-DOMAIN question that produced no
+        # grounded answer is a data gap — record it for triage/remediation. An
+        # off-domain refusal is not a gap. Best-effort; never breaks the response.
+        if not result.get("refused") and not result.get("grounded"):
+            _record_gap(q, scope, result.get("reason") or "no-grounding")
         return _resp(200, result)
     except Exception as exc:  # pragma: no cover - defensive; never leak a stack
         print(f"agent_ask error: {exc}")
