@@ -36,6 +36,50 @@ INDEX_KEY = "distress/index.json"
 # long and only drop when nothing has referenced them for this window.
 DEFAULT_TTL_DAYS = 720
 
+# --- source trust tiers (option B: double-validation) ---------------------
+# Map a raw ingestion source label to a trust "kind". A CVM Fato Relevante is
+# self-reported to the regulator (regulatory-grade); news is single-outlet unless
+# corroborated; a DataJud process is a court record (but party-scrubbed, so it only
+# ever *corroborates* a name established elsewhere).
+_REGULATORY_SOURCES = ("cvm", "fato", "ipe", "bcb", "cvm-fatorelevante")
+_COURT_SOURCES = ("datajud", "cnj", "tribunal")
+
+
+def source_kind(source: Any) -> str:
+    s = _norm(source)
+    if any(k in s for k in _REGULATORY_SOURCES):
+        return "regulatory"
+    if any(k in s for k in _COURT_SOURCES):
+        return "court"
+    return "news"
+
+
+def _publisher(url: Any) -> str:
+    """Coarse publisher key from a url (domain) for news-corroboration counting."""
+    m = re.search(r"https?://([^/]+)/?", str(url or ""))
+    host = (m.group(1) if m else "").lower().lstrip("www.")
+    return host or "?"
+
+
+def compute_confidence(sources: list[dict[str, Any]]) -> str:
+    """Grade a record from its accumulated sources (most trusted wins):
+      - ``regulatory`` — a CVM/regulator filing (single trusted source suffices);
+      - ``curated``    — an analyst-seeded record (option C);
+      - ``corroborated`` — >= 2 INDEPENDENT signals agree (a court record + news,
+        or >= 2 distinct news publishers);
+      - ``reported``   — a single news outlet (provisional).
+    """
+    kinds = {s.get("kind") for s in sources}
+    if "regulatory" in kinds:
+        return "regulatory"
+    if "curated" in kinds:
+        return "curated"
+    news_pubs = {s.get("publisher") for s in sources if s.get("kind") == "news"}
+    independent = len(news_pubs) + (1 if "court" in kinds else 0)
+    if independent >= 2:
+        return "corroborated"
+    return "reported"
+
 
 def _norm(text: Any) -> str:
     t = unicodedata.normalize("NFKD", str(text or ""))
@@ -117,6 +161,7 @@ def detect_distress_events(
         if not entities:
             continue
         date = str(item.get("date") or today.isoformat())[:10]
+        src = item.get("source") or "News"
         for eid in entities:
             out.append({
                 "entity": eid,
@@ -125,7 +170,9 @@ def detect_distress_events(
                 "date": date,
                 "title": title.strip(),
                 "url": item.get("url"),
-                "source": item.get("source") or "News",
+                "source": src,
+                "source_kind": source_kind(src),
+                "publisher": _publisher(item.get("url")),
                 "evidence_id": item.get("id"),
             })
     return out
@@ -148,11 +195,21 @@ def merge_distress(
     idx = dict(existing or {})
     records: dict[str, dict[str, Any]] = dict(idx.get("records") or {})
 
+    def _src_entry(ev: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "kind": ev.get("source_kind") or source_kind(ev.get("source")),
+            "source": ev.get("source"),
+            "publisher": ev.get("publisher") or _publisher(ev.get("url")),
+            "url": ev.get("url"),
+            "date": ev["date"],
+        }
+
     for ev in events:
         key = f"{ev['entity']}#{ev['kind']}"
         date = ev["date"]
         rec = records.get(key)
         if rec is None:
+            sources = [_src_entry(ev)]
             records[key] = {
                 "entity": ev["entity"],
                 "kind": ev["kind"],
@@ -162,6 +219,8 @@ def merge_distress(
                 "latest_title": ev["title"],
                 "latest_url": ev.get("url"),
                 "mentions": 1,
+                "sources": sources,
+                "confidence": compute_confidence(sources),
                 "evidence": [e for e in [ev.get("evidence_id")] if e][:5],
             }
         else:
@@ -173,6 +232,15 @@ def merge_distress(
                 rec["latest_title"] = ev["title"]
                 rec["latest_url"] = ev.get("url")
                 rec["label"] = ev["label"]
+            # Accumulate a NEW independent source (dedup by kind+publisher) and
+            # re-grade confidence — this is the double-validation upgrade path.
+            sources = list(rec.get("sources") or [])
+            ent = _src_entry(ev)
+            if not any(s.get("kind") == ent["kind"] and s.get("publisher") == ent["publisher"]
+                       for s in sources):
+                sources.append(ent)
+            rec["sources"] = sources[:8]
+            rec["confidence"] = compute_confidence(rec["sources"])
             ev_id = ev.get("evidence_id")
             if ev_id and ev_id not in (rec.get("evidence") or []):
                 rec["evidence"] = ((rec.get("evidence") or []) + [ev_id])[-5:]
@@ -242,6 +310,41 @@ def publish(index: dict[str, Any], bucket: str, *, s3: Any | None = None) -> str
     return f"s3://{bucket}/{INDEX_KEY}"
 
 
+def update_from_digest(
+    digest: dict[str, Any],
+    bucket: str,
+    *,
+    resolver: Callable[[dict[str, Any]], list[str]] | None = None,
+    s3: Any | None = None,
+    today: dt.date | None = None,
+) -> dict[str, Any]:
+    """End-to-end distress update from a run's digest.
+
+    Mines BOTH the **trusted CVM Fato Relevante** stream (option A — a listed
+    issuer's own regulator-filed RJ, `regulatory` confidence) AND the **news**
+    stream (which adds `reported`/`corroborated` coverage, incl. private companies
+    CVM never sees). Merges into the durable index and persists. Best-effort.
+    """
+    if resolver is None:
+        from src.synth.entities import resolve_entities as resolver  # lazy
+    items: list[dict[str, Any]] = []
+    news = digest.get("news") if isinstance(digest, dict) else None
+    if isinstance(news, dict):
+        items += (news.get("items") or []) + (news.get("context") or [])
+    fatos = digest.get("fatos") if isinstance(digest, dict) else None
+    if isinstance(fatos, dict):
+        items += (fatos.get("items") or []) + (fatos.get("context") or [])
+    events = detect_distress_events(items, resolver=resolver, today=today)
+    index = load_index(bucket, s3=s3)
+    merged = merge_distress(index, events, today=today)
+    publish(merged, bucket, s3=s3)
+    by_kind: dict[str, int] = {}
+    for e in events:
+        by_kind[e["source_kind"]] = by_kind.get(e["source_kind"], 0) + 1
+    return {"new_events": len(events), "records": merged.get("count", 0), "by_source": by_kind}
+
+
+# Back-compat: news-only entry (kept; callers/tests may still use it).
 def update_from_news(
     news_items: Iterable[dict[str, Any]],
     bucket: str,
@@ -250,8 +353,6 @@ def update_from_news(
     s3: Any | None = None,
     today: dt.date | None = None,
 ) -> dict[str, Any]:
-    """End-to-end: detect distress in the news slice, merge into the durable
-    index, persist. Returns a small summary. Best-effort by the caller."""
     if resolver is None:
         from src.synth.entities import resolve_entities as resolver  # lazy
     events = detect_distress_events(news_items, resolver=resolver, today=today)
@@ -259,3 +360,41 @@ def update_from_news(
     merged = merge_distress(index, events, today=today)
     publish(merged, bucket, s3=s3)
     return {"new_events": len(events), "records": merged.get("count", 0)}
+
+
+# --- option C: one-time curated seed --------------------------------------
+# Analyst-curated seed of tracked entities in a *known, public* distress process.
+# Deliberately EMPTY by default: asserting that a real company is in RJ/falência is
+# a defamation-sensitive, accuracy-critical claim, so records must come from a
+# regulator filing (option A), corroborated press (option B), or a vetted analyst
+# entry here — never a fabricated guess. Populate as
+#   {"entity": "<registry_id>", "kind": "recuperacao_judicial",
+#    "date": "YYYY-MM-DD", "title": "...", "url": "https://...vetted-source"}
+SEED_DISTRESS: list[dict[str, Any]] = []
+
+
+def seed_distress(
+    bucket: str,
+    seed: list[dict[str, Any]] | None = None,
+    *,
+    s3: Any | None = None,
+    today: dt.date | None = None,
+) -> dict[str, Any]:
+    """Fold the curated seed into the durable index at `curated` confidence
+    (idempotent). Records seeded here are marked source_kind=curated so a later
+    regulator filing or corroborating press upgrades their confidence."""
+    seed = SEED_DISTRESS if seed is None else seed
+    events = []
+    for s in seed:
+        kind = s.get("kind") or "recuperacao_judicial"
+        events.append({
+            "entity": s["entity"], "kind": kind, "label": label_for(kind),
+            "date": str(s.get("date") or (today or dt.date.today()).isoformat())[:10],
+            "title": s.get("title") or label_for(kind), "url": s.get("url"),
+            "source": s.get("source") or "curated", "source_kind": "curated",
+            "publisher": _publisher(s.get("url")), "evidence_id": s.get("id"),
+        })
+    index = load_index(bucket, s3=s3)
+    merged = merge_distress(index, events, today=today)
+    publish(merged, bucket, s3=s3)
+    return {"seeded": len(events), "records": merged.get("count", 0)}

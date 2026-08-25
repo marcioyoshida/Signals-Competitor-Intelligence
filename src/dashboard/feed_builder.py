@@ -320,6 +320,7 @@ def build_feed(
     graph_proposals: list[dict[str, Any]] | None = None,
     thread_cards: list[dict[str, Any]] | None = None,
     distress: list[dict[str, Any]] | None = None,
+    entity_attrs: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Pure aggregation: narratives -> feed payload. No I/O.
 
@@ -456,6 +457,11 @@ def build_feed(
         # Option A (2026-08-25): entity-tagged corporate distress (RJ/falência) mined
         # from news + persisted. Read-only list, most-recent first. [] when absent.
         "distress": distress or [],
+        # Curated per-entity classification attributes (ownership nature, compliance
+        # certifications, ticker, industries) — queryable entity facts for the agent
+        # + dashboard. Keyed by entity_id. Covers the WHOLE registry, not just
+        # narrative-bearing entities.
+        "entity_attrs": entity_attrs or {},
     }
 
 
@@ -551,6 +557,20 @@ def load_industry_data() -> tuple[dict[str, list[str]], dict[str, dict[str, Any]
     except Exception as exc:  # pragma: no cover - best-effort, read-only
         print(f"Warning: load industry data failed: {exc}")
         return {}, {}
+
+
+def load_entity_attributes() -> dict[str, dict[str, Any]]:
+    """Per-entity classification attrs (ownership/certifications/ticker) from the
+    registry, best-effort. {} when the table is unavailable."""
+    if not os.environ.get("ONCA_ENTITIES_TABLE"):
+        return {}
+    try:
+        from src.synth import entity_registry
+
+        return entity_registry.list_entity_attributes()
+    except Exception as exc:  # pragma: no cover - best-effort, read-only
+        print(f"Warning: load entity attributes failed: {exc}")
+        return {}
 
 
 def _load_macro() -> dict[str, Any] | None:
@@ -833,6 +853,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         thread_cards=(_load_threads(digests_bucket) + _load_reg_lifecycles(digests_bucket)
                       + _load_relational(digests_bucket)),
         distress=_load_distress(digests_bucket),
+        entity_attrs=load_entity_attributes(),
     )
     body = json.dumps(feed, ensure_ascii=False).encode("utf-8")
 

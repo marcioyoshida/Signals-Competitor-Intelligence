@@ -97,6 +97,11 @@ _DOMAIN_CUES = {
     # corporate distress (ADR-012): RJ/falência is in-domain (feed.json.distress).
     "recuperacao", "judicial", "extrajudicial", "falencia", "falida", "insolvencia",
     "distress", "empresa", "empresas",
+    # entity classification attributes (ADR-013): ownership nature + compliance.
+    "estatal", "estatais", "governamental", "publica", "publicas", "privada",
+    "privadas", "mista", "economia", "controle", "capital", "natureza", "listada",
+    "certificacao", "certificacoes", "certificada", "certificado", "compliance",
+    "iso", "pci", "soc", "conformidade",
 }
 # Hard off-domain / injection cues → refuse even if a domain word slips in.
 _REFUSE_CUES = {
@@ -201,6 +206,13 @@ def select_grounding(
         # off-topic card.
         relevant = overlap > 0
         score = float(overlap)
+        # Naming a specific entity is a far stronger signal than a shared generic
+        # keyword (e.g. "o Itaú é privado?" must rank Itaú's card over the 100+
+        # cards that merely contain the word "privado"). Boost by entity-name match.
+        ent_toks = set(_tokens(card.get("entity") or "")) | set(_tokens(card.get("entity_label") or ""))
+        ent_hits = len(q_toks & ent_toks)
+        if ent_hits:
+            score += 3.0 * ent_hits
         if scope_entity and scope_entity in (_fold(card.get("entity")), _fold(card.get("entity_label"))):
             score += 3.0
             relevant = True
@@ -338,6 +350,55 @@ def distress_cards(feed: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
+_OWNERSHIP_PT = {
+    "public": "capital aberto (companhia listada)",
+    "governmental": "estatal / governamental (controle público)",
+    "mixed": "economia mista (capital público e privado)",
+    "private": "privada",
+}
+# Synonym tokens embedded in the fact card so singular/plural/variant queries
+# ("estatais", "públicas") match the exact-token grounding search.
+_OWNERSHIP_KW = {
+    "public": "pública públicas listada listadas aberta capital aberto ações bolsa",
+    "governmental": "estatal estatais governamental governamentais público federal",
+    "mixed": "mista mistas economia mista estatal público privado",
+    "private": "privada privadas privado capital fechado",
+}
+
+
+def entity_fact_cards(feed: dict[str, Any]) -> list[dict[str, Any]]:
+    """Project feed.json.entity_attrs (ADR-013 classification: ownership nature,
+    certifications, ticker) into citable fact cards so the agent can ground
+    "quais são estatais?" / "quem é certificado ISO?" on the registry."""
+    attrs = feed.get("entity_attrs") or {}
+    run_date = feed.get("run_date")
+    out: list[dict[str, Any]] = []
+    for eid, a in attrs.items():
+        own = a.get("ownership")
+        own_pt = _OWNERSHIP_PT.get(own, own or "—")
+        certs = a.get("certifications") or []
+        parts = [f"{a.get('label', eid)} — natureza de controle: {own_pt} [{_OWNERSHIP_KW.get(own, '')}]."]
+        parts.append(
+            "Certificações: " + ", ".join(certs) + "."
+            if certs else "Certificações: nenhuma registrada na base."
+        )
+        if a.get("ticker"):
+            parts.append(f"Ticker B3: {a['ticker']}.")
+        out.append({
+            "id": f"fact:{eid}",
+            "date": run_date,
+            "entity": eid,
+            "entity_label": a.get("label"),
+            "entities": [eid],
+            "lenses": ["registro"],
+            "is_alert": False,
+            "threat_score": None,
+            "narrative": " ".join(parts),
+            "citations": [],
+        })
+    return out
+
+
 # --- orchestrator (DI) ----------------------------------------------------
 
 def answer(
@@ -352,12 +413,16 @@ def answer(
 ) -> dict[str, Any]:
     """Pure orchestration: scope gate → ground → generate → validate citations."""
     q = (q or "").strip()
-    # Ground on the narrative feed AND the durable distress store (ADR-012).
-    feed_cards = list(feed.get("feed") or []) + distress_cards(feed)
+    # Ground on the narrative feed, the durable distress store (ADR-012) AND the
+    # per-entity classification facts (ADR-013: ownership/certifications).
+    feed_cards = list(feed.get("feed") or []) + distress_cards(feed) + entity_fact_cards(feed)
     entity_vocab = set()
     for e in (feed.get("entities") or []):
         entity_vocab |= set(_tokens(e.get("entity") or ""))
         entity_vocab |= set(_tokens(e.get("label") or ""))
+    for eid, a in (feed.get("entity_attrs") or {}).items():
+        entity_vocab |= set(_tokens(eid))
+        entity_vocab |= set(_tokens(a.get("label") or ""))
     lens_vocab: set[str] = set()
     for c in feed_cards:
         for ln in (c.get("lenses") or []):

@@ -58,6 +58,8 @@ def put_entity(
     ambiguous_tokens: Iterable[str] | None = None,
     fatos_term: str | None = None,
     news_search: bool = True,
+    ownership: str | None = None,
+    certifications: Iterable[str] | None = None,
     table: Any | None = None,
 ) -> dict[str, Any]:
     """Upsert an entity + its ALIAS#/CNPJ# lookup items. Returns the entity item.
@@ -124,6 +126,18 @@ def put_entity(
         )
         entity["ambiguous_tokens"] = toks
         entity["ambiguous"] = bool(toks)
+    # Curated CLASSIFICATION attributes (queryable entity facts, API-editable):
+    #  - ownership: legal/control nature — public (companhia aberta/listed),
+    #    governmental (wholly state-owned), mixed (sociedade de economia mista —
+    #    public control + private capital), or private.
+    #  - certifications: compliance/certification labels (e.g. "ISO 27001",
+    #    "PCI-DSS") — evidenced/curated, never assumed.
+    if ownership:
+        entity["ownership"] = str(ownership)
+    if certifications is not None:
+        entity["certifications"] = sorted(
+            {str(c).strip() for c in certifications if str(c).strip()}
+        )
     t.put_item(Item=entity)
     for na in norm:
         t.put_item(Item={"pk": f"ALIAS#{na}", "type": "alias", "entity_id": entity_id})
@@ -189,6 +203,8 @@ def assign_ticker(entity_id: str, ticker: str, *, table: Any | None = None) -> b
         ambiguous_tokens=e.get("ambiguous_tokens"),
         fatos_term=e.get("fatos_term"),
         news_search=e.get("news_search", True),
+        ownership=e.get("ownership"),
+        certifications=e.get("certifications"),
         table=t,
     )
     return True
@@ -203,6 +219,102 @@ def backfill_tickers(table: Any | None = None) -> list[tuple[str, str]]:
         if assign_ticker(eid, ticker, table=t):
             changed.append((eid, ticker))
     return changed
+
+
+# --- Ownership / control nature (curated + derived) -----------------------
+# The four-way legal/control classification (owner-requested). Most tracked
+# entities DERIVE (listed -> public; else private); this curated map holds only
+# the non-derivable cases: wholly state-owned (governmental) and sociedades de
+# economia mista (mixed — public control + private capital, usually also listed,
+# so they must override the plain "public" derivation).
+OWNERSHIP_VALUES = ("public", "governmental", "mixed", "private")
+OWNERSHIP: dict[str, str] = {
+    "caixa": "governmental",          # 100% federal (empresa pública), não listada
+    "bndes": "governmental",          # banco de desenvolvimento, 100% federal
+    "bb": "mixed",                    # Banco do Brasil — sociedade de economia mista
+    "bb_seguridade": "mixed",         # controlada listada do BB
+    "caixa_seguridade": "mixed",      # controlada listada da Caixa
+    "banrisul": "mixed",              # controle do Estado do RS, listada
+    "banco_do_nordeste": "governmental",
+    "banestes": "mixed",
+}
+
+
+def classify_ownership(entity: dict[str, Any]) -> str:
+    """Derive an entity's control nature. Curated override wins; else a listed
+    issuer (has a ticker or a CVM fatos identity) is `public`; otherwise `private`."""
+    eid = str(entity.get("entity_id") or "")
+    if eid in OWNERSHIP:
+        return OWNERSHIP[eid]
+    if entity.get("ownership") in OWNERSHIP_VALUES:
+        return entity["ownership"]
+    if entity.get("ticker") or entity.get("fatos_term"):
+        return "public"
+    return "private"
+
+
+def backfill_ownership(table: Any | None = None) -> list[tuple[str, str]]:
+    """Set `ownership` on every active entity from classify_ownership. Idempotent;
+    returns [(id, ownership)] actually changed."""
+    t = _table(table)
+    changed: list[tuple[str, str]] = []
+    for e in list_entities(table=t):
+        want = classify_ownership(e)
+        if e.get("ownership") != want:
+            update_entity(e["entity_id"], {"ownership": want}, table=t)
+            changed.append((e["entity_id"], want))
+    return changed
+
+
+# --- Compliance / certifications (curated, evidenced — never assumed) ------
+# Certification claims are accuracy-critical (a company is/ isn't ISO-certified),
+# so this seed is intentionally conservative: populate only from a verifiable
+# source (the company's own disclosure / an accredited registry). Empty entries
+# are fine — the attribute is *scoped and queryable* even before it is filled,
+# via analyst curation or a future evidence-backed detector.
+CERTIFICATIONS: dict[str, list[str]] = {}
+
+
+def set_certifications(
+    entity_id: str, certs: Iterable[str], *, table: Any | None = None
+) -> bool:
+    """Set an entity's curated certification list (non-destructive to other
+    fields). Returns True if changed."""
+    t = _table(table)
+    e = get_entity(entity_id, table=t)
+    if not e:
+        return False
+    want = sorted({str(c).strip() for c in certs if str(c).strip()})
+    if sorted(e.get("certifications") or []) == want:
+        return False
+    update_entity(entity_id, {"certifications": want}, table=t)
+    return True
+
+
+def backfill_certifications(table: Any | None = None) -> list[str]:
+    """Apply the curated CERTIFICATIONS seed to existing entities. Idempotent."""
+    t = _table(table)
+    changed: list[str] = []
+    for eid, certs in CERTIFICATIONS.items():
+        if set_certifications(eid, certs, table=t):
+            changed.append(eid)
+    return changed
+
+
+def list_entity_attributes(table: Any | None = None) -> dict[str, dict[str, Any]]:
+    """Compact per-entity classification map for the feed/agent: every active
+    entity → {label, ownership, certifications, ticker, industries}. Ownership is
+    always derived (so it is present even when not yet written to the record)."""
+    out: dict[str, dict[str, Any]] = {}
+    for e in list_entities(table=table):
+        out[e["entity_id"]] = {
+            "label": e.get("display_name") or e["entity_id"],
+            "ownership": classify_ownership(e),
+            "certifications": e.get("certifications") or [],
+            "ticker": e.get("ticker"),
+            "industries": e.get("industries") or [],
+        }
+    return out
 
 
 def resolve_by_alias(name: str, table: Any | None = None) -> str | None:
@@ -983,7 +1095,7 @@ def clear_cache() -> None:
 # Fields an operator may PATCH, with how each is normalized. Protected keys
 # (pk, type, entity_id, canonical_id, aliases, alias_forms, cnpj_roots) are never
 # writable through the patch path.
-_PATCH_STR = frozenset({"display_name", "news_term", "fatos_term", "confidence", "sector", "license_class", "ticker"})
+_PATCH_STR = frozenset({"display_name", "news_term", "fatos_term", "confidence", "sector", "license_class", "ticker", "ownership"})
 _PATCH_BOOL = frozenset({"news_safe", "active", "news_search"})
 
 
@@ -1035,6 +1147,10 @@ def update_entity(
             ent["needs_review"] = False
         elif key == "controllers":
             ent["controllers"] = [str(c) for c in (val or [])]
+        elif key == "certifications":
+            ent["certifications"] = sorted(
+                {str(c).strip() for c in (val or []) if str(c).strip()}
+            )
         # else: unknown/protected key — ignored
     t.put_item(Item=ent)
     return ent

@@ -32,19 +32,15 @@ def _commit_news_seen(digest: dict[str, Any]) -> int:
 def _update_distress(digest: dict[str, Any]) -> dict[str, Any]:
     """Fold RJ/falência headlines from this run's news into the durable distress
     store (option A). Best-effort — a failure never breaks synthesis."""
-    news = digest.get("news") if isinstance(digest, dict) else None
-    if not isinstance(news, dict):
-        return {"new_events": 0, "records": 0}
-    items = (news.get("items") or []) + (news.get("context") or [])
-    if not items:
-        return {"new_events": 0, "records": 0}
     bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
     if not bucket:
         return {"new_events": 0, "records": 0}
     try:
         from src.synth import distress
 
-        return distress.update_from_news(items, bucket)
+        # Mines the trusted CVM Fato Relevante stream (regulatory-grade) AND news
+        # (reported/corroborated), grading each record's confidence by source.
+        return distress.update_from_digest(digest, bucket)
     except Exception as exc:  # pragma: no cover - best-effort; never crash synth
         print(f"Warning: distress update skipped: {exc}")
         return {"new_events": 0, "records": 0}

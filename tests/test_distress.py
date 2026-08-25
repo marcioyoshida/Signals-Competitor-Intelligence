@@ -116,6 +116,70 @@ class _Body:
     def read(self): return self._b
 
 
+# --- confidence tiers (option B) -----------------------------------------
+def test_confidence_regulatory_from_cvm():
+    ev = {"entity": "x", "kind": "recuperacao_judicial", "label": "RJ", "date": "2026-08-20",
+          "title": "X pede RJ", "url": "http://cvm/1", "source": "CVM-FatoRelevante",
+          "source_kind": "regulatory", "publisher": "cvm", "evidence_id": "f1"}
+    idx = ds.merge_distress(None, [ev], today=dt.date(2026, 8, 25))
+    rec = idx["records"]["x#recuperacao_judicial"]
+    assert rec["confidence"] == "regulatory"
+
+
+def test_confidence_reported_then_corroborated():
+    today = dt.date(2026, 8, 25)
+    e1 = {"entity": "y", "kind": "falencia", "label": "Falência", "date": "2026-08-20",
+          "title": "Y falência", "url": "https://a.com/1", "source": "News",
+          "source_kind": "news", "publisher": "a.com", "evidence_id": "n1"}
+    idx = ds.merge_distress(None, [e1], today=today)
+    assert idx["records"]["y#falencia"]["confidence"] == "reported"
+    # a SECOND independent publisher upgrades to corroborated
+    e2 = dict(e1, url="https://b.com/2", publisher="b.com", evidence_id="n2")
+    idx2 = ds.merge_distress(idx, [e2], today=today)
+    rec = idx2["records"]["y#falencia"]
+    assert rec["confidence"] == "corroborated" and len(rec["sources"]) == 2
+
+
+def test_source_kind_mapping():
+    assert ds.source_kind("CVM-FatoRelevante") == "regulatory"
+    assert ds.source_kind("DataJud-CNJ") == "court"
+    assert ds.source_kind("News") == "news"
+
+
+def test_detect_from_fatos_is_regulatory():
+    fatos = [{"id": "f1", "source": "CVM-FatoRelevante", "date": "2026-08-20",
+              "subject": "Pedido de Recuperação Judicial", "company": "ACME",
+              "url": "http://cvm/f1"}]
+    evs = ds.detect_distress_events(fatos, resolver=_resolver({"f1": ["acme"]}))
+    assert evs[0]["source_kind"] == "regulatory"
+
+
+def test_update_from_digest_mines_news_and_fatos():
+    s3 = FakeS3()
+    digest = {
+        "news": {"items": [{"id": "n1", "source": "News", "date": "2026-08-24",
+                            "title": "Priv pede recuperação judicial", "url": "https://x.com/1"}]},
+        "fatos": {"items": [{"id": "f1", "source": "CVM-FatoRelevante", "date": "2026-08-24",
+                             "subject": "Pedido de Recuperação Judicial", "url": "http://cvm/f1"}]},
+    }
+    out = ds.update_from_digest(digest, "b", resolver=_resolver({"n1": ["priv"], "f1": ["listada"]}),
+                                s3=s3, today=dt.date(2026, 8, 25))
+    assert out["records"] == 2
+    saved = json.loads(s3.store[ds.INDEX_KEY])
+    assert saved["records"]["listada#recuperacao_judicial"]["confidence"] == "regulatory"
+    assert saved["records"]["priv#recuperacao_judicial"]["confidence"] == "reported"
+
+
+def test_seed_distress_curated():
+    s3 = FakeS3()
+    out = ds.seed_distress("b", [{"entity": "z", "kind": "falencia", "date": "2026-01-01",
+                                  "title": "Z falida", "url": "http://vetted/z"}],
+                           s3=s3, today=dt.date(2026, 8, 25))
+    assert out["seeded"] == 1
+    saved = json.loads(s3.store[ds.INDEX_KEY])
+    assert saved["records"]["z#falencia"]["confidence"] == "curated"
+
+
 def test_update_from_news_persists_and_accumulates():
     s3 = FakeS3()
     items = [{"id": "n1", "title": "XPTO pede recuperação judicial", "date": "2026-08-24"}]

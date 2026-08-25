@@ -55,6 +55,13 @@ def test_scope_accepts_distress_question():
     assert ok
 
 
+def test_scope_accepts_ownership_and_compliance():
+    for q in ["quais entidades são estatais?", "quem é economia mista?",
+              "quais bancos têm certificação ISO?"]:
+        ok, _ = aa.classify_scope(q, entity_vocab=set(), lens_vocab=set())
+        assert ok, q
+
+
 def test_scope_rejects_off_domain():
     ok, why = aa.classify_scope(
         "me passa uma receita de bolo de cenoura",
@@ -86,6 +93,18 @@ def test_select_scope_boost():
     feed = _feed()["feed"]
     cards = aa.select_grounding("crédito", feed, scope={"entity": "nubank"})
     assert cards[0]["id"] == "n2"
+
+
+def test_select_entity_name_outranks_generic_keyword():
+    # a card naming the asked entity must beat cards that only share a generic word
+    feed = [
+        {"id": "itau", "entity": "itau", "entity_label": "Itaú Unibanco",
+         "narrative": "Itaú é de capital aberto (companhia listada)."},
+        {"id": "rede", "entity": "rede", "entity_label": "Rede",
+         "narrative": "Rede é privada privado."},
+    ]
+    cards = aa.select_grounding("o Itaú é público ou privado?", feed)
+    assert cards[0]["id"] == "itau"
 
 
 def test_select_drops_zero_overlap():
@@ -156,6 +175,26 @@ def test_distress_cards_shape():
     cards = aa.distress_cards(feed)
     assert cards[0]["id"] == "distress:z:falencia" and cards[0]["is_alert"] is True
     assert cards[0]["entity_label"] == "Zé Cia" and cards[0]["citations"] == [{"url": "u"}]
+
+
+def test_entity_fact_cards_and_grounding():
+    feed = _feed()
+    feed["run_date"] = "2026-08-25"
+    feed["entity_attrs"] = {
+        "bb": {"label": "Banco do Brasil", "ownership": "mixed", "certifications": [], "ticker": "BBAS3", "industries": ["banking"]},
+        "caixa": {"label": "Caixa", "ownership": "governmental", "certifications": [], "ticker": None, "industries": ["banking"]},
+        "picpay": {"label": "PicPay", "ownership": "private", "certifications": ["PCI-DSS"], "ticker": None, "industries": ["fintech"]},
+    }
+    cards = aa.entity_fact_cards(feed)
+    assert {c["id"] for c in cards} == {"fact:bb", "fact:caixa", "fact:picpay"}
+    # a "quais são estatais?" question grounds on the governmental/mixed fact cards
+    captured = {}
+    def conv(user, system=None, max_tokens=700):
+        captured["u"] = user
+        return "A Caixa é estatal [fact:caixa] e o Banco do Brasil é economia mista [fact:bb]."
+    r = aa.answer("quais entidades são estatais ou de economia mista?", feed=feed, converser=conv)
+    assert "fact:caixa" in captured["u"] and "fact:bb" in captured["u"]
+    assert {c["id"] for c in r["citations"]} == {"fact:caixa", "fact:bb"}
 
 
 def test_answer_grounded_happy_path():

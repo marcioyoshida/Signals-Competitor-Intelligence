@@ -31,6 +31,9 @@ class FakeTable:
     def put_item(self, Item):
         self.items[Item["pk"]] = Item
 
+    def scan(self, **kwargs):
+        return {"Items": list(self.items.values())}
+
 
 def test_assign_ticker_sets_field_and_makes_it_resolvable():
     t = FakeTable()
@@ -59,3 +62,39 @@ def test_backfill_only_touches_existing_entities():
     assert changed.get("bb") == "BBAS3"          # existing -> assigned
     assert "itau" not in changed                  # not in table -> skipped
     assert er.get_entity("bb", table=t)["ticker"] == "BBAS3"
+
+
+# --- ownership classification (ADR-013) -----------------------------------
+def test_classify_ownership_curated_and_derived():
+    # curated overrides
+    assert er.classify_ownership({"entity_id": "caixa"}) == "governmental"
+    assert er.classify_ownership({"entity_id": "bb"}) == "mixed"
+    # derived: listed (ticker/fatos) -> public; else private
+    assert er.classify_ownership({"entity_id": "itau", "ticker": "ITUB4"}) == "public"
+    assert er.classify_ownership({"entity_id": "acme", "fatos_term": "ACME SA"}) == "public"
+    assert er.classify_ownership({"entity_id": "picpay"}) == "private"
+
+
+def test_backfill_ownership_and_ticker_preserve():
+    t = FakeTable()
+    er.put_entity("bb", "Banco do Brasil", ["Banco do Brasil"], industries=["banking"],
+                  confidence="curated", table=t)
+    er.put_entity("picpay", "PicPay", ["PicPay"], confidence="curated", table=t)
+    changed = dict(er.backfill_ownership(table=t))
+    assert changed["bb"] == "mixed" and changed["picpay"] == "private"
+    assert er.get_entity("bb", table=t)["ownership"] == "mixed"
+    # a later ticker re-upsert must PRESERVE ownership (not drop it)
+    er.assign_ticker("bb", "BBAS3", table=t)
+    assert er.get_entity("bb", table=t)["ownership"] == "mixed"
+
+
+def test_certifications_set_and_attrs():
+    t = FakeTable()
+    er.put_entity("itau", "Itaú", ["Itaú"], industries=["banking"], ticker="ITUB4",
+                  confidence="curated", table=t)
+    assert er.set_certifications("itau", ["ISO 27001", "PCI-DSS"], table=t) is True
+    assert er.set_certifications("itau", ["ISO 27001", "PCI-DSS"], table=t) is False  # idempotent
+    attrs = er.list_entity_attributes(table=t)
+    assert attrs["itau"]["ownership"] == "public"
+    assert attrs["itau"]["certifications"] == ["ISO 27001", "PCI-DSS"]
+    assert attrs["itau"]["ticker"] == "ITUB4"
