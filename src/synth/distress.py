@@ -132,6 +132,42 @@ def classify_distress(title: str) -> str | None:
     return None
 
 
+# --- subject binding (defamation guard) -----------------------------------
+# A distress record must attach to the *subject* of the distress clause, not to
+# every entity merely co-mentioned in the headline. Two false-positive classes
+# were poisoning the store (issue #33):
+#
+# 1. Market operators / regulators ACT ON listed companies (delist, sanction,
+#    supervise) — a news headline never makes THEM the distressed party. They can
+#    still legitimately appear as the resolved entity, so they are dropped as a
+#    distress *subject* specifically (denylist), not from the corpus.
+NON_DISTRESS_SUBJECTS = frozenset({
+    "b3", "cvm", "bcb", "bacen", "anbima", "susep", "previc", "coaf", "cade",
+    "febraban", "abecs",
+})
+
+# 2. "<X> exclui/sanciona <Y> ... por/após recuperação" — the distress is a
+#    *reason* for X's action and belongs to the object Y, not the acting subject.
+#    We can't reliably tell actor from object by position in a bare RSS title, so
+#    precision-first: when a headline is an action-taken-over-distress shape, we do
+#    not attribute the distress to any co-mentioned entity (better a miss than a
+#    false RJ). Genuine "<empresa> pede/entra em recuperação" headlines carry no
+#    such actor verb and are unaffected.
+_ACTOR_OVER_DISTRESS = re.compile(
+    r"\b(exclui\w*|retir\w*|remov\w*|tir(a|ou)|cort(a|ou)|suspend\w*|rebaix\w*|"
+    r"barr(a|ou)|notific\w*|process\w*|acion\w*|sancion\w*|puni\w*|mult\w*|"
+    r"investig\w*|desenquadr\w*)\b.*\b(por|pela|apos|devido|em razao de|"
+    r"por conta de|diante d)\w*\b"
+)
+
+
+def _actor_headline(norm_title: str) -> bool:
+    """True when the headline describes an entity ACTING on another party in a
+    clause whose reason is the distress event (issue #33: 'B3 exclui Braskem ...
+    por recuperação extrajudicial') — subject is ambiguous, so don't attribute."""
+    return bool(_ACTOR_OVER_DISTRESS.search(norm_title))
+
+
 def label_for(kind: str) -> str:
     return DISTRESS_KINDS.get(kind, {}).get("label", kind)
 
@@ -154,10 +190,17 @@ def detect_distress_events(
         kind = classify_distress(title)
         if not kind:
             continue
+        # Guard 2: action-over-distress headlines have an ambiguous subject — the
+        # distress belongs to the object of the action, not the (usually resolved)
+        # actor. Precision-first: attribute to no one. (issue #33)
+        if _actor_headline(_norm(title)):
+            continue
         try:
             entities = resolver(item) or []
         except Exception:  # pragma: no cover - resolver best-effort
             entities = []
+        # Guard 1: market operators / regulators are never the distressed party.
+        entities = [e for e in entities if e not in NON_DISTRESS_SUBJECTS]
         if not entities:
             continue
         date = str(item.get("date") or today.isoformat())[:10]

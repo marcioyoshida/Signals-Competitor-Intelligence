@@ -47,6 +47,29 @@ def test_detect_multi_entity_headline():
     assert {e["entity"] for e in evs} == {"e1", "e2"}
 
 
+def test_detect_drops_action_over_distress_headline():
+    # issue #33: the actor (B3) is not the distressed party — the subject is the
+    # object of the action (Braskem). Attribute to no one rather than defame B3.
+    items = [{"id": "a", "date": "2026-08-25", "url": "http://x/a", "source": "News",
+              "title": "BRKM5: B3 exclui Braskem de índices hoje por recuperação extrajudicial"}]
+    evs = ds.detect_distress_events(items, resolver=_resolver({"a": ["b3"]}))
+    assert evs == []
+
+
+def test_detect_drops_operator_as_distress_subject():
+    # even without an actor verb, a market operator/regulator is never distressed.
+    items = [{"id": "a", "date": "2026-08-25", "title": "B3 em recuperação extrajudicial"}]
+    evs = ds.detect_distress_events(items, resolver=_resolver({"a": ["b3"]}))
+    assert evs == []
+
+
+def test_detect_keeps_real_subject_when_operator_co_mentioned():
+    # B3 mentioned as venue, but the real subject (a tracked company) still counts.
+    items = [{"id": "a", "date": "2026-08-25", "title": "Empresa X pede recuperação judicial"}]
+    evs = ds.detect_distress_events(items, resolver=_resolver({"a": ["b3", "empresa_x"]}))
+    assert [e["entity"] for e in evs] == ["empresa_x"]
+
+
 # --- merge / upsert -------------------------------------------------------
 def test_merge_creates_and_updates_record():
     today = dt.date(2026, 8, 25)
