@@ -37,6 +37,16 @@ SEVEN_S_PROPOSALS_KEY = "seven_s/proposals.json"
 FRAMEWORK = "seven_s"
 DIMENSIONS = ("structure", "systems", "strategy")
 
+from src.synth import framework_common
+from src.synth.framework_common import fz
+
+# ADR #34 — per-dimension evidence binding (axis OR lens). See framework_common.
+DIM_SIGNALS = {
+    "structure": (fz(),             fz("fatos", "dou")),
+    "systems":   (fz(),             fz("pix", "inf_diario", "funds")),
+    "strategy":  (fz("comparative"), fz("ofertas", "fatos")),
+}
+
 DIM_LABELS = {
     "structure": "Estrutura",
     "systems": "Sistemas",
@@ -84,7 +94,8 @@ def _collect_evidence_ids(narratives: list[dict[str, Any]], *, max_claims: int =
             continue
         seen.add(norm)
         out.append({"id": nid, "claim": claim, "date": feature_store._date_of(n),
-                    "axis": n.get("axis"), "threat_score": _score(n.get("threat_score"))})
+                    "axis": n.get("axis"), "lenses": n.get("lenses") or [],
+                    "threat_score": _score(n.get("threat_score"))})
         if len(out) >= max_claims:
             break
     return out
@@ -244,7 +255,7 @@ def analyze_visible(
         for el in elements:
             if el["confidence"] < min_conf:
                 continue
-            ev_ids = [evidence[j]["id"] for j in el["evidence"] if j < len(evidence)]
+            ev_ids = framework_common.on_signal_ids(el["evidence"], evidence, el["element"], DIM_SIGNALS)
             if not ev_ids:
                 continue
             proposals.append({

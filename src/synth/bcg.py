@@ -38,6 +38,17 @@ BCG_PROPOSALS_KEY = "bcg/proposals.json"
 FRAMEWORK = "bcg"
 DIMENSIONS = ("star", "cash_cow", "question_mark", "dog")
 
+from src.synth import framework_common
+from src.synth.framework_common import fz
+
+# ADR #34 — per-dimension evidence binding (axis OR lens). See framework_common.
+DIM_SIGNALS = {
+    "star":          (fz("comparative"),             fz("market")),
+    "cash_cow":      (fz(),                           fz("market", "juros")),
+    "question_mark": (fz("thematic"),                 fz("entrants")),
+    "dog":           (fz("silence", "longitudinal"),  fz()),
+}
+
 DIM_LABELS = {
     "star": "Estrela",
     "cash_cow": "Vaca leiteira",
@@ -86,7 +97,8 @@ def _collect_evidence_ids(narratives: list[dict[str, Any]], *, max_claims: int =
             continue
         seen.add(norm)
         out.append({"id": nid, "claim": claim, "date": feature_store._date_of(n),
-                    "axis": n.get("axis"), "threat_score": _score(n.get("threat_score"))})
+                    "axis": n.get("axis"), "lenses": n.get("lenses") or [],
+                    "threat_score": _score(n.get("threat_score"))})
         if len(out) >= max_claims:
             break
     return out
@@ -243,7 +255,7 @@ def classify_portfolio(
         for pos in positions:
             if pos["confidence"] < min_conf:
                 continue
-            ev_ids = [evidence[j]["id"] for j in pos["evidence"] if j < len(evidence)]
+            ev_ids = framework_common.on_signal_ids(pos["evidence"], evidence, pos["quadrant"], DIM_SIGNALS)
             if not ev_ids:
                 continue
             proposals.append({

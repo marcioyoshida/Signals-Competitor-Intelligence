@@ -38,6 +38,17 @@ ANSOFF_PROPOSALS_KEY = "ansoff/proposals.json"
 FRAMEWORK = "ansoff"
 DIMENSIONS = ("penetration", "market_dev", "product_dev", "diversification")
 
+from src.synth import framework_common
+from src.synth.framework_common import fz
+
+# ADR #34 — per-dimension evidence binding (axis OR lens). See framework_common.
+DIM_SIGNALS = {
+    "penetration":     (fz("comparative"), fz("market", "pix")),
+    "market_dev":      (fz(),              fz("entrants", "news")),
+    "product_dev":     (fz(),              fz("ofertas", "fatos", "pix")),
+    "diversification": (fz("ecosystem"),   fz("fatos")),
+}
+
 DIM_LABELS = {
     "penetration": "Penetração de mercado",
     "market_dev": "Desenvolvimento de mercado",
@@ -86,7 +97,8 @@ def _collect_evidence_ids(narratives: list[dict[str, Any]], *, max_claims: int =
             continue
         seen.add(norm)
         out.append({"id": nid, "claim": claim, "date": feature_store._date_of(n),
-                    "axis": n.get("axis"), "threat_score": _score(n.get("threat_score"))})
+                    "axis": n.get("axis"), "lenses": n.get("lenses") or [],
+                    "threat_score": _score(n.get("threat_score"))})
         if len(out) >= max_claims:
             break
     return out
@@ -243,7 +255,7 @@ def classify_moves(
         for mv in moves:
             if mv["confidence"] < min_conf:
                 continue
-            ev_ids = [evidence[j]["id"] for j in mv["evidence"] if j < len(evidence)]
+            ev_ids = framework_common.on_signal_ids(mv["evidence"], evidence, mv["vector"], DIM_SIGNALS)
             if not ev_ids:
                 continue
             proposals.append({

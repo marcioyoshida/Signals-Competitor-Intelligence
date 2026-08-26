@@ -38,6 +38,19 @@ PESTLE_PROPOSALS_KEY = "pestle/proposals.json"
 FRAMEWORK = "pestle"
 DIMENSIONS = ("political", "economic", "social", "technological", "legal", "environmental")
 
+from src.synth import framework_common
+from src.synth.framework_common import fz
+
+# ADR #34 — per-dimension evidence binding (axis OR lens). See framework_common.
+DIM_SIGNALS = {
+    "political":      (fz("regulatory"),                        fz("dou", "regulatory")),
+    "economic":       (fz(),                                    fz("juros", "market")),
+    "social":         (fz("thematic"),                          fz("news")),
+    "technological":  (fz("thematic"),                          fz("pix")),
+    "legal":          (fz("regulatory", "regulatory_lifecycle"), fz("dou", "regulatory")),
+    "environmental":  (fz("thematic"),                          fz("news")),
+}
+
 DIM_LABELS = {
     "political": "Político",
     "economic": "Econômico",
@@ -88,7 +101,8 @@ def _collect_evidence_ids(narratives: list[dict[str, Any]], *, max_claims: int =
             continue
         seen.add(norm)
         out.append({"id": nid, "claim": claim, "date": feature_store._date_of(n),
-                    "axis": n.get("axis"), "threat_score": _score(n.get("threat_score"))})
+                    "axis": n.get("axis"), "lenses": n.get("lenses") or [],
+                    "threat_score": _score(n.get("threat_score"))})
         if len(out) >= max_claims:
             break
     return out
@@ -246,7 +260,7 @@ def analyze_factors(
         for f in factors:
             if f["confidence"] < min_conf:
                 continue
-            ev_ids = [evidence[j]["id"] for j in f["evidence"] if j < len(evidence)]
+            ev_ids = framework_common.on_signal_ids(f["evidence"], evidence, f["factor"], DIM_SIGNALS)
             if not ev_ids:
                 continue
             proposals.append({

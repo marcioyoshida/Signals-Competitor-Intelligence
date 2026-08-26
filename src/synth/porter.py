@@ -43,6 +43,18 @@ PORTER_PROPOSALS_KEY = "porter/proposals.json"
 FRAMEWORK = "porter"
 DIMENSIONS = ("rivalry", "new_entrants", "substitutes", "buyer_power", "supplier_power")
 
+from src.synth import framework_common
+from src.synth.framework_common import fz
+
+# ADR #34 — per-dimension evidence binding (axis OR lens). See framework_common.
+DIM_SIGNALS = {
+    "rivalry":        (fz("comparative"), fz("market")),
+    "new_entrants":   (fz(),              fz("entrants")),
+    "substitutes":    (fz("thematic"),    fz("pix", "news")),
+    "buyer_power":    (fz("thematic"),    fz("news", "pix")),
+    "supplier_power": (fz("regulatory"),  fz("juros", "regulatory", "dou")),
+}
+
 DIM_LABELS = {
     "rivalry": "Rivalidade entre concorrentes",
     "new_entrants": "Ameaça de novos entrantes",
@@ -93,7 +105,8 @@ def _collect_evidence_ids(narratives: list[dict[str, Any]], *, max_claims: int =
             continue
         seen.add(norm)
         out.append({"id": nid, "claim": claim, "date": feature_store._date_of(n),
-                    "axis": n.get("axis"), "threat_score": _score(n.get("threat_score"))})
+                    "axis": n.get("axis"), "lenses": n.get("lenses") or [],
+                    "threat_score": _score(n.get("threat_score"))})
         if len(out) >= max_claims:
             break
     return out
@@ -258,7 +271,7 @@ def analyze_forces(
         for f in forces:
             if f["confidence"] < min_conf:
                 continue
-            ev_ids = [evidence[j]["id"] for j in f["evidence"] if j < len(evidence)]
+            ev_ids = framework_common.on_signal_ids(f["evidence"], evidence, f["force"], DIM_SIGNALS)
             if not ev_ids:
                 continue
             proposals.append({

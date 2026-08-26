@@ -43,6 +43,7 @@ def _narratives(entity, n=5):
             "entity": entity,
             "narrative": f"Narrative claim {i} about {entity} competitive dynamics in the Brazilian market.",
             "axis": "comparative",
+            "lenses": ["entrants", "news", "market", "pix"],
             "threat_score": 0.5 + i * 0.05,
             "as_of": RUN,
         }
@@ -80,6 +81,43 @@ def _draft_many(label, industries, swot_bullets, evidence):
         out.append({"force": "rivalry", "text": f"Rivalry assessment {i}.",
                     "intensity": "high", "confidence": 0.9, "evidence": [0]})
     return out
+
+
+# --- #34 signal gate ---
+
+def test_signal_gate_drops_off_signal_citation():
+    # supplier_power binds to regulatory axis / juros|regulatory|dou lens. Evidence
+    # that is purely comparative+market is OFF-signal for it -> the assessment is
+    # dropped (no axis/lens-valid citation survives).
+    claim = "Reguladores discutem novas regras que afetam a operação da acme no mercado."
+    off = [{"id": "e0", "entity": "acme", "narrative": claim, "axis": "comparative",
+            "lenses": ["market"], "threat_score": 0.9, "as_of": RUN}]
+    def draft(label, ind, swot, ev):
+        return [{"force": "supplier_power", "text": "Reguladores pressionam.",
+                 "intensity": "high", "confidence": 0.8, "evidence": [0]}]
+    beliefs = {"acme": _swot_beliefs("acme")}
+    result = porter.analyze_forces(beliefs, off, {}, run_date=RUN,
+                                   draft_fn=draft, min_evidence=1)
+    assert result == []
+    # same citation is KEPT once the evidence carries an on-signal lens (dou)
+    on = [dict(off[0], lenses=["dou"])]
+    result2 = porter.analyze_forces(beliefs, on, {}, run_date=RUN,
+                                    draft_fn=draft, min_evidence=1)
+    assert len(result2) == 1 and result2[0]["dimension"] == "supplier_power"
+
+
+def test_signal_gate_kill_switch(monkeypatch):
+    # With the gate disabled, an off-signal citation is kept (prior behavior).
+    monkeypatch.setenv("ONCA_FRAMEWORK_SIGNAL_GATE", "0")
+    claim = "Reguladores discutem novas regras que afetam a operação da acme no mercado."
+    off = [{"id": "e0", "entity": "acme", "narrative": claim, "axis": "comparative",
+            "lenses": ["market"], "threat_score": 0.9, "as_of": RUN}]
+    def draft(label, ind, swot, ev):
+        return [{"force": "supplier_power", "text": "X.", "intensity": "high",
+                 "confidence": 0.8, "evidence": [0]}]
+    result = porter.analyze_forces({"acme": _swot_beliefs("acme")}, off, {},
+                                   run_date=RUN, draft_fn=draft, min_evidence=1)
+    assert len(result) == 1
 
 
 # --- analyze_forces ---

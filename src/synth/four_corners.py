@@ -37,6 +37,18 @@ FOUR_CORNERS_PROPOSALS_KEY = "four_corners/proposals.json"
 FRAMEWORK = "four_corners"
 DIMENSIONS = ("drivers", "assumptions", "current_strategy", "capabilities", "response_profile")
 
+from src.synth import framework_common
+from src.synth.framework_common import fz
+
+# ADR #34 — per-dimension evidence binding (axis OR lens). See framework_common.
+DIM_SIGNALS = {
+    "drivers":          (fz("behavioral"),               fz("fatos")),
+    "assumptions":      (fz("thematic"),                 fz("news")),
+    "current_strategy": (fz("comparative"),              fz("ofertas")),
+    "capabilities":     (fz(),                           fz("market", "funds", "inf_diario")),
+    "response_profile": (fz("predictive", "behavioral"), fz()),
+}
+
 DIM_LABELS = {
     "drivers": "Motivações",
     "assumptions": "Premissas",
@@ -86,7 +98,8 @@ def _collect_evidence_ids(narratives: list[dict[str, Any]], *, max_claims: int =
             continue
         seen.add(norm)
         out.append({"id": nid, "claim": claim, "date": feature_store._date_of(n),
-                    "axis": n.get("axis"), "threat_score": _score(n.get("threat_score"))})
+                    "axis": n.get("axis"), "lenses": n.get("lenses") or [],
+                    "threat_score": _score(n.get("threat_score"))})
         if len(out) >= max_claims:
             break
     return out
@@ -246,7 +259,7 @@ def analyze_corners(
         for c in corners:
             if c["confidence"] < min_conf:
                 continue
-            ev_ids = [evidence[j]["id"] for j in c["evidence"] if j < len(evidence)]
+            ev_ids = framework_common.on_signal_ids(c["evidence"], evidence, c["corner"], DIM_SIGNALS)
             if not ev_ids:
                 continue
             proposals.append({

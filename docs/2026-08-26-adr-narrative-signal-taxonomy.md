@@ -1,6 +1,10 @@
 # ADR — Narrative signal taxonomy: unify axis + lens so frameworks can bind per-dimension
 
-- Status: **Scoped, not decided** (2026-08-26). Deliverable of "scope this" — the
+- Status: **Phase 1 SHIPPED** (2026-08-26). Design B (dual-field gate) built,
+  validated by a corpus dry-run (no starved dimension), and deployed — this closes
+  the deferred half of #32. Phase 2 (unified `topic` field) remains a follow-up.
+  Original scoping below.
+- Status (orig): **Scoped, not decided** (2026-08-26). Deliverable of "scope this" — the
   follow-up that unblocks the deferred half of
   [ADR-006 evidence-independence #32](2026-08-25-adr-framework-evidence-independence.md)
   (the strict per-dimension **axis whitelist**) and sharpens grounding/dashboard filters.
@@ -117,6 +121,34 @@ it never silently emits zero — the Validation step catches over-restrictive ro
   (a feeder env flag can bypass the gate).
 - **Phase 2: ~M, moderate risk.** Schema addition + backfill; broader blast radius
   (feed/agent/dashboard) but each piece is additive.
+
+## Phase 1 — as built (2026-08-26)
+
+Shipped exactly as scoped (Design B): `src/synth/framework_common.py`
+(`on_signal_ids`, `on_signal`, `fz`, `ONCA_FRAMEWORK_SIGNAL_GATE` kill-switch) +
+each of the six feeders got its `DIM_SIGNALS` map, `_collect_evidence_ids` now
+carries `lenses`, and `analyze_*` filters cited evidence to on-signal ids (keeping
+the hard no-evidence drop → citations are now axis/lens-valid). Empty-gate decision
+resolved to **drop the dimension** (strict, #32's intent); an unconstrained
+`(∅,∅)` row or an unmapped dimension falls back to "any cited" so nothing silently
+starves.
+
+**Validation dry-run (gate for rollout), 237 live cards — per-dimension on-signal
+coverage, no starved dimension:**
+
+| framework | min-coverage dimension (count) |
+|---|---|
+| porter | new_entrants (24) |
+| pestle | economic (80) |
+| ansoff | diversification (54) |
+| bcg | **dog (8)** |
+| four_corners | **response_profile (7)** |
+| seven_s | current-min structure (85) |
+
+`dog` (silence/longitudinal) and `response_profile` (predictive/behavioral) are the
+axis-only-no-lens dims — sparse by nature, but present, so they bind correctly.
+Rollout is steady-state-safe (append-once dedup means the gate only bites *new*
+proposals). Reversible via `ONCA_FRAMEWORK_SIGNAL_GATE=0`.
 
 ## Open decisions
 

@@ -34,7 +34,8 @@ def _narratives(entity, n=5):
     return [
         {"id": f"n-{entity}-{i}", "entity": entity,
          "narrative": f"Narrative claim {i} about {entity} market position in the Brazilian sector.",
-         "axis": "comparative", "threat_score": 0.5 + i * 0.05, "as_of": RUN}
+         "axis": "comparative", "lenses": ["market", "juros"],
+         "threat_score": 0.5 + i * 0.05, "as_of": RUN}
         for i in range(n)
     ]
 
