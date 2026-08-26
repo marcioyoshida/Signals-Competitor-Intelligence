@@ -1,16 +1,10 @@
 # ADR — Narrative signal taxonomy: unify axis + lens so frameworks can bind per-dimension
 
-- Status: **Phase 1 + 2 SHIPPED** (2026-08-26). Phase 2 (unified `topic`) built at
-  **feed-build time** (not synth time — see note) with a dashboard topic filter + an
-  agent grounding boost. Phase 1 below.
-- Status: **Phase 1 SHIPPED** (2026-08-26). Design B (dual-field gate) built,
-  validated by a corpus dry-run (no starved dimension), and deployed — this closes
-  the deferred half of #32. Phase 2 (unified `topic` field) remains a follow-up.
-  Original scoping below.
-- Status (orig): **Scoped, not decided** (2026-08-26). Deliverable of "scope this" — the
-  follow-up that unblocks the deferred half of
-  [ADR-006 evidence-independence #32](2026-08-25-adr-framework-evidence-independence.md)
-  (the strict per-dimension **axis whitelist**) and sharpens grounding/dashboard filters.
+- Status: **Phase 1 + 2 SHIPPED** (2026-08-26). Phase 1 is the Design B dual-field
+  (axis-OR-lens) gate — closes the deferred half of #32. Phase 2 (unified `topic`)
+  is built at **feed-build time** (not synth time — see note) with a dashboard
+  topic filter + an agent grounding boost. Optional leftover: persist `topic` onto
+  raw narratives. Original scoping below.
 - Builds on [ADR-003 narrative dimensions](2026-08-19-adr-narrative-dimensions.md)
   (the `(subject_type, subject_key, axis)` design space) and the detector pattern.
 

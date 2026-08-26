@@ -129,19 +129,24 @@ mapping, not to leave it failing silently.
 `sec_filings.py` still has a `REPLACE_WITH_YOUR_EMAIL` placeholder in
 HEADERS — SEC blocks requests without a real contact UA.
 
-## What's next (in priority order)
+## What's next (in priority order) — as of 2026-08-26
 
-1. **Stage A quota completion** — track pending Embed V4 requests; open
-   Support case for Titan Embed V2 once Support plan is enabled
-   (`docs/AWS_BEDROCK_QUOTA_TICKET.md`); prove ingestion + Retrieve.
-2. **Stage B quality** — DONE (multi-lens gate, min score, PL floor, as_of;
-   `cvm_fundos` on RCVM 175). Re-enable LLM/KB when quotas allow.
-3. **Next:** Phase 3 delivery (warroom / SNS digest); quota follow-up;
-   optional SEC text extraction / BCB SCR.
-4. **Phase 3** — dashboard + alerts (consume `narratives/` in S3).
-5. **Phase 4** — design partners, then Marketplace SaaS listing.
+Do **not** use the July 19 list below this file's historical sections as current
+priority. Live status is `CLAUDE.md`; ordered follow-on is the
+**Backlog — next candidates** block in `docs/2026-08-16-roadmap.md`. Short form:
 
-Deferred: CNPJ bulk registry (multi-GB), SUSEP + Diário Oficial scrapers.
+1. **Verify & close #33 live** (B3 must not inherit Braskem's RJ).
+2. **Phase 3 alerts** (email/Slack/webhook) — last named Phase 3 leftover.
+3. **Ingest speedup** (news fetch is the pipeline bottleneck after #10).
+4. **Framework belief maintenance** (reconcile + staleness; no per-fw SEED).
+5. **ADR-009 regulatory change intelligence (#28)** and **ADR-011 remainder**
+   (#14 harvest, #7 DFP/ITR). Agent write API (#20), ESG coverage (#30),
+   JUCESP (#26), X/Twitter (#19), CVM/BCB full scan (#2), CI network-marker
+   (#29) + CodeStar GitHub connection (#6) sit behind those.
+
+Deferred (unchanged): CNPJ bulk registry (multi-GB); Reclame Aqui until an
+authorized path exists; FII informe-mensal structured ingest; SOAR/NOISE
+(gated on ADR-005 private tenant).
 
 ## Open decision (unresolved)
 

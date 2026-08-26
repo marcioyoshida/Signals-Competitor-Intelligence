@@ -107,15 +107,35 @@ licensed aggregator (People Data Labs / Explorium), never scraped.
   `src/dashboard/site/index.html` (threat-scored feed, KPI tiles, entity
   timelines, source drill-down). Deployed + validated end-to-end; URL is
   the `DashboardUrl` stack output. Design:
-  `docs/2026-08-14-phase3-dashboard-plan.md`. `threat_score` is still a
-  placeholder heuristic (labeled "estimated" in the UI) — real threat
-  scoring is separate future work. Remaining Phase 3: SNS/email alerts.
+  `docs/2026-08-14-phase3-dashboard-plan.md`. Threat scoring is a bounded,
+  env-configurable blend (legacy saturated 1.0s recomputed on read 2026-08-22);
+  remaining Phase 3: SNS/email alerts.
 - **Pipeline & CI/CD (2026-08-25)** — the Step Functions pipeline is now
   **parallelized** (two-phase: BeliefAxes → Detectors incl. the SWOT+frameworks
   fan-out; ~340s→273s; ingest/news is the remaining bottleneck) and CI/CD moved
   to **AWS CodePipeline + CodeBuild** (`OncaCicdStack`, `buildspec.yml`), replacing
   GitHub Actions — pending a one-time GitHub CodeStar-connection authorization.
   Living backlog + shipped log: `docs/2026-08-16-roadmap.md`.
+- **Intelligence layer (2026-08-25 afternoon → 2026-08-26, HEAD `bb58049`)** —
+  agent + distress + coverage loop + framework evidence gate + topics.
+  - **ADR-010** grounded Q&A LIVE (`OncaAgent` `/api/ask/` + dashboard Perguntar;
+    #21 closed; write-capable Agent API #20 still open).
+  - **ADR-012** entity-tagged RJ/falência store mined from news
+    (`distress/index.json`); DataJud stays anonymized macro trend.
+  - **ADR-013** distress A+B+C + queryable ownership/certifications on `ENT#`;
+    **#33** `attribution_role` gates observer entities (B3/Serasa/regulators)
+    so they are not bound as news subjects — issue still open pending live
+    verify that B3 is not tagged with Braskem's RJ.
+  - **ADR-014** coverage-gap loop + dashboard **Pontos Cegos** drawer + Remediar;
+    AUTO_CODEGEN hard-off.
+  - **#31 CLOSED** — BCB Ranking de Reclamações LIVE (`bcb_reclamacoes`);
+    Reclame Aqui adapter parked (Cloudflare 403, no evasion).
+  - **#32 CLOSED** — six non-TOWS frameworks own-track evidence (no SWOT quorum /
+    no SWOT in the draft prompt) + per-dimension **axis-OR-lens** gate
+    (`src/synth/framework_common.py`).
+  - **#34 Phase 1+2** — unified `topic` derived at **feed-build** time
+    (`src/dashboard/topics.py`), dashboard filter + agent ranking-only boost.
+    Optional remaining: persist `topic` onto raw narratives.
 - **Synthesis-layer evolution (on `main` 2026-08-23)** — narratives grew
   from cross-sectional to longitudinal/threaded/relational, and gained a
   per-entity competitive thesis. Pipeline order is now
