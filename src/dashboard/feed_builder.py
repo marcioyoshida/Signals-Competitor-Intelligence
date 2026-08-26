@@ -16,6 +16,8 @@ from urllib.parse import urlparse
 
 import boto3
 
+from src.dashboard.topics import topic_options, topics_of
+
 try:  # reuse the display-name map Stage B already maintains
     from src.synth.synthesize import ENTITY_LABELS
 except Exception:  # pragma: no cover - dashboard must build even if synth import shifts
@@ -287,6 +289,9 @@ def _project_item(n: dict[str, Any]) -> dict[str, Any]:
         "n_dependents": n.get("n_dependents"),  # ecosystem axis: exposed count
         "entities": n.get("entities") or [],
         "lenses": n.get("lenses") or [],
+        # ADR #34 Phase 2: coarse topic rollup (from lenses+axis) for the dashboard
+        # topic filter + agent grounding boost. Derived here so no synth/backfill.
+        "topics": topics_of(n),
         "is_alert": bool(n.get("is_alert")),
         "threat_score": tscore,
         "threat_factors": tfactors,
@@ -428,6 +433,9 @@ def build_feed(
             {"slug": s, "display_name": (m or {}).get("display_name") or s}
             for s, m in sorted((industry_meta or {}).items())
         ],
+        # ADR #34 Phase 2: topic filter options (only topics present in the feed).
+        "topic_options": topic_options(feed_items),
+
         # Pending entity-registry review proposals (ADR step 5), read-only surface.
         "reviews": reviews or [],
         # Standalone Macro panel: Copom/Selic + Focus (market-wide context).

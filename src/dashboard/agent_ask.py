@@ -31,6 +31,8 @@ import re
 import unicodedata
 from typing import Any, Callable
 
+from src.dashboard.topics import question_topics
+
 # --- request/response helpers (mirror registry_api) -----------------------
 
 def _resp(status: int, body: Any) -> dict[str, Any]:
@@ -210,6 +212,10 @@ def select_grounding(
     scope = scope or {}
     q_toks = set(_tokens(q))
     classification_intent = bool(q_toks & _CLASSIFICATION_CUES)
+    # ADR #34 Phase 2: the question's topic intent (regulacao/pagamentos/…) — a
+    # RANKING signal only (lifts on-topic cards), never a relevance trigger, so a
+    # broad topic like "pagamentos" can't flood the pool with every PIX card.
+    q_topics = question_topics(q)
     scope_entity = _fold(scope.get("entity") or "") or None
     scope_lens = _fold(scope.get("lens") or "") or None
     scope_date = str(scope.get("date") or "") or None
@@ -251,6 +257,8 @@ def select_grounding(
             relevant = True
         if scope_date and str(card.get("date")) == scope_date:
             score += 1.0
+        if q_topics and q_topics & set(card.get("topics") or []):
+            score += 1.5
         if not relevant:
             continue
         if card.get("is_alert"):

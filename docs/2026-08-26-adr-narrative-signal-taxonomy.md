@@ -1,5 +1,8 @@
 # ADR — Narrative signal taxonomy: unify axis + lens so frameworks can bind per-dimension
 
+- Status: **Phase 1 + 2 SHIPPED** (2026-08-26). Phase 2 (unified `topic`) built at
+  **feed-build time** (not synth time — see note) with a dashboard topic filter + an
+  agent grounding boost. Phase 1 below.
 - Status: **Phase 1 SHIPPED** (2026-08-26). Design B (dual-field gate) built,
   validated by a corpus dry-run (no starved dimension), and deployed — this closes
   the deferred half of #32. Phase 2 (unified `topic` field) remains a follow-up.
@@ -149,6 +152,32 @@ coverage, no starved dimension:**
 axis-only-no-lens dims — sparse by nature, but present, so they bind correctly.
 Rollout is steady-state-safe (append-once dedup means the gate only bites *new*
 proposals). Reversible via `ONCA_FRAMEWORK_SIGNAL_GATE=0`.
+
+## Phase 2 — as built (2026-08-26)
+
+**Deviation from the scoped plan, on purpose:** `topic` is derived at **feed-build
+time** (`src/dashboard/topics.py` → `_project_item` stamps per-card `topics`, and
+`build_feed` emits `topic_options`), **not** stamped in `synthesize_candidate`. Why:
+the Phase-2 value is agent grounding + a dashboard filter, both of which read *feed
+cards* — deriving from the `lenses`+`axis` a card already carries needs **no synth
+change, no feed-schema migration on narratives, and no historical backfill** (every
+card, old and new, is classified the instant the feed is built). The framework gate
+stays on axis+lens (Phase 1), so nothing needs `topic` on the raw narrative. If a
+future consumer needs a durable per-narrative `topic`, promoting the same
+`topics_of()` into synth is a drop-in follow-up.
+
+**Taxonomy** (`topics.py`): 9 coarse topics — `regulacao, pagamentos, credito,
+mercado_capitais, fundos, concorrencia, novos_entrantes, analise, geral` — mapped
+from `LENS_TO_TOPIC` + `AXIS_TO_TOPIC`. The ubiquitous `news` lens is deliberately
+**not** a topic (it sits on ~80% of cards); a card matching nothing specific is
+`geral`. A card can carry multiple topics.
+
+**Wiring:** (1) `feed.json` cards gain `topics: [...]`; `feed.topic_options` lists
+the present topics. (2) Dashboard: a `#fTopic` filter select, `state.topic`, and a
+`filtered()` clause. (3) Agent: `topics.question_topics(q)` → a **ranking-only**
+boost (+1.5) in `select_grounding` (never a relevance trigger, so a broad topic like
+`pagamentos` can't flood the pool with every PIX card). Tested: on-topic card wins a
+keyword tie; a zero-overlap on-topic card is still NOT surfaced.
 
 ## Open decisions
 
