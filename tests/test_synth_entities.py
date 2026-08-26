@@ -54,6 +54,35 @@ def test_cited_source_reporting_verb_is_dropped():
     assert not _entity_source_only(["SERASA"], up("Serasa registra alta na inadimplência"))
 
 
+def test_actor_only_guard_distinguishes_actor_from_subject():
+    # issue #33: an observer entity that ACTS ON another party is not the subject.
+    from src.synth.entities import _entity_actor_only
+
+    up = lambda s: " " + s.upper() + " "
+    assert _entity_actor_only(["B3"], up("B3 exclui Braskem de índices por recuperação"))
+    assert _entity_actor_only(["B3"], up("B3 suspende negociação da Viveo"))
+    assert _entity_actor_only(["CVM"], up("CVM multa corretora por irregularidade"))
+    # genuine self-subject news is NOT actor-only -> entity kept
+    assert not _entity_actor_only(["B3"], up("B3 lança novo índice de sustentabilidade"))
+    assert not _entity_actor_only(["B3"], up("B3 registra recorde de volume negociado"))
+
+
+def test_observer_role_dropped_as_actor_but_kept_as_subject(monkeypatch):
+    # B3 (seed role=operator) is dropped when it's only the actor on another party,
+    # but kept when the story is genuinely about B3.
+    import src.synth.entities as ent
+    monkeypatch.setattr(ent, "_alias_map", lambda: {"b3": ["B3"], "braskem": ["BRASKEM"]})
+    actor = resolve_entities(
+        {"source": "News", "title": "B3 exclui Braskem de índices por recuperação extrajudicial"})
+    assert "b3" not in actor  # not attributed the distress/story
+    subject = resolve_entities({"source": "News", "title": "B3 lança novo índice ESG"})
+    assert "b3" in subject
+    # a competitor that also acts is NEVER suppressed by the role guard
+    monkeypatch.setattr(ent, "_alias_map", lambda: {"cielo": ["CIELO"]})
+    assert "cielo" in resolve_entities(
+        {"source": "News", "title": "Cielo antecipa recebíveis de varejista"})
+
+
 def test_match_kinds_uses_provided_ambiguous_set():
     from src.synth.entities import _match_kinds
 

@@ -60,6 +60,7 @@ def put_entity(
     news_search: bool = True,
     ownership: str | None = None,
     certifications: Iterable[str] | None = None,
+    attribution_role: str | None = None,
     table: Any | None = None,
 ) -> dict[str, Any]:
     """Upsert an entity + its ALIAS#/CNPJ# lookup items. Returns the entity item.
@@ -138,6 +139,11 @@ def put_entity(
         entity["certifications"] = sorted(
             {str(c).strip() for c in certifications if str(c).strip()}
         )
+    #  - attribution_role: how news naming this entity is attributed — `competitor`
+    #    (default, lenient) vs `operator`/`data_provider`/`regulator` (bind to
+    #    subject only; the entity is often the actor/source in others' news).
+    if attribution_role:
+        entity["attribution_role"] = str(attribution_role)
     t.put_item(Item=entity)
     for na in norm:
         t.put_item(Item={"pk": f"ALIAS#{na}", "type": "alias", "entity_id": entity_id})
@@ -301,10 +307,93 @@ def backfill_certifications(table: Any | None = None) -> list[str]:
     return changed
 
 
+# --- Attribution role (news-subject binding, issue #33) -------------------
+# Some tracked entities are habitually the *actor / venue / source* of news that
+# is really ABOUT another company — a market operator (B3) delists/suspends other
+# issuers, a data vendor / credit bureau (Serasa, Economatica, Boa Vista, Quod) is
+# cited for figures about others. Attributing those third-party-subject narratives
+# to them poisons every downstream signal (feed, threat scores, SWOT, distress —
+# see the B3 "recuperação extrajudicial" false positive). This curated role tells
+# resolve_entities to attribute such an entity ONLY when it is the story's subject,
+# not when it is merely the actor/source. `competitor` (default) keeps the normal,
+# lenient attribution — a competitor that also acts (e.g. Cielo antecipando
+# recebíveis) is never suppressed.
+ATTRIBUTION_ROLES = ("competitor", "operator", "data_provider", "regulator")
+ATTRIBUTION_ROLE: dict[str, str] = {
+    "b3": "operator",                 # bolsa/depositária — delista/suspende emissores
+    "cvm": "regulator",
+    "bcb": "regulator",
+    "bacen": "regulator",
+    "susep": "regulator",
+    "previc": "regulator",
+    "coaf": "regulator",
+    "cade": "regulator",
+    "serasa": "data_provider",        # bureau de crédito — citado por dados de terceiros
+    "serasa_experian": "data_provider",
+    "boa_vista": "data_provider",
+    "quod": "data_provider",
+    "economatica": "data_provider",   # provedor de dados de mercado
+    "anbima": "data_provider",
+    "neurotech": "data_provider",
+}
+
+
+def classify_attribution_role(entity: dict[str, Any]) -> str:
+    """An entity's news-attribution role. Curated seed wins; else a written
+    `attribution_role`; else `competitor` (the default, lenient attribution)."""
+    eid = str(entity.get("entity_id") or "")
+    if eid in ATTRIBUTION_ROLE:
+        return ATTRIBUTION_ROLE[eid]
+    if entity.get("attribution_role") in ATTRIBUTION_ROLES:
+        return entity["attribution_role"]
+    return "competitor"
+
+
+def backfill_attribution_roles(table: Any | None = None) -> list[tuple[str, str]]:
+    """Set `attribution_role` on every active entity from
+    classify_attribution_role. Idempotent; returns [(id, role)] changed."""
+    t = _table(table)
+    changed: list[tuple[str, str]] = []
+    for e in list_entities(table=t):
+        want = classify_attribution_role(e)
+        if e.get("attribution_role") != want:
+            update_entity(e["entity_id"], {"attribution_role": want}, table=t)
+            changed.append((e["entity_id"], want))
+    return changed
+
+
+def set_attribution_role(entity_id: str, role: str, *, table: Any | None = None) -> bool:
+    """Curate an entity's attribution role (must be a known role). True if changed."""
+    if role not in ATTRIBUTION_ROLES:
+        raise ValueError(f"unknown attribution_role: {role!r}")
+    t = _table(table)
+    e = get_entity(entity_id, table=t)
+    if not e or e.get("attribution_role") == role:
+        return False
+    update_entity(entity_id, {"attribution_role": role}, table=t)
+    return True
+
+
+_ROLE_MAP_CACHE: dict[str, str] | None = None
+
+
+def load_attribution_roles(table: Any | None = None, force: bool = False) -> dict[str, str]:
+    """{entity_id: attribution_role} for every active entity (cached), curated
+    seed overriding any written value. Drives resolve_entities' subject-binding."""
+    global _ROLE_MAP_CACHE
+    if _ROLE_MAP_CACHE is not None and not force:
+        return _ROLE_MAP_CACHE
+    roles: dict[str, str] = {}
+    for e in list_entities(table=table):
+        roles[e["entity_id"]] = classify_attribution_role(e)
+    _ROLE_MAP_CACHE = roles
+    return roles
+
+
 def list_entity_attributes(table: Any | None = None) -> dict[str, dict[str, Any]]:
     """Compact per-entity classification map for the feed/agent: every active
-    entity → {label, ownership, certifications, ticker, industries}. Ownership is
-    always derived (so it is present even when not yet written to the record)."""
+    entity → {label, ownership, certifications, ticker, industries, attribution_role}.
+    Ownership/role are always derived (present even when not yet written)."""
     out: dict[str, dict[str, Any]] = {}
     for e in list_entities(table=table):
         out[e["entity_id"]] = {
@@ -313,6 +402,7 @@ def list_entity_attributes(table: Any | None = None) -> dict[str, dict[str, Any]
             "certifications": e.get("certifications") or [],
             "ticker": e.get("ticker"),
             "industries": e.get("industries") or [],
+            "attribution_role": classify_attribution_role(e),
         }
     return out
 
@@ -1081,10 +1171,11 @@ def set_news_safe(entity_id: str, value: bool = True, table: Any | None = None) 
 
 
 def clear_cache() -> None:
-    global _ALIAS_MAP_CACHE, _TRUST_MAP_CACHE, _AMBIG_TOKENS_CACHE
+    global _ALIAS_MAP_CACHE, _TRUST_MAP_CACHE, _AMBIG_TOKENS_CACHE, _ROLE_MAP_CACHE
     _ALIAS_MAP_CACHE = None
     _TRUST_MAP_CACHE = None
     _AMBIG_TOKENS_CACHE = None
+    _ROLE_MAP_CACHE = None
 
 
 # --- Curation CRUD (operator API surface) --------------------------------------
@@ -1095,7 +1186,7 @@ def clear_cache() -> None:
 # Fields an operator may PATCH, with how each is normalized. Protected keys
 # (pk, type, entity_id, canonical_id, aliases, alias_forms, cnpj_roots) are never
 # writable through the patch path.
-_PATCH_STR = frozenset({"display_name", "news_term", "fatos_term", "confidence", "sector", "license_class", "ticker", "ownership"})
+_PATCH_STR = frozenset({"display_name", "news_term", "fatos_term", "confidence", "sector", "license_class", "ticker", "ownership", "attribution_role"})
 _PATCH_BOOL = frozenset({"news_safe", "active", "news_search"})
 
 

@@ -45,6 +45,38 @@ def test_put_entity_writes_lookup_items_and_resolves():
     assert er.resolve_by_alias("unknown", table=t) is None
 
 
+def test_attribution_role_classify_backfill_and_patch():
+    t = FakeTable()
+    # a seed observer (B3), a curated-value observer, and a plain competitor
+    er.put_entity("b3", "B3", ["B3"], ticker="B3SA3", table=t)
+    er.put_entity("acme_data", "Acme Data", ["ACME DATA"],
+                  attribution_role="data_provider", table=t)
+    er.put_entity("nubank", "Nubank", ["NUBANK"], table=t)
+    assert er.classify_attribution_role(er.get_entity("b3", table=t)) == "operator"
+    assert er.classify_attribution_role(er.get_entity("acme_data", table=t)) == "data_provider"
+    assert er.classify_attribution_role(er.get_entity("nubank", table=t)) == "competitor"
+
+    changed = dict(er.backfill_attribution_roles(table=t))
+    assert changed["b3"] == "operator" and changed["nubank"] == "competitor"
+    assert er.get_entity("b3", table=t)["attribution_role"] == "operator"
+    # idempotent
+    assert er.backfill_attribution_roles(table=t) == []
+
+    roles = er.load_attribution_roles(table=t, force=True)
+    assert roles["b3"] == "operator" and roles["nubank"] == "competitor"
+    attrs = er.list_entity_attributes(table=t)
+    assert attrs["b3"]["attribution_role"] == "operator"
+
+    # patch through the operator API surface + validation
+    assert er.set_attribution_role("nubank", "competitor", table=t) is False  # unchanged
+    assert er.update_entity("nubank", {"attribution_role": "operator"}, table=t)["attribution_role"] == "operator"
+    try:
+        er.set_attribution_role("nubank", "bogus", table=t)
+        assert False, "expected ValueError"
+    except ValueError:
+        pass
+
+
 def test_news_query_term_cleans_and_overrides():
     # cleaned display_name
     assert er.news_query_term("nubank", "Nubank / Nu Holdings") == "Nubank"

@@ -80,6 +80,53 @@ def _trust_map() -> dict[str, bool]:
     return {}
 
 
+def _attribution_role_map() -> dict[str, str]:
+    """{entity_id: attribution_role} — the registry when configured, else the
+    curated seed (so operator/data_provider/regulator entities are subject-bound
+    even before a backfill and in tests). See entity_registry.ATTRIBUTION_ROLE."""
+    from src.synth import entity_registry
+    if os.environ.get("ONCA_ENTITIES_TABLE"):
+        try:
+            roles = entity_registry.load_attribution_roles()
+            if roles:
+                return roles
+        except Exception as exc:  # pragma: no cover - graceful fallback
+            print(f"Warning: attribution-role map unavailable, using seed: {exc}")
+    return dict(entity_registry.ATTRIBUTION_ROLE)
+
+
+# Roles whose entities are habitually the actor/venue/source of OTHER companies'
+# news — attribute a narrative to them only when they are its subject (issue #33).
+_OBSERVER_ROLES: frozenset[str] = frozenset({"operator", "data_provider", "regulator"})
+
+# Action-on-another-party verb stems (uppercase blob, accents retained). When an
+# observer-role entity is immediately followed by one of these, it is the ACTOR of
+# the event, not its subject ("B3 EXCLUI Braskema...", "CVM MULTA a corretora").
+# Deliberately conservative — genuine self-news verbs (LANÇA/ANUNCIA/REGISTRA) are
+# excluded so an operator's own story survives.
+_ACTOR_VERB = re.compile(
+    r"\s+(?:EXCLU|RETIR|REMOV|SUSPEND|REBAIX|NOTIFIC|PROCESS|ACION|SANCION|MULT|"
+    r"INVESTIG|DESENQUADR|INTIM|AUTU|FISCALIZ|PENALIZ|DELIST|EXPULS|ADVERT|PUNE|"
+    r"PUNI|BARR|APLICA MULTA|VETA|VET[AO])\w*"
+)
+
+
+def _entity_actor_only(aliases: list[str], blob: str) -> bool:
+    """True iff every whole-word mention of the entity is immediately FOLLOWED by
+    an action-on-another-party verb (so it is the actor, not the story's subject)."""
+    matched = False
+    for alias in aliases:
+        token = str(alias).upper().strip()
+        if not token or token.startswith("TICKER:"):
+            continue
+        anchored = re.compile(rf"(?<!{_WORD}){re.escape(token)}(?!{_WORD})")
+        for m in anchored.finditer(blob):
+            matched = True
+            if not _ACTOR_VERB.match(blob[m.end():]):
+                return False  # a subject-position mention exists → keep the entity
+    return matched
+
+
 def _ambiguous_tokens() -> frozenset[str]:
     """Bare tokens that are common words (resolve only in structured sources).
 
@@ -320,6 +367,7 @@ def resolve_entities(item: dict[str, Any]) -> list[str]:
     free_text = str(item.get("source") or "").upper() in _FREE_TEXT_SOURCES
     trust = _trust_map()
     ambig = _ambiguous_tokens()
+    roles = _attribution_role_map()
     found: list[str] = []
     for entity_id, aliases in _alias_map().items():
         # Default trusted=True: the built-in seed is all curated, and a registry
@@ -337,6 +385,17 @@ def resolve_entities(item: dict[str, Any]) -> list[str]:
         # a cited data source is not the story's subject. A strong ticker id (a
         # structured assertion) is exempt.
         if free_text and "strong" not in kinds and _entity_source_only(aliases, blob):
+            continue
+        # Attribution-role guard (issue #33): operator/data_provider/regulator
+        # entities are named in others' news as the actor/venue/source. Attribute
+        # to them only in a genuine subject position — drop a match that is ONLY a
+        # cited source or ONLY the actor of an action on another party. A strong
+        # ticker match (its own filing) is exempt: that story is structurally its.
+        if (
+            "strong" not in kinds
+            and roles.get(entity_id, "competitor") in _OBSERVER_ROLES
+            and (_entity_source_only(aliases, blob) or _entity_actor_only(aliases, blob))
+        ):
             continue
         found.append(entity_id)
     for parent in known_parents(item):
