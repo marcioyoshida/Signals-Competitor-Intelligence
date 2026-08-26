@@ -1,6 +1,10 @@
 # ADR 006 — Addendum: framework evidence-independence (own-track evidence, TOWS exempt)
 
-- Status: **Decided, not built** (2026-08-25). Records a backlog decision surfaced
+- Status: **Partially SHIPPED** (2026-08-25, `<pending>`). Decisions 1–3 built &
+  deployed; decisions 4–5 (the strict per-axis whitelist) **deferred** — see the
+  *Implementation reality* section: live narratives are ~83% `axis: None`, so a
+  strict axis whitelist would drop the bulk of framework evidence and collapse
+  proposals to near-zero. Records a backlog decision surfaced
   while reviewing the parallelization work (issue #10) — see
   [pipeline-parallel note] and the base ADR
   [2026-08-23-adr-strategy-frameworks-beyond-swot.md](2026-08-23-adr-strategy-frameworks-beyond-swot.md).
@@ -96,6 +100,29 @@ evidence emits nothing; every assertion carries an axis-valid evidence link.**
 - Tests: assert (a) an entity with SWOT-only, zero-narrative input yields zero
   proposals; (b) an assessment citing an off-axis narrative is dropped; (c) TOWS
   still derives from vetted SWOT.
+
+## Implementation reality (2026-08-25)
+
+**Shipped (decisions 1–3):** the six non-TOWS feeders (`porter`/`pestle`/`ansoff`/
+`bcg`/`four_corners`/`seven_s`) now gate eligibility on **narrative evidence only**
+(`eligible_entities`: `n_narr >= min_evidence`; the `n_active_swot` term is gone),
+and the **SWOT-beliefs block was removed from every drafting prompt** — the model
+can now draw ONLY on the cited narrative evidence, not on SWOT bullets. Combined
+with the pre-existing hard "no evidence index → drop" gate in `_parse_draft` +
+`analyze_*` (`if not ev_ids: continue`), this delivers the *"don't derive from
+SWOT"* decoupling and the *"every assertion carries an evidence link"* floor. TOWS
+is untouched (it stays a SWOT transform, by design).
+
+**Deferred (decisions 4–5, the strict per-axis whitelist):** an audit of the live
+feed found **188 of 227 narratives carry `axis: None`** — only belief-axis/detector
+cards are axis-tagged, while the bulk (plain news, the *richest* framework evidence)
+have no axis. A strict "a dimension emits nothing without ≥1 narrative on its
+declared axis" rule would therefore drop ~83% of evidence and zero out the
+frameworks. The densely-populated field is `lenses` (news/pix/regulatory/entrants/
+juros/fatos/…), not `axis`. So the axis whitelist is **not buildable as specced
+against current data**; it needs either (a) narrative **axis enrichment**, or (b)
+reconceiving the per-dimension binding around `lenses`. Tracked as a follow-up on
+issue #32; NOT shipped to avoid breaking the frameworks.
 
 ## Open questions
 

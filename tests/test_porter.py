@@ -244,6 +244,30 @@ def test_eligible_entities_sorted_by_coverage():
     assert result[0] == "many"
 
 
+def test_swot_only_entity_no_longer_qualifies():
+    # ADR-006 #32: SWOT coverage must NOT create eligibility; only framework-native
+    # narrative evidence counts. Full SWOT but 2 narratives (< min 3) -> excluded.
+    beliefs = {"acme": _swot_beliefs("acme")}  # 4 active SWOT bullets
+    narr_by_ent = {"acme": _narratives("acme", 2)}
+    assert porter.eligible_entities(beliefs, narr_by_ent, min_evidence=3) == []
+    # and end-to-end: no proposals are drafted for a SWOT-only entity
+    result = porter.analyze_forces(beliefs, _narratives("acme", 2), {},
+                                   run_date=RUN, draft_fn=_draft_ok, min_evidence=3)
+    assert result == []
+
+
+def test_draft_prompt_omits_swot():
+    # SWOT bullets are no longer rendered into the drafting prompt (#32); the model
+    # can only draw on the cited narrative evidence.
+    swot = [_bullet("S", "SEGREDO_SWOT_MARKER algo forte")]
+    evidence = [{"id": "n1", "claim": "sinal de mercado relevante", "date": RUN,
+                 "axis": "comparative", "threat_score": 0.9}]
+    prompt = porter._draft_prompt("Acme", ["banking"], swot, evidence)
+    assert "SEGREDO_SWOT_MARKER" not in prompt
+    assert "SWOT" not in prompt
+    assert "sinal de mercado relevante" in prompt  # evidence still present
+
+
 def test_eligible_entities_excludes_already_proposed():
     beliefs = {"a": _swot_beliefs("a")}
     narr_by_ent = {"a": _narratives("a", 5)}

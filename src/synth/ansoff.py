@@ -12,8 +12,9 @@ Fed by existing signal: CVM ofertas (new offerings), CVM IPE fatos relevantes
 (strategic announcements), BCB autorizações (new licenses/market entry), new
 fund classes, and thematic/news narratives about product launches or expansions.
 
-Each entity is analyzed through one bounded LLM call that reads its active SWOT
-beliefs + recent narrative evidence + industry context. Everything is PROPOSED
+Each entity is analyzed through one bounded LLM call that reads its recent
+narrative evidence + industry context (ADR-006 addendum #32: own-track evidence,
+SWOT is not an input; every assessment cites >=1 evidence index). Everything is PROPOSED
 ONLY (propose→vet, never auto-asserted) and flows through the Phase-C vetting UI.
 
 The core `classify_moves()` is pure — it takes a `draft_fn`, so tests use fakes.
@@ -103,10 +104,11 @@ def eligible_entities(
     for ent in set(beliefs.keys()) | set(narratives_by_ent.keys()):
         if ent in already_proposed:
             continue
-        n_active = len(_active_swot(beliefs.get(ent) or {}))
+        # ADR-006 addendum (#32): own-track evidence — eligibility is gated on the
+        # framework's OWN narrative evidence, not on SWOT bullet count.
         n_narr = len(narratives_by_ent.get(ent, []))
-        if n_active + n_narr >= min_evidence:
-            candidates.append((ent, n_active + n_narr))
+        if n_narr >= min_evidence:
+            candidates.append((ent, n_narr))
     candidates.sort(key=lambda x: x[1], reverse=True)
     return [ent for ent, _ in candidates[:max_entities]]
 
@@ -136,11 +138,8 @@ def _draft_prompt(
         f"Competitor: {label}",
         f"Industries: {', '.join(industries) or '(unknown)'}",
         "",
-        "Current SWOT beliefs about this competitor:",
+        "Recent signals (evidence):",
     ]
-    for b in swot_bullets:
-        lines.append(f"  ({b.get('dimension')}) {b.get('text', '')}")
-    lines += ["", "Recent signals (evidence):"]
     for i, e in enumerate(evidence):
         lines.append(f"[{i}] ({e['date']}, {e.get('axis','')}) {e['claim']}")
     lines += [

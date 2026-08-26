@@ -15,8 +15,11 @@ Fed by existing signal already in the narrative store:
 - buyer_power:   thematic + news (customer-side signals)
 - supplier_power: regulatory axis + news (regulation as constraint)
 
-Each entity is analyzed through one bounded LLM call that reads its active SWOT
-beliefs + recent narrative evidence + industry context. Everything is PROPOSED
+Each entity is analyzed through one bounded LLM call that reads its recent
+narrative evidence + industry context. Per the ADR-006 addendum (#32) the analysis
+draws on the framework's OWN narrative evidence, not on the SWOT belief store (only
+TOWS is a SWOT transform); every assessment must still cite >=1 evidence index.
+Everything is PROPOSED
 ONLY (propose→vet, never auto-asserted) and flows through the Phase-C vetting UI.
 
 The core `analyze_forces()` is pure — it takes a `draft_fn`, so tests use fakes.
@@ -109,10 +112,12 @@ def eligible_entities(
     for ent in set(beliefs.keys()) | set(narratives_by_ent.keys()):
         if ent in already_proposed:
             continue
-        n_active = len(_active_swot(beliefs.get(ent) or {}))
+        # ADR-006 addendum (#32): own-track evidence — eligibility is gated on the
+        # framework's OWN narrative evidence, not on SWOT bullet count. An entity
+        # with SWOT coverage but no fresh narratives no longer qualifies.
         n_narr = len(narratives_by_ent.get(ent, []))
-        if n_active + n_narr >= min_evidence:
-            candidates.append((ent, n_active + n_narr))
+        if n_narr >= min_evidence:
+            candidates.append((ent, n_narr))
     candidates.sort(key=lambda x: x[1], reverse=True)
     return [ent for ent, _ in candidates[:max_entities]]
 
@@ -144,11 +149,8 @@ def _draft_prompt(
         f"Competitor: {label}",
         f"Industries: {', '.join(industries) or '(unknown)'}",
         "",
-        "Current SWOT beliefs about this competitor:",
+        "Recent signals (evidence):",
     ]
-    for i, b in enumerate(swot_bullets):
-        lines.append(f"  ({b.get('dimension')}) {b.get('text', '')}")
-    lines += ["", "Recent signals (evidence):"]
     for i, e in enumerate(evidence):
         lines.append(f"[{i}] ({e['date']}, {e.get('axis','')}) {e['claim']}")
     lines += [
