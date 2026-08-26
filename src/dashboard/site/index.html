@@ -402,7 +402,6 @@
       <h2>Feed priorizado por ameaça</h2>
       <div class="filters">
         <select id="fEntity"><option value="">Todas as entidades</option></select>
-        <select id="fTopic"><option value="">Todos os temas</option></select>
         <select id="fLens"><option value="">Todas as fontes</option></select>
         <select id="fDate"><option value="">Todas as datas</option></select>
         <label class="chk"><input type="checkbox" id="fAlert" /> Somente alertas</label>
@@ -530,7 +529,7 @@ function fmtClock(iso) {
 
 let DATA = null;
 // "all" = flat list of distinct events (default); "entity" = one summary card per entity.
-const state = { entity: "", topic: "", lens: "", date: "", alert: false, q: "", view: "all", indOpen: new Set() };
+const state = { entity: "", lens: "", date: "", alert: false, q: "", view: "all", indOpen: new Set() };
 
 function applyFeed(initial) {
   const checked = DATA.generated_at ? ` · verificado ${fmtDateTime(DATA.generated_at)}` : "";
@@ -892,9 +891,6 @@ function renderLegend() {
 function populateFilters() {
   const ent = document.getElementById("fEntity");
   DATA.entities.forEach(e => ent.add(new Option(e.label, e.entity)));
-  // Topic filter (ADR #34 Phase 2): options are the topics present in this feed.
-  const topSel = document.getElementById("fTopic");
-  (DATA.topic_options || []).forEach(t => topSel.add(new Option(t.label, t.slug)));
   const lenses = [...new Set(DATA.feed.flatMap(f => f.lenses))].sort((a, b) => lensLabel(a).localeCompare(lensLabel(b)));
   const lensSel = document.getElementById("fLens");
   lenses.forEach(l => lensSel.add(new Option(lensLabel(l), l)));
@@ -902,7 +898,6 @@ function populateFilters() {
   [...DATA.dates].reverse().forEach(d => dSel.add(new Option(fmtDate(d), d)));
 
   ent.onchange = e => { state.entity = e.target.value; syncEntityHighlight(); render(); };
-  topSel.onchange = e => { state.topic = e.target.value; render(); };
   lensSel.onchange = e => { state.lens = e.target.value; render(); };
   dSel.onchange = e => { state.date = e.target.value; render(); };
   document.getElementById("fAlert").onchange = e => { state.alert = e.target.checked; render(); };
@@ -912,7 +907,6 @@ function populateFilters() {
 function filtered() {
   return DATA.feed.filter(f =>
     (!state.entity || f.entity === state.entity) &&
-    (!state.topic || (f.topics || []).includes(state.topic)) &&
     (!state.lens || f.lenses.includes(state.lens)) &&
     (!state.date || f.date === state.date) &&
     (!state.alert || f.is_alert) &&

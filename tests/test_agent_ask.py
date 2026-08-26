@@ -107,26 +107,6 @@ def test_select_entity_name_outranks_generic_keyword():
     assert cards[0]["id"] == "itau"
 
 
-def test_select_topic_boost_breaks_tie():
-    # two cards share the SAME keyword overlap with the question; the one whose
-    # topic matches the question's intent (regulação) ranks first.
-    feed = [
-        {"id": "reg", "entity": "itau", "entity_label": "Itaú", "topics": ["regulacao"],
-         "narrative": "Mudança de norma afeta o mercado."},
-        {"id": "pay", "entity": "itau", "entity_label": "Itaú", "topics": ["pagamentos"],
-         "narrative": "Novidade de produto afeta o mercado."},
-    ]
-    cards = aa.select_grounding("qual mudança regulatória do BACEN afeta o mercado?", feed)
-    assert cards[0]["id"] == "reg"
-
-
-def test_select_topic_is_ranking_not_relevance():
-    # a purely on-topic card with ZERO keyword overlap is NOT surfaced (topic is a
-    # ranking signal, never a relevance trigger — no flooding).
-    feed = [{"id": "p", "entity": "x", "topics": ["pagamentos"], "narrative": "zzz"}]
-    assert aa.select_grounding("como está o pix hoje?", feed) == []
-
-
 def test_select_drops_zero_overlap():
     cards = aa.select_grounding("zzzqqq inexistente", _feed()["feed"])
     assert cards == []
