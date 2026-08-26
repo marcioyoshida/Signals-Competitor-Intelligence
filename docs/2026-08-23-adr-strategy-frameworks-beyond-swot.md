@@ -1,6 +1,7 @@
 # ADR 006 — Beyond SWOT: a framework-parametric belief store (TOWS, Porter, PESTLE, 7S, Four Corners, Ansoff, BCG)
 
 - Status: **All shipped** (2026-08-23): TOWS, Porter, PESTLE, Ansoff, BCG, Four Corners, 7S-visible
+- **Addendum 2026-08-25** ([framework evidence-independence](2026-08-25-adr-framework-evidence-independence.md), issue #32): the six non-TOWS frameworks get own-track evidence (SWOT no longer counts toward quorum / not citable); hard per-axis anti-fabrication gate; TOWS stays SWOT-derived. Decided, not built.
 - Sourced from **issue #3 — "Add new Strategy Frameworks"** (owner-filed): six
   candidate frameworks scored by adoption / strengths / weaknesses / **OSINT
   feasibility** (TOWS, PESTLE, Porter's Five Forces, SOAR, NOISE, McKinsey 7S).
