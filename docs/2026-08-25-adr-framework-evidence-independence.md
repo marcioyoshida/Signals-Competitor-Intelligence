@@ -113,7 +113,15 @@ with the pre-existing hard "no evidence index → drop" gate in `_parse_draft` +
 SWOT"* decoupling and the *"every assertion carries an evidence link"* floor. TOWS
 is untouched (it stays a SWOT transform, by design).
 
-**Deferred (decisions 4–5, the strict per-axis whitelist):** an audit of the live
+**UPDATE 2026-08-26 — decisions 4–5 now SHIPPED** (not as an axis-only whitelist but
+as an **axis-OR-lens** gate; see [narrative signal taxonomy](2026-08-26-adr-narrative-signal-taxonomy.md),
+Phase 1). Each dimension binds via `DIM_SIGNALS = (axis_set, lens_set)`; a cited
+evidence is on-signal iff its axis or a lens matches. Validated by a corpus dry-run
+(no starved dimension). This is the "hard, axis/lens-valid evidence link" the
+decision intended, realized against the real corpus shape. The original axis-only
+deferral note is kept below for the record.
+
+**Deferred [SUPERSEDED — see UPDATE above] (decisions 4–5, the strict per-axis whitelist):** an audit of the live
 feed found **188 of 227 narratives carry `axis: None`** — only belief-axis/detector
 cards are axis-tagged, while the bulk (plain news, the *richest* framework evidence)
 have no axis. A strict "a dimension emits nothing without ≥1 narrative on its
