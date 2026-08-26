@@ -871,10 +871,19 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         if not upd:
             continue
         run_date = (n.get("run_date") or n.get("as_of") or "")[:10]
+        #BEFORE (lines 874-877)
+        #changed: dict[str, list[dict[str, Any]]] = {}
+        #for fw, rows in upd.items():
+        #    fresh = [{"dimension": r["dimension"], "text": r["text"], "confidence": r["confidence"]}
+        #             for r in rows if r.get("date") == run_date]
+        # AFTER
         changed: dict[str, list[dict[str, Any]]] = {}
         for fw, rows in upd.items():
+        # Include all framework strips citing this narrative; the bullet date
+        # is stable (not re-computed on approval), so stale dates are fine.
             fresh = [{"dimension": r["dimension"], "text": r["text"], "confidence": r["confidence"]}
-                     for r in rows if r.get("date") == run_date]
+                for r in rows]
+        
             if fresh:
                 changed[fw] = fresh
         if changed:
