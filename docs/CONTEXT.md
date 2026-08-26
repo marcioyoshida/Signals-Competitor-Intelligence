@@ -135,11 +135,10 @@ Do **not** use the July 19 list below this file's historical sections as current
 priority. Live status is `CLAUDE.md`; ordered follow-on is the
 **Backlog — next candidates** block in `docs/2026-08-16-roadmap.md`. Short form:
 
-1. **Verify & close #33 live** (B3 must not inherit Braskem's RJ).
-2. **Phase 3 alerts** (email/Slack/webhook) — last named Phase 3 leftover.
-3. **Ingest speedup** (news fetch is the pipeline bottleneck after #10).
-4. **Framework belief maintenance** (reconcile + staleness; no per-fw SEED).
-5. **ADR-009 regulatory change intelligence (#28)** and **ADR-011 remainder**
+1. **Phase 3 alerts** (email/Slack/webhook) — last named Phase 3 leftover.
+2. **Ingest speedup** (news fetch is the pipeline bottleneck after #10).
+3. **Framework belief maintenance** (reconcile + staleness; no per-fw SEED).
+4. **ADR-009 regulatory change intelligence (#28)** and **ADR-011 remainder**
    (#14 harvest, #7 DFP/ITR). Agent write API (#20), ESG coverage (#30),
    JUCESP (#26), X/Twitter (#19), CVM/BCB full scan (#2), CI network-marker
    (#29) + CodeStar GitHub connection (#6) sit behind those.

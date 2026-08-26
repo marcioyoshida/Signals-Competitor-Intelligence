@@ -123,9 +123,10 @@ licensed aggregator (People Data Labs / Explorium), never scraped.
   - **ADR-012** entity-tagged RJ/falência store mined from news
     (`distress/index.json`); DataJud stays anonymized macro trend.
   - **ADR-013** distress A+B+C + queryable ownership/certifications on `ENT#`;
-    **#33** `attribution_role` gates observer entities (B3/Serasa/regulators)
-    so they are not bound as news subjects — issue still open pending live
-    verify that B3 is not tagged with Braskem's RJ.
+    **#33 CLOSED** — `attribution_role` gates observer entities (B3/Serasa/
+    regulators); distress mining binds the RJ clause to its subject (not the
+    co-mentioned actor); agent distress-intent questions ground **only** on
+    `distress:` store cards (never a news card that names a third-party filing).
   - **ADR-014** coverage-gap loop + dashboard **Pontos Cegos** drawer + Remediar;
     AUTO_CODEGEN hard-off.
   - **#31 CLOSED** — BCB Ranking de Reclamações LIVE (`bcb_reclamacoes`);

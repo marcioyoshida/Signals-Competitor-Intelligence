@@ -220,6 +220,90 @@ def test_answer_grounds_on_distress_store():
     assert r["grounded"] and r["citations"][0]["entity"] == "banco_master"
 
 
+def _b3_poison_card():
+    # live #33 card: entity=B3, narrative is about Braskem's RJ — must never
+    # ground a distress-status question.
+    return {
+        "id": "cand-ent-b3", "date": "2026-08-24", "entity": "b3",
+        "entity_label": "B3", "entities": ["b3"], "lenses": ["news"],
+        "is_alert": False, "threat_score": 0.44,
+        "narrative": ("A B3 tem enfrentado desafios recentes, com ações de "
+                      "empresas como Braskem e Viveo sendo removidas de seus "
+                      "índices após pedidos de recuperação extrajudicial. "
+                      "A Braskem despencou após um pedido de recuperação "
+                      "extrajudicial."),
+        "citations": [{"url": "http://x/b3"}],
+    }
+
+
+def test_distress_question_ignores_news_that_mentions_third_party_rj():
+    # issue #33: keyword overlap with "recuperação" must not surface the B3
+    # market-color card; with an empty distress store the agent declines.
+    feed = _feed()
+    feed["feed"] = feed["feed"] + [_b3_poison_card()]
+    calls = []
+    def conv(*a, **k):
+        calls.append(1)
+        return "FATO: A B3 está em recuperação extrajudicial [cand-ent-b3]."
+    r = aa.answer("Quais entidades se encontram em recuperação judicial?",
+                  feed=feed, converser=conv)
+    assert calls == []
+    assert not r["grounded"] and r["answer"] == aa.NO_GROUND_TEXT
+    assert "cand-ent-b3" not in (r.get("considered") or [])
+
+
+def test_distress_question_grounds_only_on_distress_store_not_news():
+    # even when a poison news card would rank, the store card is the only
+    # citable evidence and the news id never reaches the model.
+    feed = _feed()
+    feed["feed"] = feed["feed"] + [_b3_poison_card()]
+    feed["distress"] = [{
+        "entity": "banco_master", "kind": "recuperacao_judicial",
+        "label": "Recuperação Judicial", "first_seen": "2026-08-10",
+        "last_seen": "2026-08-24", "latest_title": "Banco Master pede RJ",
+        "latest_url": "http://x/rj",
+    }]
+    feed["entities"].append({"entity": "banco_master", "label": "Banco Master"})
+    captured = {}
+    def conv(user, system=None, max_tokens=700):
+        captured["user"] = user
+        return "Banco Master está em recuperação judicial [distress:banco_master:recuperacao_judicial]."
+    r = aa.answer("quais entidades se encontram em recuperação judicial?",
+                  feed=feed, converser=conv)
+    assert "distress:banco_master:recuperacao_judicial" in captured["user"]
+    assert "cand-ent-b3" not in captured["user"]
+    assert r["grounded"] and r["citations"][0]["id"].startswith("distress:")
+    assert "cand-ent-b3" not in (r.get("considered") or [])
+
+
+def test_distress_question_skips_kb_retrieve():
+    feed = _feed()
+    feed["distress"] = [{
+        "entity": "banco_master", "kind": "recuperacao_judicial",
+        "label": "Recuperação Judicial", "first_seen": "2026-08-10",
+        "last_seen": "2026-08-24", "latest_title": "Banco Master pede RJ",
+        "latest_url": "http://x/rj",
+    }]
+    kb_calls = []
+    def kb(q):
+        kb_calls.append(q)
+        return [{"id": "kb:0", "subject": "B3 está em recuperação extrajudicial"}]
+    def conv(user, system=None, max_tokens=700):
+        return "Banco Master está em RJ [distress:banco_master:recuperacao_judicial]."
+    aa.answer("quem está em recuperação judicial?", feed=feed,
+              converser=conv, kb_retrieve=kb)
+    assert kb_calls == []
+
+
+def test_non_distress_question_still_sees_news_cards():
+    # the hard filter is intent-scoped — a B3 *market* question still grounds on news.
+    feed = _feed()
+    feed["feed"] = feed["feed"] + [_b3_poison_card()]
+    cards = aa.select_grounding("o que aconteceu com os índices da B3?",
+                                feed["feed"])
+    assert any(c["id"] == "cand-ent-b3" for c in cards)
+
+
 def test_distress_cards_shape():
     feed = {"entities": [{"entity": "z", "label": "Zé Cia"}],
             "distress": [{"entity": "z", "kind": "falencia", "label": "Falência",
