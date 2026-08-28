@@ -49,397 +49,397 @@ INDUSTRY_KEYWORDS: dict[str, str] = {
 # Stop words / generic tokens that should never become entity brands alone.
 _STOP = frozenset(
     {
-        "FUNDO",
-        "FUNDOS",
-        "INVESTIMENTO",
-        "INVESTIMENTOS",
-        "CLASSE",
-        "COTA",
-        "COTAS",
-        "FIAGRO",
-        "FII",
-        "FIDC",
-        "CRA",
-        "CRI",
-        "DE",
-        "DA",
-        "DO",
-        "DAS",
-        "DOS",
-        "E",
-        "EM",
-        "NAS",
-        "NOS",
-        "CADEIAS",
-        "PRODUTIVAS",
-        "AGROINDUSTRIAIS",
-        "AGRO",
-        "AGROPECUARIA",
-        "IMOBILIARIO",
-        "IMOBILIÁRIO",
-        "RESPONSABILIDADE",
-        "LIMITADA",
-        "RESP",
-        "LTDA",
-        "S.A",
-        "SA",
-        "BANCO",
-        "ASSET",
-        "GESTAO",
-        "GESTÃO",
-        "ADMINISTRADOR",
-        "GESTOR",
+        "o", "a", "os", "as", "de", "da", "do", "das", "dos", "e", "em", "no", "na",
+        "nos", "nas", "um", "uma", "para", "com", "por", "ao", "à", "aos", "às",
+        "que", "se", "su", "seu", "sua", "seus", "suas", "este", "esta", "isto",
+        "the", "of", "and", "or", "in", "on", "at", "to", "for", "by", "from",
+        "fiagro", "fiagros", "fii", "fiis", "fundo", "fundos", "classe", "classes",
+        "cota", "cotas", "imobiliário", "imobiliários", "imobiliaria", "imobiliarias",
+        "agro", "crédito", "credito", "rural", "agrícola", "agricola", "imob",
+        "ltda", "sa", "s.a.", "s/a", "me", "epp", "eireli", "inc", "corp",
     }
 )
 
 
-def _slug(value: str) -> str:
-    return entity_registry._slug(value)
+def _brand_from_name(name: str) -> str:
+    """Extract a short brand-like token sequence from a long fund legal name.
 
-
-def _root8(cnpj: str | None) -> str:
-    d = "".join(ch for ch in str(cnpj or "") if ch.isdigit())
-    return d[:8] if len(d) >= 8 else ""
-
-
-# ---------------------------------------------------------------------------
-# 1. Structured CVM FIAGRO → registry (strong identity path)
-# ---------------------------------------------------------------------------
-
-
-def _profile_from_fiagro(row: dict[str, Any]) -> dict[str, Any]:
-    """Compose a registry-ready profile from a CVM FIAGRO informe row."""
-    name = str(row.get("fund_name") or "").strip()
-    ticker = (row.get("ticker") or "").strip().upper() or None
-    cnpj = row.get("cnpj") or ""
-    root = _root8(cnpj)
-    forms: list[str] = []
-    if name and len(name) >= 4:
-        forms.append(name)
-    if ticker:
-        forms.append(ticker)
-        forms.append(f"TICKER:{ticker}")
-    # Short distinctive brand: first 2–3 meaningful tokens of the name.
-    brand = _brand_from_name(name)
-    if brand and brand.upper() not in {f.upper() for f in forms}:
-        forms.append(brand)
-    display = brand or name or (ticker or f"FIAGRO {root}")
-    entity_id = _slug(ticker or brand or name) or f"fiagro_{root}"
-    return {
-        "entity_id": entity_id,
-        "display_name": display,
-        "aliases": forms,
-        "alias_forms": forms,
-        "cnpj_roots": [root] if root else [],
-        "ticker": ticker,
-        "industries": ["agri-funds"],
-        "sector": "asset-management",
-        "license_class": "FIAGRO",
-        "confidence": "cnpj",
-        "news_term": ticker or brand or display,
-        "fatos_term": None,  # funds rarely file Fato Relevante as issuers
-        "news_search": bool(ticker),  # only search news if we have a distinctive ticker
-        "source_row": {
-            "cnpj": cnpj,
-            "isin": row.get("isin"),
-            "admin": row.get("admin"),
-            "manager": row.get("manager"),
-            "pl": row.get("pl"),
-            "as_of": row.get("as_of"),
-            "url": row.get("url"),
-        },
-    }
-
-
-def _brand_from_name(name: str) -> str | None:
-    """Extract a short distinctive brand from a long legal FIAGRO name.
-
-    e.g. \"KINEA CRÉDITO AGRO FIAGRO-IMOBILIÁRIO\" → \"Kinea Crédito Agro\"
-         \"XP CRÉDITO AGRO - FI NAS CADEIAS...\" → \"XP Crédito Agro\"
+    Prefer the distinctive proper-name span before generic suffixes like
+    FIAGRO / FII / FUNDO / CLASSE. Falls back to the first 3–4 non-stop tokens.
     """
     if not name:
-        return None
-    # Drop parentheticals and after dashes that introduce the type.
-    cleaned = re.split(r"\s+-\s+|/", name)[0]
-    toks = re.split(r"[^A-Za-zÀ-ÿ0-9]+", cleaned)
+        return ""
+    clean = re.sub(r"[\s\u00a0]+", " ", str(name)).strip()
+    # Drop common trailing noise.
+    clean = re.sub(
+        r"\s+(FIAGRO[- ]?I?MO?BILI[AÁ]RIO|FIAGRO|FII|FUNDO DE INVESTIMENTO.*)$",
+        "",
+        clean,
+        flags=re.I,
+    )
+    tokens = [t for t in re.split(r"[^\w\u00c0-\u024f]+", clean) if t]
     keep: list[str] = []
-    for t in toks:
-        if not t:
-            continue
-        if t.upper() in _STOP:
-            if keep:  # stop once we hit a generic after some brand tokens
-                break
+    for t in tokens:
+        if t.lower() in _STOP and keep:
+            break
+        if t.lower() in _STOP:
             continue
         keep.append(t)
         if len(keep) >= 4:
             break
-    if not keep:
-        return None
-    brand = " ".join(keep)
-    return brand if len(brand) >= 3 else None
+    return " ".join(keep) if keep else clean[:40].strip()
+
+
+def _profile_from_fiagro(row: dict[str, Any]) -> dict[str, Any]:
+    """Map a CVM FIAGRO row into an entity_registry profile.
+
+    Strong identity: CNPJ root + optional B3 ticker. Industry fixed to agri-funds.
+    """
+    from src.ingest.cvm_fiagro import _ticker_from_isin  # local import to avoid cycle
+
+    cnpj = "".join(ch for ch in str(row.get("cnpj") or "") if ch.isdigit())
+    root = cnpj[:8] if len(cnpj) >= 8 else ""
+    isin = (row.get("isin") or "").strip().upper()
+    ticker = _ticker_from_isin(isin) if isin else None
+    name = (row.get("nome") or row.get("name") or "").strip()
+    brand = _brand_from_name(name)
+    entity_id = (ticker or brand or root or "unknown").lower().replace(" ", "-")
+    # Prefer ticker as id when present (stable, short, B3-native).
+    if ticker:
+        entity_id = ticker.lower()
+    admin = (row.get("admin") or row.get("administrador") or "").strip()
+    gestor = (row.get("gestor") or "").strip()
+    pl = row.get("pl") or row.get("patrimonio_liquido")
+    aliases = [a for a in [name, brand, ticker, isin] if a]
+    if admin:
+        aliases.append(admin)
+    if gestor:
+        aliases.append(gestor)
+    # Dedupe while preserving order.
+    seen: set[str] = set()
+    uniq_aliases: list[str] = []
+    for a in aliases:
+        k = a.lower()
+        if k not in seen:
+            seen.add(k)
+            uniq_aliases.append(a)
+    profile: dict[str, Any] = {
+        "entity_id": entity_id,
+        "display_name": brand or name or entity_id,
+        "aliases": uniq_aliases,
+        "cnpj_roots": [root] if root else [],
+        "industries": ["agri-funds"],
+        "ticker": ticker,
+        "isin": isin or None,
+        "admin": admin or None,
+        "gestor": gestor or None,
+        "pl": pl,
+        "source": "cvm_fiagro",
+        "confidence": "cnpj",
+        "raw_name": name,
+    }
+    return profile
 
 
 def discover_fiagro(
     *,
-    min_pl: float = 50_000_000.0,  # R$ 50mi floor — drop micro vehicles
+    min_pl: float = 50_000_000.0,
     max_new: int = 40,
     auto_create: bool = True,
     table: Any | None = None,
     rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Sync the CVM FIAGRO universe into the entities registry.
+    """Sync CVM FIAGRO universe into the entities registry.
 
-    For each fund (PL ≥ ``min_pl``):
-      - If CNPJ root already resolves → enrich (add ticker / industries / aliases).
-      - Else if ``auto_create`` → write a new ENT# (confidence=cnpj, industry=agri-funds).
-      - Else → queue a discovery review proposal.
+    For each class with PL ≥ min_pl:
+      - resolve by CNPJ root or ticker alias
+      - if hit → enrich (aliases, industries, ticker, admin/gestor)
+      - if miss and auto_create → put_entity (strong CNPJ identity)
+      - if miss and not auto_create → propose_review
 
-    Returns a report: {fetched, already, created, enriched, proposed, skipped, errors}.
+    Returns a report dict with created / enriched / already / proposed / skipped.
     """
+    from src.ingest import cvm_fiagro
+
     if rows is None:
-        from src.ingest import cvm_fiagro
-
         rows = cvm_fiagro.fetch_fiagro(min_pl=min_pl)
-
     report: dict[str, Any] = {
         "fetched": len(rows),
-        "already": 0,
         "created": [],
         "enriched": [],
+        "already": 0,
         "proposed": [],
-        "skipped": 0,
+        "skipped": [],
         "errors": [],
     }
-    t = entity_registry._table(table)
-    created_count = 0
+    if not rows:
+        return report
+
+    # Cap auto-create volume per run (cost + review load).
+    new_budget = max_new if auto_create else 0
 
     for row in rows:
-        if created_count >= max_new and auto_create:
-            report["skipped"] += 1
-            continue
         try:
             profile = _profile_from_fiagro(row)
-            root = (profile["cnpj_roots"] or [None])[0]
-            existing_id = (
-                entity_registry.resolve_by_cnpj(root, table=t) if root else None
-            )
-            # Also try ticker alias if present.
-            if not existing_id and profile.get("ticker"):
-                existing_id = entity_registry.resolve_by_alias(
-                    profile["ticker"], table=t
-                )
+        except Exception as exc:  # pragma: no cover
+            report["errors"].append({"row": row.get("cnpj"), "error": str(exc)})
+            continue
 
-            if existing_id:
-                report["already"] += 1
-                # Enrich: industries, ticker, aliases (non-destructive).
-                changed = _enrich_existing(existing_id, profile, table=t)
+        root = (profile.get("cnpj_roots") or [None])[0]
+        ticker = profile.get("ticker")
+        eid = None
+
+        # 1. Resolve strong id (CNPJ first, then ticker alias).
+        if root:
+            eid = entity_registry.resolve_by_cnpj(root, table=table)
+        if not eid and ticker:
+            eid = entity_registry.resolve_by_alias(ticker, table=table)
+        if not eid:
+            # Last resort: display/brand name (only if unique).
+            brand = profile.get("display_name")
+            if brand:
+                hits = entity_registry.resolve_by_name(brand, table=table)
+                if len(hits) == 1:
+                    eid = hits[0]
+
+        if eid:
+            # Enrich existing: industries + aliases + ticker.
+            try:
+                changed = False
+                if entity_registry.accumulate_aliases(
+                    eid, profile.get("aliases") or [], table=table
+                ):
+                    changed = True
+                # Ensure agri-funds industry.
+                ent = entity_registry.get_entity(eid, table=table) or {}
+                inds = list(ent.get("industries") or [])
+                if "agri-funds" not in inds:
+                    inds.append("agri-funds")
+                    entity_registry.put_entity(
+                        {**ent, "entity_id": eid, "industries": inds}, table=table
+                    )
+                    changed = True
+                # Attach ticker if missing.
+                if ticker and not ent.get("ticker"):
+                    entity_registry.put_entity(
+                        {**ent, "entity_id": eid, "ticker": ticker}, table=table
+                    )
+                    changed = True
                 if changed:
-                    report["enriched"].append(existing_id)
-                continue
+                    report["enriched"].append(eid)
+                else:
+                    report["already"] += 1
+            except Exception as exc:  # pragma: no cover
+                report["errors"].append({"eid": eid, "error": str(exc)})
+            continue
 
-            if not auto_create:
-                rid = entity_registry.propose_review(
-                    "discovery",
-                    key=profile["entity_id"],
-                    entity_id=None,
-                    proposed=profile["display_name"],
-                    reason=f"FIAGRO CVM CNPJ={root} PL={row.get('pl')}",
-                    hint=profile.get("ticker") or root or "",
-                    confidence="cnpj",
-                    table=t,
+        # 2. Missing → auto-create or propose.
+        if auto_create and new_budget > 0 and root:
+            try:
+                # Guard: another entity already owns this brand → review instead.
+                brand = profile["display_name"]
+                if brand and entity_registry.name_owned_by_other(
+                    brand, exclude_id=None, table=table
+                ):
+                    pid = entity_registry.propose_review(
+                        kind="discovery",
+                        payload={
+                            "reason": "name_collision",
+                            "profile": profile,
+                            "evidence": {"source": "cvm_fiagro", "cnpj": root},
+                        },
+                        table=table,
+                    )
+                    report["proposed"].append(pid or brand)
+                    continue
+                new_id = entity_registry.put_entity(
+                    {
+                        "entity_id": profile["entity_id"],
+                        "display_name": profile["display_name"],
+                        "aliases": profile.get("aliases") or [],
+                        "cnpj_roots": profile.get("cnpj_roots") or [],
+                        "industries": ["agri-funds"],
+                        "ticker": ticker,
+                        "confidence": "cnpj",
+                        "source": "cvm_fiagro",
+                        "admin": profile.get("admin"),
+                        "gestor": profile.get("gestor"),
+                    },
+                    table=table,
                 )
-                if rid:
-                    report["proposed"].append(rid)
-                continue
-
-            # Auto-create with strong structured identity.
-            eid = profile["entity_id"]
-            if entity_registry.get_entity(eid, table=t):
-                # slug collision with a different entity — namespace by root
-                eid = f"{eid}_{root}" if root else f"{eid}_fiagro"
-            entity_registry.put_entity(
-                eid,
-                profile["display_name"],
-                profile["aliases"],
-                alias_forms=profile["alias_forms"],
-                cnpj_roots=profile["cnpj_roots"],
-                ticker=profile.get("ticker"),
-                industries=profile["industries"],
-                sector=profile.get("sector"),
-                license_class=profile.get("license_class"),
-                confidence="cnpj",
-                news_term=profile.get("news_term"),
-                news_search=profile.get("news_search", True),
-                table=t,
-            )
-            report["created"].append(eid)
-            created_count += 1
-        except Exception as exc:  # pragma: no cover - best-effort per row
-            report["errors"].append(f"{row.get('cnpj')}: {exc}")
+                report["created"].append(new_id or profile["entity_id"])
+                new_budget -= 1
+            except Exception as exc:  # pragma: no cover
+                report["errors"].append(
+                    {"profile": profile.get("entity_id"), "error": str(exc)}
+                )
+        else:
+            # Propose-only path (or budget exhausted / no CNPJ).
+            try:
+                pid = entity_registry.propose_review(
+                    kind="discovery",
+                    payload={
+                        "reason": "fiagro_missing" if root else "fiagro_no_cnpj",
+                        "profile": profile,
+                        "evidence": {
+                            "source": "cvm_fiagro",
+                            "cnpj": root,
+                            "ticker": ticker,
+                            "pl": profile.get("pl"),
+                        },
+                    },
+                    table=table,
+                )
+                report["proposed"].append(pid or profile["entity_id"])
+            except Exception as exc:  # pragma: no cover
+                report["errors"].append(
+                    {"profile": profile.get("entity_id"), "error": str(exc)}
+                )
 
     return report
-
-
-def _enrich_existing(
-    entity_id: str, profile: dict[str, Any], *, table: Any
-) -> bool:
-    """Attach missing ticker / industries / CNPJ / aliases to an existing entity."""
-    ent = entity_registry.get_entity(entity_id, table=table)
-    if not ent:
-        return False
-    changed = False
-    # CNPJ roots
-    new_roots = entity_registry.add_cnpj_roots(
-        entity_id, profile.get("cnpj_roots") or [], table=table
-    )
-    if new_roots:
-        changed = True
-    # Aliases / ticker forms
-    forms = list(profile.get("alias_forms") or profile.get("aliases") or [])
-    added = entity_registry.accumulate_aliases(entity_id, forms, table=table)
-    if added:
-        changed = True
-    # Industries (union)
-    cur_inds = set(ent.get("industries") or [])
-    want = set(profile.get("industries") or [])
-    if want - cur_inds:
-        entity_registry.set_industries(
-            entity_id, sorted(cur_inds | want), table=table
-        )
-        changed = True
-    # Ticker
-    if profile.get("ticker") and not ent.get("ticker"):
-        if entity_registry.assign_ticker(entity_id, profile["ticker"], table=table):
-            changed = True
-    return changed
-
-
-# ---------------------------------------------------------------------------
-# 2. Keyword harvest from free-text news (propose-only path)
-# ---------------------------------------------------------------------------
 
 
 def harvest_keyword(
     keyword: str,
     news_items: Iterable[dict[str, Any]],
     *,
-    industry: str | None = None,
     min_docs: int = 2,
     table: Any | None = None,
 ) -> list[dict[str, Any]]:
-    """Scan news items for a keyword and collect unresolved associated entities.
+    """Scan news for a keyword and extract unresolved fund/entity brands + tickers.
 
-    For each item whose title/subject mentions ``keyword`` (case-insensitive):
-      - Extract B3 tickers and multi-token company-like spans.
-      - Drop anything that already resolves via ``resolve_entities``.
-      - Aggregate by surface form; keep candidates that appear in ≥ ``min_docs``
-        distinct documents (precision gate).
-
-    Returns candidate dicts ready for ``propose_review`` or further enrichment:
-      {surface, tickers, evidence_ids, industry, count, sample_titles}.
+    Frequency-gated (min_docs): a name must appear in ≥ min_docs distinct items
+    before becoming a candidate. Resolved entities (via resolve_entities) are
+    dropped. Returns a list of candidate dicts with evidence.
     """
-    industry = industry or INDUSTRY_KEYWORDS.get(keyword.upper())
-    key_re = re.compile(re.escape(keyword), re.I)
-    # surface → {docs, tickers, titles}
-    bucket: dict[str, dict[str, Any]] = {}
+    kw = (keyword or "").strip().upper()
+    if not kw:
+        return []
 
-    for item in news_items:
-        title = str(item.get("title") or item.get("subject") or "")
-        blob = f"{title} {item.get('summary') or ''}"
-        if not key_re.search(blob):
+    # Collect candidate tokens / tickers co-occurring with the keyword.
+    # Simple heuristic: B3 tickers + multi-token proper names near the keyword.
+    ticker_hits: dict[str, list[str]] = {}  # ticker → doc ids
+    brand_hits: dict[str, list[str]] = {}  # brand → doc ids
+    evidence: dict[str, list[dict[str, Any]]] = {}
+
+    ticker_re = re.compile(r"\b([A-Z]{4}11)\b")
+    # Brand-ish: 2–4 capitalized tokens not in stop.
+    brand_re = re.compile(
+        r"\b([A-ZÁÉÍÓÚÂÊÔÃÕÇ][\wÁÉÍÓÚÂÊÔÃÕÇáéíóúâêôãõç]{1,20}"
+        r"(?:\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ][\wÁÉÍÓÚÂÊÔÃÕÇáéíóúâêôãõç]{1,20}){1,3})\b"
+    )
+
+    for item in news_items or []:
+        if not isinstance(item, dict):
             continue
-        # Already-resolved entities in this item are not candidates.
-        resolved = set(resolve_entities(item))
-        tickers = detect_b3_tickers(blob.upper())
-        # Candidate surfaces: the tickers themselves + short brands near the keyword.
-        surfaces: list[str] = list(tickers)
-        for m in re.finditer(
-            rf"([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-Za-zÀ-ÿ0-9&.]{{2,}}(?:\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-Za-zÀ-ÿ0-9&.]{{1,}}){{0,3}})\s+(?:{re.escape(keyword)})",
-            blob,
-            re.I,
-        ):
-            surfaces.append(m.group(1).strip())
-
-        doc_id = str(item.get("id") or item.get("url") or title)[:120]
-        for surface in surfaces:
-            if not surface or len(surface) < 3:
-                continue
-            # Skip pure stop / the keyword itself.
-            if surface.upper() in _STOP or surface.upper() == keyword.upper():
-                continue
-            # Skip if any alias of a resolved entity matches this surface.
-            # (cheap check: if resolve_entities on a synthetic item hits something)
-            probe = {"title": surface, "source": "NEWS", "kind": "competitor"}
-            if resolve_entities(probe):
-                continue
-            # Also skip if the surface is already an ALIAS# for someone.
-            if entity_registry.resolve_by_alias(surface, table=table):
-                continue
-            key = surface.upper()
-            b = bucket.setdefault(
-                key,
-                {
-                    "surface": surface,
-                    "tickers": set(),
-                    "docs": set(),
-                    "titles": [],
-                    "industry": industry,
-                },
+        text = " ".join(
+            str(item.get(k) or "") for k in ("title", "text", "summary", "headline")
+        )
+        if not text or kw not in text.upper():
+            continue
+        doc_id = str(item.get("id") or item.get("url") or hash(text) % 10**10)
+        # Tickers
+        for m in ticker_re.finditer(text.upper()):
+            t = m.group(1)
+            ticker_hits.setdefault(t, []).append(doc_id)
+            evidence.setdefault(t, []).append(
+                {"doc_id": doc_id, "snippet": text[max(0, m.start() - 40) : m.end() + 40]}
             )
-            b["docs"].add(doc_id)
-            for tk in tickers:
-                b["tickers"].add(tk)
-            if len(b["titles"]) < 3:
-                b["titles"].append(title[:160])
+        # Brands (only near keyword window to reduce noise)
+        for m in brand_re.finditer(text):
+            brand = m.group(1).strip()
+            # Must contain a non-stop token and not be pure stop.
+            toks = [t for t in brand.split() if t.lower() not in _STOP]
+            if len(toks) < 1:
+                continue
+            # Require the keyword within ~120 chars of the brand match.
+            window = text[max(0, m.start() - 120) : m.end() + 120].upper()
+            if kw not in window:
+                continue
+            brand_hits.setdefault(brand, []).append(doc_id)
+            evidence.setdefault(brand, []).append(
+                {"doc_id": doc_id, "snippet": text[max(0, m.start() - 40) : m.end() + 40]}
+            )
 
-    # Frequency gate
-    out: list[dict[str, Any]] = []
-    for b in bucket.values():
-        if len(b["docs"]) < min_docs:
+    candidates: list[dict[str, Any]] = []
+    industry = INDUSTRY_KEYWORDS.get(kw, INDUSTRY_KEYWORDS.get(kw.rstrip("S"), None))
+
+    def _freq_ok(ids: list[str]) -> bool:
+        return len(set(ids)) >= min_docs
+
+    # Resolve known entities so we don't re-propose them.
+    all_labels = list(ticker_hits.keys()) + list(brand_hits.keys())
+    resolved_map = {}
+    try:
+        resolved_map = resolve_entities(all_labels, table=table) or {}
+    except Exception:
+        resolved_map = {}
+
+    for label, ids in list(ticker_hits.items()) + list(brand_hits.items()):
+        if not _freq_ok(ids):
             continue
-        out.append(
+        # Already resolved?
+        if resolved_map.get(label) or resolved_map.get(label.upper()) or resolved_map.get(
+            label.lower()
+        ):
+            continue
+        # Registry alias / CNPJ / name check.
+        try:
+            if entity_registry.resolve_by_alias(label, table=table):
+                continue
+            if entity_registry.resolve_by_name(label, table=table):
+                continue
+        except Exception:
+            pass
+        candidates.append(
             {
-                "surface": b["surface"],
-                "tickers": sorted(b["tickers"]),
-                "count": len(b["docs"]),
-                "evidence_ids": sorted(b["docs"])[:10],
-                "sample_titles": b["titles"],
-                "industry": b["industry"],
+                "label": label,
+                "kind": "ticker" if re.fullmatch(r"[A-Z]{4}11", label) else "brand",
+                "doc_count": len(set(ids)),
+                "industry": industry,
+                "keyword": kw,
+                "evidence": (evidence.get(label) or [])[:5],
             }
         )
-    out.sort(key=lambda c: c["count"], reverse=True)
-    return out
+
+    # Prefer higher frequency, tickers first.
+    candidates.sort(key=lambda c: (-c["doc_count"], 0 if c["kind"] == "ticker" else 1, c["label"]))
+    return candidates
 
 
 def propose_news_candidates(
     candidates: list[dict[str, Any]],
     *,
     table: Any | None = None,
+    max_propose: int = 20,
 ) -> list[str]:
-    """Queue discovery reviews for news-only candidates. Returns new review_ids."""
-    queued: list[str] = []
-    for c in candidates:
-        rid = entity_registry.propose_review(
-            "discovery",
-            key=c["surface"],
-            entity_id=None,
-            proposed=c["surface"],
-            reason=(
-                f"news keyword harvest: {c['count']} docs; "
-                f"tickers={c.get('tickers')}; industry={c.get('industry')}"
-            ),
-            hint="; ".join(c.get("sample_titles") or [])[:200],
-            confidence="fuzzy",
-            table=table,
-        )
-        if rid:
-            queued.append(rid)
-    return queued
+    """Emit review-queue proposals for news-only discovery candidates.
 
-
-# ---------------------------------------------------------------------------
-# 3. Orchestrator used by Lambda / CLI
-# ---------------------------------------------------------------------------
+    Never auto-creates from news alone (ADR 011 §4). Returns proposal ids.
+    """
+    proposed: list[str] = []
+    for c in (candidates or [])[:max_propose]:
+        try:
+            pid = entity_registry.propose_review(
+                kind="discovery",
+                payload={
+                    "reason": "news_keyword_harvest",
+                    "label": c.get("label"),
+                    "kind": c.get("kind"),
+                    "industry": c.get("industry"),
+                    "keyword": c.get("keyword"),
+                    "doc_count": c.get("doc_count"),
+                    "evidence": c.get("evidence") or [],
+                },
+                table=table,
+            )
+            if pid:
+                proposed.append(pid)
+            else:
+                proposed.append(str(c.get("label")))
+        except Exception:
+            continue
+    return proposed
 
 
 def run_discovery(
