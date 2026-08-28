@@ -1,59 +1,52 @@
 # ADR 011 — Entity discovery, enrichment & profile composition (a separate curated pipeline)
 
-- Status: **Proposed (design only)** — 2026-08-25. Owner-requested. No code ships here.
+- Status: **Partial — first vertical LIVE (2026-08-28).** Design 2026-08-25;
+  FIAGRO structured sync + keyword harvest shipped 2026-08-28. Remaining: general
+  unresolved-mention NER, FII sibling, DFP/ITR → KB, dashboard "Descoberta" tab.
 - Delivers **issue #14 (New Pipeline for Entity Discovery)**, **#22 (B3 ticker → entity)**,
   and **#7 (balance-sheet ingestion → KB for inference)**.
 - Builds on: the entities registry as source-of-truth
-  ([ADR 001](2026-08-17-adr-entities-registry.md)), its `auto_create_from_entrant` /
-  `classify_industries` / step-5 **review queue**, `receita_cnpj` (BrasilAPI CNPJ →
-  razão social / CNAE / QSA), the news-term-cap + "adding entities ≠ volume" findings,
-  the Bedrock KB, and the parallelized pipeline ([issue #10]).
+  ([ADR 002](2026-08-17-adr-entities-registry.md)), auto-create-from-entrant,
+  news-terms derivation, and the step-5 review queue.
 
 ## Context
 
-The registry is hand-curated + seeded, and we grow it in manual batches (mid-size banks,
-2nd-tier fintechs, …). That leaves three gaps:
-
-1. **Unknown unknowns.** Companies recur in the ingested texts (news/DOU/CVM/fatos) that
-   are **not in the registry** — they surface as *unresolved mentions* and are invisible
-   to synthesis. We only add what we happen to think of.
-2. **No market identity.** Listed competitors have **B3 tickers** (ITUB4, BBDC4…) that
-   appear in headlines but aren't linked to their entity — so ticker-keyed news/filings
-   don't cluster, and the dashboard can't show a ticker.
-3. **No financials.** We reason over news/regulatory/frameworks but not **balance sheets**
-   — which are open data for listed issuers and are exactly what strategic frameworks
-   (BCG share/growth, Porter) and the agent (ADR 010) want to ground on.
-
-This is a **pure ingestion + curation gap** (like the operatives person-graph): the
-resolvers and registry exist; what's missing is a producer that *finds*, *enriches*, and
-*proposes* — under strict precision so the registry isn't polluted.
+The owner example is concrete: **Fiagro / agri-funds** has only a handful of players in
+the registry, yet news is full of FIAGRO coverage. The same pattern will repeat for FII,
+new BCB-authorized fintechs, and any industry whose official universe is larger than the
+curated watchlist. Without a discovery pipeline, synthesis and the agent stay blind to
+"unknown unknowns".
 
 ## Decision
 
-A **separate "Entity Discovery & Enrichment" pipeline** (its own schedule/branch, decoupled
-from the daily run — mention-harvest can run daily, CNPJ/DFP enrichment weekly). Six stages,
-reusing existing machinery, **curated end-to-end** (proposals, not silent writes):
+Ship a **curated discovery + enrichment pipeline** (not a silent auto-writer) that:
 
-### 1. Harvest unresolved mentions
-Scan the run's ingested texts (news, DOU, fatos, CVM) for candidate company names/brands
-that **do not resolve** to any registry entity (`resolve_entities` returns nothing for the
-span) yet recur with **finance context**. Gate on frequency (≥N distinct docs/publishers)
-+ the finance-context filter — precision over recall, same discipline as the news
-corroboration floor. Output: candidate surface forms + evidence (doc ids).
+1. **Harvests unresolved mentions** from news / DOU / structured sources.
+2. **Matches against the Registry** (CNPJ, ticker, alias).
+3. **Enriches** from open regulators (CVM, BCB, Receita) when a strong identity exists.
+4. **Proposes** to the review queue (or auto-creates only on strong structured identity).
+5. **Follows up** after an add ("added but not surfacing").
+6. Later feeds **DFP/ITR balance sheets → KB** for financial grounding.
 
-### 2. Detect & assign B3 tickers (#22)
-Regex B3 ticker shapes (`^[A-Z]{4}\d{1,2}$`, e.g. ITUB4, BBDC4, KLBN11) in the texts;
-map each to an issuer via **proximity to a resolved issuer name** and the **CVM issuer
-registry** (companhias abertas — CNPJ↔ticker↔name). Then:
-- existing entity → set its `ticker` field (enrichment);
-- unknown issuer → becomes a discovery candidate (stage 1) carrying a strong structured id.
+Precision-first: strong CNPJ/BCB/CVM structured identity → auto-create; news-only → review
+queue. Nothing pollutes the registry silently.
 
-### 3. Enrich from structured sources (Receita / CNPJ / CVM)
-For a candidate, resolve its **CNPJ** (CVM issuer registry for listed; BrasilAPI/Receita
-by name otherwise), then pull `receita_cnpj` data to compose a **detailed profile**:
-razão social + fantasia (→ `display_name`/aliases), **CNAE → industry** (`classify_industries`),
-`cnpj_roots`, QSA **controllers**, capital. Listed → attach `ticker` + `fatos_term`
-(structured identity, so it resolves from filings not fragile news).
+## Stages (design)
+
+### 1. Unresolved-mention harvest
+Scan recent free-text (news, DOU, fatos) for entity-like tokens / B3 tickers that
+``resolve_entities`` does **not** map. Frequency-gate (≥ N docs) + finance-context gate
+to keep cost/precision bounded. Store candidates with evidence snippets.
+
+### 2. B3 ticker detect / assign (#22 — already shipped for existing entities)
+When a signal carries an ISIN or a bare 4-letter+11 ticker, attach it to the matching
+entity (enrich first). New tickers that do not resolve become discovery candidates.
+
+### 3. CNPJ / Receita profile composition
+For candidates with a CNPJ (from CVM filing, BCB autorização, or news extraction):
+compose a profile (razão social, trade name, CNAE → industry, controllers via QSA
+review-gated, admin/gestor for funds). For FIAGRO/FII the CVM Informe already supplies
+the strong key + metadata.
 
 ### 4. Curated proposal (never silent pollution)
 Emit an entity **create/enrich proposal** to the **step-5 review queue**, with the composed
@@ -97,18 +90,30 @@ evidence, accept/reject; and an **"added but not surfacing"** watch list from st
 
 ## Consequences
 
-- New enrichment cost (CNPJ lookups, DFP/ITR fetch+KB ingest) — bounded by gating + caching;
-  runs on its own cadence, off the daily critical path.
-- The registry grows by *discovery*, not just memory — and every listed entity gains a
-  ticker + financials, unlocking better frameworks and grounded agent answers.
-- Precision risk is the whole game: without the curation gate this pollutes the registry;
-  with it, discovery is proposals a human (or the strong-id rule) promotes.
+- Registry coverage expands without silent pollution or redeploys.
+- Fiagro (and later FII) news becomes fully entity-resolvable once the CVM universe is synced.
+- Agent / synth financial reasoning gains DFP/ITR grounding (#7).
+- Review queue load is bounded by frequency gates + max_new caps.
 
 ## Status / next steps
 
-Proposed. Implementation order: (1) unresolved-mention harvest + candidate store; (2) B3
-ticker detect/assign (enrich existing first — cheapest win); (3) CNPJ/Receita profile
-composition → review-queue proposals; (4) strong-id auto-add + ingestion follow-up probe;
-(5) CVM DFP/ITR fetcher → raw corpus → KB; (6) the discovery/curation dashboard tab.
-Related: `docs/2026-08-16-roadmap.md`, [ADR 010](2026-08-25-adr-agent-chat-ui.md) (financials
-feed the agent).
+**Shipped 2026-08-28 (first vertical — FIAGRO / agri-funds):**
+- `src/ingest/cvm_fiagro.py` — CVM FIAGRO Informe Mensal fetcher (CNPJ, ISIN→ticker,
+  admin/gestor, PL). Live: ~280 classes.
+- `src/synth/entity_discovery.py` — `discover_fiagro()` (structured strong-id auto-create
+  / enrich under `agri-funds`) + `harvest_keyword("FIAGRO", news_items)` (propose-only
+  news path, frequency-gated). Promotion policy matches §4.
+- Wired in `lambda_port` behind `ONCA_ENTITY_DISCOVERY` (default **off** until first
+  live validation). `ONCA_FIAGRO_MIN_PL` (default R$50mi) + `ONCA_ENTITY_DISCOVERY_AUTOCREATE`.
+- Tests: `tests/test_cvm_fiagro.py`, `tests/test_entity_discovery.py`.
+
+This closes the owner example: "few players in registry for Fiagro, plenty in news"
+— the CVM universe is now the source of truth for agri-funds, and news-keyword
+harvest proposes the rest.
+
+Remaining implementation order: (1) general unresolved-mention harvest across all
+news/DOU (not just FIAGRO keyword); (2) FII sibling of `cvm_fiagro` (see
+`2026-08-20-fii-structured-source-plan.md`); (3) CNPJ/Receita profile composition for
+news-only candidates; (4) ingestion follow-up probe ("added but not surfacing");
+(5) CVM DFP/ITR → KB (#7); (6) discovery/curation dashboard tab.
+Related: `docs/2026-08-16-roadmap.md`, [ADR 010](2026-08-25-adr-agent-chat-ui.md).
