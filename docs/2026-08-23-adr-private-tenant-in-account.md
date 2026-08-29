@@ -1,6 +1,13 @@
 # ADR 005 — Private tenant: in-account deployment with registry-by-API and a private-data lens
 
-- Status: **Proposed** (2026-08-23)
+- Status: **SUPERSEDED (2026-08-29)** by
+  [ADR 015 — Distribution: Portal & Marketplace](2026-08-29-adr-distribution-portal-marketplace.md).
+  The "Private tenant" tier is renamed and promoted to the **Marketplace** SKU;
+  its mechanics (in-account stack, resolve-by-API, `tenant_s3` private lens,
+  per-encounter TTL cache, metering on the resolve API) are carried forward
+  unchanged. This doc is retained for the detailed deployment split and build
+  deltas; ADR 015 is canonical for packaging.
+- Original status: **Proposed** (2026-08-23)
 - Extends [ADR 002](2026-08-18-adr-commercial-multitenancy.md) (packaging,
   entitlement, IP boundary, tenancy) and [ADR 001](2026-08-17-adr-entities-registry.md)
   (registry, resolve-not-enumerate). This ADR **revisits ADR 002's rejected

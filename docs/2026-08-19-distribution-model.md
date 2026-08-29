@@ -1,6 +1,13 @@
 # Distribution model — how Onça reaches, scopes, and bills customers
 
-- Status: **Design** (2026-08-19)
+- Status: **SUPERSEDED (2026-08-29)** by
+  [ADR 015 — Distribution: Portal & Marketplace](2026-08-29-adr-distribution-portal-marketplace.md),
+  which collapses the 4-channel / orthogonal-rail / telemetry-spectrum model here
+  into two SKUs (**Portal** = shared infra + telemetry-on; **Marketplace** =
+  dedicated in-account infra + telemetry-off + Registry-by-API). Retained for the
+  detailed entitlement/onboarding/billing flows and the moat diagrams, which ADR
+  015 references but does not restate. Where the two conflict, **ADR 015 wins**.
+- Original status: **Design** (2026-08-19)
 - Builds on [ADR 001](2026-08-17-adr-entities-registry.md) (registry) and
   [ADR 002](2026-08-18-adr-commercial-multitenancy.md) (packaging, entitlement,
   IP boundary, tenancy). ADR 002 fixed the *principles*; this document details
