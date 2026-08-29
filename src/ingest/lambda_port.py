@@ -536,6 +536,38 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as exc:  # pragma: no cover - best-effort, never blocks ingest
             print(f"Warning: entity auto-create skipped: {exc}")
 
+    # Entity discovery — structured CVM FIAGRO universe → registry (ADR 011 / #14).
+    # High-precision path: every row has a CNPJ. Auto-creates / enriches under
+    # industry agri-funds. Gated OFF by default until the first live validation
+    # (set ONCA_ENTITY_DISCOVERY=true). Weekly-ish cost is fine; runs best-effort
+    # inside the same budget window as the rest of ingest.
+    if (
+        os.environ.get("ONCA_ENTITIES_TABLE")
+        and os.environ.get("ONCA_ENTITY_DISCOVERY", "false").lower()
+        in ("1", "true", "yes")
+    ):
+        try:
+            with _source_budget("entity discovery FIAGRO", deadline, per_source):
+                from src.synth import entity_discovery
+
+                min_pl = float(os.environ.get("ONCA_FIAGRO_MIN_PL", "50000000"))
+                auto = os.environ.get(
+                    "ONCA_ENTITY_DISCOVERY_AUTOCREATE", "true"
+                ).lower() in ("1", "true", "yes")
+                report = entity_discovery.discover_fiagro(
+                    min_pl=min_pl, auto_create=auto, max_new=40
+                )
+                print(
+                    "entity discovery FIAGRO: "
+                    f"fetched={report.get('fetched')} "
+                    f"created={len(report.get('created') or [])} "
+                    f"enriched={len(report.get('enriched') or [])} "
+                    f"already={report.get('already')} "
+                    f"proposed={len(report.get('proposed') or [])}"
+                )
+        except Exception as exc:  # pragma: no cover - best-effort, never blocks ingest
+            print(f"Warning: entity discovery skipped: {exc}")
+
     # Pix traction — month-over-month volume moves (first run seeds baseline only).
     pix_by_inst: list[dict[str, Any]] = []
     pix_moves: list[dict[str, Any]] = []

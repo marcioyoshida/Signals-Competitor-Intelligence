@@ -420,6 +420,43 @@ def resolve_by_cnpj(cnpj_root: str, table: Any | None = None) -> str | None:
     return item.get("entity_id") if item else None
 
 
+def resolve_by_name(name: str, table: Any | None = None) -> list[str]:
+    """Return every entity_id a name resolves to — the normalized ALIAS# index
+    first, then any entity whose display_name normalizes to the same key.
+
+    A discovery/curation helper (not a hot path): it returns a *list* so a caller
+    can distinguish a unique hit (safe to enrich) from an ambiguous one (send to
+    review), and an empty list when the name is unknown. Unlike ``resolve_by_alias``
+    (exact alias index only) this also matches display names, which structured
+    discovery keys on before an entity has accumulated aliases.
+    """
+    na = normalize_alias(name)
+    if not na:
+        return []
+    t = _table(table)
+    hits: list[str] = []
+    alias = t.get_item(Key={"pk": f"ALIAS#{na}"}).get("Item")
+    if alias and alias.get("entity_id"):
+        hits.append(alias["entity_id"])
+    for e in _scan_type(t, "entity"):
+        eid = e.get("entity_id")
+        if eid and eid not in hits and normalize_alias(e.get("display_name") or "") == na:
+            hits.append(eid)
+    return hits
+
+
+def name_owned_by_other(
+    name: str, *, exclude_id: str | None = None, table: Any | None = None
+) -> bool:
+    """True when ``name`` already resolves to a *different* entity.
+
+    The guard the discovery auto-create path uses so a newly-found fund/brand
+    never hijacks a name a curated entity already owns (StoneX must not steal
+    StoneCo's name). Mirrors the inline owner check in ``accumulate_aliases``.
+    """
+    return any(eid != exclude_id for eid in resolve_by_name(name, table=table))
+
+
 def _slug(value: str) -> str:
     """Readable, ascii entity_id from a name (accent-folded, lowercase, _-joined)."""
     s = re.sub(r"[^a-z0-9]+", "_", normalize_alias(value).lower()).strip("_")
@@ -615,11 +652,17 @@ def propose_review(
     reason: str = "",
     hint: str = "",
     confidence: str = "fuzzy",
+    payload: dict[str, Any] | None = None,
     table: Any | None = None,
 ) -> str | None:
     """Queue a human-review proposal. Idempotent by (kind, key): an already
     queued OR already decided proposal is left untouched (never reopened, never
-    duplicated). Returns the review_id if newly queued, else ``None``."""
+    duplicated). Returns the review_id if newly queued, else ``None``.
+
+    ``payload`` carries structured evidence for the curator (e.g. a discovery
+    candidate's profile, source, doc_count, sample titles) — surfaced in the
+    review UI but never auto-applied; stored verbatim on the review item.
+    """
     t = _table(table)
     rid = _review_id(kind, key)
     if t.get_item(Key={"pk": f"REVIEW#{rid}"}).get("Item"):
@@ -636,6 +679,7 @@ def propose_review(
             "reason": reason,
             "hint": hint,
             "confidence": confidence,
+            "payload": payload or {},
             "status": "pending",
             "created_at": _now_iso(),
         }
