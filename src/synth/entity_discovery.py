@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import os
 import re
+import unicodedata
 from typing import Any, Iterable
 
 from src.synth import entity_registry
@@ -59,6 +60,61 @@ _STOP = frozenset(
         "ltda", "sa", "s.a.", "s/a", "me", "epp", "eireli", "inc", "corp",
     }
 )
+
+
+# Generic corporate/industry words that are never a brand on their own (applied
+# only to single-token candidates; multi-word names may legitimately contain them).
+_SINGLE_STOP = frozenset(
+    {
+        "banco", "bank", "digital", "fundo", "fundos", "grupo", "group", "classe",
+        "asset", "capital", "holding", "financeira", "financeiro", "seguros",
+        "seguradora", "seguro", "corretora", "gestora", "company", "companhia",
+        "cia", "investimentos", "credito", "pagamentos", "consorcio", "cooperativa",
+        "fintech", "bolsa", "mercado", "conta", "cartao", "cartoes",
+    }
+)
+
+# Broad B3 ticker: 4-letter root + 1–2 digits. Funds trade as XXXX11, equities as
+# XXXX3/XXXX4 (ON/PN), units as XXXX11 — so this spans funds AND ordinary equities
+# (ITUB4, BBDC3, MXRF11, KNCA11), unlike a fund-only ``XXXX11``.
+_TICKER_RE = re.compile(r"\b([A-Z]{4}\d{1,2})\b")
+# Multi-word proper-name brand (≥2 capitalized tokens): "Porto Seguro", "C6 Bank".
+_BRAND_MULTI_RE = re.compile(
+    r"\b([A-Z0-9ÁÉÍÓÚÂÊÔÃÕÇ][\wÁÉÍÓÚÂÊÔÃÕÇáéíóúâêôãõç]{1,20}"
+    r"(?:\s+[A-Z0-9ÁÉÍÓÚÂÊÔÃÕÇ][\wÁÉÍÓÚÂÊÔÃÕÇáéíóúâêôãõç]{1,20}){1,3})\b"
+)
+# Single-token proper name (Initial-cap then lowercase): "Neon", "Nubank", "Itaú".
+# The required lowercase tail excludes ALL-CAPS tickers/acronyms (handled above).
+_BRAND_SINGLE_RE = re.compile(
+    r"\b([A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç][\wáéíóúâêôãõç]{1,19})\b"
+)
+
+
+def _strip_accents(s: str) -> str:
+    return "".join(
+        c for c in unicodedata.normalize("NFD", str(s or ""))
+        if unicodedata.category(c) != "Mn"
+    )
+
+
+def _norm_txt(s: str) -> str:
+    return _strip_accents(s).upper()
+
+
+def _kw_regex(keyword_forms: Iterable[str]) -> "re.Pattern[str] | None":
+    """Accent- and plural-tolerant matcher for one or more keyword phrases.
+
+    Each phrase becomes a word sequence where every word may take an optional
+    trailing S — so "FUNDO IMOBILIARIO" matches "fundos imobiliarios" too — and is
+    matched against accent-stripped, upper-cased text. This is what lets one
+    keyword span the singular/plural/accented variants real news actually uses.
+    """
+    pats: list[str] = []
+    for form in keyword_forms:
+        words = [w for w in re.split(r"\s+", _norm_txt(form)) if w]
+        if words:
+            pats.append(r"\s+".join(re.escape(w) + r"S?" for w in words))
+    return re.compile("(?:" + "|".join(pats) + ")") if pats else None
 
 
 def _root8(cnpj: str | None) -> str:
@@ -157,6 +213,7 @@ def discover_fiagro(
     min_pl: float = 50_000_000.0,
     max_new: int = 40,
     auto_create: bool = True,
+    industry: str = "agri-funds",
     table: Any | None = None,
     rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
@@ -218,18 +275,16 @@ def discover_fiagro(
                 ):
                     changed = True
                 ent = entity_registry.get_entity(eid, table=table) or {}
-                inds = list(ent.get("industries") or [])
-                if "agri-funds" not in inds:
-                    inds.append("agri-funds")
-                    entity_registry.put_entity(
-                        {**ent, "entity_id": eid, "industries": inds}, table=table
+                if industry not in (ent.get("industries") or []):
+                    # set_industries is the registry's single writer for the field
+                    # (rebuilds the record + ALIAS# index consistently).
+                    entity_registry.set_industries(
+                        eid, list(ent.get("industries") or []) + [industry], table=table
                     )
                     changed = True
                 if ticker and not ent.get("ticker"):
-                    entity_registry.put_entity(
-                        {**ent, "entity_id": eid, "ticker": ticker}, table=table
-                    )
-                    changed = True
+                    if entity_registry.assign_ticker(eid, ticker, table=table):
+                        changed = True
                 if changed:
                     report["enriched"].append(eid)
                 else:
@@ -242,35 +297,31 @@ def discover_fiagro(
             try:
                 brand = profile["display_name"]
                 if brand and entity_registry.name_owned_by_other(
-                    brand, exclude_id=None, table=table
+                    brand, exclude_id=profile["entity_id"], table=table
                 ):
                     pid = entity_registry.propose_review(
                         kind="discovery",
-                        payload={
-                            "reason": "name_collision",
-                            "profile": profile,
-                            "evidence": {"source": "cvm_fiagro", "cnpj": root},
-                        },
+                        key=profile["entity_id"],
+                        proposed=brand,
+                        reason="name_collision",
+                        hint=f"cvm_fiagro cnpj={root} ticker={ticker or '-'}",
+                        confidence="cnpj",
+                        payload={"profile": profile, "source": "cvm_fiagro", "cnpj": root},
                         table=table,
                     )
                     report["proposed"].append(pid or brand)
                     continue
-                new_id = entity_registry.put_entity(
-                    {
-                        "entity_id": profile["entity_id"],
-                        "display_name": profile["display_name"],
-                        "aliases": profile.get("aliases") or [],
-                        "cnpj_roots": profile.get("cnpj_roots") or [],
-                        "industries": ["agri-funds"],
-                        "ticker": ticker,
-                        "confidence": "cnpj",
-                        "source": "cvm_fiagro",
-                        "admin": profile.get("admin"),
-                        "gestor": profile.get("gestor"),
-                    },
+                entity_registry.put_entity(
+                    profile["entity_id"],
+                    profile["display_name"],
+                    profile.get("aliases") or [],
+                    cnpj_roots=profile.get("cnpj_roots") or [],
+                    industries=[industry],
+                    ticker=ticker,
+                    confidence="cnpj",
                     table=table,
                 )
-                report["created"].append(new_id or profile["entity_id"])
+                report["created"].append(profile["entity_id"])
                 new_budget -= 1
             except Exception as exc:  # pragma: no cover
                 report["errors"].append(
@@ -280,15 +331,17 @@ def discover_fiagro(
             try:
                 pid = entity_registry.propose_review(
                     kind="discovery",
+                    key=profile["entity_id"],
+                    proposed=profile["display_name"],
+                    reason="fiagro_missing" if root else "fiagro_no_cnpj",
+                    hint=f"cvm_fiagro cnpj={root or '-'} ticker={ticker or '-'} pl={profile.get('pl')}",
+                    confidence="cnpj" if root else "fuzzy",
                     payload={
-                        "reason": "fiagro_missing" if root else "fiagro_no_cnpj",
                         "profile": profile,
-                        "evidence": {
-                            "source": "cvm_fiagro",
-                            "cnpj": root,
-                            "ticker": ticker,
-                            "pl": profile.get("pl"),
-                        },
+                        "source": "cvm_fiagro",
+                        "cnpj": root,
+                        "ticker": ticker,
+                        "pl": profile.get("pl"),
                     },
                     table=table,
                 )
@@ -302,32 +355,52 @@ def discover_fiagro(
 
 
 def harvest_keyword(
-    keyword: str,
+    keyword: str | Iterable[str],
     news_items: Iterable[dict[str, Any]],
     *,
     industry: str | None = None,
     min_docs: int = 2,
     table: Any | None = None,
 ) -> list[dict[str, Any]]:
-    """Scan news items for a keyword and collect unresolved associated entities.
+    """Scan news for a keyword (or keyword set) and collect unresolved entities.
 
-    Frequency-gated (min_docs): a name must appear in ≥ min_docs distinct items
-    before becoming a candidate. Resolved entities (via resolve_entities) are
-    dropped. Returns a list of candidate dicts with evidence (surface form).
+    Industry-agnostic. ``keyword`` may be a single string or several phrase
+    variants; matching is accent- and plural-tolerant (``_kw_regex``). Near each
+    keyword hit it captures three surface shapes:
+      - **B3 tickers** — 4 letters + 1–2 digits, spanning funds (XXXX11) AND
+        equities (XXXX3/4), so banking/insurance names surface, not just funds;
+      - **multi-word proper names** — "Porto Seguro", "C6 Bank";
+      - **single-token proper names** — "Neon", "Nubank", "Itaú" (Initial-cap +
+        lowercase), excluding the keyword's own words, generic corporate words
+        (``_SINGLE_STOP``), and sentence-initial tokens to curb noise.
+
+    Frequency-gated (``min_docs`` distinct items). Already-resolved names are
+    dropped (``resolve_entities`` + registry alias/name lookups). Returns
+    candidate dicts with evidence, most-cited first. Propose-only downstream —
+    news alone never auto-creates (ADR 011 §4).
     """
-    kw = (keyword or "").strip().upper()
-    if not kw:
+    forms = [keyword] if isinstance(keyword, str) else list(keyword)
+    forms = [f for f in forms if str(f or "").strip()]
+    kw_re = _kw_regex(forms)
+    if kw_re is None:
         return []
+    primary = str(forms[0]).strip().upper()
+    kw_tokens = {_norm_txt(w) for f in forms for w in re.split(r"\s+", str(f)) if w}
 
-    ticker_hits: dict[str, list[str]] = {}
-    brand_hits: dict[str, list[str]] = {}
+    hits: dict[str, list[str]] = {}
+    kinds: dict[str, str] = {}
     evidence: dict[str, list[dict[str, Any]]] = {}
 
-    ticker_re = re.compile(r"\b([A-Z]{4}11)\b")
-    brand_re = re.compile(
-        r"\b([A-ZÁÉÍÓÚÂÊÔÃÕÇ][\wÁÉÍÓÚÂÊÔÃÕÇáéíóúâêôãõç]{1,20}"
-        r"(?:\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ][\wÁÉÍÓÚÂÊÔÃÕÇáéíóúâêôãõç]{1,20}){1,3})\b"
-    )
+    def _add(label: str, kind: str, doc_id: str, snippet: str) -> None:
+        label = label.strip()
+        if not label:
+            return
+        hits.setdefault(label, []).append(doc_id)
+        kinds.setdefault(label, kind)
+        evidence.setdefault(label, []).append({"doc_id": doc_id, "snippet": snippet[:120]})
+
+    def _near(norm_text: str, start: int, end: int) -> bool:
+        return bool(kw_re.search(norm_text[max(0, start - 120) : end + 120]))
 
     for item in news_items or []:
         if not isinstance(item, dict):
@@ -335,46 +408,62 @@ def harvest_keyword(
         text = " ".join(
             str(item.get(k) or "") for k in ("title", "text", "summary", "headline")
         )
-        if not text or kw not in text.upper():
+        if not text:
+            continue
+        norm_text = _norm_txt(text)
+        if not kw_re.search(norm_text):
             continue
         doc_id = str(item.get("id") or item.get("url") or hash(text) % 10**10)
-        for m in ticker_re.finditer(text.upper()):
-            t = m.group(1)
-            ticker_hits.setdefault(t, []).append(doc_id)
-            evidence.setdefault(t, []).append(
-                {"doc_id": doc_id, "snippet": text[max(0, m.start() - 40) : m.end() + 40]}
-            )
-        for m in brand_re.finditer(text):
+
+        # Tickers — the whole item already contains the keyword.
+        for m in _TICKER_RE.finditer(text.upper()):
+            _add(m.group(1), "ticker", doc_id, text[max(0, m.start() - 40) : m.end() + 40])
+
+        # Multi-word brands — require the keyword nearby.
+        for m in _BRAND_MULTI_RE.finditer(text):
             brand = m.group(1).strip()
-            toks = [t for t in brand.split() if t.lower() not in _STOP]
-            if len(toks) < 1:
+            if not [t for t in brand.split() if t.lower() not in _STOP]:
                 continue
-            window = text[max(0, m.start() - 120) : m.end() + 120].upper()
-            if kw not in window:
+            if _near(norm_text, m.start(), m.end()):
+                _add(brand, "brand", doc_id, text[max(0, m.start() - 40) : m.end() + 40])
+
+        # Single-token proper names — skip keyword words, generic corp words, and
+        # only the token AT the sentence start (a capitalized common word there is
+        # ambiguous; the same brand recurring mid-text is still captured).
+        first_start = len(text) - len(text.lstrip())
+        for m in _BRAND_SINGLE_RE.finditer(text):
+            tok = m.group(1).strip()
+            if (
+                tok.lower() in _STOP
+                or _norm_txt(tok) in kw_tokens
+                or _strip_accents(tok).lower() in _SINGLE_STOP
+                or m.start() == first_start
+            ):
                 continue
-            brand_hits.setdefault(brand, []).append(doc_id)
-            evidence.setdefault(brand, []).append(
-                {"doc_id": doc_id, "snippet": text[max(0, m.start() - 40) : m.end() + 40]}
-            )
+            if _near(norm_text, m.start(), m.end()):
+                _add(tok, "brand", doc_id, text[max(0, m.start() - 40) : m.end() + 40])
 
-    candidates: list[dict[str, Any]] = []
-    ind = industry or INDUSTRY_KEYWORDS.get(kw) or INDUSTRY_KEYWORDS.get(kw.rstrip("S"))
+    ind = (
+        industry
+        or INDUSTRY_KEYWORDS.get(primary)
+        or INDUSTRY_KEYWORDS.get(primary.rstrip("S"))
+    )
 
-    def _freq_ok(ids: list[str]) -> bool:
-        return len(set(ids)) >= min_docs
-
-    all_labels = list(ticker_hits.keys()) + list(brand_hits.keys())
     resolved_map: dict[str, Any] = {}
     try:
-        resolved_map = resolve_entities(all_labels, table=table) or {}
+        resolved_map = resolve_entities(list(hits.keys()), table=table) or {}
     except Exception:
         resolved_map = {}
 
-    for label, ids in list(ticker_hits.items()) + list(brand_hits.items()):
-        if not _freq_ok(ids):
+    candidates: list[dict[str, Any]] = []
+    for label, ids in hits.items():
+        n_docs = len(set(ids))
+        if n_docs < min_docs:
             continue
-        if resolved_map.get(label) or resolved_map.get(label.upper()) or resolved_map.get(
-            label.lower()
+        if (
+            resolved_map.get(label)
+            or resolved_map.get(label.upper())
+            or resolved_map.get(label.lower())
         ):
             continue
         try:
@@ -384,15 +473,16 @@ def harvest_keyword(
                 continue
         except Exception:
             pass
+        is_ticker = kinds.get(label) == "ticker"
         candidates.append(
             {
                 "surface": label,
-                "kind": "ticker" if re.fullmatch(r"[A-Z]{4}11", label) else "brand",
-                "tickers": [label] if re.fullmatch(r"[A-Z]{4}11", label) else [],
-                "doc_count": len(set(ids)),
-                "count": len(set(ids)),
+                "kind": "ticker" if is_ticker else "brand",
+                "tickers": [label] if is_ticker else [],
+                "doc_count": n_docs,
+                "count": n_docs,
                 "industry": ind,
-                "keyword": kw,
+                "keyword": primary,
                 "evidence_ids": list(set(ids))[:8],
                 "evidence": (evidence.get(label) or [])[:5],
                 "sample_titles": [
@@ -419,16 +509,24 @@ def propose_news_candidates(
     """
     proposed: list[str] = []
     for c in (candidates or [])[:max_propose]:
+        surface = str(c.get("surface") or c.get("label") or "").strip()
+        if not surface:
+            continue
         try:
+            docs = c.get("doc_count") or c.get("count") or 0
             pid = entity_registry.propose_review(
                 kind="discovery",
+                key=surface,
+                proposed=surface,
+                reason=f"news_keyword_harvest:{c.get('keyword') or ''}",
+                hint=f"industry={c.get('industry') or '-'} docs={docs} tickers={c.get('tickers') or []}",
+                confidence="fuzzy",
                 payload={
-                    "reason": "news_keyword_harvest",
-                    "surface": c.get("surface") or c.get("label"),
+                    "surface": surface,
                     "kind": c.get("kind"),
                     "industry": c.get("industry"),
                     "keyword": c.get("keyword"),
-                    "doc_count": c.get("doc_count") or c.get("count"),
+                    "doc_count": docs,
                     "evidence": c.get("evidence") or [],
                     "evidence_ids": c.get("evidence_ids") or [],
                     "sample_titles": c.get("sample_titles") or [],
@@ -436,10 +534,7 @@ def propose_news_candidates(
                 },
                 table=table,
             )
-            if pid:
-                proposed.append(pid)
-            else:
-                proposed.append(str(c.get("surface") or c.get("label")))
+            proposed.append(pid or surface)
         except Exception:
             continue
     return proposed

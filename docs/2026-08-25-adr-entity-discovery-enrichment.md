@@ -122,6 +122,30 @@ This closes the owner example: "few players in registry for Fiagro, plenty in ne
 — the CVM universe is now the source of truth for agri-funds, and news-keyword
 harvest proposes the rest.
 
+**Hardened + generalized to any industry (2026-08-29).** The first cut targeted
+FIAGRO literally and was written against an *imagined* registry API (called
+`resolve_by_name` / `name_owned_by_other`, which did not exist; used a dict-shaped
+`put_entity` and a `payload=`-shaped `propose_review` — so the structured
+auto-create path threw on every row and the branch failed 3 of its own tests).
+Fixed and made cross-industry:
+- **Registry:** added `resolve_by_name()` (alias-index + display-name match, returns
+  a list so a unique hit is enrichable and an ambiguous one goes to review) and
+  `name_owned_by_other()` (the hijack guard); `propose_review()` gained an optional
+  `payload` for curator evidence. `entity_discovery` now enriches via the real
+  single-writer helpers (`set_industries`, `assign_ticker`).
+- **`discover_fiagro(industry=...)`** — the promotion engine (resolve→enrich→create→
+  propose) is now industry-parametric; only the CVM-FIAGRO fetcher + `_profile_from_fiagro`
+  stay source-specific. Each new **structured** industry = 1 fetcher + 1 profile mapper.
+- **`harvest_keyword`** generalized to *any* industry: accent/plural-tolerant keyword
+  matching (a singular "fundo imobiliário" catches plural "fundos imobiliários");
+  broadened B3 ticker to `XXXX\d{1,2}` (equities **and** funds — ITUB4/BBDC3, not
+  only XXXX11); single-token proper-name capture (Neon, Nubank, Itaú) with
+  keyword-word / generic-corp-word / sentence-initial filters. Empirically: a
+  banking sample that previously yielded **0** now surfaces `ITUB4`, `Itaú`, `Neon`.
+- Tests: `+test_resolve_by_name_and_name_owned_by_other`,
+  `+test_harvest_generalizes_equity_ticker_and_single_brand`,
+  `+test_harvest_keyword_accent_plural_tolerant`.
+
 Remaining implementation order: (1) general unresolved-mention harvest across all
 news/DOU (not just FIAGRO keyword); (2) FII sibling of `cvm_fiagro` (see
 `2026-08-20-fii-structured-source-plan.md`); (3) CNPJ/Receita profile composition for

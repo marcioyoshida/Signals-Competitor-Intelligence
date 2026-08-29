@@ -30,8 +30,11 @@ class _FakeTable:
 
 
 def test_brand_from_name():
+    # Distinctive brand kept; generic fund-descriptor words (crédito/agro) are
+    # stopwords, so "KINEA CRÉDITO AGRO FIAGRO" reduces to the manager brand.
     b1 = (_brand_from_name("KINEA CRÉDITO AGRO FIAGRO-IMOBILIÁRIO") or "").upper()
-    assert "KINEA" in b1 and "CRÉDITO" in b1
+    assert "KINEA" in b1
+    assert "FIAGRO" not in b1  # generic suffix dropped
     b2 = (_brand_from_name("XP CRÉDITO AGRO - FI NAS CADEIAS PRODUTIVAS") or "").upper()
     assert "XP" in b2
     assert _brand_from_name("FIAGRO") is None  # pure stop
@@ -144,6 +147,54 @@ def test_harvest_keyword_frequency_gate():
     assert "XYZ99" not in surfaces  # only 1 doc
     # RURA11 appears once → filtered
     assert "RURA11" not in surfaces
+
+
+def test_resolve_by_name_and_name_owned_by_other():
+    from src.synth import entity_registry
+
+    table = _FakeTable()
+    entity_registry.put_entity(
+        "stoneco", "StoneCo", ["StoneCo", "Stone"], cnpj_roots=["16501555"], table=table
+    )
+    # Unique hit by display-name / alias.
+    assert entity_registry.resolve_by_name("StoneCo", table=table) == ["stoneco"]
+    assert entity_registry.resolve_by_name("Stone", table=table) == ["stoneco"]
+    assert entity_registry.resolve_by_name("Unknown Corp", table=table) == []
+    # Collision guard: the name is owned by another entity, not by StoneX.
+    assert entity_registry.name_owned_by_other("StoneCo", exclude_id="stonex", table=table)
+    # ...but not "owned by other" when the excluded id IS the owner.
+    assert not entity_registry.name_owned_by_other(
+        "StoneCo", exclude_id="stoneco", table=table
+    )
+
+
+def test_harvest_generalizes_equity_ticker_and_single_brand():
+    """Non-fund industry: equity ticker (XXXX4) + single-token brand surface."""
+    table = _FakeTable()
+    news = [
+        {"id": "b1", "title": "ITUB4 sobe; Itaú comenta banco digital"},
+        {"id": "b2", "title": "ITUB4 renova máxima; Itaú fala de banco digital"},
+        {"id": "b3", "title": "Neon capta e o banco digital Neon acelera"},
+        {"id": "b4", "title": "Neon cresce; banco digital Neon amplia base"},
+    ]
+    cands = harvest_keyword("BANCO DIGITAL", news, industry="banking", table=table)
+    by = {c["surface"]: c for c in cands}
+    assert "ITUB4" in by and by["ITUB4"]["kind"] == "ticker"  # equity ticker, not XXXX11
+    assert "Neon" in by and by["Neon"]["kind"] == "brand"  # single-token brand
+    assert all(c["industry"] == "banking" for c in cands)
+
+
+def test_harvest_keyword_accent_plural_tolerant():
+    """Singular, accented keyword matches plural, accent-varied news."""
+    table = _FakeTable()
+    news = [
+        {"id": "f1", "title": "MXRF11 lidera entre fundos imobiliários"},
+        {"id": "f2", "title": "MXRF11 paga dividendo; fundo imobiliário cresce"},
+    ]
+    cands = harvest_keyword("FUNDO IMOBILIÁRIO", news, table=table)
+    surfaces = {c["surface"] for c in cands}
+    assert "MXRF11" in surfaces
+    assert all(c["industry"] == "real-estate-funds" for c in cands)
 
 
 def test_propose_news_candidates_queues_review():
