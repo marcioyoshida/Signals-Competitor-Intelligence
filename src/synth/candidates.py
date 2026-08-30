@@ -48,6 +48,16 @@ HIGH_VALUE_SOLO_LENSES = frozenset(
 # Market is backdrop only — never a solo seed.
 BACKDROP_LENSES = frozenset({"market"})
 
+# PER-INSTITUTION structured lenses (issue #50): each carries a specific institution's
+# own filing/movement (a new-entrant authorization, a Pix/juros series, a SEC 10-K, a
+# fund offering). A signal on one of these is about THAT subject — so it may fuse into a
+# cluster only when it SHARES the seed's tracked entity, never as topical "color" for an
+# unrelated seed. Only genuinely systemic lenses (regulatory/dou/market/news) can fuse
+# entity-less. This is what stops other entities' signals accreting onto a seed.
+STRUCTURED_SUBJECT_LENSES = frozenset(
+    {"entrants", "pix", "juros", "sec", "ofertas", "funds", "inf_diario", "fatos"}
+)
+
 # Corroboration floor for a news-only (single-lens) cluster: how many DISTINCT
 # outlets must independently carry the genuinely-new story before it surfaces on
 # news alone. Lowered 3→2 (issue #9) to lift volume for privately-held firms
@@ -538,24 +548,30 @@ def _soft_related(
         if sig.get("_lens") == seed.get("_lens") and not sig.get("is_new"):
             continue
         sig_ents = set(_entities_of(sig))
-        # Payments domain boost: pix regulatory + acquirer SEC. Match PIX as a WORD,
-        # not a substring — "PixBet" (a betting brand) contains "pix" but is not the
-        # Pix payment system, and the substring match stapled unrelated SEC/pix
-        # signals from OTHER entities onto a PixBet news seed (false cross-entity nexus).
+        shares_entity = bool(seed_ents & sig_ents)
+        # Fusion is gated by the SEED (issue #50). A SPECIFIC-SUBJECT seed — one that
+        # resolved to a tracked entity (a competitor/news card about that entity) — admits
+        # ONLY same-subject signals: a signal naming a DIFFERENT entity, or an untracked
+        # institution's OWN filing, is a different story, never "color". This is what
+        # stapled StoneCo's SEC onto a sportingbet seed and BB's Pix / ICBC's entrant
+        # authorization onto a Consórcio Magalu seed. A SYSTEMIC/entity-less seed (a
+        # regulatory act) may still gather topically-linked signals (the reg-affected-
+        # players case), but never a per-institution structured signal about an UNTRACKED
+        # institution (a distinct subject, not context).
+        if not shares_entity:
+            if seed_ents:
+                continue  # specific-subject seed → no cross-entity fusion
+            if sig.get("_lens") in STRUCTURED_SUBJECT_LENSES and not sig_ents:
+                continue  # untracked institution's own filing → a different subject
+        # Payments-domain link (Pix). Only REACHABLE now for a systemic seed or a
+        # same-entity signal (the guard above drops a specific-subject seed first), so it
+        # can no longer fabricate a cross-entity nexus — it just links a Pix regulatory
+        # change to the acquirers it affects. Match PIX as a WORD ("PixBet" ≠ Pix system).
         blob = (signal_blob(seed) + " " + signal_blob(sig)).upper()
-        domain_link = bool(re.search(r"\bPIX\b", blob)) and sig.get("_lens") in ("sec", "ofertas", "pix", "juros")
-        # Guard against a fabricated cross-entity nexus. A signal that belongs to a
-        # DIFFERENT tracked entity than the seed must not be attached as "related"
-        # on a coincidental shared token alone — that stapled an unrelated insurer's
-        # earnings news onto a BCB cancellation (and, on an entity-less regulatory
-        # seed, any competitor's news as free "color"). It attaches only if it
-        # shares the seed's entity or there is a genuine domain link. Signals with
-        # no tracked entity (e.g. another regulatory act) still fuse on topic.
-        if sig_ents and not (seed_ents & sig_ents) and not domain_link:
-            continue
-        score = 0
-        if seed_ents and seed_ents & sig_ents:
-            score += 3
+        domain_link = bool(re.search(r"\bPIX\b", blob)) and sig.get("_lens") in (
+            "sec", "ofertas", "pix", "juros"
+        )
+        score = 3 if shares_entity else 0
         overlap = seed_toks & tokens_for_match(sig)
         if len(overlap) >= 1:
             score += min(2, len(overlap))

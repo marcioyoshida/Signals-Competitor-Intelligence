@@ -29,6 +29,35 @@ def test_real_pix_seed_still_fuses_acquirer_sec():
     assert [r["id"] for r in rel] == ["sec:1"]
 
 
+def test_specific_entity_seed_rejects_other_entity_structured_signal():
+    # issue #50: a news seed about ONE entity must not accrete a DIFFERENT tracked
+    # entity's Pix/SEC/juros signal — even when "Pix" appears (the domain_link bug that
+    # stapled BB's Pix onto a Consórcio Magalu seed / StoneCo's SEC onto sportingbet).
+    seed = {"id": "news:9", "_lens": "news", "is_new": True,
+            "title": "Nubank amplia parcerias no mercado de Pix"}
+    bb_pix = {"id": "pix:bb", "_lens": "pix", "is_new": True,
+              "institution": "Banco do Brasil", "title": "Banco do Brasil movimenta o Pix"}
+    stone_sec = {"id": "sec:stone", "_lens": "sec", "is_new": True,
+                 "company": "StoneCo Ltd.", "title": "StoneCo Pix volumes rise"}
+    assert _candidates._soft_related(seed, [bb_pix, stone_sec], set()) == []
+
+
+def test_specific_entity_seed_rejects_untracked_institution_entrant():
+    # issue #50: ICBC (untracked) authorization must not fuse as "color" onto an Itaú seed.
+    seed = {"id": "news:10", "_lens": "news", "is_new": True, "title": "Itaú lança novo produto"}
+    icbc = {"id": "ent:icbc", "_lens": "entrants", "is_new": True,
+            "institution": "ICBC do Brasil Banco Múltiplo S.A.", "title": "ICBC autorizado pelo BCB"}
+    assert _candidates._soft_related(seed, [icbc], set()) == []
+
+
+def test_same_entity_signals_still_fuse():
+    # the fix must not break genuine same-subject corroboration.
+    seed = {"id": "news:11", "_lens": "news", "is_new": True, "title": "Nubank divulga resultados"}
+    nu_sec = {"id": "sec:nu", "_lens": "sec", "is_new": True,
+              "company": "Nu Holdings", "title": "Nubank reports Q2 results"}
+    assert [r["id"] for r in _candidates._soft_related(seed, [nu_sec], set())] == ["sec:nu"]
+
+
 def _news_only_cand(*, is_new, publishers=1, score=0.5):
     """A news-only candidate cluster (no official-filing 2nd lens)."""
     sources = [{"_lens": "news", "is_new": is_new, "publisher": f"outlet{i}"}
