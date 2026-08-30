@@ -307,12 +307,14 @@ def discover_fiagro(
             eid = cnpj_idx.get(root)
         if not eid and ticker:
             eid = alias_idx.get(_norm(ticker))
-        if not eid:
-            brand = profile.get("display_name")
-            if brand:
-                hits = disp_idx.get(_norm(brand)) or []
-                if len(hits) == 1:
-                    eid = hits[0]
+        # Intentionally NO brand-only resolution: a FIAGRO fund's brand IS its
+        # manager's brand ("KINEA CRÉDITO AGRO FIAGRO" -> "KINEA"), so a brand match
+        # resolves the fund to its institutional PARENT, not a peer fund. Enriching
+        # that parent with `agri-funds` fanned every one of its non-agri cards (a bank's
+        # Tesouro Selic fund, its Macro Day) into the FIAGRO view. Requiring a strong
+        # identity (CNPJ root or the fund's own ticker) to merge routes brand-colliding
+        # funds to the create/propose branch below, where the name-collision guard
+        # raises a review instead of silently polluting the manager.
 
         if eid:
             try:
