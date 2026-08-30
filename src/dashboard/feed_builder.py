@@ -11,12 +11,21 @@ from __future__ import annotations
 import datetime as dt
 import json
 import os
+from decimal import Decimal
 from typing import Any
 from urllib.parse import urlparse
 
 import boto3
 
 from src.dashboard.topics import topic_options, topics_of
+
+
+def _json_default(o: Any) -> Any:
+    """Registry-derived fields (e.g. ESG ise_b3_weight_pct) arrive as DynamoDB
+    Decimal; feed.json is JSON, so serialize Decimal as a plain number."""
+    if isinstance(o, Decimal):
+        return int(o) if o == o.to_integral_value() else float(o)
+    raise TypeError(f"Object of type {type(o).__name__} is not JSON serializable")
 
 try:  # reuse the display-name map Stage B already maintains
     from src.synth.synthesize import ENTITY_LABELS
@@ -903,7 +912,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         coverage_gaps=_load_coverage_gaps(digests_bucket),
         reputation=_load_reputation(digests_bucket),
     )
-    body = json.dumps(feed, ensure_ascii=False).encode("utf-8")
+    body = json.dumps(feed, ensure_ascii=False, default=_json_default).encode("utf-8")
 
     published = None
     if site_bucket:

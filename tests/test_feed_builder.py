@@ -27,6 +27,18 @@ def _narr(id, entity, date, score, *, is_alert=False, lenses=None, citations=Non
     }
 
 
+def test_feed_json_serializes_decimal_from_registry_esg():
+    # #30: ESG weight arrives as DynamoDB Decimal; feed.json must serialize it.
+    from decimal import Decimal
+    feed = feed_builder.build_feed(
+        [],
+        entity_attrs={"itau": {"label": "Itaú", "ticker": "ITUB4",
+                               "esg": {"ise_b3": True, "ise_b3_weight_pct": Decimal("2.809")}}},
+    )
+    s = json.dumps(feed, ensure_ascii=False, default=feed_builder._json_default)
+    assert '"ise_b3_weight_pct": 2.809' in s
+
+
 def test_build_feed_sorts_and_rolls_up():
     narratives = [
         _narr("a", "itau", "2026-08-12", 0.4),

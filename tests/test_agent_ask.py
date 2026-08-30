@@ -62,6 +62,28 @@ def test_scope_accepts_ownership_and_compliance():
         assert ok, q
 
 
+def test_scope_accepts_esg_question():
+    # issue #30 — ESG standing is in-domain now (answered via ISE B3 proxy).
+    for q in ["quais bancos têm rating ESG?", "quem faz parte do ISE?",
+              "quais entidades são sustentáveis?"]:
+        ok, _ = aa.classify_scope(q, entity_vocab=set(), lens_vocab=set())
+        assert ok, q
+
+
+def test_entity_fact_card_surfaces_ise_b3_membership():
+    feed = {"run_date": "2026-08-31", "entity_attrs": {
+        "itau": {"label": "Itaú", "ownership": "public", "ticker": "ITUB4",
+                 "esg": {"ise_b3": True, "ise_b3_cycle": "2026-2027",
+                         "source_url": "https://b3.com.br/ise"}},
+        "banco_pan": {"label": "Banco Pan", "ownership": "public", "ticker": "BPAN4",
+                      "esg": {}},
+    }}
+    cards = {c["entity"]: c for c in aa.entity_fact_cards(feed)}
+    assert "membro do ISE B3" in cards["itau"]["narrative"]
+    assert cards["itau"]["citations"] == [{"url": "https://b3.com.br/ise"}]
+    assert "não consta como membro do ISE B3" in cards["banco_pan"]["narrative"]
+
+
 def test_scope_rejects_off_domain():
     ok, why = aa.classify_scope(
         "me passa uma receita de bolo de cenoura",

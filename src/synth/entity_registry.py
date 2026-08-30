@@ -327,6 +327,81 @@ def backfill_certifications(table: Any | None = None) -> list[str]:
     return changed
 
 
+# --- ESG standing (proxy: B3 ISE membership, issue #30) --------------------
+# "Which banks have an ESG rating?" landed as a coverage gap because no source
+# ingests it. Proprietary agency ratings (MSCI ESG, Sustainalytics, S&P Global
+# ESG) are paid/access-gated — confirmed live 2026-08-30 (Sustainalytics'
+# public company page 301-redirects into a gated flow; MSCI's tool is a
+# lead-gen search page, not a data feed; CDP has no public bulk-disclosure
+# API). BCB's GRSAC report (Resolução CMN 4.945/2021) is a real disclosure
+# regime but is published per-institution as a PDF on each bank's own site,
+# not centralized/machine-readable by BCB.
+#
+# The best FREE, OPEN, *citable* proxy is **B3 ISE membership**: B3's own
+# Índice de Sustentabilidade Empresarial (ISE B3) is a public equity index
+# whose annual constituent selection *is* an ESG standing signal (companies
+# apply, are scored on a public questionnaire, and only the top cohort is
+# admitted). `src/ingest/esg_ise_b3.py` fetches the live portfolio from B3's
+# own (undocumented but working) `indexProxy/GetPortfolioDay` JSON endpoint —
+# no auth, no key. Modeled the same way as `certifications`: curated/evidenced,
+# never assumed, empty until backfilled from a real fetch.
+ESG_KEYS = ("ise_b3", "ise_b3_cycle", "ise_b3_weight_pct", "as_of", "source_url")
+
+
+def set_esg(entity_id: str, esg: dict[str, Any] | None, *, table: Any | None = None) -> bool:
+    """Set an entity's curated `esg` signal dict (e.g. {"ise_b3": True,
+    "ise_b3_cycle": "2026-2027", "weight_pct": 2.809, "as_of": "2026-08-31",
+    "source_url": "..."}). Non-destructive to other fields. Returns True if
+    changed. `esg=None`/`{}` clears the attribute (e.g. dropped from the index
+    on the next annual rebalance)."""
+    t = _table(table)
+    e = get_entity(entity_id, table=t)
+    if not e:
+        return False
+    want = {k: esg[k] for k in ESG_KEYS if esg and k in esg and esg[k] is not None} if esg else {}
+    # Normalize through _ddb_safe (float -> Decimal) before comparing, so a
+    # re-run comparing against an already-persisted (Decimal-typed) value is
+    # idempotent rather than "changed" on every call.
+    want_safe = _ddb_safe(want)
+    if (e.get("esg") or {}) == want_safe:
+        return False
+    update_entity(entity_id, {"esg": want_safe}, table=t)
+    return True
+
+
+def backfill_esg_ise_b3(
+    portfolio: dict[str, Any], *, table: Any | None = None
+) -> list[tuple[str, dict[str, Any]]]:
+    """Apply a fetched ISE B3 portfolio (see `esg_ise_b3.fetch_portfolio` +
+    `match_tracked_entities`) to the registry via the curated B3 ticker map.
+    Idempotent; returns [(entity_id, esg_dict)] actually changed. A tracked
+    entity that HAD `ise_b3: true` but is no longer in this cycle's portfolio
+    is explicitly cleared here (annual rebalance can drop a member — leaving
+    a stale `ise_b3: true` would be a fabricated claim)."""
+    t = _table(table)
+    changed: list[tuple[str, dict[str, Any]]] = []
+    tickers_in_portfolio = {c.get("ticker") for c in portfolio.get("constituents", [])}
+    for eid, ticker in B3_TICKERS.items():
+        hit = next((c for c in portfolio.get("constituents", []) if c.get("ticker") == ticker), None)
+        if hit:
+            esg = {
+                "ise_b3": True,
+                "ise_b3_cycle": portfolio.get("cycle"),
+                "ise_b3_weight_pct": hit.get("weight_pct"),
+                "as_of": portfolio.get("as_of"),
+                # cite the human ISE B3 page, not the base64 API endpoint.
+                "source_url": portfolio.get("page_url") or portfolio.get("source_url"),
+            }
+            if set_esg(eid, esg, table=t):
+                changed.append((eid, esg))
+        elif ticker not in tickers_in_portfolio:
+            e = get_entity(eid, table=t)
+            if e and (e.get("esg") or {}).get("ise_b3"):
+                if set_esg(eid, None, table=t):
+                    changed.append((eid, {}))
+    return changed
+
+
 # --- Attribution role (news-subject binding, issue #33) -------------------
 # Some tracked entities are habitually the *actor / venue / source* of news that
 # is really ABOUT another company — a market operator (B3) delists/suspends other
@@ -429,8 +504,10 @@ def load_attribution_roles(table: Any | None = None, force: bool = False) -> dic
 
 def list_entity_attributes(table: Any | None = None) -> dict[str, dict[str, Any]]:
     """Compact per-entity classification map for the feed/agent: every active
-    entity → {label, ownership, certifications, ticker, industries, attribution_role}.
-    Ownership/role are always derived (present even when not yet written)."""
+    entity → {label, ownership, certifications, ticker, industries,
+    attribution_role, esg}. Ownership/role are always derived (present even
+    when not yet written); esg is empty ({}) until backfilled from a real
+    fetch (ise_b3 membership — see esg_ise_b3.py, issue #30)."""
     out: dict[str, dict[str, Any]] = {}
     for e in list_entities(table=table):
         out[e["entity_id"]] = {
@@ -440,6 +517,7 @@ def list_entity_attributes(table: Any | None = None) -> dict[str, dict[str, Any]
             "ticker": e.get("ticker"),
             "industries": e.get("industries") or [],
             "attribution_role": classify_attribution_role(e),
+            "esg": e.get("esg") or {},
         }
     return out
 
@@ -1372,6 +1450,8 @@ def update_entity(
             ent["certifications"] = sorted(
                 {str(c).strip() for c in (val or []) if str(c).strip()}
             )
+        elif key == "esg":
+            ent["esg"] = _ddb_safe(dict(val)) if val else {}
         # else: unknown/protected key — ignored
     t.put_item(Item=ent)
     return ent

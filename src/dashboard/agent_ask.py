@@ -106,6 +106,9 @@ _DOMAIN_CUES = {
     "privadas", "mista", "economia", "controle", "capital", "natureza", "listada",
     "certificacao", "certificacoes", "certificada", "certificado", "compliance",
     "iso", "pci", "soc", "conformidade",
+    # ESG standing (issue #30): B3 ISE membership as the free/open proxy.
+    "esg", "sustentabilidade", "sustentavel", "sustentaveis", "ise",
+    "ambiental", "socioambiental", "asg",
     # consumer reputation (Reclame Aqui, #31).
     "reclamacao", "reclamacoes", "reclame", "reputacao", "nota", "atendimento",
     "cliente", "clientes", "consumidor", "satisfacao", "resolvidas",
@@ -196,6 +199,8 @@ _CLASSIFICATION_CUES = {
     "controle", "natureza", "capital", "listada", "estatizada", "aberto",
     "certificacao", "certificacoes", "certificada", "certificado", "compliance",
     "iso", "pci", "soc", "conformidade", "certificados",
+    # ESG standing (issue #30) — classification-intent so fact: cards are lifted.
+    "esg", "asg", "sustentabilidade", "sustentavel", "ise", "ambiental", "rating",
 }
 
 # Question tokens that signal a DISTRESS-STATUS intent (RJ / falência). These
@@ -449,6 +454,27 @@ def entity_fact_cards(feed: dict[str, Any]) -> list[dict[str, Any]]:
         )
         if a.get("ticker"):
             parts.append(f"Ticker B3: {a['ticker']}.")
+        # ESG standing (issue #30): only for listed entities (ISE B3 is a B3 index,
+        # so eligibility requires a domestic listing). A member is stated flatly (a
+        # public, citable fact); a non-member is stated as "não consta" — never as
+        # a numeric agency rating (those are proprietary/gated).
+        esg = a.get("esg") or {}
+        fact_citations: list[dict[str, Any]] = []
+        if a.get("ticker"):
+            if esg.get("ise_b3"):
+                cyc = esg.get("ise_b3_cycle")
+                parts.append(
+                    "ESG: membro do ISE B3 (Índice de Sustentabilidade Empresarial da B3"
+                    f"{f', ciclo {cyc}' if cyc else ''}) — proxy público de padrão ESG, "
+                    "não um rating numérico de agência."
+                )
+                if esg.get("source_url"):
+                    fact_citations = [{"url": esg["source_url"]}]
+            else:
+                parts.append(
+                    "ESG: não consta como membro do ISE B3 (proxy público de padrão "
+                    "ESG; ratings de agências como MSCI/Sustainalytics são proprietários)."
+                )
         out.append({
             "id": f"fact:{eid}",
             "date": run_date,
@@ -459,7 +485,7 @@ def entity_fact_cards(feed: dict[str, Any]) -> list[dict[str, Any]]:
             "is_alert": False,
             "threat_score": None,
             "narrative": " ".join(parts),
-            "citations": [],
+            "citations": fact_citations,
         })
     return out
 
