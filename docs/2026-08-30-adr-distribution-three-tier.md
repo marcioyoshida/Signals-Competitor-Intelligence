@@ -101,6 +101,22 @@ per-request Lambda), reusing the frontend components with the dynamic bits (agen
 filters) stripped — those stay on SaaS. A second parallel ingest+synth pipeline is explicitly
 rejected: it would fork the moat, duplicate Bedrock/ingest cost, and drift from the original.
 
+**Entry dashboard = a separate thin artifact, not a runtime "context" toggle — fork the
+glass, not the design system.** The Entry dashboard is its **own** buildless static
+`index.html` (e.g. `site/entry/`), served from the Entry CloudFront multi-tenant
+distribution — *not* the SaaS `index.html` conditionally hiding panels. A context-toggle
+inside the SaaS bundle would ship all the dynamic JS (agent Q&A, live filters, the
+coverage/monitor drawer) to the cheapest tier and couple the two evolutions, defeating
+Entry's thin/static/cheap purpose. Keep it DRY without forking the look: factor the shared
+presentation primitives — the **palette/theme tokens** and the **card/feed render helpers** —
+into plain static includes (`site/shared/theme.css`, `site/shared/render.js`) that BOTH
+dashboards `<link>`/`<script src>` (no bundler — matches the buildless constraint). The SaaS
+shell = shared + dynamic panels; the Entry shell = shared only. The Entry feed is the same
+JSON schema (just filtered), so the shared render helpers work unchanged. **Multi-tenancy
+lives in CloudFront, not the artifact:** there is ONE Entry dashboard artifact served to all
+entry tenants via the multi-tenant distribution; each tenant's distribution config points it
+at that tenant's scoped `feed.json` — you never build a dashboard per tenant.
+
 ## ② SaaS Platform — dynamic API + dashboard
 
 The default for interactive mid verticals (the richest product surface).
@@ -174,8 +190,10 @@ but not a product goal.
 - **Entry**: a CloudFront multi-tenant distribution template + per-tenant provisioning;
   extend the feed builder to emit a **derived, entry-scoped feed** (filter the single full feed
   by entry-vertical industry modules) as per-tenant/module **scoped static shards** at write
-  time — **not** a parallel pipeline; + a **thin static Entry dashboard** reading the scoped
-  feed (frontend components reused, dynamic surfaces stripped).
+  time — **not** a parallel pipeline; + a **thin static Entry dashboard** as its OWN artifact
+  (`site/entry/`) reading the scoped feed, sharing a buildless component/theme module
+  (`site/shared/`) with the SaaS dashboard and stripping the dynamic surfaces. Multi-tenancy
+  is CloudFront-side (one artifact, per-tenant scoped feed), not per-tenant dashboards.
 - **SaaS**: already the ADR 015 Portal dynamic path (Pattern A feed Lambda + dashboard + agent).
 - **Sovereign**: ADR 015 Marketplace / ADR 005 deltas unchanged (tenant-deployable CDK stack,
   `tenant_s3` lens, `/resolve` hardening, metering).
