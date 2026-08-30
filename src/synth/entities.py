@@ -99,6 +99,16 @@ def _attribution_role_map() -> dict[str, str]:
 # news — attribute a narrative to them only when they are its subject (issue #33).
 _OBSERVER_ROLES: frozenset[str] = frozenset({"operator", "data_provider", "regulator"})
 
+# Investment banks are constantly named in OTHERS' news as the analyst/underwriter/
+# advisor, not the subject (issue #38): "segundo o JP Morgan", "IPO coordenado pela
+# X", "escolheu a X para liderar", "assessorada pela X", "conforme ... pelo X". This
+# cue matches immediately BEFORE the entity mention (mirrors _SOURCE_CUE's `\s+$`).
+_ADVISOR_CUE = re.compile(
+    r"(?:ESCOLH\w*|CONTRAT\w*|SELECION\w*|MANDAT\w*|ASSESSOR\w*|RECOMEND\w*|"
+    r"COORDENAD\w*|LIDERAD\w*|CONFORME|SEGUNDO|DE ACORDO COM|PEL[AO])"
+    r"(?:\s+(?:A|O|AS|OS|PEL[AO]|D[AEO]S?))*\s+$"
+)
+
 # Action-on-another-party verb stems (uppercase blob, accents retained). When an
 # observer-role entity is immediately followed by one of these, it is the ACTOR of
 # the event, not its subject ("B3 EXCLUI Braskema...", "CVM MULTA a corretora").
@@ -385,6 +395,27 @@ def _entity_source_only(aliases: list[str], blob: str) -> bool:
     return matched
 
 
+def _entity_advisor_only(aliases: list[str], blob: str) -> bool:
+    """True iff every mention of the entity sits in an advisor/analyst/underwriter
+    construction (``_ADVISOR_CUE`` immediately before it) — i.e. the bank is the
+    advisor, not the subject. Any subject-position mention → False (keep it)."""
+    matched = False
+    for alias in aliases:
+        token = alias.upper().strip()
+        if not token or token.startswith("TICKER:"):
+            continue
+        starts = [
+            m.start()
+            for m in re.finditer(rf"(?<!{_WORD}){re.escape(token)}(?!{_WORD})", blob)
+        ]
+        if not starts:
+            continue
+        matched = True
+        if not all(_ADVISOR_CUE.search(blob[:s]) for s in starts):
+            return False  # a subject-position mention exists → keep the entity
+    return matched
+
+
 def resolve_entities(item: dict[str, Any]) -> list[str]:
     """Return canonical entity ids matched in an item (may be multiple).
 
@@ -434,10 +465,20 @@ def resolve_entities(item: dict[str, Any]) -> list[str]:
         # to them only in a genuine subject position — drop a match that is ONLY a
         # cited source or ONLY the actor of an action on another party. A strong
         # ticker match (its own filing) is exempt: that story is structurally its.
+        role = roles.get(entity_id, "competitor")
         if (
             "strong" not in kinds
-            and roles.get(entity_id, "competitor") in _OBSERVER_ROLES
+            and role in _OBSERVER_ROLES
             and (_entity_source_only(aliases, blob) or _entity_actor_only(aliases, blob))
+        ):
+            continue
+        # Advisor guard (issue #38): an investment bank named only as the analyst/
+        # underwriter/advisor of someone else's story is not its subject. Strong
+        # (ticker) or genuine subject-position mentions still resolve.
+        if (
+            "strong" not in kinds
+            and role == "advisor"
+            and (_entity_source_only(aliases, blob) or _entity_advisor_only(aliases, blob))
         ):
             continue
         found.append(entity_id)

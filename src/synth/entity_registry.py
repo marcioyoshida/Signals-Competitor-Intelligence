@@ -338,8 +338,25 @@ def backfill_certifications(table: Any | None = None) -> list[str]:
 # not when it is merely the actor/source. `competitor` (default) keeps the normal,
 # lenient attribution — a competitor that also acts (e.g. Cielo antecipando
 # recebíveis) is never suppressed.
-ATTRIBUTION_ROLES = ("competitor", "operator", "data_provider", "regulator")
+ATTRIBUTION_ROLES = ("competitor", "operator", "data_provider", "regulator", "advisor")
 ATTRIBUTION_ROLE: dict[str, str] = {
+    # advisor: investment banks named in OTHERS' news as the analyst/underwriter/
+    # advisor ("segundo o JP Morgan", "IPO coordenado pela X", "escolheu a X para
+    # liderar") — not the story's subject. They ARE competitors (advisory/IB
+    # modules), so this only raises the bar: a genuine subject mention or a
+    # structured/ticker match still resolves (issue #38).
+    "jpmorgan": "advisor",
+    "goldman_sachs": "advisor",
+    "morgan_stanley": "advisor",
+    "bank_of_america": "advisor",
+    "bofa": "advisor",
+    "citi": "advisor",
+    "citigroup": "advisor",
+    "ubs": "advisor",
+    "barclays": "advisor",
+    "jefferies": "advisor",
+    "lazard": "advisor",
+    "evercore": "advisor",
     "b3": "operator",                 # bolsa/depositária — delista/suspende emissores
     "cvm": "regulator",
     "bcb": "regulator",

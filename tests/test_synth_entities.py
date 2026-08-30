@@ -83,6 +83,30 @@ def test_observer_role_dropped_as_actor_but_kept_as_subject(monkeypatch):
         {"source": "News", "title": "Cielo antecipa recebíveis de varejista"})
 
 
+def test_advisor_role_dropped_as_underwriter_but_kept_as_subject(monkeypatch):
+    # An investment bank (role=advisor) named as analyst/underwriter of someone
+    # else's story is dropped; a genuine subject mention is kept (issue #38).
+    import src.synth.entities as ent
+    monkeypatch.setattr(ent, "_alias_map", lambda: {
+        "jpmorgan": ["J.P. Morgan", "JPMorgan", "JP Morgan"],
+        "general_atlantic": ["General Atlantic"],
+    })
+    monkeypatch.setattr(ent, "_attribution_role_map", lambda: {"jpmorgan": "advisor"})
+    # underwriter construction → attributed to the subject, not the bank
+    r = resolve_entities({"source": "News",
+        "title": "General Atlantic estuda IPO, escolhendo a JPMorgan para liderar"})
+    assert "general_atlantic" in r and "jpmorgan" not in r
+    # analyst-source construction → bank dropped
+    assert "jpmorgan" not in resolve_entities(
+        {"source": "News", "title": "Segundo o JP Morgan, o Ibovespa deve subir"})
+    # genuine subject news about the bank → kept
+    assert "jpmorgan" in resolve_entities(
+        {"source": "News", "title": "JPMorgan abre novo escritório no Brasil"})
+    # structured/entrant source (its own authorization) → kept
+    assert "jpmorgan" in resolve_entities(
+        {"source": "BCB-Autorizacoes", "title": "Autorizado o JPMORGAN CHASE BANK"})
+
+
 def test_match_kinds_uses_provided_ambiguous_set():
     from src.synth.entities import _match_kinds
 
