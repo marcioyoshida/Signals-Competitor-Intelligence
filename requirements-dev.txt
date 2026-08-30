@@ -5,3 +5,6 @@ pytest>=8.0.0
 # but tests import src modules that use it — needed for local + CI test runs.
 boto3>=1.34
 
+
+# CI-safety (issue #29): per-test timeout so a hung live call cannot stall CI.
+pytest-timeout>=2.3
