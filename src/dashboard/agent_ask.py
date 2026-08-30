@@ -457,6 +457,12 @@ def financials_cards(feed: dict[str, Any]) -> list[dict[str, Any]]:
             parts.append(f"patrimônio líquido {_fmt_bi(r['equity'])}")
         if not parts:
             continue
+        # issue #7 Phase 2: the deterministic BCG position grounded in the financials.
+        bcg = r.get("bcg")
+        if bcg:
+            parts.append(
+                f"posição BCG {bcg.get('label')} (participação relativa "
+                f"{bcg.get('relative_share')}, crescimento {_fmt_pct(bcg.get('growth'))})")
         out.append({
             "id": f"fin:{ent}:{r.get('period')}",
             "date": r.get("period"),

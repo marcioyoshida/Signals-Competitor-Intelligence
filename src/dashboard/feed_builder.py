@@ -466,6 +466,14 @@ def build_feed(
     for c in items + thread_items:
         c["industries"] = _card_industries(c)
 
+    # Issue #7 Phase 2: ground each issuer's BCG position in real financials (revenue
+    # growth × relative share vs the industry leader) — a hard-number anchor for the
+    # BCG framework, computed against the current industry map.
+    if financials:
+        from src.synth import bcg as _bcg
+
+        financials = _bcg.position_from_financials(financials, imap)
+
     # Merge incident threads into the displayed feed (after KPI/entity aggregation).
     feed_items = sorted(
         items + thread_items, key=lambda x: (x["date"], x["threat_score"]), reverse=True

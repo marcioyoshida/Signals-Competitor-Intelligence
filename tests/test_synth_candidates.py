@@ -799,3 +799,21 @@ def test_regulatory_fusion_does_not_absorb_unrelated_entity_news():
         if not c.get("entities"):
             src_ids = {s.get("id") for s in (c.get("sources") or [])}
             assert "news:nubank" not in src_ids
+
+
+def test_bcg_position_from_financials():
+    from src.synth import bcg
+    recs = [
+        {"entity_id": "itau", "revenue": 300.0, "revenue_growth": 0.05},   # leader, slow
+        {"entity_id": "pine", "revenue": 3.0, "revenue_growth": 0.30},     # small, fast
+        {"entity_id": "btg", "revenue": 30.0, "revenue_growth": 0.06},     # IB leader
+        {"entity_id": "nofin"},                                            # no numbers
+    ]
+    imap = {"itau": ["banking"], "pine": ["banking"],
+            "btg": ["agri-funds", "asset-management"], "nofin": ["banking"]}
+    out = {r["entity_id"]: r.get("bcg") for r in bcg.position_from_financials(recs, imap)}
+    assert out["itau"]["quadrant"] == "cash_cow"       # share 1.0, growth 5% -> cash cow
+    assert out["pine"]["quadrant"] == "question_mark"  # share 0.01, growth 30% -> ?
+    # agri-funds is excluded (leaf) -> btg grouped by asset-management, where it leads
+    assert out["btg"]["industry"] == "asset-management" and out["btg"]["quadrant"] == "cash_cow"
+    assert out["nofin"] is None                        # no revenue/growth -> no bcg

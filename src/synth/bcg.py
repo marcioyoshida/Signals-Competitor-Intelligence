@@ -56,6 +56,66 @@ DIM_LABELS = {
     "dog": "Abacaxi",
 }
 
+# Deterministic BCG position from financial statements (issue #7 Phase 2). The LLM
+# classifier above narrates from signal evidence; this grounds the two axes in real
+# numbers: market growth ≈ the issuer's YoY REVENUE GROWTH, relative share ≈ its REVENUE
+# vs the largest same-industry peer among tracked issuers. Thresholds are heuristic
+# (documented), so the quadrant is a hard-number anchor the narrative can cite.
+BCG_HIGH_SHARE = 0.5   # ≥ half the industry leader's revenue
+BCG_HIGH_GROWTH = 0.10  # ≥ 10% YoY revenue growth
+
+
+def _classify(share: float | None, growth: float | None) -> str | None:
+    if share is None or growth is None:
+        return None
+    hi_s, hi_g = share >= BCG_HIGH_SHARE, growth >= BCG_HIGH_GROWTH
+    return ("star" if hi_s and hi_g else "cash_cow" if hi_s
+            else "question_mark" if hi_g else "dog")
+
+
+# Entry-tier/fund industries: an operating company (a DFP filer) competes in its
+# OPERATING market (banking/IB/insurance…), not in a fund/consórcio tag it may carry —
+# so these are excluded from BCG peer-grouping (also robust to any agri-funds pollution).
+_LEAF_INDUSTRIES = frozenset(
+    {"agri-funds", "real-estate-funds", "consorcio", "betting", "crypto"}
+)
+
+
+def position_from_financials(
+    records: list[dict[str, Any]], industry_map: dict[str, list[str]] | None,
+) -> list[dict[str, Any]]:
+    """Annotate each financials record with a ``bcg`` position derived from revenue.
+    relative_share = revenue / the largest same-industry peer (in the entity's biggest
+    OPERATING market); growth = revenue_growth. ``bcg`` is omitted when revenue/growth is
+    missing or the entity has no operating industry."""
+    industry_map = industry_map or {}
+    op: dict[str, list[str]] = {
+        r["entity_id"]: [i for i in industry_map.get(r["entity_id"], []) if i not in _LEAF_INDUSTRIES]
+        for r in records if r.get("entity_id")
+    }
+    leader: dict[str, float] = {}  # operating industry -> max tracked revenue
+    for r in records:
+        rev = float(r.get("revenue") or 0)
+        for ind in op.get(r.get("entity_id"), []):
+            leader[ind] = max(leader.get(ind, 0.0), rev)
+    out: list[dict[str, Any]] = []
+    for r in records:
+        rec = dict(r)
+        rev = float(r.get("revenue") or 0)
+        inds = op.get(r.get("entity_id"), [])
+        # the entity's biggest market (largest peer leader) — where it actually competes.
+        best = max(inds, key=lambda i: leader.get(i, 0.0), default=None)
+        peer = leader.get(best, 0.0) if best else 0.0
+        share = round(rev / peer, 3) if peer and rev else None
+        growth = r.get("revenue_growth")
+        q = _classify(share, growth)
+        if q and best:
+            rec["bcg"] = {"quadrant": q, "label": DIM_LABELS[q],
+                          "relative_share": share, "growth": round(float(growth), 4),
+                          "industry": best}
+        out.append(rec)
+    return out
+
 ENABLED = os.environ.get("ONCA_BCG_ENABLED", "1") not in ("0", "false", "False")
 MAX_ENTITIES = int(os.environ.get("ONCA_BCG_MAX_ENTITIES", "8"))
 MAX_PER_DIM = int(os.environ.get("ONCA_BCG_MAX_PER_DIM", "2"))
