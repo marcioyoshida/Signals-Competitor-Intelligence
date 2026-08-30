@@ -449,20 +449,60 @@ def test_provenance_stamping_and_preservation():
     assert prov["industries"]["source"] == "fixture" and prov["aliases"]["source"] == "fixture"
     assert "set_at" in prov["industries"]
 
-    er.set_industries("acme", ["banking", "fintech"], source="enrich", table=t)
-    prov = er.entity_provenance("acme", table=t)
-    assert prov["industries"]["source"] == "enrich"       # re-stamped
-    assert prov["aliases"]["source"] == "fixture"          # preserved
+    # Phase 2: an automated (curated fixture -> allowed only for curated/fixture). A
+    # human curated edit re-stamps and wins over the seed.
+    assert er.set_industries("acme", ["banking", "fintech"], source="curated", table=t) is True
+    assert er.entity_provenance("acme", table=t)["industries"]["source"] == "curated"
 
-    # assign_ticker rebuilds via put_entity but must preserve other fields' provenance.
-    er.assign_ticker("acme", "ACME3", source="enrich", table=t)
-    prov = er.entity_provenance("acme", table=t)
-    assert prov["ticker"]["source"] == "enrich"
-    assert prov["industries"]["source"] == "enrich" and prov["aliases"]["source"] == "fixture"
 
-    er.set_parent("acme-sub", None, table=t)  # missing entity -> no crash
-    er.put_entity("acme-sub", "Acme Sub", ["ASUB"], parent="acme", source="discovery", table=t)
-    assert er.entity_provenance("acme-sub", table=t)["parent"]["source"] == "discovery"
+def test_write_precedence_blocks_automated_demotion():
+    # ADR 018 Phase 2 — the general form of the #52 guard: discovery/enrich cannot demote a
+    # curated/fixture field; a curated (human) or a stronger source can.
+    t = FakeTable()
+    er.put_entity("btg", "BTG", ["BTG"], industries=["investment-banking"],
+                  source="fixture", table=t)
+    # an enrich trying to add agri-funds is REJECTED and the value is unchanged.
+    assert er.set_industries("btg", ["investment-banking", "agri-funds"],
+                             source="enrich", table=t) is False
+    assert er.get_entity("btg", table=t)["industries"] == ["investment-banking"]
+    # a discovered fund (no fixture) is freely enriched.
+    er.put_entity("fund", "Fund X", ["FDX"], industries=["agri-funds"],
+                  source="discovery", table=t)
+    assert er.set_industries("fund", ["agri-funds", "real-estate-funds"],
+                             source="enrich", table=t) is True
+    # parent precedence: enrich can't relink a fixture entity's parent.
+    er.set_parent("btg", "someone", source="curated", table=t)   # human sets it
+    assert er.set_parent("btg", "hijack", source="enrich", table=t) is False
+    assert er.get_entity("btg", table=t)["parent"] == "someone"
+
+
+def test_curation_log_records_mutations(monkeypatch):
+    # ADR 018 Phase 1b: every registry mutation appends to the journal (best-effort).
+    class _Sink:
+        def __init__(self):
+            self.items = []
+
+        def put_item(self, Item):
+            self.items.append(Item)
+
+    sink = _Sink()
+    monkeypatch.setattr(er, "_log_table", lambda: sink)
+    t = FakeTable()
+    er.put_entity("acme", "Acme", ["ACME"], industries=["banking"], source="fixture", table=t)
+    er.set_industries("acme", ["banking", "fintech"], source="curated", table=t)  # allowed
+    er.set_industries("acme", ["x"], source="enrich", table=t)                    # blocked
+    er.set_parent("acme", "grp", source="curated", table=t)
+    actions = {(i["action"], i["source"]) for i in sink.items}
+    assert ("put", "fixture") in actions
+    assert ("set_industries", "curated") in actions
+    assert ("blocked", "enrich") in actions      # Phase 2 rejection is journaled
+    assert ("set_parent", "curated") in actions
+    assert all(i["entity_id"] == "acme" and "#" in i["ts"] for i in sink.items)
+
+
+def test_no_log_table_is_a_noop(monkeypatch):
+    monkeypatch.setattr(er, "_log_table", lambda: None)
+    er.put_entity("x", "X", ["X"], table=FakeTable())  # must not raise
 
 
 def test_parent_link_and_children_of():

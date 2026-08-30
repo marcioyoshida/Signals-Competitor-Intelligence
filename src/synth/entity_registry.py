@@ -66,6 +66,22 @@ def _table(table: Any | None = None) -> Any:
 # fixture (a human/API `curated` write, and the code seed, are the strongest).
 PROV_SOURCES = ("inferred", "enrich", "discovery", "structured", "curated", "fixture")
 PROV_RANK = {s: i for i, s in enumerate(PROV_SOURCES)}
+# ADR 018 Phase 2 — protection level for write-precedence. A human/API `curated` edit and
+# the code `fixture` seed are BOTH top (curated must be able to override the seed), so an
+# automated writer can never demote either. Higher wins; a lower-ranked write is rejected.
+_PROV_PROTECT = {"inferred": 0, "enrich": 2, "discovery": 2, "structured": 3,
+                 "curated": 4, "fixture": 4}  # enrich==discovery (enrich follows discovery)
+
+
+def _may_write(ent: dict[str, Any], field: str, source: str) -> bool:
+    """Phase 2: may a write from `source` set `field`? A field with no provenance is open;
+    otherwise the write must be at least as strong as the field's current provenance —
+    this is the GENERAL form of the #52/ADR-017 point-guards (discovery can't demote a
+    curated/fixture institution's industries)."""
+    cur = (ent.get("_prov") or {}).get(field)
+    if not cur:
+        return True
+    return _PROV_PROTECT.get(source, 0) >= _PROV_PROTECT.get(cur.get("source"), 0)
 
 
 def _prov_entry(source: str, confidence: str | None = None) -> dict[str, Any]:
@@ -81,6 +97,56 @@ def _prov_entry(source: str, confidence: str | None = None) -> dict[str, Any]:
 def entity_provenance(entity_id: str, table: Any | None = None) -> dict[str, Any]:
     """ADR 018: the per-field provenance map {field: {source, confidence?, set_at}}."""
     return (get_entity(entity_id, table=table) or {}).get("_prov") or {}
+
+
+# ADR 018 Phase 1b — append-only mutation journal (audit + rollback substrate). Written to
+# a SEPARATE table (ONCA_CURATION_LOG_TABLE) so it never bloats the entity scans; a no-op
+# when unset (tests, local). Best-effort: a log failure never blocks the registry write.
+_LOG_TABLE_CACHE: Any | None = None
+
+
+def _log_table() -> Any | None:
+    global _LOG_TABLE_CACHE
+    name = os.environ.get("ONCA_CURATION_LOG_TABLE")
+    if not name:
+        return None
+    if _LOG_TABLE_CACHE is None:
+        import boto3
+
+        _LOG_TABLE_CACHE = boto3.resource("dynamodb").Table(name)
+    return _LOG_TABLE_CACHE
+
+
+def _log(entity_id: str, action: str, source: str, detail: dict[str, Any] | None = None) -> None:
+    t = _log_table()
+    if t is None:
+        return
+    try:
+        import datetime as _dt
+        import uuid
+
+        ts = _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="milliseconds")
+        t.put_item(Item=_ddb_safe({
+            "entity_id": str(entity_id), "ts": f"{ts}#{uuid.uuid4().hex[:8]}",
+            "action": str(action), "source": str(source), "detail": detail or {},
+        }))
+    except Exception as exc:  # pragma: no cover - best-effort, never blocks a write
+        print(f"Warning: curation-log write failed for {entity_id}: {exc}")
+
+
+def entity_history(entity_id: str, *, limit: int = 100) -> list[dict[str, Any]]:
+    """ADR 018: the mutation journal for one entity, newest first. [] if no log table."""
+    t = _log_table()
+    if t is None:
+        return []
+    try:
+        from boto3.dynamodb.conditions import Key
+
+        r = t.query(KeyConditionExpression=Key("entity_id").eq(str(entity_id)),
+                    ScanIndexForward=False, Limit=limit)
+        return list(r.get("Items") or [])
+    except Exception:  # pragma: no cover
+        return []
 
 
 def _stamp(entity: dict[str, Any], fields: Iterable[str], source: str,
@@ -218,6 +284,8 @@ def put_entity(
         t.put_item(Item={"pk": f"ALIAS#{na}", "type": "alias", "entity_id": entity_id})
     for r in roots:
         t.put_item(Item={"pk": f"CNPJ#{r}", "type": "cnpj", "entity_id": entity_id})
+    _log(entity_id, "put", source,  # ADR 018 Phase 1b
+         {"industries": entity.get("industries"), "ticker": entity.get("ticker")})
     return entity
 
 
@@ -420,6 +488,7 @@ def set_esg(entity_id: str, esg: dict[str, Any] | None, *, source: str = "struct
         return False
     prov = {**(e.get("_prov") or {}), "esg": _prov_entry(source)}  # ADR 018
     update_entity(entity_id, {"esg": want_safe, "_prov": prov}, table=t)
+    _log(entity_id, "set_esg", source, {"ise_b3": bool(want.get("ise_b3"))})
     return True
 
 
@@ -763,6 +832,7 @@ def accumulate_aliases(
     t.put_item(Item=ent)
     for na in new_norm:
         t.put_item(Item={"pk": f"ALIAS#{na}", "type": "alias", "entity_id": entity_id})
+    _log(entity_id, "accumulate_aliases", source, {"added": added})
     return added
 
 
@@ -1127,6 +1197,12 @@ def set_industries(
     if not ent:
         return False
     inds = sorted({str(i).strip().lower() for i in industries if str(i).strip()})
+    # ADR 018 Phase 2: an automated write must not demote a curated/fixture industry set.
+    if not _may_write(ent, "industries", source):
+        _log(entity_id, "blocked", source,
+             {"field": "industries", "attempted": inds,
+              "held_by": (ent.get("_prov") or {}).get("industries", {}).get("source")})
+        return False
     if inds:
         ent["industries"] = inds
     else:
@@ -1134,6 +1210,7 @@ def set_industries(
     ent["needs_review"] = False
     _stamp(ent, ["industries"], source)  # ADR 018
     t.put_item(Item=ent)
+    _log(entity_id, "set_industries", source, {"new": inds})
     return True
 
 
@@ -1145,12 +1222,16 @@ def set_parent(entity_id: str, parent: str | None, table: Any | None = None,
     ent = get_entity(entity_id, table=t)
     if not ent:
         return False
+    if not _may_write(ent, "parent", source):  # ADR 018 Phase 2
+        _log(entity_id, "blocked", source, {"field": "parent", "attempted": parent})
+        return False
     if parent:
         ent["parent"] = str(parent)
     else:
         ent.pop("parent", None)
     _stamp(ent, ["parent"], source)  # ADR 018
     t.put_item(Item=ent)
+    _log(entity_id, "set_parent", source, {"parent": parent})
     return True
 
 

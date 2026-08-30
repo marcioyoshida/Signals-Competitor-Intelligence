@@ -122,6 +122,19 @@ class OncaPrototypeStack(Stack):
         )
         CfnOutput(self, "TenantConfigTable", value=tenant_config_table.table_name)
 
+        # ADR 018 Phase 1b — append-only curation mutation journal (audit + rollback).
+        # Separate table so it never bloats the entity scans; the registry writers below
+        # get ONCA_CURATION_LOG_TABLE + write access.
+        curation_log_table = dynamodb.Table(
+            self,
+            "OncaCurationLog",
+            partition_key=dynamodb.Attribute(name="entity_id", type=dynamodb.AttributeType.STRING),
+            sort_key=dynamodb.Attribute(name="ts", type=dynamodb.AttributeType.STRING),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.RETAIN,
+        )
+        CfnOutput(self, "CurationLogTable", value=curation_log_table.table_name)
+
         # Provisioned out-of-band by infra/bootstrap.sh (account-level baseline
         # buckets, shared across future stacks) — import them, don't create them.
         digests_bucket = s3.Bucket.from_bucket_name(
@@ -343,6 +356,8 @@ class OncaPrototypeStack(Stack):
         )
         state_table.grant_read_write_data(func)
         entities_table.grant_read_write_data(func)
+        curation_log_table.grant_write_data(func)  # ADR 018 Phase 1b
+        func.add_environment("ONCA_CURATION_LOG_TABLE", curation_log_table.table_name)
         digests_bucket.grant_put(func)
         raw_bucket.grant_put(func)
         func.add_to_role_policy(
@@ -404,6 +419,8 @@ class OncaPrototypeStack(Stack):
         digests_bucket.grant_put(synth)
         raw_bucket.grant_read(synth)
         entities_table.grant_read_write_data(synth)
+        curation_log_table.grant_write_data(synth)  # ADR 018 Phase 1b
+        synth.add_environment("ONCA_CURATION_LOG_TABLE", curation_log_table.table_name)
         state_table.grant_read_write_data(synth)  # deferred news seen-commit (#23)
         synth.add_to_role_policy(
             iam.PolicyStatement(
@@ -1253,6 +1270,8 @@ class OncaPrototypeStack(Stack):
             },
         )
         entities_table.grant_read_write_data(review_fn)
+        curation_log_table.grant_write_data(review_fn)  # ADR 018 Phase 1b
+        review_fn.add_environment("ONCA_CURATION_LOG_TABLE", curation_log_table.table_name)
         digests_bucket.grant_read_write(review_fn)  # Phase C: vet SWOT/graph proposal stores
         feed_fn.grant_invoke(review_fn)
         review_url = review_fn.add_function_url(
@@ -1280,6 +1299,8 @@ class OncaPrototypeStack(Stack):
             },
         )
         entities_table.grant_read_write_data(registry_fn)
+        curation_log_table.grant_write_data(registry_fn)  # ADR 018 Phase 1b
+        registry_fn.add_environment("ONCA_CURATION_LOG_TABLE", curation_log_table.table_name)
         registry_url = registry_fn.add_function_url(
             auth_type=lambda_.FunctionUrlAuthType.NONE
         )
@@ -1444,6 +1465,8 @@ class OncaPrototypeStack(Stack):
         digests_bucket.grant_read_write(gaps_fn)
         site_bucket.grant_read(gaps_fn)
         entities_table.grant_read_write_data(gaps_fn)  # safe-autofix backfills
+        curation_log_table.grant_write_data(gaps_fn)  # ADR 018 Phase 1b
+        gaps_fn.add_environment("ONCA_CURATION_LOG_TABLE", curation_log_table.table_name)
         gaps_fn.add_to_role_policy(
             iam.PolicyStatement(
                 actions=["bedrock:Retrieve"],
