@@ -10,9 +10,10 @@ import os
 from pathlib import Path
 
 import yaml
-from aws_cdk import App, CfnOutput, Duration, Stack, Tags
+from aws_cdk import App, CfnOutput, Duration, RemovalPolicy, Stack, Tags
 from aws_cdk import aws_bedrock as bedrock
 from aws_cdk import aws_cloudfront as cloudfront
+from aws_cdk import aws_cognito as cognito
 from aws_cdk import aws_cloudfront_origins as cf_origins
 from aws_cdk import aws_cloudwatch as cloudwatch
 from aws_cdk import aws_dynamodb as dynamodb
@@ -458,6 +459,58 @@ class OncaPrototypeStack(Stack):
             # S3 bucket (per-request detail — IP, URI, status, referer).
             enable_logging=True,
             log_file_prefix="cf-access/",
+        )
+
+        # --- Phase C: identity (Cognito) — ADR 002 Decision 7 "7 gates 6" --------
+        # Per-tenant identity is THE prerequisite for entitlement + the distribution
+        # tiers (ADR 015/016): the shared basic-auth edge cannot attribute a request to
+        # a tenant. This user pool is the identity provider; `tenant` + `tier` ride as
+        # custom claims that onca-tenant-config (Phase D) authorizes against.
+        # ADDITIVE — it does NOT yet gate the Lambda-URL APIs. Those are Lambda URLs
+        # (no built-in authorizer), so JWT verification is a follow-on increment
+        # (API Gateway JWT authorizer vs Lambda@Edge vs in-Lambda JWKS — see ADR).
+        _acct = os.environ.get("CDK_DEFAULT_ACCOUNT", "signals")
+        user_pool = cognito.UserPool(
+            self,
+            "OncaUserPool",
+            self_sign_up_enabled=False,  # tenants are provisioned, not open self-signup
+            sign_in_aliases=cognito.SignInAliases(email=True),
+            standard_attributes=cognito.StandardAttributes(
+                email=cognito.StandardAttribute(required=True, mutable=False),
+            ),
+            custom_attributes={
+                # the tenant this user belongs to (entitlement key) + its tier.
+                "tenant": cognito.StringAttribute(mutable=False),
+                "tier": cognito.StringAttribute(mutable=True),  # entry | saas | sovereign
+            },
+            password_policy=cognito.PasswordPolicy(min_length=12),
+            account_recovery=cognito.AccountRecovery.EMAIL_ONLY,
+            removal_policy=RemovalPolicy.RETAIN,  # never destroy identities on stack update
+        )
+        user_pool_client = user_pool.add_client(
+            "OncaWarroomClient",
+            auth_flows=cognito.AuthFlow(user_srp=True),
+            o_auth=cognito.OAuthSettings(
+                flows=cognito.OAuthFlows(authorization_code_grant=True),
+                scopes=[cognito.OAuthScope.OPENID, cognito.OAuthScope.EMAIL],
+                callback_urls=[f"https://{distribution.distribution_domain_name}/"],
+                logout_urls=[f"https://{distribution.distribution_domain_name}/"],
+            ),
+            prevent_user_existence_errors=True,
+        )
+        user_pool_domain = user_pool.add_domain(
+            "OncaHostedUi",
+            cognito_domain=cognito.CognitoDomainOptions(domain_prefix=f"onca-{_acct}"),
+        )
+        CfnOutput(self, "UserPoolId", value=user_pool.user_pool_id)
+        CfnOutput(self, "UserPoolClientId", value=user_pool_client.user_pool_client_id)
+        CfnOutput(
+            self,
+            "UserPoolHostedUi",
+            value=(
+                f"https://{user_pool_domain.domain_name}.auth."
+                f"{self.region}.amazoncognito.com"
+            ),
         )
 
         # And a CloudWatch dashboard to watch pilot traffic at a glance.
