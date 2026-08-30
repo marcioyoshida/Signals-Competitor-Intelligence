@@ -111,6 +111,29 @@ def test_discover_fiagro_creates_and_enriches():
     assert "agri-funds" in (ent.get("industries") or [])
 
 
+def test_discover_fiagro_links_fund_to_tier1_parent():
+    # ADR 017: a fund whose brand token matches a tracked institution links to it as
+    # `parent`; the parent stays tier-1 (no agri, no parent), the fund carries the line.
+    from src.synth import entity_registry
+
+    table = _FakeTable()
+    entity_registry.put_entity(
+        "btg", "BTG Pactual", ["BTG", "TICKER:BPAC11"],
+        industries=["investment-banking"], table=table,
+    )
+    rows = [{
+        "fund_name": "BTG CERES FIAGRO", "ticker": "BTGC11", "cnpj": "55555555000199",
+        "pl": 1e9, "as_of": "2026-03-01", "url": "https://x", "admin": "BTG", "manager": "BTG",
+    }]
+    report = discover_fiagro(rows=rows, min_pl=0, auto_create=True, max_new=5, table=table)
+    assert report["created"]  # id is the ticker slug (btgc11); parent comes from the brand
+    child = report["created"][0]
+    assert entity_registry.get_entity(child, table=table)["parent"] == "btg"
+    parent = entity_registry.get_entity("btg", table=table)
+    assert "agri-funds" not in (parent.get("industries") or []) and "parent" not in parent
+    assert entity_registry.children_of("btg", table=table) == [child]
+
+
 def test_discover_fiagro_quality_gate():
     """Junk-named funds (no ticker, generic legal name) are proposed, not
     auto-created; clean ticker funds are created."""

@@ -277,6 +277,20 @@ def discover_fiagro(
     cnpj_idx: dict[str, str] = {}
     alias_idx: dict[str, str] = {}
     disp_idx: dict[str, list[str]] = {}
+    # ADR 017: index the tracked INSTITUTIONS a discovered fund may be a sub-entity OF —
+    # entities with a non-agri industry (bank/IB/asset manager). A fund whose brand matches
+    # one links to it as `parent`, so the parent stays tier-1 while the fund carries the
+    # agri line. Brand→PARENT is the correct use of the fund-brand==manager-brand signal
+    # (the same signal that must NOT drive industry enrichment — see the enrich note above).
+    # A parentable INSTITUTION has at least one non-fund industry — a bank/IB/asset
+    # manager, never a pure FII/FIAGRO fund (those are the sub-entities, not the parents).
+    _FUND_INDUSTRIES = {"agri-funds", "real-estate-funds"}
+    _parentable: list[str] = []
+    _aliases_of: dict[str, set[str]] = {}
+
+    def _norm(s: str) -> str:
+        return entity_registry.normalize_alias(s or "")
+
     for e in entity_registry.list_entities(table=table, include_inactive=True):
         _eid = e.get("entity_id")
         if not _eid:
@@ -285,12 +299,35 @@ def discover_fiagro(
             cnpj_idx[str(r)[:8]] = _eid
         for a in e.get("aliases") or []:
             alias_idx[a] = _eid
-        d = entity_registry.normalize_alias(e.get("display_name") or "")
+        d = _norm(e.get("display_name") or "")
         if d:
             disp_idx.setdefault(d, []).append(_eid)
+        if set(e.get("industries") or []) - _FUND_INDUSTRIES:
+            _parentable.append(_eid)
+            _aliases_of[_eid] = {a for a in (e.get("aliases") or []) if a}
 
-    def _norm(s: str) -> str:
-        return entity_registry.normalize_alias(s or "")
+    # Build the brand→institution index in two passes so an EXACT key (entity_id or a
+    # full alias) always beats a looser brand token (`bb` the bank, not `bb_seguridade`).
+    # Keys are NORMALIZED (normalize_alias uppercases + strips accents) so they match a
+    # fund's normalized brand — the entity_id is a lowercase slug, so normalize it too.
+    parent_brand_idx: dict[str, str] = {}
+    for _eid in _parentable:  # pass 1 — exact keys (normalized entity_id + aliases)
+        parent_brand_idx.setdefault(_norm(_eid), _eid)
+        for a in _aliases_of[_eid]:  # registry aliases are already normalized
+            parent_brand_idx.setdefault(a, _eid)
+    for _eid in _parentable:  # pass 2 — the entity_id's brand token (lower priority)
+        tok = _norm(_eid.split("_")[0])
+        if tok and tok != _norm(_eid) and len(tok) >= 2:
+            parent_brand_idx.setdefault(tok, _eid)
+
+    def _parent_of(brand: str | None) -> str | None:
+        """The tier-1 institution a fund's brand belongs to (`BTG PACTUAL ASSET CERES`
+        -> `btg`). Matches the full brand, then its leading token, to a tracked
+        institution — never to another fund."""
+        nb = _norm(brand or "")
+        if not nb:
+            return None
+        return parent_brand_idx.get(nb) or parent_brand_idx.get(nb.split(" ")[0])
 
     for row in rows:
         try:
@@ -333,6 +370,11 @@ def discover_fiagro(
                     changed = True
                 if ticker and not ent.get("ticker"):
                     if entity_registry.assign_ticker(eid, ticker, table=table):
+                        changed = True
+                # ADR 017: link an existing fund to its tier-1 parent if not already.
+                pid = _parent_of(profile.get("display_name"))
+                if pid and pid != eid and not ent.get("parent"):
+                    if entity_registry.set_parent(eid, pid, table=table):
                         changed = True
                 if changed:
                     report["enriched"].append(eid)
@@ -377,6 +419,7 @@ def discover_fiagro(
                     industries=[industry],
                     ticker=ticker,
                     confidence="cnpj",
+                    parent=_parent_of(profile.get("display_name")),  # ADR 017 sub-entity link
                     table=table,
                 )
                 report["created"].append(profile["entity_id"])
