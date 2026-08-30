@@ -160,6 +160,86 @@ def test_profile_auto_ok_flag():
     assert clean["auto_ok"] is True
 
 
+def test_fiagro_shared_admin_alias_causes_over_resolution():
+    """DEFECT (QA-added, live-quantified 2026-08-29 against the prod registry:
+    of 186 real FIAGRO PL-move-shaped rows, only 26 (14%) resolved to exactly
+    one entity via resolve_entities(); 160 (86%) over-resolved to 2-27 entities,
+    up to 27 for a single administrator's book).
+
+    Root cause: _profile_from_fiagro() appends the fund's raw `admin`/`manager`
+    string verbatim into `aliases` (see below). Many small FIAGRO funds share
+    the same administrator (a DTVM/corretora that services dozens of funds).
+    Because entities.signal_blob() also includes `admin`/`manager` in the text
+    blob matched against every OTHER fund's aliases, a single fund's PL-move
+    event resolves to every fund sharing that administrator via a 'distinct'
+    (whole multi-token string) alias match — not just to the fund it's about.
+
+    This test reproduces the mechanism hermetically (no live calls): two
+    unrelated FIAGRO funds share one administrator; a signal that is genuinely
+    about fund A resolves entities including unrelated fund B purely off the
+    shared administrator name. This is the current (undesired) behavior --
+    the assertion documents the defect, it is not the desired spec."""
+    from src.synth import entities as _entities
+    from src.synth.entity_discovery import _profile_from_fiagro
+
+    fund_a = {
+        "fund_name": "ALPHA CREDITO AGRO FIAGRO",
+        "ticker": "ALFA11",
+        "cnpj": "11111111000100",
+        "admin": "SHARED ADMINISTRADORA DE FUNDOS S.A.",
+        "manager": "GESTORA ALPHA",
+        "pl": 100_000_000.0,
+    }
+    fund_b = {
+        "fund_name": "BETA RURAL FIAGRO",
+        "ticker": "BETA11",
+        "cnpj": "22222222000100",
+        "admin": "SHARED ADMINISTRADORA DE FUNDOS S.A.",
+        "manager": "GESTORA BETA",
+        "pl": 50_000_000.0,
+    }
+    profile_a = _profile_from_fiagro(fund_a)
+    profile_b = _profile_from_fiagro(fund_b)
+    # Reproduces production shape: the shared admin string is a verbatim alias
+    # on BOTH entities.
+    assert "SHARED ADMINISTRADORA DE FUNDOS S.A." in profile_a["aliases"]
+    assert "SHARED ADMINISTRADORA DE FUNDOS S.A." in profile_b["aliases"]
+
+    fake_alias_map = {
+        profile_a["entity_id"]: profile_a["aliases"],
+        profile_b["entity_id"]: profile_b["aliases"],
+    }
+    orig_alias_map = _entities._alias_map
+    _entities._alias_map = lambda: fake_alias_map
+    try:
+        # A PL-move event genuinely about fund A only.
+        move_sig = {
+            "_lens": "funds",
+            "event": "pl_move",
+            "fund_name": fund_a["fund_name"],
+            "cnpj": fund_a["cnpj"],
+            "admin": fund_a["admin"],
+            "manager": fund_a["manager"],
+            "ticker": fund_a["ticker"],
+            "pl": 140_000_000.0,
+            "pct_change": 40.0,
+            "is_new": True,
+        }
+        resolved = _entities.resolve_entities(move_sig)
+    finally:
+        _entities._alias_map = orig_alias_map
+
+    # Current (defective) behavior: fund B's entity is pulled in too, purely
+    # via the shared administrator alias — an event about fund A over-resolves
+    # to an unrelated fund.
+    assert profile_a["entity_id"] in resolved
+    assert profile_b["entity_id"] in resolved, (
+        "expected the shared-admin over-resolution defect to reproduce "
+        f"(got {resolved}) — if this now fails, the admin/manager alias "
+        "leak has been fixed and this test should be inverted"
+    )
+
+
 def test_propose_review_sanitizes_floats():
     """A payload with floats (e.g. a fund's PL) must be stored as Decimal —
     DynamoDB rejects Python floats, which previously errored the review write."""

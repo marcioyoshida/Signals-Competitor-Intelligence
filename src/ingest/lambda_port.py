@@ -90,6 +90,7 @@ from src.ingest import (
     bcb_macro,
     bcb_normativos,
     bcb_pix,
+    cvm_fiagro,
     cvm_fundos,
     cvm_inf_diario,
     cvm_ipe,
@@ -568,6 +569,75 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as exc:  # pragma: no cover - best-effort, never blocks ingest
             print(f"Warning: entity discovery skipped: {exc}")
 
+    # FIAGRO agri-funds — PL / cotista moves + newly-registered classes as
+    # narrative-ready signal (task b). Entity discovery above only populates the
+    # registry; without this, 0 agri-funds narratives ever reach synth. Reuses
+    # the generic value-state move engine (same primitives as Pix/juros/Informe
+    # Diário) — first run seeds a baseline only. Independently gated from
+    # ONCA_ENTITY_DISCOVERY so either can be disabled without the other.
+    fiagro_rows: list[dict[str, Any]] = []
+    fiagro_pl_moves: list[dict[str, Any]] = []
+    fiagro_cotista_moves: list[dict[str, Any]] = []
+    fiagro_new_regs: list[dict[str, Any]] = []
+    if os.environ.get("ONCA_FIAGRO_SIGNAL", "true").lower() in ("1", "true", "yes"):
+        try:
+            with _source_budget("FIAGRO moves", deadline, per_source):
+                fiagro_min_pl = float(os.environ.get("ONCA_FIAGRO_MIN_PL", "50000000"))
+                pl_threshold = float(
+                    os.environ.get("ONCA_FIAGRO_PL_MOVE_THRESHOLD_PCT", "15.0")
+                )
+                cotista_threshold = float(
+                    os.environ.get("ONCA_FIAGRO_COTISTA_MOVE_THRESHOLD_PCT", "30.0")
+                )
+                reg_lookback = int(
+                    os.environ.get("ONCA_FIAGRO_NEW_REG_LOOKBACK_DAYS", "60")
+                )
+                fiagro_rows = cvm_fiagro.fetch_fiagro(min_pl=fiagro_min_pl)
+                fiagro_pl_moves = _moves_since_last_run(
+                    "cvm_fiagro_pl",
+                    cvm_fiagro.for_pl_moves(fiagro_rows),
+                    key_field="cnpj",
+                    value_field="pl",
+                    min_pct=pl_threshold,
+                )
+                fiagro_cotista_moves = _moves_since_last_run(
+                    "cvm_fiagro_cotistas",
+                    cvm_fiagro.for_cotista_moves(fiagro_rows),
+                    key_field="cnpj",
+                    value_field="cotistas",
+                    min_pct=cotista_threshold,
+                )
+                reg_candidates = cvm_fiagro.for_new_registrations(
+                    fiagro_rows, lookback_days=reg_lookback
+                )
+                fiagro_new_regs = _new_since_last_run(
+                    "cvm_fiagro_newreg", reg_candidates, seed_if_empty=True
+                )
+        except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
+            print(f"Warning: CVM FIAGRO moves fetch failed: {exc}")
+    fiagro_moves_all = fiagro_pl_moves + fiagro_cotista_moves + fiagro_new_regs
+    # Attribute each FIAGRO move to exactly ONE entity by CNPJ — a structured id
+    # that is authoritative. This bypasses the free-text alias matcher, which
+    # over-resolves FIAGRO funds via their shared *administrator* name (dozens of
+    # funds share one DTVM/corretora admin, so a single move would otherwise fan
+    # out to every co-administered fund). Drop a move whose CNPJ isn't yet a
+    # registry entity — there's no subject to attribute it to (discovery adds the
+    # fund later, after which its next move resolves).
+    if fiagro_moves_all:
+        try:
+            from src.synth import entity_registry as _fiagro_reg
+
+            _resolved: list[dict[str, Any]] = []
+            for _ev in fiagro_moves_all:
+                _eid = _fiagro_reg.resolve_by_cnpj(str(_ev.get("cnpj") or ""))
+                if _eid:
+                    _ev["_entities"] = [_eid]
+                    _resolved.append(_ev)
+            fiagro_moves_all = _resolved
+        except Exception as exc:  # pragma: no cover - never emit unattributed fan-out
+            print(f"Warning: FIAGRO entity resolution failed, dropping signal: {exc}")
+            fiagro_moves_all = []
+
     # Pix traction — month-over-month volume moves (first run seeds baseline only).
     pix_by_inst: list[dict[str, Any]] = []
     pix_moves: list[dict[str, Any]] = []
@@ -909,6 +979,18 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             "items": _tag_new(inf_diario_moves[:10]),
             # Top-by-PL sample for entity fusion (already sorted in fetch_latest).
             "context": _strip_raw(inf_diario_rows[:15]),
+        },
+        # Agri-funds (FIAGRO) moves — task b. Reuses the "funds" lens (candidates.py
+        # _collect_signals) so a solo material move can alert on its own, the same
+        # as a new CVM fund-class filing.
+        "fiagro_moves": {
+            "funds_tracked": len(fiagro_rows),
+            "pl_move_count": len(fiagro_pl_moves),
+            "cotista_move_count": len(fiagro_cotista_moves),
+            "new_registration_count": len(fiagro_new_regs),
+            "move_count": len(fiagro_moves_all),
+            "items": _tag_new(fiagro_moves_all[:12]),
+            "context": _strip_raw(fiagro_rows[:15]),
         },
         "source": "lambda_port",
     }

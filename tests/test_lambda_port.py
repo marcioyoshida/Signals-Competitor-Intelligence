@@ -26,6 +26,7 @@ def _auto_stub_external_sources(monkeypatch):
     monkeypatch.setattr(lambda_port.cvm_inf_diario, "for_moves", lambda rows: rows)
     monkeypatch.setattr(lambda_port.bcb_macro, "fetch_selic", lambda *a, **k: None)
     monkeypatch.setattr(lambda_port.bcb_macro, "fetch_focus", lambda *a, **k: [])
+    monkeypatch.setattr(lambda_port.cvm_fiagro, "fetch_fiagro", lambda **kwargs: [])
 
 
 class FakeStateTable:
@@ -92,6 +93,8 @@ def test_lambda_handler_returns_digest_payload_when_ingesters_fail(monkeypatch):
     assert payload["sec_filings"]["new_count"] == 0
     assert payload["inf_diario_moves"]["funds_tracked"] == 0
     assert payload["inf_diario_moves"]["move_count"] == 0
+    assert payload["fiagro_moves"]["funds_tracked"] == 0
+    assert payload["fiagro_moves"]["move_count"] == 0
 
 
 def test_lambda_handler_passes_watchlist_config_to_ingesters(monkeypatch):
@@ -438,6 +441,76 @@ def test_pix_moves_detected_across_two_runs(monkeypatch):
     assert move["ispb"] == "111"
     assert move["pct_change"] == 50.0
     assert move["prev_value"] == 100.0
+
+
+def test_fiagro_pl_moves_detected_across_two_runs(monkeypatch):
+    """Month-over-month FIAGRO PL move flows end-to-end into the digest (task b)."""
+    fake_table = FakeStateTable()
+    monkeypatch.setattr(lambda_port, "DynamoDbState", lambda source: DynamoDbState(source, table=fake_table))
+    monkeypatch.setattr(
+        lambda_port, "DynamoDbValueState", lambda source: DynamoDbValueState(source, table=fake_table)
+    )
+    _stub_core_ingesters(monkeypatch)
+
+    # FIAGRO moves are attributed to exactly one entity by CNPJ (structured id);
+    # stub the registry lookup so this stays hermetic (no live AWS) and the fund
+    # resolves to a single entity id.
+    from src.synth import entity_registry as _er
+    monkeypatch.setattr(
+        _er, "resolve_by_cnpj",
+        lambda cnpj, table=None: "grow11" if "11111111" in str(cnpj) else None,
+    )
+
+    def _fund(pl):
+        return {
+            "id": "cvm:fiagro:11111111000100",
+            "cnpj": "11111111000100",
+            "fund_name": "GROWER FIAGRO",
+            "ticker": "GROW11",
+            "admin": "ADMIN X",
+            "manager": "GESTORA Y",
+            "pl": pl,
+            "cotistas": 50,
+            "registered": "2020-01-01",
+            "url": "https://dados.cvm.gov.br/dataset/fiagro-doc-inf_mensal",
+            "yyyymm": "202607",
+            "as_of": "2026-07-01",
+            "industry": "agri-funds",
+        }
+
+    monkeypatch.setattr(lambda_port.cvm_fiagro, "fetch_fiagro", lambda **kwargs: [_fund(100_000_000.0)])
+    month_one = json.loads(lambda_port.lambda_handler({}, None)["body"])
+    assert month_one["fiagro_moves"]["funds_tracked"] == 1
+    assert month_one["fiagro_moves"]["move_count"] == 0  # baseline seed
+
+    monkeypatch.setattr(lambda_port.cvm_fiagro, "fetch_fiagro", lambda **kwargs: [_fund(140_000_000.0)])
+    month_two = json.loads(lambda_port.lambda_handler({}, None)["body"])
+    assert month_two["fiagro_moves"]["pl_move_count"] == 1
+    move = month_two["fiagro_moves"]["items"][0]
+    assert move["cnpj"] == "11111111000100"
+    assert move["pct_change"] == 40.0
+    assert move["prev_value"] == 100_000_000.0
+    assert move["is_new"] is True
+    # Attributed to exactly the one CNPJ-resolved entity (no free-text fan-out).
+    assert move["_entities"] == ["grow11"]
+
+
+def test_fiagro_signal_can_be_disabled(monkeypatch):
+    fake_table = FakeStateTable()
+    monkeypatch.setattr(lambda_port, "DynamoDbState", lambda source: DynamoDbState(source, table=fake_table))
+    monkeypatch.setattr(
+        lambda_port, "DynamoDbValueState", lambda source: DynamoDbValueState(source, table=fake_table)
+    )
+    _stub_core_ingesters(monkeypatch)
+    monkeypatch.setenv("ONCA_FIAGRO_SIGNAL", "false")
+
+    def _boom(**kwargs):
+        raise AssertionError("fetch_fiagro must not run when ONCA_FIAGRO_SIGNAL=false")
+
+    monkeypatch.setattr(lambda_port.cvm_fiagro, "fetch_fiagro", _boom)
+    payload = json.loads(lambda_port.lambda_handler({}, None)["body"])
+    assert payload["fiagro_moves"]["funds_tracked"] == 0
+    assert payload["fiagro_moves"]["move_count"] == 0
 
 
 def test_sec_filings_first_run_seeds_silently(monkeypatch):

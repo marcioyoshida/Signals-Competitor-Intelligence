@@ -453,6 +453,180 @@ def test_fatos_material_fact_high_value_and_resolves_entity():
     assert "BANCO BRADESCO" in txt and "Aquisição de participação" in txt
 
 
+def test_fiagro_pl_move_yields_solo_funds_alert():
+    """A material FIAGRO PL move (task b) reuses the 'funds' lens — one NEW
+    move is enough to alert solo, same as a fresh CVM fund-class filing, and
+    the narrative branch must render the PL/% metric (not misdescribe it)."""
+    from src.synth.synthesize import _describe_signal
+
+    d = {
+        "fiagro_moves": {
+            "items": [
+                {
+                    "id": "cvm:fiagro:61865683000100",
+                    "source": "CVM-FIAGRO",
+                    "kind": "competitor",
+                    "event": "pl_move",
+                    "fund_name": "SANTO REIS FIAGRO IMOBILIARIO",
+                    "ticker": None,
+                    "cnpj": "61865683000100",
+                    "admin": "PLANNER CORRETORA",
+                    "manager": "X GESTORA",
+                    "pl": 221_700_000.0,
+                    "prev_value": 109_300_000.0,
+                    "pct_change": 102.8,
+                    "as_of": "2026-07-01",
+                    "yyyymm": "202607",
+                    "url": "https://dados.cvm.gov.br/dataset/fiagro-doc-inf_mensal",
+                    "industry": "agri-funds",
+                    "is_new": True,
+                }
+            ],
+            "context": [],
+        }
+    }
+    cands = extract_candidates(d, max_candidates=5, min_lenses=1, min_score=0.0)
+    assert cands
+    c = cands[0]
+    assert c["kind"] == "competitor:funds"
+    assert "funds" in c["lenses"]
+    assert c["is_alert"] is True
+    assert c["threat_score"] > 0.5  # a 102.8% PL move carries real magnitude
+
+    txt = _describe_signal({**d["fiagro_moves"]["items"][0], "_lens": "funds"})
+    assert "SANTO REIS" in txt
+    assert "102.8" in txt
+    assert txt.startswith("Patrimônio de fundo")
+
+
+def test_fiagro_cotista_move_narrative_does_not_mix_up_pl():
+    """A cotista-surge event must not be rendered with the PL branch's wording
+    (it carries no 'pl' field — see cvm_fiagro.for_cotista_moves)."""
+    from src.synth.synthesize import _describe_signal
+
+    sig = {
+        "id": "cvm:fiagro:66397199000100",
+        "event": "cotista_move",
+        "fund_name": "ECOAGRO DATAGRO FIAGRO",
+        "cnpj": "66397199000100",
+        "admin": "ADMIN X",
+        "cotistas": 2178,
+        "prev_value": 1630,
+        "pct_change": 33.6,
+        "url": "https://dados.cvm.gov.br/dataset/fiagro-doc-inf_mensal",
+        "_lens": "funds",
+        "is_new": True,
+    }
+    txt = _describe_signal(sig)
+    assert txt.startswith("Base de cotistas FIAGRO")
+    assert "ECOAGRO DATAGRO" in txt and "33.6" in txt
+    assert "PL=" not in txt
+
+
+def test_fiagro_new_registration_narrative():
+    from src.synth.synthesize import _describe_signal
+
+    sig = {
+        "id": "fiagro:newreg:42336323000109",
+        "event": "new_registration",
+        "fund_name": "CERES CONFINA FIAGRO",
+        "cnpj": "42336323000109",
+        "admin": "BTG PACTUAL",
+        "registered": "2026-07-08",
+        "pl": 60_000_000.0,
+        "url": "https://dados.cvm.gov.br/dataset/fiagro-doc-inf_mensal",
+        "_lens": "funds",
+        "is_new": True,
+    }
+    txt = _describe_signal(sig)
+    assert txt.startswith("Nova classe FIAGRO registrada")
+    assert "CERES CONFINA" in txt and "2026-07-08" in txt
+
+
+def test_fiagro_new_registration_alone_does_not_solo_alert():
+    """Anti-fabrication (QA-added): a bare new-class registration carries no
+    magnitude (no pct_change) — _score_threat scores it ~0.37, below the
+    default ONCA_SYNTH_MIN_SCORE=0.40 solo-alert floor, even though 'funds'
+    is a HIGH_VALUE_SOLO_LENSES member. It must NOT surface as a standalone
+    candidate; it needs a second corroborating lens/source to clear the gate."""
+    d = {
+        "fiagro_moves": {
+            "items": [
+                {
+                    "id": "fiagro:newreg:99999999000100",
+                    "event": "new_registration",
+                    "fund_name": "SOME NEW FIAGRO CLASS",
+                    "cnpj": "99999999000100",
+                    "admin": "SOME ADMIN DTVM",
+                    "registered": "2026-08-01",
+                    "url": "https://dados.cvm.gov.br/dataset/fiagro-doc-inf_mensal",
+                    "industry": "agri-funds",
+                    "is_new": True,
+                }
+            ],
+            "context": [],
+        }
+    }
+    cands = extract_candidates(d, max_candidates=5, min_lenses=2, min_score=0.40)
+    assert cands == []
+
+
+def test_fiagro_pl_and_cotista_move_same_fund_distinct_ids_both_survive():
+    """FIXED (was a defect): a fund with BOTH a material PL move and a material
+    cotista move in one run must keep both. for_pl_moves()/for_cotista_moves()
+    now suffix the id by event (":pl" / ":cotista"), so candidates._section_pool's
+    dedup-by-id no longer silently drops the second event."""
+    from src.ingest import cvm_fiagro
+
+    cnpj = "55555555000100"
+    row = {
+        "id": f"cvm:fiagro:{cnpj}",
+        "fund_name": "DUAL MOVE FIAGRO",
+        "cnpj": cnpj,
+        "pl": 140.0,
+        "cotistas": 100,
+        "url": "https://dados.cvm.gov.br/dataset/fiagro-doc-inf_mensal",
+    }
+    pl = cvm_fiagro.for_pl_moves([row])[0]
+    cot = cvm_fiagro.for_cotista_moves([row])[0]
+    assert pl["id"] != cot["id"]  # distinct, event-scoped ids
+    for m in (pl, cot):
+        m["is_new"] = True
+        m["pct_change"] = 40.0
+    d = {"fiagro_moves": {"items": [pl, cot], "context": []}}
+    signals = _candidates._collect_signals(d)
+    events = {s.get("event") for s in signals}
+    assert events == {"pl_move", "cotista_move"}, (
+        f"only {events} survived — the second event was dropped by id dedup"
+    )
+
+
+def test_fiagro_move_attributes_only_to_preresolved_entity_no_fanout():
+    """FIXED P0: a FIAGRO move pre-resolved by CNPJ (``_entities``) must attribute
+    to exactly that one fund — NOT fan out to co-administered funds via the shared
+    administrator alias. candidates now honors ``_entities`` and bypasses the
+    free-text matcher for these events."""
+    move = {
+        "id": "cvm:fiagro:99999999000100:pl",
+        "event": "pl_move",
+        "fund_name": "FUND A FIAGRO",
+        "cnpj": "99999999000100",
+        # shared administrator that would otherwise over-resolve via free text:
+        "admin": "SHARED ADMINISTRADORA DE FUNDOS S.A.",
+        "manager": "SHARED ADMINISTRADORA DE FUNDOS S.A.",
+        "pl": 200.0,
+        "prev_value": 100.0,
+        "pct_change": 100.0,
+        "is_new": True,
+        "_entities": ["fund-a"],
+        "url": "https://dados.cvm.gov.br/dataset/fiagro-doc-inf_mensal",
+    }
+    d = {"fiagro_moves": {"items": [move], "context": []}}
+    cands = _candidates.extract_candidates(d, min_lenses=1)
+    ents = {e for c in cands for e in (c.get("entities") or [])}
+    assert ents == {"fund-a"}, f"expected only fund-a, got {ents} (fan-out?)"
+
+
 def test_dou_act_is_high_value_and_resolves_entity():
     from src.synth.synthesize import _describe_signal
     d = {"dou": {"items": [{

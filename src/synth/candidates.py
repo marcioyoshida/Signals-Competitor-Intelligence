@@ -57,6 +57,20 @@ BACKDROP_LENSES = frozenset({"market"})
 DEFAULT_NEWS_MIN_PUBLISHERS = int(os.environ.get("ONCA_SYNTH_NEWS_MIN_PUBLISHERS", "2"))
 
 
+def _entities_of(item: dict[str, Any]) -> list[str]:
+    """Entities for a signal, honoring a pre-resolved ``_entities`` binding.
+
+    Structured sources that carry an authoritative id (e.g. FIAGRO moves resolved
+    by CNPJ in ingest) stamp ``_entities`` so clustering uses that exact entity and
+    bypasses the free-text alias matcher — which over-resolves funds via their
+    shared administrator name. Everything else falls back to resolve_entities().
+    """
+    pre = item.get("_entities")
+    if pre:
+        return list(pre)
+    return resolve_entities(item)
+
+
 def extract_candidates(
     digest: dict[str, Any],
     max_candidates: int = 10,
@@ -152,7 +166,7 @@ def extract_candidates(
                 "seed": reg,
                 "related": related,
                 "sources": sources,
-                "entities": resolve_entities(reg),
+                "entities": _entities_of(reg),
                 "lenses": _lenses(sources),
                 "threat_score": threat,
                 "threat_factors": factors,
@@ -181,7 +195,7 @@ def extract_candidates(
                 used_ids.add(str(r["id"]))
         sources = [sig, *related]
         threat, factors = _score_threat(sources)
-        seed_ents = resolve_entities(sig)
+        seed_ents = _entities_of(sig)
         candidates.append(
             {
                 "id": f"cand-{_short_id(sid or uuid4().hex)}",
@@ -343,6 +357,14 @@ def _collect_signals(
         ("pix_moves", "pix"),
         ("juros_moves", "juros"),
         ("inf_diario_moves", "inf_diario"),
+        # FIAGRO agri-funds moves (task b) reuse the "funds" lens — deliberately,
+        # not a new "fiagro" lens: "funds" is already in HIGH_VALUE_SOLO_LENSES,
+        # so one material NEW move (PL/cotista move or new-class registration)
+        # can alert solo, same as a fresh CVM fund-class filing. The tradeoff:
+        # a fiagro_moves item is scored/ranked with the same (lower, 0.4) funds
+        # strategic weight as a routine filing, not a dedicated higher weight —
+        # acceptable since PL/cotista moves already carry pct_change magnitude.
+        ("fiagro_moves", "funds"),
         ("market", "market"),
     ]
     out: list[dict[str, Any]] = []
@@ -421,7 +443,7 @@ def _cluster_by_entity(
 ) -> dict[str, list[dict[str, Any]]]:
     clusters: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for sig in signals:
-        for ent in resolve_entities(sig):
+        for ent in _entities_of(sig):
             clusters[ent].append(sig)
     kept: dict[str, list[dict[str, Any]]] = {}
     for ent, members in clusters.items():
@@ -499,7 +521,7 @@ def _soft_related(
     used: set[str],
     limit: int = 3,
 ) -> list[dict[str, Any]]:
-    seed_ents = set(resolve_entities(seed))
+    seed_ents = set(_entities_of(seed))
     seed_toks = tokens_for_match(seed)
     related: list[dict[str, Any]] = []
     for sig in signals:
@@ -508,7 +530,7 @@ def _soft_related(
             continue
         if sig.get("_lens") == seed.get("_lens") and not sig.get("is_new"):
             continue
-        sig_ents = set(resolve_entities(sig))
+        sig_ents = set(_entities_of(sig))
         # Payments domain boost: pix regulatory + acquirer SEC. Match PIX as a WORD,
         # not a substring — "PixBet" (a betting brand) contains "pix" but is not the
         # Pix payment system, and the substring match stapled unrelated SEC/pix
@@ -538,7 +560,7 @@ def _soft_related(
         related.sort(
             key=lambda m: (
                 1 if m.get("is_new") else 0,
-                1 if set(resolve_entities(m)) & seed_ents else 0,
+                1 if set(_entities_of(m)) & seed_ents else 0,
             ),
             reverse=True,
         )

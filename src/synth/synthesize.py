@@ -300,6 +300,22 @@ def _describe_signal(sig: dict[str, Any], prefix: str = "") -> str:
             f"{sig.get('issuer') or 'emissor'}; líder {sig.get('leader') or 'n/d'}"
             f"{amt_s}. {url}"
         ).strip()
+    # FIAGRO agri-funds events (task b) — checked ahead of the PL-move branch
+    # below since a cotista-move row is on the "funds" lens too (reused, not a
+    # dedicated lens) and must not be described with the wrong metric's %.
+    if sig.get("event") == "cotista_move":
+        pct = sig.get("pct_change")
+        pct_s = f" variação={pct}%" if pct is not None else ""
+        return (
+            f"{head}Base de cotistas FIAGRO{alert}: {sig.get('fund_name') or sig.get('cnpj')} "
+            f"cotistas={sig.get('cotistas')}{pct_s} (admin. {sig.get('admin') or 'n/d'}). {url}"
+        ).strip()
+    if sig.get("event") == "new_registration":
+        return (
+            f"{head}Nova classe FIAGRO registrada{alert}: "
+            f"{sig.get('fund_name') or sig.get('cnpj')} — registro "
+            f"{sig.get('registered') or 'n/d'} (admin. {sig.get('admin') or 'n/d'}). {url}"
+        ).strip()
     if lens == "inf_diario" or sig.get("pl") is not None and sig.get("fund_name"):
         pct = sig.get("pct_change")
         pct_s = f" variação={pct}%" if pct is not None else ""

@@ -42,6 +42,14 @@ LENS_TO_TOPIC = {
     "juros": "credito",
     "fatos": "mercado_capitais", "sec": "mercado_capitais",
     "ofertas": "mercado_capitais", "market": "mercado_capitais",
+    # "funds" also covers FIAGRO agri-funds moves (task b, digest key
+    # `fiagro_moves` — reuses the "funds" lens in candidates.py, see comment
+    # there). Deliberately not a separate "agri-funds" topic: this taxonomy is
+    # a coarse, fixed set (module docstring); the agri-funds-specific cut
+    # already exists via the entities registry `industry` rollup
+    # (feed.json.industries / entity_industry_map), which every fiagro_moves
+    # card reaches automatically once its entity resolves — no topics.py
+    # change needed for that distinction.
     "funds": "fundos", "inf_diario": "fundos",
     "entrants": "novos_entrantes",
 }

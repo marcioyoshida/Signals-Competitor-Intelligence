@@ -176,6 +176,100 @@ def fetch_fiagro(
     return out
 
 
+# ── Move detection (task b: informe → narrative signal) ────────────────────
+# fetch_fiagro() already returns one row per class per competency month. These
+# helpers shape that same list for the generic value-state move engine
+# (src.diff.engine.detect_moves / DynamoDbValueState) — the same primitive
+# already used for BCB Pix, juros médios, and CVM Informe Diário AUM moves
+# (see src/ingest/lambda_port.py `_moves_since_last_run`). No bespoke snapshot
+# storage needed: detect_moves(key_field="cnpj", value_field=...) persists the
+# prior value per source name and returns only rows whose value moved
+# >= min_pct, annotated with prev_value/delta/pct_change. First run seeds the
+# baseline (no prior value to diff against) and reports nothing — intentional.
+
+# Below this prior cotista count, percentage swings are noise (a qualified-
+# investor class with 5 cotistas going to 7 reads as "+40%"). Filtered before
+# handing rows to detect_moves so both the baseline and every later reading
+# only track well-populated cotista bases.
+COTISTA_MIN_BASE = 20
+
+
+def for_pl_moves(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Rows with a CNPJ + PL — the AUM series for detect_moves(value_field='pl')."""
+    out = []
+    for r in rows:
+        if not r.get("cnpj") or r.get("pl") is None:
+            continue
+        row = dict(r)
+        # Event-scoped id: a fund with BOTH a PL move and a cotista move in one
+        # run must not collide (candidates._section_pool dedups by id, which would
+        # silently drop the second event).
+        row["id"] = f"{r.get('id') or ('cvm:fiagro:' + str(r.get('cnpj')))}:pl"
+        row["event"] = "pl_move"
+        out.append(row)
+    return out
+
+
+def for_cotista_moves(
+    rows: list[dict[str, Any]], min_base: int = COTISTA_MIN_BASE
+) -> list[dict[str, Any]]:
+    """Cotista-count series for detect_moves(value_field='cotistas').
+
+    Drops the ``pl`` field: a cotista move and a PL move are different metrics,
+    and downstream narrative rendering (``synthesize._describe_signal``) picks
+    a branch by field presence — keeping both would let a cotista-surge event
+    be mislabeled with the *PL* percentage change.
+    """
+    out = []
+    for r in rows:
+        cot = r.get("cotistas")
+        if not r.get("cnpj") or cot is None:
+            continue
+        try:
+            if float(cot) < min_base:
+                continue
+        except (TypeError, ValueError):
+            continue
+        row = {k: v for k, v in r.items() if k != "pl"}
+        row["id"] = f"{r.get('id') or ('cvm:fiagro:' + str(r.get('cnpj')))}:cotista"
+        row["event"] = "cotista_move"
+        out.append(row)
+    return out
+
+
+def for_new_registrations(
+    rows: list[dict[str, Any]],
+    *,
+    as_of: dt.date | None = None,
+    lookback_days: int = 60,
+) -> list[dict[str, Any]]:
+    """Rows whose ``Data_Registro`` falls within ``lookback_days`` — candidate
+    "new class" events. A fund's registration date never changes, so this is
+    not itself deduplicated across runs: the caller must diff the result
+    through ``detect_new`` (state key = the ``id`` set below, scoped to CNPJ)
+    so a fund already alerted once does not resurface every month it happens
+    to still fall inside the window.
+    """
+    cutoff = (as_of or dt.date.today()) - dt.timedelta(days=lookback_days)
+    out = []
+    for r in rows:
+        cnpj = r.get("cnpj")
+        reg = r.get("registered")
+        if not cnpj or not reg:
+            continue
+        try:
+            d = dt.date.fromisoformat(str(reg)[:10])
+        except ValueError:
+            continue
+        if d < cutoff:
+            continue
+        row = dict(r)
+        row["id"] = f"fiagro:newreg:{cnpj}"
+        row["event"] = "new_registration"
+        out.append(row)
+    return out
+
+
 def inspect(months_back: int = 0, top: int = 15) -> None:
     yyyymm = _find_available_yyyymm() or latest_yyyymm(months_back)
     rows = fetch_fiagro(yyyymm)
