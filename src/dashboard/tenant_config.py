@@ -12,6 +12,19 @@ from typing import Any
 
 VALID_TIERS = ("entry", "saas", "sovereign")
 
+# ADR 016 — the Entry Portal carries ONLY the entry-tier verticals, at shallow
+# public-filing depth. This is the single source of truth for that set (canonical
+# registry slugs). An `entry` tenant may license a SUBSET of these and nothing else;
+# the higher-tier industries are never fed to Entry (enforced here at provisioning
+# AND at feed-build via feed_builder.derive_entry_feed — see "fork the feed").
+ENTRY_INDUSTRIES = ("agri-funds", "betting", "consorcio", "crypto", "real-estate-funds")
+
+
+def allowed_industries_for_tier(tier: str) -> frozenset[str] | None:
+    """The industry allow-list a tier may license. Entry is capped to the entry-tier
+    verticals; SaaS/Sovereign are unrestricted (None = any registered industry)."""
+    return frozenset(ENTRY_INDUSTRIES) if tier == "entry" else None
+
 
 def _table(table: Any | None = None) -> Any:
     if table is not None:
@@ -48,6 +61,18 @@ def put_tenant_config(
     if tier not in VALID_TIERS:
         raise ValueError(f"tier must be one of {VALID_TIERS}, got {tier!r}")
     mods = sorted({str(m).strip().lower() for m in (modules or []) if str(m).strip()})
+    # Entry tenants are capped to the entry-tier verticals (ADR 016): a higher-tier
+    # industry must never enter an Entry tenant's entitlement, so the Entry dashboard
+    # can never surface it. Reject rather than silently drop — a mis-scoped provision
+    # is an operator error worth surfacing.
+    allowed = allowed_industries_for_tier(tier)
+    if allowed is not None:
+        bad = [m for m in mods if m not in allowed]
+        if bad:
+            raise ValueError(
+                f"tier {tier!r} may only license entry-tier industries "
+                f"{sorted(allowed)}; got disallowed {bad}"
+            )
     _table(table).put_item(Item={"tenant_id": str(tenant_id), "tier": tier, "modules": mods})
     return {"tenant_id": str(tenant_id), "tier": tier, "modules": mods}
 

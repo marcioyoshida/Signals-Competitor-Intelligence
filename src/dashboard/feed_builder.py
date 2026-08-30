@@ -40,6 +40,14 @@ except Exception:  # pragma: no cover - degrade to stored score if synth import 
 NARRATIVES_PREFIX = "narratives/"
 # Published to the static site bucket root; index.html fetches "feed.json".
 FEED_KEY = "feed.json"
+# ADR 016 — the Entry Portal's scoped slice (entry-tier industries only). The Entry
+# dashboard fetches THIS, never feed.json, so a higher-tier industry can't leak.
+ENTRY_FEED_KEY = "feed.entry.json"
+
+try:  # single source of truth for the entry-tier vertical set (ADR 016)
+    from src.dashboard.tenant_config import ENTRY_INDUSTRIES
+except Exception:  # pragma: no cover - keep the feed buildable if the module shifts
+    ENTRY_INDUSTRIES = ("agri-funds", "betting", "consorcio", "crypto", "real-estate-funds")
 
 # Below this many narratives over the window, an industry module aggregates too
 # little to feel worth an add-on subscription — flagged so we don't sell a thin
@@ -489,6 +497,102 @@ def build_feed(
     }
 
 
+def derive_entry_feed(
+    feed: dict[str, Any], *, industries: Any = ENTRY_INDUSTRIES
+) -> dict[str, Any]:
+    """ADR 016 "fork the feed, not the pipeline": a strict projection of the full feed
+    down to the entry-tier industries ONLY. Not a second sensor — every entity-bearing
+    section is filtered to entities in the entry industries, so a higher-tier industry
+    (or an entity outside the entry set) can never appear in the Entry Portal. KPIs and
+    topic options are recomputed for the slice. Fail closed: a row we can't attribute to
+    an entry entity is dropped rather than carried over.
+
+    Depth note: the entry industries are themselves the shallow public-filing verticals,
+    so scoping by industry already yields the shallow slice; a stricter lens/axis depth
+    filter (drop relational/predictive/operative cards) is a documented follow-on.
+    """
+    keep = {str(i).strip().lower() for i in (industries or [])}
+    attrs = feed.get("entity_attrs") or {}
+    ent_ind = {
+        e: {str(i).strip().lower() for i in ((a or {}).get("industries") or [])}
+        for e, a in attrs.items()
+    }
+    entry_entities = {e for e, inds in ent_ind.items() if inds & keep}
+
+    def card_ok(c: dict[str, Any]) -> bool:
+        for e in [c.get("entity"), *(c.get("entities") or [])]:
+            if e and e in entry_entities:
+                return True
+        return False
+
+    def row_ok(r: dict[str, Any]) -> bool:
+        e = r.get("entity") or r.get("entity_id")
+        return bool(e and e in entry_entities)
+
+    def by_entity_key(d: Any) -> dict[str, Any]:
+        return {e: v for e, v in (d or {}).items() if e in entry_entities}
+
+    def scrub_industries(inds: Any) -> list[str]:
+        # a multi-industry entity can sit in an entry AND a higher tier; the Entry
+        # dashboard must show ONLY its entry industries, never a higher-tier chip.
+        return sorted(i for i in (inds or []) if str(i).strip().lower() in keep)
+
+    feed_items = [c for c in (feed.get("feed") or []) if card_ok(c)]
+    entities = [
+        {**r, "industries": scrub_industries(r.get("industries"))}
+        for r in (feed.get("entities") or [])
+        if r.get("entity") in entry_entities
+    ]
+    latest = feed.get("run_date")
+    latest_items = [c for c in feed_items if c.get("date") == latest]
+    sources = {
+        s for c in feed_items for cit in (c.get("citations") or []) if (s := _source_of(cit))
+    }
+
+    out = dict(feed)  # inherit generated_at/as_of/dates/macro/etc, then override slices
+    out.update(
+        {
+            "tier": "entry",
+            "feed": feed_items,
+            "entities": entities,
+            "entity_attrs": {
+                e: {**a, "industries": scrub_industries((a or {}).get("industries"))}
+                for e, a in attrs.items()
+                if e in entry_entities
+            },
+            "kpis": {
+                "narratives_latest": len(latest_items),
+                "alerts_latest": sum(1 for c in latest_items if c.get("is_alert")),
+                "entities_tracked": len(entities),
+                "sources": len(sources),
+                "narratives_total": len(feed_items),
+            },
+            "industries": [i for i in (feed.get("industries") or []) if i.get("slug") in keep],
+            "industry_options": [
+                o for o in (feed.get("industry_options") or []) if o.get("slug") in keep
+            ],
+            "topic_options": topic_options(feed_items),
+            # per-entity framework/belief stores — scope to entry entities
+            "swot": by_entity_key(feed.get("swot")),
+            "tows": by_entity_key(feed.get("tows")),
+            "porter": by_entity_key(feed.get("porter")),
+            "pestle": by_entity_key(feed.get("pestle")),
+            "ansoff": by_entity_key(feed.get("ansoff")),
+            "bcg": by_entity_key(feed.get("bcg")),
+            "four_corners": by_entity_key(feed.get("four_corners")),
+            "seven_s": by_entity_key(feed.get("seven_s")),
+            # entity-attributed lists — keep only rows bound to an entry entity
+            "reviews": [r for r in (feed.get("reviews") or []) if row_ok(r)],
+            "swot_proposals": [r for r in (feed.get("swot_proposals") or []) if row_ok(r)],
+            "graph_proposals": [r for r in (feed.get("graph_proposals") or []) if row_ok(r)],
+            "distress": [r for r in (feed.get("distress") or []) if row_ok(r)],
+            "reputation": [r for r in (feed.get("reputation") or []) if row_ok(r)],
+            "coverage_gaps": [r for r in (feed.get("coverage_gaps") or []) if row_ok(r)],
+        }
+    )
+    return out
+
+
 def _recent_dates(window_days: int) -> set[str]:
     today = dt.date.today()
     return {(today - dt.timedelta(days=i)).isoformat() for i in range(window_days)}
@@ -913,11 +1017,16 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         reputation=_load_reputation(digests_bucket),
     )
     body = json.dumps(feed, ensure_ascii=False, default=_json_default).encode("utf-8")
+    # ADR 016: the entry-scoped slice (entry-tier industries only) — written alongside
+    # the full feed so the Entry Portal serves ONLY entry data (no higher-tier leak).
+    entry_feed = derive_entry_feed(feed)
+    entry_body = json.dumps(entry_feed, ensure_ascii=False, default=_json_default).encode("utf-8")
 
     published = None
     if site_bucket:
+        s3 = boto3.client("s3")
         try:
-            boto3.client("s3").put_object(
+            s3.put_object(
                 Bucket=site_bucket,
                 Key=FEED_KEY,
                 Body=body,
@@ -927,6 +1036,16 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             published = f"s3://{site_bucket}/{FEED_KEY}"
         except Exception as exc:  # pragma: no cover - publish is best-effort
             print(f"Warning: feed publish failed: {exc}")
+        try:
+            s3.put_object(
+                Bucket=site_bucket,
+                Key=ENTRY_FEED_KEY,
+                Body=entry_body,
+                ContentType="application/json",
+                CacheControl="no-cache",
+            )
+        except Exception as exc:  # pragma: no cover - publish is best-effort
+            print(f"Warning: entry feed publish failed: {exc}")
 
     return {
         "statusCode": 200,
@@ -935,6 +1054,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 "status": "ok",
                 "as_of": feed["as_of"],
                 "feed_count": len(feed["feed"]),
+                "entry_feed_count": len(entry_feed["feed"]),
                 "entities": len(feed["entities"]),
                 "industries_covered": sum(1 for i in feed["industries"] if i["covered"]),
                 "industry_coverage_gaps": [

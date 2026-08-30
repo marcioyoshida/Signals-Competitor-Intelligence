@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Onça — Entry Portal</title>
+<style>
+  /* Entry Portal — a thin, SHARED static surface (ADR 016). It fetches ONLY
+     feed.entry.json (entry-tier industries at shallow depth), so no higher-tier
+     industry can ever render here. Design tokens mirror the main warroom for one
+     visual system; the shell is deliberately minimal (no SaaS panels, no agent). */
+  :root {
+    --bg: #ffffff; --panel: #f6f7f9; --border: #d9dde3;
+    --ink: #1a1f26; --ink2: #4a5460; --muted: #79818c; --accent: #1f8f8a;
+    --t-crit: #c62828; --t-high: #e06c00; --t-med: #b8860b; --t-low: #5b6673;
+    --shadow: 0 1px 2px rgba(20,25,35,.06), 0 2px 8px rgba(20,25,35,.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e1116; --panel: #161b22; --border: #2a313b;
+      --ink: #e6e9ee; --ink2: #aeb6c2; --muted: #79818c; --accent: #3fbdb6;
+      --t-crit: #ff6b6b; --t-high: #ffa04d; --t-med: #ffd166; --t-low: #8a95a5;
+      --shadow: none;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         background: var(--bg); color: var(--ink); }
+  a { color: var(--accent); text-decoration: none; }
+  header { position: sticky; top: 0; z-index: 5; background: var(--bg);
+           border-bottom: 1px solid var(--border); padding: 14px 20px; }
+  .brand { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .brand b { font-size: 18px; letter-spacing: .2px; }
+  .brand .tag { font-size: 11px; text-transform: uppercase; letter-spacing: .8px;
+                color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px; }
+  .meta { color: var(--muted); font-size: 12px; margin-left: auto; }
+  main { max-width: 1040px; margin: 0 auto; padding: 20px; }
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 18px; }
+  .kpi { background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+         padding: 14px 16px; box-shadow: var(--shadow); }
+  .kpi .n { font-size: 26px; font-weight: 700; }
+  .kpi .l { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .5px; }
+  .toggles { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 18px; }
+  .chip { border: 1px solid var(--border); background: var(--panel); color: var(--ink2);
+          border-radius: 999px; padding: 5px 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .chip[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+          padding: 14px 16px; margin-bottom: 10px; box-shadow: var(--shadow);
+          border-left: 4px solid var(--t-low); }
+  .card.crit { border-left-color: var(--t-crit); } .card.high { border-left-color: var(--t-high); }
+  .card.med { border-left-color: var(--t-med); } .card.low { border-left-color: var(--t-low); }
+  .card h3 { margin: 0 0 4px; font-size: 15px; }
+  .card .sub { color: var(--muted); font-size: 12px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .card p { margin: 8px 0 0; color: var(--ink2); }
+  .card .inds { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .ind { font-size: 11px; color: var(--muted); border: 1px solid var(--border); border-radius: 6px; padding: 1px 7px; }
+  .score { font-variant-numeric: tabular-nums; font-weight: 700; }
+  .alert { color: var(--t-crit); font-weight: 700; }
+  .empty { color: var(--muted); text-align: center; padding: 40px; }
+  .cite { font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <b>Onça</b>
+    <span class="tag">Entry Portal</span>
+    <span class="meta" id="meta"></span>
+  </div>
+  <div class="toggles" id="toggles"></div>
+</header>
+<main>
+  <section class="kpis" id="kpis"></section>
+  <section id="feed"><div class="empty">Carregando…</div></section>
+</main>
+<script>
+// Entry Portal is a filtered slice: it reads ONLY the entry feed. The industry
+// toggles are a convenience AMONG the entry industries — not a paywall (nothing
+// outside the entry set is in this feed to reveal).
+const ENTRY_LABELS = {
+  "agri-funds": "Fundos do Agro (FIAGRO)", "betting": "Betting & iGaming",
+  "consorcio": "Consórcios", "crypto": "Crypto & Digital Assets",
+  "real-estate-funds": "Fundos Imobiliários (FIIs)",
+};
+const state = { feed: null, on: new Set() };
+
+function sev(s) { return s >= 0.75 ? "crit" : s >= 0.5 ? "high" : s >= 0.25 ? "med" : "low"; }
+function esc(x) { return String(x == null ? "" : x).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
+
+function entityIndustries(feed) {
+  const attrs = feed.entity_attrs || {};
+  const m = {};
+  for (const [e, a] of Object.entries(attrs)) m[e] = new Set((a.industries || []).map(s => String(s).toLowerCase()));
+  return m;
+}
+
+function cardIndustries(card, emap) {
+  const out = new Set();
+  for (const e of [card.entity, ...(card.entities || [])]) {
+    if (e && emap[e]) for (const i of emap[e]) out.add(i);
+  }
+  return out;
+}
+
+function render() {
+  const feed = state.feed;
+  const emap = entityIndustries(feed);
+  document.getElementById("meta").textContent =
+    `dados de ${feed.as_of || "—"} · ${(feed.industry_options || []).length} indústrias`;
+
+  // KPI tiles (already scoped to the entry slice server-side).
+  const k = feed.kpis || {};
+  document.getElementById("kpis").innerHTML = [
+    ["Sinais hoje", k.narratives_latest], ["Alertas", k.alerts_latest],
+    ["Entidades", k.entities_tracked], ["Fontes", k.sources],
+  ].map(([l, n]) => `<div class="kpi"><div class="n">${n ?? 0}</div><div class="l">${l}</div></div>`).join("");
+
+  // Feed, filtered client-side to the enabled entry industries.
+  const cards = (feed.feed || []).filter(c => {
+    const inds = cardIndustries(c, emap);
+    if (!inds.size) return false;
+    for (const i of inds) if (state.on.has(i)) return true;
+    return false;
+  });
+  const el = document.getElementById("feed");
+  if (!cards.length) { el.innerHTML = `<div class="empty">Nenhum sinal para as indústrias selecionadas.</div>`; return; }
+  el.innerHTML = cards.map(c => {
+    const s = Number(c.threat_score || 0);
+    const inds = [...cardIndustries(c, emap)].filter(i => ENTRY_LABELS[i]);
+    const cite = (c.citations || [])[0];
+    return `<article class="card ${sev(s)}">
+      <h3>${esc(c.entity_label || c.entity || c.kind || "Sinal")}</h3>
+      <div class="sub">
+        <span>${esc(c.date || "")}</span>
+        <span class="score">score ${s.toFixed(2)}</span>
+        ${c.is_alert ? '<span class="alert">● alerta</span>' : ""}
+      </div>
+      <p>${esc(c.narrative || "")}</p>
+      <div class="inds">${inds.map(i => `<span class="ind">${esc(ENTRY_LABELS[i])}</span>`).join("")}
+        ${cite && cite.url ? `<a class="cite" href="${esc(cite.url)}" target="_blank" rel="noopener">fonte ↗</a>` : ""}</div>
+    </article>`;
+  }).join("");
+}
+
+function buildToggles() {
+  const opts = (state.feed.industry_options || []).map(o => o.slug);
+  state.on = new Set(opts);  // all entry industries on by default
+  document.getElementById("toggles").innerHTML = opts.map(s =>
+    `<button class="chip" aria-pressed="true" data-slug="${esc(s)}">${esc(ENTRY_LABELS[s] || s)}</button>`).join("");
+  document.querySelectorAll(".chip").forEach(btn => btn.addEventListener("click", () => {
+    const slug = btn.dataset.slug, was = btn.getAttribute("aria-pressed") === "true";
+    btn.setAttribute("aria-pressed", String(!was));
+    if (was) state.on.delete(slug); else state.on.add(slug);
+    render();
+  }));
+}
+
+fetch("/feed.entry.json", { cache: "no-store" })
+  .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+  .then(feed => { state.feed = feed; buildToggles(); render(); })
+  .catch(() => { document.getElementById("feed").innerHTML =
+    `<div class="empty">Feed indisponível.</div>`; });
+</script>
+</body>
+</html>

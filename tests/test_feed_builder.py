@@ -195,6 +195,40 @@ def test_load_recent_narratives_filters_by_window(monkeypatch):
     assert ids == {"fresh"}  # old is outside the 14-day window; .txt skipped
 
 
+def test_derive_entry_feed_scopes_to_entry_industries_only():
+    # itau (banking, higher tier), agroca (agri-funds, entry), betco (betting, entry),
+    # dualco (agri-funds + banking — a multi-industry entity that touches entry).
+    narratives = [
+        _narr("n1", "itau", "2026-08-20", 0.9, is_alert=True),
+        _narr("n2", "agroca", "2026-08-20", 0.5, is_alert=True),
+        _narr("n3", "betco", "2026-08-20", 0.4),
+        _narr("n4", "dualco", "2026-08-20", 0.6),
+    ]
+    imap = {"itau": ["banking"], "agroca": ["agri-funds"],
+            "betco": ["betting"], "dualco": ["agri-funds", "banking"]}
+    attrs = {k: {"industries": v} for k, v in imap.items()}
+    meta = {s: {"display_name": s} for s in ["banking", "agri-funds", "betting"]}
+    feed = feed_builder.build_feed(
+        narratives, industry_map=imap, industry_meta=meta, entity_attrs=attrs
+    )
+    entry = feed_builder.derive_entry_feed(feed)
+
+    assert entry["tier"] == "entry"
+    # itau's banking card is gone; the three entry-touching entities remain.
+    ids = {c["id"] for c in entry["feed"]}
+    assert ids == {"n2", "n3", "n4"}
+    ents = {e["entity"] for e in entry["entities"]}
+    assert ents == {"agroca", "betco", "dualco"} and "itau" not in ents
+    # the multi-industry entity shows ONLY its entry industry — no "banking" chip leaks.
+    dual = next(e for e in entry["entities"] if e["entity"] == "dualco")
+    assert dual["industries"] == ["agri-funds"]
+    assert entry["entity_attrs"]["dualco"]["industries"] == ["agri-funds"]
+    assert "banking" not in {o["slug"] for o in entry["industry_options"]}
+    # KPIs recomputed for the slice.
+    assert entry["kpis"]["narratives_total"] == 3
+    assert entry["kpis"]["entities_tracked"] == 3
+
+
 def test_display_label_falls_back_to_kind_when_entity_less():
     assert feed_builder.display_label("itau", "entity_fusion") == "Itaú"
     assert feed_builder.display_label(None, "regulatory_fusion") == "Regulatório"

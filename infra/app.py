@@ -573,7 +573,9 @@ class OncaPrototypeStack(Stack):
             sources=[s3deploy.Source.asset(str(SITE_ASSET))],
             destination_bucket=site_bucket,
             distribution=distribution,
-            distribution_paths=["/index.html"],
+            # /entry/index.html = the ADR 016 Entry Portal (thin shared static site
+            # that serves ONLY feed.entry.json — no higher-tier industry can leak).
+            distribution_paths=["/index.html", "/entry/index.html"],
             prune=False,
         )
 

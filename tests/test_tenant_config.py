@@ -35,6 +35,29 @@ def test_put_rejects_bad_tier():
         tc.put_tenant_config("x", "premium", ["banking"], table=_FakeTable())
 
 
+def test_entry_tier_capped_to_entry_industries():
+    t = _FakeTable()
+    # an entry tenant may license the entry-tier verticals...
+    cfg = tc.put_tenant_config("consorcio-co", "entry", ["consorcio", "betting"], table=t)
+    assert cfg["modules"] == ["betting", "consorcio"]
+    # ...but never a higher-tier industry — reject rather than silently drop.
+    with pytest.raises(ValueError):
+        tc.put_tenant_config("bad", "entry", ["consorcio", "banking"], table=t)
+    with pytest.raises(ValueError):
+        tc.put_tenant_config("bad2", "entry", ["banking"], table=t)
+
+
+def test_higher_tiers_are_unrestricted():
+    t = _FakeTable()
+    # saas/sovereign may license any industry, including entry ones.
+    assert tc.put_tenant_config("bank", "saas", ["banking", "consorcio"], table=t)["modules"] \
+        == ["banking", "consorcio"]
+    assert tc.put_tenant_config("tier1", "sovereign", ["investment-banking"], table=t)["modules"] \
+        == ["investment-banking"]
+    assert tc.allowed_industries_for_tier("entry") == frozenset(tc.ENTRY_INDUSTRIES)
+    assert tc.allowed_industries_for_tier("saas") is None
+
+
 def test_entitled_helper():
     cfg = {"modules": ["banking", "crypto"]}
     assert tc.entitled(cfg, ["banking"]) is True
