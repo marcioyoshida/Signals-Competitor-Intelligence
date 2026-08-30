@@ -1299,6 +1299,37 @@ class OncaPrototypeStack(Stack):
                 )
             ],
         )
+        # B3 live-quote proxy (issue #43): GET /api/quotes?industry=<slug> returns the
+        # industry's representative listed names from Yahoo Finance (free, no token),
+        # fetched server-side (Yahoo has no browser CORS) + cached. Same origin-secret +
+        # edge-basic-auth gate as the other dashboard endpoints; no data grants needed.
+        quotes_fn = lambda_.Function(
+            self,
+            "OncaQuotesApi",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.dashboard.quotes_api.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.seconds(15),
+            memory_size=256,
+            environment={"PYTHONPATH": "/var/task", "ONCA_ORIGIN_SECRET": origin_secret},
+        )
+        quotes_url = quotes_fn.add_function_url(auth_type=lambda_.FunctionUrlAuthType.NONE)
+        distribution.add_behavior(
+            "/api/quotes*",
+            cf_origins.FunctionUrlOrigin(
+                quotes_url, custom_headers={"X-Onca-Origin": origin_secret}
+            ),
+            viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+            allowed_methods=cloudfront.AllowedMethods.ALLOW_ALL,
+            cache_policy=cloudfront.CachePolicy.CACHING_DISABLED,
+            origin_request_policy=cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+            function_associations=[
+                cloudfront.FunctionAssociation(
+                    function=auth_fn,
+                    event_type=cloudfront.FunctionEventType.VIEWER_REQUEST,
+                )
+            ],
+        )
         # Ad-hoc "run soon" trigger: schedules ONE pipeline run at the top of the
         # next hour, debounced (fixed-name EventBridge Scheduler one-shot). Same
         # auth model; registered BEFORE the /api/* catch-all (insertion order).
