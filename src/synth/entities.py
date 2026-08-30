@@ -257,6 +257,40 @@ _FREE_TEXT_SOURCES: frozenset[str] = frozenset({"NEWS", "DOU"})
 
 # Word chars for boundary tests: letters (incl. pt accents), digits, underscore.
 _WORD = r"[0-9A-Za-zÁÉÍÓÚÂÊÔÃÕÇÀÜáéíóúâêôãõçàü_]"
+_TOK = re.compile(_WORD + r"+")
+
+# Prefilter index for resolve_entities: {entity_id: (token_set, has_ticker_alias)}.
+# A word/phrase alias can only match a blob if all its tokens appear in the blob
+# (whole-word/boundary match in _word_match), so an entity sharing NO token with
+# the blob cannot match — we skip _match_kinds for it. Entities with a TICKER:
+# alias are never skipped (the nospace ticker path can match without a clean
+# token). This turns resolve_entities from O(all entities) into O(candidates),
+# which matters as discovery keeps growing the registry. Exact (superset filter),
+# guarded by ONCA_RESOLVE_PREFILTER.
+_ENT_TOK_CACHE: dict[str, tuple[frozenset[str], bool]] = {}
+_ENT_TOK_SRC: int | None = None
+
+
+def _entity_token_index() -> dict[str, tuple[frozenset[str], bool]]:
+    """Cached per-entity token sets, rebuilt when the alias map object changes."""
+    global _ENT_TOK_SRC, _ENT_TOK_CACHE
+    amap = _alias_map()
+    if _ENT_TOK_SRC != id(amap):
+        cache: dict[str, tuple[frozenset[str], bool]] = {}
+        for eid, aliases in amap.items():
+            toks: set[str] = set()
+            has_ticker = False
+            for a in aliases:
+                au = str(a).upper()
+                if au.startswith("TICKER:"):
+                    has_ticker = True
+                    toks.update(_TOK.findall(au.split(":", 1)[1]))
+                else:
+                    toks.update(_TOK.findall(au))
+            cache[eid] = (frozenset(toks), has_ticker)
+        _ENT_TOK_CACHE = cache
+        _ENT_TOK_SRC = id(amap)
+    return _ENT_TOK_CACHE
 
 
 def _word_match(token: str, blob: str) -> bool:
@@ -368,8 +402,17 @@ def resolve_entities(item: dict[str, Any]) -> list[str]:
     trust = _trust_map()
     ambig = _ambiguous_tokens()
     roles = _attribution_role_map()
+    # O(candidates) prefilter: skip entities that share no token with the blob
+    # (they cannot word-match any alias). Ticker-alias entities are never skipped.
+    prefilter = os.environ.get("ONCA_RESOLVE_PREFILTER", "true").lower() in ("1", "true", "yes")
+    blob_words = frozenset(_TOK.findall(blob)) if prefilter else frozenset()
+    tok_index = _entity_token_index() if prefilter else {}
     found: list[str] = []
     for entity_id, aliases in _alias_map().items():
+        if prefilter:
+            toks, has_ticker = tok_index.get(entity_id, (frozenset(), True))
+            if not has_ticker and toks.isdisjoint(blob_words):
+                continue
         # Default trusted=True: the built-in seed is all curated, and a registry
         # entity absent from the trust map shouldn't be silently muted.
         kinds = _match_kinds(

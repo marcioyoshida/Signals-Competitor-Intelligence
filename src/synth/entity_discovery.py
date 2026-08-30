@@ -199,10 +199,11 @@ def _profile_from_fiagro(row: dict[str, Any]) -> dict[str, Any]:
     entity_id = _slug(ticker or brand) or f"fiagro-{root or 'unknown'}"
     admin = (row.get("admin") or "").strip() or None
     manager = (row.get("manager") or "").strip() or None
-    if admin and admin not in forms:
-        forms.append(admin)
-    if manager and manager not in forms:
-        forms.append(manager)
+    # NB: admin/manager are the fund's SERVICER (administrator/gestor), not its
+    # identity — and are shared across dozens of funds. They must NOT enter the
+    # name index (aliases/alias_forms): resolve_entities substring-matches those,
+    # so a shared servicer name would fan one fund's signal out to every fund it
+    # services. Keep them only as descriptive profile fields (below).
     # Dedupe preserving order
     seen: set[str] = set()
     uniq: list[str] = []

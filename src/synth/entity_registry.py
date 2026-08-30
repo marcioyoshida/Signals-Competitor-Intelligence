@@ -592,6 +592,55 @@ def accumulate_aliases(
     return added
 
 
+def strip_aliases(
+    entity_id: str,
+    forms: Iterable[str],
+    *,
+    table: Any | None = None,
+) -> list[str]:
+    """Remove specific raw alias forms from an entity (and their ``ALIAS#`` index
+    items, when still owned by this entity). Idempotent; preserves every other
+    field. Returns the raw forms actually removed.
+
+    The inverse of ``accumulate_aliases`` — used to undo data-quality pollution
+    where non-identity strings (e.g. a shared administrator/servicer legal name)
+    were wrongly indexed as identity aliases and caused resolve_entities to fan a
+    signal out to every entity sharing that string. Never touches ``cnpj_roots``,
+    ``display_name``, ``ticker``, or aliases not listed in ``forms``.
+    """
+    t = _table(table)
+    ent = get_entity(entity_id, table=t)
+    if not ent:
+        return []
+    strip_norm = {normalize_alias(f) for f in forms if str(f).strip()}
+    if not strip_norm:
+        return []
+    cur_forms = list(ent.get("alias_forms") or [])
+    kept_forms = [f for f in cur_forms if normalize_alias(f) not in strip_norm]
+    removed = [f for f in cur_forms if normalize_alias(f) in strip_norm]
+    if not removed:
+        return []
+    kept_norm = sorted(
+        {
+            normalize_alias(f)
+            for f in kept_forms
+            if str(f).strip() and not str(f).upper().startswith("TICKER:")
+        }
+    )
+    ent["alias_forms"] = kept_forms
+    ent["aliases"] = kept_norm
+    t.put_item(Item=ent)
+    # Delete ALIAS# items for norms we removed and no kept form still maps to,
+    # but only when the index still points at THIS entity (don't steal another's).
+    for na in {normalize_alias(f) for f in removed} - set(kept_norm):
+        if not na:
+            continue
+        item = t.get_item(Key={"pk": f"ALIAS#{na}"}).get("Item")
+        if item and item.get("entity_id") == entity_id:
+            t.delete_item(Key={"pk": f"ALIAS#{na}"})
+    return removed
+
+
 def add_cnpj_roots(
     entity_id: str,
     roots: Iterable[str],

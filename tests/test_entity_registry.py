@@ -20,6 +20,33 @@ class FakeTable:
     def scan(self, **kwargs):
         return {"Items": list(self.items.values())}
 
+    def delete_item(self, Key):
+        self.items.pop(Key["pk"], None)
+
+
+def test_strip_aliases_removes_servicer_forms_and_index_preserves_identity():
+    t = FakeTable()
+    er.put_entity(
+        "alfa11", "ALFA", ["ALFA", "ALFA11", "SHARED ADMIN LTDA"],
+        cnpj_roots=["11111111"], ticker="ALFA11", table=t,
+    )
+    # sanity: the servicer alias is currently indexed
+    assert er.resolve_by_alias("SHARED ADMIN LTDA", table=t) == "alfa11"
+    removed = er.strip_aliases("alfa11", ["SHARED ADMIN LTDA"], table=t)
+    assert removed == ["SHARED ADMIN LTDA"]
+    # servicer alias + its ALIAS# item gone...
+    assert er.resolve_by_alias("SHARED ADMIN LTDA", table=t) is None
+    ent = er.get_entity("alfa11", table=t)
+    assert "SHARED ADMIN LTDA" not in (ent.get("alias_forms") or [])
+    assert er.normalize_alias("SHARED ADMIN LTDA") not in (ent.get("aliases") or [])
+    # ...identity preserved: brand, ticker, cnpj all intact + still resolvable
+    assert er.resolve_by_alias("ALFA", table=t) == "alfa11"
+    assert er.resolve_by_cnpj("11111111", table=t) == "alfa11"
+    assert ent.get("ticker") == "ALFA11"
+    assert "ALFA11" in (ent.get("alias_forms") or [])
+    # idempotent: second call removes nothing
+    assert er.strip_aliases("alfa11", ["SHARED ADMIN LTDA"], table=t) == []
+
 
 def test_normalize_alias_folds_accents_and_case():
     assert er.normalize_alias("Itaú  Unibanco") == "ITAU UNIBANCO"
