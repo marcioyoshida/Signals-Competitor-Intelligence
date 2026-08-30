@@ -111,6 +111,55 @@ def test_discover_fiagro_creates_and_enriches():
     assert "agri-funds" in (ent.get("industries") or [])
 
 
+def test_discover_fiagro_quality_gate():
+    """Junk-named funds (no ticker, generic legal name) are proposed, not
+    auto-created; clean ticker funds are created."""
+    table = _FakeTable()
+    rows = [
+        {
+            "fund_name": "INVESTIMENTO FIAGRO RESPONSABILIDADE LIMITADA",
+            "ticker": None,
+            "cnpj": "11111111000191",
+            "isin": None,
+            "admin": "ADM",
+            "manager": "GES",
+            "pl": 2e8,
+            "as_of": "2026-03-01",
+            "url": "u",
+        },
+        {
+            "fund_name": "KINEA CRÉDITO AGRO FIAGRO",
+            "ticker": "KNCA11",
+            "cnpj": "41745701000137",
+            "isin": "BRKNCACTF014",
+            "admin": "INTRAG",
+            "manager": "KINEA",
+            "pl": 2e9,
+            "as_of": "2026-03-01",
+            "url": "u",
+        },
+    ]
+    report = discover_fiagro(rows=rows, min_pl=0, auto_create=True, table=table)
+    assert report["created"] == ["knca11"]  # clean ticker fund auto-created
+    assert len(report["proposed"]) == 1  # junk-named fund routed to review
+    from src.synth import entity_registry
+
+    # the junk fund never entered the registry...
+    assert entity_registry.resolve_by_cnpj("11111111", table=table) is None
+    # ...but a review proposal exists for it, tagged needs_brand_review.
+    reviews = [v for k, v in table.items.items() if k.startswith("REVIEW#")]
+    assert any(r.get("reason") == "needs_brand_review" for r in reviews)
+
+
+def test_profile_auto_ok_flag():
+    from src.synth.entity_discovery import _profile_from_fiagro
+
+    junk = _profile_from_fiagro({"fund_name": "INVESTIMENTO RESPONSABILIDADE LIMITADA", "cnpj": "11111111000191"})
+    assert junk["auto_ok"] is False
+    clean = _profile_from_fiagro({"fund_name": "SUNO AGRO FIAGRO", "ticker": "SNAG11", "cnpj": "28152777000100"})
+    assert clean["auto_ok"] is True
+
+
 def test_harvest_keyword_frequency_gate():
     news = [
         {

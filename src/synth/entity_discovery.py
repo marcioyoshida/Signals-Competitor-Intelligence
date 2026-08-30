@@ -61,6 +61,22 @@ _STOP = frozenset(
     }
 )
 
+# Generic / legal-form / fund-structure words that must not stand in for a brand.
+# A fund name reduced to only these has no distinctive brand → propose, don't
+# auto-create (keeps "INVESTIMENTO", "RESP LIMITADA" etc. out of the registry).
+_GENERIC = frozenset(
+    {
+        "investimento", "investimentos", "responsabilidade", "limitada", "resp",
+        "multimercado", "multiestrategia", "multiestratégia", "renda", "fixa",
+        "variavel", "variável", "direitos", "creditorios", "creditórios",
+        "recebiveis", "recebíveis", "participacoes", "participações", "cadeias",
+        "produtivas", "agroindustriais", "agroindustrial", "desenvolvimento",
+        "infraestrutura", "incentivado", "referenciado", "aberto", "fechado",
+        "condominio", "condomínio", "profissionais", "qualificados", "geral",
+        "especial", "master", "feeder", "cotas", "responsabilidad",
+    }
+)
+
 
 # Generic corporate/industry words that are never a brand on their own (applied
 # only to single-token candidates; multi-word names may legitimately contain them).
@@ -146,10 +162,13 @@ def _brand_from_name(name: str) -> str | None:
     tokens = [t for t in re.split(r"[^\w\u00c0-\u024f]+", clean) if t]
     keep: list[str] = []
     for t in tokens:
-        if t.lower() in _STOP and keep:
-            break
-        if t.lower() in _STOP:
+        low = t.lower()
+        if len(t) == 1:  # single-letter fragment ("P P") — never a brand token
             continue
+        if low in _STOP or low in _GENERIC:
+            if keep:  # a distinctive span already started — stop extending it
+                break
+            continue  # leading generic/stop word — skip and keep looking
         keep.append(t)
         if len(keep) >= 4:
             break
@@ -172,8 +191,12 @@ def _profile_from_fiagro(row: dict[str, Any]) -> dict[str, Any]:
     brand = _brand_from_name(name)
     if brand and brand.upper() not in {f.upper() for f in forms}:
         forms.append(brand)
-    display = brand or name or (ticker or f"FIAGRO {root}")
-    entity_id = _slug(ticker or brand or name) or f"fiagro-{root or 'unknown'}"
+    # Prefer a clean brand, then the ticker; never the raw messy legal name as the
+    # display. ``auto_ok`` gates auto-create: a fund with neither a ticker nor a
+    # distinctive brand has no clean identity → route to review, don't auto-create.
+    auto_ok = bool(ticker or brand)
+    display = brand or ticker or f"FIAGRO {root or 'sem-cnpj'}"
+    entity_id = _slug(ticker or brand) or f"fiagro-{root or 'unknown'}"
     admin = (row.get("admin") or "").strip() or None
     manager = (row.get("manager") or "").strip() or None
     if admin and admin not in forms:
@@ -191,6 +214,7 @@ def _profile_from_fiagro(row: dict[str, Any]) -> dict[str, Any]:
     return {
         "entity_id": entity_id,
         "display_name": display,
+        "auto_ok": auto_ok,
         "aliases": uniq,
         "cnpj_roots": [root] if root else [],
         "industries": ["agri-funds"],
@@ -293,7 +317,10 @@ def discover_fiagro(
                 report["errors"].append({"eid": eid, "error": str(exc)})
             continue
 
-        if auto_create and new_budget > 0 and root:
+        # Name-quality gate: only funds with a clean identity (ticker or a
+        # distinctive brand) are auto-createable. Junk-named funds ("INVESTIMENTO",
+        # legal-form-only) fall through to the propose-only branch for curator review.
+        if auto_create and new_budget > 0 and root and profile.get("auto_ok"):
             try:
                 brand = profile["display_name"]
                 if brand and entity_registry.name_owned_by_other(
@@ -328,13 +355,19 @@ def discover_fiagro(
                     {"profile": profile.get("entity_id"), "error": str(exc)}
                 )
         else:
+            if not root:
+                reason = "fiagro_no_cnpj"
+            elif not profile.get("auto_ok"):
+                reason = "needs_brand_review"  # strong CNPJ id but no clean brand
+            else:
+                reason = "fiagro_missing"  # auto_create off / budget exhausted
             try:
                 pid = entity_registry.propose_review(
                     kind="discovery",
                     key=profile["entity_id"],
                     proposed=profile["display_name"],
-                    reason="fiagro_missing" if root else "fiagro_no_cnpj",
-                    hint=f"cvm_fiagro cnpj={root or '-'} ticker={ticker or '-'} pl={profile.get('pl')}",
+                    reason=reason,
+                    hint=f"cvm_fiagro cnpj={root or '-'} ticker={ticker or '-'} pl={profile.get('pl')} raw={str(profile.get('raw_name'))[:60]!r}",
                     confidence="cnpj" if root else "fuzzy",
                     payload={
                         "profile": profile,
