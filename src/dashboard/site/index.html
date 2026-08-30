@@ -398,6 +398,51 @@
   .hidden { display: none !important; }
   .tip { position: fixed; pointer-events: none; background: var(--ink); color: var(--bg);
     padding: 4px 8px; border-radius: 6px; font-size: 12px; opacity: 0; transition: opacity .1s; z-index: 20; }
+  /* ADR 015 #1-#3: Radar Competitivo drawer — three zero-backend visuals stacked
+     in one pull-out (Radar de Risco, Balanço de Crença Estratégica, Radar
+     Regulatório / Calendário de Prazos). Reuses .ent-row/.entity-link/#tip. */
+  .subhead { margin: 14px 16px 0; padding: 14px 0 0; border-top: 1px solid var(--border);
+    font-size: 13px; font-weight: 700; color: var(--ink); display: flex; align-items: center; gap: 8px; }
+  .subhead.first { border-top: 0; margin-top: 4px; padding-top: 4px; }
+  .ent-row.riskrow { grid-template-columns: 1fr auto 70px; }
+  .riskmeta { display: flex; flex-direction: column; align-items: flex-end; gap: 3px;
+    font-size: 12px; color: var(--ink2); text-align: right; }
+  .riskmeta a { color: var(--accent); }
+  .riskmuted { color: var(--muted); font-size: 11.5px; font-style: italic; }
+  .distress-badge { color: var(--t-crit); font-weight: 700; font-size: 11px;
+    border: 1px dashed currentColor; border-radius: 6px; padding: 1px 6px; white-space: nowrap; }
+  .balrow { display: flex; align-items: center; gap: 10px; padding: 9px 16px;
+    border-top: 1px solid var(--border); cursor: pointer; }
+  .balrow:first-child { border-top: 0; }
+  .balrow:hover { background: var(--panel2); }
+  .balrow .ent-name { flex: 0 0 110px; font-size: 13px; }
+  .balbar { flex: 1; height: 14px; display: flex; border-radius: 4px; background: var(--panel2);
+    position: relative; }
+  .balbar::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px;
+    width: 1px; background: var(--border); }
+  .balneg-wrap { width: 50%; display: flex; justify-content: flex-end; overflow: hidden;
+    border-radius: 4px 0 0 4px; }
+  .balpos-wrap { width: 50%; display: flex; justify-content: flex-start; overflow: hidden;
+    border-radius: 0 4px 4px 0; }
+  .balneg { height: 100%; background: var(--t-crit); }
+  .balpos { height: 100%; background: #2e9e6b; }
+  .balcount { flex: 0 0 46px; text-align: right; font-size: 11.5px; font-variant-numeric: tabular-nums;
+    color: var(--muted); }
+  .balsep { margin: 0 3px; color: var(--border); }
+  .cal-wrap { overflow-x: auto; padding: 8px 16px 4px; }
+  .cal-grid { display: grid; grid-auto-flow: column; grid-template-rows: repeat(7, 11px);
+    grid-auto-columns: 11px; gap: 3px; width: max-content; }
+  .cal-cell { width: 11px; height: 11px; border-radius: 2px; cursor: default; }
+  .cal-pins { padding: 4px 16px 16px; display: flex; flex-direction: column; gap: 0; }
+  .pinrow { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px;
+    border-top: 1px solid var(--border); padding: 7px 0; }
+  .pinrow:first-child { border-top: 0; }
+  .pinrow[data-entity]:not([data-entity=""]) { cursor: pointer; }
+  .pinrow[data-entity]:not([data-entity=""]):hover { color: var(--accent); }
+  .pin-label { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px; }
+  .pin-stage { color: var(--muted); font-size: 11px; }
+  .pin-date { color: var(--ink2); font-variant-numeric: tabular-nums; }
+  .pin-days { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 11.5px; white-space: nowrap; }
 </style>
 </head>
 <body>
@@ -474,6 +519,9 @@
   <button class="railtab" id="macroTab" style="display:none" title="Macro · Copom & Focus">
     <span class="rtlabel">Macro</span>
   </button>
+  <button class="railtab" id="radarTab" style="display:none" title="Radar de risco, balanço de crença estratégica e calendário regulatório">
+    <span class="rtlabel">Radar</span><span class="rtbadge" id="radarCount"></span>
+  </button>
 </div>
 
 <aside class="drawer" id="covDrawer" aria-hidden="true">
@@ -501,6 +549,31 @@
   </div>
   <div class="hint" style="padding:0 16px">Contexto macro do mercado (BCB): decisão do Copom / Selic e as expectativas do Relatório Focus. Sinais amplos de mercado — não são de um concorrente específico.</div>
   <div id="macro"></div>
+</aside>
+
+<aside class="drawer" id="radarDrawer" aria-hidden="true">
+  <div class="drhead">
+    <h2>Radar Competitivo</h2>
+    <button class="drclose" data-close="radarDrawer" aria-label="Fechar">✕</button>
+  </div>
+
+  <div class="subhead first">Radar de Risco
+    <span class="infer" title="Cruza três sinais já citados na ferramenta e nunca combinados antes: o ranking oficial de reclamações do Banco Central, o status de recuperação judicial/falência minerado da imprensa e o pico de ameaça do período.">fusão de sinais</span>
+  </div>
+  <div class="hint" style="padding:0 16px 8px">Ranking de reclamações fundamentadas do BCB (1º = pior), status de distress (RJ/falência) e o nível de ameaça do período. Clique numa entidade para ver as narrativas e fontes abaixo.</div>
+  <div id="riskRadar"></div>
+
+  <div class="subhead">Balanço de Crença Estratégica
+    <span class="infer" title="Contagem de crenças SWOT (curadas/vetadas por analista, cada uma com evidência) — uma leitura da tese acumulada, nunca um fato novo reportado.">inferência</span>
+  </div>
+  <div class="hint" style="padding:0 16px 8px">Forças + Oportunidades (direita, verde) contra Fraquezas + Ameaças (esquerda, vermelho), por entidade — é uma contagem de crenças da tese SWOT, não de fatos. Entidade mais pressionada primeiro.</div>
+  <div id="beliefBalance"></div>
+
+  <div class="subhead">Radar Regulatório · Calendário de Prazos</div>
+  <div class="hint" style="padding:0 16px 8px">Volume diário de sinais do tema Regulação no período (mais escuro = mais sinais no dia) e os prazos regulatórios já identificados no ciclo de vida normativo das narrativas.</div>
+  <div class="cal-wrap"><div class="cal-grid" id="calGrid"></div></div>
+  <div class="indempty" id="calEmpty" style="display:none"></div>
+  <div id="calPins" class="cal-pins"></div>
 </aside>
 <div class="drawerscrim" id="drawerScrim"></div>
 
@@ -769,7 +842,228 @@ function renderLower() {
     const h = low.querySelector("h2");
     if (h) h.textContent = `Revisão de entidades (${DATA.reviews.length})`;
   }
-  renderMacro(); renderReviews(); renderGaps();
+  renderMacro(); renderReviews(); renderGaps(); renderRadarPanels();
+}
+
+// Shared drill-down for the Radar Competitivo drawer rows (ADR 015 #1-#3): reuse
+// the SAME state.entity + render()/syncEntityHighlight() path as every other
+// entity click in the app, then close the drawer so the filtered feed is visible.
+function jumpToEntityFromRadar(en) {
+  if (!en) return;
+  state.entity = en;
+  document.getElementById("fEntity").value = en;
+  syncEntityHighlight(); render();
+  toggleDrawer("radarDrawer", false);
+}
+
+function radarHasData() {
+  return (DATA.entities || []).length > 0 || (DATA.reputation || []).length > 0 ||
+    (DATA.distress || []).length > 0 || Object.keys(DATA.swot || {}).length > 0 ||
+    (DATA.feed || []).some(f => (f.topics || []).includes("regulacao"));
+}
+function renderRadarPanels() {
+  const tab = document.getElementById("radarTab");
+  const has = radarHasData();
+  tab.style.display = has ? "" : "none";
+  if (!has) return;
+  renderRiskRadar(); renderBeliefBalance(); renderRegCalendar();
+}
+
+// --- #1 Radar de Risco: BCB complaints rank + distress state + threat tier ---
+// Fields consumed (verified against feed_builder.py / bcb_reclamacoes.py /
+// distress.py): reputation[].{entity,rank,index,period,url,company},
+// distress[].{entity,kind,label,latest_title}, entities[].{entity,label,peak_score}.
+const DISTRESS_SEVERITY = { falencia: 3, recuperacao_judicial: 2, recuperacao_extrajudicial: 1 };
+function buildRiskRows() {
+  const repByEntity = {};
+  (DATA.reputation || []).forEach(r => {
+    if (typeof r.rank !== "number" || !r.entity) return;   // no invented rank
+    const prev = repByEntity[r.entity];
+    if (!prev || r.rank < prev.rank) repByEntity[r.entity] = r;
+  });
+  const distressByEntity = {};
+  (DATA.distress || []).forEach(d => {
+    if (!d.entity) return;
+    const prev = distressByEntity[d.entity];
+    if (!prev || (DISTRESS_SEVERITY[d.kind] || 0) > (DISTRESS_SEVERITY[prev.kind] || 0))
+      distressByEntity[d.entity] = d;
+  });
+  const entityMeta = {};
+  (DATA.entities || []).forEach(e => { entityMeta[e.entity] = e; });
+  const ids = new Set([...Object.keys(repByEntity), ...Object.keys(distressByEntity)]);
+  // Sort weight is an internal ordering key only — never displayed as a score
+  // (the guardrail is against showing a fabricated composite number to the user).
+  const rows = [...ids].map(id => {
+    const rep = repByEntity[id] || null;
+    const dis = distressByEntity[id] || null;
+    const ent = entityMeta[id] || null;
+    const label = (ent && ent.label) || (rep && rep.company) || id;
+    const tier = ent ? tierOf(ent.peak_score) : null;
+    const badness = rep && rep.rank ? 1 / rep.rank : 0;
+    const weight = (dis ? (DISTRESS_SEVERITY[dis.kind] || 1) * 100 : 0)
+      + badness * 10 + (ent ? (ent.peak_score || 0) : 0);
+    return { entity: id, label, rep, distress: dis, tier, weight };
+  });
+  rows.sort((a, b) => b.weight - a.weight);
+  return rows;
+}
+function renderRiskRadar() {
+  const el = document.getElementById("riskRadar");
+  if (!el) return;
+  const rows = buildRiskRows();
+  if (!rows.length) {
+    el.innerHTML = `<div class="indempty">Sem dados de reclamações BCB ou de distress no período.</div>`;
+    document.getElementById("radarCount").textContent = "";
+    return;
+  }
+  document.getElementById("radarCount").textContent = String(rows.length);
+  el.innerHTML = rows.map(r => {
+    const tierChip = r.tier
+      ? `<span class="tier" style="background:${cssvar(r.tier.var)}" title="Pico de ameaça no período">${r.tier.label}</span>`
+      : `<span class="tier" style="background:var(--t-low)" title="Sem narrativas de ameaça no período">—</span>`;
+    const repHtml = r.rep
+      ? `<a href="${esc(r.rep.url || '#')}" target="_blank" rel="noopener" title="Ranking oficial de reclamações fundamentadas — Banco Central${r.rep.period ? ' · ' + esc(r.rep.period) : ''}">reclamações BCB · ${r.rep.rank}º${r.rep.period ? ' · ' + esc(r.rep.period) : ''}</a>`
+      : `<span class="riskmuted">sem ranking BCB</span>`;
+    // Distress is never color-only: dashed border + text badge ("⚠ <label>") together carry the semantic.
+    const distHtml = r.distress
+      ? `<span class="distress-badge" title="${esc(r.distress.latest_title || '')}">⚠ ${esc(r.distress.label || r.distress.kind)}</span>`
+      : "";
+    return `<div class="ent-row riskrow" data-entity="${esc(r.entity)}">
+      <div class="ent-name entity-link" title="${esc(r.label)}">${esc(r.label)}</div>
+      <div class="riskmeta">${repHtml}${distHtml}</div>
+      <div class="ent-meta">${tierChip}</div>
+    </div>`;
+  }).join("");
+  el.querySelectorAll(".riskrow").forEach(r => r.onclick = () => jumpToEntityFromRadar(r.dataset.entity));
+}
+
+// --- #2 Balanço de Crença Estratégica: swot[entity].counts (ADR 004) ---------
+// Fields consumed: DATA.swot = {entity: {label, counts:{S,W,O,T}}} (feed_builder
+// projects swot_store's compact index verbatim under "entities").
+function buildBalanceRows() {
+  const swot = DATA.swot || {};
+  const rows = Object.entries(swot).map(([entity, s]) => {
+    const c = s.counts || {};
+    const pos = (c.S || 0) + (c.O || 0);
+    const neg = (c.W || 0) + (c.T || 0);
+    return { entity, label: s.label || entity, pos, neg, net: pos - neg };
+  }).filter(r => r.pos + r.neg > 0);   // skip entities with zero beliefs
+  rows.sort((a, b) => a.net - b.net);  // most-pressured (W+T > S+O) first
+  return rows;
+}
+function renderBeliefBalance() {
+  const el = document.getElementById("beliefBalance");
+  if (!el) return;
+  const rows = buildBalanceRows();
+  if (!rows.length) {
+    el.innerHTML = `<div class="indempty">Sem crenças SWOT vetadas no período.</div>`;
+    return;
+  }
+  const maxMag = Math.max(1, ...rows.map(r => Math.max(r.pos, r.neg)));
+  el.innerHTML = rows.map(r => {
+    const negPct = (r.neg / maxMag) * 100, posPct = (r.pos / maxMag) * 100;
+    return `<div class="balrow" data-entity="${esc(r.entity)}">
+      <div class="ent-name entity-link" title="${esc(r.label)}">${esc(r.label)}</div>
+      <div class="balbar">
+        <div class="balneg-wrap"><div class="balneg" style="width:${negPct.toFixed(0)}%" title="Fraquezas + Ameaças: ${r.neg}"></div></div>
+        <div class="balpos-wrap"><div class="balpos" style="width:${posPct.toFixed(0)}%" title="Forças + Oportunidades: ${r.pos}"></div></div>
+      </div>
+      <div class="balcount" title="Forças+Oportunidades · Fraquezas+Ameaças">${r.pos}<span class="balsep">·</span>${r.neg}</div>
+    </div>`;
+  }).join("");
+  el.querySelectorAll(".balrow").forEach(r => r.onclick = () => jumpToEntityFromRadar(r.dataset.entity));
+}
+
+// --- #3 Radar Regulatório / Calendário de Prazos -----------------------------
+// Fields consumed: feed[].{date,topics} (topic "regulacao" from topics.py) for
+// the heatmap; feed[].{deadline,days_to_deadline,current_stage,entity} (ADR 003
+// Wave 1 regulatory-lifecycle payload) for the deadline pins.
+function parseISODate(iso) {
+  const [y, m, d] = String(iso).split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d));
+}
+function isoOfDate(date) { return date.toISOString().slice(0, 10); }
+function buildRegCalendar() {
+  const dates = DATA.dates || [];
+  if (!dates.length) return null;
+  const counts = {};
+  (DATA.feed || []).forEach(f => {
+    if (f.date && (f.topics || []).includes("regulacao")) counts[f.date] = (counts[f.date] || 0) + 1;
+  });
+  const start = parseISODate(dates[0]), end = parseISODate(dates[dates.length - 1]);
+  // Pad to full Sun-Sat weeks so the grid aligns like a GitHub contributions graph.
+  const gridStart = new Date(start);
+  gridStart.setUTCDate(gridStart.getUTCDate() - gridStart.getUTCDay());
+  const days = [];
+  for (let d = new Date(gridStart); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+    const iso = isoOfDate(d);
+    days.push({ date: iso, count: counts[iso] || 0, inRange: iso >= dates[0] });
+  }
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  const max = Math.max(1, ...Object.values(counts));
+  return { days, max, total };
+}
+function buildDeadlinePins() {
+  const seen = new Map();
+  (DATA.feed || []).forEach(f => {
+    if (!f.deadline || !(f.topics || []).includes("regulacao")) return;
+    const key = `${f.entity || f.id}#${f.deadline}`;
+    if (seen.has(key)) return;
+    seen.set(key, {
+      entity: f.entity, label: f.entity_label || f.subject_label || "—",
+      deadline: f.deadline, days: f.days_to_deadline, stage: f.current_stage,
+    });
+  });
+  return [...seen.values()].sort((a, b) => String(a.deadline).localeCompare(String(b.deadline)));
+}
+function renderRegCalendar() {
+  const gridEl = document.getElementById("calGrid");
+  const emptyEl = document.getElementById("calEmpty");
+  const pinsEl = document.getElementById("calPins");
+  if (!gridEl) return;
+  const cal = buildRegCalendar();
+  if (!cal || !cal.total) {
+    gridEl.innerHTML = "";
+    emptyEl.style.display = "";
+    emptyEl.textContent = "Sem sinais regulatórios (tema Regulação) no período.";
+  } else {
+    emptyEl.style.display = "none";
+    gridEl.innerHTML = cal.days.map(day => {
+      const bg = day.count > 0
+        ? hexToRgba(cssvar("--accent"), 0.15 + 0.75 * (day.count / cal.max))
+        : "var(--border)";
+      const fade = day.inRange ? "" : "opacity:.3;";
+      return `<div class="cal-cell" style="background:${bg};${fade}" data-d="${day.date}" data-v="${day.count}"></div>`;
+    }).join("");
+    const tip = document.getElementById("tip");
+    gridEl.querySelectorAll(".cal-cell").forEach(c => {
+      c.onmousemove = ev => {
+        tip.textContent = `${fmtDate(c.dataset.d)}: ${c.dataset.v} sinal(is) regulatório(s)`;
+        tip.style.left = (ev.clientX + 12) + "px"; tip.style.top = (ev.clientY - 10) + "px";
+        tip.style.opacity = 1;
+      };
+      c.onmouseleave = () => tip.style.opacity = 0;
+    });
+  }
+  const pins = buildDeadlinePins();
+  if (!pins.length) {
+    pinsEl.innerHTML = `<div class="indempty">Sem prazos regulatórios identificados no período — item pendente até o ciclo de vida normativo render mais dados de prazo.</div>`;
+    return;
+  }
+  pinsEl.innerHTML = pins.map(p => {
+    const dueTxt = p.days == null ? "" : (p.days >= 0 ? `faltam ${p.days}d` : `venceu há ${Math.abs(p.days)}d`);
+    const stageTxt = p.stage ? (REG_STAGE_PT[p.stage] || p.stage) : "";
+    return `<div class="pinrow${p.entity ? ' entity-link' : ''}" data-entity="${esc(p.entity || '')}">
+      <span title="Prazo regulatório">📌</span>
+      <span class="pin-label" title="${esc(p.label)}">${esc(p.label)}</span>
+      <span class="pin-stage">${esc(stageTxt)}</span>
+      <span class="pin-date">${esc(fmtDate(p.deadline))}</span>
+      <span class="pin-days">${esc(dueTxt)}</span>
+    </div>`;
+  }).join("");
+  pinsEl.querySelectorAll(".pinrow[data-entity]").forEach(r => {
+    if (r.dataset.entity) r.onclick = () => jumpToEntityFromRadar(r.dataset.entity);
+  });
 }
 
 const GAP_CLASS_LABEL = {
@@ -1595,7 +1889,7 @@ function applyTheme(t) {
   document.documentElement.setAttribute("data-theme", t);
   const btn = document.getElementById("themeToggle");
   if (btn) btn.textContent = t === "dark" ? "Claro" : "Escuro";
-  if (DATA) { renderLegend(); renderIndustryMonitor(); render(); syncEntityHighlight(); }
+  if (DATA) { renderLegend(); renderIndustryMonitor(); render(); syncEntityHighlight(); renderRadarPanels(); }
 }
 applyTheme(autoTheme());
 setInterval(() => { if (!themeManual) applyTheme(autoTheme()); }, 600000);
@@ -1938,6 +2232,7 @@ renderAuthUI();
 document.getElementById("covTab").onclick = () => toggleDrawer("covDrawer", true);
 document.getElementById("gapsTab").onclick = () => toggleDrawer("gapsDrawer", true);
 document.getElementById("macroTab").onclick = () => toggleDrawer("macroDrawer", true);
+document.getElementById("radarTab").onclick = () => toggleDrawer("radarDrawer", true);
 document.querySelectorAll(".drclose").forEach(b => b.onclick = () => toggleDrawer(b.dataset.close, false));
 document.getElementById("drawerScrim").onclick = () => closeDrawers();
 document.addEventListener("keydown", e => { if (e.key === "Escape") closeDrawers(); });
