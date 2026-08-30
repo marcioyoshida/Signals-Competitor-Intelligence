@@ -160,6 +160,37 @@ def test_profile_auto_ok_flag():
     assert clean["auto_ok"] is True
 
 
+def test_discover_fiagro_scans_registry_once():
+    """Perf: discovery scans the registry ONCE regardless of row count (no
+    per-row full-table scan via resolve_by_name)."""
+
+    class _CountingTable(_FakeTable):
+        scans = 0
+
+        def scan(self, **kwargs):
+            type(self).scans += 1
+            return super().scan(**kwargs)
+
+    table = _CountingTable()
+    rows = [
+        {
+            "fund_name": f"BRAND{i} AGRO FIAGRO",
+            "ticker": f"AB{i:02d}11",
+            "cnpj": f"{10000000 + i:08d}000191",
+            "isin": None,
+            "admin": "ADM",
+            "manager": "GES",
+            "pl": 1e8,
+            "as_of": "2026-03-01",
+            "url": "u",
+        }
+        for i in range(8)
+    ]
+    report = discover_fiagro(rows=rows, min_pl=0, auto_create=True, max_new=20, table=table)
+    assert len(report["created"]) == 8
+    assert _CountingTable.scans == 1  # exactly one scan for 8 rows, not one per row
+
+
 def test_harvest_keyword_frequency_gate():
     news = [
         {

@@ -269,6 +269,28 @@ def discover_fiagro(
 
     new_budget = max_new if auto_create else 0
 
+    # One scan up front → local resolution indexes (cnpj / alias / display). This
+    # replaces the per-row DB resolves (resolve_by_name scanned the whole table on
+    # every miss → ~O(rows) full scans, which the ingest source-budget truncated).
+    # Kept correct intra-run by updating the indexes as we create entities.
+    cnpj_idx: dict[str, str] = {}
+    alias_idx: dict[str, str] = {}
+    disp_idx: dict[str, list[str]] = {}
+    for e in entity_registry.list_entities(table=table, include_inactive=True):
+        _eid = e.get("entity_id")
+        if not _eid:
+            continue
+        for r in e.get("cnpj_roots") or []:
+            cnpj_idx[str(r)[:8]] = _eid
+        for a in e.get("aliases") or []:
+            alias_idx[a] = _eid
+        d = entity_registry.normalize_alias(e.get("display_name") or "")
+        if d:
+            disp_idx.setdefault(d, []).append(_eid)
+
+    def _norm(s: str) -> str:
+        return entity_registry.normalize_alias(s or "")
+
     for row in rows:
         try:
             profile = _profile_from_fiagro(row)
@@ -281,13 +303,13 @@ def discover_fiagro(
         eid = None
 
         if root:
-            eid = entity_registry.resolve_by_cnpj(root, table=table)
+            eid = cnpj_idx.get(root)
         if not eid and ticker:
-            eid = entity_registry.resolve_by_alias(ticker, table=table)
+            eid = alias_idx.get(_norm(ticker))
         if not eid:
             brand = profile.get("display_name")
             if brand:
-                hits = entity_registry.resolve_by_name(brand, table=table)
+                hits = disp_idx.get(_norm(brand)) or []
                 if len(hits) == 1:
                     eid = hits[0]
 
@@ -323,15 +345,21 @@ def discover_fiagro(
         if auto_create and new_budget > 0 and root and profile.get("auto_ok"):
             try:
                 brand = profile["display_name"]
-                if brand and entity_registry.name_owned_by_other(
-                    brand, exclude_id=profile["entity_id"], table=table
-                ):
+                nb = _norm(brand)
+                # Collision check against the local indexes (display + alias),
+                # excluding this fund's own id — same guarantee as name_owned_by_other
+                # without another full-table scan.
+                owners = {x for x in (disp_idx.get(nb) or []) if x != profile["entity_id"]}
+                alias_owner = alias_idx.get(nb)
+                if alias_owner and alias_owner != profile["entity_id"]:
+                    owners.add(alias_owner)
+                if brand and owners:
                     pid = entity_registry.propose_review(
                         kind="discovery",
                         key=profile["entity_id"],
                         proposed=brand,
                         reason="name_collision",
-                        hint=f"cvm_fiagro cnpj={root} ticker={ticker or '-'}",
+                        hint=f"cvm_fiagro cnpj={root} ticker={ticker or '-'} owner={sorted(owners)[0]}",
                         confidence="cnpj",
                         payload={"profile": profile, "source": "cvm_fiagro", "cnpj": root},
                         table=table,
@@ -350,6 +378,17 @@ def discover_fiagro(
                 )
                 report["created"].append(profile["entity_id"])
                 new_budget -= 1
+                # Keep local indexes current so later rows see this new entity
+                # (mirror put_entity's normalization: skip TICKER: forms).
+                cnpj_idx[root] = profile["entity_id"]
+                if nb:
+                    disp_idx.setdefault(nb, []).append(profile["entity_id"])
+                for a in profile.get("aliases") or []:
+                    if str(a).upper().startswith("TICKER:"):
+                        continue
+                    na = _norm(a)
+                    if na:
+                        alias_idx.setdefault(na, profile["entity_id"])
             except Exception as exc:  # pragma: no cover
                 report["errors"].append(
                     {"profile": profile.get("entity_id"), "error": str(exc)}
