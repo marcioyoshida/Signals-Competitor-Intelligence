@@ -68,6 +68,28 @@ flowchart LR
   class REG,API,FB moat;
 ```
 
+## Tierization rationale (sensitivity → signal depth → persona)
+
+The tier a vertical lands in is driven by **data sensitivity**, which in turn sets the
+**depth of signal/inference** it's worth delivering and the **buyer persona** it serves:
+
+| Vertical group | Data sensitivity | Regulatory / signal depth tracked | Tier | Primary buyer |
+|---|---|---|---|---|
+| Consórcios · Betting · FIAGRO/FIIs · Crypto | Low–Medium (public / niche) | Centralized BCB circulars, SPA/MF authorizations, CVM public filings | **Entry Portal** (static S3) | Operational heads, niche strategists, product managers |
+| Fintech · Adquirência · Insurance · Wealth | Medium–High (competitive) | PIX operational moves, SUSEP circulars, B3 trading signals | **SaaS Platform** (dynamic API) | VPs of Strategy, Compliance Officers, Risk Directors |
+| Banking · Investment Banking · Private Markets | Prime / Sovereign | Systemic risk, institutional sanctions, C-suite M&A, cross-entity graph | **Sovereign** (tenant VPC) | CEOs, Board members, Enterprise CROs |
+
+**The "signal depth" column is a second projection filter, not a second pipeline.** The one
+pipeline ingests everything (the moat tracks all signals/entities); the tier feed then scopes
+on **two** dimensions — *which entities/industries* (the entry-module filter above) **and** *how
+deep the signal/inference*. Depth maps to the corpus's existing lens/axis layers: Entry = the
+shallow public-filing lenses (regulatory/dou/fatos, funds); SaaS = operational + competitive
+(pix/juros/market/ofertas + news); Sovereign = the full derived graph/inference layer
+(relational/predictive/ecosystem/cohort — cross-entity graph, systemic-risk inference, M&A).
+So the **deepest, highest-value derived intelligence is Sovereign-only** — the right moat/
+pricing logic (premium depth for the premium, C-suite buyer), and it's a *filter at the
+projection boundary* (by lens/axis + industry), never a fork of ingest or synth.
+
 ## ① Entry Portal — static feeds at scale (CloudFront multi-tenant)
 
 For fragmented, high-count, low-ARPU verticals where per-tenant cost must approach zero.
