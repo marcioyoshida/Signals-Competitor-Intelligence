@@ -52,6 +52,25 @@ def test_build_card_labeled_inference():
     assert "não fato confirmado" in card["narrative"]
 
 
+def test_contagion_carries_citation_and_card_is_grounded():
+    # #37: a dict incident threads the triggering signal's citations/event through
+    # to the card — no more uncited "incidente em X" inference.
+    hubs = {"ITAU UNIBANCO S.A.": {"hub": "ITAU UNIBANCO S.A.",
+            "dependents": ["fundo_a", "fundo_b"], "kind": "fund_admin", "n_dependents": 2}}
+    inc = {"ITAU UNIBANCO S.A.": {"severity": 0.72,
+           "citations": [{"url": "https://x/y"}], "source_ids": ["news:abc"],
+           "event": "Itaú Unibanco enfrenta falha operacional em serviço de custódia."}}
+    out = ecosystem.contagion(hubs, inc)
+    assert len(out) == 1 and out[0]["citations"] == [{"url": "https://x/y"}]
+    card = ecosystem.build_card(out[0])
+    assert card["citations"] == [{"url": "https://x/y"}]          # grounded
+    assert card["source_ids"] == ["news:abc"]
+    assert "incidente em" not in card["narrative"]                # no overclaim
+    assert "fundos sob sua administração" in card["narrative"]    # readable label
+    assert "falha operacional" in card["narrative"]               # references the real signal
+    assert "não fato confirmado" in card["narrative"]             # still labeled inference
+
+
 def test_derived_axis_registered():
     from src.synth import feature_store
     assert "ecosystem" in feature_store.DERIVED_AXES

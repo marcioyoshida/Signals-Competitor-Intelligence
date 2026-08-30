@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from typing import Any
 
 import boto3
@@ -86,24 +87,41 @@ def build_dependency_graph(
     return hubs
 
 
+# Dependency-kind → reader-facing noun (issue #37: "10 dependentes (fund_admin)" reads
+# as jargon). Falls back to a generic label for unmapped kinds.
+_KIND_LABEL = {
+    "fund_admin": "fundos sob sua administração",
+    "custodian": "fundos sob sua custódia",
+    "controller": "empresas que controla",
+    "cloud": "clientes de infraestrutura",
+}
+
+
 def contagion(
-    hubs: dict[str, dict[str, Any]], incidents: dict[str, float]
+    hubs: dict[str, dict[str, Any]], incidents: dict[str, Any]
 ) -> list[dict[str, Any]]:
     """Pure: dependency graph + hub incidents -> exposure findings.
 
-    `incidents` maps a hub name to an incident severity (0..1). A hub with dependents
-    AND an incident yields one exposure finding listing who is exposed.
+    ``incidents`` maps a hub → its incident: either a bare severity float, or a dict
+    ``{severity, citations, source_ids, event}`` (the triggering high-threat signal —
+    threaded through so the card can CITE it, issue #37). A hub with dependents AND an
+    incident above the severity floor yields one exposure finding.
     """
     out: list[dict[str, Any]] = []
     min_sev = _f("ONCA_ECOSYSTEM_MIN_SEVERITY", 0.5)
-    for hub, sev in incidents.items():
+    for hub, inc in incidents.items():
+        sev = inc.get("severity") if isinstance(inc, dict) else inc
         h = hubs.get(hub)
-        if not h or not h["dependents"] or sev < min_sev:
+        if not h or not h["dependents"] or float(sev) < min_sev:
             continue
+        payload = inc if isinstance(inc, dict) else {}
         out.append({
             "hub": hub, "severity": round(float(sev), 3),
             "dependents": h["dependents"], "n_dependents": h["n_dependents"],
             "kind": h["kind"],
+            "citations": payload.get("citations") or [],
+            "source_ids": payload.get("source_ids") or [],
+            "event": payload.get("event") or "",
         })
     out.sort(key=lambda x: (x["severity"], x["n_dependents"]), reverse=True)
     return out
@@ -111,8 +129,18 @@ def contagion(
 
 def build_card(finding: dict[str, Any]) -> dict[str, Any]:
     hub, n = finding["hub"], finding["n_dependents"]
-    head = (f"Exposição de ecossistema: incidente em {hub} pode afetar {n} "
-            f"dependentes ({finding['kind']}). Inferência de contágio, não fato confirmado.")
+    kind = finding.get("kind") or ""
+    label = _KIND_LABEL.get(kind) or (f"dependentes ({kind})" if kind else "dependentes")
+    # Lead with the REAL, cited hub signal — not a vague "incidente" (issue #37):
+    # reference the triggering event so the reader knows what the risk is.
+    event = (finding.get("event") or "").strip()
+    lead = f"{hub} está sob sinal de alta ameaça"
+    if event:
+        snippet = re.split(r"(?<=[.!?])\s", event)[0][:160].rstrip(" .")
+        if snippet:
+            lead += f" — {snippet}"
+    head = (f"{lead}. {n} {label} podem ser afetados por contágio "
+            f"(inferência, não fato confirmado).")
     return {
         "id": f"ecosystem-{hub}".replace(" ", "_")[:120],
         "kind": "ecosystem", "axis": AXIS, "subject_type": "hub",
@@ -120,9 +148,13 @@ def build_card(finding: dict[str, Any]) -> dict[str, Any]:
         "hub": hub, "n_dependents": n,
         "lenses": [], "is_alert": False, "is_inference": True,
         "threat_score": round(min(0.5, 0.2 + 0.02 * n), 3),
-        "threat_factors": {"severity": finding["severity"], "n_dependents": n},
+        "threat_factors": {"severity": finding.get("severity"), "n_dependents": n},
         "threat_score_note": "estimated_v1_ecosystem",
-        "narrative": head, "citations": [], "source_ids": [],
+        "narrative": head,
+        # Ground the inference in the hub's triggering signal (the whole product
+        # promise is cited claims — an uncited inference card is a defect).
+        "citations": finding.get("citations") or [],
+        "source_ids": finding.get("source_ids") or [],
         "mode": "derived",
         "run_date": run_date_today(), "run_at": run_at_now(), "as_of": run_date_today(),
         "data_as_of": {},
@@ -146,17 +178,27 @@ def _load_external_source(s3: Any) -> list[dict[str, Any]]:
 
 def _hub_incidents(narratives: list[dict[str, Any]], hubs: dict[str, dict[str, Any]]) -> dict[str, float]:
     """Best-effort: a hub named in a recent high-threat narrative is 'in incident'."""
-    incidents: dict[str, float] = {}
+    incidents: dict[str, Any] = {}
     hub_names = {h.lower(): h for h in hubs}
     for n in narratives:
         if not isinstance(n, dict) or not feature_store.is_activity_narrative(n):
             continue
-        if feature_store._score(n.get("threat_score")) < INCIDENT_THREAT:
+        sev = feature_store._score(n.get("threat_score"))
+        if sev < INCIDENT_THREAT:
             continue
         text = (n.get("narrative") or "").lower()
         for low, hub in hub_names.items():
             if low and low in text:
-                incidents[hub] = max(incidents.get(hub, 0.0), feature_store._score(n.get("threat_score")))
+                cur = incidents.get(hub)
+                # Keep the highest-threat triggering signal; carry its citations so
+                # the exposure card is grounded (issue #37).
+                if cur is None or sev > cur["severity"]:
+                    incidents[hub] = {
+                        "severity": sev,
+                        "citations": n.get("citations") or [],
+                        "source_ids": n.get("source_ids") or [],
+                        "event": (n.get("narrative") or "").strip(),
+                    }
     return incidents
 
 
