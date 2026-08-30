@@ -81,6 +81,7 @@ def put_entity(
     ownership: str | None = None,
     certifications: Iterable[str] | None = None,
     attribution_role: str | None = None,
+    parent: str | None = None,
     table: Any | None = None,
 ) -> dict[str, Any]:
     """Upsert an entity + its ALIAS#/CNPJ# lookup items. Returns the entity item.
@@ -164,6 +165,12 @@ def put_entity(
     #    subject only; the entity is often the actor/source in others' news).
     if attribution_role:
         entity["attribution_role"] = str(attribution_role)
+    #  - parent: the tier-1 conglomerate this entity is a line-of-business of (ADR 017).
+    #    A sub-entity (e.g. a bank's FIAGRO/consórcio arm) links to its parent so the
+    #    parent can stay tagged tier-1 only while the lower-industry activity lives here;
+    #    the tier-1 opt-in toggle folds a parent's children back in on demand.
+    if parent:
+        entity["parent"] = str(parent)
     t.put_item(Item=entity)
     for na in norm:
         t.put_item(Item={"pk": f"ALIAS#{na}", "type": "alias", "entity_id": entity_id})
@@ -1054,6 +1061,32 @@ def set_industries(
     ent["needs_review"] = False
     t.put_item(Item=ent)
     return True
+
+
+def set_parent(entity_id: str, parent: str | None, table: Any | None = None) -> bool:
+    """Link a sub-entity to its tier-1 conglomerate parent (ADR 017), or clear it with
+    ``parent=None``. Returns True if the entity existed and was updated."""
+    t = _table(table)
+    ent = get_entity(entity_id, table=t)
+    if not ent:
+        return False
+    if parent:
+        ent["parent"] = str(parent)
+    else:
+        ent.pop("parent", None)
+    t.put_item(Item=ent)
+    return True
+
+
+def children_of(parent_id: str, table: Any | None = None) -> list[str]:
+    """Entity ids whose `parent` is `parent_id` (ADR 017 corporate group). Drives the
+    tier-1 opt-in toggle — folding a conglomerate's lower-industry lines back in."""
+    pid = str(parent_id)
+    return sorted(
+        e["entity_id"]
+        for e in _scan_type(_table(table), "entity")
+        if e.get("entity_id") and e.get("parent") == pid
+    )
 
 
 def entity_industry_map(table: Any | None = None) -> dict[str, list[str]]:

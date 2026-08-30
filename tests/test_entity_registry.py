@@ -440,6 +440,26 @@ def test_set_industries_assigns_and_clears_needs_review():
     assert er.set_industries("missing", ["banking"], table=t) is False
 
 
+def test_parent_link_and_children_of():
+    # ADR 017: a sub-entity links to its tier-1 conglomerate parent; the parent stays
+    # tier-1 only and is discoverable from its children.
+    t = FakeTable()
+    er.put_entity("itau", "Itaú", ["ITUB4"], industries=["banking"], table=t)
+    er.put_entity("itau-consorcio", "Itaú Consórcio", ["ICON"],
+                  industries=["consorcio"], parent="itau", table=t)
+    er.put_entity("itau-fiagro", "Itaú FIAGRO", ["IAGR"],
+                  industries=["agri-funds"], table=t)
+    assert er.get_entity("itau-consorcio", table=t)["parent"] == "itau"
+    assert "parent" not in er.get_entity("itau", table=t)  # parent carries no parent
+    # link the second child after the fact
+    assert er.set_parent("itau-fiagro", "itau", table=t) is True
+    assert er.children_of("itau", table=t) == ["itau-consorcio", "itau-fiagro"]
+    # clear a link
+    assert er.set_parent("itau-fiagro", None, table=t) is True
+    assert er.children_of("itau", table=t) == ["itau-consorcio"]
+    assert er.set_parent("missing", "itau", table=t) is False
+
+
 def test_entity_industry_map_lists_industries_per_entity():
     t = FakeTable()
     er.put_entity("a", "A", ["ACO"], industries=["banking"], table=t)

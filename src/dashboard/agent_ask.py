@@ -547,6 +547,11 @@ def _scope_cards_to_modules(
     attrs = feed.get("entity_attrs") or {}
 
     def _ok(c: dict[str, Any]) -> bool:
+        # Prefer the card's denormalized industries (ADR 017 — exact once a
+        # conglomerate's lines are sub-entities); fall back to entity membership.
+        card_inds = c.get("industries")
+        if card_inds is not None:
+            return bool({str(i).strip().lower() for i in card_inds} & mods)
         for e in [c.get("entity"), *(c.get("entities") or [])]:
             if not e:
                 continue

@@ -420,6 +420,20 @@ def build_feed(
         if (s := _source_of(c))
     }
 
+    # ADR 017: denormalize each card's industries (union of its entities' registry
+    # industries) onto the card, so the Entry fork, the per-tenant read boundary, and
+    # the dashboard toggles all scope by the CARD — exact once a conglomerate's lines
+    # are sub-entities (a sub-entity card then carries its single lower industry).
+    def _card_industries(c: dict[str, Any]) -> list[str]:
+        s: set[str] = set()
+        for e in [c.get("entity"), *(c.get("entities") or [])]:
+            if e:
+                s.update(imap.get(e, []))
+        return sorted(s)
+
+    for c in items + thread_items:
+        c["industries"] = _card_industries(c)
+
     # Merge incident threads into the displayed feed (after KPI/entity aggregation).
     feed_items = sorted(
         items + thread_items, key=lambda x: (x["date"], x["threat_score"]), reverse=True
@@ -520,6 +534,11 @@ def derive_entry_feed(
     entry_entities = {e for e, inds in ent_ind.items() if inds & keep}
 
     def card_ok(c: dict[str, Any]) -> bool:
+        # Prefer the card's denormalized industries (ADR 017); fall back to entity
+        # membership for any card built before the field existed.
+        inds = c.get("industries")
+        if inds is not None:
+            return bool({str(i).strip().lower() for i in inds} & keep)
         for e in [c.get("entity"), *(c.get("entities") or [])]:
             if e and e in entry_entities:
                 return True
@@ -537,7 +556,11 @@ def derive_entry_feed(
         # dashboard must show ONLY its entry industries, never a higher-tier chip.
         return sorted(i for i in (inds or []) if str(i).strip().lower() in keep)
 
-    feed_items = [c for c in (feed.get("feed") or []) if card_ok(c)]
+    feed_items = [
+        {**c, "industries": scrub_industries(c.get("industries"))}
+        for c in (feed.get("feed") or [])
+        if card_ok(c)
+    ]
     entities = [
         {**r, "industries": scrub_industries(r.get("industries"))}
         for r in (feed.get("entities") or [])

@@ -112,6 +112,10 @@ function entityIndustries(feed) {
 }
 
 function cardIndustries(card, emap) {
+  // Prefer the card's denormalized industries (ADR 017, already scrubbed to the entry
+  // set server-side); fall back to entity membership for older feeds.
+  if (Array.isArray(card.industries))
+    return new Set(card.industries.map(s => String(s).toLowerCase()));
   const out = new Set();
   for (const e of [card.entity, ...(card.entities || [])]) {
     if (e && emap[e]) for (const i of emap[e]) out.add(i);

@@ -211,9 +211,16 @@ def test_derive_entry_feed_scopes_to_entry_industries_only():
     feed = feed_builder.build_feed(
         narratives, industry_map=imap, industry_meta=meta, entity_attrs=attrs
     )
+    # ADR 017: each card carries its denormalized industries (union of its entities').
+    by_id = {c["id"]: c for c in feed["feed"]}
+    assert by_id["n1"]["industries"] == ["banking"]
+    assert by_id["n4"]["industries"] == ["agri-funds", "banking"]  # dualco is multi-industry
+
     entry = feed_builder.derive_entry_feed(feed)
 
     assert entry["tier"] == "entry"
+    # a multi-industry card's entry copy is scrubbed to the entry industries only.
+    assert next(c for c in entry["feed"] if c["id"] == "n4")["industries"] == ["agri-funds"]
     # itau's banking card is gone; the three entry-touching entities remain.
     ids = {c["id"] for c in entry["feed"]}
     assert ids == {"n2", "n3", "n4"}
