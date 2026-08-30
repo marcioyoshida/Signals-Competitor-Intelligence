@@ -195,6 +195,30 @@ def test_load_recent_narratives_filters_by_window(monkeypatch):
     assert ids == {"fresh"}  # old is outside the 14-day window; .txt skipped
 
 
+def test_scope_feed_to_modules_saas_boundary_and_group_optin():
+    # issue #48: per-tenant scoped feed keeps depth + groups, folds in an in-scope
+    # parent's group children (ADR-017 opt-in), fail-closed on empty modules.
+    narratives = [
+        _narr("bk", "itau", "2026-08-20", 0.7),        # banking (licensed)
+        _narr("ag", "agroca", "2026-08-20", 0.5),      # agri-funds (NOT licensed)
+        _narr("kn", "kinea", "2026-08-20", 0.4),       # itau's sub-entity (group child)
+    ]
+    imap = {"itau": ["banking"], "agroca": ["agri-funds"], "kinea": ["agri-funds"]}
+    attrs = {"itau": {"industries": ["banking"]},
+             "agroca": {"industries": ["agri-funds"]},
+             "kinea": {"industries": ["agri-funds"], "parent": "itau"}}
+    feed = feed_builder.build_feed(narratives, industry_map=imap, industry_meta={}, entity_attrs=attrs)
+
+    scoped = feed_builder.scope_feed_to_modules(feed, ["banking"])
+    ids = {c["id"] for c in scoped["feed"]}
+    # itau (licensed) + kinea (its group child) are in; agroca (unlicensed, no parent) is out.
+    assert ids == {"bk", "kn"} and scoped["scoped_modules"] == ["banking"]
+    assert scoped["groups"] == {"itau": ["kinea"]}  # only in-scope parents' groups
+    assert set(scoped["entity_attrs"]) == {"itau", "kinea"} and "agroca" not in scoped["entity_attrs"]
+    # fail closed
+    assert feed_builder.scope_feed_to_modules(feed, [])["feed"] == []
+
+
 def test_build_feed_emits_corporate_groups_and_entry_collapses_them():
     # ADR 017 Phase 3: entity `parent` links roll up into feed.groups {parent: [children]}.
     narratives = [_narr("n1", "btg", "2026-08-20", 0.6),

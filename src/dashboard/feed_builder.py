@@ -546,6 +546,98 @@ def build_feed(
     }
 
 
+def scope_feed_to_modules(feed: dict[str, Any], modules: Any) -> dict[str, Any]:
+    """Server-authoritative per-tenant projection (issue #48 / ADR 016 SaaS): the full
+    feed scoped to a tenant's licensed ``modules`` (industries). Unlike the Entry fork it
+    keeps full depth, industry labels, and corporate groups — and, per the ADR-017 tier-1
+    opt-in, folds in the children of any IN-SCOPE parent (a tenant entitled to a
+    conglomerate is entitled to its group). Fail closed: empty modules ⇒ empty feed.
+
+    Identical delivery for the two tier-1 planes (your framing): SaaS serves this from the
+    shared multi-tenant endpoint; an AWS Marketplace tenant runs the same projection in its
+    own account. The read boundary is the same either way.
+    """
+    keep = {str(i).strip().lower() for i in (modules or [])}
+    attrs = feed.get("entity_attrs") or {}
+    ent_ind = {
+        e: {str(i).strip().lower() for i in ((a or {}).get("industries") or [])}
+        for e, a in attrs.items()
+    }
+    scoped = {e for e, inds in ent_ind.items() if inds & keep}
+    if not keep:
+        scoped = set()
+    # ADR 017 tier-1 opt-in: add descendants of any in-scope parent (recursive).
+    groups = feed.get("groups") or {}
+    stack = [e for e in scoped if e in groups]
+    while stack:
+        for child in groups.get(stack.pop(), []):
+            if child not in scoped:
+                scoped.add(child)
+                if child in groups:
+                    stack.append(child)
+
+    def card_ok(c: dict[str, Any]) -> bool:
+        inds = c.get("industries")
+        if inds is not None and {str(i).strip().lower() for i in inds} & keep:
+            return True
+        for e in [c.get("entity"), *(c.get("entities") or [])]:
+            if e and e in scoped:  # covers group children (a licensed parent's lines)
+                return True
+        return False
+
+    def row_ok(r: dict[str, Any]) -> bool:
+        e = r.get("entity") or r.get("entity_id")
+        return bool(e and e in scoped)
+
+    def by_key(d: Any) -> dict[str, Any]:
+        return {e: v for e, v in (d or {}).items() if e in scoped}
+
+    feed_items = [c for c in (feed.get("feed") or []) if card_ok(c)]
+    entities = [r for r in (feed.get("entities") or []) if r.get("entity") in scoped]
+    latest = feed.get("run_date")
+    latest_items = [c for c in feed_items if c.get("date") == latest]
+    sources = {
+        s for c in feed_items for cit in (c.get("citations") or []) if (s := _source_of(cit))
+    }
+    out = dict(feed)
+    out.update(
+        {
+            "scoped_modules": sorted(keep),
+            "feed": feed_items,
+            "entities": entities,
+            "entity_attrs": by_key(attrs),
+            "groups": {p: ks for p, ks in groups.items() if p in scoped},
+            "kpis": {
+                "narratives_latest": len(latest_items),
+                "alerts_latest": sum(1 for c in latest_items if c.get("is_alert")),
+                "entities_tracked": len(entities),
+                "sources": len(sources),
+                "narratives_total": len(feed_items),
+            },
+            "industries": [i for i in (feed.get("industries") or []) if i.get("slug") in keep],
+            "industry_options": [
+                o for o in (feed.get("industry_options") or []) if o.get("slug") in keep
+            ],
+            "topic_options": topic_options(feed_items),
+            "swot": by_key(feed.get("swot")),
+            "tows": by_key(feed.get("tows")),
+            "porter": by_key(feed.get("porter")),
+            "pestle": by_key(feed.get("pestle")),
+            "ansoff": by_key(feed.get("ansoff")),
+            "bcg": by_key(feed.get("bcg")),
+            "four_corners": by_key(feed.get("four_corners")),
+            "seven_s": by_key(feed.get("seven_s")),
+            "reviews": [r for r in (feed.get("reviews") or []) if row_ok(r)],
+            "swot_proposals": [r for r in (feed.get("swot_proposals") or []) if row_ok(r)],
+            "graph_proposals": [r for r in (feed.get("graph_proposals") or []) if row_ok(r)],
+            "distress": [r for r in (feed.get("distress") or []) if row_ok(r)],
+            "reputation": [r for r in (feed.get("reputation") or []) if row_ok(r)],
+            "coverage_gaps": [r for r in (feed.get("coverage_gaps") or []) if row_ok(r)],
+        }
+    )
+    return out
+
+
 def derive_entry_feed(
     feed: dict[str, Any], *, industries: Any = ENTRY_INDUSTRIES
 ) -> dict[str, Any]:

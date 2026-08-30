@@ -47,6 +47,19 @@ def test_entry_tier_capped_to_entry_industries():
         tc.put_tenant_config("bad2", "entry", ["banking"], table=t)
 
 
+def test_delivery_plane_default_and_explicit():
+    t = _FakeTable()
+    # entry defaults to the portal plane; higher tiers default to saas.
+    assert tc.put_tenant_config("e", "entry", ["consorcio"], table=t)["plane"] == "portal"
+    assert tc.put_tenant_config("s", "saas", ["banking"], table=t)["plane"] == "saas"
+    # tier-1 can be delivered as AWS Marketplace (in-account) instead of shared SaaS.
+    mk = tc.put_tenant_config("tier1", "sovereign", ["banking"], plane="marketplace", table=t)
+    assert mk["plane"] == "marketplace"
+    assert tc.get_tenant_config("tier1", table=t)["plane"] == "marketplace"
+    with pytest.raises(ValueError):
+        tc.put_tenant_config("x", "saas", ["banking"], plane="bogus", table=t)
+
+
 def test_higher_tiers_are_unrestricted():
     t = _FakeTable()
     # saas/sovereign may license any industry, including entry ones.

@@ -566,9 +566,23 @@ function applyFeed(initial) {
 // the user's current filters. Only the first load surfaces the empty-state message.
 async function loadFeed(initial) {
   try {
-    const r = await fetch("feed.json", { cache: "no-store" });
-    if (!r.ok) throw new Error(r.status);
-    DATA = await r.json();
+    let loaded = null;
+    // Per-tenant scoped feed (issue #48): a logged-in provisioned tenant gets ONLY its
+    // licensed modules (server-authoritative). 403 = operator/unprovisioned -> full feed.
+    const token = getIdToken();
+    if (token) {
+      try {
+        const rs = await fetch("/api/feed", { cache: "no-store",
+          headers: { authorization: `Bearer ${token}` } });
+        if (rs.ok) loaded = await rs.json();
+      } catch (_) { /* fall back to the static feed */ }
+    }
+    if (!loaded) {
+      const r = await fetch("feed.json", { cache: "no-store" });
+      if (!r.ok) throw new Error(r.status);
+      loaded = await r.json();
+    }
+    DATA = loaded;
   } catch (e) {
     if (initial) document.getElementById("feed").innerHTML =
       `<div class="empty">Ainda não há feed. Ele é publicado após a execução diária do pipeline.<br><small>(${esc(e.message)})</small></div>`;

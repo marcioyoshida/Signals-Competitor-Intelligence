@@ -48,11 +48,13 @@ def cmd_put(args) -> int:
     table, table_name = _resolve_table(args.table)
     modules = _split_modules(args.modules)
     try:
-        cfg = tc.put_tenant_config(args.tenant_id, args.tier, modules, table=table)
+        cfg = tc.put_tenant_config(
+            args.tenant_id, args.tier, modules, plane=args.plane, table=table)
     except ValueError as exc:
         print(f"REJECTED: {exc}", file=sys.stderr)
         return 2
-    print(f"OK  {table_name}  {cfg['tenant_id']}  tier={cfg['tier']}  modules={cfg['modules']}")
+    print(f"OK  {table_name}  {cfg['tenant_id']}  tier={cfg['tier']}  "
+          f"plane={cfg['plane']}  modules={cfg['modules']}")
     return 0
 
 
@@ -62,7 +64,7 @@ def cmd_get(args) -> int:
     if cfg is None:
         print(f"(not provisioned) {args.tenant_id}")
         return 1
-    print(f"{cfg['tenant_id']}  tier={cfg['tier']}  modules={cfg['modules']}")
+    print(f"{cfg['tenant_id']}  tier={cfg['tier']}  plane={cfg.get('plane')}  modules={cfg['modules']}")
     return 0
 
 
@@ -73,7 +75,8 @@ def cmd_list(args) -> int:
     print(f"{table_name}: {len(items)} tenant(s)")
     for it in items:
         mods = [str(m) for m in (it.get("modules") or [])]
-        print(f"  {str(it.get('tenant_id')):28} {str(it.get('tier')):10} {mods}")
+        print(f"  {str(it.get('tenant_id')):24} {str(it.get('tier')):10} "
+              f"{str(it.get('plane') or '-'):12} {mods}")
     return 0
 
 
@@ -94,6 +97,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("tenant_id")
     sp.add_argument("tier", choices=tc.VALID_TIERS)
     sp.add_argument("modules", nargs="*", help="industry slugs (space or comma separated)")
+    sp.add_argument("--plane", choices=tc.VALID_PLANES, default=None,
+                    help="delivery plane (portal|saas|marketplace); defaults from tier")
     sp.set_defaults(func=cmd_put)
 
     sg = sub.add_parser("get", help="show one tenant")

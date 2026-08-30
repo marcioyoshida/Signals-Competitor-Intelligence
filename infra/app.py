@@ -1431,6 +1431,28 @@ class OncaPrototypeStack(Stack):
         # NOTE: /api/gaps is CUT OVER to the Cognito-JWT HTTP API below (issue #45),
         # same-origin like /api/ask — no Lambda function URL, no origin secret, no edge
         # basic-auth. Its ONCA_ORIGIN_SECRET env stays only as a fail-closed backstop.
+
+        # Per-tenant scoped feed (issue #48, ADR 016 SaaS): GET /api/feed returns the full
+        # feed scoped to the caller's tenant.modules (server-authoritative — the client
+        # never sees the full feed). JWT-only; the same projection backs the AWS
+        # Marketplace in-account plane (identical read boundary in the tenant's account).
+        feed_api_fn = lambda_.Function(
+            self,
+            "OncaFeedApi",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.dashboard.feed_api.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.seconds(30),
+            memory_size=512,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_SITE_BUCKET": site_bucket.bucket_name,
+                "ONCA_TENANT_CONFIG_TABLE": tenant_config_table.table_name,
+            },
+        )
+        site_bucket.grant_read(feed_api_fn)  # reads feed.json
+        tenant_config_table.grant_read_data(feed_api_fn)  # tenant → modules
+
         # --- Phase C increment 2: authenticated API path (API Gateway HTTP API +
         # Cognito JWT authorizer) -----------------------------------------------------
         # This HTTP API VERIFIES a Cognito JWT (API Gateway does the crypto) and passes
@@ -1480,6 +1502,13 @@ class OncaPrototypeStack(Stack):
             integration=_gaps_integ,
             authorizer=jwt_authorizer,
         )
+        # GET /api/feed — per-tenant scoped feed (issue #48).
+        auth_api.add_routes(
+            path="/api/feed",
+            methods=[apigwv2.HttpMethod.GET],
+            integration=apigwv2_int.HttpLambdaIntegration("FeedInteg", feed_api_fn),
+            authorizer=jwt_authorizer,
+        )
         CfnOutput(self, "AuthApiUrl", value=auth_api.api_endpoint)
 
         # Cut over /api/ask to the JWT-verified HTTP API, SAME ORIGIN via CloudFront.
@@ -1498,7 +1527,7 @@ class OncaPrototypeStack(Stack):
         _auth_api_id = os.environ.get("ONCA_AUTH_API_ID", "azml8kx82k")
         api_domain = f"{_auth_api_id}.execute-api.{self.region}.amazonaws.com"
         _api_origin = cf_origins.HttpOrigin(api_domain)
-        for _pat in ("/api/ask*", "/api/gaps*"):  # issue #45: gaps joins ask on the JWT API
+        for _pat in ("/api/ask*", "/api/gaps*", "/api/feed*"):  # #45/#48: JWT API paths
             distribution.add_behavior(
                 _pat,
                 _api_origin,

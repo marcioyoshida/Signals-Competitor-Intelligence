@@ -46,20 +46,38 @@ def get_tenant_config(tenant_id: str | None, *, table: Any | None = None) -> dic
         return None
     if not item:
         return None
+    tier = str(item.get("tier") or "saas")
     return {
         "tenant_id": str(tenant_id),
-        "tier": str(item.get("tier") or "saas"),
+        "tier": tier,
         "modules": [str(m).strip().lower() for m in (item.get("modules") or []) if str(m).strip()],
+        # ADR 016 delivery plane: portal (Entry static) | saas (shared multi-tenant) |
+        # marketplace (the SAME product in the tenant's own AWS account). tier-1 is SaaS
+        # OR Marketplace — same per-tenant read boundary either way.
+        "plane": str(item.get("plane") or _default_plane(tier)),
     }
 
 
+# The delivery plane a tier defaults to (overridable per tenant): a tier-1 tenant is
+# `saas` unless explicitly provisioned as `marketplace` (in-account).
+VALID_PLANES = ("portal", "saas", "marketplace")
+
+
+def _default_plane(tier: str) -> str:
+    return "portal" if tier == "entry" else "saas"
+
+
 def put_tenant_config(
-    tenant_id: str, tier: str, modules: list[str], *, table: Any | None = None
+    tenant_id: str, tier: str, modules: list[str], *, plane: str | None = None,
+    table: Any | None = None,
 ) -> dict[str, Any]:
     """Provision/update a tenant's entitlement. Idempotent upsert."""
     tier = str(tier)
     if tier not in VALID_TIERS:
         raise ValueError(f"tier must be one of {VALID_TIERS}, got {tier!r}")
+    plane = str(plane) if plane else _default_plane(tier)
+    if plane not in VALID_PLANES:
+        raise ValueError(f"plane must be one of {VALID_PLANES}, got {plane!r}")
     mods = sorted({str(m).strip().lower() for m in (modules or []) if str(m).strip()})
     # Entry tenants are capped to the entry-tier verticals (ADR 016): a higher-tier
     # industry must never enter an Entry tenant's entitlement, so the Entry dashboard
@@ -73,8 +91,9 @@ def put_tenant_config(
                 f"tier {tier!r} may only license entry-tier industries "
                 f"{sorted(allowed)}; got disallowed {bad}"
             )
-    _table(table).put_item(Item={"tenant_id": str(tenant_id), "tier": tier, "modules": mods})
-    return {"tenant_id": str(tenant_id), "tier": tier, "modules": mods}
+    _table(table).put_item(
+        Item={"tenant_id": str(tenant_id), "tier": tier, "modules": mods, "plane": plane})
+    return {"tenant_id": str(tenant_id), "tier": tier, "modules": mods, "plane": plane}
 
 
 def entitled(config: dict[str, Any] | None, industries: Any) -> bool:
