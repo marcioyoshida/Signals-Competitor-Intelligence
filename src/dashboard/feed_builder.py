@@ -322,6 +322,25 @@ def _project_item(n: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# ADR 016 — the Entry Portal is scoped on TWO dimensions: industry AND depth. These are
+# the DEEP, derived analytical axes (ADR 003 Waves 2–3: inferences, not public-filing
+# facts) that must not surface in the shallow Entry feed.
+_DEEP_AXES = {"relational", "predictive", "ecosystem", "operatives", "operative", "behavioral"}
+
+
+def _is_shallow_card(c: dict[str, Any]) -> bool:
+    """A shallow public-filing card (fact), not a derived-axis inference. Entry keeps
+    only these (issue #44); the deep axes (relational/predictive/ecosystem/behavioral/
+    operatives) are dropped from the entry slice."""
+    if c.get("is_inference"):
+        return False
+    if str(c.get("axis") or "").lower() in _DEEP_AXES:
+        return False
+    if c.get("relation") or c.get("horizon_days") is not None or c.get("hub") or c.get("pattern"):
+        return False
+    return True
+
+
 def _build_groups(entity_attrs: dict[str, Any] | None) -> dict[str, list[str]]:
     """ADR 017 corporate groups: {parent_id: sorted[child sub-entity ids]} from the
     entities' `parent` links. Only parents that are themselves tracked are kept."""
@@ -572,10 +591,12 @@ def derive_entry_feed(
         # dashboard must show ONLY its entry industries, never a higher-tier chip.
         return sorted(i for i in (inds or []) if str(i).strip().lower() in keep)
 
+    # Entry keeps only cards that are BOTH in an entry industry (card_ok) AND shallow
+    # public-filing facts (issue #44) — the deep derived axes never reach the Entry feed.
     feed_items = [
         {**c, "industries": scrub_industries(c.get("industries"))}
         for c in (feed.get("feed") or [])
-        if card_ok(c)
+        if card_ok(c) and _is_shallow_card(c)
     ]
     entities = [
         {**r, "industries": scrub_industries(r.get("industries"))}

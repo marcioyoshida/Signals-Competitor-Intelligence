@@ -743,10 +743,18 @@ async function remediateGap(btn) {
   btn.disabled = true; btn.textContent = "Remediando…";
   if (out) { out.className = "gresult"; out.textContent = "Triando, corrigindo o que é seguro e reverificando…"; }
   try {
+    // issue #45: /api/gaps/remediate is now behind the Cognito-JWT HTTP API — send the token.
+    const token = getIdToken();
     const r = await fetch("/api/gaps/remediate", {
-      method: "POST", headers: { "content-type": "application/json" },
+      method: "POST",
+      headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
       body: JSON.stringify({ id }),
     });
+    if (r.status === 401 || r.status === 403) {
+      btn.disabled = false; btn.textContent = prev;
+      if (out) { out.className = "gresult warn"; out.textContent = "É necessário entrar para remediar."; }
+      return;
+    }
     const j = await r.json();
     const gap = j.gap || {};
     if (gap.status === "resolved") {

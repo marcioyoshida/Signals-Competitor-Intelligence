@@ -212,6 +212,24 @@ def test_build_feed_emits_corporate_groups_and_entry_collapses_them():
     assert "btg" not in entry["entity_attrs"] and "btg-ceres" in entry["entity_attrs"]
 
 
+def test_derive_entry_feed_drops_deep_cards_keeps_shallow():
+    # issue #44: Entry is shallow public-filing only — a deep/derived-axis card in an
+    # entry industry must be dropped; a shallow fact card kept.
+    shallow = _narr("s1", "agroca", "2026-08-20", 0.5)          # plain public-filing fact
+    deep_rel = _narr("d1", "agroca", "2026-08-20", 0.6); deep_rel["relation"] = "convergence"
+    deep_inf = _narr("d2", "agroca", "2026-08-20", 0.6); deep_inf["is_inference"] = True
+    deep_axis = _narr("d3", "agroca", "2026-08-20", 0.6); deep_axis["axis"] = "predictive"
+    imap = {"agroca": ["agri-funds"]}
+    attrs = {"agroca": {"industries": ["agri-funds"]}}
+    feed = feed_builder.build_feed(
+        [shallow, deep_rel, deep_inf, deep_axis],
+        industry_map=imap, industry_meta={}, entity_attrs=attrs)
+    entry = feed_builder.derive_entry_feed(feed)
+    assert {c["id"] for c in entry["feed"]} == {"s1"}  # only the shallow fact survives
+    # the full feed still carries all four (depth filter is entry-only).
+    assert len(feed["feed"]) == 4
+
+
 def test_derive_entry_feed_scopes_to_entry_industries_only():
     # itau (banking, higher tier), agroca (agri-funds, entry), betco (betting, entry),
     # dualco (agri-funds + banking — a multi-industry entity that touches entry).

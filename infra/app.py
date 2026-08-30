@@ -1428,31 +1428,15 @@ class OncaPrototypeStack(Stack):
                 ],
             )
         )
-        gaps_url = gaps_fn.add_function_url(auth_type=lambda_.FunctionUrlAuthType.NONE)
-        distribution.add_behavior(
-            "/api/gaps/*",
-            cf_origins.FunctionUrlOrigin(
-                gaps_url, custom_headers={"X-Onca-Origin": origin_secret}
-            ),
-            viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-            allowed_methods=cloudfront.AllowedMethods.ALLOW_ALL,
-            cache_policy=cloudfront.CachePolicy.CACHING_DISABLED,
-            origin_request_policy=cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
-            function_associations=[
-                cloudfront.FunctionAssociation(
-                    function=auth_fn,
-                    event_type=cloudfront.FunctionEventType.VIEWER_REQUEST,
-                )
-            ],
-        )
+        # NOTE: /api/gaps is CUT OVER to the Cognito-JWT HTTP API below (issue #45),
+        # same-origin like /api/ask — no Lambda function URL, no origin secret, no edge
+        # basic-auth. Its ONCA_ORIGIN_SECRET env stays only as a fail-closed backstop.
         # --- Phase C increment 2: authenticated API path (API Gateway HTTP API +
         # Cognito JWT authorizer) -----------------------------------------------------
         # This HTTP API VERIFIES a Cognito JWT (API Gateway does the crypto) and passes
-        # the tenant claims to the SAME Lambdas. `/api/ask` is CUT OVER to it (see the
-        # same-origin CloudFront behavior below) — the agent's public Lambda function URL
-        # + origin-secret path are gone. `/api/gaps` GET is also modeled here; its POST
-        # sub-path (/api/gaps/remediate) is not yet, so the gaps CloudFront behavior stays
-        # on the Lambda-URL + origin-secret path until that path is fully modeled. The
+        # the tenant claims to the SAME Lambdas. `/api/ask` AND `/api/gaps` (GET list +
+        # POST /remediate) are CUT OVER to it (see the same-origin CloudFront behaviors
+        # below) — their public Lambda function URLs + origin-secret path are gone. The
         # operator surfaces (registry/run/review) remain origin-secret + edge basic-auth.
         jwt_authorizer = apigwv2_auth.HttpJwtAuthorizer(
             "OncaJwtAuthorizer",
@@ -1482,10 +1466,18 @@ class OncaPrototypeStack(Stack):
             integration=apigwv2_int.HttpLambdaIntegration("AskInteg", agent_fn),
             authorizer=jwt_authorizer,
         )
+        _gaps_integ = apigwv2_int.HttpLambdaIntegration("GapsInteg", gaps_fn)
         auth_api.add_routes(
             path="/api/gaps",
             methods=[apigwv2.HttpMethod.GET],
-            integration=apigwv2_int.HttpLambdaIntegration("GapsInteg", gaps_fn),
+            integration=_gaps_integ,
+            authorizer=jwt_authorizer,
+        )
+        # POST /api/gaps/remediate — the Pontos Cegos "Remediar" action (issue #45).
+        auth_api.add_routes(
+            path="/api/gaps/remediate",
+            methods=[apigwv2.HttpMethod.POST],
+            integration=_gaps_integ,
             authorizer=jwt_authorizer,
         )
         CfnOutput(self, "AuthApiUrl", value=auth_api.api_endpoint)
@@ -1505,14 +1497,16 @@ class OncaPrototypeStack(Stack):
         # account/region (read the AuthApiUrl output after the first create-only deploy).
         _auth_api_id = os.environ.get("ONCA_AUTH_API_ID", "azml8kx82k")
         api_domain = f"{_auth_api_id}.execute-api.{self.region}.amazonaws.com"
-        distribution.add_behavior(
-            "/api/ask*",
-            cf_origins.HttpOrigin(api_domain),
-            viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-            allowed_methods=cloudfront.AllowedMethods.ALLOW_ALL,
-            cache_policy=cloudfront.CachePolicy.CACHING_DISABLED,
-            origin_request_policy=cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
-        )
+        _api_origin = cf_origins.HttpOrigin(api_domain)
+        for _pat in ("/api/ask*", "/api/gaps*"):  # issue #45: gaps joins ask on the JWT API
+            distribution.add_behavior(
+                _pat,
+                _api_origin,
+                viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+                allowed_methods=cloudfront.AllowedMethods.ALLOW_ALL,
+                cache_policy=cloudfront.CachePolicy.CACHING_DISABLED,
+                origin_request_policy=cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+            )
 
         # /api/* catch-all (review action) — registered AFTER /api/registry/* and
         # /api/run/* so the specific patterns win; everything else under /api/ lands here.
