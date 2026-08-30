@@ -66,9 +66,16 @@ def _entities_of(item: dict[str, Any]) -> list[str]:
     shared administrator name. Everything else falls back to resolve_entities().
     """
     pre = item.get("_entities")
-    if pre:
+    if pre is not None:
         return list(pre)
-    return resolve_entities(item)
+    # Memoize on the (transient) signal dict: resolve_entities scans the whole
+    # registry, and clustering + O(n²) _soft_related re-resolve the same signals
+    # many times per run. Caching per signal turns that into one resolve per
+    # signal — the difference between a fast synth and a 5-min Lambda timeout as
+    # the registry grows. Structured sources pre-stamp _entities (CNPJ-anchored).
+    ents = resolve_entities(item)
+    item["_entities"] = ents
+    return ents
 
 
 def extract_candidates(

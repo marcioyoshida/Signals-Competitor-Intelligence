@@ -342,7 +342,11 @@ class OncaPrototypeStack(Stack):
             handler="src.synth.lambda_handler.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.minutes(5),
-            memory_size=512,
+            # 1536MB ≈ 1 vCPU (Lambda CPU scales with memory). candidate
+            # extraction is CPU-bound on resolve_entities, whose cost grows with
+            # the registry (discovery keeps adding entities); 512MB (~0.36 vCPU)
+            # risked the 5-min timeout. Pairs with resolve_entities memoization.
+            memory_size=1536,
             environment={
                 "PYTHONPATH": "/var/task",
                 "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
