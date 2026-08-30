@@ -37,10 +37,10 @@ egress (see §Sovereign).
 
 | | **Entry Portal** | **SaaS Platform** | **Sovereign** |
 |---|---|---|---|
-| **Delivery** | Static S3 feeds via **CloudFront multi-tenant** | Authenticated **dynamic API** + dashboard | Stack in the tenant's **own VPC / account** |
+| **Delivery** | Static S3 feeds — **one shared static site** (the entry-tier industries only, toggled among them) | Authenticated **dynamic API** + dashboard, **CloudFront multi-tenant** (per-tenant scoped) | Stack in the tenant's **own VPC / account** |
 | **= ADR 015** | Portal (static half, Pattern B) | Portal (dynamic half, Pattern A) | Marketplace (extended) |
 | **Telemetry** | On — *read patterns only* (static ⇒ no in-glass) | On — *richest* (vendor-hosted glass) | **Off** |
-| **Entitlement enforced** | at **write** (per-tenant scoped static feed) | at **read** (server-authoritative feed Lambda) | at **resolve** (the central API meters it) |
+| **Entitlement enforced** | at **write** (feed scoped to the entry-tier industries + shallow depth; higher-tier industries and deeper signals are never in it — the on/off toggle only filters *among* the entry industries, it's not a paywall) | at **read + per-tenant** (server-authoritative feed Lambda; multi-tenant distribution scopes each tenant to its modules) | at **resolve** (the central API meters it) |
 | **Hosting** | Vendor | Vendor | Tenant VPC/account |
 | **Billing** | Low / self-serve / metered | Module subscription (direct) | AWS Marketplace + Private Offers; compute on the tenant's bill |
 | **Default verticals** | Consórcios · FIAGRO/FIIs · Betting/Gaming · Crypto | Fintech/Adquirência · Insurance (SUSEP) · Wealth/Asset Mgmt · Data/Analytics | Tier-1 Banking · Investment Banking · M&A/Private Markets · Advisory |
@@ -55,12 +55,12 @@ flowchart LR
   subgraph MOAT["🔒 Vendor account — moat (never ships)"]
     REG[("Registry + discovery")]
     API{{"resolve + entitlement + metering API"}}
-    FB["feed builder → per-tenant scoped feeds"]
+    FB["feed builder → 1 entry-industries shallow feed (Entry)<br/>+ per-tenant scoped feeds (SaaS)"]
     REG --> API
     REG --> FB
   end
-  FB -->|"static scoped feed (write)"| ENTRY["① Entry Portal<br/>S3 + CloudFront multi-tenant<br/>(consórcios · FIAGRO/FII · betting · crypto)"]
-  API -->|"dynamic scoped feed (read)"| SAAS["② SaaS Platform<br/>auth API + dashboard<br/>(fintech · insurance · wealth · data)"]
+  FB -->|"entry-industries shallow feed (write)"| ENTRY["① Entry Portal<br/>shared S3 static site<br/>entry-tier industries only, toggled among them<br/>(consórcios · FIAGRO/FII · betting · crypto)"]
+  API -->|"per-tenant scoped feed (read)"| SAAS["② SaaS Platform<br/>auth API + dashboard<br/>CloudFront multi-tenant<br/>(fintech · insurance · wealth · data)"]
   SAAS -.->|"grows → graduate up"| SOV
   ENTRY -.->|"grows → graduate up"| SAAS
   API <-->|"resolve results (one governed egress)"| SOV["③ Sovereign<br/>tenant VPC/account<br/>(tier-1 bank · IB · M&A · advisory)"]
@@ -79,54 +79,70 @@ The tier a vertical lands in is driven by **data sensitivity**, which in turn se
 | Fintech · Adquirência · Insurance · Wealth | Medium–High (competitive) | PIX operational moves, SUSEP circulars, B3 trading signals | **SaaS Platform** (dynamic API) | VPs of Strategy, Compliance Officers, Risk Directors |
 | Banking · Investment Banking · Private Markets | Prime / Sovereign | Systemic risk, institutional sanctions, C-suite M&A, cross-entity graph | **Sovereign** (tenant VPC) | CEOs, Board members, Enterprise CROs |
 
-**The "signal depth" column is a second projection filter, not a second pipeline.** The one
-pipeline ingests everything (the moat tracks all signals/entities); the tier feed then scopes
-on **two** dimensions — *which entities/industries* (the entry-module filter above) **and** *how
-deep the signal/inference*. Depth maps to the corpus's existing lens/axis layers: Entry = the
-shallow public-filing lenses (regulatory/dou/fatos, funds); SaaS = operational + competitive
-(pix/juros/market/ofertas + news); Sovereign = the full derived graph/inference layer
-(relational/predictive/ecosystem/cohort — cross-entity graph, systemic-risk inference, M&A).
-So the **deepest, highest-value derived intelligence is Sovereign-only** — the right moat/
-pricing logic (premium depth for the premium, C-suite buyer), and it's a *filter at the
-projection boundary* (by lens/axis + industry), never a fork of ingest or synth.
+**The "signal depth" column is a projection filter (by lens/axis), not a second pipeline —
+and it is what separates the tiers, NOT the industry set.** The one pipeline ingests everything
+(the moat tracks all signals/entities); the tier feed is scoped by **depth**, mapping to the
+corpus's existing lens/axis layers:
+- **Entry** — the shallow public-filing lenses (regulatory/dou/fatos, funds), **scoped to the
+  entry-tier industries only** (consórcios, FIAGRO/FIIs, betting, crypto). Higher-tier industries
+  (fintech/insurance/wealth/banking/IB/…) are **not fed or displayed** here. The buyer **toggles
+  those entry industries on/off client-side** — a convenience over one shared feed among the
+  entry set, not a paywall (nothing outside the entry-tier industries or the shallow depth is in
+  the Entry feed to leak).
+- **SaaS** — operational + competitive depth (pix/juros/market/ofertas + news), **scoped per
+  tenant to its licensed modules** (this is where per-industry entitlement lives, enforced at read
+  + by the multi-tenant distribution).
+- **Sovereign** — the full derived graph/inference layer (relational/predictive/ecosystem/cohort
+  — cross-entity graph, systemic-risk inference, M&A).
 
-## ① Entry Portal — static feeds at scale (CloudFront multi-tenant)
+So the **deepest, highest-value derived intelligence is Sovereign-only**, SaaS gets the
+competitive/operational middle scoped per tenant, and Entry gets broad-but-shallow with
+client-side toggles — the right moat/pricing logic (premium depth for the premium, C-suite
+buyer). All of it is a *filter at the projection boundary* (by lens/axis; per-tenant module
+scoping on SaaS), never a fork of ingest or synth.
+
+## ① Entry Portal — one shared static site, entry-tier industries, client-toggled
 
 For fragmented, high-count, low-ARPU verticals where per-tenant cost must approach zero.
 
-- **Mechanism**: one CloudFront **multi-tenant distribution template** → many **tenant
-  distributions** (per-tenant custom domain + config), each serving that tenant's
-  **entitlement-scoped static feed** from S3. Entitlement is enforced **at write**: the feed
-  builder emits `feed/<tenant-or-module>.json` (module shards shared across tenants of a
-  module, cacheable), and the tenant only ever has a signed/scoped path to what it licensed —
-  the superset never lands. (ADR 015 Pattern B, taken to a pure-static extreme.)
+- **Mechanism**: **one shared static feed** scoped to the **entry-tier industries only**
+  (consórcios, FIAGRO/FIIs, betting, crypto) at shallow public-filing depth, on S3 + a regular
+  CloudFront distribution, and **one shared static dashboard**. Every entry subscriber sees the
+  same entry feed and **toggles those entry industries on/off client-side** — a UX convenience
+  among the entry set, not entitlement: the higher-tier industries and the deeper signals are
+  never in the feed to leak (both the industry scope and the depth are enforced at feed-build,
+  §Tierization). This is deliberately **not** the per-tenant multi-tenant machinery — that lives
+  on SaaS, where entitlement differs per tenant. Entry's simplicity (one feed, one site,
+  self-serve) is the tier's whole point.
 - **Telemetry**: server/edge **read patterns** only (CloudFront access logs) — no in-glass
   beacon. Enough for anti-scrape (breadth/volume anomaly) + basic usage.
-- **Cost**: near-zero idle floor, CDN-cached, no per-request Lambda; scales to thousands of
-  tenants. *Verify current CloudFront SaaS/multi-tenant distribution limits (per-account
-  distribution/tenant caps, custom-domain/cert handling) before committing — feature specifics
-  post-date this doc's knowledge cutoff.*
+- **Cost**: one static feed + one static site, CDN-cached, no per-request Lambda, near-zero
+  idle floor. Adding a subscriber costs nothing — they hit the same shared site; scale is a
+  CDN concern, not a per-tenant one.
 
 **Derived projection, not a parallel pipeline — "don't fork the pipeline; fork the feed."**
 The Entry Portal is a *filtered slice of the one full feed*, never a second sensor. The
 **single** pipeline (ingest → synth → detectors → feed builder) runs once over **all** entities
 — that is the moat and the full-coverage source of truth, kept **unchanged**. The feed builder
-then emits one additional **entry-scoped feed**: filter to the entry-vertical industry modules
-(`consórcio`, `agri-funds`/`real-estate-funds`, `betting`, `crypto`) using the `industries[]`
-each card already carries, and write it as the static shards CloudFront multi-tenant serves.
-Three consequences fall out for free: **(a)** the original keeps tracking every entity across
-every industry, untouched; **(b)** the entry feed can never contain *more* than the original —
-it is a strict filtered slice, so no un-entitled module leaks and there is no drift to keep in
-sync; **(c)** zero extra ingest/synth cost — just one more scoped write. The Entry **dashboard**
-is derived the same way: a **thin static glass** reading the scoped feed (no API, no
-per-request Lambda), reusing the frontend components with the dynamic bits (agent Q&A, live
-filters) stripped — those stay on SaaS. A second parallel ingest+synth pipeline is explicitly
+then emits one additional **entry-scoped feed**: filter on **two** dimensions using the
+`industries[]` + lens/axis each card already carries — **industry** (keep only the entry-tier
+modules: `consórcio`, `agri-funds`/`real-estate-funds`, `betting`, `crypto`) **and depth** (keep
+only the shallow public-filing lenses, drop the deeper SaaS/Sovereign layers) — and write it as
+**one shared static feed** (not per-tenant shards). Three consequences fall out for free:
+**(a)** the original keeps tracking every entity across every industry at full depth, untouched;
+**(b)** the entry feed can never contain a higher-tier industry *or* a deeper signal — a strict
+projection, so the premium tiers never leak and there is no drift to keep in sync; **(c)** zero
+extra ingest/synth cost — just one more scoped write. The Entry **dashboard** is derived the same
+way: a **thin static glass** reading that one shared feed (no API, no per-request Lambda), with
+the on/off toggles among the entry industries done **client-side**, reusing the frontend
+components with the dynamic bits (agent Q&A, live filters) stripped — those stay on SaaS. A second parallel ingest+synth pipeline is explicitly
 rejected: it would fork the moat, duplicate Bedrock/ingest cost, and drift from the original.
 
 **Entry dashboard = a separate thin artifact, not a runtime "context" toggle — fork the
 glass, not the design system.** The Entry dashboard is its **own** buildless static
-`index.html` (e.g. `site/entry/`), served from the Entry CloudFront multi-tenant
-distribution — *not* the SaaS `index.html` conditionally hiding panels. A context-toggle
+`index.html` (e.g. `site/entry/`), served from a **regular** CloudFront static distribution
+(Entry is one shared site, not multi-tenant) — *not* the SaaS `index.html` conditionally
+hiding panels. A context-toggle
 inside the SaaS bundle would ship all the dynamic JS (agent Q&A, live filters, the
 coverage/monitor drawer) to the cheapest tier and couple the two evolutions, defeating
 Entry's thin/static/cheap purpose. Keep it DRY without forking the look: factor the shared
@@ -134,10 +150,11 @@ presentation primitives — the **palette/theme tokens** and the **card/feed ren
 into plain static includes (`site/shared/theme.css`, `site/shared/render.js`) that BOTH
 dashboards `<link>`/`<script src>` (no bundler — matches the buildless constraint). The SaaS
 shell = shared + dynamic panels; the Entry shell = shared only. The Entry feed is the same
-JSON schema (just filtered), so the shared render helpers work unchanged. **Multi-tenancy
-lives in CloudFront, not the artifact:** there is ONE Entry dashboard artifact served to all
-entry tenants via the multi-tenant distribution; each tenant's distribution config points it
-at that tenant's scoped `feed.json` — you never build a dashboard per tenant.
+JSON schema (just scoped to the entry-tier industries + shallow depth), so the shared render
+helpers work unchanged — the Entry shell renders that feed and exposes on/off toggles **among
+the entry industries**. **Entry is ONE shared artifact + ONE shared feed** for all entry
+subscribers; the per-tenant multi-tenant machinery (a distribution template pointing each
+tenant at its own scoped feed) is a **SaaS** concern, not Entry's — see §②.
 
 ## ② SaaS Platform — dynamic API + dashboard
 
@@ -146,7 +163,10 @@ The default for interactive mid verticals (the richest product surface).
 - **Mechanism**: authenticated `GET /api/feed` (Pattern A feed Lambda) + the vendor-hosted
   warroom dashboard + agent Q&A. Entitlement enforced **at read**, server-authoritative
   (`requested ∈ tenant.modules`); derived aggregates (KPIs, autocomplete, timelines) scoped
-  too. Migrate hot modules to signed static shards for CDN economics as needed.
+  too. **This is where CloudFront multi-tenant lives**: a distribution *template* → per-tenant
+  distributions (custom domain + config), each scoped to that tenant's licensed modules — the
+  per-tenant scoping Entry deliberately doesn't need. Hot modules can also be served as signed
+  static shards through the same multi-tenant distributions for CDN economics.
 - **Telemetry**: richest — vendor hosts the instrumented glass (every view/drill-down/session,
   consented; the same instrument as anti-exfiltration).
 - **Billing**: module subscription, direct.
@@ -190,14 +210,17 @@ but not a product goal.
   delivery re-provision, not a rebuild.
 
 **Costs / risks (honest)**
-- Three delivery planes to build/operate (static-shard emitter + multi-tenant CloudFront;
-  the dynamic API/dashboard; the in-account CDK stack) vs ADR 015's two.
-- CloudFront multi-tenant has account/feature limits to validate; custom-domain/cert
-  management per tenant is real operational surface.
+- Three delivery planes to build/operate (Entry static site + shallow feed; the SaaS dynamic
+  API/dashboard **on CloudFront multi-tenant**; the Sovereign in-account CDK stack) vs ADR 015's two.
+- **CloudFront multi-tenant (SaaS)** has account/feature limits to validate + per-tenant
+  custom-domain/cert operational surface. *Verify current SaaS/multi-tenant distribution limits
+  before committing — feature specifics post-date this doc's knowledge cutoff.*
 - Sovereign's single egress is a hard runtime dependency (the resolve API) — cap/rate/canary
   it; a true air-gap remains unsolved by design (snapshot variant deferred).
-- Entry's write-time scoping must reach every emitted shard — a leak here is the whole
-  superset for that module.
+- **Entry's two-dimension projection is the whole guard** — the entry feed must never include a
+  higher-tier **industry** or a deeper **lens/axis** layer; a leak on either ships premium
+  SaaS/Sovereign data to the cheapest tier. (The client-side toggle only filters *among* the
+  entry-tier industries already in the feed — it is UX, never the entitlement boundary.)
 
 ## Open decisions (owner: commercial + platform)
 - **Vertical map is a default** — confirm the per-vertical tier assignments (esp. Data/Analytics
@@ -209,14 +232,17 @@ but not a product goal.
   zero egress.
 
 ## Build deltas (against ADR 015)
-- **Entry**: a CloudFront multi-tenant distribution template + per-tenant provisioning;
-  extend the feed builder to emit a **derived, entry-scoped feed** (filter the single full feed
-  by entry-vertical industry modules) as per-tenant/module **scoped static shards** at write
-  time — **not** a parallel pipeline; + a **thin static Entry dashboard** as its OWN artifact
-  (`site/entry/`) reading the scoped feed, sharing a buildless component/theme module
-  (`site/shared/`) with the SaaS dashboard and stripping the dynamic surfaces. Multi-tenancy
-  is CloudFront-side (one artifact, per-tenant scoped feed), not per-tenant dashboards.
-- **SaaS**: already the ADR 015 Portal dynamic path (Pattern A feed Lambda + dashboard + agent).
+- **Entry**: extend the feed builder to emit **one entry-scoped feed** — a two-dimension
+  projection of the single full feed: entry-tier **industries** (consórcio/agri-funds/
+  real-estate-funds/betting/crypto) × shallow public-filing **depth** only — on S3 behind a
+  **regular** CloudFront static distribution — **not** a parallel pipeline, **not** per-tenant
+  shards. + a **thin static Entry dashboard** as its OWN artifact (`site/entry/`) that reads the
+  one shared feed and toggles among the entry industries **client-side**, sharing a buildless
+  component/theme module (`site/shared/`) with the SaaS dashboard and stripping the dynamic
+  surfaces. One shared artifact + one shared feed for all entry subscribers.
+- **SaaS**: the ADR 015 Portal dynamic path (Pattern A feed Lambda + dashboard + agent), now
+  delivered via **CloudFront multi-tenant** — a distribution template + per-tenant provisioning
+  (custom domain + per-tenant scoped feed to the tenant's licensed modules).
 - **Sovereign**: ADR 015 Marketplace / ADR 005 deltas unchanged (tenant-deployable CDK stack,
   `tenant_s3` lens, `/resolve` hardening, metering).
 - **Cross-cutting**: add `tier ∈ {entry, saas, sovereign}` to `onca-tenant-config`; the tier
