@@ -473,6 +473,7 @@ def discover_fiagro(
     _FUND_INDUSTRIES = {"agri-funds", "real-estate-funds"}
     _parentable: list[str] = []
     _aliases_of: dict[str, set[str]] = {}
+    existing_ids: set[str] = set()
 
     def _norm(s: str) -> str:
         return entity_registry.normalize_alias(s or "")
@@ -481,6 +482,7 @@ def discover_fiagro(
         _eid = e.get("entity_id")
         if not _eid:
             continue
+        existing_ids.add(_eid)
         for r in e.get("cnpj_roots") or []:
             cnpj_idx[str(r)[:8]] = _eid
         for a in e.get("aliases") or []:
@@ -540,13 +542,22 @@ def discover_fiagro(
         # raises a review instead of silently polluting the manager.
 
         if eid:
+            ent = entity_registry.get_entity(eid, table=table) or {}
+            # #52: a FIAGRO fund that resolves (by cnpj/ticker/alias) to an INSTITUTION —
+            # any tracked entity with a NON-fund industry — is a mis-resolution, almost
+            # always a fund ticker/CNPJ left on the institution by earlier brand-match
+            # pollution. NEVER enrich it: that re-adds agri-funds AND re-accumulates the
+            # fund's aliases onto the institution, a self-sustaining loop. Fall through to
+            # create/propose (where the collision guard raises a review).
+            if set(ent.get("industries") or []) - _FUND_INDUSTRIES:
+                eid = None
+        if eid:
             try:
                 changed = False
                 if entity_registry.accumulate_aliases(
                     eid, profile.get("aliases") or [], table=table
                 ):
                     changed = True
-                ent = entity_registry.get_entity(eid, table=table) or {}
                 if industry not in (ent.get("industries") or []):
                     # set_industries is the registry's single writer for the field
                     # (rebuilds the record + ALIAS# index consistently).
@@ -584,6 +595,13 @@ def discover_fiagro(
                 alias_owner = alias_idx.get(nb)
                 if alias_owner and alias_owner != profile["entity_id"]:
                     owners.add(alias_owner)
+                # #52: never OVERWRITE an EXISTING entity whose id equals this fund's
+                # brand-slug ("XP" -> "xp"). The self-exclusion above hides exactly this
+                # case (the colliding owner IS profile.entity_id); if that id already
+                # exists and is not this fund (by CNPJ), it's a foreign entity -> propose.
+                if (profile["entity_id"] in existing_ids
+                        and cnpj_idx.get(root) != profile["entity_id"]):
+                    owners.add(profile["entity_id"])
                 if brand and owners:
                     pid = entity_registry.propose_review(
                         kind="discovery",

@@ -161,6 +161,38 @@ def test_discover_consorcio_creates_and_nests_conglomerate_arm():
     assert r2["created"] == [] and r2["already"] == 2
 
 
+def test_fiagro_enrich_never_pollutes_an_institution():
+    # #52: a fund that resolves to an INSTITUTION (via a ticker/cnpj left on it by earlier
+    # pollution) must NOT enrich it — no agri-funds added, no fund aliases accumulated.
+    from src.synth import entity_registry
+
+    table = _FakeTable()
+    entity_registry.put_entity("btg", "BTG Pactual", ["BTG", "BTAL11"],
+                               industries=["investment-banking"], table=table)
+    rows = [{"fund_name": "BTG PACTUAL AGRO FIAGRO", "ticker": "BTAL11",
+             "cnpj": "36642244000100", "pl": 1e9, "as_of": "2026-03-01", "url": "x"}]
+    discover_fiagro(rows=rows, min_pl=0, auto_create=True, table=table)
+    btg = entity_registry.get_entity("btg", table=table)
+    assert btg["industries"] == ["investment-banking"]        # NOT polluted with agri-funds
+    assert "BTG PACTUAL AGRO FIAGRO" not in (btg.get("alias_forms") or [])  # no fund alias
+
+
+def test_fiagro_create_never_overwrites_existing_entity():
+    # #52: a fund whose brand-slug equals an institution id ("XP" -> "xp") must be proposed,
+    # never put_entity'd OVER the institution.
+    from src.synth import entity_registry
+
+    table = _FakeTable()
+    entity_registry.put_entity("xp", "XP", ["XP"],
+                               industries=["asset-management"], table=table)
+    rows = [{"fund_name": "XP AGRO RENDA FIAGRO", "ticker": None,
+             "cnpj": "63779784000100", "pl": 1e9, "as_of": "2026-03-01", "url": "x"}]
+    rep = discover_fiagro(rows=rows, min_pl=0, auto_create=True, table=table)
+    xp = entity_registry.get_entity("xp", table=table)
+    assert xp["industries"] == ["asset-management"]           # NOT overwritten
+    assert rep["proposed"] and "xp" not in rep["created"]
+
+
 def test_discover_fiagro_quality_gate():
     """Junk-named funds (no ticker, generic legal name) are proposed, not
     auto-created; clean ticker funds are created."""
