@@ -160,6 +160,27 @@ def test_profile_auto_ok_flag():
     assert clean["auto_ok"] is True
 
 
+def test_propose_review_sanitizes_floats():
+    """A payload with floats (e.g. a fund's PL) must be stored as Decimal —
+    DynamoDB rejects Python floats, which previously errored the review write."""
+    from decimal import Decimal
+    from src.synth import entity_registry
+
+    table = _FakeTable()
+    entity_registry.propose_review(
+        kind="discovery",
+        key="k1",
+        proposed="X",
+        payload={"pl": 1.5, "nested": {"cotistas": 2.0}, "n": 3, "s": "x"},
+        table=table,
+    )
+    item = next(v for k, v in table.items.items() if k.startswith("REVIEW#"))
+    assert isinstance(item["payload"]["pl"], Decimal)
+    assert isinstance(item["payload"]["nested"]["cotistas"], Decimal)
+    assert item["payload"]["n"] == 3  # ints untouched
+    assert item["payload"]["s"] == "x"
+
+
 def test_discover_fiagro_scans_registry_once():
     """Perf: discovery scans the registry ONCE regardless of row count (no
     per-row full-table scan via resolve_by_name)."""

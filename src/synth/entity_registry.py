@@ -20,7 +20,27 @@ import datetime as _dt
 import os
 import re
 import unicodedata
+from decimal import Decimal
 from typing import Any, Iterable
+
+
+def _ddb_safe(obj: Any) -> Any:
+    """Recursively coerce values into DynamoDB-storable types.
+
+    boto3's DynamoDB resource rejects Python ``float`` ("Float types are not
+    supported"); convert to ``Decimal`` (via str, to avoid binary-float drift).
+    Used for free-form blobs like a review ``payload`` that may carry a fund's
+    PL / cotistas as floats.
+    """
+    if isinstance(obj, bool):
+        return obj
+    if isinstance(obj, float):
+        return Decimal(str(obj))
+    if isinstance(obj, dict):
+        return {k: _ddb_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_ddb_safe(v) for v in obj]
+    return obj
 
 
 def normalize_alias(value: str) -> str:
@@ -679,7 +699,7 @@ def propose_review(
             "reason": reason,
             "hint": hint,
             "confidence": confidence,
-            "payload": payload or {},
+            "payload": _ddb_safe(payload or {}),
             "status": "pending",
             "created_at": _now_iso(),
         }
