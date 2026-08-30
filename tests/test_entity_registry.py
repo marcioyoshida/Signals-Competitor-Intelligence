@@ -1,9 +1,46 @@
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.synth import entity_registry as er
+
+
+_HIST = [  # a mutation journal, newest first
+    {"ts": "2026-08-30T12:00#b", "action": "set_industries", "source": "enrich",
+     "detail": {"new": ["agri-funds", "banking"]}},
+    {"ts": "2026-08-30T10:00#a", "action": "put", "source": "fixture",
+     "detail": {"industries": ["banking"]}},
+]
+
+
+def test_field_value_before_and_missing():
+    assert er.field_value_before("e", "industries", "2026-08-30T11:00", history=_HIST) == ["banking"]
+    assert er.field_value_before("e", "industries", "2026-08-30T13:00", history=_HIST) == ["agri-funds", "banking"]
+    assert er.field_value_before("e", "industries", "2026-08-30T09:00", history=_HIST) is er._MISSING
+
+
+def test_rollback_field_restores_and_wins_precedence():
+    t = FakeTable()
+    # a polluted current state (enrich provenance so it's mutable at all)
+    er.put_entity("e", "E", ["E"], industries=["agri-funds", "banking"], source="enrich", table=t)
+    ok = er.rollback_field("e", "industries", "2026-08-30T11:30", history=_HIST, table=t)
+    assert ok
+    assert er.get_entity("e", table=t)["industries"] == ["banking"]           # restored
+    assert er.entity_provenance("e", table=t)["industries"]["source"] == "curated"  # curated wins
+    with pytest.raises(ValueError):
+        er.rollback_field("e", "aliases", "x", history=_HIST, table=t)
+
+
+def test_revert_entity_since(monkeypatch):
+    t = FakeTable()
+    er.put_entity("e", "E", ["E"], industries=["agri-funds", "banking"], source="enrich", table=t)
+    monkeypatch.setattr(er, "entity_history", lambda eid, **k: _HIST)
+    reverted = er.revert_entity_since("e", "2026-08-30T11:00", table=t)
+    assert reverted == ["industries"]
+    assert er.get_entity("e", table=t)["industries"] == ["banking"]
 
 
 class FakeTable:

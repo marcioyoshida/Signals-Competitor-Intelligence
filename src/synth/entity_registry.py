@@ -134,7 +134,7 @@ def _log(entity_id: str, action: str, source: str, detail: dict[str, Any] | None
         print(f"Warning: curation-log write failed for {entity_id}: {exc}")
 
 
-def entity_history(entity_id: str, *, limit: int = 100) -> list[dict[str, Any]]:
+def entity_history(entity_id: str, *, limit: int = 200) -> list[dict[str, Any]]:
     """ADR 018: the mutation journal for one entity, newest first. [] if no log table."""
     t = _log_table()
     if t is None:
@@ -147,6 +147,65 @@ def entity_history(entity_id: str, *, limit: int = 100) -> list[dict[str, Any]]:
         return list(r.get("Items") or [])
     except Exception:  # pragma: no cover
         return []
+
+
+# ADR 018 Phase 4 — rollback over the journal. The log records each write's NEW value, so a
+# field's value "before time T" is the newest logged value strictly earlier than T. Only the
+# ownership fields (industries/parent) are rollback-supported; aliases are additive.
+_MISSING = object()
+_ROLLBACK_FIELDS = ("industries", "parent")
+
+
+def _field_from_log(entry: dict[str, Any], field: str) -> Any:
+    d = entry.get("detail") or {}
+    action = entry.get("action")
+    if action == "set_industries" and field == "industries":
+        return d.get("new")
+    if action == "set_parent" and field == "parent":
+        return d.get("parent")
+    if action == "put" and field in d:
+        return d.get(field)
+    return _MISSING
+
+
+def field_value_before(entity_id: str, field: str, before_ts: str,
+                       *, history: list[dict[str, Any]] | None = None) -> Any:
+    """The field's value as of the last write strictly earlier than ``before_ts`` (the
+    journal ts sorts lexically), or ``_MISSING`` if there is no prior value."""
+    hist = history if history is not None else entity_history(entity_id)
+    for h in hist:  # newest first
+        if str(h.get("ts", "")) < str(before_ts):
+            v = _field_from_log(h, field)
+            if v is not _MISSING:
+                return v
+    return _MISSING
+
+
+def rollback_field(entity_id: str, field: str, before_ts: str, *,
+                   history: list[dict[str, Any]] | None = None, table: Any | None = None) -> bool:
+    """Restore ``field`` to its value just before ``before_ts`` (a curated write, so it wins
+    precedence and re-stamps provenance). Returns True if a rollback was applied."""
+    if field not in _ROLLBACK_FIELDS:
+        raise ValueError(f"rollback unsupported for {field!r}; one of {_ROLLBACK_FIELDS}")
+    v = field_value_before(entity_id, field, before_ts, history=history)
+    if v is _MISSING:
+        return False
+    ok = (set_industries(entity_id, v or [], source="curated", table=table) if field == "industries"
+          else set_parent(entity_id, v or None, source="curated", table=table))
+    if ok:
+        _log(entity_id, "rollback", "curated", {"field": field, "restored": v, "before": before_ts})
+    return ok
+
+
+def revert_entity_since(entity_id: str, since_ts: str, *, table: Any | None = None) -> list[str]:
+    """Roll back every rollback-supported field an entity changed at/after ``since_ts`` to
+    its state just before. Returns the fields reverted (undoes a bad run in one shot)."""
+    hist = entity_history(entity_id)
+    touched = {f for h in hist if str(h.get("ts", "")) >= str(since_ts)
+               for f in _ROLLBACK_FIELDS if _field_from_log(h, f) is not _MISSING}
+    reverted = [f for f in touched
+                if rollback_field(entity_id, f, since_ts, history=hist, table=table)]
+    return reverted
 
 
 def _stamp(entity: dict[str, Any], fields: Iterable[str], source: str,
