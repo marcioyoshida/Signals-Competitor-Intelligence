@@ -216,6 +216,12 @@ class OncaPrototypeStack(Stack):
                 "ONCA_STATE_TABLE": state_table.table_name,
                 "ONCA_ENTITIES_TABLE": entities_table.table_name,
                 "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+                # Entity discovery (ADR 011): CVM FIAGRO structured sync → registry.
+                # Flipped LIVE 2026-08-29 after a read-only dry-run + name-quality
+                # gate (auto-create only ticker/clean-brand funds; junk → review).
+                "ONCA_ENTITY_DISCOVERY": "true",
+                "ONCA_ENTITY_DISCOVERY_AUTOCREATE": "true",
+                "ONCA_FIAGRO_MIN_PL": "50000000",
                 "ONCA_LOOKBACK_DAYS": str(watchlist.get("lookback_days", 7)),
                 "ONCA_COMPETITORS": ",".join(watchlist.get("competitors", [])),
                 # Pix: empty ISPB list = rank all institutions (noisier).
