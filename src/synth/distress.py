@@ -134,8 +134,8 @@ def classify_distress(title: str) -> str | None:
 
 # --- subject binding (defamation guard) -----------------------------------
 # A distress record must attach to the *subject* of the distress clause, not to
-# every entity merely co-mentioned in the headline. Two false-positive classes
-# were poisoning the store (issue #33):
+# every entity merely co-mentioned in the headline. Three false-positive classes
+# were poisoning the store (issues #33, #55):
 #
 # 1. Market operators / regulators ACT ON listed companies (delist, sanction,
 #    supervise) — a news headline never makes THEM the distressed party. They can
@@ -168,6 +168,38 @@ def _actor_headline(norm_title: str) -> bool:
     return bool(_ACTOR_OVER_DISTRESS.search(norm_title))
 
 
+# 3. Creditor / exposure framing (issue #55) — the tracked entity is a CREDITOR
+#    OF, or FINANCIALLY EXPOSED TO, a distressed debtor, not the distressed party
+#    itself. E.g. "Cliente do Banco do Brasil entra em recuperação judicial",
+#    "BB tem exposição a empresa em recuperação judicial", "Banco executa dívida
+#    de X em RJ". The distress is the debtor's — usually a non-FS company, and
+#    caught by its own direct headline elsewhere — never the bank's. Precision-
+#    first, like guard 2: attribute to no one.
+#
+#    The cues are chosen so a bank's OWN distress headline is NOT suppressed:
+#    - a POSSESSIVE creditor link ("cliente/devedor/tomador ... do/da/de <banco>")
+#      requires the preposition, so "Empresa devedora pede RJ" (subject = empresa)
+#      is untouched; only "devedora DO <banco>" (bank = creditor) is caught;
+#    - EXPOSURE/loss language ("exposição", "provisão", "calote", "inadimplência")
+#      a self-distress headline would not use about itself.
+#    Bare "credores" is deliberately NOT a cue — a distressed company negotiating
+#    with *its* creditors ("Banco Y em RJ negocia com credores") must still count.
+_CREDITOR_FRAMING = re.compile(
+    r"\b(?:client\w+|correntist\w+|devedor\w*|tomador\w+|mutuari\w+)\s+d[eoa]s?\b"
+    r"|\b(?:exposic\w+|expost\w+|provis(?:ao|oes|ion\w*)|calote\w*|inadimplenc\w+)\b"
+    r"|\bexecu\w+\b(?=.*\bdivida\b)|\bdivida\b(?=.*\bexecu\w+)"
+    r"|\bcobranc\w+\s+d[eoa]s?\s+divida"
+)
+
+
+def _creditor_headline(norm_title: str) -> bool:
+    """True when the headline frames the tracked entity as a CREDITOR of / EXPOSED
+    to a distressed debtor rather than the distressed party itself (issue #55:
+    'Cliente do Banco do Brasil ... recuperação judicial'). Precision-first: the
+    distress belongs to the debtor, so attribute to no one."""
+    return bool(_CREDITOR_FRAMING.search(norm_title))
+
+
 def label_for(kind: str) -> str:
     return DISTRESS_KINDS.get(kind, {}).get("label", kind)
 
@@ -190,10 +222,13 @@ def detect_distress_events(
         kind = classify_distress(title)
         if not kind:
             continue
+        norm_title = _norm(title)
         # Guard 2: action-over-distress headlines have an ambiguous subject — the
         # distress belongs to the object of the action, not the (usually resolved)
         # actor. Precision-first: attribute to no one. (issue #33)
-        if _actor_headline(_norm(title)):
+        # Guard 3: creditor/exposure framing — the resolved entity is a creditor
+        # of / exposed to a distressed debtor, not the distressed party. (issue #55)
+        if _actor_headline(norm_title) or _creditor_headline(norm_title):
             continue
         try:
             entities = resolver(item) or []
