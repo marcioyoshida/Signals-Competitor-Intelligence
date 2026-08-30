@@ -70,6 +70,49 @@ def test_detect_keeps_real_subject_when_operator_co_mentioned():
     assert [e["entity"] for e in evs] == ["empresa_x"]
 
 
+# --- issue #55: creditor / exposure framing (bank is NOT the distressed party) --
+def test_detect_drops_creditor_of_distressed_debtor():
+    # The reported false positive: a *client* of the bank is in RJ, not the bank.
+    # "Cliente do Banco do Brasil ..." — BB is the creditor, attribute to no one.
+    items = [{"id": "a", "date": "2026-08-25", "url": "http://x/a", "source": "News",
+              "title": "Cliente do Banco do Brasil entra em recuperação judicial"}]
+    evs = ds.detect_distress_events(items, resolver=_resolver({"a": ["bb"]}))
+    assert evs == []
+
+
+def test_detect_drops_bank_exposure_to_distressed():
+    # Exposure/loss framing: the bank absorbs a debtor's default — not its own RJ.
+    items = [{"id": "a", "date": "2026-08-25",
+              "title": "Banco do Brasil tem exposição a empresa em recuperação judicial"}]
+    evs = ds.detect_distress_events(items, resolver=_resolver({"a": ["bb"]}))
+    assert evs == []
+
+
+def test_detect_drops_debt_execution_headline():
+    # The bank executing a debtor's debt is a creditor action, not distress.
+    items = [{"id": "a", "date": "2026-08-25",
+              "title": "Banco executa dívida de Varejista X em recuperação judicial"}]
+    evs = ds.detect_distress_events(items, resolver=_resolver({"a": ["banco_x"]}))
+    assert evs == []
+
+
+def test_detect_keeps_bank_own_rj_despite_mentioning_creditors():
+    # Over-suppression guard: a genuinely distressed bank negotiating with ITS
+    # creditors must still be tagged — bare "credores" is not a creditor cue.
+    items = [{"id": "a", "date": "2026-08-25",
+              "title": "Banco Y pede recuperação judicial e negocia com credores"}]
+    evs = ds.detect_distress_events(items, resolver=_resolver({"a": ["banco_y"]}))
+    assert [e["entity"] for e in evs] == ["banco_y"]
+
+
+def test_detect_keeps_debtor_filing_directly_without_possessive():
+    # "Empresa devedora pede RJ" — the devedora IS the subject (no "do <banco>"),
+    # so it must be kept; the possessive is what marks the creditor framing.
+    items = [{"id": "a", "date": "2026-08-25", "title": "Empresa devedora pede recuperação judicial"}]
+    evs = ds.detect_distress_events(items, resolver=_resolver({"a": ["empresa_x"]}))
+    assert [e["entity"] for e in evs] == ["empresa_x"]
+
+
 # --- merge / upsert -------------------------------------------------------
 def test_merge_creates_and_updates_record():
     today = dt.date(2026, 8, 25)
