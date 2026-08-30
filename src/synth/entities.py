@@ -249,6 +249,53 @@ def acquiring_cross_refs(item: dict[str, Any], found: list[str]) -> list[str]:
     return out
 
 
+# Line-of-business cues (issue #47): free-text news about a conglomerate's LOWER-tier
+# line ("Itaú lança novo consórcio", "FIAGRO da Bradesco") resolves only to the tier-1
+# parent. When a resolved parent has exactly ONE sub-entity in the cued industry, attach
+# it so the story ALSO surfaces under that lower-industry line (ADR 017). Ambiguous cues
+# (a bank with many FIAGRO funds + a generic "FIAGRO" mention) attach nothing.
+_LOB_CUES: dict[str, "re.Pattern[str]"] = {
+    "consorcio": re.compile(r"CONS[ÓO]RCIO"),
+    "agri-funds": re.compile(r"FIAGRO|FUNDOS? DO AGRO"),
+    "real-estate-funds": re.compile(r"(?<![0-9A-ZÀ-Ÿ])FIIS?(?![0-9A-ZÀ-Ÿ])|FUNDOS? IMOBILI[ÁA]RIO"),
+}
+
+
+def _subentity_map() -> dict[str, list[tuple[str, frozenset[str]]]]:
+    """{parent_id: [(child_id, industries)]} — the registry when configured, else {}
+    (the built-in seed carries no sub-entities)."""
+    from src.synth import entity_registry
+    if os.environ.get("ONCA_ENTITIES_TABLE"):
+        try:
+            return entity_registry.load_subentities()
+        except Exception as exc:  # pragma: no cover - graceful fallback
+            print(f"Warning: sub-entity map unavailable: {exc}")
+    return {}
+
+
+def line_of_business_cross_refs(item: dict[str, Any], found: list[str]) -> list[str]:
+    """Sub-entities to attach when a resolved parent's news is about a specific lower-tier
+    line. Attaches only an UNAMBIGUOUS line (exactly one child in the cued industry)."""
+    submap = _subentity_map()
+    if not submap:
+        return []
+    blob = " " + signal_blob(item) + " "
+    out: list[str] = []
+    for parent in list(found):
+        kids = submap.get(parent)
+        if not kids:
+            continue
+        for industry, cue in _LOB_CUES.items():
+            if not cue.search(blob):
+                continue
+            in_industry = [c for c, inds in kids if industry in inds]
+            if len(in_industry) == 1:
+                child = in_industry[0]
+                if child not in found and child not in out:
+                    out.append(child)
+    return out
+
+
 # Bare single-token aliases that are also common words / surnames / too-short —
 # they collide with unrelated free text ("Stone" vs "Rolling Stone", "caixa" =
 # cashbox, "nu" = nude in pt, "nomad"/"neon" everyday words). Each of these
@@ -488,6 +535,10 @@ def resolve_entities(item: dict[str, Any]) -> list[str]:
     # A parent bank's acquiring-segment signal also surfaces under its acquiring
     # subsidiary (the only channel for Rede; corroboration for Cielo/Getnet).
     for sub in acquiring_cross_refs(item, found):
+        found.append(sub)
+    # A conglomerate's news about a lower-tier line surfaces under that line's sub-entity
+    # (issue #47): "Itaú ... consórcio" → itau-consorcio, so it reaches the consórcio view.
+    for sub in line_of_business_cross_refs(item, found):
         found.append(sub)
     return found
 

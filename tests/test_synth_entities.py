@@ -3,7 +3,27 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.synth.entities import primary_entity, resolve_entities, acquiring_cross_refs
+from src.synth import entities as _entities
+from src.synth.entities import (
+    primary_entity, resolve_entities, acquiring_cross_refs, line_of_business_cross_refs,
+)
+
+
+def test_line_of_business_cross_ref_attaches_unambiguous_line(monkeypatch):
+    # issue #47: news about a conglomerate's lower-tier line attaches the line sub-entity.
+    submap = {"itau": [("itau-consorcio", frozenset({"consorcio"})),
+                       ("kinea", frozenset({"agri-funds"})),
+                       ("rura11", frozenset({"agri-funds"}))]}
+    monkeypatch.setattr(_entities, "_subentity_map", lambda: submap)
+    # "Itaú ... consórcio" → the single consórcio child.
+    assert line_of_business_cross_refs(
+        {"subject": "Itaú lança novo consórcio de imóveis"}, ["itau"]) == ["itau-consorcio"]
+    # a generic FIAGRO mention is ambiguous (2 agri children) → attach nothing.
+    assert line_of_business_cross_refs(
+        {"subject": "Itaú amplia atuação em FIAGRO"}, ["itau"]) == []
+    # parent not resolved → nothing; no cue → nothing.
+    assert line_of_business_cross_refs({"subject": "Itaú consórcio"}, ["bradesco"]) == []
+    assert line_of_business_cross_refs({"subject": "Itaú lucro recorde"}, ["itau"]) == []
 
 
 def test_acquiring_cross_ref_attaches_rede_to_itau_acquiring_signal():

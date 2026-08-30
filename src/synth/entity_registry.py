@@ -494,6 +494,26 @@ def set_attribution_role(entity_id: str, role: str, *, table: Any | None = None)
 
 
 _ROLE_MAP_CACHE: dict[str, str] | None = None
+_SUBENTITY_CACHE: "dict[str, list[tuple[str, frozenset[str]]]] | None" = None
+
+
+def load_subentities(
+    table: Any | None = None, force: bool = False
+) -> dict[str, list[tuple[str, frozenset[str]]]]:
+    """{parent_id: [(child_id, frozenset(industries))]} — ADR 017 corporate groups,
+    cached. Drives news→sub-entity re-attribution (issue #47)."""
+    global _SUBENTITY_CACHE
+    if _SUBENTITY_CACHE is not None and not force:
+        return _SUBENTITY_CACHE
+    out: dict[str, list[tuple[str, frozenset[str]]]] = {}
+    for e in list_entities(table=table):
+        p = e.get("parent")
+        if p:
+            out.setdefault(str(p), []).append(
+                (e["entity_id"], frozenset(str(i).lower() for i in (e.get("industries") or [])))
+            )
+    _SUBENTITY_CACHE = out
+    return out
 
 
 def load_attribution_roles(table: Any | None = None, force: bool = False) -> dict[str, str]:
