@@ -440,6 +440,31 @@ def test_set_industries_assigns_and_clears_needs_review():
     assert er.set_industries("missing", ["banking"], table=t) is False
 
 
+def test_provenance_stamping_and_preservation():
+    # ADR 018 Phase 1: every write stamps per-field provenance; a field-setter re-stamps
+    # only its field and preserves the others.
+    t = FakeTable()
+    er.put_entity("acme", "Acme", ["ACME"], industries=["banking"], source="fixture", table=t)
+    prov = er.entity_provenance("acme", table=t)
+    assert prov["industries"]["source"] == "fixture" and prov["aliases"]["source"] == "fixture"
+    assert "set_at" in prov["industries"]
+
+    er.set_industries("acme", ["banking", "fintech"], source="enrich", table=t)
+    prov = er.entity_provenance("acme", table=t)
+    assert prov["industries"]["source"] == "enrich"       # re-stamped
+    assert prov["aliases"]["source"] == "fixture"          # preserved
+
+    # assign_ticker rebuilds via put_entity but must preserve other fields' provenance.
+    er.assign_ticker("acme", "ACME3", source="enrich", table=t)
+    prov = er.entity_provenance("acme", table=t)
+    assert prov["ticker"]["source"] == "enrich"
+    assert prov["industries"]["source"] == "enrich" and prov["aliases"]["source"] == "fixture"
+
+    er.set_parent("acme-sub", None, table=t)  # missing entity -> no crash
+    er.put_entity("acme-sub", "Acme Sub", ["ASUB"], parent="acme", source="discovery", table=t)
+    assert er.entity_provenance("acme-sub", table=t)["parent"]["source"] == "discovery"
+
+
 def test_parent_link_and_children_of():
     # ADR 017: a sub-entity links to its tier-1 conglomerate parent; the parent stays
     # tier-1 only and is discoverable from its children.

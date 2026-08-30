@@ -60,6 +60,37 @@ def _table(table: Any | None = None) -> Any:
     )
 
 
+# ADR 018 Phase 1 — per-field curation provenance. Every registry write stamps who/what
+# set a field, so Phase 2's write-precedence can tell a curated value from an automated
+# one. Ranked weakest→strongest: inferred < enrich < discovery < structured < curated <
+# fixture (a human/API `curated` write, and the code seed, are the strongest).
+PROV_SOURCES = ("inferred", "enrich", "discovery", "structured", "curated", "fixture")
+PROV_RANK = {s: i for i, s in enumerate(PROV_SOURCES)}
+
+
+def _prov_entry(source: str, confidence: str | None = None) -> dict[str, Any]:
+    import datetime as _dt
+
+    entry = {"source": str(source),
+             "set_at": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds")}
+    if confidence:  # omit None — keep the DynamoDB map free of NULLs
+        entry["confidence"] = str(confidence)
+    return entry
+
+
+def entity_provenance(entity_id: str, table: Any | None = None) -> dict[str, Any]:
+    """ADR 018: the per-field provenance map {field: {source, confidence?, set_at}}."""
+    return (get_entity(entity_id, table=table) or {}).get("_prov") or {}
+
+
+def _stamp(entity: dict[str, Any], fields: Iterable[str], source: str,
+           confidence: str | None = None) -> None:
+    prov = entity.setdefault("_prov", {})
+    entry = _prov_entry(source, confidence)
+    for f in fields:
+        prov[f] = dict(entry)
+
+
 def put_entity(
     entity_id: str,
     display_name: str,
@@ -82,6 +113,8 @@ def put_entity(
     certifications: Iterable[str] | None = None,
     attribution_role: str | None = None,
     parent: str | None = None,
+    source: str = "curated",
+    prov: dict[str, Any] | None = None,
     table: Any | None = None,
 ) -> dict[str, Any]:
     """Upsert an entity + its ALIAS#/CNPJ# lookup items. Returns the entity item.
@@ -171,6 +204,15 @@ def put_entity(
     #    the tier-1 opt-in toggle folds a parent's children back in on demand.
     if parent:
         entity["parent"] = str(parent)
+    # ADR 018: stamp provenance. A full rebuild (seed/create) stamps every field it set
+    # with `source`; a delegating setter (assign_ticker) passes a pre-built `prov` so the
+    # other fields keep their existing provenance and only the changed one is re-stamped.
+    if prov is not None:
+        entity["_prov"] = prov
+    else:
+        _stamp(entity, [k for k in ("industries", "aliases", "cnpj_roots", "ticker",
+                                    "parent", "ownership", "certifications", "attribution_role")
+                        if k in entity], source, confidence)
     t.put_item(Item=entity)
     for na in norm:
         t.put_item(Item={"pk": f"ALIAS#{na}", "type": "alias", "entity_id": entity_id})
@@ -199,7 +241,8 @@ B3_TICKERS: dict[str, str] = {
 }
 
 
-def assign_ticker(entity_id: str, ticker: str, *, table: Any | None = None) -> bool:
+def assign_ticker(entity_id: str, ticker: str, *, source: str = "enrich",
+                  table: Any | None = None) -> bool:
     """Set an existing entity's B3 ``ticker`` and make the ticker resolvable.
 
     Idempotent. Adds the ticker to the entity's aliases/alias_forms so ticker-keyed
@@ -238,6 +281,8 @@ def assign_ticker(entity_id: str, ticker: str, *, table: Any | None = None) -> b
         news_search=e.get("news_search", True),
         ownership=e.get("ownership"),
         certifications=e.get("certifications"),
+        # ADR 018: preserve other fields' provenance, re-stamp only `ticker`.
+        prov={**(e.get("_prov") or {}), "ticker": _prov_entry(source)},
         table=t,
     )
     return True
@@ -355,7 +400,8 @@ def backfill_certifications(table: Any | None = None) -> list[str]:
 ESG_KEYS = ("ise_b3", "ise_b3_cycle", "ise_b3_weight_pct", "as_of", "source_url")
 
 
-def set_esg(entity_id: str, esg: dict[str, Any] | None, *, table: Any | None = None) -> bool:
+def set_esg(entity_id: str, esg: dict[str, Any] | None, *, source: str = "structured",
+            table: Any | None = None) -> bool:
     """Set an entity's curated `esg` signal dict (e.g. {"ise_b3": True,
     "ise_b3_cycle": "2026-2027", "weight_pct": 2.809, "as_of": "2026-08-31",
     "source_url": "..."}). Non-destructive to other fields. Returns True if
@@ -372,7 +418,8 @@ def set_esg(entity_id: str, esg: dict[str, Any] | None, *, table: Any | None = N
     want_safe = _ddb_safe(want)
     if (e.get("esg") or {}) == want_safe:
         return False
-    update_entity(entity_id, {"esg": want_safe}, table=t)
+    prov = {**(e.get("_prov") or {}), "esg": _prov_entry(source)}  # ADR 018
+    update_entity(entity_id, {"esg": want_safe, "_prov": prov}, table=t)
     return True
 
 
@@ -665,6 +712,7 @@ def accumulate_aliases(
     entity_id: str,
     forms: Iterable[str],
     *,
+    source: str = "enrich",
     table: Any | None = None,
 ) -> list[str]:
     """ADR step 4: fold data-derived name forms into a resolved entity's aliases.
@@ -711,6 +759,7 @@ def accumulate_aliases(
 
     ent["aliases"] = sorted(norm_set)
     ent["alias_forms"] = cur_forms
+    _stamp(ent, ["aliases"], source)  # ADR 018
     t.put_item(Item=ent)
     for na in new_norm:
         t.put_item(Item={"pk": f"ALIAS#{na}", "type": "alias", "entity_id": entity_id})
@@ -1067,7 +1116,8 @@ def classify_industries(entrant: dict[str, Any]) -> tuple[list[str], bool]:
 
 
 def set_industries(
-    entity_id: str, industries: Iterable[str], table: Any | None = None
+    entity_id: str, industries: Iterable[str], table: Any | None = None,
+    *, source: str = "curated",
 ) -> bool:
     """Assign an entity's industry module(s) and clear its needs_review flag —
     the review-queue action for an entrant we couldn't auto-classify. Returns
@@ -1082,11 +1132,13 @@ def set_industries(
     else:
         ent.pop("industries", None)
     ent["needs_review"] = False
+    _stamp(ent, ["industries"], source)  # ADR 018
     t.put_item(Item=ent)
     return True
 
 
-def set_parent(entity_id: str, parent: str | None, table: Any | None = None) -> bool:
+def set_parent(entity_id: str, parent: str | None, table: Any | None = None,
+               *, source: str = "curated") -> bool:
     """Link a sub-entity to its tier-1 conglomerate parent (ADR 017), or clear it with
     ``parent=None``. Returns True if the entity existed and was updated."""
     t = _table(table)
@@ -1097,6 +1149,7 @@ def set_parent(entity_id: str, parent: str | None, table: Any | None = None) -> 
         ent["parent"] = str(parent)
     else:
         ent.pop("parent", None)
+    _stamp(ent, ["parent"], source)  # ADR 018
     t.put_item(Item=ent)
     return True
 
@@ -1321,6 +1374,7 @@ def seed(table: Any | None = None) -> int:
             confidence="curated",
             news_term=news_query_term(entity_id, display_name),
             ambiguous_tokens=_seed_ambiguous_tokens(aliases),
+            source="fixture",  # ADR 018: the code seed is the strongest provenance
             table=t,
         )
         count += 1

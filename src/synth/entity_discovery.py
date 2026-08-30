@@ -368,10 +368,11 @@ def discover_consorcio(
                 ent = entity_registry.get_entity(eid, table=table) or {}
                 if "consorcio" not in (ent.get("industries") or []):
                     entity_registry.set_industries(
-                        eid, list(ent.get("industries") or []) + ["consorcio"], table=table)
+                        eid, list(ent.get("industries") or []) + ["consorcio"],
+                        source="enrich", table=table)
                     changed = True
                 if parent and parent != eid and not ent.get("parent"):
-                    changed = entity_registry.set_parent(eid, parent, table=table) or changed
+                    changed = entity_registry.set_parent(eid, parent, source="enrich", table=table) or changed
                 if changed:
                     report["enriched"].append(eid)
                 else:
@@ -406,7 +407,7 @@ def discover_consorcio(
                     confidence="cnpj", parent=parent,
                     # Identity is the BCB filing, and many administradora brands are generic
                     # words (Globo/Eldorado/Central) → structured-only, no fragile news match.
-                    news_search=False, table=table)
+                    news_search=False, source="discovery", table=table)
                 report["created"].append(profile["entity_id"])
                 new_budget -= 1
                 cnpj_idx[root] = profile["entity_id"]
@@ -562,7 +563,8 @@ def discover_fiagro(
                     # set_industries is the registry's single writer for the field
                     # (rebuilds the record + ALIAS# index consistently).
                     entity_registry.set_industries(
-                        eid, list(ent.get("industries") or []) + [industry], table=table
+                        eid, list(ent.get("industries") or []) + [industry],
+                        source="enrich", table=table
                     )
                     changed = True
                 if ticker and not ent.get("ticker"):
@@ -571,7 +573,7 @@ def discover_fiagro(
                 # ADR 017: link an existing fund to its tier-1 parent if not already.
                 pid = _parent_of(profile.get("display_name"))
                 if pid and pid != eid and not ent.get("parent"):
-                    if entity_registry.set_parent(eid, pid, table=table):
+                    if entity_registry.set_parent(eid, pid, source="enrich", table=table):
                         changed = True
                 if changed:
                     report["enriched"].append(eid)
@@ -624,6 +626,7 @@ def discover_fiagro(
                     ticker=ticker,
                     confidence="cnpj",
                     parent=_parent_of(profile.get("display_name")),  # ADR 017 sub-entity link
+                    source="discovery",  # ADR 018
                     table=table,
                 )
                 report["created"].append(profile["entity_id"])
