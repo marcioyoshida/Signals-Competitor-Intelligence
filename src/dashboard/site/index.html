@@ -43,6 +43,9 @@
     border-radius: 8px; padding: 6px 10px; font-size: 12px; cursor: pointer;
   }
   .btn:hover { color: var(--ink); }
+  /* Cognito auth affordance in the header (issue: Hosted-UI login for the Q&A panel). */
+  .authbox { display: inline-flex; align-items: center; gap: 8px; }
+  .authuser { color: var(--ink2); font-size: 12px; }
   .wrap { padding: 18px 22px; max-width: 1200px; margin: 0 auto; }
   .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
   .tile {
@@ -115,6 +118,8 @@
   .askex .chip { cursor: pointer; font-size: 12px; color: var(--muted);
     border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; }
   .askex .chip:hover { color: var(--accent); border-color: var(--accent); }
+  .askauthhint { margin-top: 10px; display: flex; align-items: center; gap: 10px;
+    color: var(--muted); font-size: 12px; }
   .askans { margin-top: 14px; padding: 12px 14px; border: 1px solid var(--border);
     border-radius: 10px; background: var(--bg); line-height: 1.5; }
   .askans.refused { border-color: var(--muted); color: var(--muted); }
@@ -383,6 +388,7 @@
   <button class="btn" id="runBtn" title="Agenda uma execução do pipeline no topo da próxima hora (evita execuções repetidas)">Executar</button>
   <button class="btn" id="tableToggle">Tabela</button>
   <button class="btn" id="themeToggle">Claro</button>
+  <span class="authbox" id="authBox"></span>
 </header>
 
 <div class="wrap">
@@ -395,6 +401,10 @@
       <button class="btn" id="askBtn">Perguntar</button>
     </div>
     <div class="askex" id="askEx"></div>
+    <div class="askauthhint" id="askAuthHint" style="display:none">
+      <span>É necessário entrar para usar o assistente.</span>
+      <button class="btn" id="askLoginBtn">Entrar</button>
+    </div>
     <div class="askans" id="askAns" style="display:none"></div>
   </section>
 
@@ -564,6 +574,8 @@ async function loadFeed(initial) {
   return true;
 }
 async function boot() {
+  await handleAuthCallback();  // consume ?code=... from the Hosted-UI redirect, if present
+  renderAuthUI();               // reflect the just-exchanged token (or logged-out state)
   await loadFeed(true);
   pollRunStatus();          // start following the pipeline (reflects any in-flight run)
 }
@@ -1579,6 +1591,131 @@ document.getElementById("tableToggle").onclick = (e) => {
   e.target.textContent = hidden ? "Tabela" : "Cartões";
 };
 
+// --- Auth (Cognito Hosted UI, Authorization Code + PKCE, public SPA client) ---
+// Fronts the NEW authenticated agent API (AuthApiUrl). The legacy same-origin
+// /api/ask (CloudFront + origin secret) keeps working unauthenticated for other
+// callers; only the "Perguntar" panel below is wired to the token-bearing call.
+const AUTH = {
+  domain: "https://onca-668449743071.auth.us-east-1.amazoncognito.com",
+  clientId: "7qlquhh56o06tp9bo8gp77p385",
+  apiUrl: "https://azml8kx82k.execute-api.us-east-1.amazonaws.com",
+  // Must exactly match the Cognito app client's registered callback/logout URL.
+  redirectUri: location.origin + "/",
+};
+const TOKEN_KEY = "onca_id_token", VERIFIER_KEY = "onca_pkce_verifier";
+
+function b64UrlEncode(bytes) {
+  let bin = "";
+  bytes.forEach(b => { bin += String.fromCharCode(b); });
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function randomPkceVerifier() {
+  const arr = new Uint8Array(64);
+  crypto.getRandomValues(arr);
+  return b64UrlEncode(arr);
+}
+async function pkceChallenge(verifier) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
+  return b64UrlEncode(new Uint8Array(digest));
+}
+// Decode a JWT payload client-side for DISPLAY ONLY (e.g. showing the signed-in
+// email) — this is never treated as a trust boundary; the API Gateway JWT
+// authorizer is what actually validates the token server-side.
+function decodeJwt(token) {
+  try {
+    const b64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const json = decodeURIComponent(
+      atob(b64).split("").map(c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join("")
+    );
+    return JSON.parse(json);
+  } catch (e) { return null; }
+}
+function getIdToken() { return sessionStorage.getItem(TOKEN_KEY); }
+function isLoggedIn() {
+  const t = getIdToken();
+  if (!t) return false;
+  const p = decodeJwt(t);
+  return !!(p && p.exp && p.exp * 1000 > Date.now());
+}
+async function login() {
+  const verifier = randomPkceVerifier();
+  sessionStorage.setItem(VERIFIER_KEY, verifier);
+  const challenge = await pkceChallenge(verifier);
+  const params = new URLSearchParams({
+    client_id: AUTH.clientId, response_type: "code", scope: "openid email",
+    redirect_uri: AUTH.redirectUri, code_challenge: challenge, code_challenge_method: "S256",
+  });
+  location.href = `${AUTH.domain}/login?${params.toString()}`;
+}
+function logout() {
+  sessionStorage.removeItem(TOKEN_KEY);
+  const params = new URLSearchParams({ client_id: AUTH.clientId, logout_uri: AUTH.redirectUri });
+  location.href = `${AUTH.domain}/logout?${params.toString()}`;
+}
+// PKCE code -> token exchange for the /?code=... redirect back from Hosted UI.
+async function exchangeCodeForToken(code) {
+  const verifier = sessionStorage.getItem(VERIFIER_KEY);
+  sessionStorage.removeItem(VERIFIER_KEY);
+  if (!verifier) return false;
+  try {
+    const body = new URLSearchParams({
+      grant_type: "authorization_code", client_id: AUTH.clientId,
+      code, redirect_uri: AUTH.redirectUri, code_verifier: verifier,
+    });
+    const r = await fetch(`${AUTH.domain}/oauth2/token`, {
+      method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: body.toString(),
+    });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const j = await r.json();
+    if (!j.id_token) throw new Error("sem id_token na resposta");
+    sessionStorage.setItem(TOKEN_KEY, j.id_token);
+    return true;
+  } catch (e) {
+    console.error("Onça auth: falha na troca do código por token", e);
+    return false;
+  }
+}
+// On boot: if the Hosted UI just redirected back with ?code=..., exchange it
+// and strip the query string so a refresh doesn't try to reuse a spent code.
+async function handleAuthCallback() {
+  const url = new URL(location.href);
+  const code = url.searchParams.get("code");
+  if (!code) return;
+  await exchangeCodeForToken(code);
+  url.searchParams.delete("code"); url.searchParams.delete("state");
+  history.replaceState({}, "", url.pathname + (url.search || "") + url.hash);
+}
+function renderAuthUI() {
+  const el = document.getElementById("authBox");
+  if (!el) return;
+  if (isLoggedIn()) {
+    const p = decodeJwt(getIdToken()) || {};
+    const email = p.email || "conta";
+    el.innerHTML = `<span class="authuser" title="${esc(email)}">${esc(email)}</span>
+      <button class="btn" id="logoutBtn">Sair</button>`;
+    document.getElementById("logoutBtn").onclick = logout;
+  } else {
+    el.innerHTML = `<button class="btn" id="loginBtn">Entrar</button>`;
+    document.getElementById("loginBtn").onclick = login;
+  }
+  renderAskLoginState();
+}
+// Gate the Q&A input on auth: logged out -> disabled input + "Entrar" prompt,
+// never a silent error. Logged in -> normal input, hint hidden.
+function renderAskLoginState() {
+  const hint = document.getElementById("askAuthHint");
+  const input = document.getElementById("askInput");
+  const btn = document.getElementById("askBtn");
+  if (!hint || !input || !btn) return;
+  const logged = isLoggedIn();
+  hint.style.display = logged ? "none" : "";
+  input.disabled = !logged; btn.disabled = !logged;
+  input.placeholder = logged
+    ? "Ex.: o que o Itaú mudou esta semana? quem está exposto à regra do DICT?"
+    : "Entre para perguntar à Onça";
+}
+
 // --- Ask panel (ADR 010): grounded, curated Q&A over the tool's own data ------
 const ASK_EXAMPLES = [
   "O que o Itaú mudou recentemente?",
@@ -1630,6 +1767,8 @@ function renderAnswer(res) {
 let askBusy = false;
 async function askOnca() {
   if (askBusy) return;
+  // Logged-out: never call the API silently — surface the login prompt instead.
+  if (!isLoggedIn()) { renderAskLoginState(); return; }
   const input = document.getElementById("askInput");
   const q = (input.value || "").trim();
   if (!q) return;
@@ -1643,10 +1782,19 @@ async function askOnca() {
   if (state.lens) scope.lens = state.lens;
   if (state.date) scope.date = state.date;
   try {
-    const r = await fetch("/api/ask/", {
-      method: "POST", headers: { "content-type": "application/json" },
+    const token = getIdToken();
+    const r = await fetch(`${AUTH.apiUrl}/api/ask`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "authorization": `Bearer ${token}` },
       body: JSON.stringify({ q, scope }),
     });
+    if (r.status === 401) {
+      // Token expired/rejected — drop it and fall back to the login prompt.
+      sessionStorage.removeItem(TOKEN_KEY);
+      renderAuthUI();
+      renderAnswer({ refused: true, answer: "Sessão expirada. Entre novamente para perguntar." });
+      return;
+    }
     const j = await r.json();
     if (r.ok) renderAnswer(j);
     else renderAnswer({ refused: true, answer: "Falha ao consultar. Tente novamente." });
@@ -1655,7 +1803,9 @@ async function askOnca() {
 }
 document.getElementById("askBtn").onclick = askOnca;
 document.getElementById("askInput").addEventListener("keydown", e => { if (e.key === "Enter") askOnca(); });
+document.getElementById("askLoginBtn").onclick = login;
 renderAskExamples();
+renderAuthUI();
 
 // Side-panel rail (issue #39): Cobertura & Monitor + Pontos Cegos pull-out
 // drawers, opened from their tabs, closed via their own ✕, the shared scrim,
