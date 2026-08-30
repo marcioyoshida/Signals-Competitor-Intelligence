@@ -12,6 +12,9 @@ from pathlib import Path
 import yaml
 from aws_cdk import App, CfnOutput, Duration, RemovalPolicy, Stack, Tags
 from aws_cdk import aws_bedrock as bedrock
+from aws_cdk import aws_apigatewayv2 as apigwv2
+from aws_cdk import aws_apigatewayv2_authorizers as apigwv2_auth
+from aws_cdk import aws_apigatewayv2_integrations as apigwv2_int
 from aws_cdk import aws_cloudfront as cloudfront
 from aws_cdk import aws_cognito as cognito
 from aws_cdk import aws_cloudfront_origins as cf_origins
@@ -1436,6 +1439,44 @@ class OncaPrototypeStack(Stack):
                 )
             ],
         )
+        # --- Phase C increment 2: authenticated API path (API Gateway HTTP API +
+        # Cognito JWT authorizer) -----------------------------------------------------
+        # ADDITIVE + transition-safe: the CloudFront → Lambda-URL + origin-secret path
+        # above is untouched (the current tokenless dashboard keeps working). This adds a
+        # SECOND ingress that VERIFIES a Cognito JWT (API Gateway does the crypto) and
+        # passes the tenant claims to the SAME Lambdas; the handlers accept EITHER a
+        # verified identity OR the origin secret (src/dashboard/auth.py). Once the
+        # Hosted-UI login is wired and traffic cuts over, the origin-secret path retires.
+        jwt_authorizer = apigwv2_auth.HttpJwtAuthorizer(
+            "OncaJwtAuthorizer",
+            f"https://cognito-idp.{self.region}.amazonaws.com/{user_pool.user_pool_id}",
+            identity_source=["$request.header.Authorization"],
+            jwt_audience=[user_pool_client.user_pool_client_id],  # Cognito ID-token aud
+        )
+        auth_api = apigwv2.HttpApi(
+            self,
+            "OncaAuthApi",
+            api_name="onca-auth-api",
+            cors_preflight=apigwv2.CorsPreflightOptions(
+                allow_headers=["authorization", "content-type"],
+                allow_methods=[apigwv2.CorsHttpMethod.POST, apigwv2.CorsHttpMethod.GET],
+                allow_origins=[f"https://{distribution.distribution_domain_name}"],
+            ),
+        )
+        auth_api.add_routes(
+            path="/api/ask",
+            methods=[apigwv2.HttpMethod.POST],
+            integration=apigwv2_int.HttpLambdaIntegration("AskInteg", agent_fn),
+            authorizer=jwt_authorizer,
+        )
+        auth_api.add_routes(
+            path="/api/gaps",
+            methods=[apigwv2.HttpMethod.GET],
+            integration=apigwv2_int.HttpLambdaIntegration("GapsInteg", gaps_fn),
+            authorizer=jwt_authorizer,
+        )
+        CfnOutput(self, "AuthApiUrl", value=auth_api.api_endpoint)
+
         # /api/* catch-all (review action) — registered AFTER /api/registry/* and
         # /api/run/* so the specific patterns win; everything else under /api/ lands here.
         distribution.add_behavior(

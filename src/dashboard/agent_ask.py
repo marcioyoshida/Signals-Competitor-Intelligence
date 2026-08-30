@@ -652,10 +652,16 @@ def _record_gap(q: str, scope: dict[str, Any] | None, reason: str) -> None:
 
 
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
-    # Origin secret: present only when the request came through CloudFront.
+    # Auth (Phase C increment 2): accept EITHER a verified Cognito identity — the API
+    # Gateway JWT authorizer put its claims in the request context — OR the legacy
+    # CloudFront origin secret, during the transition to per-tenant identity.
+    from src.dashboard.auth import identity_from_event
+
+    identity = identity_from_event(event)
     secret = os.environ.get("ONCA_ORIGIN_SECRET")
     headers = {str(k).lower(): v for k, v in (event.get("headers") or {}).items()}
-    if secret and headers.get("x-onca-origin") != secret:
+    origin_ok = (not secret) or headers.get("x-onca-origin") == secret
+    if identity is None and not origin_ok:
         return _resp(403, {"error": "forbidden"})
 
     body = _body(event)

@@ -84,6 +84,21 @@ def test_entity_fact_card_surfaces_ise_b3_membership():
     assert "não consta como membro do ISE B3" in cards["banco_pan"]["narrative"]
 
 
+def test_handler_accepts_verified_identity_without_origin_secret(monkeypatch):
+    # Phase C increment 2: a verified Cognito identity (API Gateway JWT authorizer)
+    # passes the gate even without the origin secret (empty q → 400, not 403).
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", "s3cr3t")
+    ev = {"requestContext": {"authorizer": {"jwt": {"claims": {
+              "sub": "u1", "custom:tenant": "acme"}}}},
+          "headers": {}, "body": "{}"}
+    assert aa.lambda_handler(ev, None)["statusCode"] != 403
+
+
+def test_handler_rejects_without_identity_or_secret(monkeypatch):
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", "s3cr3t")
+    assert aa.lambda_handler({"headers": {}, "body": "{}"}, None)["statusCode"] == 403
+
+
 def test_scope_rejects_off_domain():
     ok, why = aa.classify_scope(
         "me passa uma receita de bolo de cenoura",

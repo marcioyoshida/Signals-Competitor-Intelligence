@@ -72,9 +72,15 @@ def _verifier(site_bucket: str | None):
 
 
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
+    # Auth (Phase C increment 2): a verified Cognito identity (API Gateway JWT
+    # authorizer) OR the legacy CloudFront origin secret.
+    from src.dashboard.auth import identity_from_event
+
+    identity = identity_from_event(event)
     secret = os.environ.get("ONCA_ORIGIN_SECRET")
     headers = {str(k).lower(): v for k, v in (event.get("headers") or {}).items()}
-    if secret and headers.get("x-onca-origin") != secret:
+    origin_ok = (not secret) or headers.get("x-onca-origin") == secret
+    if identity is None and not origin_ok:
         return _resp(403, {"error": "forbidden"})
 
     bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
