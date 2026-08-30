@@ -96,6 +96,9 @@ _DOMAIN_CUES = {
     "alerta", "alertas", "feed", "sinal", "sinais", "tese", "selic", "juros",
     "industria", "setor", "vertical", "ticker", "b3", "acao", "acoes",
     "lucro", "balanco", "resultado", "captacao", "fatos", "relevante",
+    # financial statements (issue #7 / ADR 011 stage 6): DFP/ITR grounding.
+    "receita", "receitas", "faturamento", "margem", "alavancagem", "endividamento",
+    "patrimonio", "ativos", "rentabilidade", "demonstracoes", "financeiras", "dfp", "itr",
     # corporate distress (ADR-012): RJ/falência is in-domain (feed.json.distress).
     "recuperacao", "judicial", "extrajudicial", "falencia", "falida", "insolvencia",
     "distress", "empresa", "empresas",
@@ -420,6 +423,53 @@ def distress_cards(feed: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
+def _fmt_bi(v: Any) -> str:
+    return f"R$ {v / 1e9:.1f} bi".replace(".", ",") if isinstance(v, (int, float)) else "—"
+
+
+def _fmt_pct(v: Any) -> str:
+    return f"{v * 100:.1f}%".replace(".", ",") if isinstance(v, (int, float)) else "—"
+
+
+def financials_cards(feed: dict[str, Any]) -> list[dict[str, Any]]:
+    """Turn feed.json.financials (CVM DFP/ITR, issue #7) into citable cards so the agent
+    can ground financial questions — revenue, net income, margin, growth, leverage."""
+    labels = {e["entity"]: e.get("label") or e["entity"]
+              for e in (feed.get("entities") or []) if e.get("entity")}
+    out: list[dict[str, Any]] = []
+    for r in (feed.get("financials") or []):
+        ent = r.get("entity_id")
+        label = labels.get(ent) or r.get("name") or ent
+        parts: list[str] = []
+        if r.get("revenue"):
+            parts.append(f"receita/faturamento {_fmt_bi(r['revenue'])}")
+        if r.get("net_income") is not None:
+            parts.append(f"lucro líquido {_fmt_bi(r['net_income'])}")
+        if r.get("net_margin") is not None:
+            parts.append(f"margem líquida {_fmt_pct(r['net_margin'])}")
+        if r.get("revenue_growth") is not None:
+            parts.append(f"crescimento de receita {_fmt_pct(r['revenue_growth'])} a/a")
+        if r.get("leverage") is not None:
+            parts.append(f"alavancagem {r['leverage']:.2f}x".replace(".", ","))
+        if r.get("assets"):
+            parts.append(f"ativos totais {_fmt_bi(r['assets'])}")
+        if r.get("equity"):
+            parts.append(f"patrimônio líquido {_fmt_bi(r['equity'])}")
+        if not parts:
+            continue
+        out.append({
+            "id": f"fin:{ent}:{r.get('period')}",
+            "date": r.get("period"),
+            "entity": ent, "entity_label": label, "entities": [ent],
+            # `financials`/`balanço` tokens so a balance-sheet question grounds here.
+            "lenses": ["financials"], "is_alert": False, "threat_score": None,
+            "narrative": (f"{label} — demonstrações financeiras / balanço (CVM DFP, "
+                          f"{r.get('period')}): " + "; ".join(parts) + "."),
+            "citations": [{"url": r["source_url"]}] if r.get("source_url") else [],
+        })
+    return out
+
+
 _OWNERSHIP_PT = {
     "public": "capital aberto (companhia listada)",
     "governmental": "estatal / governamental (controle público)",
@@ -583,7 +633,8 @@ def answer(
     # Ground on the narrative feed, the durable distress store (ADR-012) AND the
     # per-entity classification facts (ADR-013: ownership/certifications).
     feed_cards = (list(feed.get("feed") or []) + distress_cards(feed)
-                  + entity_fact_cards(feed) + reputation_cards(feed))
+                  + entity_fact_cards(feed) + reputation_cards(feed)
+                  + financials_cards(feed))
     if modules is not None:
         feed_cards = _scope_cards_to_modules(feed_cards, feed, modules)
     entity_vocab = set()

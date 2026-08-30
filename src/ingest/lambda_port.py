@@ -591,6 +591,31 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as exc:  # pragma: no cover - best-effort, never blocks ingest
             print(f"Warning: consórcio discovery skipped: {exc}")
 
+    # Financial statements (issue #7 / ADR 011 stage 6): CVM DFP → per-issuer key-metric
+    # store (financials/index.json). Filings are annual/quarterly, so this is a periodic
+    # best-effort refresh, gated OFF by default (ONCA_FINANCIALS=true to enable).
+    if os.environ.get("ONCA_FINANCIALS", "false").lower() in ("1", "true", "yes"):
+        try:
+            with _source_budget("financials DFP", deadline, per_source):
+                import datetime as _dt
+
+                from src.ingest import cvm_financials
+                from src.synth import entities as _ent
+                from src.synth import entity_registry as _er
+
+                bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
+                year = int(os.environ.get("ONCA_FINANCIALS_YEAR", str(_dt.date.today().year - 1)))
+                stmts = cvm_financials.fetch_statements(year, doc="DFP")
+                idx = cvm_financials.build_index(
+                    list(_er.list_entities(include_inactive=True)), stmts,
+                    resolver=_ent.resolve_entities,
+                )
+                if idx and bucket:
+                    cvm_financials.persist(bucket, idx)
+                print(f"financials DFP {year}: issuers={len(stmts)} matched={len(idx)}")
+        except Exception as exc:  # pragma: no cover - best-effort, never blocks ingest
+            print(f"Warning: financials ingest skipped: {exc}")
+
     # FIAGRO agri-funds — PL / cotista moves + newly-registered classes as
     # narrative-ready signal (task b). Entity discovery above only populates the
     # registry; without this, 0 agri-funds narratives ever reach synth. Reuses

@@ -376,6 +376,7 @@ def build_feed(
     entity_attrs: dict[str, dict[str, Any]] | None = None,
     coverage_gaps: list[dict[str, Any]] | None = None,
     reputation: list[dict[str, Any]] | None = None,
+    financials: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Pure aggregation: narratives -> feed payload. No I/O.
 
@@ -543,6 +544,10 @@ def build_feed(
         "coverage_gaps": coverage_gaps or [],
         # Reclame Aqui consumer-reputation snapshots (#31), worst-score first.
         "reputation": reputation or [],
+        # Issue #7 / ADR 011 stage 6: per-issuer financial statement metrics (CVM DFP/ITR)
+        # — revenue/net income/assets/equity + derived net margin, YoY growth, leverage.
+        # Keyed grounding for the agent + a financial lens on the frameworks.
+        "financials": financials or [],
     }
 
 
@@ -633,6 +638,7 @@ def scope_feed_to_modules(feed: dict[str, Any], modules: Any) -> dict[str, Any]:
             "distress": [r for r in (feed.get("distress") or []) if row_ok(r)],
             "reputation": [r for r in (feed.get("reputation") or []) if row_ok(r)],
             "coverage_gaps": [r for r in (feed.get("coverage_gaps") or []) if row_ok(r)],
+            "financials": [r for r in (feed.get("financials") or []) if row_ok(r)],
         }
     )
     return out
@@ -742,6 +748,7 @@ def derive_entry_feed(
             "distress": [r for r in (feed.get("distress") or []) if row_ok(r)],
             "reputation": [r for r in (feed.get("reputation") or []) if row_ok(r)],
             "coverage_gaps": [r for r in (feed.get("coverage_gaps") or []) if row_ok(r)],
+            "financials": [r for r in (feed.get("financials") or []) if row_ok(r)],
         }
     )
     return out
@@ -892,6 +899,17 @@ def _load_reg_lifecycles(digests_bucket: str) -> list[dict[str, Any]]:
         return json.loads(body.decode("utf-8")).get("cards", [])
     except Exception as exc:  # pragma: no cover - best-effort, read-only
         print(f"Warning: load reg-lifecycle index failed: {exc}")
+        return []
+
+
+def _load_financials(digests_bucket: str) -> list[dict[str, Any]]:
+    """Read the per-issuer financial-statement store (issue #7), best-effort. [] if absent."""
+    try:
+        from src.ingest import cvm_financials
+
+        return cvm_financials.load_index(digests_bucket)
+    except Exception as exc:  # pragma: no cover - best-effort, read-only
+        print(f"Warning: load financials index failed: {exc}")
         return []
 
 
@@ -1169,6 +1187,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         entity_attrs=load_entity_attributes(),
         coverage_gaps=_load_coverage_gaps(digests_bucket),
         reputation=_load_reputation(digests_bucket),
+        financials=_load_financials(digests_bucket),
     )
     body = json.dumps(feed, ensure_ascii=False, default=_json_default).encode("utf-8")
     # ADR 016: the entry-scoped slice (entry-tier industries only) — written alongside
