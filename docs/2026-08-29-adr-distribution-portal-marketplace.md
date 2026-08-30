@@ -1,6 +1,11 @@
 # ADR 015 — Distribution: two SKUs, Portal and Marketplace (telemetry is the axis)
 
-- Status: **Proposed** (2026-08-29) — **canonical distribution ADR**.
+- Status: **Proposed (2026-08-29), REVISED by
+  [ADR 016 — Distribution tiers](2026-08-30-adr-distribution-three-tier.md) (2026-08-30).**
+  ADR 016 keeps this ADR's telemetry axis + moat invariant but adds a delivery/sovereignty
+  axis: *Portal* splits into **Entry Portal** (static, CloudFront multi-tenant) + **SaaS
+  Platform** (dynamic API), and *Marketplace* becomes **Sovereign**. Read ADR 016 for the
+  current tiering; the principles below still hold.
 - **Consolidates and supersedes** two documents:
   - [distribution-model (2026-08-19)](2026-08-19-distribution-model.md) — the
     4-channel / orthogonal-rail taxonomy. **Superseded by this ADR.**
