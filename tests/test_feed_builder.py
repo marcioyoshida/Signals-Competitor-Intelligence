@@ -195,6 +195,23 @@ def test_load_recent_narratives_filters_by_window(monkeypatch):
     assert ids == {"fresh"}  # old is outside the 14-day window; .txt skipped
 
 
+def test_build_feed_emits_corporate_groups_and_entry_collapses_them():
+    # ADR 017 Phase 3: entity `parent` links roll up into feed.groups {parent: [children]}.
+    narratives = [_narr("n1", "btg", "2026-08-20", 0.6),
+                  _narr("n2", "btg-ceres", "2026-08-20", 0.4)]
+    imap = {"btg": ["investment-banking"], "btg-ceres": ["agri-funds"]}
+    attrs = {"btg": {"industries": ["investment-banking"]},
+             "btg-ceres": {"industries": ["agri-funds"], "parent": "btg"}}
+    feed = feed_builder.build_feed(
+        narratives, industry_map=imap, industry_meta={}, entity_attrs=attrs)
+    assert feed["groups"] == {"btg": ["btg-ceres"]}
+    # a parent whose child isn't tracked is dropped; entry feed carries no groups.
+    entry = feed_builder.derive_entry_feed(feed)
+    assert entry["groups"] == {}
+    # btg (tier-1) is out of entry; its sub-entity btg-ceres is in.
+    assert "btg" not in entry["entity_attrs"] and "btg-ceres" in entry["entity_attrs"]
+
+
 def test_derive_entry_feed_scopes_to_entry_industries_only():
     # itau (banking, higher tier), agroca (agri-funds, entry), betco (betting, entry),
     # dualco (agri-funds + banking — a multi-industry entity that touches entry).

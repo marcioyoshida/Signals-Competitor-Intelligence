@@ -71,6 +71,9 @@
   }
   label.chk { display: inline-flex; align-items: center; gap: 6px; color: var(--ink2); font-size: 13px; }
   .hint { color: var(--muted); font-size: 12px; padding: 0 16px 10px; }
+  .groupbar { margin: 0 16px 10px; padding: 7px 12px; border: 1px dashed var(--border);
+    border-radius: 8px; background: var(--panel); font-size: 13px; }
+  .groupbar .gbn { color: var(--muted); font-size: 12px; margin-left: 6px; }
   .review { padding: 10px 16px; border-top: 1px solid var(--border); }
   .review:first-child { border-top: 0; }
   .review .rmeta { color: var(--muted); font-size: 12px; margin-top: 3px; }
@@ -422,6 +425,7 @@
     <div class="hint">Cada cartão reúne sinais de várias fontes (as “lentes”) sobre a mesma entidade e traz o link de cada fonte. O nível de ameaça é uma estimativa que combina quantas fontes e quão relevantes são.</div>
     <div class="legend" id="legend"></div>
     <div id="frameworksPanel"></div>
+    <div id="groupBar" class="groupbar" style="display:none"></div>
     <div class="feed" id="feed"></div>
     <div id="tableView" class="hidden" style="padding:6px 12px 16px"></div>
   </div>
@@ -548,7 +552,7 @@ function fmtClock(iso) {
 
 let DATA = null;
 // "all" = flat list of distinct events (default); "entity" = one summary card per entity.
-const state = { entity: "", topic: "", lens: "", date: "", alert: false, q: "", view: "all", indOpen: new Set() };
+const state = { entity: "", topic: "", lens: "", date: "", alert: false, q: "", view: "all", indOpen: new Set(), showGroup: false };
 
 function applyFeed(initial) {
   const checked = DATA.generated_at ? ` · verificado ${fmtDateTime(DATA.generated_at)}` : "";
@@ -946,9 +950,27 @@ function populateFilters() {
   document.getElementById("fSearch").oninput = e => { state.q = e.target.value.toLowerCase(); render(); };
 }
 
+// ADR 017: a conglomerate parent + all its descendant sub-entities (two-level:
+// itau -> kinea -> funds). Used by the tier-1 "show group" opt-in.
+function groupEntities(parent) {
+  const groups = DATA.groups || {};
+  const out = new Set([parent]);
+  const stack = [parent];
+  while (stack.length) {
+    const p = stack.pop();
+    for (const c of (groups[p] || [])) if (!out.has(c)) { out.add(c); stack.push(c); }
+  }
+  return out;
+}
+
 function filtered() {
+  const kids = (DATA.groups || {})[state.entity];
+  // When a tier-1 parent is selected and "show group" is on, fold in its children's
+  // (lower-industry) cards; otherwise the feed stays scoped to the entity itself.
+  const allowed = (state.entity && state.showGroup && kids && kids.length)
+    ? groupEntities(state.entity) : null;
   return DATA.feed.filter(f =>
-    (!state.entity || f.entity === state.entity) &&
+    (!state.entity || (allowed ? allowed.has(f.entity) : f.entity === state.entity)) &&
     (!state.topic || (f.topics || []).includes(state.topic)) &&
     (!state.lens || f.lenses.includes(state.lens)) &&
     (!state.date || f.date === state.date) &&
@@ -1383,7 +1405,27 @@ function renderFrameworks() {
   });
 }
 
+function renderGroupBar() {
+  // ADR 017 tier-1 opt-in: when the selected entity is a conglomerate parent, offer to
+  // fold its lower-industry group lines into the feed. Hidden otherwise.
+  const gb = document.getElementById("groupBar");
+  if (!gb) return;
+  const kids = (DATA.groups || {})[state.entity];
+  if (state.entity && kids && kids.length) {
+    const label = (DATA.entity_attrs && DATA.entity_attrs[state.entity] || {}).label || state.entity;
+    const n = groupEntities(state.entity).size - 1;  // descendant sub-entities
+    gb.style.display = "";
+    gb.innerHTML = `<label class="chk"><input type="checkbox" id="fGroup"${state.showGroup ? " checked" : ""}/>
+      Incluir linhas do grupo <b>${esc(label)}</b> <span class="gbn">${n} sub-entidade${n === 1 ? "" : "s"}</span></label>`;
+    document.getElementById("fGroup").onchange = e => { state.showGroup = e.target.checked; render(); };
+  } else {
+    gb.style.display = "none";
+    state.showGroup = false;
+  }
+}
+
 function render() {
+  renderGroupBar();
   const rows = filtered();
   renderFrameworks();
   const feed = document.getElementById("feed");

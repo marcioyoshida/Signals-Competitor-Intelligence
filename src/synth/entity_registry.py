@@ -525,6 +525,9 @@ def list_entity_attributes(table: Any | None = None) -> dict[str, dict[str, Any]
             "industries": e.get("industries") or [],
             "attribution_role": classify_attribution_role(e),
             "esg": e.get("esg") or {},
+            # ADR 017: the tier-1 conglomerate this entity is a sub-entity of, if any —
+            # lets the dashboard fold a parent's lower-industry group in on demand.
+            "parent": e.get("parent"),
         }
     return out
 

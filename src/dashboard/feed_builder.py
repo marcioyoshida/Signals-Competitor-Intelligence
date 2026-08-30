@@ -322,6 +322,18 @@ def _project_item(n: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _build_groups(entity_attrs: dict[str, Any] | None) -> dict[str, list[str]]:
+    """ADR 017 corporate groups: {parent_id: sorted[child sub-entity ids]} from the
+    entities' `parent` links. Only parents that are themselves tracked are kept."""
+    attrs = entity_attrs or {}
+    groups: dict[str, list[str]] = {}
+    for eid, a in attrs.items():
+        p = (a or {}).get("parent")
+        if p and p in attrs:
+            groups.setdefault(str(p), []).append(eid)
+    return {p: sorted(kids) for p, kids in groups.items()}
+
+
 def build_feed(
     narratives: list[dict[str, Any]],
     *,
@@ -503,6 +515,10 @@ def build_feed(
         # + dashboard. Keyed by entity_id. Covers the WHOLE registry, not just
         # narrative-bearing entities.
         "entity_attrs": entity_attrs or {},
+        # ADR 017: corporate groups {parent_id: [child sub-entity ids]} — a tier-1
+        # entity's lower-industry lines. Drives the dashboard's "show group" opt-in
+        # (fold a parent's children's cards into its view on demand).
+        "groups": _build_groups(entity_attrs),
         # ADR-014 coverage-gap loop: unanswered in-domain questions awaiting triage/
         # remediation. Read-only list (open + proposed), most-frequent first.
         "coverage_gaps": coverage_gaps or [],
@@ -583,6 +599,8 @@ def derive_entry_feed(
                 for e, a in attrs.items()
                 if e in entry_entities
             },
+            # tier-1 parents aren't in Entry, so the corporate groups collapse to {}.
+            "groups": {},
             "kpis": {
                 "narratives_latest": len(latest_items),
                 "alerts_latest": sum(1 for c in latest_items if c.get("is_alert")),
