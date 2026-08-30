@@ -519,6 +519,9 @@
   <button class="railtab" id="macroTab" style="display:none" title="Macro · Copom & Focus">
     <span class="rtlabel">Macro</span>
   </button>
+  <button class="railtab" id="integTab" style="display:none" title="Auditoria de integridade do registro (ADR 018)">
+    <span class="rtlabel">Integridade</span><span class="rtbadge" id="integCount"></span>
+  </button>
   <button class="railtab" id="radarTab" style="display:none" title="Radar de risco, balanço de crença estratégica e calendário regulatório">
     <span class="rtlabel">Radar</span><span class="rtbadge" id="radarCount"></span>
   </button>
@@ -549,6 +552,15 @@
   </div>
   <div class="hint" style="padding:0 16px">Contexto macro do mercado (BCB): decisão do Copom / Selic e as expectativas do Relatório Focus. Sinais amplos de mercado — não são de um concorrente específico.</div>
   <div id="macro"></div>
+</aside>
+
+<aside class="drawer" id="integDrawer" aria-hidden="true">
+  <div class="drhead">
+    <h2>Integridade do registro</h2>
+    <button class="drclose" data-close="integDrawer" aria-label="Fechar">✕</button>
+  </div>
+  <div class="hint" style="padding:0 16px">Auditoria contínua (ADR 018): anomalias no registro e no feed — poluição de indústria, apelidos de fundo em instituições, atribuição de cartão sem nexo. Somente operador.</div>
+  <div id="integList"></div>
 </aside>
 
 <aside class="drawer" id="radarDrawer" aria-hidden="true">
@@ -842,7 +854,25 @@ function renderLower() {
     const h = low.querySelector("h2");
     if (h) h.textContent = `Revisão de entidades (${DATA.reviews.length})`;
   }
-  renderMacro(); renderReviews(); renderGaps(); renderRadarPanels();
+  renderMacro(); renderReviews(); renderGaps(); renderRadarPanels(); renderIntegrity();
+}
+
+// ADR 018 Phase 3: operator-only integrity findings in a lateral drawer.
+function renderIntegrity() {
+  const findings = (DATA.integrity || {}).findings || [];
+  const tab = document.getElementById("integTab"), badge = document.getElementById("integCount");
+  if (tab) tab.style.display = findings.length ? "" : "none";
+  if (badge) badge.textContent = findings.length ? String(findings.length) : "";
+  const el = document.getElementById("integList");
+  if (!el) return;
+  if (!findings.length) { el.innerHTML = `<div class="indempty">Nenhuma anomalia detectada.</div>`; return; }
+  const sev = { high: "gap", med: "low", low: "none" };
+  el.innerHTML = findings.map(f => `
+    <div style="padding:8px 16px;border-bottom:1px solid var(--border)">
+      <div><span class="flag ${sev[f.severity] || "none"}">${esc(f.severity)}</span>
+        <b>${esc(f.kind)}</b>${f.safe_fix ? ' <span class="flag ok">corrigível</span>' : ""}</div>
+      <div class="pmeta" style="margin-top:3px">${esc(f.summary)}</div>
+    </div>`).join("");
 }
 
 // Shared drill-down for the Radar Competitivo drawer rows (ADR 015 #1-#3): reuse
@@ -2232,6 +2262,7 @@ renderAuthUI();
 document.getElementById("covTab").onclick = () => toggleDrawer("covDrawer", true);
 document.getElementById("gapsTab").onclick = () => toggleDrawer("gapsDrawer", true);
 document.getElementById("macroTab").onclick = () => toggleDrawer("macroDrawer", true);
+document.getElementById("integTab").onclick = () => toggleDrawer("integDrawer", true);
 document.getElementById("radarTab").onclick = () => toggleDrawer("radarDrawer", true);
 document.querySelectorAll(".drclose").forEach(b => b.onclick = () => toggleDrawer(b.dataset.close, false));
 document.getElementById("drawerScrim").onclick = () => closeDrawers();

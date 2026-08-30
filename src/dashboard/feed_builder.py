@@ -647,6 +647,7 @@ def scope_feed_to_modules(feed: dict[str, Any], modules: Any) -> dict[str, Any]:
             "reputation": [r for r in (feed.get("reputation") or []) if row_ok(r)],
             "coverage_gaps": [r for r in (feed.get("coverage_gaps") or []) if row_ok(r)],
             "financials": [r for r in (feed.get("financials") or []) if row_ok(r)],
+            "integrity": {"findings": [], "counts": {}, "total": 0},  # operator-only
         }
     )
     return out
@@ -757,6 +758,7 @@ def derive_entry_feed(
             "reputation": [r for r in (feed.get("reputation") or []) if row_ok(r)],
             "coverage_gaps": [r for r in (feed.get("coverage_gaps") or []) if row_ok(r)],
             "financials": [r for r in (feed.get("financials") or []) if row_ok(r)],
+            "integrity": {"findings": [], "counts": {}, "total": 0},  # operator-only
         }
     )
     return out
@@ -1197,6 +1199,15 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         reputation=_load_reputation(digests_bucket),
         financials=_load_financials(digests_bucket),
     )
+    # ADR 018 Phase 3: continuous integrity audit over the registry + this feed —
+    # operator-facing findings (scoped OUT of the entry/tenant slices below).
+    try:
+        from src.synth import entity_registry, integrity
+
+        feed["integrity"] = integrity.audit(feed, entity_registry.list_entities())
+    except Exception as exc:  # pragma: no cover - best-effort, read-only
+        print(f"Warning: integrity audit skipped: {exc}")
+        feed["integrity"] = {"findings": [], "counts": {}, "total": 0}
     body = json.dumps(feed, ensure_ascii=False, default=_json_default).encode("utf-8")
     # ADR 016: the entry-scoped slice (entry-tier industries only) — written alongside
     # the full feed so the Entry Portal serves ONLY entry data (no higher-tier leak).
