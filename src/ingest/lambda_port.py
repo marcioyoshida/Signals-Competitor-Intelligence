@@ -569,6 +569,28 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as exc:  # pragma: no cover - best-effort, never blocks ingest
             print(f"Warning: entity discovery skipped: {exc}")
 
+        # Consórcio administradoras — structured BCB universe → registry (issue #46,
+        # ADR 017). Same master gate; every row has a CNPJ. Conglomerate arms
+        # (Itaú/Bradesco/Santander/Porto Seguro) nest as sub-entities of the tier-1 parent.
+        try:
+            with _source_budget("entity discovery consórcio", deadline, per_source):
+                from src.synth import entity_discovery
+
+                auto = os.environ.get(
+                    "ONCA_ENTITY_DISCOVERY_AUTOCREATE", "true"
+                ).lower() in ("1", "true", "yes")
+                creport = entity_discovery.discover_consorcio(auto_create=auto, max_new=100)
+                print(
+                    "entity discovery consórcio: "
+                    f"fetched={creport.get('fetched')} "
+                    f"created={len(creport.get('created') or [])} "
+                    f"enriched={len(creport.get('enriched') or [])} "
+                    f"already={creport.get('already')} "
+                    f"proposed={len(creport.get('proposed') or [])}"
+                )
+        except Exception as exc:  # pragma: no cover - best-effort, never blocks ingest
+            print(f"Warning: consórcio discovery skipped: {exc}")
+
     # FIAGRO agri-funds — PL / cotista moves + newly-registered classes as
     # narrative-ready signal (task b). Entity discovery above only populates the
     # registry; without this, 0 agri-funds narratives ever reach synth. Reuses

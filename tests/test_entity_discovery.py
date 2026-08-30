@@ -134,6 +134,33 @@ def test_discover_fiagro_links_fund_to_tier1_parent():
     assert entity_registry.children_of("btg", table=table) == [child]
 
 
+def test_discover_consorcio_creates_and_nests_conglomerate_arm():
+    from src.synth import entity_registry
+    from src.synth.entity_discovery import discover_consorcio
+
+    table = _FakeTable()
+    entity_registry.put_entity("bradesco", "Bradesco", ["BRADESCO", "TICKER:BBDC4"],
+                               industries=["banking"], table=table)
+    rows = [
+        {"cnpj": "17351180", "name": "BRADESCO ADMINISTRADORA DE CONSÓRCIOS LTDA.",
+         "branches": 30, "as_of": "2026-08-27"},
+        {"cnpj": "52111111", "name": "ADEMICON ADMINISTRADORA DE CONSÓRCIOS S.A.",
+         "branches": 20, "as_of": "2026-08-27"},
+    ]
+    report = discover_consorcio(rows=rows, min_branches=1, auto_create=True, table=table)
+    assert len(report["created"]) == 2
+    # the conglomerate arm gets a distinct id nested under the parent (no overwrite).
+    arm = entity_registry.get_entity("bradesco-consorcio", table=table)
+    assert arm and arm["parent"] == "bradesco" and arm["industries"] == ["consorcio"]
+    assert entity_registry.get_entity("bradesco", table=table)["industries"] == ["banking"]
+    # an independent administradora is its own top-level entity, no parent.
+    adem = entity_registry.get_entity("ademicon", table=table)
+    assert adem and "parent" not in adem and adem["industries"] == ["consorcio"]
+    # idempotent: second run enriches nothing new.
+    r2 = discover_consorcio(rows=rows, min_branches=1, auto_create=True, table=table)
+    assert r2["created"] == [] and r2["already"] == 2
+
+
 def test_discover_fiagro_quality_gate():
     """Junk-named funds (no ticker, generic legal name) are proposed, not
     auto-created; clean ticker funds are created."""

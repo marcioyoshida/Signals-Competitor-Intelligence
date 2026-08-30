@@ -58,8 +58,53 @@ _STOP = frozenset(
         "cota", "cotas", "imobiliário", "imobiliários", "imobiliaria", "imobiliarias",
         "agro", "crédito", "credito", "rural", "agrícola", "agricola", "imob",
         "ltda", "sa", "s.a.", "s/a", "me", "epp", "eireli", "inc", "corp",
+        # consórcio legal-form words (issue #46) — so a razão social reduces to its brand.
+        "administradora", "administradoras", "adm", "consórcio", "consorcio",
+        "consórcios", "consorcios",
     }
 )
+
+# ADR 017 sub-entity linking, shared by discover_fiagro/discover_consorcio: a fund or
+# consórcio line links to the tier-1 INSTITUTION its brand belongs to (`BRADESCO ADM DE
+# CONSÓRCIOS` -> `bradesco`). A parentable institution has a HIGHER-TIER industry — an
+# entry-tier/leaf player (a fund, a consórcio administrator) is a sub-entity, never a
+# parent, so those industries are excluded from parentability.
+_LEAF_INDUSTRIES = frozenset(
+    {"agri-funds", "real-estate-funds", "consorcio", "betting", "crypto"}
+)
+
+
+def _norm_brand(s: str | None) -> str:
+    return entity_registry.normalize_alias(s or "")
+
+
+def _build_parent_brand_idx(entities: list[dict[str, Any]]) -> dict[str, str]:
+    """Normalized brand/alias/entity-id -> institution id. Two passes so an exact key
+    (entity_id or a full alias) always beats a looser brand token."""
+    parentable = [
+        (e.get("entity_id"), {a for a in (e.get("aliases") or []) if a})
+        for e in entities
+        if e.get("entity_id") and set(e.get("industries") or []) - _LEAF_INDUSTRIES
+    ]
+    idx: dict[str, str] = {}
+    for eid, aliases in parentable:  # pass 1 — exact keys (any length; `bb` is valid)
+        idx.setdefault(_norm_brand(eid), eid)
+        for a in aliases:
+            idx.setdefault(a, eid)
+    for eid, _ in parentable:  # pass 2 — brand token, ≥3 chars to avoid generic 2-letter
+        tok = _norm_brand(eid.split("_")[0])  # collisions like "BR" -> br_partners
+        if tok and tok != _norm_brand(eid) and len(tok) >= 3:
+            idx.setdefault(tok, eid)
+    return idx
+
+
+def _resolve_parent(parent_brand_idx: dict[str, str], brand: str | None) -> str | None:
+    """The institution a sub-entity's brand belongs to — full brand then leading token."""
+    nb = _norm_brand(brand)
+    if not nb:
+        return None
+    return parent_brand_idx.get(nb) or parent_brand_idx.get(nb.split(" ")[0])
+
 
 # Generic / legal-form / fund-structure words that must not stand in for a brand.
 # A fund name reduced to only these has no distinctive brand → propose, don't
@@ -231,6 +276,147 @@ def _profile_from_fiagro(row: dict[str, Any]) -> dict[str, Any]:
         "as_of": row.get("as_of"),
         "url": row.get("url"),
     }
+
+
+def _profile_from_consorcio(row: dict[str, Any]) -> dict[str, Any]:
+    """Compose a registry-ready profile from a BCB consórcio administrator row."""
+    name = str(row.get("name") or "").strip()
+    root = _root8(row.get("cnpj"))
+    brand = _brand_from_name(name)
+    forms: list[str] = []
+    if name and len(name) >= 4:
+        forms.append(name)
+    if brand and brand.upper() not in {f.upper() for f in forms}:
+        forms.append(brand)
+    return {
+        "entity_id": _slug(brand) or f"consorcio-{root or 'unknown'}",
+        "display_name": brand or f"Consórcio {root or 'sem-cnpj'}",
+        "auto_ok": bool(brand),  # a distinctive brand is required to auto-create
+        "aliases": forms,
+        "cnpj_roots": [root] if root else [],
+        "industries": ["consorcio"],
+        "source": "bcb_consorcio",
+        "confidence": "cnpj",
+        "raw_name": name,
+        "as_of": row.get("as_of"),
+        "url": row.get("url"),
+    }
+
+
+def discover_consorcio(
+    *,
+    min_branches: int = 1,
+    max_new: int = 40,
+    auto_create: bool = True,
+    table: Any | None = None,
+    rows: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Sync the BCB consórcio administradoras into the registry (issue #46, ADR 017).
+
+    Resolve each administrator by CNPJ root: hit → enrich (industry `consorcio` +
+    tier-1 `parent` if its brand is a conglomerate's); miss → auto-create (clean brand)
+    or propose_review. Mirrors discover_fiagro; parent-linking uses the shared resolver
+    so "BRADESCO ADMINISTRADORA DE CONSÓRCIOS" nests under `bradesco`.
+    """
+    if rows is None:
+        from src.ingest import bcb_consorcio
+
+        rows = bcb_consorcio.fetch_consorcio()
+    rows = [r for r in rows if int(r.get("branches") or 0) >= min_branches]
+    report: dict[str, Any] = {
+        "fetched": len(rows), "created": [], "enriched": [], "already": 0,
+        "proposed": [], "skipped": [], "errors": [],
+    }
+    if not rows:
+        return report
+
+    entities = list(entity_registry.list_entities(table=table, include_inactive=True))
+    cnpj_idx: dict[str, str] = {}
+    disp_idx: dict[str, list[str]] = {}
+    for e in entities:
+        eid = e.get("entity_id")
+        if not eid:
+            continue
+        for r in e.get("cnpj_roots") or []:
+            cnpj_idx[str(r)[:8]] = eid
+        d = _norm_brand(e.get("display_name") or "")
+        if d:
+            disp_idx.setdefault(d, []).append(eid)
+    parent_idx = _build_parent_brand_idx(entities)
+
+    new_budget = max_new if auto_create else 0
+    for row in rows:
+        try:
+            profile = _profile_from_consorcio(row)
+        except Exception as exc:  # pragma: no cover
+            report["errors"].append({"row": row.get("cnpj"), "error": str(exc)})
+            continue
+        root = (profile.get("cnpj_roots") or [None])[0]
+        parent = _resolve_parent(parent_idx, profile.get("display_name"))
+        # A conglomerate's consórcio arm shares the parent's brand, so the naive slug
+        # (`bradesco`) would COLLIDE with — and overwrite — the parent. Give the arm a
+        # distinct sub-entity id + label and nest it under the parent (ADR 017).
+        if parent and profile["entity_id"] == parent:
+            profile["entity_id"] = f"{parent}-consorcio"
+            profile["display_name"] = f"{profile['display_name']} Consórcio"
+        eid = cnpj_idx.get(root) if root else None
+
+        if eid:  # already tracked → enrich (industry + parent), don't duplicate
+            try:
+                changed = entity_registry.accumulate_aliases(
+                    eid, profile.get("aliases") or [], table=table)
+                ent = entity_registry.get_entity(eid, table=table) or {}
+                if "consorcio" not in (ent.get("industries") or []):
+                    entity_registry.set_industries(
+                        eid, list(ent.get("industries") or []) + ["consorcio"], table=table)
+                    changed = True
+                if parent and parent != eid and not ent.get("parent"):
+                    changed = entity_registry.set_parent(eid, parent, table=table) or changed
+                if changed:
+                    report["enriched"].append(eid)
+                else:
+                    report["already"] += 1
+            except Exception as exc:  # pragma: no cover
+                report["errors"].append({"eid": eid, "error": str(exc)})
+            continue
+
+        if auto_create and new_budget > 0 and root and profile.get("auto_ok"):
+            nb = _norm_brand(profile["display_name"])
+            owners = {x for x in (disp_idx.get(nb) or []) if x != profile["entity_id"]}
+            # A brand that collides ONLY with the resolved tier-1 parent is the expected
+            # sub-entity case ("PORTO SEGURO" consórcio under porto_seguro) — nest it with
+            # a distinct id + label instead of proposing. Propose only on a FOREIGN collision.
+            if parent and owners and owners <= {parent}:
+                profile["entity_id"] = f"{parent}-consorcio"
+                profile["display_name"] = f"{profile['display_name']} Consórcio"
+                nb = _norm_brand(profile["display_name"])
+                owners = set()
+            if owners:  # brand collides with a different tracked entity → review, don't merge
+                pid = entity_registry.propose_review(
+                    kind="discovery", key=profile["entity_id"], proposed=profile["display_name"],
+                    reason="name_collision", hint=f"bcb_consorcio cnpj={root} owner={sorted(owners)[0]}",
+                    confidence="cnpj", payload={"profile": profile, "source": "bcb_consorcio", "cnpj": root},
+                    table=table)
+                report["proposed"].append(pid or profile["entity_id"])
+                continue
+            try:
+                entity_registry.put_entity(
+                    profile["entity_id"], profile["display_name"], profile.get("aliases") or [],
+                    cnpj_roots=profile.get("cnpj_roots") or [], industries=["consorcio"],
+                    confidence="cnpj", parent=parent,
+                    # Identity is the BCB filing, and many administradora brands are generic
+                    # words (Globo/Eldorado/Central) → structured-only, no fragile news match.
+                    news_search=False, table=table)
+                report["created"].append(profile["entity_id"])
+                new_budget -= 1
+                cnpj_idx[root] = profile["entity_id"]
+                if nb:
+                    disp_idx.setdefault(nb, []).append(profile["entity_id"])
+            except Exception as exc:  # pragma: no cover
+                report["errors"].append({"profile": profile.get("entity_id"), "error": str(exc)})
+        else:
+            report["skipped"].append(profile.get("entity_id"))
+    return report
 
 
 def discover_fiagro(
