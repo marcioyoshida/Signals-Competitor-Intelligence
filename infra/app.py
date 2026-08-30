@@ -107,6 +107,21 @@ class OncaPrototypeStack(Stack):
             removal_policy=None,
         )
 
+        # Phase D — per-tenant entitlement source of truth (ADR 002 Phase D + ADR 016).
+        # tenant_id -> {tier ∈ entry|saas|sovereign, modules[]}. The read boundary scopes
+        # the feed/agent to modules[]; tier selects the delivery plane. No record = no
+        # entitlement (fail closed). PK reserved in ADR 001.
+        tenant_config_table = dynamodb.Table(
+            self,
+            "OncaTenantConfig",
+            partition_key=dynamodb.Attribute(
+                name="tenant_id", type=dynamodb.AttributeType.STRING
+            ),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.RETAIN,
+        )
+        CfnOutput(self, "TenantConfigTable", value=tenant_config_table.table_name)
+
         # Provisioned out-of-band by infra/bootstrap.sh (account-level baseline
         # buckets, shared across future stacks) — import them, don't create them.
         digests_bucket = s3.Bucket.from_bucket_name(
@@ -1339,10 +1354,12 @@ class OncaPrototypeStack(Stack):
                 "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,  # coverage-gap store
                 "ONCA_KB_ID": knowledge_base.attr_knowledge_base_id,
                 "ONCA_SYNTH_MODEL_ID": os.environ.get("ONCA_SYNTH_MODEL_ID", "amazon.nova-lite-v1:0"),
+                "ONCA_TENANT_CONFIG_TABLE": tenant_config_table.table_name,  # Phase D
             },
         )
         site_bucket.grant_read(agent_fn)  # reads feed.json
         digests_bucket.grant_read_write(agent_fn)  # capture coverage gaps (ADR-014)
+        tenant_config_table.grant_read_data(agent_fn)  # Phase D: entitlement lookup
         agent_fn.add_to_role_policy(
             iam.PolicyStatement(
                 actions=["bedrock:Retrieve"],

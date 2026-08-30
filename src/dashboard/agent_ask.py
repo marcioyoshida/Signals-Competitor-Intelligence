@@ -535,6 +535,29 @@ def reputation_cards(feed: dict[str, Any]) -> list[dict[str, Any]]:
 
 # --- orchestrator (DI) ----------------------------------------------------
 
+def _scope_cards_to_modules(
+    cards: list[dict[str, Any]], feed: dict[str, Any], modules: list[str]
+) -> list[dict[str, Any]]:
+    """Phase D read boundary: keep only cards whose entity is in a licensed module,
+    via the entity→industries map in feed.entity_attrs. Empty modules ⇒ [] (fail
+    closed) — a card with no attributable entity is not entitled to a scoped tenant."""
+    mods = {str(m).strip().lower() for m in (modules or [])}
+    if not mods:
+        return []
+    attrs = feed.get("entity_attrs") or {}
+
+    def _ok(c: dict[str, Any]) -> bool:
+        for e in [c.get("entity"), *(c.get("entities") or [])]:
+            if not e:
+                continue
+            inds = {str(i).strip().lower() for i in ((attrs.get(e) or {}).get("industries") or [])}
+            if inds & mods:
+                return True
+        return False
+
+    return [c for c in cards if _ok(c)]
+
+
 def answer(
     q: str,
     *,
@@ -544,13 +567,20 @@ def answer(
     kb_retrieve: Callable[[str], list[dict[str, Any]]] | None = None,
     limit: int = 12,
     max_tokens: int = 700,
+    modules: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Pure orchestration: scope gate → ground → generate → validate citations."""
+    """Pure orchestration: scope gate → ground → generate → validate citations.
+
+    ``modules`` (Phase D) is the verified tenant's licensed modules: when not None the
+    grounding pool is scoped to entities in those modules (an empty list ⇒ no
+    entitlement ⇒ empty pool ⇒ honest decline). None ⇒ unscoped (operator/legacy)."""
     q = (q or "").strip()
     # Ground on the narrative feed, the durable distress store (ADR-012) AND the
     # per-entity classification facts (ADR-013: ownership/certifications).
     feed_cards = (list(feed.get("feed") or []) + distress_cards(feed)
                   + entity_fact_cards(feed) + reputation_cards(feed))
+    if modules is not None:
+        feed_cards = _scope_cards_to_modules(feed_cards, feed, modules)
     entity_vocab = set()
     for e in (feed.get("entities") or []):
         entity_vocab |= set(_tokens(e.get("entity") or ""))
@@ -677,12 +707,22 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     bucket = os.environ.get("ONCA_SITE_BUCKET")
     if not bucket:
         return _resp(500, {"error": "not configured"})
+    # Phase D read boundary: a verified tenant is scoped to its licensed modules.
+    # Provisioned-but-empty ⇒ [] ⇒ fail closed; no identity (legacy operator) ⇒ None
+    # ⇒ unscoped (full access), so the current dashboard is unchanged until cutover.
+    modules = None
+    if identity is not None and identity.tenant:
+        from src.dashboard.tenant_config import get_tenant_config
+
+        cfg = get_tenant_config(identity.tenant)
+        modules = list((cfg or {}).get("modules") or [])
     try:
         from src.synth.bedrock_llm import converse
         feed = _load_feed(bucket)
         result = answer(
             q, feed=feed, scope=scope, converser=converse,
             kb_retrieve=_kb_retrieve if os.environ.get("ONCA_KB_ID") else None,
+            modules=modules,
         )
         # Coverage-gap loop (capture stage): an IN-DOMAIN question that produced no
         # grounded answer is a data gap — record it for triage/remediation. An
