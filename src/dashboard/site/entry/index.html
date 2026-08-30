@@ -51,7 +51,7 @@
   .card.med { border-left-color: var(--t-med); } .card.low { border-left-color: var(--t-low); }
   .card h3 { margin: 0 0 4px; font-size: 15px; }
   .card .sub { color: var(--muted); font-size: 12px; display: flex; gap: 10px; flex-wrap: wrap; }
-  .card p { margin: 8px 0 0; color: var(--ink2); }
+  .card p { margin: 8px 0 0; color: var(--ink2); overflow-wrap: anywhere; }
   .card .inds { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
   .ind { font-size: 11px; color: var(--muted); border: 1px solid var(--border); border-radius: 6px; padding: 1px 7px; }
   .score { font-variant-numeric: tabular-nums; font-weight: 700; }
@@ -86,6 +86,23 @@ const state = { feed: null, on: new Set() };
 
 function sev(s) { return s >= 0.75 ? "crit" : s >= 0.5 ? "high" : s >= 0.25 ? "med" : "low"; }
 function esc(x) { return String(x == null ? "" : x).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
+
+// Narratives embed raw source URLs (e.g. 400-char Google-RSS links). Render them as
+// a compact ↗ anchor instead of overflowing text — trailing sentence punctuation is
+// kept outside the link. Non-URL text is escaped normally.
+function linkify(raw) {
+  const s = String(raw == null ? "" : raw), re = /https?:\/\/[^\s]+/g;
+  let out = "", last = 0, m;
+  while ((m = re.exec(s))) {
+    out += esc(s.slice(last, m.index));
+    let url = m[0], trail = "";
+    const tm = url.match(/[.,;:)\]]+$/);
+    if (tm) { trail = url.slice(url.length - tm[0].length); url = url.slice(0, -tm[0].length); }
+    out += `<a href="${esc(url)}" target="_blank" rel="noopener" class="cite" title="${esc(url)}">↗</a>` + esc(trail);
+    last = m.index + m[0].length;
+  }
+  return out + esc(s.slice(last));
+}
 
 function entityIndustries(feed) {
   const attrs = feed.entity_attrs || {};
@@ -135,7 +152,7 @@ function render() {
         <span class="score">score ${s.toFixed(2)}</span>
         ${c.is_alert ? '<span class="alert">● alerta</span>' : ""}
       </div>
-      <p>${esc(c.narrative || "")}</p>
+      <p>${linkify(c.narrative || "")}</p>
       <div class="inds">${inds.map(i => `<span class="ind">${esc(ENTRY_LABELS[i])}</span>`).join("")}
         ${cite && cite.url ? `<a class="cite" href="${esc(cite.url)}" target="_blank" rel="noopener">fonte ↗</a>` : ""}</div>
     </article>`;
