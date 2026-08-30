@@ -51,11 +51,10 @@
   }
   .tile .n { font-size: 26px; font-weight: 650; letter-spacing: .3px; }
   .tile .l { color: var(--muted); font-size: 12px; margin-top: 2px; }
-  .cols { display: grid; grid-template-columns: 1fr 340px; gap: 18px; margin-top: 18px; }
-  /* Let the 1fr track shrink instead of being blown out by a long unbreakable
-     token (e.g. a raw news URL in a narrative) that would push content offscreen. */
-  .cols > * { min-width: 0; }
-  @media (max-width: 900px) { .cols { grid-template-columns: 1fr; } .kpis { grid-template-columns: repeat(2,1fr); } }
+  /* Main column is full-width now that Cobertura & Monitor lives in a pull-out
+     side panel (issue #39) — the feed reclaims the space the 340px rail used. */
+  .main { margin-top: 18px; min-width: 0; }
+  @media (max-width: 900px) { .kpis { grid-template-columns: repeat(2,1fr); } }
   .panel {
     background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
     box-shadow: var(--shadow);
@@ -125,30 +124,33 @@
   .askans .cite:hover { background: var(--accent); color: #fff; }
   .askans .cref { color: var(--accent); font-weight: 600; cursor: pointer; }
   .askans .thinking { color: var(--muted); }
-  /* Pontos Cegos — lateral vertical tab + slide-in drawer */
-  .gapstab { position: fixed; right: 0; top: 50%; transform: translateY(-50%);
-    z-index: 40; writing-mode: vertical-rl; text-orientation: mixed;
+  /* Side-panel rail — a stack of pull-out tabs (Cobertura & Monitor, Pontos Cegos)
+     sharing one slide-in drawer pattern so the pair reads as a matched affordance. */
+  .railtabs { position: fixed; right: 0; top: 50%; transform: translateY(-50%);
+    z-index: 40; display: flex; flex-direction: column; gap: 10px; }
+  .railtab { writing-mode: vertical-rl; text-orientation: mixed;
     background: var(--accent); color: #fff; border: none; cursor: pointer;
     padding: 16px 8px; border-radius: 10px 0 0 10px; font: inherit; font-weight: 700;
     font-size: 13px; letter-spacing: .04em; box-shadow: -2px 0 10px rgba(0,0,0,.18); }
-  .gapstab:hover { filter: brightness(1.08); }
-  .gapstab .gcountbadge { display: block; margin-top: 8px; background: #fff; color: var(--accent);
+  .railtab:hover { filter: brightness(1.08); }
+  .railtab .rtbadge { display: block; margin-top: 8px; background: #fff; color: var(--accent);
     border-radius: 999px; padding: 1px 6px; font-size: 11px; writing-mode: horizontal-tb; text-align: center; }
-  .gapstab .gcountbadge:empty { display: none; }
-  .gapsdrawer { position: fixed; top: 0; right: 0; height: 100vh; width: min(440px, 92vw);
+  .railtab .rtbadge:empty { display: none; }
+  .drawer { position: fixed; top: 0; right: 0; height: 100vh; width: min(440px, 92vw);
     z-index: 60; background: var(--panel); border-left: 1px solid var(--border);
     box-shadow: -8px 0 28px rgba(0,0,0,.28); transform: translateX(100%);
     transition: transform .22s ease; overflow-y: auto; }
-  .gapsdrawer.open { transform: translateX(0); }
-  .gdhead { display: flex; align-items: center; justify-content: space-between;
+  .drawer.open { transform: translateX(0); }
+  .drhead { display: flex; align-items: center; justify-content: space-between;
     padding: 14px 16px 4px; }
-  .gdhead h2 { margin: 0; }
-  .gdclose { background: none; border: none; color: var(--muted); font-size: 18px; cursor: pointer; }
-  .gdclose:hover { color: var(--fg); }
+  .drhead h2 { margin: 0; }
+  .drclose { background: none; border: none; color: var(--muted); font-size: 18px; cursor: pointer; }
+  .drclose:hover { color: var(--fg); }
   #gaps { padding: 8px 16px 24px; }
-  .gapsscrim { position: fixed; inset: 0; z-index: 55; background: rgba(0,0,0,.32);
+  #indmon { padding-bottom: 10px; }
+  .drawerscrim { position: fixed; inset: 0; z-index: 55; background: rgba(0,0,0,.32);
     opacity: 0; pointer-events: none; transition: opacity .22s ease; }
-  .gapsscrim.open { opacity: 1; pointer-events: auto; }
+  .drawerscrim.open { opacity: 1; pointer-events: auto; }
   .gaprow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 11px 2px; border-bottom: 1px solid var(--border); }
   .gaprow .gq { flex: 1 1 100%; font-size: 14px; font-weight: 500; }
   .gaprow .gresult { flex: 1 1 100%; font-size: 12px; color: var(--muted); }
@@ -358,16 +360,15 @@
   .mcard .mtitle { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
   .mcard .mdetail { color: var(--muted); font-size: 12.5px; line-height: 1.4; }
   .mcard .mmeta { color: var(--muted); font-size: 11px; margin-top: 6px; }
-  /* Right-hand rail: supportive panels (macro / industry coverage) stacked beside
-     the feed, each collapsible via its header — off by default (supporting info). */
-  .rail { display: flex; flex-direction: column; gap: 18px; align-self: start; }
+  /* Supportive full-width card below the feed (macro) — collapsible via its
+     header, off by default (supporting info, not primary content). */
+  .railcard { margin-top: 18px; }
   .railcard .railhead { display: flex; align-items: center; justify-content: space-between;
     gap: 8px; cursor: pointer; user-select: none; margin: 0; }
   .railcard .railtog { background: none; border: 0; color: var(--muted); cursor: pointer;
     font-size: 13px; line-height: 1; padding: 2px 4px; }
   .railcard.collapsed .railbody { display: none; }
   .railcard .railbody { overflow-x: auto; }
-  .railcard .macrocards { grid-template-columns: 1fr; padding: 8px 0 2px; }
   .empty { padding: 40px; text-align: center; color: var(--muted); }
   .hidden { display: none !important; }
   .tip { position: fixed; pointer-events: none; background: var(--ink); color: var(--bg);
@@ -397,40 +398,31 @@
     <div class="askans" id="askAns" style="display:none"></div>
   </section>
 
-  <div class="cols">
-    <div class="panel">
-      <h2>Feed priorizado por ameaça</h2>
-      <div class="filters">
-        <select id="fEntity"><option value="">Todas as entidades</option></select>
-        <select id="fTopic"><option value="">Todos os temas</option></select>
-        <select id="fLens"><option value="">Todas as fontes</option></select>
-        <select id="fDate"><option value="">Todas as datas</option></select>
-        <label class="chk"><input type="checkbox" id="fAlert" /> Somente alertas</label>
-        <button class="btn" id="viewToggle" title="Resumir para um cartão por entidade">Por entidade</button>
-        <input type="search" id="fSearch" placeholder="Buscar nas narrativas…" style="flex:1;min-width:140px" />
-      </div>
-      <div class="hint">Cada cartão reúne sinais de várias fontes (as “lentes”) sobre a mesma entidade e traz o link de cada fonte. O nível de ameaça é uma estimativa que combina quantas fontes e quão relevantes são.</div>
-      <div class="legend" id="legend"></div>
-      <div id="frameworksPanel"></div>
-      <div class="feed" id="feed"></div>
-      <div id="tableView" class="hidden" style="padding:6px 12px 16px"></div>
+  <div class="panel main">
+    <h2>Feed priorizado por ameaça</h2>
+    <div class="filters">
+      <select id="fEntity"><option value="">Todas as entidades</option></select>
+      <select id="fTopic"><option value="">Todos os temas</option></select>
+      <select id="fLens"><option value="">Todas as fontes</option></select>
+      <select id="fDate"><option value="">Todas as datas</option></select>
+      <label class="chk"><input type="checkbox" id="fAlert" /> Somente alertas</label>
+      <button class="btn" id="viewToggle" title="Resumir para um cartão por entidade">Por entidade</button>
+      <input type="search" id="fSearch" placeholder="Buscar nas narrativas…" style="flex:1;min-width:140px" />
     </div>
-
-    <div class="rail">
-      <div class="panel">
-        <h2>Cobertura &amp; monitor <span style="text-transform:none;letter-spacing:0">· entidades por indústria</span></h2>
-        <div class="hint">Cada indústria é um add-on de assinatura. Os números resumem o período; abra uma indústria para ver o pico de ameaça de cada entidade.</div>
-        <div id="indmon"></div>
-      </div>
-      <section class="panel railcard collapsed" id="railMacro" style="display:none">
-        <h2 class="railhead">Macro · Copom &amp; Focus <button class="railtog" aria-label="Mostrar/ocultar">▸</button></h2>
-        <div class="railbody">
-          <div class="hint">Contexto macro do mercado (BCB): decisão do Copom / Selic e as expectativas do Relatório Focus. Sinais amplos de mercado — não são de um concorrente específico.</div>
-          <div id="macro"></div>
-        </div>
-      </section>
-    </div>
+    <div class="hint">Cada cartão reúne sinais de várias fontes (as “lentes”) sobre a mesma entidade e traz o link de cada fonte. O nível de ameaça é uma estimativa que combina quantas fontes e quão relevantes são.</div>
+    <div class="legend" id="legend"></div>
+    <div id="frameworksPanel"></div>
+    <div class="feed" id="feed"></div>
+    <div id="tableView" class="hidden" style="padding:6px 12px 16px"></div>
   </div>
+
+  <section class="panel railcard collapsed" id="railMacro" style="display:none">
+    <h2 class="railhead">Macro · Copom &amp; Focus <button class="railtog" aria-label="Mostrar/ocultar">▸</button></h2>
+    <div class="railbody">
+      <div class="hint">Contexto macro do mercado (BCB): decisão do Copom / Selic e as expectativas do Relatório Focus. Sinais amplos de mercado — não são de um concorrente específico.</div>
+      <div id="macro"></div>
+    </div>
+  </section>
 
   <div class="panel" id="lowerPanel" style="margin-top:28px;display:none">
     <h2>Revisão de entidades</h2>
@@ -441,19 +433,35 @@
   <p class="est" style="margin:16px 6px">O nível de ameaça é uma estimativa heurística (não é um modelo validado). Cada afirmação tem link para a sua fonte.</p>
 </div>
 
-<!-- Pontos Cegos: lateral vertical tab + slide-in drawer -->
-<button class="gapstab" id="gapsTab" style="display:none" title="Perguntas que a base ainda não responde">
-  <span class="glabel">Pontos Cegos</span><span class="gcountbadge" id="gapsCount"></span>
-</button>
-<aside class="gapsdrawer" id="gapsDrawer" aria-hidden="true">
-  <div class="gdhead">
+<!-- Side-panel rail (issue #39): two pull-out drawers sharing one affordance —
+     Cobertura & Monitor and Pontos Cegos — stacked as a matched pair of tabs. -->
+<div class="railtabs">
+  <button class="railtab" id="covTab" title="Cobertura por indústria e monitor de entidades">
+    <span class="rtlabel">Cobertura</span><span class="rtbadge" id="covCount"></span>
+  </button>
+  <button class="railtab" id="gapsTab" style="display:none" title="Perguntas que a base ainda não responde">
+    <span class="rtlabel">Pontos Cegos</span><span class="rtbadge" id="gapsCount"></span>
+  </button>
+</div>
+
+<aside class="drawer" id="covDrawer" aria-hidden="true">
+  <div class="drhead">
+    <h2>Cobertura &amp; Monitor</h2>
+    <button class="drclose" data-close="covDrawer" aria-label="Fechar">✕</button>
+  </div>
+  <div class="hint" style="padding:0 16px">Cada indústria é um add-on de assinatura. Os números resumem o período; abra uma indústria para ver o pico de ameaça de cada entidade.</div>
+  <div id="indmon"></div>
+</aside>
+
+<aside class="drawer" id="gapsDrawer" aria-hidden="true">
+  <div class="drhead">
     <h2>Pontos Cegos</h2>
-    <button class="gdclose" id="gapsClose" aria-label="Fechar">✕</button>
+    <button class="drclose" data-close="gapsDrawer" aria-label="Fechar">✕</button>
   </div>
   <div class="hint" style="padding:0 16px">Perguntas dentro do escopo que a base ainda não responde. <b>Remediar</b> corrige o que é seguro (curadoria/atributos do registro) e reverifica; o que exige nova fonte vira issue no GitHub.</div>
   <div id="gaps"></div>
 </aside>
-<div class="gapsscrim" id="gapsScrim"></div>
+<div class="drawerscrim" id="drawerScrim"></div>
 
 <div class="tip" id="tip"></div>
 
@@ -598,6 +606,8 @@ function renderIndustryMonitor() {
     return { ind, ents };
   });
   const orphans = (DATA.entities || []).filter(e => !placed.has(e.entity));
+  const covBadge = document.getElementById("covCount");
+  if (covBadge) covBadge.textContent = inds.length ? String(inds.length) : "";
   if (!groups.length && !orphans.length) {
     el.innerHTML = `<div class="indempty">Sem dados de cobertura no período.</div>`;
     return;
@@ -643,6 +653,9 @@ function wireIndMonitor(el) {
     state.entity = state.entity === en ? "" : en;
     document.getElementById("fEntity").value = state.entity;
     syncEntityHighlight(); render();
+    // Picking an entity here targets the feed behind the drawer — close it so
+    // the filtered result is immediately visible.
+    toggleDrawer("covDrawer", false);
   });
   const tip = document.getElementById("tip");
   el.querySelectorAll("circle").forEach(c => {
@@ -740,12 +753,24 @@ async function remediateGap(btn) {
     btn.textContent = "Falhou"; setTimeout(() => { btn.textContent = prev; btn.disabled = false; }, 2500);
   }
 }
-function toggleGaps(open) {
-  const d = document.getElementById("gapsDrawer"), s = document.getElementById("gapsScrim");
-  const on = open === undefined ? !d.classList.contains("open") : open;
-  d.classList.toggle("open", on); s.classList.toggle("open", on);
-  d.setAttribute("aria-hidden", on ? "false" : "true");
+// Generic pull-out drawer control shared by Cobertura & Monitor and Pontos
+// Cegos (issue #39) — only one of the pair is open at a time, sharing one scrim.
+function closeDrawers() {
+  document.querySelectorAll(".drawer.open").forEach(d => {
+    d.classList.remove("open"); d.setAttribute("aria-hidden", "true");
+  });
+  document.getElementById("drawerScrim").classList.remove("open");
 }
+function toggleDrawer(id, open) {
+  const d = document.getElementById(id);
+  const willOpen = open === undefined ? !d.classList.contains("open") : open;
+  closeDrawers();
+  if (willOpen) {
+    d.classList.add("open"); d.setAttribute("aria-hidden", "false");
+    document.getElementById("drawerScrim").classList.add("open");
+  }
+}
+function toggleGaps(open) { toggleDrawer("gapsDrawer", open); }
 
 function renderMacro() {
   const m = DATA.macro || {};
@@ -1632,11 +1657,14 @@ document.getElementById("askBtn").onclick = askOnca;
 document.getElementById("askInput").addEventListener("keydown", e => { if (e.key === "Enter") askOnca(); });
 renderAskExamples();
 
-// Pontos Cegos lateral drawer open/close.
-document.getElementById("gapsTab").onclick = () => toggleGaps(true);
-document.getElementById("gapsClose").onclick = () => toggleGaps(false);
-document.getElementById("gapsScrim").onclick = () => toggleGaps(false);
-document.addEventListener("keydown", e => { if (e.key === "Escape") toggleGaps(false); });
+// Side-panel rail (issue #39): Cobertura & Monitor + Pontos Cegos pull-out
+// drawers, opened from their tabs, closed via their own ✕, the shared scrim,
+// or Escape (mutually exclusive — opening one closes the other).
+document.getElementById("covTab").onclick = () => toggleDrawer("covDrawer", true);
+document.getElementById("gapsTab").onclick = () => toggleDrawer("gapsDrawer", true);
+document.querySelectorAll(".drclose").forEach(b => b.onclick = () => toggleDrawer(b.dataset.close, false));
+document.getElementById("drawerScrim").onclick = () => closeDrawers();
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeDrawers(); });
 
 document.addEventListener("click", e => {
   const b = e.target.closest(".rbtn");
@@ -1646,16 +1674,14 @@ document.addEventListener("click", e => {
     const box = pb.closest(".pactions");
     decideProposal(box.dataset.pid, box.dataset.queue, pb.dataset.dec, pb);
   }
-});
-
-// Collapse/expand a rail card by clicking its header.
-document.querySelector(".rail").addEventListener("click", e => {
+  // Collapse/expand a rail card (macro) by clicking its header.
   const head = e.target.closest(".railhead");
-  if (!head) return;
-  const card = head.closest(".railcard");
-  const collapsed = card.classList.toggle("collapsed");
-  const tog = head.querySelector(".railtog");
-  if (tog) tog.textContent = collapsed ? "▸" : "▾";
+  if (head) {
+    const card = head.closest(".railcard");
+    const collapsed = card.classList.toggle("collapsed");
+    const tog = head.querySelector(".railtog");
+    if (tog) tog.textContent = collapsed ? "▸" : "▾";
+  }
 });
 
 boot();
