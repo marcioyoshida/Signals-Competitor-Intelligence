@@ -1592,13 +1592,13 @@ document.getElementById("tableToggle").onclick = (e) => {
 };
 
 // --- Auth (Cognito Hosted UI, Authorization Code + PKCE, public SPA client) ---
-// Fronts the NEW authenticated agent API (AuthApiUrl). The legacy same-origin
-// /api/ask (CloudFront + origin secret) keeps working unauthenticated for other
-// callers; only the "Perguntar" panel below is wired to the token-bearing call.
+// The "Perguntar" panel POSTs SAME-ORIGIN `/api/ask` with `Authorization: Bearer
+// <id_token>`; CloudFront routes /api/ask to the Cognito-JWT-verified HTTP API
+// (no origin secret, no edge basic-auth on that path). apiUrl is "" = same origin.
 const AUTH = {
   domain: "https://onca-668449743071.auth.us-east-1.amazoncognito.com",
   clientId: "7qlquhh56o06tp9bo8gp77p385",
-  apiUrl: "https://azml8kx82k.execute-api.us-east-1.amazonaws.com",
+  apiUrl: "",  // same origin — /api/ask is fronted by CloudFront -> HTTP API (JWT)
   // Must exactly match the Cognito app client's registered callback/logout URL.
   redirectUri: location.origin + "/",
 };

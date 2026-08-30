@@ -1375,25 +1375,12 @@ class OncaPrototypeStack(Stack):
                 ],
             )
         )
-        agent_url = agent_fn.add_function_url(
-            auth_type=lambda_.FunctionUrlAuthType.NONE
-        )
-        distribution.add_behavior(
-            "/api/ask/*",
-            cf_origins.FunctionUrlOrigin(
-                agent_url, custom_headers={"X-Onca-Origin": origin_secret}
-            ),
-            viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-            allowed_methods=cloudfront.AllowedMethods.ALLOW_ALL,
-            cache_policy=cloudfront.CachePolicy.CACHING_DISABLED,
-            origin_request_policy=cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
-            function_associations=[
-                cloudfront.FunctionAssociation(
-                    function=auth_fn,
-                    event_type=cloudfront.FunctionEventType.VIEWER_REQUEST,
-                )
-            ],
-        )
+        # NOTE: /api/ask is CUT OVER to the Cognito-JWT-verified HTTP API below
+        # (same origin, no Lambda function URL, no origin secret, no edge basic-auth).
+        # The agent Lambda is invoked only through that authorated ingress now, so it
+        # no longer needs a public function URL. Its ONCA_ORIGIN_SECRET env stays as a
+        # fail-closed backstop (nothing injects X-Onca-Origin on this path, so the
+        # dual-gate requires a verified identity).
         # Coverage-gap API (ADR-014): the "Pontos Cegos" dashboard surface + the
         # Remediar button (single-gap remediation: triage → safe backfill → re-ask
         # the agent → resolve). Needs the union of the agent's + registry's access
@@ -1458,12 +1445,13 @@ class OncaPrototypeStack(Stack):
         )
         # --- Phase C increment 2: authenticated API path (API Gateway HTTP API +
         # Cognito JWT authorizer) -----------------------------------------------------
-        # ADDITIVE + transition-safe: the CloudFront → Lambda-URL + origin-secret path
-        # above is untouched (the current tokenless dashboard keeps working). This adds a
-        # SECOND ingress that VERIFIES a Cognito JWT (API Gateway does the crypto) and
-        # passes the tenant claims to the SAME Lambdas; the handlers accept EITHER a
-        # verified identity OR the origin secret (src/dashboard/auth.py). Once the
-        # Hosted-UI login is wired and traffic cuts over, the origin-secret path retires.
+        # This HTTP API VERIFIES a Cognito JWT (API Gateway does the crypto) and passes
+        # the tenant claims to the SAME Lambdas. `/api/ask` is CUT OVER to it (see the
+        # same-origin CloudFront behavior below) — the agent's public Lambda function URL
+        # + origin-secret path are gone. `/api/gaps` GET is also modeled here; its POST
+        # sub-path (/api/gaps/remediate) is not yet, so the gaps CloudFront behavior stays
+        # on the Lambda-URL + origin-secret path until that path is fully modeled. The
+        # operator surfaces (registry/run/review) remain origin-secret + edge basic-auth.
         jwt_authorizer = apigwv2_auth.HttpJwtAuthorizer(
             "OncaJwtAuthorizer",
             f"https://cognito-idp.{self.region}.amazonaws.com/{user_pool.user_pool_id}",
@@ -1474,10 +1462,16 @@ class OncaPrototypeStack(Stack):
             self,
             "OncaAuthApi",
             api_name="onca-auth-api",
+            # `/api/ask` is now SAME-ORIGIN via CloudFront, so no CORS preflight is
+            # needed for the dashboard. Keep a permissive-origin CORS only so the API
+            # stays directly callable (e.g. from tooling) — a bearer token is the gate,
+            # never a cookie, so a wildcard origin is safe (no allow_credentials). This
+            # also breaks the CloudFront<->HTTP API circular dependency that referencing
+            # the distribution's own domain here would create.
             cors_preflight=apigwv2.CorsPreflightOptions(
                 allow_headers=["authorization", "content-type"],
                 allow_methods=[apigwv2.CorsHttpMethod.POST, apigwv2.CorsHttpMethod.GET],
-                allow_origins=[f"https://{distribution.distribution_domain_name}"],
+                allow_origins=["*"],
             ),
         )
         auth_api.add_routes(
@@ -1493,6 +1487,30 @@ class OncaPrototypeStack(Stack):
             authorizer=jwt_authorizer,
         )
         CfnOutput(self, "AuthApiUrl", value=auth_api.api_endpoint)
+
+        # Cut over /api/ask to the JWT-verified HTTP API, SAME ORIGIN via CloudFront.
+        # The dashboard now POSTs same-origin `/api/ask` with `Authorization: Bearer
+        # <id_token>`; CloudFront forwards it (Authorization included, Host stripped) to
+        # the HTTP API, whose Cognito authorizer does the crypto before the agent Lambda
+        # ever runs. No edge basic-auth on this behavior (the JWT is the gate), and no
+        # origin secret. Registered BEFORE the /api/* catch-all (insertion order).
+        # Point the CloudFront origin at the HTTP API by its STABLE regional domain
+        # rather than the `auth_api.http_api_id` token. Referencing the token would make
+        # the distribution DependsOn the API, and because the Cognito app client's OAuth
+        # callback URL references the distribution's own domain, that closes a CFN
+        # circular dependency (distribution -> API -> authorizer -> client -> distribution).
+        # The API id is stable for the life of the HTTP API; override via env for a fresh
+        # account/region (read the AuthApiUrl output after the first create-only deploy).
+        _auth_api_id = os.environ.get("ONCA_AUTH_API_ID", "azml8kx82k")
+        api_domain = f"{_auth_api_id}.execute-api.{self.region}.amazonaws.com"
+        distribution.add_behavior(
+            "/api/ask*",
+            cf_origins.HttpOrigin(api_domain),
+            viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+            allowed_methods=cloudfront.AllowedMethods.ALLOW_ALL,
+            cache_policy=cloudfront.CachePolicy.CACHING_DISABLED,
+            origin_request_policy=cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+        )
 
         # /api/* catch-all (review action) — registered AFTER /api/registry/* and
         # /api/run/* so the specific patterns win; everything else under /api/ lands here.
