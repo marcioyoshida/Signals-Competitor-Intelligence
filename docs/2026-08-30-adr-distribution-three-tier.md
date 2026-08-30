@@ -85,6 +85,22 @@ For fragmented, high-count, low-ARPU verticals where per-tenant cost must approa
   distribution/tenant caps, custom-domain/cert handling) before committing — feature specifics
   post-date this doc's knowledge cutoff.*
 
+**Derived projection, not a parallel pipeline — "don't fork the pipeline; fork the feed."**
+The Entry Portal is a *filtered slice of the one full feed*, never a second sensor. The
+**single** pipeline (ingest → synth → detectors → feed builder) runs once over **all** entities
+— that is the moat and the full-coverage source of truth, kept **unchanged**. The feed builder
+then emits one additional **entry-scoped feed**: filter to the entry-vertical industry modules
+(`consórcio`, `agri-funds`/`real-estate-funds`, `betting`, `crypto`) using the `industries[]`
+each card already carries, and write it as the static shards CloudFront multi-tenant serves.
+Three consequences fall out for free: **(a)** the original keeps tracking every entity across
+every industry, untouched; **(b)** the entry feed can never contain *more* than the original —
+it is a strict filtered slice, so no un-entitled module leaks and there is no drift to keep in
+sync; **(c)** zero extra ingest/synth cost — just one more scoped write. The Entry **dashboard**
+is derived the same way: a **thin static glass** reading the scoped feed (no API, no
+per-request Lambda), reusing the frontend components with the dynamic bits (agent Q&A, live
+filters) stripped — those stay on SaaS. A second parallel ingest+synth pipeline is explicitly
+rejected: it would fork the moat, duplicate Bedrock/ingest cost, and drift from the original.
+
 ## ② SaaS Platform — dynamic API + dashboard
 
 The default for interactive mid verticals (the richest product surface).
@@ -156,7 +172,10 @@ but not a product goal.
 
 ## Build deltas (against ADR 015)
 - **Entry**: a CloudFront multi-tenant distribution template + per-tenant provisioning;
-  extend the feed builder to emit per-tenant/module **scoped static shards** at write time.
+  extend the feed builder to emit a **derived, entry-scoped feed** (filter the single full feed
+  by entry-vertical industry modules) as per-tenant/module **scoped static shards** at write
+  time — **not** a parallel pipeline; + a **thin static Entry dashboard** reading the scoped
+  feed (frontend components reused, dynamic surfaces stripped).
 - **SaaS**: already the ADR 015 Portal dynamic path (Pattern A feed Lambda + dashboard + agent).
 - **Sovereign**: ADR 015 Marketplace / ADR 005 deltas unchanged (tenant-deployable CDK stack,
   `tenant_s3` lens, `/resolve` hardening, metering).
