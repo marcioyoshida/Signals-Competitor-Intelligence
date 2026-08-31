@@ -472,6 +472,20 @@
   .mapasvg .mapabubble:hover circle { opacity: .8; }
   .mapasvg .mapalabel { fill: var(--ink); font-size: 10.5px; font-weight: 650; }
   .mapasvg .mapawarn { fill: var(--t-crit); font-size: 11px; font-weight: 700; }
+  /* Degenerate-momentum fallback (ADR 015 §4 fix): honest threat-ranked list in
+     the same slot the scatter would occupy, when momentum has zero spread. */
+  .mapafallback { padding: 2px 0 4px; }
+  .mapafbmsg { font-size: 12.5px; font-weight: 650; color: var(--ink2); padding: 0 0 12px; }
+  .mapafbrow { display: flex; align-items: center; gap: 10px; padding: 7px 0;
+    border-bottom: 1px solid var(--border); cursor: pointer; }
+  .mapafbrow:last-child { border-bottom: 0; }
+  .mapafbrow:hover .mapafbname { color: var(--accent); }
+  .mapafbname { flex: 0 0 128px; font-size: 12.5px; font-weight: 600;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mapafbbar-wrap { flex: 1; height: 10px; border-radius: 5px; background: var(--panel2); overflow: hidden; }
+  .mapafbbar { display: block; height: 100%; border-radius: 5px; }
+  .mapafbval { flex: 0 0 36px; text-align: right; font-size: 11.5px; color: var(--muted);
+    font-variant-numeric: tabular-nums; }
   .mapacaption { padding: 0 16px 12px; color: var(--muted); font-size: 11.5px; line-height: 1.45; }
   .momcol { width: 240px; flex-shrink: 0; border-left: 1px solid var(--border); padding-left: 16px; }
   @media (max-width: 900px) { .mapawrap { flex-direction: column; }
@@ -1313,8 +1327,12 @@ function renderMapa() {
   renderMapaChart(rows);
   renderMomentumRanking(rows);
   const days = (DATA.dates || []).length;
+  const wrap = document.getElementById("mapaSvgWrap");
+  const dodgeNote = wrap.dataset.dodged === "1"
+    ? " Bolhas muito próximas são afastadas levemente para ficarem distinguíveis — a posição exata de cada uma está sempre no tooltip."
+    : "";
   document.getElementById("mapaCaption").textContent =
-    `Momentum conta sinais de novos entrantes, ofertas de distribuição, novas classes de fundos e movimentação Pix na janela de ${days} dia(s) — não inclui contratação (sem fonte de RH licenciada ainda). Cobertura de participação de mercado (IF.data) é parcial: bolhas tracejadas indicam entidade ainda sem correspondência.`;
+    `Momentum conta sinais de novos entrantes, ofertas de distribuição, novas classes de fundos e movimentação Pix na janela de ${days} dia(s) — não inclui contratação (sem fonte de RH licenciada ainda). Cobertura de participação de mercado (IF.data) é parcial: bolhas tracejadas indicam entidade ainda sem correspondência.${dodgeNote}`;
 }
 // NULL_SHARE_R: fixed radius for entities with no resolved IF.data share — a
 // deliberately small, hollow placeholder, never a guessed size.
@@ -1325,17 +1343,88 @@ function mapaRadius(share, shareMax) {
   const r = 6 + 22 * Math.sqrt(Math.max(0, share) / shareMax);
   return Math.max(6, Math.min(28, r));
 }
+// Greedy pairwise decollision (a lightweight beeswarm/force-separation pass,
+// no external layout lib needed for a buildless page): nudges circles apart
+// when they overlap. Y (threat) is the axis with real analytical meaning —
+// its axis position must stay legible — so vertical movement is damped to a
+// fraction of the horizontal push; the underlying momentum/threat VALUES are
+// never altered, only the on-screen dot. This is what turns "everyone stacked
+// on the x=0 column" into a readable cluster of distinguishable dots.
+function dodgeBubbles(items, bounds, padding) {
+  for (let iter = 0; iter < 10; iter++) {
+    let moved = false;
+    for (let i = 0; i < items.length; i++) {
+      for (let j = i + 1; j < items.length; j++) {
+        const a = items[i], b = items[j];
+        let dx = b.x - a.x, dy = b.y - a.y;
+        let dist = Math.hypot(dx, dy);
+        const minDist = a.rad + b.rad + padding;
+        if (dist < minDist) {
+          moved = true;
+          if (dist < 0.01) { dx = (i % 2 === 0 ? 1 : -1); dy = 0; dist = 1; }
+          const push = (minDist - dist) / 2;
+          const ux = dx / dist, uy = dy / dist;
+          a.x -= ux * push; a.y -= uy * push * 0.25;
+          b.x += ux * push; b.y += uy * push * 0.25;
+        }
+      }
+    }
+    if (!moved) break;
+  }
+  items.forEach(p => {
+    p.x = Math.max(bounds.l + p.rad, Math.min(bounds.l + bounds.w - p.rad, p.x));
+    p.y = Math.max(bounds.t + p.rad, Math.min(bounds.t + bounds.h - p.rad, p.y));
+  });
+}
+// ADR 015 §4 fix: a Threat×Momentum SCATTER is meaningless when momentum has
+// zero spread (everyone tied, typically all 0 — expansion signals are sparse
+// and the entities surfacing at high threat are incumbents with regulatory/
+// news narratives, not expansion). Plotting it anyway produces a vertical
+// pile with illegible stacked labels — the exact bug this replaces. Instead:
+// stay in the SAME panel but switch to an honest, still-informational view —
+// a threat-ranked list (reusing the peak_score everyone already trusts
+// elsewhere in the product) — rather than a blank/apologetic empty state.
+function renderMapaThreatFallback(rows, wrap) {
+  const ranked = [...rows].sort((a, b) => b.threat - a.threat);
+  const rowsHtml = ranked.map(r => {
+    const tier = tierOf(r.threat);
+    const bar = hexToRgba(cssvar(tier.var), 0.22 + 0.55 * r.threat);
+    const distress = r.distress
+      ? `<span class="distress-badge" title="${esc(r.distress.label || r.distress.kind)}">⚠ ${esc(r.distress.label || r.distress.kind)}</span>` : "";
+    return `<div class="mapafbrow" data-entity="${esc(r.entity)}" title="${esc(r.label)}: ameaça ${r.threat.toFixed(2)} (${tier.label})">
+      <div class="mapafbname entity-link">${esc(r.label)}</div>
+      <div class="mapafbbar-wrap"><span class="mapafbbar" style="width:${Math.round(r.threat * 100)}%;background:${bar}"></span></div>
+      <div class="mapafbval">${r.threat.toFixed(2)}</div>
+      <span class="tier" style="background:${cssvar(tier.var)}">${tier.label}</span>
+      ${distress}
+    </div>`;
+  }).join("");
+  wrap.innerHTML = `<div class="mapafallback">
+    <div class="mapafbmsg">Sem sinais de expansão no período — exibindo ranking por ameaça.</div>
+    <div class="mapafblist">${rowsHtml}</div>
+  </div>`;
+  wrap.dataset.dodged = "0";
+  wrap.querySelectorAll(".mapafbrow").forEach(r => r.onclick = () => jumpToEntityFromRadar(r.dataset.entity));
+}
 function renderMapaChart(rows) {
   const wrap = document.getElementById("mapaSvgWrap");
   // ADR 015 §4 guardrail: a sparse window (<2 plottable entities) reads as the
   // whole field if plotted — refuse rather than mislead.
   if (rows.length < 2) {
     wrap.innerHTML = `<div class="indempty">Dados insuficientes para o mapa neste período.</div>`;
+    wrap.dataset.dodged = "0";
+    return;
+  }
+  const moms = rows.map(r => r.momentum);
+  // Degenerate case: momentum has NO spread (everyone tied — all 0 in
+  // practice). An X axis with a single value conveys nothing; fall back to
+  // an honest threat ranking in the same panel instead of a fake scatter.
+  if (Math.max(...moms) <= Math.min(...moms)) {
+    renderMapaThreatFallback(rows, wrap);
     return;
   }
   const W = 640, H = 380, m = { l: 54, r: 18, t: 18, b: 46 };
   const plotW = W - m.l - m.r, plotH = H - m.t - m.b;
-  const moms = rows.map(r => r.momentum);
   const xMax = Math.max(1, ...moms);
   const xMed = median(moms);
   const shares = rows.map(r => r.share).filter(v => typeof v === "number");
@@ -1359,23 +1448,61 @@ function renderMapaChart(rows) {
     const y = yScale(v);
     svg += `<text class="mapatick" x="${m.l - 6}" y="${(y + 3).toFixed(1)}" text-anchor="end">${lab}</text>`;
   });
+  // Raw (undodged) positions first — dodging must run over the FULL set
+  // before we decide z-order/labels, so ties (e.g. several entities legit
+  // sharing momentum=0) resolve into a readable cluster instead of a stack.
+  const positioned = rows.map(r => ({
+    r, rad: mapaRadius(r.share, shareMax),
+    x: xScale(r.momentum), y: yScale(r.threat),
+  }));
+  dodgeBubbles(positioned, { l: m.l, t: m.t, w: plotW, h: plotH }, 2);
+  const anyDodged = positioned.some(p => Math.abs(p.x - xScale(p.r.momentum)) > 0.5);
+
+  // Label declutter: with 50+ entities in production, labelling every bubble
+  // is the worst offense (the reported bug). So cap on-canvas labels to a
+  // small, most-salient set (highest threat — "who's the biggest threat" is
+  // the panel's own framing) and skip any candidate whose text bounding box
+  // would overlap an already-accepted label's box (a real 2D rectangle test,
+  // not just a same-side vertical gap — two "start"-anchored labels from
+  // bubbles that are horizontally close, e.g. after dodging, can still clash
+  // sideways even when their y values differ enough to pass a Y-only check).
+  // Every bubble (labelled or not) still carries the full reading in its
+  // hover tooltip (#tip) — nothing is lost, just deferred to interaction.
+  const LABEL_CAP = 8, LABEL_PAD = 4, CHAR_W = 6.3;
+  const acceptedBoxes = [];
+  const labelOf = {};
+  const boxesOverlap = (a, b, pad) =>
+    !(a.x1 + pad < b.x0 || b.x1 + pad < a.x0 || a.y1 + pad < b.y0 || b.y1 + pad < a.y0);
+  // A label must also not land on top of a NEIGHBOURING bubble's circle
+  // (not just on top of another label) — checked as a bounding-box vs
+  // bounding-box test, close enough for small circles at this scale.
+  const circleBoxes = positioned.map(q => ({
+    x0: q.x - q.rad, x1: q.x + q.rad, y0: q.y - q.rad, y1: q.y + q.rad, entity: q.r.entity,
+  }));
+  [...positioned].sort((a, b) => b.r.threat - a.r.threat).slice(0, LABEL_CAP).forEach(p => {
+    const flip = p.x > m.l + plotW * 0.78;
+    const lx = flip ? p.x - p.rad - 4 : p.x + p.rad + 4;
+    const w = String(p.r.label ?? "").length * CHAR_W;
+    const box = flip
+      ? { x0: lx - w, x1: lx, y0: p.y - 8, y1: p.y + 4 }
+      : { x0: lx, x1: lx + w, y0: p.y - 8, y1: p.y + 4 };
+    const collidesLabel = acceptedBoxes.some(b => boxesOverlap(box, b, LABEL_PAD));
+    const collidesBubble = circleBoxes.some(cb => cb.entity !== p.r.entity && boxesOverlap(box, cb, 1));
+    if (!collidesLabel && !collidesBubble) { acceptedBoxes.push(box); labelOf[p.r.entity] = true; }
+  });
   // Paint largest bubbles first (z-order = descending radius) so a big
   // translucent share-sized bubble never visually buries a smaller/hollow one
   // (e.g. a null-share or distress dot sharing the same momentum=0 column) —
   // standard bubble-chart convention, and load-bearing here because several
   // entities legitimately share x=0 (no expansion signal this window).
-  const ordered = rows
-    .map(r => ({ r, rad: mapaRadius(r.share, shareMax) }))
-    .sort((a, b) => b.rad - a.rad)
-    .map(o => o.r);
-  const bubbles = ordered.map(r => {
-    const x = xScale(r.momentum), y = yScale(r.threat), rad = mapaRadius(r.share, shareMax);
+  const ordered = [...positioned].sort((a, b) => b.rad - a.rad);
+  const bubbles = ordered.map(({ r, rad, x, y }) => {
     const tier = tierOf(r.threat);
     const fill = r.share != null ? hexToRgba(cssvar(tier.var), 0.18 + 0.55 * r.threat) : "none";
     const stroke = r.distress ? cssvar("--t-crit") : (r.share != null ? cssvar(tier.var) : cssvar("--muted"));
     const dash = (r.distress || r.share == null) ? `stroke-dasharray="3,2"` : "";
     const sw = r.distress ? 2.2 : (r.share != null ? 1.2 : 1.5);
-    const showLabel = r.threat >= 0.65;
+    const showLabel = !!labelOf[r.entity];
     const flip = x > m.l + plotW * 0.78;
     const anchor = flip ? "end" : "start";
     const lx = flip ? x - rad - 4 : x + rad + 4;
@@ -1394,6 +1521,7 @@ function renderMapaChart(rows) {
   svg += `<text class="mapaaxis" x="14" y="${(m.t + plotH / 2).toFixed(1)}" text-anchor="middle" transform="rotate(-90 14 ${(m.t + plotH / 2).toFixed(1)})">ameaça (pico do período)</text>`;
   svg += `</svg>`;
   wrap.innerHTML = svg;
+  wrap.dataset.dodged = anyDodged ? "1" : "0";
 
   const tip = document.getElementById("tip");
   wrap.querySelectorAll(".mapabubble").forEach(g => {
