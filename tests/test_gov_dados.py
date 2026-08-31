@@ -38,7 +38,7 @@ def test_search_and_resources_and_find():
     def fetcher(url, params, headers):
         assert headers["chave-api-dados-abertos"] == "TOK"
         if url.endswith("/conjuntos-dados"):
-            assert params == {"nomeConjuntoDados": "consumidor.gov.br"}
+            assert params == {"pagina": 1, "nomeConjuntoDados": "consumidor.gov.br"}
             return [{"id": "ds1", "title": "Consumidor.gov"}, {"nome": "no-id"}]
         if url.endswith("/conjuntos-dados/ds1"):
             return {"recursos": [
@@ -54,6 +54,22 @@ def test_search_and_resources_and_find():
     assert len(res) == 2 and res[0]["formato"] == "PDF"
     found = gd.find_resource("consumidor.gov.br", name_contains="finalizadas", fetcher=fetcher)
     assert found["link"].endswith("finalizadas_2026-07.zip") and found["dataset_id"] == "ds1"
+
+
+def test_find_resource_newest_picks_latest_by_atualizado():
+    def fetcher(url, params, headers):
+        if url.endswith("/conjuntos-dados"):
+            return [{"id": "ds1"}]
+        return {"recursos": [
+            {"link": "u-mar.csv", "formato": "CSV", "titulo": "Março_2026",
+             "dataUltimaAtualizacaoArquivo": "14/04/2026 10:00"},
+            {"link": "u-jun.csv", "formato": "CSV", "titulo": "Junho_2026",
+             "dataUltimaAtualizacaoArquivo": "07/07/2026 09:00"},
+        ]}
+    got = gd.find_resource("q", formato="CSV", newest=True, fetcher=fetcher)
+    assert got["link"] == "u-jun.csv"                         # latest atualizado wins
+    first = gd.find_resource("q", formato="CSV", newest=False, fetcher=fetcher)
+    assert first["link"] == "u-mar.csv"                       # first match without newest
 
 
 def test_find_resource_format_filter():

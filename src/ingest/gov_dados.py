@@ -72,9 +72,11 @@ def _get(path: str, params: dict[str, Any] | None,
         return None
 
 
-def search_datasets(query: str, *, fetcher=None) -> list[dict[str, Any]]:
-    """Datasets whose name matches ``query`` (empty list if none / no token)."""
-    data = _get("/conjuntos-dados", {"nomeConjuntoDados": query}, fetcher)
+def search_datasets(query: str, *, pagina: int = 1, fetcher=None) -> list[dict[str, Any]]:
+    """Datasets whose name matches ``query`` (empty list if none / no token).
+
+    ``pagina`` is REQUIRED by the API (a request without it 400s)."""
+    data = _get("/conjuntos-dados", {"pagina": pagina, "nomeConjuntoDados": query}, fetcher)
     rows = data if isinstance(data, list) else (data or {}).get("content") or []
     return [r for r in rows if isinstance(r, dict) and r.get("id")]
 
@@ -94,22 +96,36 @@ def dataset_resources(dataset_id: str, *, fetcher=None) -> list[dict[str, Any]]:
     return out
 
 
+def _upd_key(r: dict[str, Any]) -> str:
+    """Sort key from ``atualizado`` ('dd/mm/yyyy hh:mm...') → 'yyyymmdd' (‘0’ if absent)."""
+    import re
+    m = re.match(r"(\d{2})/(\d{2})/(\d{4})", str(r.get("atualizado") or ""))
+    return (m.group(3) + m.group(2) + m.group(1)) if m else "0"
+
+
 def find_resource(query: str, *, formato: str | None = None, name_contains: str | None = None,
-                  fetcher=None) -> dict[str, Any] | None:
-    """First resource across the matching datasets that fits ``formato``/``name_contains``.
+                  newest: bool = False, fetcher=None) -> dict[str, Any] | None:
+    """A resource across the matching datasets that fits ``formato``/``name_contains``.
 
     Returns the resource dict (with ``link``) or None. ``formato`` e.g. "CSV"/"ZIP";
-    ``name_contains`` filters by ``nomeArquivo``/``titulo`` (case-insensitive)."""
+    ``name_contains`` filters by ``nomeArquivo``/``titulo`` (case-insensitive). With
+    ``newest=True`` it returns the most-recently-updated match (by ``atualizado``) instead
+    of the first — needed for periodic datasets like consumidor.gov whose resources are
+    titled per month ("Base Completa … - Junho_2026"), not by a fixed name."""
     want_fmt = (formato or "").upper() or None
     needle = (name_contains or "").lower() or None
+    matches: list[dict[str, Any]] = []
     for ds in search_datasets(query, fetcher=fetcher):
         for r in dataset_resources(ds["id"], fetcher=fetcher):
             if want_fmt and (r.get("formato") or "") != want_fmt:
                 continue
             if needle and needle not in f"{r.get('nomeArquivo') or ''} {r.get('titulo') or ''}".lower():
                 continue
-            return {**r, "dataset_id": ds["id"], "dataset_title": ds.get("title") or ds.get("nome")}
-    return None
+            hit = {**r, "dataset_id": ds["id"], "dataset_title": ds.get("title") or ds.get("nome")}
+            if not newest:
+                return hit
+            matches.append(hit)
+    return max(matches, key=_upd_key) if matches else None
 
 
 def clear_cache() -> None:

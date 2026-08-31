@@ -148,8 +148,10 @@ def fetch_indicators(
     """Resolve the latest consumidor.gov resource via the catalog, download, aggregate."""
     if resource_finder is None:
         from src.ingest import gov_dados
+        # The catalog titles resources per month ("Base Completa Consumidor.gov.br -
+        # Junho_2026"), so take the NEWEST CSV rather than a fixed name.
         resource_finder = lambda: gov_dados.find_resource(  # noqa: E731
-            DATASET_QUERY, name_contains="finalizadas")
+            DATASET_QUERY, formato="CSV", newest=True)
     res = resource_finder()
     if not res or not res.get("link"):
         return []
