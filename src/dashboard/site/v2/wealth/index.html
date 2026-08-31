@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Onça · Wealth</title>
+<link rel="stylesheet" href="../app.css" />
+</head>
+<body>
+<header class="appbar">
+  <div class="brand"><span class="mark">ON<b>Ç</b>A</span><span class="ctx">Wealth</span></div>
+  <nav class="ctxnav" aria-label="Contextos">
+    <a href="../newentry/">Entrada</a>
+    <a href="../adquirencia/">Adquirência</a>
+    <a href="../fintech/">Fintechs</a>
+    <a href="../seguros/">Seguros</a>
+    <a href="../wealth/" aria-current="page">Wealth</a>
+  </nav>
+  <span class="spacer"></span>
+  <span class="sub" id="asof">—</span>
+  <span id="authBox" style="display:inline-flex;gap:var(--s2);align-items:center"></span>
+  <button class="icnbtn" id="themeBtn" title="Alternar tema" aria-label="Alternar tema claro/escuro">◐</button>
+</header>
+
+<main class="wrap">
+  <div class="pagehead">
+    <h1>Wealth — gestão de patrimônio</h1>
+    <p class="lede">Velocidade de fundos lidera: registros de classe/fundo na CVM, informe
+      diário, FII/FIAGRO e pipeline de ofertas. O comparativo entre gestoras/plataformas e a
+      tese competitiva por entidade vêm em seguida. Registros de classe net-new entram como
+      <b>proxy citado de share-of-shelf</b> — nunca uma estimativa de AUM.</p>
+  </div>
+
+  <div class="tiles" id="kpis" style="margin-bottom:var(--s5)"></div>
+
+  <!-- LEAD 1 — Fundos velocity -->
+  <section class="band">
+    <div class="band-hd"><span class="overline">Fundos · velocidade de registro</span><span class="rule"></span></div>
+    <div class="panel panel--lead">
+      <div class="panel__hd"><h2>Registros de classe/fundo · informe · ofertas</h2>
+        <span class="count" id="fundosCount">0</span></div>
+      <div class="panel__bd" id="fundos"></div>
+    </div>
+  </section>
+
+  <!-- LEAD 2 — Comparar across gestoras/platforms -->
+  <section class="band">
+    <div class="band-hd"><span class="overline">Comparar gestoras e plataformas</span><span class="rule"></span></div>
+    <div class="panel panel--lead">
+      <div class="panel__hd"><h2>Roster de wealth</h2><span class="spacer"></span>
+        <span class="hd-note">pico de ameaça no tempo · momentum · share só com IF.data</span></div>
+      <div class="panel__bd" id="comparar"></div>
+    </div>
+  </section>
+
+  <!-- LEAD 3 — per-entity SWOT competitive thesis -->
+  <section class="band">
+    <div class="band-hd"><span class="overline">Tese competitiva por entidade</span><span class="rule"></span>
+      <span class="badge badge--ghost">apenas crenças vetadas</span></div>
+    <div class="panel panel--lead">
+      <div class="panel__hd"><h2>SWOT / tese</h2><span class="spacer"></span>
+        <span class="hd-note">precisão primeiro</span></div>
+      <div class="panel__bd" id="swot"></div>
+    </div>
+  </section>
+</main>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-hidden="true" role="dialog" aria-labelledby="drTitle">
+  <div class="drawer__hd"><h3 id="drTitle">Detalhe</h3>
+    <button class="drawer__close" id="drClose" aria-label="Fechar">×</button></div>
+  <div class="drawer__bd" id="drBody"></div>
+</aside>
+
+<script src="../app.js"></script>
+<script src="../context.js"></script>
+<script>
+OncaCtx.bootSaaS({
+  ctxLabel: "wealth",
+  render(D) {
+    const k = D.kpis || {};
+    OncaCtx.renderKpis(document.getElementById("kpis"), [
+      ["Sinais hoje", k.narratives_latest], ["Alertas hoje", k.alerts_latest],
+      ["Gestoras/plataformas", k.entities_tracked], ["Fontes distintas", k.sources],
+    ]);
+    OncaCtx.renderFundos(document.getElementById("fundos"), D);
+    document.getElementById("fundosCount").textContent =
+      OncaCtx.feed(D).filter((c) => OncaCtx.hasLens(c, "funds", "inf_diario", "ofertas")).length;
+    OncaCtx.renderComparar(document.getElementById("comparar"), D, { limit: 12 });
+    OncaCtx.renderSWOT(document.getElementById("swot"), D, {});
+  },
+});
+</script>
+</body>
+</html>

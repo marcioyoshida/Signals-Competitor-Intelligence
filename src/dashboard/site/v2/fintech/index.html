@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Onça · Fintechs</title>
+<link rel="stylesheet" href="../app.css" />
+</head>
+<body>
+<header class="appbar">
+  <div class="brand"><span class="mark">ON<b>Ç</b>A</span><span class="ctx">Fintechs</span></div>
+  <nav class="ctxnav" aria-label="Contextos">
+    <a href="../newentry/">Entrada</a>
+    <a href="../adquirencia/">Adquirência</a>
+    <a href="../fintech/" aria-current="page">Fintechs</a>
+    <a href="../seguros/">Seguros</a>
+    <a href="../wealth/">Wealth</a>
+  </nav>
+  <span class="spacer"></span>
+  <span class="sub" id="asof">—</span>
+  <span id="authBox" style="display:inline-flex;gap:var(--s2);align-items:center"></span>
+  <button class="icnbtn" id="themeBtn" title="Alternar tema" aria-label="Alternar tema claro/escuro">◐</button>
+</header>
+
+<main class="wrap">
+  <div class="pagehead">
+    <h1>Fintechs — cadência regulatória e entrada</h1>
+    <p class="lede">Onde a régua se move e quem está entrando. O calendário regulatório com
+      prazos (Pix, open finance, licenciamento) lidera; o funil de entrada
+      (autorização → participação → oferta) e o alerta antecipado de estresse vêm em
+      seguida. Seguros/SUSEP ficam recolhidos.</p>
+  </div>
+
+  <div class="tiles" id="kpis" style="margin-bottom:var(--s5)"></div>
+
+  <!-- LEAD 1 — Regulatory calendar + deadlines -->
+  <section class="band">
+    <div class="band-hd"><span class="overline">Calendário regulatório · prazos</span><span class="rule"></span></div>
+    <div class="grid lead-3" style="grid-template-columns:1fr 1fr">
+      <div class="panel panel--lead">
+        <div class="panel__hd"><h2>Prazos em vigor</h2><span class="count" id="calCount">0</span>
+          <span class="spacer"></span><span class="hd-note">mais urgente primeiro</span></div>
+        <div class="panel__bd panel__bd--flush panel__bd--scroll" id="calendar"></div>
+      </div>
+      <div class="panel panel--lead">
+        <div class="panel__hd"><h2>Normativos e DOU</h2><span class="spacer"></span>
+          <span class="hd-note">Pix · open finance · licenciamento</span></div>
+        <div class="panel__bd panel__bd--flush panel__bd--scroll" id="regulatorio"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LEAD 2 — Entrants funnel + list -->
+  <section class="band">
+    <div class="band-hd"><span class="overline">Funil de entrada</span><span class="rule"></span></div>
+    <div class="grid" style="grid-template-columns:1fr;gap:var(--s4)">
+      <div class="panel panel--lead">
+        <div class="panel__hd"><h2>Autorização → participação → oferta</h2><span class="spacer"></span>
+          <span class="hd-note">contagem citada</span></div>
+        <div class="panel__bd" id="funnel"></div>
+      </div>
+      <div class="panel panel--lead">
+        <div class="panel__hd"><h2>Novos entrantes</h2><span class="count" id="entrantsCount">0</span></div>
+        <div class="panel__bd panel__bd--flush panel__bd--scroll" id="entrants"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LEAD 3 — Distress early-warning -->
+  <section class="band">
+    <div class="band-hd"><span class="overline">Alerta antecipado · estresse</span><span class="rule"></span></div>
+    <div class="panel panel--lead">
+      <div class="panel__hd"><h2>Risco</h2><span class="spacer"></span>
+        <span class="hd-note">ranking BCB + RJ/falência · grau de evidência explícito</span></div>
+      <div class="panel__bd panel__bd--flush panel__bd--scroll" id="risco"></div>
+    </div>
+  </section>
+
+  <!-- DEMOTE — seguros/SUSEP -->
+  <section class="band">
+    <details class="fold">
+      <summary><span class="tw" aria-hidden="true">▸</span> Seguros / SUSEP
+        <span class="demoted">— secundário nas fintechs</span></summary>
+      <div class="fold__bd" id="susep"></div>
+    </details>
+  </section>
+</main>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-hidden="true" role="dialog" aria-labelledby="drTitle">
+  <div class="drawer__hd"><h3 id="drTitle">Detalhe</h3>
+    <button class="drawer__close" id="drClose" aria-label="Fechar">×</button></div>
+  <div class="drawer__bd" id="drBody"></div>
+</aside>
+
+<script src="../app.js"></script>
+<script src="../context.js"></script>
+<script>
+OncaCtx.bootSaaS({
+  ctxLabel: "fintechs",
+  render(D) {
+    const k = D.kpis || {};
+    OncaCtx.renderKpis(document.getElementById("kpis"), [
+      ["Sinais hoje", k.narratives_latest], ["Alertas hoje", k.alerts_latest],
+      ["Entidades", k.entities_tracked], ["Fontes distintas", k.sources],
+    ]);
+    OncaCtx.renderCalendar(document.getElementById("calendar"), D);
+    document.getElementById("calCount").textContent =
+      OncaCtx.feed(D).filter((c) => c.deadline || c.days_to_deadline != null).length;
+    OncaCtx.renderRegulatorio(document.getElementById("regulatorio"), D, {
+      lenses: ["regulatory", "dou"],
+      emptyD: "Nenhum normativo Pix/open-finance/licenciamento na janela." });
+    OncaCtx.renderEntrantsFunnel(document.getElementById("funnel"), D);
+    OncaCtx.renderEntrants(document.getElementById("entrants"), D);
+    document.getElementById("entrantsCount").textContent =
+      OncaCtx.feed(D).filter((c) => OncaCtx.hasLens(c, "entrants", "ofertas", "funds")).length;
+    OncaCtx.renderRisco(document.getElementById("risco"), D);
+    // SUSEP demoted: DOU cards that are insurance-oriented (best-effort by lens).
+    OncaCtx.renderRegulatorio(document.getElementById("susep"), D, {
+      lenses: ["dou"], emptyD: "Sem itens de SUSEP/PREVIC na janela." });
+  },
+});
+</script>
+</body>
+</html>
