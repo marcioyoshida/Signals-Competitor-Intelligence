@@ -98,6 +98,7 @@ from src.ingest import (
     bcb_reclamacoes,
     cade,
     ceis_cnep,
+    consumidor_gov,
     datajud,
     dou,
     pncp_contratos,
@@ -893,6 +894,26 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as exc:  # pragma: no cover - defensive; upstream best-effort
             print(f"Warning: BCB reclamações fetch failed: {exc}")
 
+    # consumidor.gov.br complaints (#63) — cross-industry consumer reputation, the general
+    # form of bcb_reclamacoes. DEFAULT-OFF + token-gated: the source is resolved via the
+    # dados.gov.br catalog ([[gov_dados]]), whose GOV_DADOS_TOKEN is currently rejected, so
+    # this is inert until the token is regenerated. Durable store, like bcb_reclamacoes.
+    consumidor_gov_summary: dict[str, Any] | None = None
+    if os.environ.get("ONCA_CONSUMIDOR_GOV", "false").lower() in ("1", "true", "yes"):
+        bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
+        try:
+            with _source_budget("consumidor.gov", deadline, per_source):
+                from src.synth.entities import resolve_entities
+
+                rows = consumidor_gov.fetch_indicators(
+                    min_complaints=int(os.environ.get("ONCA_CONSUMIDOR_MIN_COMPLAINTS", "30")))
+                recs = consumidor_gov.map_to_entities(rows, resolver=resolve_entities)
+                if recs and bucket:
+                    consumidor_gov.update_store(recs, bucket)
+                consumidor_gov_summary = {**consumidor_gov.summarize(recs), "items": recs[:12]}
+        except Exception as exc:  # pragma: no cover - defensive; upstream best-effort
+            print(f"Warning: consumidor.gov fetch failed: {exc}")
+
     # CEIS/CNEP federal sanctions (#60) — counterparty-integrity, sector-agnostic. Only
     # sanctions resolving (CNPJ-root first) to a tracked entity are kept; a durable
     # sanctions/index.json store holds state and _new_since_last_run drives the delta
@@ -1134,6 +1155,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         # Consumer reputation (#31) — entity-tied; stores are authoritative.
         "reputation": reputation_summary,
         "bcb_reclamacoes": bcb_reclamacoes_summary,
+        "consumidor_gov": consumidor_gov_summary,  # #63 (default-off, token-gated)
         "inf_diario_moves": {
             "funds_tracked": len(inf_diario_rows),
             "as_of": (inf_diario_rows[0].get("date") if inf_diario_rows else None),
