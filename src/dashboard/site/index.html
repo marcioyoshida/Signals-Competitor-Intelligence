@@ -443,6 +443,59 @@
   .pin-stage { color: var(--muted); font-size: 11px; }
   .pin-date { color: var(--ink2); font-variant-numeric: tabular-nums; }
   .pin-days { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 11.5px; white-space: nowrap; }
+  /* Coloring-audit fix: these five proposal-kind badges (.pk.<fw>, generated in
+     proposalKindHtml()) had no CSS rule at all — pestle/ansoff/bcg/four_corners/
+     seven_s proposals rendered as flat/uncolored text on the base .pk pill. Each
+     reuses that framework's own first-dimension --qc hue (already established,
+     reused elsewhere in this file), so no new one-off hex is introduced. */
+  .swot-props .pk.pestle { background: rgba(224,108,0,.14); color: var(--t-high); }
+  .swot-props .pk.ansoff { background: rgba(31,143,138,.16); color: var(--accent); }
+  .swot-props .pk.bcg { background: rgba(185,130,15,.16); color: #b9820f; }
+  .swot-props .pk.four_corners { background: rgba(108,99,196,.16); color: #6c63c4; }
+  .swot-props .pk.seven_s { background: rgba(26,122,181,.14); color: #1a7ab5; }
+  /* ADR 015 #4 — Mapa Competitivo: top-level flagship panel (bubble scatter,
+     threat × momentum) + its companion Ranking de Momentum, sharing one panel
+     between the KPI tiles and "Perguntar à Onça" so it's seen before drilling in. */
+  .mapapanel { margin-bottom: 18px; }
+  .mapawrap { display: flex; gap: 18px; align-items: flex-start; padding: 4px 16px 12px; }
+  .mapachart { flex: 1; min-width: 0; }
+  .mapasvg { width: 100%; height: auto; display: block; }
+  /* The chart "canvas" gets an explicit fill so the plot area reads as a distinct
+     surface rather than a blank/flat rectangle floating on the panel background. */
+  .mapasvg .mapabg { fill: var(--panel2); }
+  .mapasvg .mapaguide { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 3; opacity: .8; }
+  .mapasvg .mapaqlabel { fill: var(--muted); font-size: 9.5px; letter-spacing: .2px; text-transform: uppercase; }
+  .mapasvg .mapaaxis { fill: var(--ink2); font-size: 10.5px; }
+  .mapasvg .mapatick { fill: var(--muted); font-size: 9.5px; }
+  .mapasvg .mapabubble { cursor: pointer; }
+  .mapasvg .mapabubble circle { transition: opacity .1s; }
+  .mapasvg .mapabubble:hover circle { opacity: .8; }
+  .mapasvg .mapalabel { fill: var(--ink); font-size: 10.5px; font-weight: 650; }
+  .mapasvg .mapawarn { fill: var(--t-crit); font-size: 11px; font-weight: 700; }
+  .mapacaption { padding: 0 16px 12px; color: var(--muted); font-size: 11.5px; line-height: 1.45; }
+  .momcol { width: 240px; flex-shrink: 0; border-left: 1px solid var(--border); padding-left: 16px; }
+  @media (max-width: 900px) { .mapawrap { flex-direction: column; }
+    .momcol { width: 100%; border-left: 0; border-top: 1px solid var(--border);
+      padding-left: 0; padding-top: 12px; } }
+  .momhead { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase;
+    letter-spacing: .5px; margin: 2px 0 10px; }
+  .momrow { display: flex; align-items: center; gap: 8px; padding: 5px 0; cursor: pointer; }
+  .momrow:hover .momname { color: var(--accent); }
+  .momname { flex: 0 0 92px; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mombar-wrap { flex: 1; height: 8px; border-radius: 4px; background: var(--panel2); overflow: hidden; }
+  .mombar { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
+  .momval { flex: 0 0 22px; text-align: right; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  /* ADR 015 #6 — Linha do tempo de ameaça: multi-entity overlaid comparison,
+     lives in its own rail drawer (most front-end code of the set, ranked last). */
+  .tlsvg { width: 100%; height: auto; display: block; }
+  .tlsvg .tlbg { fill: var(--panel2); }
+  .tlsvg .tlguide { stroke: var(--t-high); stroke-width: 1; stroke-dasharray: 3 3; opacity: .7; }
+  .tlsvg .tlaxis { fill: var(--ink2); font-size: 10px; }
+  .tllegend { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 8px 16px 16px; }
+  .tllegend .tlitem { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px;
+    color: var(--ink2); cursor: pointer; }
+  .tllegend .tlitem:hover { color: var(--accent); }
+  .tllegend .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
 </style>
 </head>
 <body>
@@ -458,6 +511,24 @@
 
 <div class="wrap">
   <div class="kpis" id="kpis"></div>
+
+  <!-- ADR 015 §1/§4: Mapa Competitivo (Ameaça × Momentum) — the MQ replacement,
+       a top-level entry-portal panel (not a drawer), seen before drilling into
+       the feed. Ranking de Momentum rides the same field as its companion. -->
+  <section class="panel mapapanel" id="mapaPanel" style="display:none">
+    <h2>Mapa Competitivo · Ameaça × Momentum
+      <span class="infer" title="Eixo Y reaproveita o pico de ameaça já usado no resto do produto (nunca uma nota de 'Visão' inventada); eixo X é uma CONTAGEM de sinais de expansão já citados alhures, não um índice fabricado; o tamanho da bolha só usa participação de mercado do IF.data quando ela existe.">eixos citados, sem eixo estimado</span>
+    </h2>
+    <div class="hint" style="padding:10px 16px 0">Quem já é ameaça (eixo Y, invertido — topo = mais ameaça) contra quem está ganhando terreno rápido (eixo X). Clique numa bolha ou numa entidade do ranking para ver as narrativas e fontes abaixo.</div>
+    <div class="mapawrap">
+      <div class="mapachart" id="mapaSvgWrap"></div>
+      <div class="momcol">
+        <div class="momhead">Ranking de momentum</div>
+        <div id="momRanking"></div>
+      </div>
+    </div>
+    <div class="mapacaption" id="mapaCaption"></div>
+  </section>
 
   <section class="panel askpanel" id="askPanel">
     <h2>Perguntar à Onça <span style="text-transform:none;letter-spacing:0;color:var(--muted);font-weight:500">· resposta fundamentada só nos dados da ferramenta</span></h2>
@@ -507,17 +578,21 @@
   <p class="est" style="margin:16px 6px">O nível de ameaça é uma estimativa heurística (não é um modelo validado). Cada afirmação tem link para a sua fonte.</p>
 </div>
 
-<!-- Side-panel rail (issue #39): two pull-out drawers sharing one affordance —
-     Cobertura & Monitor and Pontos Cegos — stacked as a matched pair of tabs. -->
+<!-- Side-panel rail (issue #39), reorganized (ADR 015 §4) into three legible
+     groups instead of arbitrary add-order, so the growing tab set still reads
+     as one system for a small senior audience:
+       1. Cobertura — the foundational monitor (always the anchor, first).
+       2. Analysis cluster — Risco / Crença / Regulatório / Comparar: the four
+          "fuse-existing-signals-into-one-picture" visuals, in the same
+          leverage-ranked order as ADR 015 (Radar de Risco #1, Balanço de
+          Crença #2, Radar Regulatório #3, Comparar/timeline #6 last — it's
+          the most front-end-heavy and least zero-backend of the set).
+       3. Macro (ambient context) → Pontos Cegos (action items) → Integridade
+          (operator-only audit) — context, then action, then audit, last
+          because it's the least relevant tab to a buyer-side reader. -->
 <div class="railtabs">
   <button class="railtab" id="covTab" title="Cobertura por indústria e monitor de entidades">
     <span class="rtlabel">Cobertura</span><span class="rtbadge" id="covCount"></span>
-  </button>
-  <button class="railtab" id="gapsTab" style="display:none" title="Perguntas que a base ainda não responde">
-    <span class="rtlabel">Pontos Cegos</span><span class="rtbadge" id="gapsCount"></span>
-  </button>
-  <button class="railtab" id="macroTab" style="display:none" title="Macro · Copom & Focus">
-    <span class="rtlabel">Macro</span>
   </button>
   <button class="railtab" id="radarTab" style="display:none" title="Radar de Risco: reclamações BCB, distress e ameaça">
     <span class="rtlabel">Risco</span><span class="rtbadge" id="radarCount"></span>
@@ -527,6 +602,15 @@
   </button>
   <button class="railtab" id="regTab" style="display:none" title="Radar regulatório: calendário de sinais e prazos">
     <span class="rtlabel">Regulatório</span><span class="rtbadge" id="regCount"></span>
+  </button>
+  <button class="railtab" id="tlTab" style="display:none" title="Linha do tempo de ameaça: comparação entre entidades no período">
+    <span class="rtlabel">Comparar</span><span class="rtbadge" id="tlCount"></span>
+  </button>
+  <button class="railtab" id="macroTab" style="display:none" title="Macro · Copom & Focus">
+    <span class="rtlabel">Macro</span>
+  </button>
+  <button class="railtab" id="gapsTab" style="display:none" title="Perguntas que a base ainda não responde">
+    <span class="rtlabel">Pontos Cegos</span><span class="rtbadge" id="gapsCount"></span>
   </button>
   <button class="railtab" id="integTab" style="display:none" title="Auditoria de integridade do registro (ADR 018)">
     <span class="rtlabel">Integridade</span><span class="rtbadge" id="integCount"></span>
@@ -601,6 +685,18 @@
   <div class="cal-wrap"><div class="cal-grid" id="calGrid"></div></div>
   <div class="indempty" id="calEmpty" style="display:none"></div>
   <div id="calPins" class="cal-pins"></div>
+</aside>
+
+<aside class="drawer" id="tlDrawer" aria-hidden="true">
+  <div class="drhead">
+    <h2>Linha do tempo de ameaça
+      <span class="infer" title="Reaproveita entities[].timeline — o mesmo dado por trás do gráfico de linha (sparkline) de cada entidade — apenas sobrepondo as N entidades de maior pico no período para revelar movimento conjunto.">comparativo</span>
+    </h2>
+    <button class="drclose" data-close="tlDrawer" aria-label="Fechar">✕</button>
+  </div>
+  <div class="hint" style="padding:0 16px 8px">As entidades de maior pico de ameaça no período, sobrepostas — revela avanços e recuos que acontecem juntos (co-movimento) e que o gráfico linha-a-linha de cada cartão não mostra. Clique numa entidade na legenda para ver suas narrativas e fontes abaixo.</div>
+  <div id="tlSvgWrap" style="padding:8px 16px 4px"></div>
+  <div id="tlLegend" class="tllegend"></div>
 </aside>
 <div class="drawerscrim" id="drawerScrim"></div>
 
@@ -870,6 +966,7 @@ function renderLower() {
     if (h) h.textContent = `Revisão de entidades (${DATA.reviews.length})`;
   }
   renderMacro(); renderReviews(); renderGaps(); renderRadarPanels(); renderCrencaPanels(); renderRegPanels(); renderIntegrity();
+  renderMapa(); renderComparar();
 }
 
 // ADR 018 Phase 3: operator-only integrity findings in a lateral drawer.
@@ -1177,6 +1274,232 @@ function renderRegCalendar() {
   pinsEl.querySelectorAll(".pinrow[data-entity]").forEach(r => {
     if (r.dataset.entity) r.onclick = () => jumpToEntityFromRadar(r.dataset.entity);
   });
+}
+
+// --- ADR 015 #4/#5: Mapa Competitivo (Ameaça × Momentum) + Ranking de Momentum
+// Fields consumed (null-safe — renders correctly whether or not the backend
+// fields have landed yet): entities[].{entity,label,peak_score,momentum,
+// market_share_pct}, DATA.distress[] (entity/kind/label, reused from #1's
+// DISTRESS_SEVERITY map above). Never invents a position/size: missing
+// momentum -> 0 (an honest "no expansion signal yet"), missing/null
+// market_share_pct -> a small dashed placeholder dot, never a fabricated size.
+function buildMapaRows() {
+  const distressByEntity = {};
+  (DATA.distress || []).forEach(d => {
+    if (!d.entity) return;
+    const prev = distressByEntity[d.entity];
+    if (!prev || (DISTRESS_SEVERITY[d.kind] || 0) > (DISTRESS_SEVERITY[prev.kind] || 0))
+      distressByEntity[d.entity] = d;
+  });
+  return (DATA.entities || []).map(e => ({
+    entity: e.entity, label: e.label,
+    momentum: Number.isFinite(e.momentum) ? e.momentum : 0,
+    threat: Number.isFinite(e.peak_score) ? e.peak_score : 0,
+    share: (typeof e.market_share_pct === "number") ? e.market_share_pct : null,
+    distress: distressByEntity[e.entity] || null,
+  }));
+}
+function median(nums) {
+  const s = [...nums].sort((a, b) => a - b);
+  if (!s.length) return 0;
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+}
+function renderMapa() {
+  const panel = document.getElementById("mapaPanel");
+  const rows = buildMapaRows();
+  if (!rows.length) { panel.style.display = "none"; return; }
+  panel.style.display = "";
+  renderMapaChart(rows);
+  renderMomentumRanking(rows);
+  const days = (DATA.dates || []).length;
+  document.getElementById("mapaCaption").textContent =
+    `Momentum conta sinais de novos entrantes, ofertas de distribuição, novas classes de fundos e movimentação Pix na janela de ${days} dia(s) — não inclui contratação (sem fonte de RH licenciada ainda). Cobertura de participação de mercado (IF.data) é parcial: bolhas tracejadas indicam entidade ainda sem correspondência.`;
+}
+// NULL_SHARE_R: fixed radius for entities with no resolved IF.data share — a
+// deliberately small, hollow placeholder, never a guessed size.
+const NULL_SHARE_R = 7;
+function mapaRadius(share, shareMax) {
+  if (share == null) return NULL_SHARE_R;
+  if (!shareMax) return NULL_SHARE_R;
+  const r = 6 + 22 * Math.sqrt(Math.max(0, share) / shareMax);
+  return Math.max(6, Math.min(28, r));
+}
+function renderMapaChart(rows) {
+  const wrap = document.getElementById("mapaSvgWrap");
+  // ADR 015 §4 guardrail: a sparse window (<2 plottable entities) reads as the
+  // whole field if plotted — refuse rather than mislead.
+  if (rows.length < 2) {
+    wrap.innerHTML = `<div class="indempty">Dados insuficientes para o mapa neste período.</div>`;
+    return;
+  }
+  const W = 640, H = 380, m = { l: 54, r: 18, t: 18, b: 46 };
+  const plotW = W - m.l - m.r, plotH = H - m.t - m.b;
+  const moms = rows.map(r => r.momentum);
+  const xMax = Math.max(1, ...moms);
+  const xMed = median(moms);
+  const shares = rows.map(r => r.share).filter(v => typeof v === "number");
+  const shareMax = shares.length ? Math.max(...shares) : 0;
+  const xScale = v => m.l + (v / xMax) * plotW;
+  const yScale = v => m.t + (1 - Math.max(0, Math.min(1, v))) * plotH;
+  const yLine = yScale(0.65), xLine = xScale(xMed);
+
+  let svg = `<svg class="mapasvg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">`;
+  svg += `<rect class="mapabg" x="${m.l}" y="${m.t}" width="${plotW}" height="${plotH}" rx="6"/>`;
+  svg += `<line class="mapaguide" x1="${m.l}" x2="${m.l + plotW}" y1="${yLine.toFixed(1)}" y2="${yLine.toFixed(1)}"/>`;
+  svg += `<line class="mapaguide" x1="${xLine.toFixed(1)}" x2="${xLine.toFixed(1)}" y1="${m.t}" y2="${m.t + plotH}"/>`;
+  // Plain-Portuguese quadrant labels (deliberately NOT Gartner Leader/Challenger/…
+  // — ADR 015 rejects the Magic Quadrant framing/trademark outright).
+  svg += `<text class="mapaqlabel" x="${m.l + 6}" y="${m.t + 12}">ameaça estabelecida, baixo movimento</text>`;
+  svg += `<text class="mapaqlabel" x="${m.l + plotW - 6}" y="${m.t + 12}" text-anchor="end">avanço agressivo</text>`;
+  svg += `<text class="mapaqlabel" x="${m.l + 6}" y="${m.t + plotH - 6}">baixa prioridade</text>`;
+  svg += `<text class="mapaqlabel" x="${m.l + plotW - 6}" y="${m.t + plotH - 6}" text-anchor="end">entrante em aceleração</text>`;
+  // Y ticks at 0 / tier line (0,65) / 1 — the SAME threshold used by TIERS/heat chips.
+  [[0, "0"], [0.65, "0,65"], [1, "1,0"]].forEach(([v, lab]) => {
+    const y = yScale(v);
+    svg += `<text class="mapatick" x="${m.l - 6}" y="${(y + 3).toFixed(1)}" text-anchor="end">${lab}</text>`;
+  });
+  // Paint largest bubbles first (z-order = descending radius) so a big
+  // translucent share-sized bubble never visually buries a smaller/hollow one
+  // (e.g. a null-share or distress dot sharing the same momentum=0 column) —
+  // standard bubble-chart convention, and load-bearing here because several
+  // entities legitimately share x=0 (no expansion signal this window).
+  const ordered = rows
+    .map(r => ({ r, rad: mapaRadius(r.share, shareMax) }))
+    .sort((a, b) => b.rad - a.rad)
+    .map(o => o.r);
+  const bubbles = ordered.map(r => {
+    const x = xScale(r.momentum), y = yScale(r.threat), rad = mapaRadius(r.share, shareMax);
+    const tier = tierOf(r.threat);
+    const fill = r.share != null ? hexToRgba(cssvar(tier.var), 0.18 + 0.55 * r.threat) : "none";
+    const stroke = r.distress ? cssvar("--t-crit") : (r.share != null ? cssvar(tier.var) : cssvar("--muted"));
+    const dash = (r.distress || r.share == null) ? `stroke-dasharray="3,2"` : "";
+    const sw = r.distress ? 2.2 : (r.share != null ? 1.2 : 1.5);
+    const showLabel = r.threat >= 0.65;
+    const flip = x > m.l + plotW * 0.78;
+    const anchor = flip ? "end" : "start";
+    const lx = flip ? x - rad - 4 : x + rad + 4;
+    const shareTxt = r.share != null ? `${r.share.toFixed(1)}%` : "sem dados IF.data";
+    const distTxt = r.distress ? ` · ⚠ ${esc(r.distress.label || r.distress.kind)}` : "";
+    const tip = `${esc(r.label)}: momentum ${r.momentum} · ameaça ${r.threat.toFixed(2)} (${tier.label}) · participação ${esc(shareTxt)}${distTxt}`;
+    return `<g class="mapabubble" data-entity="${esc(r.entity)}" data-tip="${tip}">
+      <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${rad.toFixed(1)}"
+        fill="${fill}" stroke="${stroke}" stroke-width="${sw}" ${dash}/>
+      ${showLabel ? `<text class="mapalabel" x="${lx.toFixed(1)}" y="${(y + 3).toFixed(1)}" text-anchor="${anchor}">${esc(r.label)}</text>` : ""}
+      ${r.distress ? `<text class="mapawarn" x="${x.toFixed(1)}" y="${(y - rad - 5).toFixed(1)}" text-anchor="middle">⚠</text>` : ""}
+    </g>`;
+  }).join("");
+  svg += bubbles;
+  svg += `<text class="mapaaxis" x="${(m.l + plotW / 2).toFixed(1)}" y="${H - 8}" text-anchor="middle">sinais de expansão · janela de ${(DATA.dates || []).length} dia(s)</text>`;
+  svg += `<text class="mapaaxis" x="14" y="${(m.t + plotH / 2).toFixed(1)}" text-anchor="middle" transform="rotate(-90 14 ${(m.t + plotH / 2).toFixed(1)})">ameaça (pico do período)</text>`;
+  svg += `</svg>`;
+  wrap.innerHTML = svg;
+
+  const tip = document.getElementById("tip");
+  wrap.querySelectorAll(".mapabubble").forEach(g => {
+    g.onclick = () => jumpToEntityFromRadar(g.dataset.entity);
+    g.onmousemove = ev => {
+      tip.textContent = g.dataset.tip;
+      tip.style.left = (ev.clientX + 12) + "px"; tip.style.top = (ev.clientY - 10) + "px";
+      tip.style.opacity = 1;
+    };
+    g.onmouseleave = () => tip.style.opacity = 0;
+  });
+}
+function renderMomentumRanking(rows) {
+  const el = document.getElementById("momRanking");
+  const ranked = rows.filter(r => r.momentum > 0).sort((a, b) => b.momentum - a.momentum);
+  if (!ranked.length) {
+    el.innerHTML = `<div class="indempty">Sem sinais de expansão no período.</div>`;
+    return;
+  }
+  const max = ranked[0].momentum;
+  el.innerHTML = ranked.map(r => `
+    <div class="momrow" data-entity="${esc(r.entity)}" title="${esc(r.label)}: ${r.momentum} sinal(is) de expansão">
+      <div class="momname entity-link">${esc(r.label)}</div>
+      <div class="mombar-wrap"><span class="mombar" style="width:${Math.round((r.momentum / max) * 100)}%"></span></div>
+      <div class="momval">${r.momentum}</div>
+    </div>`).join("");
+  el.querySelectorAll(".momrow").forEach(r => r.onclick = () => jumpToEntityFromRadar(r.dataset.entity));
+}
+
+// --- ADR 015 #6: Linha do tempo de ameaça — multi-entity comparative overlay
+// of entities[].timeline (the same data behind each card's per-row sparkline).
+// Palette reuses the existing SWOT/TOWS/Porter/PESTLE quadrant hex tokens
+// (#1a7ab5 steel-blue, #6c63c4 violet, #b9820f gold, #2e9e6b teal-green) plus
+// --accent/--t-high — no new one-off color is introduced.
+const TIMELINE_PALETTE = ["var(--accent)", "#1a7ab5", "#6c63c4", "#b9820f", "#2e9e6b", "var(--t-high)"];
+function buildTimelineSeries() {
+  const dates = DATA.dates || [];
+  const ents = [...(DATA.entities || [])]
+    .filter(e => (e.timeline || []).length)
+    .sort((a, b) => (b.peak_score || 0) - (a.peak_score || 0))
+    .slice(0, TIMELINE_PALETTE.length);
+  const series = ents.map((e, i) => ({
+    entity: e.entity, label: e.label, color: TIMELINE_PALETTE[i % TIMELINE_PALETTE.length],
+    byDate: Object.fromEntries((e.timeline || []).map(t => [t.date, t.max_score])),
+  }));
+  return { dates, series };
+}
+function compararHasData() { return buildTimelineSeries().series.length >= 2; }
+function renderComparar() {
+  const tab = document.getElementById("tlTab");
+  const has = compararHasData();
+  tab.style.display = has ? "" : "none";
+  const { series } = buildTimelineSeries();
+  document.getElementById("tlCount").textContent = has ? String(series.length) : "";
+  if (!has) return;
+  renderTimelineChart();
+}
+function renderTimelineChart() {
+  const wrap = document.getElementById("tlSvgWrap"), legendEl = document.getElementById("tlLegend");
+  const { dates, series } = buildTimelineSeries();
+  if (!dates.length || series.length < 2) {
+    wrap.innerHTML = `<div class="indempty">Dados insuficientes para comparar entidades neste período.</div>`;
+    legendEl.innerHTML = "";
+    return;
+  }
+  const W = 600, H = 260, m = { l: 34, r: 14, t: 14, b: 22 };
+  const plotW = W - m.l - m.r, plotH = H - m.t - m.b;
+  const xScale = i => m.l + (dates.length <= 1 ? 0 : i * (plotW / (dates.length - 1)));
+  const yScale = v => m.t + (1 - Math.max(0, Math.min(1, v))) * plotH;
+  let svg = `<svg class="tlsvg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">`;
+  svg += `<rect class="tlbg" x="${m.l}" y="${m.t}" width="${plotW}" height="${plotH}" rx="6"/>`;
+  const yHigh = yScale(0.65);
+  svg += `<line class="tlguide" x1="${m.l}" x2="${m.l + plotW}" y1="${yHigh.toFixed(1)}" y2="${yHigh.toFixed(1)}"/>`;
+  svg += `<text class="tlaxis" x="${m.l + 4}" y="${(yHigh - 4).toFixed(1)}">ALTO · 0,65</text>`;
+  let dots = "";
+  series.forEach(s => {
+    const pts = dates.map((d, i) => ({ x: xScale(i), y: s.byDate[d] != null ? yScale(s.byDate[d]) : null, d, v: s.byDate[d] }));
+    const line = pts.filter(p => p.y != null);
+    if (line.length < 2) return;
+    const poly = line.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+    const areaPts = `${line[0].x.toFixed(1)},${(m.t + plotH).toFixed(1)} ${poly} ${line[line.length - 1].x.toFixed(1)},${(m.t + plotH).toFixed(1)}`;
+    svg += `<polygon points="${areaPts}" fill="${s.color}" opacity="0.10"></polygon>`;
+    svg += `<polyline points="${poly}" fill="none" stroke="${s.color}" stroke-width="2"
+      stroke-linejoin="round" stroke-linecap="round"/>`;
+    dots += line.map(p =>
+      `<circle class="tldot" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.2" fill="${s.color}"
+        data-label="${esc(s.label)}" data-d="${p.d}" data-v="${p.v.toFixed(2)}"></circle>`).join("");
+  });
+  svg += dots;
+  svg += `<text class="tlaxis" x="${m.l}" y="${H - 4}">${esc(fmtDate(dates[0]))}</text>`;
+  svg += `<text class="tlaxis" x="${m.l + plotW}" y="${H - 4}" text-anchor="end">${esc(fmtDate(dates[dates.length - 1]))}</text>`;
+  svg += `</svg>`;
+  wrap.innerHTML = svg;
+  const tip = document.getElementById("tip");
+  wrap.querySelectorAll(".tldot").forEach(c => {
+    c.onmousemove = ev => {
+      tip.textContent = `${c.dataset.label} · ${fmtDate(c.dataset.d)}: ${c.dataset.v}`;
+      tip.style.left = (ev.clientX + 12) + "px"; tip.style.top = (ev.clientY - 10) + "px";
+      tip.style.opacity = 1;
+    };
+    c.onmouseleave = () => tip.style.opacity = 0;
+  });
+  legendEl.innerHTML = series.map(s =>
+    `<span class="tlitem" data-entity="${esc(s.entity)}"><span class="dot" style="background:${s.color}"></span>${esc(s.label)}</span>`
+  ).join("");
+  legendEl.querySelectorAll(".tlitem").forEach(it => it.onclick = () => jumpToEntityFromRadar(it.dataset.entity));
 }
 
 const GAP_CLASS_LABEL = {
@@ -2002,7 +2325,7 @@ function applyTheme(t) {
   document.documentElement.setAttribute("data-theme", t);
   const btn = document.getElementById("themeToggle");
   if (btn) btn.textContent = t === "dark" ? "Claro" : "Escuro";
-  if (DATA) { renderLegend(); renderIndustryMonitor(); render(); syncEntityHighlight(); renderRadarPanels(); renderCrencaPanels(); renderRegPanels(); }
+  if (DATA) { renderLegend(); renderIndustryMonitor(); render(); syncEntityHighlight(); renderRadarPanels(); renderCrencaPanels(); renderRegPanels(); renderMapa(); renderComparar(); }
 }
 applyTheme(autoTheme());
 setInterval(() => { if (!themeManual) applyTheme(autoTheme()); }, 600000);
@@ -2349,6 +2672,7 @@ document.getElementById("integTab").onclick = () => toggleDrawer("integDrawer", 
 document.getElementById("radarTab").onclick = () => toggleDrawer("radarDrawer", true);
 document.getElementById("crencaTab").onclick = () => toggleDrawer("crencaDrawer", true);
 document.getElementById("regTab").onclick = () => toggleDrawer("regDrawer", true);
+document.getElementById("tlTab").onclick = () => toggleDrawer("tlDrawer", true);
 document.querySelectorAll(".drclose").forEach(b => b.onclick = () => toggleDrawer(b.dataset.close, false));
 document.getElementById("drawerScrim").onclick = () => closeDrawers();
 document.addEventListener("keydown", e => { if (e.key === "Escape") closeDrawers(); });
