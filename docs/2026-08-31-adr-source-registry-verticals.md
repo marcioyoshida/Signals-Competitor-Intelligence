@@ -1,7 +1,14 @@
 # ADR 019 — Declarative Source Registry & First-Class Verticals
 
-Status: ACCEPTED 2026-08-31 — Phases 1–4 shipped (see "Realization status" at the end; the
-still-bespoke FS fetch migration + per-sector taxonomy/entity seeding are the follow-ons).
+Status: ACCEPTED 2026-08-31; **PARTIALLY IMPLEMENTED** — core architecture is live and
+non-breaking, but the ADR's end state is NOT reached. Still open before this can be flagged
+Implemented: (a) the god-function is shrunk, not collapsed — there is no single
+`for spec in REGISTRY.active(vertical)` loop; 9 of 16 lens sources + the non-lens stores are
+still hand-coded; (b) adding a source still needs a `lambda_port` `_gated_source` call + a
+`_lens_section` payload line (not "one spec, zero handler edits"); (c) per-source knobs are
+still in `config/watchlist.yaml`, not on the specs; (d) the Anteater fork is NOT retired — its
+sector entities/taxonomy/sources aren't migrated, so a sectorial vertical yields an empty feed.
+See "Realization status" + "What's missing" at the end.
 Relates to ADR 011 (discovery/enrichment), ADR 003/006
 (axes & strategy frameworks over lenses), the narrative-signal taxonomy ADR (#34 lens/topic),
 ADR 015/016/017 (distribution tiers, Entry vertical scoping, conglomerate disambiguation),
@@ -164,3 +171,32 @@ What remains beyond this repo: the fork's sector ENTITIES + any sector SOURCES a
 to migrate in; the code path is unified. Optional hardening: migrate the still-bespoke FS
 fetches to `_gated_source` so a sectorial vertical also SKIPS their fetch cost (today their
 output is gated but the fetch still runs); register the non-lens stores as specs.
+
+## What's missing before this is "Implemented"
+
+Honest gap against the Decision above (ranked by how central to the ADR's promise):
+
+1. **The pipeline loop was never built.** The headline was "`lambda_port` becomes
+   `for spec in REGISTRY.active(vertical):` … the ~600-line god-function collapses to one
+   loop." What shipped is 7 sources calling `_gated_source` *individually* + ~9 lens sources
+   (market, new_entrants, pix/juros/inf_diario moves, fatos, sec, fiagro) still as bespoke
+   `try/with _source_budget` blocks. There is no loop; the god-function is smaller, not gone.
+2. **"Add a source = one spec, zero handler edits" is not true.** A new lens source still
+   needs a `_gated_source` call *and* a `_lens_section` entry in the payload dict. No
+   auto-registration. The core productivity claim is only partially delivered.
+3. **Per-source config not moved.** `config/watchlist.yaml` still holds the flat FS keyspace
+   (`pix_move_threshold_pct`, `dou_lookback_days`, …); the ADR said these move onto the spec.
+4. **The fork is not retired.** Phase 4 shipped the *config scaffolding* (verticals recognized,
+   fail-closed) but not the substance: the sector industry taxonomy, the seeded sector entity
+   universe, and any sector-specific sources still live in the Anteater fork. A sectorial
+   vertical publishes an empty feed today, so "one codebase replaces the fork" is enabled, not
+   done.
+5. **Non-lens stores are outside the model.** datajud, bcb_reclamações, reclame-aqui,
+   consumidor, macro, IF.data-store are not `SourceSpec`s, so the registry/vertical model does
+   not govern them.
+6. **Sectorial vertical is output-gated, not fetch-gated.** Under `ONCA_VERTICAL=<sector>` the
+   bespoke FS fetches still RUN (their output is dropped) — correct but wasteful.
+
+To flag **Implemented**: build the real registry loop (items 1–2), move the knobs (3), register
+the stores (5) and skip their fetch under a non-FS vertical (6). Item 4 (retire the fork) is a
+data migration that also needs the fork's entities/taxonomy — trackable separately.
