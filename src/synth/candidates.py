@@ -18,50 +18,27 @@ from collections import defaultdict
 from typing import Any
 from uuid import uuid4
 
+from src.ingest import registry as _reg  # ADR 019 — source/lens registry (single source of truth)
 from src.synth.entities import resolve_entities, signal_blob, tokens_for_match
 
 # Lens priority when ranking multi-signal entity clusters.
-LENS_WEIGHT = {
-    "regulatory": 0.35,
-    "antitrust": 0.33,
-    "sanctions": 0.32,
-    "fatos": 0.3,
-    "dou": 0.3,
-    "sec": 0.25,
-    "ofertas": 0.2,
-    "inf_diario": 0.15,
-    "pix": 0.12,
-    "juros": 0.12,
-    "entrants": 0.18,
-    "funds": 0.15,
-    "contracts": 0.2,
-    "news": 0.12,
-    "market": 0.08,
-}
-
-# Single-lens candidates allowed only for these lenses when is_new.
-# Lenses whose lone NEW signal is strong enough to surface/alert on its own.
-# News is intentionally excluded — it's "color" (low strategic weight); a single
-# headline must be corroborated by another lens to surface, else a routine promo
-# becomes a false alert.
-HIGH_VALUE_SOLO_LENSES = frozenset(
-    {"regulatory", "antitrust", "sanctions", "fatos", "dou", "sec", "ofertas",
-     "entrants", "funds", "contracts"}
-)
-
-# Market is backdrop only — never a solo seed.
-BACKDROP_LENSES = frozenset({"market"})
-
-# PER-INSTITUTION structured lenses (issue #50): each carries a specific institution's
-# own filing/movement (a new-entrant authorization, a Pix/juros series, a SEC 10-K, a
-# fund offering). A signal on one of these is about THAT subject — so it may fuse into a
-# cluster only when it SHARES the seed's tracked entity, never as topical "color" for an
-# unrelated seed. Only genuinely systemic lenses (regulatory/dou/market/news) can fuse
-# entity-less. This is what stops other entities' signals accreting onto a seed.
-STRUCTURED_SUBJECT_LENSES = frozenset(
-    {"entrants", "pix", "juros", "sec", "ofertas", "funds", "inf_diario", "fatos",
-     "sanctions", "contracts"}
-)
+# ADR 019 Phase 1: lens policy is now declared once per lens in the source registry
+# (src/ingest/registry.py) and DERIVED here, instead of four hand-maintained frozensets
+# that a new source had to remember to join (the #50-class "forgot a set" bug). Semantics
+# are unchanged — the registry reproduces the previous literals exactly.
+#
+#  - LENS_WEIGHT: strategic weight per lens.
+#  - HIGH_VALUE_SOLO_LENSES: a lone NEW signal on the lens can surface/alert on its own.
+#    News is intentionally excluded (low-weight "color" — needs corroboration).
+#  - BACKDROP_LENSES: market is backdrop only, never a solo seed.
+#  - STRUCTURED_SUBJECT_LENSES (issue #50): per-subject lenses (a specific institution's own
+#    filing/movement) may fuse into a cluster only when they SHARE the seed's tracked entity,
+#    never as topical color for an unrelated seed. Only systemic lenses (regulatory/dou/
+#    market/news) fuse entity-less. This stops other entities' signals accreting onto a seed.
+LENS_WEIGHT = _reg.lens_weight()
+HIGH_VALUE_SOLO_LENSES = _reg.solo_lenses()
+BACKDROP_LENSES = _reg.backdrop_lenses()
+STRUCTURED_SUBJECT_LENSES = _reg.structured_subject_lenses()
 
 # Corroboration floor for a news-only (single-lens) cluster: how many DISTINCT
 # outlets must independently carry the genuinely-new story before it surfaces on
@@ -367,31 +344,11 @@ def _collect_signals(
     min_pl: float = 0.0,
 ) -> list[dict[str, Any]]:
     """Flatten items + context from each section into tagged signal dicts."""
-    sections = [
-        ("regulatory", "regulatory"),
-        ("competitor", "funds"),
-        ("new_entrants", "entrants"),
-        ("ofertas", "ofertas"),
-        ("fatos", "fatos"),
-        ("dou", "dou"),
-        ("sanctions", "sanctions"),
-        ("cade", "antitrust"),
-        ("contracts", "contracts"),
-        ("news", "news"),
-        ("sec_filings", "sec"),
-        ("pix_moves", "pix"),
-        ("juros_moves", "juros"),
-        ("inf_diario_moves", "inf_diario"),
-        # FIAGRO agri-funds moves (task b) reuse the "funds" lens — deliberately,
-        # not a new "fiagro" lens: "funds" is already in HIGH_VALUE_SOLO_LENSES,
-        # so one material NEW move (PL/cotista move or new-class registration)
-        # can alert solo, same as a fresh CVM fund-class filing. The tradeoff:
-        # a fiagro_moves item is scored/ranked with the same (lower, 0.4) funds
-        # strategic weight as a routine filing, not a dedicated higher weight —
-        # acceptable since PL/cotista moves already carry pct_change magnitude.
-        ("fiagro_moves", "funds"),
-        ("market", "market"),
-    ]
+    # ADR 019 Phase 1: the (digest section → lens) mapping now comes from the source
+    # registry (src/ingest/registry.py), in the same order. Adding a source is one spec
+    # there, not an edit here. (E.g. `fiagro_moves` reuses the `funds` lens deliberately —
+    # a material NEW PL/cotista move alerts like a fresh CVM fund-class filing.)
+    sections = _reg.section_lens_pairs()
     out: list[dict[str, Any]] = []
     seen: set[str] = set()
     for section_key, lens in sections:
