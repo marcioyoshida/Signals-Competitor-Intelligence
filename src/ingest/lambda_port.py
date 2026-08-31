@@ -96,6 +96,7 @@ from src.ingest import (
     cvm_ipe,
     cvm_ofertas,
     bcb_reclamacoes,
+    ceis_cnep,
     datajud,
     dou,
     raw_writer,
@@ -858,6 +859,35 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as exc:  # pragma: no cover - defensive; upstream best-effort
             print(f"Warning: BCB reclamações fetch failed: {exc}")
 
+    # CEIS/CNEP federal sanctions (#60) — counterparty-integrity, sector-agnostic. Only
+    # sanctions resolving (CNPJ-root first) to a tracked entity are kept; a durable
+    # sanctions/index.json store holds state and _new_since_last_run drives the delta
+    # (seed-suppressed so the historical backlog does not flood the first run).
+    sanctions_records: list[dict[str, Any]] = []
+    new_sanctions: list[dict[str, Any]] = []
+    if os.environ.get("ONCA_CEIS_CNEP", "true").lower() in ("1", "true", "yes"):
+        bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
+        try:
+            with _source_budget("CEIS/CNEP sanctions", deadline, per_source):
+                from src.synth import entity_registry
+
+                # CNPJ-only resolution — no registry, no signal (correct: a sanction
+                # binds to a specific legal person; see ceis_cnep docstring).
+                cnpj_index = ceis_cnep.build_cnpj_index(
+                    entity_registry.list_entities()
+                ) if os.environ.get("ONCA_ENTITIES_TABLE") else {}
+                srows = ceis_cnep.fetch_sanctions() if cnpj_index else []
+                sanctions_records = ceis_cnep.map_to_entities(
+                    srows, cnpj_index=cnpj_index
+                )
+                new_sanctions = _new_since_last_run(
+                    "ceis_cnep", sanctions_records, seed_if_empty=True
+                )
+                if sanctions_records and bucket:
+                    ceis_cnep.update_store(sanctions_records, bucket)
+        except Exception as exc:  # pragma: no cover - defensive; upstream best-effort
+            print(f"Warning: CEIS/CNEP sanctions fetch failed: {exc}")
+
     # Reclame Aqui — consumer-reputation snapshots for retail-facing banks/fintechs
     # (issue #31). Unofficial source, so best-effort + off via env; writes a durable
     # reputation/index.json (entity-tied), surfaced in the feed + agent. Requires the
@@ -1010,6 +1040,14 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             "new_count": len(new_dou),
             "items": _tag_new(new_dou[:10]),
             "context": _strip_raw(dou_acts[:15]),
+        },
+        # CEIS/CNEP sanctions (#60) — entity-tied (CNPJ-anchored); a NEW sanction against
+        # a tracked entity surfaces solo (HIGH_VALUE_SOLO). Full state is in the store.
+        "sanctions": {
+            "count": len(sanctions_records),
+            "new_count": len(new_sanctions),
+            "items": _tag_new(new_sanctions[:10]),
+            "context": _strip_raw(sanctions_records[:15]),
         },
         # In "all" mode news is fetched inline here; in "structured" mode the news
         # slice is empty and the parallel news branch supplies it (overlaid at synth).
