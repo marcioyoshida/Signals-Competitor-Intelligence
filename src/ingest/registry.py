@@ -19,9 +19,21 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-# Verticals (ADR 019). Consumed from Phase 3; declared now for readiness.
+# Verticals (ADR 019). A vertical is the market a deployment serves; the same codebase runs
+# as Onça (financial-services) or as the Anteater sectorial product by setting ONCA_VERTICAL.
 VERTICAL_FS = "financial-services"
+# Anteater sectorial verticals — first-class here (Phase 4) so the sectorial product is a
+# CONFIG of this codebase, not a fork. Each folds in fully by (a) its industry slugs in
+# VERTICAL_INDUSTRIES below + entity_registry.INDUSTRIES, (b) a seeded sector entity universe,
+# (c) any sector-specific SourceSpecs (verticals={<sector>}). Until (a)/(b) are populated a
+# sector fails closed (empty feed) — it never leaks FS data.
+SECTORIAL_VERTICALS = ("pharma", "health", "logistics", "retail", "energy", "telecom", "agro")
+KNOWN_VERTICALS = (VERTICAL_FS, *SECTORIAL_VERTICALS)
 ALL = "all"
+
+
+def is_known_vertical(vertical: str) -> bool:
+    return vertical in KNOWN_VERTICALS
 
 
 @dataclass(frozen=True)
@@ -112,6 +124,26 @@ SPECS: dict[str, SourceSpec] = {s.id: s for s in SOURCES}
 
 def by_id(source_id: str) -> SourceSpec:
     return SPECS[source_id]
+
+
+# --- Vertical taxonomy (ADR 019 Phase 3b) --------------------------------------------------
+# A vertical's in-scope industry slugs — the feed is scoped to these so a sectorial deployment
+# publishes only its own market. ``None`` = all industries (no scoping): the financial-services
+# vertical spans the entire entity_registry.INDUSTRIES taxonomy, so Onça needs no feed scoping.
+# Sectorial verticals (pharma/health/logistics/retail/energy/telecom/agro) register their
+# industry sets here when the Anteater deployment is folded in (Phase 4).
+VERTICAL_INDUSTRIES: dict[str, "frozenset[str] | None"] = {
+    VERTICAL_FS: None,
+    # Sectorial verticals: their industry slugs are populated when the sector's entities are
+    # seeded (Phase 4 fold-in). Empty for now ⇒ fail-closed (empty feed), never an FS leak.
+    **{v: frozenset() for v in SECTORIAL_VERTICALS},
+}
+
+
+def vertical_industries(vertical: str) -> "frozenset[str] | None":
+    """In-scope industry slugs for ``vertical`` — ``None`` means all (no feed scoping).
+    Unknown verticals fail closed to an empty set (publish nothing) rather than leak."""
+    return VERTICAL_INDUSTRIES.get(vertical, frozenset())
 
 
 # --- Derived views (consumed by candidates.py in Phase 1) -----------------------------------

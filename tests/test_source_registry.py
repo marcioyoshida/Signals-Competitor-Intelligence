@@ -47,6 +47,18 @@ def test_shared_lens_sources_kept():
     assert set(funds_sources) == {"competitor", "fiagro_moves"}
 
 
+def test_vertical_taxonomy_and_known_verticals():
+    # ADR 019 Phase 3b/4 — vertical → industries; FS spans all (no scoping), sectors fail closed.
+    assert r.vertical_industries(r.VERTICAL_FS) is None            # None = all industries
+    assert r.is_known_vertical(r.VERTICAL_FS)
+    for v in r.SECTORIAL_VERTICALS:                                # pharma/health/… recognized
+        assert r.is_known_vertical(v)
+        assert r.vertical_industries(v) == frozenset()            # not-yet-seeded → empty (fail closed)
+    assert not r.is_known_vertical("nope")
+    assert r.vertical_industries("nope") == frozenset()           # unknown also fails closed
+    assert set(r.KNOWN_VERTICALS) == {r.VERTICAL_FS, *r.SECTORIAL_VERTICALS}
+
+
 def test_active_vertical_gates_sources():
     # Phase-3 forward check: sector-agnostic sources appear for any vertical; FS-only don't.
     fs = {s.id for s in r.active(r.VERTICAL_FS)}

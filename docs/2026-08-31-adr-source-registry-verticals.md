@@ -1,6 +1,8 @@
 # ADR 019 — Declarative Source Registry & First-Class Verticals
 
-Status: PROPOSED 2026-08-31. Relates to ADR 011 (discovery/enrichment), ADR 003/006
+Status: ACCEPTED 2026-08-31 — Phases 1–4 shipped (see "Realization status" at the end; the
+still-bespoke FS fetch migration + per-sector taxonomy/entity seeding are the follow-ons).
+Relates to ADR 011 (discovery/enrichment), ADR 003/006
 (axes & strategy frameworks over lenses), the narrative-signal taxonomy ADR (#34 lens/topic),
 ADR 015/016/017 (distribution tiers, Entry vertical scoping, conglomerate disambiguation),
 and the [[onca-tier1-cross-industry-ingestion]] arc (#60–#63) that motivated it.
@@ -125,3 +127,40 @@ per-source env flags.
 - **Ties:** lens semantics stay owned by the narrative-taxonomy ADR (#34); discovery sources
   (ADR-011) register as specs too; distribution tiers (ADR-016/017) compose with — do not
   duplicate — the vertical scoping.
+
+## Realization status (2026-08-31)
+
+- **Phase 1 SHIPPED** — `src/ingest/registry.py` (`LensSpec` + `SourceSpec`); `candidates.py`
+  derives its four lens sets + section list from it (exact reproduction, non-breaking).
+- **Phase 2 / 2b SHIPPED** — `_lens_section` (declarative section limits) + `_gated_source`
+  (gate→budget→fetch→delta→store) in `lambda_port`. 7 sources registry-driven: regulatory,
+  competitor, ofertas, dou, sanctions, cade, contracts. Still-bespoke (side effects / moves /
+  special sections): market, new_entrants, pix/juros/inf_diario moves, fatos, sec, fiagro, +
+  the non-lens stores (datajud/reclamações/reclame-aqui/consumidor).
+- **Phase 3 SHIPPED** — `ONCA_VERTICAL` (default `financial-services`); `_source_enabled`
+  vertical-gates the migrated sources' FETCH; a payload post-filter drops the lens SECTION of
+  ANY source (incl. still-bespoke FS ones) outside the active vertical. Under a sectorial
+  vertical only the `{all}` lens sources (sanctions/cade/contracts) survive.
+- **Phase 3b SHIPPED** — `VERTICAL_INDUSTRIES` + `vertical_industries()`; the feed builder
+  scopes `feed.json` to the active vertical's industries via `scope_feed_to_modules` (FS =
+  `None` = all = no scoping, so Onça is unchanged). Reuses the ADR-016 scoping primitive.
+- **Phase 4 SHIPPED (config scaffolding)** — the Anteater sectors (pharma/health/logistics/
+  retail/energy/telecom/agro) are first-class recognized verticals (`SECTORIAL_VERTICALS` /
+  `KNOWN_VERTICALS` / `is_known_vertical`), each fail-closed (empty industries) until seeded.
+  The sectorial product is now a **config** of this codebase, not a code fork.
+
+### Folding a sector fork in (the recipe Phase 4 establishes)
+
+A sector vertical `X` is fully live once:
+1. **Taxonomy** — add `X`'s industry slugs to `entity_registry.INDUSTRIES` and to
+   `registry.VERTICAL_INDUSTRIES["X"]` (replace the empty fail-closed set).
+2. **Entities** — seed `X`'s entity universe into the registry (the fork's data).
+3. **Sources** — the sector-agnostic `{all}` sources (CEIS/CNEP, CADE, PNCP) already apply;
+   register any sector-specific ingesters as `SourceSpec(..., verticals=frozenset({"X"}))`.
+4. **Deploy** — the SAME CDK stack with `ONCA_VERTICAL=X`. The ingest loop runs `X`'s sources,
+   and `feed.json` is scoped to `X`'s industries. No code fork.
+
+What remains beyond this repo: the fork's sector ENTITIES + any sector SOURCES are data/specs
+to migrate in; the code path is unified. Optional hardening: migrate the still-bespoke FS
+fetches to `_gated_source` so a sectorial vertical also SKIPS their fetch cost (today their
+output is gated but the fetch still runs); register the non-lens stores as specs.

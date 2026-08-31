@@ -1260,6 +1260,17 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     except Exception as exc:  # pragma: no cover - best-effort, read-only
         print(f"Warning: integrity audit skipped: {exc}")
         feed["integrity"] = {"findings": [], "counts": {}, "total": 0}
+    # ADR 019 Phase 3b — vertical feed scoping: a sectorial deployment publishes ONLY its
+    # own vertical's industries. financial-services (default) spans the whole taxonomy →
+    # vertical_industries is None → no scoping, so Onça's feed is unchanged (non-breaking).
+    from src.ingest import registry as _registry
+
+    _vertical = os.environ.get("ONCA_VERTICAL", _registry.VERTICAL_FS)
+    _vinds = _registry.vertical_industries(_vertical)
+    if _vinds is not None:
+        feed = scope_feed_to_modules(feed, _vinds)
+        feed["vertical"] = _vertical
+
     body = json.dumps(feed, ensure_ascii=False, default=_json_default).encode("utf-8")
     # ADR 016: the entry-scoped slice (entry-tier industries only) — written alongside
     # the full feed so the Entry Portal serves ONLY entry data (no higher-tier leak).

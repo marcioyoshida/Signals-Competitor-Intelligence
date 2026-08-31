@@ -213,10 +213,18 @@ def _strip_raw(docs: list[dict[str, Any]]) -> list[dict[str, Any]]:
 # SourceSpec, replacing the per-source hand-coded blocks. Migration is source-by-source;
 # the FS-core sources with interleaved side effects move over incrementally.
 
+_VERTICAL_WARNED: set[str] = set()
+
+
 def _active_vertical() -> str:
     """The market this deployment serves (ADR 019 Phase 3). Onça = financial-services;
     the Anteater sectorial deployment sets ONCA_VERTICAL to a sector."""
-    return os.environ.get("ONCA_VERTICAL", registry.VERTICAL_FS)
+    v = os.environ.get("ONCA_VERTICAL", registry.VERTICAL_FS)
+    if not registry.is_known_vertical(v) and v not in _VERTICAL_WARNED:
+        _VERTICAL_WARNED.add(v)
+        print(f"Warning: ONCA_VERTICAL={v!r} is not a known vertical "
+              f"{registry.KNOWN_VERTICALS}; failing closed (only sector-agnostic sources run).")
+    return v
 
 
 def _vertical_ok(spec: "registry.SourceSpec") -> bool:
