@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Onça · Entrada — Novos entrantes</title>
+<link rel="stylesheet" href="/v2/app.css" />
+</head>
+<body>
+<header class="appbar">
+  <div class="brand">
+    <span class="mark">ON<b>Ç</b>A</span>
+    <span class="ctx">Entrada</span>
+  </div>
+  <!-- Context nav: tenant-facing family only (Entrada + the four SaaS verticals).
+       The operator "Curadoria" surface is intentionally absent from every scoped
+       screen — it lives only in the full admin feed. -->
+  <nav class="ctxnav" aria-label="Contextos">
+    <a href="../newentry/" aria-current="page">Entrada</a>
+    <a href="../adquirencia/">Adquirência</a>
+    <a href="../fintech/">Fintechs</a>
+    <a href="../seguros/">Seguros</a>
+    <a href="../wealth/">Wealth</a>
+  </nav>
+  <span class="spacer"></span>
+  <span class="sub" id="asof">—</span>
+  <button class="icnbtn" id="themeBtn" title="Alternar tema" aria-label="Alternar tema claro/escuro">◐</button>
+</header>
+
+<main class="wrap">
+  <div class="pagehead">
+    <h1>Entrada — verticais em formação</h1>
+    <p class="lede">Quem está SE FORMANDO nas verticais Tier-3 rápidas e fragmentadas
+      (FIAGRO, betting, consórcio, crypto, FIIs)? Novos entrantes e as regras que
+      constituem cada vertical lideram; o mapa do comprador vem logo abaixo. Tudo por
+      contagem citada — nunca um tamanho de mercado estimado.</p>
+  </div>
+
+  <div class="tiles" id="kpis" style="margin-bottom:var(--s5)"></div>
+
+  <!-- Perguntar à Onça — present but honest: the grounded assistant belongs to
+       the SaaS plan. The entry tier is a login-less static slice with no
+       /api/ask entitlement, so the bar renders an upgrade state, never a
+       control that would 404 on submit. -->
+  <section class="band">
+    <div class="band-hd"><span class="overline">Perguntar à Onça</span><span class="rule"></span>
+      <span class="badge badge--ghost">resposta fundamentada</span></div>
+    <div class="panel">
+      <div class="panel__hd"><h2>Pergunte à base da Onça</h2><span class="spacer"></span>
+        <span class="hd-note">assistente fundamentado · plano SaaS</span></div>
+      <div class="panel__bd" id="askBody"></div>
+    </div>
+  </section>
+
+  <!-- LEAD 1 — Novos entrantes (the discovery moat) + formation-velocity funnel -->
+  <section class="band">
+    <div class="band-hd"><span class="overline">Novos entrantes · velocidade de formação</span><span class="rule"></span></div>
+    <div class="grid" style="grid-template-columns:1fr;gap:var(--s4)">
+      <div class="panel panel--lead">
+        <div class="panel__hd"><h2>Funil de formação</h2><span class="spacer"></span>
+          <span class="hd-note">contagem citada de filings na janela</span></div>
+        <div class="panel__bd" id="funnel"></div>
+      </div>
+      <div class="panel panel--lead">
+        <div class="panel__hd"><h2>Autorizações · registros CVM · ofertas</h2>
+          <span class="count" id="entrantsCount">0</span></div>
+        <div class="panel__bd panel__bd--flush panel__bd--scroll" id="entrants"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LEAD 2 — Regulatório (the rules constituting each vertical) -->
+  <section class="band">
+    <div class="band-hd"><span class="overline">Regulatório · as regras da vertical</span><span class="rule"></span></div>
+    <div class="panel panel--lead">
+      <div class="panel__hd"><h2>Normativos e DOU</h2><span class="spacer"></span>
+        <span class="hd-note">BCB / CVM / DOU</span></div>
+      <div class="panel__bd panel__bd--flush panel__bd--scroll" id="regulatorio"></div>
+    </div>
+  </section>
+
+  <!-- LEAD 3 — Mapa (buyer hero) -->
+  <section class="band">
+    <div class="band-hd"><span class="overline">Mapa do comprador</span><span class="rule"></span>
+      <span class="badge badge--infer">pico de ameaça na janela</span></div>
+    <div class="panel">
+      <div class="panel__hd"><h2>Entidades por pico de ameaça</h2><span class="spacer"></span>
+        <span class="hd-note">momentum quando não há IF.data — nunca share estimado</span></div>
+      <div class="panel__bd" id="mapa"></div>
+    </div>
+  </section>
+</main>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-hidden="true" role="dialog" aria-labelledby="drTitle">
+  <div class="drawer__hd"><h3 id="drTitle">Detalhe</h3>
+    <button class="drawer__close" id="drClose" aria-label="Fechar">×</button></div>
+  <div class="drawer__bd" id="drBody"></div>
+</aside>
+
+<script src="/v2/app.js"></script>
+<script src="/v2/context.js"></script>
+<script src="/v2/ask.js"></script>
+<script>
+const U = window.OncaUI, C = window.OncaCtx;
+U.initTheme();
+C.wireDrawer();
+// Entry tier has no /api/ask entitlement (static slice, no login) — honest state.
+OncaAsk.mount(document.getElementById("askBody"), { entry: true });
+document.getElementById("themeBtn").addEventListener("click", () => { U.toggleTheme(); if (window.DATA) render(); });
+
+(async function boot() {
+  // Entry Portal reads ONLY the static entry slice (feed.entry.json) — no auth,
+  // no higher-tier industry reachable. ?demo loads the co-located sample.
+  const res = await C.loadScopedFeed({ entry: true, entryUrl: "/feed.entry.json" });
+  if (res.error) { document.getElementById("entrants").innerHTML =
+    U.empty("Feed indisponível", res.error, "!"); return; }
+  window.DATA = res.data; C.setData(window.DATA); C.setAsOf(window.DATA); render();
+})();
+
+function render() {
+  const D = window.DATA;
+  const k = D.kpis || {};
+  C.renderKpis(document.getElementById("kpis"), [
+    ["Sinais hoje", k.narratives_latest], ["Entidades em formação", k.entities_tracked],
+    ["Fontes distintas", k.sources], ["Verticais", (D.industry_options || []).length],
+  ]);
+  C.renderEntrantsFunnel(document.getElementById("funnel"), D);
+  C.renderEntrants(document.getElementById("entrants"), D);
+  document.getElementById("entrantsCount").textContent =
+    C.feed(D).filter((c) => C.hasLens(c, "entrants", "ofertas", "funds")).length;
+  C.renderRegulatorio(document.getElementById("regulatorio"), D, {
+    emptyD: "Nenhum normativo constituindo estas verticais na janela." });
+  C.renderMapa(document.getElementById("mapa"), D, { momentum: true });
+}
+</script>
+</body>
+</html>

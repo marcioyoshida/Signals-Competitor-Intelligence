@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Onça · Seguros</title>
+<link rel="stylesheet" href="/v2/app.css" />
+</head>
+<body>
+<header class="appbar">
+  <div class="brand"><span class="mark">ON<b>Ç</b>A</span><span class="ctx">Seguros</span></div>
+  <nav class="ctxnav" aria-label="Contextos">
+    <a href="../newentry/">Entrada</a>
+    <a href="../adquirencia/">Adquirência</a>
+    <a href="../fintech/">Fintechs</a>
+    <a href="../seguros/" aria-current="page">Seguros</a>
+    <a href="../wealth/">Wealth</a>
+  </nav>
+  <span class="spacer"></span>
+  <span class="sub" id="asof">—</span>
+  <span id="authBox" style="display:inline-flex;gap:var(--s2);align-items:center"></span>
+  <button class="icnbtn" id="themeBtn" title="Alternar tema" aria-label="Alternar tema claro/escuro">◐</button>
+</header>
+
+<main class="wrap">
+  <div class="pagehead">
+    <h1>Seguros — regulatório e crença acumulada</h1>
+    <p class="lede">Cadência lenta recompensa a crença acumulada. Regulatório/DOU
+      (SUSEP, PREVIC, CADE) com prazos lidera; o comparativo entre seguradoras e a tese
+      competitiva (Crença/SWOT) vêm em seguida. Pix e churn de alta frequência ficam
+      recolhidos.</p>
+  </div>
+
+  <div class="tiles" id="kpis" style="margin-bottom:var(--s5)"></div>
+
+  <!-- Perguntar à Onça — grounded, cited Q&A (ADR 010). Lead selling point. -->
+  <section class="band">
+    <div class="band-hd"><span class="overline">Perguntar à Onça</span><span class="rule"></span>
+      <span class="badge badge--ghost">resposta fundamentada</span></div>
+    <div class="panel panel--lead">
+      <div class="panel__hd"><h2>Pergunte à base da Onça</h2><span class="spacer"></span>
+        <span class="hd-note">resposta só com fonte citada · escopada à sua licença</span></div>
+      <div class="panel__bd" id="askBody"></div>
+    </div>
+  </section>
+
+  <!-- LEAD 1 — Regulatorio/DOU (SUSEP/PREVIC/CADE) with deadlines + honest caveat -->
+  <section class="band">
+    <div class="band-hd"><span class="overline">Regulatório · SUSEP / PREVIC / CADE</span><span class="rule"></span></div>
+    <div class="grid lead-3" style="grid-template-columns:1fr 1fr">
+      <div class="panel panel--lead">
+        <div class="panel__hd"><h2>Prazos em vigor</h2><span class="count" id="calCount">0</span>
+          <span class="spacer"></span><span class="hd-note">mais urgente primeiro</span></div>
+        <div class="panel__bd panel__bd--flush panel__bd--scroll" id="calendar"></div>
+      </div>
+      <div class="panel panel--lead">
+        <div class="panel__hd"><h2>DOU e normativos</h2><span class="spacer"></span>
+          <span class="hd-note">cobertura SUSEP ainda fina</span></div>
+        <div class="panel__bd panel__bd--flush panel__bd--scroll" id="regulatorio"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LEAD 2 — Comparar across insurers -->
+  <section class="band">
+    <div class="band-hd"><span class="overline">Comparar seguradoras</span><span class="rule"></span></div>
+    <div class="panel panel--lead">
+      <div class="panel__hd"><h2>Roster de seguradoras</h2><span class="spacer"></span>
+        <span class="hd-note">pico de ameaça no tempo · momentum · share só com IF.data</span></div>
+      <div class="panel__bd" id="comparar"></div>
+    </div>
+  </section>
+
+  <!-- LEAD 3 — Crença / SWOT competitive thesis -->
+  <section class="band">
+    <div class="band-hd"><span class="overline">Crença · tese competitiva</span><span class="rule"></span>
+      <span class="badge badge--ghost">apenas crenças vetadas</span></div>
+    <div class="panel panel--lead">
+      <div class="panel__hd"><h2>SWOT por seguradora</h2><span class="spacer"></span>
+        <span class="hd-note">precisão primeiro — nada não-vetado aparece como fato</span></div>
+      <div class="panel__bd" id="swot"></div>
+    </div>
+  </section>
+
+  <!-- DEMOTE — Pix / high-freq churn -->
+  <section class="band">
+    <details class="fold">
+      <summary><span class="tw" aria-hidden="true">▸</span> Pix e alta frequência
+        <span class="demoted">— secundário em seguros</span></summary>
+      <div class="fold__bd" id="pix"></div>
+    </details>
+  </section>
+</main>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-hidden="true" role="dialog" aria-labelledby="drTitle">
+  <div class="drawer__hd"><h3 id="drTitle">Detalhe</h3>
+    <button class="drawer__close" id="drClose" aria-label="Fechar">×</button></div>
+  <div class="drawer__bd" id="drBody"></div>
+</aside>
+
+<script src="/v2/app.js"></script>
+<script src="/v2/context.js"></script>
+<script src="/v2/ask.js"></script>
+<script>
+function mountAsk() {
+  if (window.__askMounted) return;
+  window.__askMounted = true;
+  OncaAsk.mount(document.getElementById("askBody"), {
+    auth: OncaCtx,
+    examples: [
+      "Que normativos de SUSEP/PREVIC vencem primeiro?",
+      "Qual a tese competitiva vetada para a Porto?",
+      "Que seguradora ganhou momentum na janela?",
+      "Há algum movimento de CADE relevante?",
+    ],
+    onCite: (en) => {
+      const c = OncaCtx.feed(window.DATA).filter((x) => x.entity === en)
+        .sort((a, b) => (b.date || "").localeCompare(a.date || ""))[0];
+      if (c) OncaCtx.openCard(c);
+    },
+  });
+}
+OncaCtx.bootSaaS({
+  ctxLabel: "seguros",
+  render(D) {
+    mountAsk();
+    const k = D.kpis || {};
+    OncaCtx.renderKpis(document.getElementById("kpis"), [
+      ["Sinais hoje", k.narratives_latest], ["Alertas hoje", k.alerts_latest],
+      ["Seguradoras", k.entities_tracked], ["Fontes distintas", k.sources],
+    ]);
+    OncaCtx.renderCalendar(document.getElementById("calendar"), D);
+    document.getElementById("calCount").textContent =
+      OncaCtx.feed(D).filter((c) => c.deadline || c.days_to_deadline != null).length;
+    OncaCtx.renderRegulatorio(document.getElementById("regulatorio"), D, {
+      lenses: ["dou", "regulatory"],
+      caveat: "Cobertura de fontes SUSEP ainda é fina — a ausência de um item aqui não significa ausência do fato. Trate como incompleto.",
+      caveatBelow: 5,
+      emptyD: "Nenhum item de DOU/SUSEP na janela — cobertura em formação." });
+    OncaCtx.renderComparar(document.getElementById("comparar"), D, { limit: 10 });
+    OncaCtx.renderSWOT(document.getElementById("swot"), D, {});
+    OncaCtx.renderPix(document.getElementById("pix"), D);
+  },
+});
+</script>
+</body>
+</html>

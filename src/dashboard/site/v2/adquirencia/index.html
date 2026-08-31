@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Onça · Adquirência</title>
+<link rel="stylesheet" href="/v2/app.css" />
+</head>
+<body>
+<header class="appbar">
+  <div class="brand"><span class="mark">ON<b>Ç</b>A</span><span class="ctx">Adquirência</span></div>
+  <nav class="ctxnav" aria-label="Contextos">
+    <a href="../newentry/">Entrada</a>
+    <a href="../adquirencia/" aria-current="page">Adquirência</a>
+    <a href="../fintech/">Fintechs</a>
+    <a href="../seguros/">Seguros</a>
+    <a href="../wealth/">Wealth</a>
+  </nav>
+  <span class="spacer"></span>
+  <span class="sub" id="asof">—</span>
+  <span id="authBox" style="display:inline-flex;gap:var(--s2);align-items:center"></span>
+  <button class="icnbtn" id="themeBtn" title="Alternar tema" aria-label="Alternar tema claro/escuro">◐</button>
+</header>
+
+<main class="wrap">
+  <div class="pagehead">
+    <h1>Adquirência — oligopólio de maquininhas</h1>
+    <p class="lede">Roster fechado (Cielo, Getnet, Rede, Stone, PagBank, InfinitePay, Mercado
+      Pago). Comparar lidera — ameaça × momentum entidade a entidade; o risco ancora no ranking
+      oficial de reclamações do BCB; a substituição por Pix fecha. Fundos ficam recolhidos.</p>
+  </div>
+
+  <div class="tiles" id="kpis" style="margin-bottom:var(--s5)"></div>
+
+  <!-- Perguntar à Onça — grounded, cited Q&A (ADR 010). Lead selling point. -->
+  <section class="band">
+    <div class="band-hd"><span class="overline">Perguntar à Onça</span><span class="rule"></span>
+      <span class="badge badge--ghost">resposta fundamentada</span></div>
+    <div class="panel panel--lead">
+      <div class="panel__hd"><h2>Pergunte à base da Onça</h2><span class="spacer"></span>
+        <span class="hd-note">resposta só com fonte citada · escopada à sua licença</span></div>
+      <div class="panel__bd" id="askBody"></div>
+    </div>
+  </section>
+
+  <!-- LEAD 1 — Comparar (closed roster: ideal for a multi-entity timeline) -->
+  <section class="band">
+    <div class="band-hd"><span class="overline">Comparar · ameaça × momentum</span><span class="rule"></span></div>
+    <div class="panel panel--lead">
+      <div class="panel__hd"><h2>Roster de adquirência</h2><span class="spacer"></span>
+        <span class="hd-note">pico de ameaça no tempo · momentum de expansão · share só com IF.data</span></div>
+      <div class="panel__bd" id="comparar"></div>
+    </div>
+  </section>
+
+  <!-- LEAD 2 + 3 — Risco (BCB complaints) + Pix substitution -->
+  <section class="band">
+    <div class="band-hd"><span class="overline">Risco e substituição</span><span class="rule"></span></div>
+    <div class="grid lead-3" style="grid-template-columns:1fr 1fr">
+      <div class="panel panel--lead">
+        <div class="panel__hd"><h2>Risco</h2><span class="spacer"></span>
+          <span class="hd-note">ranking BCB + estresse</span></div>
+        <div class="panel__bd panel__bd--flush panel__bd--scroll" id="risco"></div>
+      </div>
+      <div class="panel panel--lead">
+        <div class="panel__hd"><h2>Substituição por Pix</h2><span class="count" id="pixCount">0</span>
+          <span class="spacer"></span><span class="hd-note">pressão sobre trilhos de cartão</span></div>
+        <div class="panel__bd panel__bd--flush panel__bd--scroll" id="pix"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DEMOTE — fundos, recolhido -->
+  <section class="band">
+    <details class="fold">
+      <summary><span class="tw" aria-hidden="true">▸</span> Fundos e ofertas
+        <span class="demoted">— secundário na adquirência</span></summary>
+      <div class="fold__bd" id="fundos"></div>
+    </details>
+  </section>
+</main>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-hidden="true" role="dialog" aria-labelledby="drTitle">
+  <div class="drawer__hd"><h3 id="drTitle">Detalhe</h3>
+    <button class="drawer__close" id="drClose" aria-label="Fechar">×</button></div>
+  <div class="drawer__bd" id="drBody"></div>
+</aside>
+
+<script src="/v2/app.js"></script>
+<script src="/v2/context.js"></script>
+<script src="/v2/ask.js"></script>
+<script>
+function mountAsk() {
+  if (window.__askMounted) return;
+  window.__askMounted = true;
+  OncaAsk.mount(document.getElementById("askBody"), {
+    auth: OncaCtx,
+    examples: [
+      "Como está o momentum da Stone vs. Cielo?",
+      "Quem lidera o ranking de reclamações do BCB?",
+      "Onde o Pix está pressionando as maquininhas?",
+      "Alguma adquirente em estresse na janela?",
+    ],
+    onCite: (en) => {
+      const c = OncaCtx.feed(window.DATA).filter((x) => x.entity === en)
+        .sort((a, b) => (b.date || "").localeCompare(a.date || ""))[0];
+      if (c) OncaCtx.openCard(c);
+    },
+  });
+}
+OncaCtx.bootSaaS({
+  ctxLabel: "adquirência",
+  render(D) {
+    mountAsk();
+    const k = D.kpis || {};
+    OncaCtx.renderKpis(document.getElementById("kpis"), [
+      ["Sinais hoje", k.narratives_latest], ["Alertas hoje", k.alerts_latest],
+      ["Entidades no roster", k.entities_tracked], ["Fontes distintas", k.sources],
+    ]);
+    OncaCtx.renderComparar(document.getElementById("comparar"), D, { limit: 12 });
+    OncaCtx.renderRisco(document.getElementById("risco"), D);
+    OncaCtx.renderPix(document.getElementById("pix"), D);
+    document.getElementById("pixCount").textContent =
+      OncaCtx.feed(D).filter((c) => OncaCtx.hasLens(c, "pix")).length;
+    OncaCtx.renderFundos(document.getElementById("fundos"), D);
+  },
+});
+</script>
+</body>
+</html>

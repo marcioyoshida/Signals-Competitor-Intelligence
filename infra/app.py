@@ -19,6 +19,7 @@ from aws_cdk import aws_cloudfront as cloudfront
 from aws_cdk import aws_cognito as cognito
 from aws_cdk import aws_cloudfront_origins as cf_origins
 from aws_cdk import aws_cloudwatch as cloudwatch
+from aws_cdk import custom_resources as cr
 from aws_cdk import aws_dynamodb as dynamodb
 from aws_cdk import aws_events as events
 from aws_cdk import aws_events_targets as targets
@@ -482,6 +483,20 @@ class OncaPrototypeStack(Stack):
             code=cloudfront.FunctionCode.from_inline(
                 "function handler(event) {\n"
                 "  var r = event.request; var h = r.headers;\n"
+                "  // Clean-route rewrite (v2 multi-context dashboards), evaluated\n"
+                "  // BEFORE the basic-auth gate: /admin, /newentry, /adquirencia,\n"
+                "  // /fintech, /seguros, /wealth (with or without a trailing slash)\n"
+                "  // map to their /v2/<ctx>/index.html object. The root '/',\n"
+                "  // /entry/*, static assets and every /api/* behavior pass through\n"
+                "  // untouched; auth still gates everything below.\n"
+                '  var routes = { "/admin": "admin", "/newentry": "newentry",\n'
+                '    "/adquirencia": "adquirencia", "/fintech": "fintech",\n'
+                '    "/seguros": "seguros", "/wealth": "wealth" };\n'
+                "  var key = r.uri;\n"
+                '  if (key.length > 1 && key.charAt(key.length - 1) === "/") {\n'
+                "    key = key.substring(0, key.length - 1);\n"
+                "  }\n"
+                '  if (routes[key]) { r.uri = "/v2/" + routes[key] + "/index.html"; }\n'
                 f'  var expected = "Basic {basic}";\n'
                 "  if (!h.authorization || h.authorization.value !== expected) {\n"
                 "    return { statusCode: 401, statusDescription: 'Unauthorized',\n"
@@ -565,6 +580,78 @@ class OncaPrototypeStack(Stack):
             ),
         )
 
+        # --- Demo SaaS tenant provisioning (deploy-time, idempotent) --------------
+        # ADR 016 SaaS-plane demo: four single-module `saas` tenants + one Cognito
+        # user each (tenant/tier ride as custom claims the JWT authorizer forwards to
+        # /api/feed). Provisioned ON DEPLOY so a fresh account has a working per-tenant
+        # feed without a manual seed. tier=`saas` ⇒ unrestricted module allow-list
+        # (see allowed_industries_for_tier), so writing these rows directly can NOT
+        # weaken the entry-tier cap — a real `entry` tenant is still validated/capped
+        # by put_tenant_config on provision. Kept in sync with the v2 dashboard
+        # contexts: acquiring↔adquirencia, fintech↔fintech, insurance↔seguros,
+        # wealth-management↔wealth (the newentry portal is entry-tier, not here).
+        demo_tenants = [
+            ("acquiring", "acquiring"),
+            ("fintech", "fintech"),
+            ("insurance", "insurance"),
+            ("wealth-management", "wealth-management"),
+        ]
+        # onca-tenant-config rows via a single idempotent BatchWriteItem custom
+        # resource (re-runs each deploy; PutRequest overwrites ⇒ self-healing). Mirrors
+        # the {tenant_id, tier, modules, plane} shape put_tenant_config writes.
+        _put_requests = [
+            {
+                "PutRequest": {
+                    "Item": {
+                        "tenant_id": {"S": tid},
+                        "tier": {"S": "saas"},
+                        "modules": {"L": [{"S": slug}]},
+                        "plane": {"S": "saas"},
+                    }
+                }
+            }
+            for (tid, slug) in demo_tenants
+        ]
+        _seed_call = cr.AwsSdkCall(
+            service="DynamoDB",
+            action="batchWriteItem",
+            parameters={"RequestItems": {tenant_config_table.table_name: _put_requests}},
+            physical_resource_id=cr.PhysicalResourceId.of("onca-demo-tenant-seed"),
+        )
+        cr.AwsCustomResource(
+            self,
+            "OncaDemoTenantSeed",
+            on_create=_seed_call,
+            on_update=_seed_call,
+            policy=cr.AwsCustomResourcePolicy.from_sdk_calls(
+                resources=[tenant_config_table.table_arn]
+            ),
+            install_latest_aws_sdk=False,
+        )
+        # One demo Cognito user per tenant. SUPPRESS ⇒ no invite email to the
+        # placeholder .example address; email_verified skips verification. Users land
+        # in FORCE_CHANGE_PASSWORD — an operator sets a permanent demo password
+        # out-of-band (the one unavoidable manual step; see deploy notes).
+        for (tid, _slug) in demo_tenants:
+            _uid = tid.replace("-", "").capitalize()
+            cognito.CfnUserPoolUser(
+                self,
+                f"OncaDemoUser{_uid}",
+                user_pool_id=user_pool.user_pool_id,
+                username=f"demo-{tid}@onca.example",
+                message_action="SUPPRESS",
+                user_attributes=[
+                    cognito.CfnUserPoolUser.AttributeTypeProperty(
+                        name="email", value=f"demo-{tid}@onca.example"),
+                    cognito.CfnUserPoolUser.AttributeTypeProperty(
+                        name="email_verified", value="true"),
+                    cognito.CfnUserPoolUser.AttributeTypeProperty(
+                        name="custom:tenant", value=tid),
+                    cognito.CfnUserPoolUser.AttributeTypeProperty(
+                        name="custom:tier", value="saas"),
+                ],
+            )
+
         # And a CloudWatch dashboard to watch pilot traffic at a glance.
         def _cf_metric(name: str, statistic: str) -> cloudwatch.Metric:
             return cloudwatch.Metric(
@@ -609,7 +696,20 @@ class OncaPrototypeStack(Stack):
             distribution=distribution,
             # /entry/index.html = the ADR 016 Entry Portal (thin shared static site
             # that serves ONLY feed.entry.json — no higher-tier industry can leak).
-            distribution_paths=["/index.html", "/entry/index.html"],
+            distribution_paths=[
+                "/index.html",
+                "/entry/index.html",
+                # v2 multi-context dashboards (six clean routes + shared assets).
+                "/v2/admin/index.html",
+                "/v2/newentry/index.html",
+                "/v2/adquirencia/index.html",
+                "/v2/fintech/index.html",
+                "/v2/seguros/index.html",
+                "/v2/wealth/index.html",
+                "/v2/app.css",
+                "/v2/app.js",
+                "/v2/context.js",
+            ],
             prune=False,
         )
 
