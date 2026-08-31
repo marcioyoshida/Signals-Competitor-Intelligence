@@ -96,9 +96,11 @@ from src.ingest import (
     cvm_ipe,
     cvm_ofertas,
     bcb_reclamacoes,
+    cade,
     ceis_cnep,
     datajud,
     dou,
+    pncp_contratos,
     raw_writer,
     receita_cnpj,
     reclame_aqui,
@@ -819,6 +821,25 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
             print(f"Warning: Diário Oficial fetch failed: {exc}")
 
+    # CADE antitrust (#61) — merger reviews (Atos de Concentração) via the DOU Defesa
+    # Econômica organ. Distinct from the `dou` lens: pulls ALL merger acts and resolves
+    # the parties by NAME (parties are the named subjects), so a deal surfaces as a
+    # dedicated M&A `antitrust` signal. Sector-agnostic. Best-effort; off via env.
+    cade_records: list[dict[str, Any]] = []
+    new_cade: list[dict[str, Any]] = []
+    if os.environ.get("ONCA_CADE", "true").lower() in ("1", "true", "yes"):
+        try:
+            with _source_budget("CADE antitrust", deadline, per_source):
+                from src.synth.entities import resolve_entities
+
+                atos = cade.fetch_atos(
+                    lookback_days=int(os.environ.get("ONCA_CADE_LOOKBACK_DAYS", "45"))
+                )
+                cade_records = cade.map_to_entities(atos, resolver=resolve_entities)
+                new_cade = _new_since_last_run("cade", cade_records, seed_if_empty=True)
+        except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
+            print(f"Warning: CADE antitrust fetch failed: {exc}")
+
     # BCB macro — Copom/Selic decision + weekly Focus expectations (market-wide,
     # not entity-tied; surfaces as standalone "macro" cards). Best-effort.
     macro_selic: dict[str, Any] | None = None
@@ -900,6 +921,35 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                     ceis_cnep.update_store(sanctions_records, bucket)
         except Exception as exc:  # pragma: no cover - defensive; upstream best-effort
             print(f"Warning: CEIS/CNEP sanctions fetch failed: {exc}")
+
+    # PNCP federal contracts (#62) — demand signal, sector-agnostic. DEFAULT-OFF: PNCP has
+    # no supplier filter (~18k contracts/day scanned to find tracked suppliers), which yields
+    # ~0 for the FS registry; enable (ONCA_PNCP_CONTRATOS=true) for the sectorial deployment
+    # whose supplier universe genuinely appears here. CNPJ-only resolution (see the module).
+    contracts_records: list[dict[str, Any]] = []
+    new_contracts: list[dict[str, Any]] = []
+    if os.environ.get("ONCA_PNCP_CONTRATOS", "false").lower() in ("1", "true", "yes"):
+        bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
+        try:
+            with _source_budget("PNCP contracts", deadline, per_source):
+                from src.synth import entity_registry
+
+                cnpj_index = ceis_cnep.build_cnpj_index(
+                    entity_registry.list_entities()
+                ) if os.environ.get("ONCA_ENTITIES_TABLE") else {}
+                crows = pncp_contratos.fetch_contracts(
+                    days_back=int(os.environ.get("ONCA_PNCP_LOOKBACK_DAYS", "2")),
+                    max_pages=int(os.environ.get("ONCA_PNCP_MAX_PAGES", "60")),
+                    min_valor=float(os.environ.get("ONCA_PNCP_MIN_VALOR", "0")),
+                ) if cnpj_index else []
+                contracts_records = pncp_contratos.map_to_entities(crows, cnpj_index=cnpj_index)
+                new_contracts = _new_since_last_run(
+                    "pncp_contratos", contracts_records, seed_if_empty=True
+                )
+                if contracts_records and bucket:
+                    pncp_contratos.update_store(contracts_records, bucket)
+        except Exception as exc:  # pragma: no cover - defensive; upstream best-effort
+            print(f"Warning: PNCP contracts fetch failed: {exc}")
 
     # Reclame Aqui — consumer-reputation snapshots for retail-facing banks/fintechs
     # (issue #31). Unofficial source, so best-effort + off via env; writes a durable
@@ -1061,6 +1111,20 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             "new_count": len(new_sanctions),
             "items": _tag_new(new_sanctions[:10]),
             "context": _strip_raw(sanctions_records[:15]),
+        },
+        # CADE merger reviews (#61) — M&A signal; parties resolved by name, surfaces solo.
+        "cade": {
+            "count": len(cade_records),
+            "new_count": len(new_cade),
+            "items": _tag_new(new_cade[:10]),
+            "context": _strip_raw(cade_records[:15]),
+        },
+        # PNCP federal contracts (#62) — demand signal (default-off; CNPJ-anchored).
+        "contracts": {
+            "count": len(contracts_records),
+            "new_count": len(new_contracts),
+            "items": _tag_new(new_contracts[:10]),
+            "context": _strip_raw(contracts_records[:15]),
         },
         # In "all" mode news is fetched inline here; in "structured" mode the news
         # slice is empty and the parallel news branch supplies it (overlaid at synth).

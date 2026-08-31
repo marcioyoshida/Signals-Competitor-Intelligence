@@ -23,6 +23,7 @@ from src.synth.entities import resolve_entities, signal_blob, tokens_for_match
 # Lens priority when ranking multi-signal entity clusters.
 LENS_WEIGHT = {
     "regulatory": 0.35,
+    "antitrust": 0.33,
     "sanctions": 0.32,
     "fatos": 0.3,
     "dou": 0.3,
@@ -33,6 +34,7 @@ LENS_WEIGHT = {
     "juros": 0.12,
     "entrants": 0.18,
     "funds": 0.15,
+    "contracts": 0.2,
     "news": 0.12,
     "market": 0.08,
 }
@@ -43,7 +45,8 @@ LENS_WEIGHT = {
 # headline must be corroborated by another lens to surface, else a routine promo
 # becomes a false alert.
 HIGH_VALUE_SOLO_LENSES = frozenset(
-    {"regulatory", "sanctions", "fatos", "dou", "sec", "ofertas", "entrants", "funds"}
+    {"regulatory", "antitrust", "sanctions", "fatos", "dou", "sec", "ofertas",
+     "entrants", "funds", "contracts"}
 )
 
 # Market is backdrop only — never a solo seed.
@@ -56,7 +59,8 @@ BACKDROP_LENSES = frozenset({"market"})
 # unrelated seed. Only genuinely systemic lenses (regulatory/dou/market/news) can fuse
 # entity-less. This is what stops other entities' signals accreting onto a seed.
 STRUCTURED_SUBJECT_LENSES = frozenset(
-    {"entrants", "pix", "juros", "sec", "ofertas", "funds", "inf_diario", "fatos", "sanctions"}
+    {"entrants", "pix", "juros", "sec", "ofertas", "funds", "inf_diario", "fatos",
+     "sanctions", "contracts"}
 )
 
 # Corroboration floor for a news-only (single-lens) cluster: how many DISTINCT
@@ -371,6 +375,8 @@ def _collect_signals(
         ("fatos", "fatos"),
         ("dou", "dou"),
         ("sanctions", "sanctions"),
+        ("cade", "antitrust"),
+        ("contracts", "contracts"),
         ("news", "news"),
         ("sec_filings", "sec"),
         ("pix_moves", "pix"),
