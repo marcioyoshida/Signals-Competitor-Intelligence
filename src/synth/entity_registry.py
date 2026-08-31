@@ -73,6 +73,20 @@ _PROV_PROTECT = {"inferred": 0, "enrich": 2, "discovery": 2, "structured": 3,
                  "curated": 4, "fixture": 4}  # enrich==discovery (enrich follows discovery)
 
 
+_TICKER_ALIAS = re.compile(r"^(?:TICKER:)?[A-Z]{4}\d{1,2}$")
+
+
+def _is_protected(ent: dict[str, Any], field: str = "industries") -> bool:
+    """The field's provenance is curated/fixture (top protection) — an automated write may
+    not overwrite it."""
+    src = (ent.get("_prov") or {}).get(field, {}).get("source")
+    return _PROV_PROTECT.get(src, 0) >= 4
+
+
+def _is_automated(source: str) -> bool:
+    return _PROV_PROTECT.get(source, 0) < 4
+
+
 def _may_write(ent: dict[str, Any], field: str, source: str) -> bool:
     """Phase 2: may a write from `source` set `field`? A field with no provenance is open;
     otherwise the write must be at least as strong as the field's current provenance —
@@ -249,6 +263,17 @@ def put_entity(
     substring matching — preserving curated hacks like "STONE " / "TICKER:STNE".
     """
     t = _table(table)
+    # ADR 018 Phase 2 (precedence, generalized): a *fresh* automated write (discovery/
+    # enrich create, prov=None) may not OVERWRITE an existing entity whose classification is
+    # curated/fixture-protected. This is the general form of the #52 create-overwrite guard
+    # ("XP" FIAGRO fund colliding onto the curated `xp` institution): identity-clobbering is
+    # blocked at the single writer, not just in discover_fiagro. Delegating setters pass an
+    # explicit `prov` (assign_ticker) and are exempt — they preserve the protected fields.
+    if prov is None and _is_automated(source):
+        _existing = get_entity(entity_id, table=t)
+        if _existing is not None and _is_protected(_existing, "industries"):
+            _log(entity_id, "blocked", source, {"field": "put", "reason": "protected-entity-overwrite"})
+            return _existing
     raw = [str(a) for a in (alias_forms if alias_forms is not None else aliases) if str(a).strip()]
     norm = sorted(
         {normalize_alias(a) for a in aliases if str(a).strip() and not str(a).upper().startswith("TICKER:")}
@@ -859,6 +884,15 @@ def accumulate_aliases(
     ent = get_entity(entity_id, table=t)
     if not ent:
         return []
+    # ADR 018 Phase 2 (precedence, generalized): an automated accumulation onto a curated/
+    # fixture-protected entity may not introduce a *ticker-shaped* alias (FII/FIAGRO code, e.g.
+    # BTAL11 / TICKER:CPTA11). A ticker is identity-grade and belongs to exactly one issuer;
+    # letting a fund ticker land as an institution alias is precisely the #52 feedback-loop
+    # fuel (ticker re-resolves the fund onto the institution → re-enrich). Real ticker
+    # assignment flows through assign_ticker, so this never blocks a legitimate ticker.
+    forms = list(forms)
+    if _is_automated(source) and _is_protected(ent, "industries"):
+        forms = [f for f in forms if not _TICKER_ALIAS.match(str(f or "").strip().upper())]
     norm_set = set(ent.get("aliases") or [])
     cur_forms = list(ent.get("alias_forms") or [])
     forms_upper = {f.upper() for f in cur_forms}

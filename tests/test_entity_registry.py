@@ -513,6 +513,44 @@ def test_write_precedence_blocks_automated_demotion():
     assert er.get_entity("btg", table=t)["parent"] == "someone"
 
 
+def test_put_entity_automated_create_cannot_overwrite_protected(monkeypatch):
+    # ADR 018 Phase 2 (generalized #52 create-overwrite): a fresh automated write may not
+    # clobber a curated/fixture entity — the "XP" FIAGRO fund colliding onto `xp` the bank.
+    logs = []
+    monkeypatch.setattr(er, "_log", lambda *a, **k: logs.append((a, k)))
+    t = FakeTable()
+    er.put_entity("xp", "XP Inc.", ["XP", "XPBR31"], industries=["broker-dealer"],
+                  cnpj_roots=["02332886"], source="fixture", table=t)
+    # a discovery create for a same-slug FIAGRO fund is REJECTED; the bank is untouched.
+    ret = er.put_entity("xp", "XP AGRO FIAGRO", ["XPCA11"], industries=["agri-funds"],
+                        source="discovery", table=t)
+    keep = er.get_entity("xp", table=t)
+    assert ret["industries"] == ["broker-dealer"] and keep["industries"] == ["broker-dealer"]
+    assert keep["display_name"] == "XP Inc."
+    # a non-colliding automated create still works; a delegating prov-write is exempt.
+    er.put_entity("xpca11", "XP AGRO FIAGRO", ["XPCA11"], industries=["agri-funds"],
+                  source="discovery", table=t)
+    assert er.get_entity("xpca11", table=t)["industries"] == ["agri-funds"]
+
+
+def test_accumulate_aliases_drops_fund_ticker_on_protected_institution():
+    # ADR 018 Phase 2 (generalized #52 loop fuel): an automated accumulation onto a
+    # protected institution may not introduce a ticker-shaped alias (BTAL11 / TICKER:CPTA11).
+    t = FakeTable()
+    er.put_entity("btg", "BTG Pactual", ["BTG"], industries=["investment-banking"],
+                  source="fixture", table=t)
+    added = er.accumulate_aliases(
+        "btg", ["BTAL11", "TICKER:CPTA11", "BTG PACTUAL GESTORA DE RECURSOS"],
+        source="enrich", table=t)
+    assert "BTG PACTUAL GESTORA DE RECURSOS" in added        # legit name form kept
+    assert not any(a.upper().endswith("11") or a.upper().startswith("TICKER:") for a in added)
+    assert "BTAL11" not in (er.get_entity("btg", table=t).get("alias_forms") or [])
+    # a discovery-created fund (unprotected) still accumulates its own ticker.
+    er.put_entity("fund", "Some Fund", ["SFND"], industries=["agri-funds"],
+                  source="discovery", table=t)
+    assert er.accumulate_aliases("fund", ["SFND11"], source="enrich", table=t) == ["SFND11"]
+
+
 def test_curation_log_records_mutations(monkeypatch):
     # ADR 018 Phase 1b: every registry mutation appends to the journal (best-effort).
     class _Sink:

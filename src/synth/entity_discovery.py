@@ -550,6 +550,12 @@ def discover_fiagro(
             # pollution. NEVER enrich it: that re-adds agri-funds AND re-accumulates the
             # fund's aliases onto the institution, a self-sustaining loop. Fall through to
             # create/propose (where the collision guard raises a review).
+            # This resolution-time guard is now BACKED (not replaced) by write-time
+            # precedence (ADR 018 Phase 2): set_industries is _may_write-blocked, and
+            # accumulate_aliases drops ticker-shaped forms, on a protected institution.
+            # Keeping the guard is deliberate defense-in-depth — it also stops the residual
+            # name-alias accumulation and ticker-less-institution edge that per-field
+            # precedence does not, and keeps the mis-resolution from happening at all.
             if set(ent.get("industries") or []) - _FUND_INDUSTRIES:
                 eid = None
         if eid:
