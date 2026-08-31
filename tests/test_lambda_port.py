@@ -1003,3 +1003,23 @@ def test_lambda_handler_structured_mode_skips_news(monkeypatch):
     body = json.loads(resp["body"])
     assert body["source"] == "lambda_port"
     assert body["news"] == {"count": 0, "new_count": 0, "items": [], "context": [], "fetched_ids": []}
+
+
+def test_lambda_handler_vertical_gates_lens_sections(monkeypatch):
+    # ADR 019 Phase 3: under a sectorial vertical, FS-only lens sections are dropped from the
+    # digest while sector-agnostic ({all}) ones survive; non-lens sections are untouched.
+    monkeypatch.setenv("ONCA_VERTICAL", "retail")
+    monkeypatch.setattr(lambda_port, "_new_since_last_run",
+                        lambda source, docs, seed_if_empty=False, commit=True: docs)
+    monkeypatch.setattr(lambda_port, "_moves_since_last_run", lambda *a, **k: [])
+    monkeypatch.setattr(lambda_port.cade, "fetch_atos", lambda **k: [])   # keep off live DOU
+    monkeypatch.setattr(lambda_port.cade, "map_to_entities", lambda atos, **k: [])
+    _stub_core_ingesters(monkeypatch)
+
+    body = json.loads(lambda_port.lambda_handler({"mode": "structured"}, None)["body"])
+    for fs in ("regulatory", "competitor", "ofertas", "dou", "pix_moves", "fatos",
+               "sec_filings", "market", "fiagro_moves"):
+        assert fs not in body, f"FS lens section {fs} should be gated out under 'retail'"
+    for agnostic in ("sanctions", "cade", "contracts"):
+        assert agnostic in body, f"sector-agnostic section {agnostic} should survive"
+    assert "macro" in body and body["source"] == "lambda_port"   # non-lens sections untouched

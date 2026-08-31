@@ -52,6 +52,29 @@ def test_gated_source_runs_fetch_delta_store(monkeypatch):
     assert stored == {"n": 2}                               # store got the full records
 
 
+def test_vertical_gating(monkeypatch):
+    # ADR 019 Phase 3 — a source runs only in its verticals; sector-agnostic ({all}) always.
+    monkeypatch.delenv("ONCA_VERTICAL", raising=False)
+    assert lp._active_vertical() == reg.VERTICAL_FS                 # default = financial-services
+    fs_spec = reg.by_id("regulatory")                              # verticals = {financial-services}
+    all_spec = reg.by_id("sanctions")                             # verticals = {all}
+    assert lp._vertical_ok(fs_spec) and lp._vertical_ok(all_spec)  # both apply under FS
+    monkeypatch.setenv("ONCA_VERTICAL", "retail")
+    assert not lp._vertical_ok(fs_spec)                            # FS source excluded elsewhere
+    assert lp._vertical_ok(all_spec)                              # {all} still applies
+    assert lp._source_enabled(fs_spec) is False                    # gate blocks the FS source
+    assert lp._source_enabled(all_spec) is True
+
+
+def test_gated_source_skips_when_vertical_excludes(monkeypatch):
+    monkeypatch.setenv("ONCA_VERTICAL", "retail")
+    called = {"n": 0}
+    recs, new = lp._gated_source(
+        reg.by_id("regulatory"), deadline=time.monotonic() + 100, per_source=90,
+        fetch=lambda: called.__setitem__("n", 1) or [{"id": 1}])
+    assert (recs, new) == ([], []) and called["n"] == 0            # FS source's fetch skipped
+
+
 def test_gated_source_swallows_fetch_error(monkeypatch):
     def boom():
         raise RuntimeError("upstream down")

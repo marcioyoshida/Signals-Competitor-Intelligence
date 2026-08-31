@@ -213,8 +213,21 @@ def _strip_raw(docs: list[dict[str, Any]]) -> list[dict[str, Any]]:
 # SourceSpec, replacing the per-source hand-coded blocks. Migration is source-by-source;
 # the FS-core sources with interleaved side effects move over incrementally.
 
+def _active_vertical() -> str:
+    """The market this deployment serves (ADR 019 Phase 3). Onça = financial-services;
+    the Anteater sectorial deployment sets ONCA_VERTICAL to a sector."""
+    return os.environ.get("ONCA_VERTICAL", registry.VERTICAL_FS)
+
+
+def _vertical_ok(spec: "registry.SourceSpec") -> bool:
+    """Whether ``spec`` applies to the active vertical (sector-agnostic = ``all``)."""
+    return registry.ALL in spec.verticals or _active_vertical() in spec.verticals
+
+
 def _source_enabled(spec: "registry.SourceSpec") -> bool:
-    """Gate a source on its env flag (default from spec.default_on)."""
+    """Gate a source on its vertical applicability (ADR 019 Phase 3) then its env flag."""
+    if not _vertical_ok(spec):
+        return False
     default = "true" if spec.default_on else "false"
     flag = spec.env_flag or f"ONCA_{spec.id.upper()}"
     return os.environ.get(flag, default).lower() in ("1", "true", "yes")
@@ -258,7 +271,7 @@ def _gated_source(
         with _source_budget(spec.label or spec.id, deadline, per_source):
             records = fetch() or []
             new_records = _new_since_last_run(
-                spec.state_key or spec.id, records, seed_if_empty=True
+                spec.state_key or spec.id, records, seed_if_empty=spec.seed_if_empty
             )
             if store is not None and records:
                 store(records)
@@ -494,19 +507,16 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     deadline = _ingest_deadline(context)
     per_source = int(os.environ.get("ONCA_SOURCE_TIMEOUT_SEC", "90"))
 
-    try:
-        with _source_budget("BCB normativos", deadline, per_source):
-            normativos = bcb_normativos.fetch_recent(days=lookback_days)
-    except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
-        normativos = []
-        print(f"Warning: BCB normativos fetch failed: {exc}")
-
-    try:
-        with _source_budget("CVM funds", deadline, per_source):
-            funds = cvm_fundos.fetch_funds(watchlist_admins=competitors)
-    except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
-        funds = []
-        print(f"Warning: CVM funds fetch failed: {exc}")
+    # BCB normativos + CVM funds — fetch + delta together (ADR 019 Phase 2b). Their delta
+    # keeps seed_if_empty=False (first run reports all as new, per the spec).
+    normativos, new_normativos = _gated_source(
+        registry.by_id("regulatory"), deadline=deadline, per_source=per_source,
+        fetch=lambda: bcb_normativos.fetch_recent(days=lookback_days),
+    )
+    funds, new_funds = _gated_source(
+        registry.by_id("competitor"), deadline=deadline, per_source=per_source,
+        fetch=lambda: cvm_fundos.fetch_funds(watchlist_admins=competitors),
+    )
 
     try:
         with _source_budget("IF.data market", deadline, per_source):
@@ -807,19 +817,11 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         print(f"Warning: BCB juros médios fetch failed: {exc}")
 
     # CVM ofertas — capital raise / product launch (seed suppressed on first run).
-    offerings: list[dict[str, Any]] = []
-    new_ofertas: list[dict[str, Any]] = []
-    try:
-        with _source_budget("CVM ofertas", deadline, per_source):
-            offerings = cvm_ofertas.fetch_recent(
-                lookback_days=ofertas_lookback,
-                watchlist=ofertas_watch or None,
-            )
-            new_ofertas = _new_since_last_run(
-                "cvm_ofertas", offerings, seed_if_empty=True
-            )
-    except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
-        print(f"Warning: CVM ofertas fetch failed: {exc}")
+    offerings, new_ofertas = _gated_source(
+        registry.by_id("ofertas"), deadline=deadline, per_source=per_source,
+        fetch=lambda: cvm_ofertas.fetch_recent(
+            lookback_days=ofertas_lookback, watchlist=ofertas_watch or None),
+    )
 
     # CVM material facts — Fato Relevante / Comunicado ao Mercado (strategic
     # disclosures from B3-listed competitors; seed suppressed on first run).
@@ -873,15 +875,10 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             print(f"Warning: entity alias accumulation skipped: {exc}")
 
     # Diário Oficial — official acts (SUSEP/CADE/BACEN) naming a competitor.
-    dou_acts: list[dict[str, Any]] = []
-    new_dou: list[dict[str, Any]] = []
-    if dou_terms:
-        try:
-            with _source_budget("Diário Oficial", deadline, per_source):
-                dou_acts = dou.fetch_dou(dou_terms, lookback_days=dou_lookback)
-                new_dou = _new_since_last_run("dou", dou_acts, seed_if_empty=True)
-        except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
-            print(f"Warning: Diário Oficial fetch failed: {exc}")
+    dou_acts, new_dou = _gated_source(
+        registry.by_id("dou"), deadline=deadline, per_source=per_source,
+        fetch=lambda: dou.fetch_dou(dou_terms, lookback_days=dou_lookback) if dou_terms else [],
+    )
 
     # CADE antitrust (#61) — merger reviews (Atos de Concentração) via the DOU Defesa
     # Econômica organ. Distinct from the `dou` lens: pulls ALL merger acts and resolves
@@ -1092,15 +1089,6 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as exc:  # pragma: no cover
             print(f"Warning: CVM Informe Diário fetch failed: {exc}")
 
-    new_normativos: list[dict[str, Any]] = []
-    new_funds: list[dict[str, Any]] = []
-    try:
-        with _source_budget("state diffs", deadline, per_source):
-            new_normativos = _new_since_last_run("bcb_normativos", normativos)
-            new_funds = _new_since_last_run("cvm_fundos", funds)
-    except Exception as exc:  # pragma: no cover - deadline reached / state unavailable
-        print(f"Warning: normativos/funds diff skipped: {exc}")
-
     # Corpus gets document-like signals only (not numeric Pix/juros/AUM moves).
     _populate_corpus_and_sync(
         new_normativos + new_funds + new_entrants + new_ofertas + new_sec
@@ -1177,6 +1165,17 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         },
         "source": "lambda_port",
     }
+
+    # ADR 019 Phase 3 — vertical gating: drop the lens sections of sources not applicable to
+    # the active vertical (each digest section key IS the source id). Sector-agnostic sources
+    # ({all}: sanctions/cade/contracts) survive every vertical; FS-only sources vanish under a
+    # sectorial vertical, so synth never fuses them into that vertical's cards. Non-lens
+    # sections (macro/reputation/stores) are untouched. Migrated sources already skip their
+    # fetch via _source_enabled; this also gates the still-bespoke FS fetches' OUTPUT.
+    _active_ids = {s.id for s in registry.active(_active_vertical())}
+    for _sid in [s.id for s in registry.SOURCES]:
+        if _sid not in _active_ids:
+            payload.pop(_sid, None)
 
     bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
     if bucket:

@@ -50,6 +50,7 @@ class SourceSpec:
     # Phase 2 — the digest section the source emits (consumed by the registry-driven runner):
     label: str | None = None         # human budget label; falls back to id
     state_key: str | None = None      # delta seen-set key (DynamoDbState); falls back to id
+    seed_if_empty: bool = True       # suppress the first-run flood (False = report all on seed)
     items_limit: int = 10            # _tag_new(new[:items_limit])
     context_limit: int = 15          # _strip_raw(records[:context_limit])
 
@@ -78,12 +79,15 @@ LENSES: dict[str, LensSpec] = {
 # `verticals={ALL}` marks the sector-agnostic sources (they also serve the Anteater verticals);
 # the rest are the financial-services vertical's current implementations.
 SOURCES: list[SourceSpec] = [
-    SourceSpec("regulatory", "regulatory", items_limit=8, context_limit=12),
-    SourceSpec("competitor", "funds", resolution="cnpj", items_limit=8, context_limit=12),
+    SourceSpec("regulatory", "regulatory", items_limit=8, context_limit=12,
+               state_key="bcb_normativos", label="BCB normativos", seed_if_empty=False),
+    SourceSpec("competitor", "funds", resolution="cnpj", items_limit=8, context_limit=12,
+               state_key="cvm_fundos", label="CVM funds", seed_if_empty=False),
     SourceSpec("new_entrants", "entrants", resolution="cnpj", items_limit=8),
-    SourceSpec("ofertas", "ofertas", resolution="cnpj"),
+    SourceSpec("ofertas", "ofertas", resolution="cnpj",
+               state_key="cvm_ofertas", label="CVM ofertas"),
     SourceSpec("fatos", "fatos", items_limit=12),
-    SourceSpec("dou", "dou"),
+    SourceSpec("dou", "dou", label="Diário Oficial"),
     SourceSpec("sanctions", "sanctions", resolution="cnpj", verticals=frozenset({ALL}),     # #60
                integration="store", state_key="ceis_cnep", env_flag="ONCA_CEIS_CNEP",
                label="CEIS/CNEP sanctions"),
