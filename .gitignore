@@ -12,3 +12,6 @@ build/
 
 data/state/*.json
 data/latest_digest.json
+
+# v2 dashboards fetch a server-written scoped feed; never commit a synthetic fixture
+src/dashboard/site/v2/**/feed.json

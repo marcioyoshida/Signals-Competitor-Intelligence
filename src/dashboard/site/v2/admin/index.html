@@ -1,0 +1,546 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Onça · Admin — Sala de Guerra</title>
+<link rel="stylesheet" href="../app.css" />
+</head>
+<body>
+<!-- ===================== app bar (shared shell) ===================== -->
+<header class="appbar">
+  <div class="brand">
+    <span class="mark">ON<b>Ç</b>A</span>
+    <span class="ctx">Admin</span>
+  </div>
+  <nav class="ctxnav" aria-label="Contextos">
+    <a href="../admin/" aria-current="page">Curadoria</a>
+    <a class="locked" title="Em breve" aria-disabled="true">Entrada</a>
+    <a class="locked" title="Em breve" aria-disabled="true">Adquirência</a>
+    <a class="locked" title="Em breve" aria-disabled="true">Fintechs</a>
+    <a class="locked" title="Em breve" aria-disabled="true">Seguros</a>
+    <a class="locked" title="Em breve" aria-disabled="true">Wealth</a>
+  </nav>
+  <span class="spacer"></span>
+  <span class="sub" id="asof">—</span>
+  <button class="icnbtn" id="themeBtn" title="Alternar tema" aria-label="Alternar tema claro/escuro">◐</button>
+</header>
+
+<main class="wrap">
+  <div class="pagehead">
+    <h1>Curadoria — todas as indústrias</h1>
+    <p class="lede">O que precisa da minha decisão hoje, e o moat se manteve? Fila de vetting,
+      lacunas de cobertura e integridade do registro lideram; o mapa e o feed citado ficam
+      recolhidos como exceções.</p>
+  </div>
+
+  <!-- ===================== LEAD: decisions + moat ===================== -->
+  <section class="band">
+    <div class="band-hd"><span class="overline">Decisões de hoje</span><span class="rule"></span></div>
+    <div class="grid lead-3" style="grid-template-columns: 1.15fr .95fr .95fr;">
+
+      <!-- Action queue (the vetting surface) -->
+      <div class="panel panel--lead">
+        <div class="panel__hd">
+          <h2>Fila de ação</h2><span class="count" id="queueCount">0</span>
+          <span class="spacer"></span>
+          <span class="hd-note">SWOT · grafo · registro</span>
+        </div>
+        <div class="panel__bd panel__bd--flush panel__bd--scroll" id="queue"></div>
+      </div>
+
+      <!-- Pontos Cegos (coverage-gap loop) -->
+      <div class="panel panel--lead">
+        <div class="panel__hd">
+          <h2>Pontos cegos</h2><span class="count" id="gapsCount">0</span>
+          <span class="spacer"></span>
+          <span class="hd-note">perguntas sem resposta</span>
+        </div>
+        <div class="panel__bd panel__bd--flush panel__bd--scroll" id="gaps"></div>
+      </div>
+
+      <!-- Integridade (registry/attribution audit) -->
+      <div class="panel panel--lead">
+        <div class="panel__hd">
+          <h2>Integridade</h2><span class="count" id="integCount">0</span>
+          <span class="spacer"></span>
+          <span class="hd-note">auditoria de registro</span>
+        </div>
+        <div class="panel__bd panel__bd--flush panel__bd--scroll" id="integ"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== MID: coverage delta ===================== -->
+  <section class="band">
+    <div class="band-hd"><span class="overline">Cobertura por indústria</span><span class="rule"></span>
+      <span class="badge badge--infer">tendência na janela · inferência</span></div>
+    <div class="panel">
+      <div class="panel__hd">
+        <h2>Onde os rollups estão afinando</h2>
+        <span class="spacer"></span>
+        <span class="hd-note" id="covWindow"></span>
+      </div>
+      <div class="panel__bd" id="coverage"></div>
+    </div>
+  </section>
+
+  <!-- ===================== DEMOTE: KPIs · Mapa · exceptions ========== -->
+  <section class="band">
+    <div class="band-hd"><span class="overline">Contexto (secundário)</span><span class="rule"></span></div>
+
+    <div class="tiles" id="kpis" style="margin-bottom: var(--s4);"></div>
+
+    <details class="fold" style="margin-bottom: var(--s4);">
+      <summary><span class="tw" aria-hidden="true">▸</span> Mapa competitivo
+        <span class="demoted">— visão do comprador, recolhida na curadoria</span></summary>
+      <div class="fold__bd" id="mapa"></div>
+    </details>
+
+    <div class="panel">
+      <div class="panel__hd">
+        <h2>Feed — exceções</h2><span class="count" id="excCount">0</span>
+        <span class="spacer"></span>
+        <span class="hd-note">baixa confiança de citação · inferência · atribuição</span>
+      </div>
+      <div class="panel__bd panel__bd--flush" id="exceptions"></div>
+    </div>
+  </section>
+</main>
+
+<!-- inspect drawer (Integridade one-click) -->
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-hidden="true" role="dialog" aria-labelledby="drTitle">
+  <div class="drawer__hd">
+    <h3 id="drTitle">Inspeção</h3>
+    <button class="drawer__close" id="drClose" aria-label="Fechar">×</button>
+  </div>
+  <div class="drawer__bd" id="drBody"></div>
+</aside>
+
+<script src="../app.js"></script>
+<script>
+const U = window.OncaUI;
+let DATA = {};
+
+U.initTheme();
+document.getElementById("themeBtn").addEventListener("click", () => { U.toggleTheme(); render(); });
+document.getElementById("drClose").addEventListener("click", closeDrawer);
+document.getElementById("scrim").addEventListener("click", closeDrawer);
+
+fetch("feed.json").then(r => r.json()).then(d => { DATA = d; boot(); })
+  .catch(e => { document.getElementById("queue").innerHTML =
+    U.empty("Feed indisponível", "Não foi possível carregar feed.json.", "!"); console.error(e); });
+
+function boot() {
+  const asof = DATA.as_of ? `dados de ${U.fmtDate(DATA.as_of)}` : "";
+  document.getElementById("asof").textContent = asof;
+  render();
+}
+
+function render() {
+  renderQueue();
+  renderGaps();
+  renderIntegrity();
+  renderCoverage();
+  renderKpis();
+  renderMapa();
+  renderExceptions();
+}
+
+/* ======================= LEAD 1 — Action queue ======================= */
+// Unified vetting queue: entity reviews + SWOT/framework proposals + graph
+// proposals. One Aprovar/Rejeitar affordance; optimistic removal on decide.
+const FW_DIM_PT = {
+  S: "Força", W: "Fraqueza", O: "Oportunidade", T: "Ameaça",
+  rivalry: "Rivalidade", new_entrants: "Novos entrantes", substitutes: "Substitutos",
+  buyer_power: "Poder do comprador", supplier_power: "Poder do fornecedor",
+};
+const RELATION_PT = { co_mention: "citados juntos", convergence: "convergência", dispute: "disputa" };
+
+function queueItems() {
+  const out = [];
+  (DATA.reviews || []).forEach(r => {
+    let title;
+    if (r.kind === "group_merge")
+      title = `Agrupar <b>${U.esc(r.member_label || r.member)}</b> sob <b>${U.esc(r.leader_label || r.leader)}</b>`;
+    else if (r.kind === "news_safe")
+      title = `Liberar marca <b>${U.esc(r.proposed || r.member_label)}</b> em notícias/DOU`;
+    else if (r.kind === "industry")
+      title = `Atribuir indústria <b>${U.esc(r.proposed || "?")}</b> a <b>${U.esc(r.member_label || r.member)}</b>`;
+    else
+      title = `Adicionar nome <b>${U.esc(r.proposed || "?")}</b> a <b>${U.esc(r.member_label || r.member)}</b>`;
+    out.push({ id: r.review_id, kind: "review", tag: "Registro", tagClass: "info",
+      title, meta: [r.reason, r.confidence, U.fmtDate(r.created_at)] });
+  });
+  (DATA.swot_proposals || []).forEach(p => {
+    const dim = FW_DIM_PT[p.dimension] || p.dimension || "";
+    const kindPt = p.kind === "challenge" ? "Contesta crença" : p.kind === "seed" ? "Tese inicial"
+      : p.kind === "stale" ? "Revalidar" : (p.kind || "SWOT");
+    out.push({ id: p.id, kind: "swot", tag: (p.kind || "SWOT").toUpperCase(), tagClass: "warn",
+      title: `<b>${U.esc(labelFor(p.entity))}</b> · ${U.esc(kindPt)} <span class="badge badge--ghost">${U.esc(dim)}</span> — ${U.esc(p.text)}`,
+      target: p.target_text, infer: true,
+      meta: [p.kind === "stale" ? `sem corroboração há ${p.days_stale} dias`
+             : `confiança ${Math.round((p.confidence || 0) * 100)}%`, U.fmtDate(p.date)] });
+  });
+  (DATA.graph_proposals || []).forEach(p => {
+    out.push({ id: p.id, kind: "graph", tag: "Grafo", tagClass: "info",
+      title: `<b>${U.esc(RELATION_PT[p.relation] || p.kind)}</b> — ${U.esc(p.text)}`,
+      infer: true,
+      meta: [(p.themes || []).join(", "), p.n_dates ? `${p.n_dates} dias` : ""] });
+  });
+  return out;
+}
+function labelFor(eid) {
+  const e = (DATA.entities || []).find(x => x.entity === eid);
+  return (e && e.label) || (DATA.entity_attrs || {})[eid] && DATA.entity_attrs[eid].display_name || eid;
+}
+
+function renderQueue() {
+  const items = queueItems();
+  const el = document.getElementById("queue");
+  setCount("queueCount", items.length, items.length ? "" : "zero");
+  if (!items.length) { el.innerHTML = U.empty("Nada aguardando", "Nenhuma proposta ou revisão pendente.", "✓"); return; }
+  el.innerHTML = items.map(it => `
+    <div class="qrow" data-id="${U.esc(it.id)}">
+      <div class="qrow__type"><span class="badge badge--${it.tagClass}">${U.esc(it.tag)}</span></div>
+      <div class="qrow__main">
+        <div class="qrow__title">${it.title}${it.infer ? ' <span class="badge badge--infer">inferência</span>' : ""}</div>
+        ${it.target ? `<div class="qrow__meta">↳ crença: ${U.esc(it.target)}</div>` : ""}
+        <div class="qrow__meta">${it.meta.filter(Boolean).map(U.esc).join(" · ")}</div>
+      </div>
+      <div class="qrow__actions">
+        <button class="btn btn--approve btn--sm" data-dec="approved">✓ Aprovar</button>
+        <button class="btn btn--reject btn--sm" data-dec="rejected">✕ Rejeitar</button>
+      </div>
+    </div>`).join("");
+  el.querySelectorAll(".qrow").forEach(row => {
+    const id = row.dataset.id;
+    row.querySelectorAll("button[data-dec]").forEach(b =>
+      b.onclick = () => decideQueue(id, b.dataset.dec, row));
+  });
+}
+function decideQueue(id, decision, row) {
+  row.classList.add("busy");
+  // Fire-and-forget to the vetting endpoint; optimistic either way (server
+  // rebuilds feed.json in the background). In this synthetic harness it 404s.
+  try {
+    fetch("api/review", { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id, decision }) }).catch(() => {});
+  } catch (e) {}
+  DATA.reviews = (DATA.reviews || []).filter(x => x.review_id !== id);
+  DATA.swot_proposals = (DATA.swot_proposals || []).filter(x => x.id !== id);
+  DATA.graph_proposals = (DATA.graph_proposals || []).filter(x => x.id !== id);
+  renderQueue();
+}
+
+/* ======================= LEAD 2 — Pontos Cegos ======================= */
+const GAP_CLASS_PT = { curation_gap: "curadoria", discovery_gap: "descoberta",
+  ingestion_gap: "nova fonte", retrieval_gap: "recuperação" };
+function renderGaps() {
+  const list = DATA.coverage_gaps || [];
+  const el = document.getElementById("gaps");
+  setCount("gapsCount", list.length, list.length ? "" : "zero");
+  if (!list.length) { el.innerHTML = U.empty("Sem lacunas", "Nenhuma pergunta em domínio ficou sem resposta.", "✓"); return; }
+  el.innerHTML = list.map(g => {
+    const cls = g.triage && g.triage.class ? (GAP_CLASS_PT[g.triage.class] || g.triage.class) : "";
+    const st = g.status === "proposed"
+      ? `<span class="badge badge--warn"><span class="g" aria-hidden="true">◷</span>proposto</span>`
+      : `<span class="badge badge--info"><span class="g" aria-hidden="true">○</span>aberto</span>`;
+    const issue = g.issue_url ? ` · <a href="${U.esc(g.issue_url)}" target="_blank" rel="noopener">issue ↗</a>` : "";
+    return `<div class="qrow" data-id="${U.esc(g.id)}">
+      <div class="qrow__type">${st}</div>
+      <div class="qrow__main">
+        <div class="qrow__title">${U.esc(g.question)}</div>
+        <div class="qrow__meta">${cls ? `<span class="badge badge--ghost">${U.esc(cls)}</span>` : ""}
+          <span>×${g.count || 1}</span>${issue}</div>
+        <div class="qrow__meta gres" data-for="${U.esc(g.id)}"></div>
+      </div>
+      <div class="qrow__actions">
+        <button class="btn btn--sm" data-id="${U.esc(g.id)}">Remediar</button>
+      </div>
+    </div>`;
+  }).join("");
+  el.querySelectorAll("button[data-id]").forEach(b => b.onclick = () => remediate(b));
+}
+function remediate(btn) {
+  const id = btn.dataset.id, row = btn.closest(".qrow");
+  const out = row.querySelector(".gres");
+  btn.disabled = true; btn.textContent = "Remediando…";
+  out.textContent = "Triando, corrigindo o que é seguro e reverificando…";
+  // No live endpoint in the harness; show honest queued-for-review feedback.
+  fetch("api/gaps/remediate", { method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id }) }).then(r => r.json()).then(j => applyRemediation(id, j, btn, out, row))
+    .catch(() => { out.textContent = "Encaminhado para revisão (sem endpoint no rascunho)."; btn.textContent = "Encaminhado"; });
+}
+function applyRemediation(id, j, btn, out, row) {
+  const gap = j.gap || {};
+  if (gap.status === "resolved") {
+    btn.textContent = "Resolvido ✓"; out.textContent = "Resolvido — a base já responde.";
+    row.style.opacity = "0.55";
+    DATA.coverage_gaps = (DATA.coverage_gaps || []).filter(x => x.id !== id);
+    setTimeout(renderGaps, 1200);
+  } else { out.textContent = "Encaminhado para revisão."; btn.textContent = "Encaminhado"; }
+}
+
+/* ======================= LEAD 3 — Integridade ======================= */
+// Registry + feed invariant findings. The card_primary_absent finding is the
+// issue-#33 mis-attribution check (an RJ/distress clause bound to the wrong
+// subject) — highest-liability failure mode, one-click Inspecionar.
+const SEV_BADGE = {
+  high: { cls: "crit", g: "▲", label: "alta" },
+  med:  { cls: "high", g: "◆", label: "média" },
+  low:  { cls: "low",  g: "▬", label: "baixa" },
+};
+const INTEG_KIND_PT = {
+  institution_leaf_pollution: "Indústria de fundo em instituição",
+  fund_alias_on_institution: "Ticker de fundo como alias",
+  unbacked_cnpj: "CNPJ sem raiz",
+  parent_inversion: "Matriz invertida",
+  card_primary_absent: "Atribuição sem menção",
+};
+function renderIntegrity() {
+  const findings = ((DATA.integrity || {}).findings) || [];
+  const el = document.getElementById("integ");
+  setCount("integCount", findings.length, findings.length ? "alert" : "zero");
+  if (!findings.length) { el.innerHTML = U.empty("Sem anomalias", "Registro e atribuições consistentes.", "✓"); return; }
+  el.innerHTML = findings.map((f, i) => {
+    const s = SEV_BADGE[f.severity] || SEV_BADGE.low;
+    const attrib = f.kind === "card_primary_absent";
+    return `<div class="qrow" data-i="${i}">
+      <div class="qrow__type"><span class="badge badge--${s.cls}"><span class="g" aria-hidden="true">${s.g}</span>${s.label}</span></div>
+      <div class="qrow__main">
+        <div class="qrow__title"><b>${U.esc(INTEG_KIND_PT[f.kind] || f.kind)}</b>
+          ${attrib ? ' <span class="badge badge--crit"><span class="g" aria-hidden="true">⚠</span>atribuição</span>' : ""}
+          ${f.safe_fix ? ' <span class="badge badge--ok"><span class="g" aria-hidden="true">✓</span>corrigível</span>' : ""}</div>
+        <div class="qrow__meta">${U.esc(f.summary)}</div>
+      </div>
+      <div class="qrow__actions">
+        <button class="btn btn--sm" data-i="${i}">Inspecionar</button>
+      </div>
+    </div>`;
+  }).join("");
+  el.querySelectorAll("button[data-i]").forEach(b =>
+    b.onclick = () => inspectFinding(findings[+b.dataset.i]));
+}
+
+/* ---------------- Inspect drawer (attribution / registry) ---------------- */
+function inspectFinding(f) {
+  const attrs = DATA.entity_attrs || {};
+  let body = "";
+  if (f.kind === "card_primary_absent") {
+    const card = (DATA.feed || []).find(c => c.id === f.card_id) || {};
+    const attributed = card.entity;
+    const aRole = (attrs[attributed] || {}).attribution_role || "competitor";
+    // who the narrative actually names (from the registry)
+    const named = namedIn(card.narrative, attributed);
+    const model = U.citationModel(card);
+    body = `
+      <div class="callout callout--warn">
+        <b>Cláusula ligada ao sujeito errado.</b> O cartão está atribuído a
+        <b>${U.esc(labelFor(attributed))}</b> (papel de atribuição
+        <span class="badge badge--ghost">${U.esc(aRole)}</span>), mas a entidade
+        <b>não aparece</b> na própria narrativa. ${named.length
+          ? `A narrativa cita: ${named.map(n => `<b>${U.esc(labelFor(n))}</b> <span class="badge badge--ghost">${U.esc((attrs[n]||{}).attribution_role||"competitor")}</span>`).join(", ")}.`
+          : ""}
+        Antes de publicar, reatribua a cláusula ao sujeito correto.
+      </div>
+      <dl class="kv">
+        <dt>Cartão</dt><dd>${U.esc(card.id || "?")}</dd>
+        <dt>Atribuído a</dt><dd>${U.esc(labelFor(attributed))} · ${U.esc(aRole)}</dd>
+        <dt>Data</dt><dd>${U.esc(U.fmtDate(card.date))}</dd>
+      </dl>
+      <div class="callout">${U.linkifyNarrative(card.narrative, model)}${U.citationFooter(model)}</div>`;
+  } else if (f.entity_id) {
+    const a = attrs[f.entity_id] || {};
+    body = `
+      <div class="callout">${U.esc(f.summary)}
+        ${f.safe_fix ? ' <span class="badge badge--ok"><span class="g" aria-hidden="true">✓</span>corrigível automaticamente</span>' : ""}</div>
+      <dl class="kv">
+        <dt>Entidade</dt><dd>${U.esc(a.display_name || f.entity_id)}</dd>
+        <dt>Indústrias</dt><dd>${U.esc((a.industries || []).join(", ") || "—")}</dd>
+        <dt>Papel de atribuição</dt><dd><span class="badge badge--ghost">${U.esc(a.attribution_role || "competitor")}</span></dd>
+        <dt>Ticker</dt><dd>${U.esc(a.ticker || "—")}</dd>
+        <dt>Aliases</dt><dd>${U.esc((a.aliases || []).join(", ") || "—")}</dd>
+        <dt>Raízes CNPJ</dt><dd>${U.esc((a.cnpj_roots || []).join(", ") || "—")}</dd>
+        <dt>Confiança</dt><dd>${U.esc(a.confidence || "—")}</dd>
+      </dl>`;
+  } else {
+    body = `<div class="callout">${U.esc(f.summary)}</div>`;
+  }
+  document.getElementById("drTitle").textContent = INTEG_KIND_PT[f.kind] || f.kind;
+  document.getElementById("drBody").innerHTML = body;
+  openDrawer();
+}
+// Which OTHER registry entities does this text name (via display_name/aliases)?
+function namedIn(text, exclude) {
+  const t = " " + String(text || "").toUpperCase() + " ";
+  const out = [];
+  Object.entries(DATA.entity_attrs || {}).forEach(([eid, a]) => {
+    if (eid === exclude) return;
+    const forms = [a.display_name, ...(a.aliases || [])].filter(Boolean).map(s => s.toUpperCase());
+    if (forms.some(f => f.length >= 3 && t.includes(f))) out.push(eid);
+  });
+  return out;
+}
+function openDrawer() {
+  document.getElementById("drawer").classList.add("open");
+  document.getElementById("drawer").setAttribute("aria-hidden", "false");
+  document.getElementById("scrim").classList.add("open");
+}
+function closeDrawer() {
+  document.getElementById("drawer").classList.remove("open");
+  document.getElementById("drawer").setAttribute("aria-hidden", "true");
+  document.getElementById("scrim").classList.remove("open");
+}
+
+/* ======================= MID — Coverage delta ======================= */
+// Which industry rollups are thinning fastest? Honest, count-based within-window
+// trend: split the window at its midpoint, compare narrative volume per half.
+// Derived (labelled inferência) — never presented as a guaranteed coverage figure.
+function renderCoverage() {
+  const dates = (DATA.dates || []).slice().sort();
+  const el = document.getElementById("coverage");
+  const industries = DATA.industries || [];
+  if (!dates.length || !industries.length) {
+    el.innerHTML = U.empty("Sem janela de dados", "Nenhuma data no feed para calcular tendência.", "○"); return;
+  }
+  const mid = dates[Math.floor(dates.length / 2)];
+  document.getElementById("covWindow").textContent =
+    `janela ${U.fmtDate(dates[0])} → ${U.fmtDate(dates[dates.length - 1])}`;
+
+  // per-industry per-date counts from the feed cards (real volume, not invented).
+  const perDate = {};   // slug -> {date -> count}
+  (DATA.feed || []).forEach(c => {
+    (c.industries || []).forEach(slug => {
+      (perDate[slug] = perDate[slug] || {});
+      perDate[slug][c.date] = (perDate[slug][c.date] || 0) + 1;
+    });
+  });
+  const rows = industries.map(ind => {
+    const counts = perDate[ind.slug] || {};
+    const series = dates.map(dt => counts[dt] || 0);
+    const first = series.filter((_, i) => dates[i] < mid).reduce((a, b) => a + b, 0);
+    const second = series.filter((_, i) => dates[i] >= mid).reduce((a, b) => a + b, 0);
+    const delta = second - first;
+    return { ind, series, first, second, delta, total: ind.narratives };
+  });
+  // most-thinning first (largest negative delta), then lowest volume.
+  rows.sort((a, b) => (a.delta - b.delta) || (a.total - b.total));
+
+  el.innerHTML = `<div class="covstrip">` + rows.map(r => {
+    const ind = r.ind;
+    if (!ind.narratives) {
+      return `<div class="covrow">
+        <div><div class="cvname">${U.esc(ind.display_name)}</div>
+          <div class="cvsub">${ind.entities} monitorada(s)</div></div>
+        <div class="cvtrend flat"><span aria-hidden="true">—</span> sem sinal</div>
+        <div class="cvspark"></div>
+        <div class="cvflag"><span class="badge badge--warn"><span class="g" aria-hidden="true">◷</span>cobertura fina</span></div>
+      </div>`;
+    }
+    const dir = r.delta < 0 ? "down" : r.delta > 0 ? "up" : "flat";
+    const arrow = r.delta < 0 ? "▼" : r.delta > 0 ? "▲" : "▬";
+    const sign = r.delta > 0 ? "+" : "";
+    const stroke = dir === "down" ? "var(--t-high)" : dir === "up" ? "var(--ok)" : "var(--muted)";
+    const flag = ind.low_volume
+      ? `<span class="badge badge--warn"><span class="g" aria-hidden="true">◷</span>baixo volume</span>`
+      : `<span class="badge badge--ok"><span class="g" aria-hidden="true">✓</span>ativa</span>`;
+    return `<div class="covrow">
+      <div><div class="cvname">${U.esc(ind.display_name)}</div>
+        <div class="cvsub">${ind.active_entities}/${ind.entities} ativas · ${ind.narratives} sinais</div></div>
+      <div class="cvtrend ${dir}"><span aria-hidden="true">${arrow}</span> ${sign}${r.delta}</div>
+      <div class="cvspark chartcanvas">${U.sparkline(r.series, { w: 220, h: 26, stroke, label: ind.display_name + " tendência" })}</div>
+      <div class="cvflag">${flag}</div>
+    </div>`;
+  }).join("") + `</div>
+    <div class="legend"><span class="sw"><span aria-hidden="true">▼</span> afinando</span>
+      <span class="sw"><span aria-hidden="true">▲</span> intensificando</span>
+      <span class="sw"><span aria-hidden="true">▬</span> estável / sem sinal</span>
+      <span class="sw">Δ = sinais na 2ª metade menos a 1ª metade da janela</span></div>`;
+}
+
+/* ======================= DEMOTE — KPIs ======================= */
+function renderKpis() {
+  const k = DATA.kpis || {};
+  const tiles = [
+    ["Narrativas hoje", k.narratives_latest], ["Alertas hoje", k.alerts_latest],
+    ["Entidades monitoradas", k.entities_tracked], ["Fontes distintas", k.sources],
+  ];
+  document.getElementById("kpis").innerHTML = tiles.map(([l, n]) =>
+    `<div class="tile tile--slim"><div class="tile__n">${n ?? "—"}</div><div class="tile__l">${l}</div></div>`).join("");
+}
+
+/* ======================= DEMOTE — Mapa (honest, recolhido) ============= */
+// Buyer-facing map is demoted here. Rather than a degenerate scatter, render an
+// honest ranked bar of entities by peak threat, tier-encoded (color + glyph).
+function renderMapa() {
+  const ents = (DATA.entities || []).slice().sort((a, b) => (b.peak_score || 0) - (a.peak_score || 0)).slice(0, 12);
+  const el = document.getElementById("mapa");
+  if (!ents.length) { el.innerHTML = U.empty("Sem entidades", "Nenhuma entidade no feed.", "○"); return; }
+  el.innerHTML = ents.map(e => {
+    const t = U.tierOf(e.peak_score);
+    const pct = Math.round((e.peak_score || 0) * 100);
+    const ms = (e.market_share_pct == null)
+      ? `<span class="badge badge--infer">sem IF.data</span>`
+      : `<span class="cvsub num">${e.market_share_pct}% mercado</span>`;
+    return `<div class="covrow" style="grid-template-columns:150px 1fr 120px;">
+      <div class="cvname">${U.esc(e.label)} ${U.tierBadge(e.peak_score)}</div>
+      <div class="cvspark"><div style="height:8px;border-radius:999px;background:var(--surface-3);overflow:hidden">
+        <span style="display:block;height:100%;width:${pct}%;background:var(--${t.key === 'crit' ? 't-crit' : t.key === 'high' ? 't-high' : t.key === 'med' ? 't-med' : 't-low'})"></span></div></div>
+      <div class="cvflag">${ms}</div>
+    </div>`;
+  }).join("");
+}
+
+/* ======================= DEMOTE — Exceptions feed ==================== */
+// The cited buyer feed is collapsed to an EXCEPTIONS view: only cards whose
+// trust signals need a curator's eye. Each still shows its clickable sources.
+function renderExceptions() {
+  const cardById = {};
+  (DATA.feed || []).forEach(c => { cardById[c.id] = c; });
+  const misattributed = new Set(
+    (((DATA.integrity || {}).findings) || []).filter(f => f.kind === "card_primary_absent").map(f => f.card_id));
+  const excs = [];
+  (DATA.feed || []).forEach(c => {
+    const model = U.citationModel(c);
+    const reasons = [];
+    if (!model.entries.length)
+      reasons.push({ cls: "crit", g: "⚠", t: "sem fonte clicável" });
+    if (c.is_inference)
+      reasons.push({ cls: "infer", g: "", t: "inferência (não é fato)" });
+    if (misattributed.has(c.id))
+      reasons.push({ cls: "crit", g: "⚠", t: "atribuição a revisar" });
+    if (reasons.length) excs.push({ c, model, reasons });
+  });
+  const el = document.getElementById("exceptions");
+  setCount("excCount", excs.length, excs.length ? "alert" : "zero");
+  if (!excs.length) { el.innerHTML = U.empty("Nenhuma exceção", "Todo cartão tem fonte e atribuição consistente.", "✓"); return; }
+  el.innerHTML = excs.map(({ c, model, reasons }) => `
+    <div class="exc">
+      <div class="exc__row1">
+        ${U.tierBadge(c.threat_score)}
+        <span class="exc__ent">${U.esc(c.entity_label || c.subject_label || c.entity || "—")}</span>
+        <span class="exc__date">${U.esc(U.fmtDate(c.date))}</span>
+        <span class="spacer" style="flex:1"></span>
+        ${reasons.map(r => r.cls === "infer"
+          ? `<span class="badge badge--infer">${U.esc(r.t)}</span>`
+          : `<span class="badge badge--${r.cls}"><span class="g" aria-hidden="true">${r.g}</span>${U.esc(r.t)}</span>`).join(" ")}
+      </div>
+      <div class="exc__body">${U.linkifyNarrative(c.narrative, model)}</div>
+      ${model.entries.length ? U.citationFooter(model)
+        : `<div class="cites"><span class="cite-grp"><span class="src">Sem fonte pública clicável</span> — provido apenas por id de sinal interno (${U.esc((c.source_ids || [])[0] || "—")})</span></div>`}
+    </div>`).join("");
+}
+
+/* ======================= helpers ======================= */
+function setCount(id, n, mod) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = n;
+  el.className = "count" + (mod ? ` count--${mod}` : "");
+}
+</script>
+</body>
+</html>
