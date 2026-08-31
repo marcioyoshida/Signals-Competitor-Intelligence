@@ -359,6 +359,23 @@ class OncaPrototypeStack(Stack):
         curation_log_table.grant_write_data(func)  # ADR 018 Phase 1b
         func.add_environment("ONCA_CURATION_LOG_TABLE", curation_log_table.table_name)
         digests_bucket.grant_put(func)
+        # GOV_DADOS_TOKEN access (#63 / Tier-3): the ingester reads the token from the
+        # api-key secret (via boto3) to reach the dados.gov.br catalog. The token now
+        # authenticates and catalog search/resource-resolution work live. Grant read on
+        # that one secret so any dados.gov.br source can use it.
+        func.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["secretsmanager:GetSecretValue"],
+                resources=[
+                    f"arn:aws:secretsmanager:{self.region}:{self.account}"
+                    ":secret:signalscompetitor/onca/api-key-*"
+                ],
+            )
+        )
+        # consumidor.gov.br (#63) stays default-off: the catalog resolves its resources to
+        # dados.mj.gov.br, which is currently NXDOMAIN (the MJ open-data host is dead), so
+        # the file is unreachable through the catalog too. Flip ONCA_CONSUMIDOR_GOV=true
+        # once a live resource host is confirmed.
         raw_bucket.grant_put(func)
         func.add_to_role_policy(
             iam.PolicyStatement(
