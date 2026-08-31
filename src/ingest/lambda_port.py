@@ -449,7 +449,20 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             base_date = bcb_ifdata.latest_base_date()
             rows = bcb_ifdata.fetch_institutions(base_date=base_date)
             names = bcb_ifdata.fetch_institution_names(base_date)
-            market = bcb_ifdata.market_share(rows, institution_names=names)[:10]
+            shares = bcb_ifdata.market_share(rows, institution_names=names)
+            market = shares[:10]
+            # ADR 015 §3: resolve institution names -> entity_id and persist a durable
+            # bcb_ifdata/index.json store so feed_builder can emit entities[].market_
+            # share_pct. Best-effort, mirrors the bcb_reclamacoes store below.
+            bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
+            if bucket:
+                from src.synth.entities import resolve_entities
+
+                recs = bcb_ifdata.map_to_entities(
+                    shares, resolver=resolve_entities, base_date=base_date
+                )
+                if recs:
+                    bcb_ifdata.update_store(recs, bucket)
     except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
         market = []
         print(f"Warning: IF.data market fetch failed: {exc}")
