@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="robots" content="noindex, nofollow" />
 <title>Onça · Admin — Sala de Guerra</title>
-<link rel="stylesheet" href="../app.css" />
+<link rel="stylesheet" href="/v2/app.css" />
 </head>
 <body>
 <!-- ===================== app bar (shared shell) ===================== -->
@@ -15,12 +15,12 @@
     <span class="ctx">Admin</span>
   </div>
   <nav class="ctxnav" aria-label="Contextos">
-    <a href="../admin/" aria-current="page">Curadoria</a>
-    <a class="locked" title="Em breve" aria-disabled="true">Entrada</a>
-    <a class="locked" title="Em breve" aria-disabled="true">Adquirência</a>
-    <a class="locked" title="Em breve" aria-disabled="true">Fintechs</a>
-    <a class="locked" title="Em breve" aria-disabled="true">Seguros</a>
-    <a class="locked" title="Em breve" aria-disabled="true">Wealth</a>
+    <a href="/admin" aria-current="page">Curadoria</a>
+    <a href="/newentry">Entrada</a>
+    <a href="/adquirencia">Adquirência</a>
+    <a href="/fintech">Fintechs</a>
+    <a href="/seguros">Seguros</a>
+    <a href="/wealth">Wealth</a>
   </nav>
   <span class="spacer"></span>
   <span class="sub" id="asof">—</span>
@@ -119,7 +119,7 @@
   <div class="drawer__bd" id="drBody"></div>
 </aside>
 
-<script src="../app.js"></script>
+<script src="/v2/app.js"></script>
 <script>
 const U = window.OncaUI;
 let DATA = {};
@@ -129,7 +129,7 @@ document.getElementById("themeBtn").addEventListener("click", () => { U.toggleTh
 document.getElementById("drClose").addEventListener("click", closeDrawer);
 document.getElementById("scrim").addEventListener("click", closeDrawer);
 
-fetch("feed.json").then(r => r.json()).then(d => { DATA = d; boot(); })
+fetch("/feed.json").then(r => r.json()).then(d => { DATA = d; boot(); })
   .catch(e => { document.getElementById("queue").innerHTML =
     U.empty("Feed indisponível", "Não foi possível carregar feed.json.", "!"); console.error(e); });
 
@@ -226,7 +226,7 @@ function decideQueue(id, decision, row) {
   // Fire-and-forget to the vetting endpoint; optimistic either way (server
   // rebuilds feed.json in the background). In this synthetic harness it 404s.
   try {
-    fetch("api/review", { method: "POST", headers: { "content-type": "application/json" },
+    fetch("/api/review", { method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ id, decision }) }).catch(() => {});
   } catch (e) {}
   DATA.reviews = (DATA.reviews || []).filter(x => x.review_id !== id);
@@ -270,7 +270,7 @@ function remediate(btn) {
   btn.disabled = true; btn.textContent = "Remediando…";
   out.textContent = "Triando, corrigindo o que é seguro e reverificando…";
   // No live endpoint in the harness; show honest queued-for-review feedback.
-  fetch("api/gaps/remediate", { method: "POST", headers: { "content-type": "application/json" },
+  fetch("/api/gaps/remediate", { method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ id }) }).then(r => r.json()).then(j => applyRemediation(id, j, btn, out, row))
     .catch(() => { out.textContent = "Encaminhado para revisão (sem endpoint no rascunho)."; btn.textContent = "Encaminhado"; });
 }
