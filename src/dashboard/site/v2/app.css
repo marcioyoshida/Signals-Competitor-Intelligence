@@ -363,6 +363,41 @@ a:hover { text-decoration: underline; }
 .refnum.dead { color: var(--muted); border-color: var(--border-2); }
 .sup { color: var(--primary); font-weight: 700; }
 
+/* ============================ ask bar (grounded Q&A, ADR 010) ========== */
+/* "Perguntar à Onça" — restyled onto the v2 system. Tokens only; no new hue. */
+.askbar { display: flex; gap: var(--s2); align-items: center; flex-wrap: wrap; }
+.askbar .ask-input { flex: 1; min-width: 220px; font-size: var(--fs-sm); padding: 8px 11px; }
+.ask-ex { margin-top: var(--s3); display: flex; flex-wrap: wrap; gap: 6px; }
+.ask-chip {
+  cursor: pointer; font-size: var(--fs-micro); color: var(--ink-2);
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--r-pill); padding: 3px 10px;
+}
+.ask-chip:hover { color: var(--primary); border-color: color-mix(in srgb, var(--primary) 45%, transparent); }
+.ask-hint {
+  margin-top: var(--s3); display: flex; align-items: center; gap: var(--s2);
+  flex-wrap: wrap; color: var(--muted); font-size: var(--fs-meta);
+}
+.ask-acct { margin-top: var(--s3); display: flex; align-items: center; gap: var(--s2); }
+/* the [hidden] attr must beat the display:flex above (flex would otherwise win) */
+.ask-hint[hidden], .ask-acct[hidden], .ask-ans[hidden] { display: none; }
+.ask-acct .sub { color: var(--muted); font-size: var(--fs-meta); }
+.ask-ans {
+  margin-top: var(--s3); padding: var(--s3) var(--s4);
+  border: 1px solid var(--border); border-radius: var(--r-md);
+  background: var(--surface-2); font-size: var(--fs-sm); line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.ask-ans--refused { border-style: dashed; border-color: var(--border-2); color: var(--ink-2); }
+.ask-ans .thinking { color: var(--muted); }
+.ask-aref { color: var(--primary); font-weight: 700; cursor: pointer; }
+.ask-cites { margin-top: var(--s3); }
+.ask-cite {
+  cursor: pointer; font-weight: 600; color: var(--primary);
+  border-bottom: 1px dotted color-mix(in srgb, var(--primary) 55%, transparent);
+}
+.ask-cite:hover { color: var(--primary-2); }
+
 /* ============================ collapsible ============================== */
 details.fold { border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--shadow-1); }
 details.fold > summary {

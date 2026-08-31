@@ -86,6 +86,20 @@
     </div>
   </section>
 
+  <!-- ===================== Perguntar à Onça (operator utility) ======== -->
+  <!-- Secondary to the decision panels above: the operator's grounded Q&A over
+       the FULL feed (no tenant scoping — modules=None server-side). Its own
+       login lives here since admin does not load the buyer auth (context.js). -->
+  <section class="band">
+    <div class="band-hd"><span class="overline">Perguntar à Onça</span><span class="rule"></span>
+      <span class="badge badge--ghost">resposta fundamentada · feed completo</span></div>
+    <div class="panel">
+      <div class="panel__hd"><h2>Pergunte à base da Onça</h2><span class="spacer"></span>
+        <span class="hd-note">resposta só com fonte citada · operador (sem escopo de licença)</span></div>
+      <div class="panel__bd" id="askBody"></div>
+    </div>
+  </section>
+
   <!-- ===================== DEMOTE: KPIs · Mapa · exceptions ========== -->
   <section class="band">
     <div class="band-hd"><span class="overline">Contexto (secundário)</span><span class="rule"></span></div>
@@ -120,6 +134,7 @@
 </aside>
 
 <script src="/v2/app.js"></script>
+<script src="/v2/ask.js"></script>
 <script>
 const U = window.OncaUI;
 let DATA = {};
@@ -128,6 +143,22 @@ U.initTheme();
 document.getElementById("themeBtn").addEventListener("click", () => { U.toggleTheme(); render(); });
 document.getElementById("drClose").addEventListener("click", closeDrawer);
 document.getElementById("scrim").addEventListener("click", closeDrawer);
+
+// Perguntar à Onça — operator Q&A over the full feed. Built-in auth (admin does
+// not load context.js); shares the same session token as the buyer screens.
+OncaAsk.mount(document.getElementById("askBody"), {
+  showAccount: true,
+  onCite: (en) => {
+    const c = (DATA.feed || []).filter((x) => x.entity === en)
+      .sort((a, b) => (b.date || "").localeCompare(a.date || ""))[0];
+    if (!c) return;
+    const model = U.citationModel(c);
+    document.getElementById("drTitle").textContent = c.entity_label || c.subject_label || c.entity || "Detalhe";
+    document.getElementById("drBody").innerHTML =
+      `<div class="callout">${U.linkifyNarrative(c.narrative, model)}${U.citationFooter(model)}</div>`;
+    openDrawer();
+  },
+});
 
 fetch("/feed.json").then(r => r.json()).then(d => { DATA = d; boot(); })
   .catch(e => { document.getElementById("queue").innerHTML =
