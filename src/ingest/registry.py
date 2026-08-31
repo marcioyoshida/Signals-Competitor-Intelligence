@@ -47,6 +47,11 @@ class SourceSpec:
     verticals: frozenset[str] = field(default_factory=lambda: frozenset({VERTICAL_FS}))
     default_on: bool = True
     env_flag: str | None = None      # existing ONCA_* override, when a source is env-gated
+    # Phase 2 — the digest section the source emits (consumed by the registry-driven runner):
+    label: str | None = None         # human budget label; falls back to id
+    state_key: str | None = None      # delta seen-set key (DynamoDbState); falls back to id
+    items_limit: int = 10            # _tag_new(new[:items_limit])
+    context_limit: int = 15          # _strip_raw(records[:context_limit])
 
 
 # --- Lens policy — reproduces candidates.py's LENS_WEIGHT + the three *_LENSES sets ---------
@@ -73,16 +78,20 @@ LENSES: dict[str, LensSpec] = {
 # `verticals={ALL}` marks the sector-agnostic sources (they also serve the Anteater verticals);
 # the rest are the financial-services vertical's current implementations.
 SOURCES: list[SourceSpec] = [
-    SourceSpec("regulatory", "regulatory"),
-    SourceSpec("competitor", "funds", resolution="cnpj"),
-    SourceSpec("new_entrants", "entrants", resolution="cnpj"),
+    SourceSpec("regulatory", "regulatory", items_limit=8, context_limit=12),
+    SourceSpec("competitor", "funds", resolution="cnpj", items_limit=8, context_limit=12),
+    SourceSpec("new_entrants", "entrants", resolution="cnpj", items_limit=8),
     SourceSpec("ofertas", "ofertas", resolution="cnpj"),
-    SourceSpec("fatos", "fatos"),
+    SourceSpec("fatos", "fatos", items_limit=12),
     SourceSpec("dou", "dou"),
-    SourceSpec("sanctions", "sanctions", resolution="cnpj", verticals=frozenset({ALL})),   # #60
-    SourceSpec("cade", "antitrust", resolution="name", verticals=frozenset({ALL})),        # #61
-    SourceSpec("contracts", "contracts", resolution="cnpj", integration="store",           # #62
-               default_on=False, env_flag="ONCA_PNCP_CONTRATOS", verticals=frozenset({ALL})),
+    SourceSpec("sanctions", "sanctions", resolution="cnpj", verticals=frozenset({ALL}),     # #60
+               integration="store", state_key="ceis_cnep", env_flag="ONCA_CEIS_CNEP",
+               label="CEIS/CNEP sanctions"),
+    SourceSpec("cade", "antitrust", resolution="name", verticals=frozenset({ALL}),          # #61
+               state_key="cade", env_flag="ONCA_CADE", label="CADE antitrust"),
+    SourceSpec("contracts", "contracts", resolution="cnpj", integration="store",            # #62
+               default_on=False, env_flag="ONCA_PNCP_CONTRATOS", verticals=frozenset({ALL}),
+               state_key="pncp_contratos", label="PNCP contracts"),
     SourceSpec("news", "news", resolution="text"),
     SourceSpec("sec_filings", "sec"),
     SourceSpec("pix_moves", "pix", delta="moves"),
@@ -93,6 +102,12 @@ SOURCES: list[SourceSpec] = [
     SourceSpec("fiagro_moves", "funds", delta="moves", resolution="prebound"),
     SourceSpec("market", "market", resolution="macro"),
 ]
+
+SPECS: dict[str, SourceSpec] = {s.id: s for s in SOURCES}
+
+
+def by_id(source_id: str) -> SourceSpec:
+    return SPECS[source_id]
 
 
 # --- Derived views (consumed by candidates.py in Phase 1) -----------------------------------

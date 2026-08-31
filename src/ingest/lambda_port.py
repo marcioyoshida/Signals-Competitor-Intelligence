@@ -103,6 +103,7 @@ from src.ingest import (
     dou,
     pncp_contratos,
     raw_writer,
+    registry,
     receita_cnpj,
     reclame_aqui,
     sec_filings,
@@ -205,6 +206,66 @@ def _strip_raw(docs: list[dict[str, Any]]) -> list[dict[str, Any]]:
             row["text"] = text[:max_text].rstrip() + "…"
         out.append(row)
     return out
+
+
+# --- ADR 019 Phase 2 — registry-driven source runner ---------------------------------------
+# The (gate → budget → fetch → delta → standard digest section) pattern, driven by a
+# SourceSpec, replacing the per-source hand-coded blocks. Migration is source-by-source;
+# the FS-core sources with interleaved side effects move over incrementally.
+
+def _source_enabled(spec: "registry.SourceSpec") -> bool:
+    """Gate a source on its env flag (default from spec.default_on)."""
+    default = "true" if spec.default_on else "false"
+    flag = spec.env_flag or f"ONCA_{spec.id.upper()}"
+    return os.environ.get(flag, default).lower() in ("1", "true", "yes")
+
+
+def _lens_section(
+    records: list[dict[str, Any]],
+    new_records: list[dict[str, Any]],
+    spec: "registry.SourceSpec",
+    **extra: Any,
+) -> dict[str, Any]:
+    """The standard {count, new_count, items, context} digest section, with per-source
+    limits taken from the spec (declarative). ``extra`` adds source-specific keys."""
+    return {
+        "count": len(records),
+        "new_count": len(new_records),
+        **extra,
+        "items": _tag_new(new_records[: spec.items_limit]),
+        "context": _strip_raw(records[: spec.context_limit]),
+    }
+
+
+def _gated_source(
+    spec: "registry.SourceSpec",
+    *,
+    deadline: float,
+    per_source: int,
+    fetch: "Any",
+    store: "Any" = None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Run one registry source: gate → budget → fetch → delta → optional store.
+
+    ``fetch()`` returns the source's records; ``store(records)`` persists a durable index
+    when the source is store-integrated. Returns (records, new_records). Best-effort — a
+    failure degrades to ([], []) like every other source here."""
+    if not _source_enabled(spec):
+        return [], []
+    records: list[dict[str, Any]] = []
+    new_records: list[dict[str, Any]] = []
+    try:
+        with _source_budget(spec.label or spec.id, deadline, per_source):
+            records = fetch() or []
+            new_records = _new_since_last_run(
+                spec.state_key or spec.id, records, seed_if_empty=True
+            )
+            if store is not None and records:
+                store(records)
+    except Exception as exc:  # pragma: no cover - defensive; upstream best-effort
+        print(f"Warning: {spec.label or spec.id} fetch failed: {exc}")
+    return records, new_records
+
 
 def _populate_corpus_and_sync(new_docs: list[dict[str, Any]]) -> None:
     """Write new docs to the raw corpus bucket and trigger a KB ingestion sync.
@@ -826,20 +887,14 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # Econômica organ. Distinct from the `dou` lens: pulls ALL merger acts and resolves
     # the parties by NAME (parties are the named subjects), so a deal surfaces as a
     # dedicated M&A `antitrust` signal. Sector-agnostic. Best-effort; off via env.
-    cade_records: list[dict[str, Any]] = []
-    new_cade: list[dict[str, Any]] = []
-    if os.environ.get("ONCA_CADE", "true").lower() in ("1", "true", "yes"):
-        try:
-            with _source_budget("CADE antitrust", deadline, per_source):
-                from src.synth.entities import resolve_entities
-
-                atos = cade.fetch_atos(
-                    lookback_days=int(os.environ.get("ONCA_CADE_LOOKBACK_DAYS", "45"))
-                )
-                cade_records = cade.map_to_entities(atos, resolver=resolve_entities)
-                new_cade = _new_since_last_run("cade", cade_records, seed_if_empty=True)
-        except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
-            print(f"Warning: CADE antitrust fetch failed: {exc}")
+    from src.synth.entities import resolve_entities as _resolve_entities
+    cade_records, new_cade = _gated_source(
+        registry.by_id("cade"), deadline=deadline, per_source=per_source,
+        fetch=lambda: cade.map_to_entities(
+            cade.fetch_atos(lookback_days=int(os.environ.get("ONCA_CADE_LOOKBACK_DAYS", "45"))),
+            resolver=_resolve_entities,
+        ),
+    )
 
     # BCB macro — Copom/Selic decision + weekly Focus expectations (market-wide,
     # not entity-tied; surfaces as standalone "macro" cards). Best-effort.
@@ -918,59 +973,46 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # sanctions resolving (CNPJ-root first) to a tracked entity are kept; a durable
     # sanctions/index.json store holds state and _new_since_last_run drives the delta
     # (seed-suppressed so the historical backlog does not flood the first run).
-    sanctions_records: list[dict[str, Any]] = []
-    new_sanctions: list[dict[str, Any]] = []
-    if os.environ.get("ONCA_CEIS_CNEP", "true").lower() in ("1", "true", "yes"):
-        bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
-        try:
-            with _source_budget("CEIS/CNEP sanctions", deadline, per_source):
-                from src.synth import entity_registry
+    def _fetch_sanctions() -> list[dict[str, Any]]:
+        from src.synth import entity_registry
 
-                # CNPJ-only resolution — no registry, no signal (correct: a sanction
-                # binds to a specific legal person; see ceis_cnep docstring).
-                cnpj_index = ceis_cnep.build_cnpj_index(
-                    entity_registry.list_entities()
-                ) if os.environ.get("ONCA_ENTITIES_TABLE") else {}
-                srows = ceis_cnep.fetch_sanctions() if cnpj_index else []
-                sanctions_records = ceis_cnep.map_to_entities(
-                    srows, cnpj_index=cnpj_index
-                )
-                new_sanctions = _new_since_last_run(
-                    "ceis_cnep", sanctions_records, seed_if_empty=True
-                )
-                if sanctions_records and bucket:
-                    ceis_cnep.update_store(sanctions_records, bucket)
-        except Exception as exc:  # pragma: no cover - defensive; upstream best-effort
-            print(f"Warning: CEIS/CNEP sanctions fetch failed: {exc}")
+        # CNPJ-only resolution — no registry, no signal (a sanction binds to a specific
+        # legal person; see ceis_cnep docstring).
+        idx = ceis_cnep.build_cnpj_index(
+            entity_registry.list_entities()
+        ) if os.environ.get("ONCA_ENTITIES_TABLE") else {}
+        srows = ceis_cnep.fetch_sanctions() if idx else []
+        return ceis_cnep.map_to_entities(srows, cnpj_index=idx)
+
+    _bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
+    sanctions_records, new_sanctions = _gated_source(
+        registry.by_id("sanctions"), deadline=deadline, per_source=per_source,
+        fetch=_fetch_sanctions,
+        store=(lambda recs: ceis_cnep.update_store(recs, _bucket)) if _bucket else None,
+    )
 
     # PNCP federal contracts (#62) — demand signal, sector-agnostic. DEFAULT-OFF: PNCP has
     # no supplier filter (~18k contracts/day scanned to find tracked suppliers), which yields
     # ~0 for the FS registry; enable (ONCA_PNCP_CONTRATOS=true) for the sectorial deployment
     # whose supplier universe genuinely appears here. CNPJ-only resolution (see the module).
-    contracts_records: list[dict[str, Any]] = []
-    new_contracts: list[dict[str, Any]] = []
-    if os.environ.get("ONCA_PNCP_CONTRATOS", "false").lower() in ("1", "true", "yes"):
-        bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
-        try:
-            with _source_budget("PNCP contracts", deadline, per_source):
-                from src.synth import entity_registry
+    def _fetch_contracts() -> list[dict[str, Any]]:
+        from src.synth import entity_registry
 
-                cnpj_index = ceis_cnep.build_cnpj_index(
-                    entity_registry.list_entities()
-                ) if os.environ.get("ONCA_ENTITIES_TABLE") else {}
-                crows = pncp_contratos.fetch_contracts(
-                    days_back=int(os.environ.get("ONCA_PNCP_LOOKBACK_DAYS", "2")),
-                    max_pages=int(os.environ.get("ONCA_PNCP_MAX_PAGES", "60")),
-                    min_valor=float(os.environ.get("ONCA_PNCP_MIN_VALOR", "0")),
-                ) if cnpj_index else []
-                contracts_records = pncp_contratos.map_to_entities(crows, cnpj_index=cnpj_index)
-                new_contracts = _new_since_last_run(
-                    "pncp_contratos", contracts_records, seed_if_empty=True
-                )
-                if contracts_records and bucket:
-                    pncp_contratos.update_store(contracts_records, bucket)
-        except Exception as exc:  # pragma: no cover - defensive; upstream best-effort
-            print(f"Warning: PNCP contracts fetch failed: {exc}")
+        idx = ceis_cnep.build_cnpj_index(
+            entity_registry.list_entities()
+        ) if os.environ.get("ONCA_ENTITIES_TABLE") else {}
+        crows = pncp_contratos.fetch_contracts(
+            days_back=int(os.environ.get("ONCA_PNCP_LOOKBACK_DAYS", "2")),
+            max_pages=int(os.environ.get("ONCA_PNCP_MAX_PAGES", "60")),
+            min_valor=float(os.environ.get("ONCA_PNCP_MIN_VALOR", "0")),
+        ) if idx else []
+        return pncp_contratos.map_to_entities(crows, cnpj_index=idx)
+
+    contracts_records, new_contracts = _gated_source(
+        registry.by_id("contracts"), deadline=deadline, per_source=per_source,
+        fetch=_fetch_contracts,
+        store=(lambda recs: pncp_contratos.update_store(recs, _bucket)) if _bucket else None,
+    )
 
     # Reclame Aqui — consumer-reputation snapshots for retail-facing banks/fintechs
     # (issue #31). Unofficial source, so best-effort + off via env; writes a durable
@@ -1069,18 +1111,9 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # empty while pulls still succeed. Attach compact context samples and
     # tag delta rows with is_new for prioritization.
     payload = {
-        "regulatory": {
-            "count": len(normativos),
-            "new_count": len(new_normativos),
-            "items": _tag_new(new_normativos[:8]),
-            "context": _strip_raw(normativos[:12]),
-        },
-        "competitor": {
-            "count": len(funds),
-            "new_count": len(new_funds),
-            "items": _tag_new(new_funds[:8]),
-            "context": _strip_raw(funds[:12]),
-        },
+        # ADR 019 Phase 2: lens sections built via _lens_section (limits from the registry).
+        "regulatory": _lens_section(normativos, new_normativos, registry.by_id("regulatory")),
+        "competitor": _lens_section(funds, new_funds, registry.by_id("competitor")),
         "market": {"count": len(market), "items": market, "context": market},
         "new_entrants": {
             "count": len(authorized),
@@ -1100,53 +1133,19 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             "items": _tag_new(juros_moves[:10]),
             "context": _strip_raw(juros_focus[:15]),
         },
-        "ofertas": {
-            "count": len(offerings),
-            "new_count": len(new_ofertas),
-            "items": _tag_new(new_ofertas[:10]),
-            "context": _strip_raw(offerings[:15]),
-        },
-        "sec_filings": {
-            "count": len(sec_filings_rows),
-            "new_count": len(new_sec),
-            "items": _tag_new(new_sec[:10]),
-            "context": _strip_raw(sec_filings_rows[:15]),
-        },
-        "fatos": {
-            "count": len(fatos),
-            "new_count": len(new_fatos),
-            "governance_count": sum(1 for f in new_fatos if f.get("governance")),
-            "items": _tag_new(new_fatos[:12]),
-            "context": _strip_raw(fatos[:15]),
-        },
-        "dou": {
-            "count": len(dou_acts),
-            "new_count": len(new_dou),
-            "items": _tag_new(new_dou[:10]),
-            "context": _strip_raw(dou_acts[:15]),
-        },
-        # CEIS/CNEP sanctions (#60) — entity-tied (CNPJ-anchored); a NEW sanction against
-        # a tracked entity surfaces solo (HIGH_VALUE_SOLO). Full state is in the store.
-        "sanctions": {
-            "count": len(sanctions_records),
-            "new_count": len(new_sanctions),
-            "items": _tag_new(new_sanctions[:10]),
-            "context": _strip_raw(sanctions_records[:15]),
-        },
+        "ofertas": _lens_section(offerings, new_ofertas, registry.by_id("ofertas")),
+        "sec_filings": _lens_section(sec_filings_rows, new_sec, registry.by_id("sec_filings")),
+        "fatos": _lens_section(
+            fatos, new_fatos, registry.by_id("fatos"),
+            governance_count=sum(1 for f in new_fatos if f.get("governance")),
+        ),
+        "dou": _lens_section(dou_acts, new_dou, registry.by_id("dou")),
+        # CEIS/CNEP sanctions (#60) — entity-tied (CNPJ-anchored); NEW sanction surfaces solo.
+        "sanctions": _lens_section(sanctions_records, new_sanctions, registry.by_id("sanctions")),
         # CADE merger reviews (#61) — M&A signal; parties resolved by name, surfaces solo.
-        "cade": {
-            "count": len(cade_records),
-            "new_count": len(new_cade),
-            "items": _tag_new(new_cade[:10]),
-            "context": _strip_raw(cade_records[:15]),
-        },
+        "cade": _lens_section(cade_records, new_cade, registry.by_id("cade")),
         # PNCP federal contracts (#62) — demand signal (default-off; CNPJ-anchored).
-        "contracts": {
-            "count": len(contracts_records),
-            "new_count": len(new_contracts),
-            "items": _tag_new(new_contracts[:10]),
-            "context": _strip_raw(contracts_records[:15]),
-        },
+        "contracts": _lens_section(contracts_records, new_contracts, registry.by_id("contracts")),
         # In "all" mode news is fetched inline here; in "structured" mode the news
         # slice is empty and the parallel news branch supplies it (overlaid at synth).
         "news": _news_slice(context) if mode == "all" else _empty_news_slice(),
