@@ -77,6 +77,48 @@ def test_build_feed_separates_run_date_from_data_date():
     assert feed["kpis"]["narratives_latest"] == 1
 
 
+def test_entity_momentum_weighted_count_of_expansion_lenses():
+    # ADR 015 §3: momentum is a weighted COUNT of expansion-lens narratives.
+    # entrants + ofertas weigh 2; funds/inf_diario/pix weigh 1; a card counts once
+    # at its max expansion weight; non-expansion lenses (regulatory/news) add 0.
+    narratives = [
+        _narr("a", "itau", "2026-08-12", 0.5, lenses=["entrants"]),          # +2
+        _narr("b", "itau", "2026-08-12", 0.5, lenses=["funds", "pix"]),      # +1 (max of 1,1)
+        _narr("c", "itau", "2026-08-13", 0.5, lenses=["ofertas", "funds"]),  # +2 (max of 2,1)
+        _narr("d", "itau", "2026-08-13", 0.5, lenses=["regulatory"]),        # +0 (not expansion)
+    ]
+    feed = feed_builder.build_feed(narratives)
+    itau = next(e for e in feed["entities"] if e["entity"] == "itau")
+    assert itau["momentum"] == 5
+    assert isinstance(itau["momentum"], int)
+
+
+def test_entity_momentum_defaults_zero_without_expansion_lenses():
+    feed = feed_builder.build_feed(
+        [_narr("a", "itau", "2026-08-12", 0.5, lenses=["regulatory", "news"])]
+    )
+    itau = next(e for e in feed["entities"] if e["entity"] == "itau")
+    assert itau["momentum"] == 0
+
+
+def test_entity_market_share_pct_resolves_and_is_null_for_unknown():
+    # ADR 015 §3: market_share_pct joins the resolved IF.data store by entity_id;
+    # an entity with no resolved IF.data row emits null (never an invented number).
+    narratives = [
+        _narr("a", "itau", "2026-08-12", 0.5),
+        _narr("b", "nubank", "2026-08-12", 0.5),
+    ]
+    feed = feed_builder.build_feed(narratives, market_share={"itau": 18.7})
+    itau = next(e for e in feed["entities"] if e["entity"] == "itau")
+    nubank = next(e for e in feed["entities"] if e["entity"] == "nubank")
+    assert itau["market_share_pct"] == 18.7
+    assert nubank["market_share_pct"] is None
+    # default (no store passed): every entity is null, key always present
+    plain = feed_builder.build_feed(narratives)
+    assert all(e["market_share_pct"] is None for e in plain["entities"])
+    assert all("momentum" in e for e in plain["entities"])
+
+
 def test_build_feed_carries_reviews_and_defaults_empty():
     # reviews (ADR step 5) ride along on the feed for the read-only surface
     proposals = [{"review_id": "group_merge:a_b", "kind": "group_merge",

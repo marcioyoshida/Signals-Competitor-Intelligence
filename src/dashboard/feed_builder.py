@@ -49,6 +49,36 @@ try:  # single source of truth for the entry-tier vertical set (ADR 016)
 except Exception:  # pragma: no cover - keep the feed buildable if the module shifts
     ENTRY_INDUSTRIES = ("agri-funds", "betting", "consorcio", "crypto", "real-estate-funds")
 
+# ADR 015 §3 — per-entity expansion MOMENTUM. A weighted COUNT (never a 0–1 index)
+# of expansion-lens narratives per entity over the feed window: the fastest-cadence
+# "who's moving into the market" signal. The lens identifiers are the ones narratives
+# actually carry (`n["lenses"]`), from src.synth.candidates.LENS_WEIGHT — new-entrant
+# licensing (`entrants`), public/securities offerings (`ofertas`), new fund/class
+# registrations (`funds`), daily fund flows (`inf_diario`), and Pix key activity
+# (`pix`). New-entrant licensing + offerings are the strongest expansion tells, so they
+# weigh 2; a routine fund/flow/Pix registration weighs 1. A narrative counts once, at
+# the max weight among its expansion lenses (so a multi-lens card isn't double-counted).
+# NOTE: hiring/LinkedIn velocity is deliberately NOT included — there is no such
+# ingester (CLAUDE.md: LinkedIn only via a licensed aggregator, not built).
+EXPANSION_LENS_WEIGHTS: dict[str, int] = {
+    "entrants": 2,
+    "ofertas": 2,
+    "funds": 1,
+    "inf_diario": 1,
+    "pix": 1,
+}
+EXPANSION_LENSES = frozenset(EXPANSION_LENS_WEIGHTS)
+
+
+def _momentum_weight(lenses: list[str] | None) -> int:
+    """Expansion weight a single narrative contributes: the max weight over its
+    expansion lenses (0 if it carries none), so a card is counted once, not per lens."""
+    return max(
+        (EXPANSION_LENS_WEIGHTS[l] for l in (lenses or []) if l in EXPANSION_LENS_WEIGHTS),
+        default=0,
+    )
+
+
 # Below this many narratives over the window, an industry module aggregates too
 # little to feel worth an add-on subscription — flagged so we don't sell a thin
 # feed. Zero narratives while entities are tracked is a coverage_gap (worse).
@@ -377,6 +407,7 @@ def build_feed(
     coverage_gaps: list[dict[str, Any]] | None = None,
     reputation: list[dict[str, Any]] | None = None,
     financials: list[dict[str, Any]] | None = None,
+    market_share: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     """Pure aggregation: narratives -> feed payload. No I/O.
 
@@ -418,15 +449,18 @@ def build_feed(
         if not ent:
             continue
         rec = by_entity.setdefault(
-            ent, {"entity": ent, "label": x["entity_label"], "by_date": {}}
+            ent, {"entity": ent, "label": x["entity_label"], "by_date": {}, "momentum": 0}
         )
         day = rec["by_date"].setdefault(
             x["date"], {"date": x["date"], "count": 0, "max_score": 0.0}
         )
         day["count"] += 1
         day["max_score"] = max(day["max_score"], x["threat_score"])
+        # ADR 015 §3: weighted count of this entity's expansion-lens narratives.
+        rec["momentum"] += _momentum_weight(x["lenses"])
 
     imap = industry_map or {}
+    share_map = market_share or {}
     entities: list[dict[str, Any]] = []
     for rec in by_entity.values():
         timeline = [rec["by_date"][d] for d in sorted(rec["by_date"])]
@@ -436,6 +470,11 @@ def build_feed(
                 "label": rec["label"],
                 "timeline": timeline,
                 "peak_score": max((t["max_score"] for t in timeline), default=0.0),
+                # ADR 015 §3: per-entity expansion momentum (weighted count, int, default 0).
+                "momentum": int(rec.get("momentum", 0)),
+                # ADR 015 §3: IF.data market share (%) if the entity resolved to an
+                # IF.data row, else None — never an invented number.
+                "market_share_pct": share_map.get(rec["entity"]),
                 "total": sum(t["count"] for t in timeline),
                 # industry slugs this entity belongs to — lets the dashboard group
                 # the entity monitor under each industry (fused coverage panel).
@@ -954,6 +993,18 @@ def _load_reputation(digests_bucket: str) -> list[dict[str, Any]]:
     return out
 
 
+def _load_market_share(digests_bucket: str) -> dict[str, float]:
+    """Read the IF.data market-share store (ADR 015 §3) as {entity_id: share_pct},
+    best-effort. {} when absent so entities emit market_share_pct=null."""
+    try:
+        from src.ingest import bcb_ifdata
+
+        return bcb_ifdata.share_by_entity(bcb_ifdata.load_index(digests_bucket))
+    except Exception as exc:  # pragma: no cover - best-effort, read-only
+        print(f"Warning: load IF.data market-share store failed: {exc}")
+        return {}
+
+
 def _load_coverage_gaps(digests_bucket: str) -> list[dict[str, Any]]:
     """Read the coverage-gap store (ADR-014), best-effort. [] if absent."""
     try:
@@ -1198,6 +1249,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         coverage_gaps=_load_coverage_gaps(digests_bucket),
         reputation=_load_reputation(digests_bucket),
         financials=_load_financials(digests_bucket),
+        market_share=_load_market_share(digests_bucket),
     )
     # ADR 018 Phase 3: continuous integrity audit over the registry + this feed —
     # operator-facing findings (scoped OUT of the entry/tenant slices below).
