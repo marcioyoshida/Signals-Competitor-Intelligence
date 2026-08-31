@@ -519,11 +519,17 @@
   <button class="railtab" id="macroTab" style="display:none" title="Macro · Copom & Focus">
     <span class="rtlabel">Macro</span>
   </button>
+  <button class="railtab" id="radarTab" style="display:none" title="Radar de Risco: reclamações BCB, distress e ameaça">
+    <span class="rtlabel">Risco</span><span class="rtbadge" id="radarCount"></span>
+  </button>
+  <button class="railtab" id="crencaTab" style="display:none" title="Balanço de Crença Estratégica: contagem de crenças SWOT por indústria">
+    <span class="rtlabel">Crença</span><span class="rtbadge" id="crencaCount"></span>
+  </button>
+  <button class="railtab" id="regTab" style="display:none" title="Radar regulatório: calendário de sinais e prazos">
+    <span class="rtlabel">Regulatório</span><span class="rtbadge" id="regCount"></span>
+  </button>
   <button class="railtab" id="integTab" style="display:none" title="Auditoria de integridade do registro (ADR 018)">
     <span class="rtlabel">Integridade</span><span class="rtbadge" id="integCount"></span>
-  </button>
-  <button class="railtab" id="radarTab" style="display:none" title="Radar de risco, balanço de crença estratégica e calendário regulatório">
-    <span class="rtlabel">Radar</span><span class="rtbadge" id="radarCount"></span>
   </button>
 </div>
 
@@ -565,23 +571,32 @@
 
 <aside class="drawer" id="radarDrawer" aria-hidden="true">
   <div class="drhead">
-    <h2>Radar Competitivo</h2>
+    <h2>Radar de Risco
+      <span class="infer" title="Cruza três sinais já citados na ferramenta e nunca combinados antes: o ranking oficial de reclamações do Banco Central, o status de recuperação judicial/falência minerado da imprensa e o pico de ameaça do período.">fusão de sinais</span>
+    </h2>
     <button class="drclose" data-close="radarDrawer" aria-label="Fechar">✕</button>
-  </div>
-
-  <div class="subhead first">Radar de Risco
-    <span class="infer" title="Cruza três sinais já citados na ferramenta e nunca combinados antes: o ranking oficial de reclamações do Banco Central, o status de recuperação judicial/falência minerado da imprensa e o pico de ameaça do período.">fusão de sinais</span>
   </div>
   <div class="hint" style="padding:0 16px 8px">Ranking de reclamações fundamentadas do BCB (1º = pior), status de distress (RJ/falência) e o nível de ameaça do período. Clique numa entidade para ver as narrativas e fontes abaixo.</div>
   <div id="riskRadar"></div>
+</aside>
 
-  <div class="subhead">Balanço de Crença Estratégica
-    <span class="infer" title="Contagem de crenças SWOT (curadas/vetadas por analista, cada uma com evidência) — uma leitura da tese acumulada, nunca um fato novo reportado.">inferência</span>
+<aside class="drawer" id="crencaDrawer" aria-hidden="true">
+  <div class="drhead">
+    <h2>Balanço de Crença Estratégica
+      <span class="infer" title="Contagem de crenças SWOT (curadas/vetadas por analista, cada uma com evidência) — uma leitura da tese acumulada, nunca um fato novo reportado.">inferência</span>
+    </h2>
+    <button class="drclose" data-close="crencaDrawer" aria-label="Fechar">✕</button>
   </div>
-  <div class="hint" style="padding:0 16px 8px">Forças + Oportunidades (direita, verde) contra Fraquezas + Ameaças (esquerda, vermelho), por entidade — é uma contagem de crenças da tese SWOT, não de fatos. Entidade mais pressionada primeiro.</div>
+  <div class="hint" style="padding:0 16px 8px">Forças + Oportunidades (direita, verde) contra Fraquezas + Ameaças (esquerda, vermelho), agrupado por indústria — é uma contagem de crenças da tese SWOT, não de fatos. Dentro de cada indústria, entidade mais pressionada primeiro.</div>
   <div id="beliefBalance"></div>
+</aside>
 
-  <div class="subhead">Radar Regulatório · Calendário de Prazos</div>
+<aside class="drawer" id="regDrawer" aria-hidden="true">
+  <div class="drhead">
+    <h2>Radar Regulatório</h2>
+    <button class="drclose" data-close="regDrawer" aria-label="Fechar">✕</button>
+  </div>
+  <div class="subhead first">Calendário de Prazos</div>
   <div class="hint" style="padding:0 16px 8px">Volume diário de sinais do tema Regulação no período (mais escuro = mais sinais no dia) e os prazos regulatórios já identificados no ciclo de vida normativo das narrativas.</div>
   <div class="cal-wrap"><div class="cal-grid" id="calGrid"></div></div>
   <div class="indempty" id="calEmpty" style="display:none"></div>
@@ -854,7 +869,7 @@ function renderLower() {
     const h = low.querySelector("h2");
     if (h) h.textContent = `Revisão de entidades (${DATA.reviews.length})`;
   }
-  renderMacro(); renderReviews(); renderGaps(); renderRadarPanels(); renderIntegrity();
+  renderMacro(); renderReviews(); renderGaps(); renderRadarPanels(); renderCrencaPanels(); renderRegPanels(); renderIntegrity();
 }
 
 // ADR 018 Phase 3: operator-only integrity findings in a lateral drawer.
@@ -875,28 +890,59 @@ function renderIntegrity() {
     </div>`).join("");
 }
 
-// Shared drill-down for the Radar Competitivo drawer rows (ADR 015 #1-#3): reuse
-// the SAME state.entity + render()/syncEntityHighlight() path as every other
-// entity click in the app, then close the drawer so the filtered feed is visible.
+// Shared drill-down for the Radar de Risco / Balanço de Crença / Radar
+// Regulatório drawer rows (ADR 015 #1-#3): reuse the SAME state.entity +
+// render()/syncEntityHighlight() path as every other entity click in the
+// app, then close the drawer so the filtered feed is visible.
 function jumpToEntityFromRadar(en) {
   if (!en) return;
   state.entity = en;
   document.getElementById("fEntity").value = en;
   syncEntityHighlight(); render();
-  toggleDrawer("radarDrawer", false);
+  // Generic close: this drill-down fires from three different drawers now
+  // (Radar de Risco, Balanço de Crença, Radar Regulatório's deadline pins) —
+  // closeDrawers() closes whichever one is actually open.
+  closeDrawers();
 }
 
+// Ticket #58: Radar de Risco is its own rail tab/drawer — gate on its rows only
+// (Balanço de Crença moved to its own tab/drawer, gated separately below).
 function radarHasData() {
-  return (DATA.entities || []).length > 0 || (DATA.reputation || []).length > 0 ||
-    (DATA.distress || []).length > 0 || Object.keys(DATA.swot || {}).length > 0 ||
-    (DATA.feed || []).some(f => (f.topics || []).includes("regulacao"));
+  return buildRiskRows().length > 0;
 }
 function renderRadarPanels() {
   const tab = document.getElementById("radarTab");
   const has = radarHasData();
   tab.style.display = has ? "" : "none";
   if (!has) return;
-  renderRiskRadar(); renderBeliefBalance(); renderRegCalendar();
+  renderRiskRadar();
+}
+// Ticket #58: Balanço de Crença Estratégica, split out of Radar Competitivo
+// into its own rail tab + drawer (mirrors regHasData/renderRegPanels below).
+function crencaHasData() {
+  return buildBalanceRows().length > 0;
+}
+function renderCrencaPanels() {
+  const tab = document.getElementById("crencaTab");
+  const has = crencaHasData();
+  tab.style.display = has ? "" : "none";
+  if (!has) { document.getElementById("crencaCount").textContent = ""; return; }
+  document.getElementById("crencaCount").textContent = String(buildBalanceRows().length);
+  renderBeliefBalance();
+}
+// Ticket #57: Radar Regulatório (calendar heatmap + deadline pins), split out
+// of Radar Competitivo into its own rail tab + drawer. Gated on the panel
+// actually having something to show (signal days in the heatmap or a pin).
+function regHasData() {
+  const cal = buildRegCalendar();
+  return !!(cal && cal.total) || buildDeadlinePins().length > 0;
+}
+function renderRegPanels() {
+  const tab = document.getElementById("regTab");
+  const has = regHasData();
+  tab.style.display = has ? "" : "none";
+  if (!has) { document.getElementById("regCount").textContent = ""; return; }
+  renderRegCalendar();
 }
 
 // --- #1 Radar de Risco: BCB complaints rank + distress state + threat tier ---
@@ -981,25 +1027,58 @@ function buildBalanceRows() {
   rows.sort((a, b) => a.net - b.net);  // most-pressured (W+T > S+O) first
   return rows;
 }
+// Ticket #56: group the balance rows under industry/sector headers, reusing
+// renderIndustryMonitor's entity->industries[] union idiom — an entity that
+// belongs to 2 industries appears under both, exactly like Cobertura. Order
+// within each group is preserved from buildBalanceRows (most-pressured
+// first); groups follow DATA.industries' order; entities with no registered
+// industry (or missing from DATA.entities entirely) fall into "Outras
+// entidades", same label/parity as renderIndustryMonitor's orphan bucket.
+// Groups with zero entities are omitted.
+function buildBalanceGroups() {
+  const rows = buildBalanceRows();
+  if (!rows.length) return [];
+  const indOfEntity = {};
+  (DATA.entities || []).forEach(e => { indOfEntity[e.entity] = e.industries || []; });
+  const inds = (DATA.industries || []).filter(i => (i.entities || 0) > 0);
+  const placed = new Set();
+  const groups = [];
+  inds.forEach(ind => {
+    const ents = rows.filter(r => (indOfEntity[r.entity] || []).includes(ind.slug));
+    if (!ents.length) return;
+    ents.forEach(e => placed.add(e.entity));
+    groups.push({ title: ind.display_name, rows: ents });
+  });
+  const orphanRows = rows.filter(r => !placed.has(r.entity));
+  if (orphanRows.length) groups.push({ title: "Outras entidades", rows: orphanRows });
+  return groups;
+}
 function renderBeliefBalance() {
   const el = document.getElementById("beliefBalance");
   if (!el) return;
-  const rows = buildBalanceRows();
-  if (!rows.length) {
+  const groups = buildBalanceGroups();
+  if (!groups.length) {
     el.innerHTML = `<div class="indempty">Sem crenças SWOT vetadas no período.</div>`;
     return;
   }
-  const maxMag = Math.max(1, ...rows.map(r => Math.max(r.pos, r.neg)));
-  el.innerHTML = rows.map(r => {
-    const negPct = (r.neg / maxMag) * 100, posPct = (r.pos / maxMag) * 100;
-    return `<div class="balrow" data-entity="${esc(r.entity)}">
-      <div class="ent-name entity-link" title="${esc(r.label)}">${esc(r.label)}</div>
-      <div class="balbar">
-        <div class="balneg-wrap"><div class="balneg" style="width:${negPct.toFixed(0)}%" title="Fraquezas + Ameaças: ${r.neg}"></div></div>
-        <div class="balpos-wrap"><div class="balpos" style="width:${posPct.toFixed(0)}%" title="Forças + Oportunidades: ${r.pos}"></div></div>
-      </div>
-      <div class="balcount" title="Forças+Oportunidades · Fraquezas+Ameaças">${r.pos}<span class="balsep">·</span>${r.neg}</div>
-    </div>`;
+  // Scale is shared across the WHOLE panel (not re-based per industry) so bar
+  // length stays comparable when scanning across groups — otherwise a group
+  // whose single entity has a mild imbalance would visually read as "as
+  // pressured" as the period's most-contested entity just from local rescaling.
+  const maxMag = Math.max(1, ...groups.flatMap(g => g.rows.map(r => Math.max(r.pos, r.neg))));
+  el.innerHTML = groups.map(g => {
+    const rowsHtml = g.rows.map(r => {
+      const negPct = (r.neg / maxMag) * 100, posPct = (r.pos / maxMag) * 100;
+      return `<div class="balrow" data-entity="${esc(r.entity)}">
+        <div class="ent-name entity-link" title="${esc(r.label)}">${esc(r.label)}</div>
+        <div class="balbar">
+          <div class="balneg-wrap"><div class="balneg" style="width:${negPct.toFixed(0)}%" title="Fraquezas + Ameaças: ${r.neg}"></div></div>
+          <div class="balpos-wrap"><div class="balpos" style="width:${posPct.toFixed(0)}%" title="Forças + Oportunidades: ${r.pos}"></div></div>
+        </div>
+        <div class="balcount" title="Forças+Oportunidades · Fraquezas+Ameaças">${r.pos}<span class="balsep">·</span>${r.neg}</div>
+      </div>`;
+    }).join("");
+    return `<div class="subhead">${esc(g.title)}</div>${rowsHtml}`;
   }).join("");
   el.querySelectorAll(".balrow").forEach(r => r.onclick = () => jumpToEntityFromRadar(r.dataset.entity));
 }
@@ -1076,6 +1155,10 @@ function renderRegCalendar() {
     });
   }
   const pins = buildDeadlinePins();
+  // Badge mirrors #radarCount's convention (count of the drawer's actionable
+  // listing) — here the deadline pins, since the heatmap alone has no single count.
+  const regCountEl = document.getElementById("regCount");
+  if (regCountEl) regCountEl.textContent = pins.length ? String(pins.length) : "";
   if (!pins.length) {
     pinsEl.innerHTML = `<div class="indempty">Sem prazos regulatórios identificados no período — item pendente até o ciclo de vida normativo render mais dados de prazo.</div>`;
     return;
@@ -1919,7 +2002,7 @@ function applyTheme(t) {
   document.documentElement.setAttribute("data-theme", t);
   const btn = document.getElementById("themeToggle");
   if (btn) btn.textContent = t === "dark" ? "Claro" : "Escuro";
-  if (DATA) { renderLegend(); renderIndustryMonitor(); render(); syncEntityHighlight(); renderRadarPanels(); }
+  if (DATA) { renderLegend(); renderIndustryMonitor(); render(); syncEntityHighlight(); renderRadarPanels(); renderCrencaPanels(); renderRegPanels(); }
 }
 applyTheme(autoTheme());
 setInterval(() => { if (!themeManual) applyTheme(autoTheme()); }, 600000);
@@ -2264,6 +2347,8 @@ document.getElementById("gapsTab").onclick = () => toggleDrawer("gapsDrawer", tr
 document.getElementById("macroTab").onclick = () => toggleDrawer("macroDrawer", true);
 document.getElementById("integTab").onclick = () => toggleDrawer("integDrawer", true);
 document.getElementById("radarTab").onclick = () => toggleDrawer("radarDrawer", true);
+document.getElementById("crencaTab").onclick = () => toggleDrawer("crencaDrawer", true);
+document.getElementById("regTab").onclick = () => toggleDrawer("regDrawer", true);
 document.querySelectorAll(".drclose").forEach(b => b.onclick = () => toggleDrawer(b.dataset.close, false));
 document.getElementById("drawerScrim").onclick = () => closeDrawers();
 document.addEventListener("keydown", e => { if (e.key === "Escape") closeDrawers(); });
