@@ -484,12 +484,13 @@ class OncaPrototypeStack(Stack):
                 "function handler(event) {\n"
                 "  var r = event.request; var h = r.headers;\n"
                 "  // Clean-route rewrite (v2 multi-context dashboards), evaluated\n"
-                "  // BEFORE the basic-auth gate: /admin, /newentry, /adquirencia,\n"
-                "  // /fintech, /seguros, /wealth (with or without a trailing slash)\n"
-                "  // map to their /v2/<ctx>/index.html object. The root '/',\n"
-                "  // /entry/*, static assets and every /api/* behavior pass through\n"
-                "  // untouched; auth still gates everything below.\n"
-                '  var routes = { "/admin": "admin", "/newentry": "newentry",\n'
+                "  // BEFORE the basic-auth gate: /app (the profile-driven router that\n"
+                "  // renders the industry licensed to the Cognito login), /admin,\n"
+                "  // /newentry, /adquirencia, /fintech, /seguros, /wealth (with or\n"
+                "  // without a trailing slash) map to their /v2/<ctx>/index.html object.\n"
+                "  // The root '/', /entry/*, static assets and every /api/* behavior\n"
+                "  // pass through untouched; auth still gates everything below.\n"
+                '  var routes = { "/app": "app", "/admin": "admin", "/newentry": "newentry",\n'
                 '    "/adquirencia": "adquirencia", "/fintech": "fintech",\n'
                 '    "/seguros": "seguros", "/wealth": "wealth" };\n'
                 "  var key = r.uri;\n"

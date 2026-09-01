@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Onça</title>
+<link rel="stylesheet" href="/v2/app.css" />
+</head>
+<body>
+<header class="appbar">
+  <div class="brand"><span class="mark">ON<b>Ç</b>A</span><span class="ctx" id="ctxName">—</span></div>
+  <nav class="ctxnav" id="ctxnav" aria-label="Seus setores"></nav>
+  <span class="spacer"></span>
+  <span class="sub" id="asof">—</span>
+  <span id="authBox" style="display:inline-flex;gap:var(--s2);align-items:center"></span>
+  <button class="icnbtn" id="themeBtn" title="Alternar tema" aria-label="Alternar tema claro/escuro">◐</button>
+</header>
+
+<main class="wrap">
+  <div class="pagehead">
+    <h1 id="pageTitle">Onça</h1>
+    <p class="lede" id="pageLede">Seu painel é escolhido pelo seu perfil de acesso — o setor
+      licenciado à sua conta. O feed é escopado no servidor; nada é filtrado no navegador.</p>
+  </div>
+
+  <div class="tiles" id="kpis" style="margin-bottom:var(--s5)"></div>
+
+  <!-- Perguntar à Onça — grounded, cited Q&A (ADR 010), scoped to the tenant. -->
+  <section class="band">
+    <div class="band-hd"><span class="overline">Perguntar à Onça</span><span class="rule"></span>
+      <span class="badge badge--ghost">resposta fundamentada</span></div>
+    <div class="panel panel--lead">
+      <div class="panel__hd"><h2>Pergunte à base da Onça</h2><span class="spacer"></span>
+        <span class="hd-note">resposta só com fonte citada · escopada à sua licença</span></div>
+      <div class="panel__bd" id="askBody"></div>
+    </div>
+  </section>
+
+  <!-- The profile-selected industry dashboard renders here. -->
+  <div id="dash"></div>
+</main>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-hidden="true" role="dialog" aria-labelledby="drTitle">
+  <div class="drawer__hd"><h3 id="drTitle">Detalhe</h3>
+    <button class="drawer__close" id="drClose" aria-label="Fechar">×</button></div>
+  <div class="drawer__bd" id="drBody"></div>
+</aside>
+
+<script src="/v2/app.js"></script>
+<script src="/v2/context.js"></script>
+<script src="/v2/ask.js"></script>
+<script src="/v2/industries.js"></script>
+<script>
+(function () {
+  "use strict";
+  const U = window.OncaUI, Ctx = window.OncaCtx, Ind = window.OncaIndustries;
+  let LICENSED = [];   // the tenant's licensed industry slugs (from scoped_modules)
+
+  function activeSlug() {
+    const h = (location.hash || "").replace(/^#/, "").toLowerCase();
+    if (h && LICENSED.indexOf(h) !== -1) return h;
+    return LICENSED[0] || "";
+  }
+
+  function renderNav() {
+    const nav = document.getElementById("ctxnav");
+    const active = activeSlug();
+    // Only the industries this profile is licensed for — never a cross-industry menu.
+    nav.innerHTML = LICENSED.map((s) =>
+      `<a href="#${s}"${s === active ? ' aria-current="page"' : ""}>${U.esc(Ind.labelFor(s))}</a>`).join("");
+    document.getElementById("ctxName").textContent = Ind.labelFor(active) || "—";
+  }
+
+  let _askMounted = false;
+  function mountAsk(cfg) {
+    if (_askMounted) return;
+    _askMounted = true;
+    window.OncaAsk.mount(document.getElementById("askBody"), {
+      auth: Ctx,
+      examples: cfg.ask || [],
+      onCite: (en) => {
+        const c = Ctx.feed(window.DATA).filter((x) => x.entity === en)
+          .sort((a, b) => (b.date || "").localeCompare(a.date || ""))[0];
+        if (c) Ctx.openCard(c);
+      },
+    });
+  }
+
+  function renderActive() {
+    if (!window.DATA) return;
+    renderNav();
+    const cfg = Ind.renderDashboard(document.getElementById("dash"), window.DATA, activeSlug());
+    mountAsk(cfg);
+  }
+
+  async function load() {
+    Ctx.renderAuthBox("authBox");
+    const dash = document.getElementById("dash");
+    const res = await Ctx.loadScopedFeed({});
+    if (res.needAuth) { Ctx.mountGate(dash, "needAuth", "seu painel"); return; }
+    if (res.noAccess) { Ctx.mountGate(dash, "noAccess", "seu painel"); return; }
+    if (res.error) { Ctx.mountGate(dash, res.error, "seu painel"); return; }
+    window.DATA = res.data; Ctx.setData(window.DATA); Ctx.setAsOf(window.DATA);
+    LICENSED = Ind.licensedIndustries(window.DATA);
+    renderActive();
+  }
+
+  async function boot() {
+    U.initTheme();
+    Ctx.wireDrawer();
+    await Ctx.handleAuthCallback();
+    const tb = document.getElementById("themeBtn");
+    if (tb) tb.addEventListener("click", () => { U.toggleTheme(); renderActive(); });
+    // Switch industry (multi-licensed tenant) without a reload; feed already loaded.
+    window.addEventListener("hashchange", renderActive);
+    window.__oncaReload = load;
+    await load();
+  }
+  boot();
+})();
+</script>
+</body>
+</html>
