@@ -74,7 +74,7 @@
   .review .rmeta { color: var(--muted); font-size: 12px; margin-top: 3px; }
   .ractions { margin-top: 6px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
   .rbtn { font-size: 12px; padding: 3px 10px; }
-  .rpick { font-size: 12px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg2); color: var(--ink); }
+  .rpick { font-size: 12px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--ink); }
   .ind { display: flex; align-items: center; gap: 10px; padding: 9px 16px; border-top: 1px solid var(--border); flex-wrap: wrap; }
   .ind:first-child { border-top: 0; }
   .ind .iname { font-weight: 600; min-width: 150px; }
@@ -86,13 +86,6 @@
   .flag.low { background: rgba(217,119,6,.15); color: #d97706; }
   .flag.ok  { background: rgba(22,163,74,.13); color: #16a34a; }
   .flag.none { background: rgba(121,129,140,.15); color: var(--muted); }
-  /* Tabbed lower section (industry coverage / reviews), well below the feed. */
-  .tabs { display: flex; gap: 2px; padding: 0 10px; border-bottom: 1px solid var(--border); }
-  .tab { border: 0; background: none; color: var(--muted); font-size: 13px; font-weight: 600;
-    padding: 12px 14px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
-  .tab:hover { color: var(--ink); }
-  .tab.active { color: var(--ink); border-bottom-color: var(--accent); }
-  .tabpane .hint { padding: 12px 16px 4px; }
   .legend { display: flex; gap: 12px; flex-wrap: wrap; padding: 0 16px 12px; color: var(--ink2); font-size: 12px; }
   .legend .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
   .feed { padding: 6px 10px 14px; }
@@ -191,6 +184,11 @@
   .swot-props .pk.stale { background: rgba(200,150,40,.16); color: #b9820f; }
   .swot-props .pk.tows { background: rgba(60,140,200,.14); color: #1a7ab5; }
   .swot-props .pk.porter { background: rgba(200,90,40,.14); color: #c25a28; }
+  .swot-props .pk.pestle { background: rgba(108,99,196,.16); color: #6c63c4; }
+  .swot-props .pk.ansoff { background: rgba(46,158,107,.16); color: #2e9e6b; }
+  .swot-props .pk.bcg { background: rgba(185,130,15,.16); color: #b9820f; }
+  .swot-props .pk.four_corners { background: rgba(31,143,138,.16); color: #1f8f8a; }
+  .swot-props .pk.seven_s { background: rgba(26,122,181,.16); color: #1a7ab5; }
   /* ADR 006: TOWS posture quadrants reuse the swot-q card style with distinct colors. */
   .swot-q.SO { --qc: #1a7ab5; } .swot-q.ST { --qc: #6c63c4; }
   .swot-q.WO { --qc: #b9820f; } .swot-q.WT { --qc: var(--t-crit); }
@@ -268,6 +266,17 @@
   .railcard .macrocards { grid-template-columns: 1fr; padding: 8px 0 2px; }
   .empty { padding: 40px; text-align: center; color: var(--muted); }
   .hidden { display: none !important; }
+  /* Keyboard focus: a visible ring on every interactive control (custom + native). */
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+  .card:focus-visible, .ent-row:focus-visible, .indhead:focus-visible,
+  .fw-hdr:focus-visible, .thesis:focus-visible { outline-offset: -2px; }
+  /* Respect reduced-motion: kill the run-status pulse and any transitions. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: .001ms !important; animation-iteration-count: 1 !important;
+      transition-duration: .001ms !important; scroll-behavior: auto !important;
+    }
+  }
   .tip { position: fixed; pointer-events: none; background: var(--ink); color: var(--bg);
     padding: 4px 8px; border-radius: 6px; font-size: 12px; opacity: 0; transition: opacity .1s; z-index: 20; }
 </style>
@@ -289,12 +298,12 @@
     <div class="panel">
       <h2>Feed priorizado por ameaça</h2>
       <div class="filters">
-        <select id="fEntity"><option value="">Todas as entidades</option></select>
-        <select id="fLens"><option value="">Todas as fontes</option></select>
-        <select id="fDate"><option value="">Todas as datas</option></select>
+        <select id="fEntity" aria-label="Filtrar por entidade"><option value="">Todas as entidades</option></select>
+        <select id="fLens" aria-label="Filtrar por fonte"><option value="">Todas as fontes</option></select>
+        <select id="fDate" aria-label="Filtrar por data"><option value="">Todas as datas</option></select>
         <label class="chk"><input type="checkbox" id="fAlert" /> Somente alertas</label>
         <button class="btn" id="viewToggle" title="Resumir para um cartão por entidade">Por entidade</button>
-        <input type="search" id="fSearch" placeholder="Buscar nas narrativas…" style="flex:1;min-width:140px" />
+        <input type="search" id="fSearch" aria-label="Buscar nas narrativas" placeholder="Buscar nas narrativas…" style="flex:1;min-width:140px" />
       </div>
       <div class="hint">Cada cartão reúne sinais de várias fontes (as “lentes”) sobre a mesma entidade e traz o link de cada fonte. O nível de ameaça é uma estimativa que combina quantas fontes e quão relevantes são.</div>
       <div class="legend" id="legend"></div>
@@ -310,7 +319,7 @@
         <div id="indmon"></div>
       </div>
       <section class="panel railcard collapsed" id="railMacro" style="display:none">
-        <h2 class="railhead">Macro · Copom &amp; Focus <button class="railtog" aria-label="Mostrar/ocultar">▸</button></h2>
+        <h2 class="railhead">Macro · Copom &amp; Focus <button class="railtog" aria-label="Mostrar/ocultar" aria-expanded="false">▸</button></h2>
         <div class="railbody">
           <div class="hint">Contexto macro do mercado (BCB): decisão do Copom / Selic e as expectativas do Relatório Focus. Sinais amplos de mercado — não são de um concorrente específico.</div>
           <div id="macro"></div>
@@ -441,7 +450,8 @@ function industryFlag(i) {
 function entRowHtml(e) {
   const t = tierOf(e.peak_score);
   const bg = hexToRgba(cssvar(t.var), 0.18 + 0.55 * (e.peak_score ?? 0));
-  return `<div class="ent-row" data-entity="${esc(e.entity)}">
+  return `<div class="ent-row" data-entity="${esc(e.entity)}" role="button" tabindex="0"
+      aria-pressed="false" aria-label="Filtrar pela entidade ${esc(e.label)}">
     <div class="ent-name" title="${esc(e.label)}">${esc(e.label)}</div>
     <div>${sparkline(e.timeline)}</div>
     <div class="ent-meta"><span class="heat" title="Pico de ameaça: ${t.label}"
@@ -471,7 +481,7 @@ function renderIndustryMonitor() {
     const body = ents.length ? ents.map(entRowHtml).join("")
       : `<div class="indempty">sem narrativas no período</div>`;
     return `<div class="indgroup ${open ? "open" : ""}" data-ind="${esc(id)}">
-      <div class="indhead">
+      <div class="indhead" role="button" tabindex="0" aria-expanded="${open}" aria-label="${esc(title)}">
         <div class="indtitle"><span class="nm">${esc(title)}</span>${situ || ""}</div>
         <div class="indstats">${statline}</div>
         <span class="indcar">${open ? "▾" : "▸"}</span>
@@ -499,6 +509,7 @@ function wireIndMonitor(el) {
     const g = h.closest(".indgroup"), id = g.dataset.ind;
     if (state.indOpen.has(id)) state.indOpen.delete(id); else state.indOpen.add(id);
     const open = g.classList.toggle("open");
+    h.setAttribute("aria-expanded", String(open));
     h.querySelector(".indcar").textContent = open ? "▾" : "▸";
   });
   el.querySelectorAll(".ent-row").forEach(r => r.onclick = () => {
@@ -833,7 +844,8 @@ function thesisContext(entity) {
   if (!chips && !top) return "";
   const topHtml = top
     ? `<span class="ttop ${topDim}" title="${esc(top.text)}">${esc(top.text)}</span>` : "";
-  return `<div class="thesis" data-entity="${esc(entity)}"
+  return `<div class="thesis" data-entity="${esc(entity)}" role="button" tabindex="0"
+    aria-label="Abrir a tese competitiva de ${esc(entity)}"
     title="Tese competitiva mantida para esta entidade (SWOT · inferência) — clique para abrir o painel completo">
     <span class="tlabel">Tese</span>${chips}${topHtml}</div>`;
 }
@@ -849,7 +861,8 @@ function cardHtml(f, group) {
   const multi = group && group.count > 1
     ? `<span class="est">· ${group.count} atualizações no período · pico ${group.peak.toFixed(2)}</span>`
     : "";
-  return `<div class="card" data-id="${esc(f.id)}">
+  return `<div class="card" data-id="${esc(f.id)}" role="button" tabindex="0"
+      aria-expanded="false" aria-label="Expandir narrativa · ${esc(f.subject_label || f.entity_label)}">
     <div class="row1">
       <span class="tier" style="background:${cssvar(t.var)}">${t.label}</span>
       <span class="entity">${esc(f.subject_label || f.entity_label)}</span>
@@ -1011,7 +1024,7 @@ function renderFrameworks() {
     }
     const pcount = swotProps.length ? `<span class="fw-pcount">${swotProps.length} proposta(s)</span>` : "";
     cards.push({fw: "swot", html: `<div class="fw-card" data-fw="swot">
-      <div class="fw-hdr"><span class="fw-tog">▸</span><span class="fw-name">SWOT</span>
+      <div class="fw-hdr" role="button" tabindex="0" aria-expanded="false"><span class="fw-tog">▸</span><span class="fw-name">SWOT</span>
         <span class="fw-chips">${_fwChips(SWOT_LABELS, counts)}</span>${pcount}
         <span class="infer">inferência</span></div>
       <div class="fw-body"><div class="swot-grid">${gridHtml}</div>
@@ -1034,7 +1047,7 @@ function renderFrameworks() {
     }).join("");
     const pcount = towsProps.length ? `<span class="fw-pcount">${towsProps.length} proposta(s)</span>` : "";
     cards.push({fw: "tows", html: `<div class="fw-card" data-fw="tows">
-      <div class="fw-hdr"><span class="fw-tog">▸</span><span class="fw-name">TOWS</span>
+      <div class="fw-hdr" role="button" tabindex="0" aria-expanded="false"><span class="fw-tog">▸</span><span class="fw-name">TOWS</span>
         <span class="fw-chips">${_fwChips(TOWS_LABELS, towsCounts)}</span>${pcount}
         <span class="infer">curadoria</span></div>
       <div class="fw-body"><div class="swot-grid">${gridHtml}</div>
@@ -1057,7 +1070,7 @@ function renderFrameworks() {
     }).join("");
     const pcount = porterProps.length ? `<span class="fw-pcount">${porterProps.length} proposta(s)</span>` : "";
     cards.push({fw: "porter", html: `<div class="fw-card" data-fw="porter">
-      <div class="fw-hdr"><span class="fw-tog">▸</span><span class="fw-name">Porter</span>
+      <div class="fw-hdr" role="button" tabindex="0" aria-expanded="false"><span class="fw-tog">▸</span><span class="fw-name">Porter</span>
         <span class="fw-chips">${_fwChips(PORTER_LABELS, porterCounts)}</span>${pcount}
         <span class="infer">cinco forças</span></div>
       <div class="fw-body"><div class="swot-grid" style="grid-template-columns:1fr 1fr 1fr">${gridHtml}</div>
@@ -1087,7 +1100,7 @@ function renderFrameworks() {
       }).join("");
       const pcount = fwProps.length ? `<span class="fw-pcount">${fwProps.length} proposta(s)</span>` : "";
       cards.push({fw: fwKey, html: `<div class="fw-card" data-fw="${fwKey}">
-        <div class="fw-hdr"><span class="fw-tog">▸</span><span class="fw-name">${fwName}</span>
+        <div class="fw-hdr" role="button" tabindex="0" aria-expanded="false"><span class="fw-tog">▸</span><span class="fw-name">${fwName}</span>
           <span class="fw-chips">${_fwChips(fwLabels, fwCounts)}</span>${pcount}
           <span class="infer">${fwTag}</span></div>
         <div class="fw-body"><div class="swot-grid" style="grid-template-columns:${gridCols}">${gridHtml}</div>
@@ -1098,24 +1111,25 @@ function renderFrameworks() {
   if (!cards.length) { el.innerHTML = ""; return; }
   el.innerHTML = `<div class="fw-tabs">${cards.map(c => c.html).join("")}</div>`;
 
-  // Accordion: click header toggles this card open, closes others.
+  // Accordion: a header opens its card and closes the others; aria-expanded tracks it.
+  const syncFwAria = () => el.querySelectorAll(".fw-card").forEach(c =>
+    c.querySelector(".fw-hdr").setAttribute("aria-expanded", String(c.classList.contains("open"))));
   el.querySelectorAll(".fw-hdr").forEach(hdr => {
     hdr.onclick = () => {
       const card = hdr.parentElement;
       const wasOpen = card.classList.contains("open");
       el.querySelectorAll(".fw-card.open").forEach(c => c.classList.remove("open"));
       if (!wasOpen) card.classList.add("open");
+      state._openFw = card.classList.contains("open") ? card.dataset.fw : null;
+      syncFwAria();
     };
   });
-  // Restore previously-open framework tab.
+  // Restore the previously-open framework tab.
   if (state._openFw) {
     const prev = el.querySelector(`.fw-card[data-fw="${state._openFw}"]`);
     if (prev) prev.classList.add("open");
   }
-  el.querySelectorAll(".fw-hdr").forEach(hdr => {
-    const origClick = hdr.onclick;
-    hdr.onclick = () => { origClick(); state._openFw = hdr.parentElement.classList.contains("open") ? hdr.parentElement.dataset.fw : null; };
-  });
+  syncFwAria();
 }
 
 function render() {
@@ -1135,17 +1149,17 @@ function render() {
   }
   feed.innerHTML = html;
   feed.querySelectorAll(".card").forEach(c => c.onclick = () => {
-    c.querySelector(".narr").classList.toggle("clamp");
+    const clamped = c.querySelector(".narr").classList.toggle("clamp");
+    c.setAttribute("aria-expanded", String(!clamped));
   });
   feed.querySelectorAll(".thesis").forEach(t => t.onclick = ev => {
     ev.stopPropagation();                 // don't also toggle the narrative clamp
     const en = t.dataset.entity;
     state.entity = en;
+    state._openFw = "swot";               // render() -> renderFrameworks() opens + aria-syncs it
     document.getElementById("fEntity").value = en;
     syncEntityHighlight(); render();
-    state._openFw = "swot";
-    const fp = document.getElementById("frameworksPanel");
-    if (fp) { fp.querySelector('.fw-card[data-fw="swot"]')?.classList.add("open"); fp.scrollIntoView({ behavior: "smooth", block: "nearest" }); }
+    document.getElementById("frameworksPanel")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   });
   renderTable(rows);
 }
@@ -1173,14 +1187,17 @@ function sparkline(timeline) {
   const dots = line.map(p =>
     `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="var(--accent)"
       data-d="${p.d}" data-v="${p.v.toFixed(2)}"></circle>`).join("");
-  return `<svg class="spark" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+  return `<svg class="spark" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true" focusable="false">
     <polyline points="${poly}" fill="none" stroke="var(--accent)" stroke-width="2"
       stroke-linejoin="round" stroke-linecap="round"/>${dots}</svg>`;
 }
 
 function syncEntityHighlight() {
-  document.querySelectorAll(".ent-row").forEach(r =>
-    r.classList.toggle("active", r.dataset.entity === state.entity && state.entity !== ""));
+  document.querySelectorAll(".ent-row").forEach(r => {
+    const on = r.dataset.entity === state.entity && state.entity !== "";
+    r.classList.toggle("active", on);
+    r.setAttribute("aria-pressed", String(on));
+  });
 }
 
 // Theme follows the time of day: claro das 06:00 às 17:59, escuro das 18:00 às
@@ -1305,6 +1322,18 @@ document.addEventListener("click", e => {
   }
 });
 
+// Keyboard operability for the custom (div) controls: Enter/Space activate the
+// focused role="button" element, matching native button semantics. Only fires
+// when the role=button is itself focused (not a link/button nested inside it).
+document.addEventListener("keydown", e => {
+  if (e.key !== "Enter" && e.key !== " " && e.key !== "Spacebar") return;
+  const t = e.target;
+  if (!t || typeof t.getAttribute !== "function") return;
+  if (t.getAttribute("role") !== "button" || t.tagName === "BUTTON" || t.tagName === "A") return;
+  e.preventDefault();          // Space would otherwise scroll the page
+  t.click();
+});
+
 // Collapse/expand a rail card by clicking its header.
 document.querySelector(".rail").addEventListener("click", e => {
   const head = e.target.closest(".railhead");
@@ -1312,7 +1341,7 @@ document.querySelector(".rail").addEventListener("click", e => {
   const card = head.closest(".railcard");
   const collapsed = card.classList.toggle("collapsed");
   const tog = head.querySelector(".railtog");
-  if (tog) tog.textContent = collapsed ? "▸" : "▾";
+  if (tog) { tog.textContent = collapsed ? "▸" : "▾"; tog.setAttribute("aria-expanded", String(!collapsed)); }
 });
 
 boot();
