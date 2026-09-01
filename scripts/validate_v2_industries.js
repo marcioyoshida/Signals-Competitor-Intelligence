@@ -50,5 +50,27 @@ const D = { kpis:{narratives_latest:7,alerts_latest:2,entities_tracked:12,source
 // 4) licensedIndustries reads scoped_modules; activeSlug fallback via first
 const lic = Ind.licensedIndustries({scoped_modules:["wealth-management","banking"]});
 if (JSON.stringify(lic)!==JSON.stringify(["wealth-management","banking"])){ console.error("licensed wrong",lic); fail++; }
-console.log(fail===0 ? "VALIDATION OK — all industries render, all kinds valid" : ("FAIL: "+fail));
+// 5) per-industry slice: a card tagged only 'banking' must NOT appear under 'acquiring',
+//    and an acquiring-tagged entity/card MUST. Filtering is within the entitlement.
+const Dmix = {
+  run_date: "2026-08-31",
+  entity_attrs: { stone: {industries:["acquiring"]}, itau: {industries:["banking"]} },
+  groups: {}, entities: [{entity:"stone"},{entity:"itau"}],
+  feed: [
+    { id:"c1", entity:"stone", industries:["acquiring"], date:"2026-08-31", is_alert:true, citations:[{url:"https://bcb.gov.br/x"}] },
+    { id:"c2", entity:"itau", industries:["banking"], date:"2026-08-31", citations:[{url:"https://cvm.gov.br/y"}] },
+    { id:"c3", entity:"stone", industries:["acquiring","fintech"], date:"2026-08-31", citations:[] },
+  ],
+  kpis:{sources:9},
+};
+const acq = Ind.sliceToIndustry(Dmix, "acquiring");
+const bank = Ind.sliceToIndustry(Dmix, "banking");
+const acqIds = acq.feed.map(c=>c.id).sort();
+if (JSON.stringify(acqIds)!==JSON.stringify(["c1","c3"])){ console.error("acquiring slice wrong:",acqIds); fail++; }
+if (bank.feed.map(c=>c.id).join()!=="c2"){ console.error("banking slice wrong:",bank.feed.map(c=>c.id)); fail++; }
+if (acq.kpis.narratives_total!==2 || acq.kpis.narratives_latest!==2 || acq.kpis.alerts_latest!==1){ console.error("acq kpis wrong:",acq.kpis); fail++; }
+if (acq.entities.map(e=>e.entity).join()!=="stone"){ console.error("acq entities wrong",acq.entities); fail++; }
+if (JSON.stringify(acq.scoped_modules)!==JSON.stringify(["acquiring"])){ console.error("scoped_modules wrong"); fail++; }
+
+console.log(fail===0 ? "VALIDATION OK — all industries render, all kinds valid, per-industry slice filters" : ("FAIL: "+fail));
 process.exit(fail?1:0);

@@ -182,6 +182,64 @@
 
   function configFor(slug) { return REGISTRY[slug] || GENERIC; }
 
+  // --- Per-industry slice (within the ENTITLED feed) -------------------------
+  // The server scopes /api/feed to the tenant's whole entitlement (all its licensed
+  // industries). A per-industry TAB must then show only THAT industry's signals — else a
+  // multi-industry tenant sees, e.g., banks under Adquirência. This filters the tenant's OWN
+  // licensed data to the active industry (NOT a superset — ADR 002 is about the entitlement
+  // boundary, which the server already enforced). Card `industries[]` (ADR-017 denorm) is
+  // authoritative; entities fall back to their registry industries; group children of an
+  // in-scope parent are included (ADR-017 tier-1 opt-in). KPIs are recomputed for the slice.
+  const _norm = (x) => String(x == null ? "" : x).toLowerCase();
+  function _host(url) { try { return new URL(url).host.replace(/^www\./, ""); } catch (e) { return ""; } }
+
+  function sliceToIndustry(D, slug) {
+    if (!D || !slug) return D;
+    const attrs = D.entity_attrs || {};
+    const scoped = new Set(Object.keys(attrs).filter(
+      (e) => (attrs[e].industries || []).map(_norm).indexOf(slug) !== -1));
+    const groups = D.groups || {};
+    const stack = Array.from(scoped).filter((e) => groups[e]);
+    while (stack.length) {
+      (groups[stack.pop()] || []).forEach((ch) => {
+        if (!scoped.has(ch)) { scoped.add(ch); if (groups[ch]) stack.push(ch); }
+      });
+    }
+    const cardOK = (c) => {
+      const inds = (c.industries || []).map(_norm);
+      if (inds.length) return inds.indexOf(slug) !== -1;      // denorm is authoritative
+      return [c.entity].concat(c.entities || []).some((e) => e && scoped.has(e));
+    };
+    const feed = (D.feed || []).filter(cardOK);
+    const entities = (D.entities || []).filter((r) => scoped.has(r.entity));
+    const latest = D.run_date;
+    const latestItems = feed.filter((c) => c.date === latest);
+    const srcs = new Set();
+    feed.forEach((c) => (c.citations || []).forEach((cit) => {
+      const h = _host(cit && (cit.url || cit.href || cit)); if (h) srcs.add(h);
+    }));
+    const byKey = (o) => {                    // dict keyed by entity -> keep scoped keys
+      const r = {}; Object.keys(o || {}).forEach((k) => { if (scoped.has(k)) r[k] = o[k]; }); return r;
+    };
+    const byEnt = (arr, field) => (arr || []).filter((r) => scoped.has(r[field || "entity"]));
+    return Object.assign({}, D, {
+      feed, entities, entity_attrs: byKey(attrs), groups: byKey(groups),
+      scoped_modules: [slug],
+      // entity-keyed auxiliary stores the panels read (risco/swot/mapa) — same slice, so no
+      // panel shows a cross-industry entity. Absent keys stay absent (honest empty states).
+      reputation: byEnt(D.reputation), distress: byEnt(D.distress),
+      financials: byEnt(D.financials, "entity_id"),
+      swot: byKey(D.swot), tows: byKey(D.tows), porter: byKey(D.porter), bcg: byKey(D.bcg),
+      kpis: {
+        narratives_latest: latestItems.length,
+        alerts_latest: latestItems.filter((c) => c.is_alert).length,
+        entities_tracked: entities.length,
+        sources: srcs.size || (D.kpis && D.kpis.sources) || 0,
+        narratives_total: feed.length,
+      },
+    });
+  }
+
   // The tenant's licensed industry slugs, from the SERVER-SCOPED feed (never derived
   // on the client from a superset): scoped_modules is authoritative; industries[] is a
   // labelled fallback.
@@ -215,6 +273,7 @@
 
   function renderDashboard(root, D, slug) {
     const cfg = configFor(slug);
+    D = sliceToIndustry(D, slug);   // per-tab data = ONLY the active industry (within entitlement)
     const set = (id, txt) => { const e = document.getElementById(id); if (e) e.textContent = txt; };
     set("pageTitle", cfg.title);
     set("pageLede", cfg.lede);
@@ -242,6 +301,6 @@
   }
 
   global.OncaIndustries = {
-    REGISTRY, configFor, licensedIndustries, labelFor, renderDashboard,
+    REGISTRY, configFor, licensedIndustries, labelFor, renderDashboard, sliceToIndustry,
   };
 })(window);
