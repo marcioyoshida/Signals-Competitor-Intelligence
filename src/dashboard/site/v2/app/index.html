@@ -26,14 +26,17 @@
 
   <div class="tiles" id="kpis" style="margin-bottom:var(--s5)"></div>
 
-  <!-- Perguntar à Onça — grounded, cited Q&A (ADR 010), scoped to the tenant. -->
-  <section class="band">
-    <div class="band-hd"><span class="overline">Perguntar à Onça</span><span class="rule"></span>
-      <span class="badge badge--ghost">resposta fundamentada</span></div>
+  <!-- Mapa de posição competitiva — the hero: AMEAÇA (pico) × SINAIS DE EXPANSÃO
+       (momentum), one dot per scoped entity, per active industry. (The Ask panel
+       is withdrawn pending a scoped resolution; its runtime lives on in ask.js.) -->
+  <section class="band" id="quadrantBand">
+    <div class="band-hd"><span class="overline" id="quadOverline">Mapa de posição competitiva</span>
+      <span class="rule"></span>
+      <span class="badge badge--ghost">ameaça × expansão</span></div>
     <div class="panel panel--lead">
-      <div class="panel__hd"><h2>Pergunte à base da Onça</h2><span class="spacer"></span>
-        <span class="hd-note">resposta só com fonte citada · escopada à sua licença</span></div>
-      <div class="panel__bd" id="askBody"></div>
+      <div class="panel__hd"><h2>Ameaça × sinais de expansão</h2><span class="spacer"></span>
+        <span class="hd-note">pico de ameaça no tempo × momentum de expansão · escopado à sua licença</span></div>
+      <div class="panel__bd" id="quadBody"></div>
     </div>
   </section>
 
@@ -50,7 +53,6 @@
 
 <script src="/v2/app.js"></script>
 <script src="/v2/context.js"></script>
-<script src="/v2/ask.js"></script>
 <script src="/v2/industries.js"></script>
 <script>
 (function () {
@@ -78,36 +80,14 @@
       (ADMIN ? "Curadoria · " : "") + (Ind.labelFor(active) || "—");
   }
 
-  let _askMounted = false;
-  function mountAsk(cfg) {
-    if (_askMounted) return;
-    _askMounted = true;
-    const askEl = document.getElementById("askBody");
-    if (ADMIN) {   // the operator preview is about the PANELS; Ask needs a tenant token.
-      askEl.innerHTML = '<div class="empty"><div class="em-ico" aria-hidden="true">◑</div>' +
-        '<div class="em-t">Pré-visualização de curadoria</div><div class="em-d">O painel abaixo ' +
-        'reproduz o que o tenant deste setor vê. A pergunta fundamentada exige o login do tenant.</div></div>';
-      return;
-    }
-    window.OncaAsk.mount(askEl, {
-      auth: Ctx,
-      examples: cfg.ask || [],
-      // ADR 019 — the Ask carries the ACTIVE industry; the server narrows non-top-tier
-      // tenants to it (cross-industry answers are a top-tier/sovereign capability).
-      industry: activeSlug(),
-      onCite: (en) => {
-        const c = Ctx.feed(window.DATA).filter((x) => x.entity === en)
-          .sort((a, b) => (b.date || "").localeCompare(a.date || ""))[0];
-        if (c) Ctx.openCard(c);
-      },
-    });
-  }
-
   function renderActive() {
     if (!window.DATA) return;
     renderNav();
-    const cfg = Ind.renderDashboard(document.getElementById("dash"), window.DATA, activeSlug());
-    mountAsk(cfg);
+    // renderDashboard slices to the active industry, renders the quadrant hero
+    // (#quadBody) + that industry's lead panels (#dash) from the SAME slice.
+    Ind.renderDashboard(document.getElementById("dash"), window.DATA, activeSlug());
+    const ov = document.getElementById("quadOverline");
+    if (ov) ov.textContent = "Mapa de posição · " + (Ind.labelFor(activeSlug()) || "setor");
   }
 
   async function load() {

@@ -11,7 +11,7 @@ global.OncaCtx = {
   renderCalendar:noop("calendar"), renderEntrants:noop("entrants"),
   renderEntrantsFunnel:noop("entrantsFunnel"), renderRisco:noop("risco"),
   renderPix:noop("pix"), renderFundos:noop("fundos"), renderSWOT:noop("swot"),
-  renderMapa:noop("mapa"), renderKpis:noop("kpis"),
+  renderMapa:noop("mapa"), renderKpis:noop("kpis"), renderQuadrant:noop("quadrant"),
 };
 global.document = { getElementById:(id)=> (els[id] || (els[id]=fakeEl())) };
 // load the file (IIFE attaches window.OncaIndustries)

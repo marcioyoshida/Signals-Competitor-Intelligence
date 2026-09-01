@@ -348,6 +348,15 @@ a:hover { text-decoration: underline; }
 .legend .sw { display: inline-flex; align-items: center; gap: 5px; }
 .legend .dot { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
 
+/* Position-map quadrant (ameaça × expansão). SVG scales to width; dots drill. */
+.quadwrap { max-width: 100%; }
+.quadwrap svg { height: auto; }
+.quad-pt { cursor: pointer; }
+.quad-pt circle { transition: r .1s ease, stroke-width .1s ease; }
+.quad-pt:hover circle, .quad-pt:focus circle { stroke-width: 3; }
+.quad-pt:focus { outline: none; }
+.quad-pt:focus text { text-decoration: underline; }
+
 /* ============================ exceptions feed ========================== */
 .exc { border-top: 1px solid var(--border); padding: var(--s3) var(--s4); }
 .exc:first-child { border-top: 0; }

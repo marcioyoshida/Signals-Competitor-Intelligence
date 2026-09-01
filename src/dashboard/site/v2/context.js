@@ -604,6 +604,114 @@
     }).join("");
   }
 
+  /* ======================================================================
+     PANEL — Mapa de posição competitiva (XY quadrant): AMEAÇA (pico, eixo Y)
+     × SINAIS DE EXPANSÃO (momentum = contagem ponderada de movimentos, eixo X).
+     The hero of a per-industry tab: one dot per scoped entity, tier-colored,
+     placed on two axes we already compute honestly — peak threat (0..1) and the
+     weighted expansion COUNT (never a market-size estimate). Four quadrants read
+     the roster at a glance: Ofensivos (alta ameaça + expansão), Consolidados
+     (ameaça sem movimento), Desafiantes (expansão sem ameaça ainda), Latentes.
+     Degrades honestly: <1 entity -> empty state; a single dot still places.
+     Clicking a dot drills to that entity's most recent cited card.
+     ====================================================================== */
+  function renderQuadrant(el, D, opts) {
+    opts = opts || {};
+    let ents = (D.entities || []).slice()
+      .map((e) => ({ e, mom: Number(e.momentum) || 0, thr: Number(e.peak_score) || 0,
+        total: Number(e.total) || 0 }))
+      // rank by relevance so a crowded roster keeps the signal-bearing dots.
+      .sort((a, b) => (b.thr - a.thr) || (b.mom - a.mom))
+      .slice(0, opts.limit || 16);
+    if (!ents.length) {
+      el.innerHTML = U.empty("Sem mapa de posição",
+        "Nenhuma entidade escopada com sinal neste setor na janela.", "○");
+      return;
+    }
+    const W = 820, H = 460, ML = 52, MR = 20, MT = 26, MB = 40;
+    const pW = W - ML - MR, pH = H - MT - MB;
+    const maxMom = Math.max(3, ...ents.map((p) => p.mom));
+    const maxTot = Math.max(1, ...ents.map((p) => p.total));
+    // split lines: threat at the MÉDIO/ALTO seam (0.5); expansion at the roster median.
+    const moms = ents.map((p) => p.mom).sort((a, b) => a - b);
+    const median = moms.length % 2 ? moms[(moms.length - 1) / 2]
+      : (moms[moms.length / 2 - 1] + moms[moms.length / 2]) / 2;
+    const xSplitV = Math.max(1, median);
+    const ySplitV = 0.5;
+    const X = (m) => ML + (m / maxMom) * pW;
+    const Y = (t) => MT + (1 - t) * pH;
+    const xS = X(xSplitV), yS = Y(ySplitV);
+    const quadTxt = (x, y, anchor, txt) =>
+      `<text x="${x}" y="${y}" text-anchor="${anchor}" fill="var(--muted)"
+        font-size="11" font-weight="700" letter-spacing=".4" opacity=".72">${esc(txt)}</text>`;
+    // axis ticks: threat 0/.25/.5/.75/1, expansion 0..maxMom in ~4 steps.
+    let grid = "";
+    [0, 0.25, 0.5, 0.75, 1].forEach((t) => {
+      const y = Y(t);
+      grid += `<line x1="${ML}" y1="${y.toFixed(1)}" x2="${ML + pW}" y2="${y.toFixed(1)}"
+        stroke="var(--border)" stroke-width="1" opacity=".55"/>
+        <text x="${ML - 8}" y="${(y + 3).toFixed(1)}" text-anchor="end" fill="var(--muted)"
+          font-size="10">${t.toFixed(2)}</text>`;
+    });
+    const xTicks = Math.min(maxMom, 6);
+    for (let i = 0; i <= xTicks; i++) {
+      const v = Math.round((maxMom / xTicks) * i);
+      const x = X(v);
+      grid += `<text x="${x.toFixed(1)}" y="${MT + pH + 15}" text-anchor="middle"
+        fill="var(--muted)" font-size="10">${v}</text>`;
+    }
+    // dots + labels; label anchors flip near the right edge to avoid clipping.
+    const dots = ents.map((p, i) => {
+      const t = U.tierOf(p.thr);
+      const cx = X(p.mom), cy = Y(p.thr);
+      const r = 5 + Math.sqrt(p.total / maxTot) * 7;
+      const flip = cx > ML + pW * 0.8;
+      const lx = flip ? cx - r - 5 : cx + r + 5;
+      const anc = flip ? "end" : "start";
+      return `<g class="quad-pt" data-ent="${esc(p.e.entity)}" role="button" tabindex="0"
+          aria-label="${esc(p.e.label)}: ameaça ${p.thr.toFixed(2)}, expansão ${p.mom}">
+        <title>${esc(p.e.label)} — ameaça ${p.thr.toFixed(2)} · expansão ${p.mom} · ${p.total} sinais</title>
+        <circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(1)}"
+          fill="var(--t-${t.key}-fill)" stroke="var(--t-${t.key})" stroke-width="1.75"/>
+        <text x="${lx.toFixed(1)}" y="${(cy + 3.5).toFixed(1)}" text-anchor="${anc}"
+          fill="var(--ink-2)" font-size="11" font-weight="600">${esc(p.e.label)}</text>
+      </g>`;
+    }).join("");
+    el.innerHTML = `<div class="chartcanvas quadwrap">
+      <svg viewBox="0 0 ${W} ${H}" role="img" width="100%"
+        aria-label="Mapa de posição: ameaça (pico) por sinais de expansão (momentum)">
+        <rect x="${ML}" y="${MT}" width="${pW}" height="${pH}" fill="none" stroke="var(--border-2)" stroke-width="1"/>
+        ${grid}
+        <line x1="${xS.toFixed(1)}" y1="${MT}" x2="${xS.toFixed(1)}" y2="${MT + pH}"
+          stroke="var(--border-2)" stroke-width="1.25" stroke-dasharray="4 4"/>
+        <line x1="${ML}" y1="${yS.toFixed(1)}" x2="${ML + pW}" y2="${yS.toFixed(1)}"
+          stroke="var(--border-2)" stroke-width="1.25" stroke-dasharray="4 4"/>
+        ${quadTxt(ML + pW - 6, MT + 14, "end", "OFENSIVOS")}
+        ${quadTxt(ML + 6, MT + 14, "start", "CONSOLIDADOS")}
+        ${quadTxt(ML + pW - 6, MT + pH - 8, "end", "DESAFIANTES")}
+        ${quadTxt(ML + 6, MT + pH - 8, "start", "LATENTES")}
+        <text x="${ML + pW / 2}" y="${H - 4}" text-anchor="middle" fill="var(--ink-2)"
+          font-size="11" font-weight="700">SINAIS DE EXPANSÃO  (momentum — contagem ponderada) →</text>
+        <text x="14" y="${MT + pH / 2}" text-anchor="middle" fill="var(--ink-2)" font-size="11"
+          font-weight="700" transform="rotate(-90 14 ${MT + pH / 2})">AMEAÇA (pico) →</text>
+        ${dots}
+      </svg></div>
+      <div class="legend">
+        <span class="sw"><span class="dot" style="background:var(--t-crit)"></span>ameaça = pico no tempo (0–1)</span>
+        <span class="sw"><span class="dot" style="background:var(--cat-teal)"></span>expansão = contagem ponderada de movimentos</span>
+        <span class="sw">tamanho do ponto = total de sinais · clique para a fonte</span>
+      </div>`;
+    el.querySelectorAll(".quad-pt[data-ent]").forEach((g) => {
+      const ent = g.dataset.ent;
+      const go = () => {
+        const c = feed(D).filter((x) => x.entity === ent).sort(byDateThreat)[0];
+        if (c) openCard(c);
+      };
+      g.addEventListener("click", go);
+      g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
+    });
+  }
+
   /* ---- as-of stamp ----------------------------------------------------- */
   function setAsOf(D) {
     const el = document.getElementById("asof"); if (!el) return;
@@ -655,7 +763,7 @@
     // panels
     renderKpis, renderComparar, renderRegulatorio, renderCalendar,
     renderEntrants, renderEntrantsFunnel, renderRisco, renderPix,
-    renderFundos, renderSWOT, renderMapa,
+    renderFundos, renderSWOT, renderMapa, renderQuadrant,
     // selectors / util
     feed, hasLens, hasTopic, setAsOf, labelOf,
   };

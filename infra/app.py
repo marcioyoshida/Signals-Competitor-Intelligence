@@ -707,6 +707,9 @@ class OncaPrototypeStack(Stack):
                 "/v2/fintech/index.html",
                 "/v2/seguros/index.html",
                 "/v2/wealth/index.html",
+                # profile-driven router shell (PR #66) + its industry registry.
+                "/v2/app/index.html",
+                "/v2/industries.js",
                 "/v2/app.css",
                 "/v2/app.js",
                 "/v2/context.js",

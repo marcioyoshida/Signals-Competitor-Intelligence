@@ -280,6 +280,10 @@
     const kel = document.getElementById("kpis");
     if (kel) Ctx.renderKpis(kel, (cfg.kpis || DEFAULT_KPIS).map(([l, k]) => [l, (D.kpis || {})[k]]));
 
+    // Hero: the AMEAÇA × SINAIS DE EXPANSÃO quadrant, on the SAME per-industry slice.
+    const qel = document.getElementById("quadBody");
+    if (qel) { try { Ctx.renderQuadrant(qel, D, {}); } catch (e) { console.error("quadrant", e); } }
+
     const tasks = [];
     let html = (cfg.leads || []).map((lead) => bandHTML(lead, tasks, D)).join("");
     if (cfg.fold && cfg.fold.length) {
