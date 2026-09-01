@@ -208,3 +208,30 @@ Honest gap against the Decision above (ranked by how central to the ADR's promis
 To flag **Implemented**: build the real registry loop (items 1–2), move the knobs (3), register
 the stores (5) and skip their fetch under a non-FS vertical (6). Item 4 (retire the fork) is a
 data migration that also needs the fork's entities/taxonomy — trackable separately.
+
+## Completion scope (from "Implemented (core)" → "Implemented")
+
+The residual is scoped here as concrete, ordered work items — not open-ended "follow-ons".
+Each is independently shippable behind the 789-test suite + the handler test (which asserts
+the digest), and non-breaking at the default `financial-services` vertical. Two are code in
+this repo; one is a data migration in the fork.
+
+| # | Item | Approach | Risk | Done when |
+|---|------|----------|------|-----------|
+| C1 | **`moves` + `market` into the loop** (pix/juros/inf_diario, market) | Extend the runner with `delta="moves"` (drive `_moves_since_last_run` from spec `key_field`/`value_field`) + a `_moves_section` builder for the `{…_tracked, move_count, items, context}` shape; add `market` as a `delta="none"` store source. Add `_FETCHERS` entries. | Low–med — mechanical; special section shapes, no reordering. | The 5 sources are `_FETCHERS` entries; their bespoke blocks are gone; digest byte-identical. |
+| C2 | **Side-effecting lens sources into the loop** (sec, fatos, new_entrants) | Move each fetch into `_FETCHERS`; lift the side effect to a POST-loop step consuming `loop_results[id]`: sec→`enrich_with_content(new)`; fatos→governance-sort of `new` + alias accrual (relocate the accrual block to after the loop); new_entrants→receita enrich + entity autocreate on `new`. | Med — requires side-effect **reordering** on the live path; guard with the handler test per source, one at a time. | The 3 fetches are in the loop; the side effects run post-loop on `loop_results`; digest + registry writes unchanged. |
+| C3 | **Config onto the spec** (ADR item 3) | Add a `params: dict` (or typed fields) to `SourceSpec`, populated from `watchlist.yaml`/env keyed by `spec.id`; fetchers read `spec.params` instead of ambient locals. | Low. | No per-source knob is read from a flat `watchlist.yaml` key in `lambda_port`; all via `spec.params`. |
+| C4 | **Register the non-lens stores** (item 5) | Allow `lens=None` on `SourceSpec` (exclude from `section_lens_pairs`/`LENSES`); add specs for datajud, bcb_reclamações, reclame-aqui, consumidor, macro, IF.data-store with `integration="store"`/`"macro"` + `verticals`. Gate them via `_source_enabled`. | Low. | Those 6 are `SourceSpec`s and are vertical-gated by the same path. |
+| C5 | **Fetch-gate the bespoke sources** (item 6) | Once C1–C2 land, every lens source is in the loop → the loop's `_source_enabled` already fetch-gates. Only the non-lens stores (C4) need the gate added at their block. | Low (subsumed by C1–C2/C4). | Under `ONCA_VERTICAL=<sector>` no FS source runs its fetch. |
+| C6 | **Retire the Anteater fork** (item d) | Populate `INDUSTRIES` + `VERTICAL_INDUSTRIES["X"]` for a sector; seed X's entity universe; register any sector `SourceSpec`s (`verticals={X}`); deploy the same stack with `ONCA_VERTICAL=X`. | Med — **data migration**, needs the fork's entities/taxonomy (not in this repo). | A sector deployment runs from this codebase with a non-empty, correctly-scoped feed; the fork is deleted. |
+
+**Sequence:** C1 → C2 (per source) → C3 → C4 → C5 (falls out) — all code in this repo, each a
+small PR. C6 is orthogonal (the fork's data) and can proceed in parallel once C1–C5 make the
+codebase vertical-complete.
+
+**Definition of Done ("Implemented"):** every source is a `SourceSpec` + `_FETCHERS`/store
+entry with no bespoke handler block (C1–C4); adding any source touches only the registry + a
+fetcher (no `lambda_port`/`candidates.py`/payload edits); per-source config lives on the spec
+(C3); a non-FS vertical runs only its sources' fetches and publishes only its industries
+(C5 + Phase 3/3b, already live); and at least one sector runs from this codebase, retiring the
+fork (C6).
