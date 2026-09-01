@@ -1,14 +1,20 @@
 # ADR 019 — Declarative Source Registry & First-Class Verticals
 
-Status: ACCEPTED 2026-08-31; **PARTIALLY IMPLEMENTED** — core architecture is live and
-non-breaking, but the ADR's end state is NOT reached. Still open before this can be flagged
-Implemented: (a) the god-function is shrunk, not collapsed — there is no single
-`for spec in REGISTRY.active(vertical)` loop; 9 of 16 lens sources + the non-lens stores are
-still hand-coded; (b) adding a source still needs a `lambda_port` `_gated_source` call + a
-`_lens_section` payload line (not "one spec, zero handler edits"); (c) per-source knobs are
-still in `config/watchlist.yaml`, not on the specs; (d) the Anteater fork is NOT retired — its
-sector entities/taxonomy/sources aren't migrated, so a sectorial vertical yields an empty feed.
-See "Realization status" + "What's missing" at the end.
+Status: ACCEPTED 2026-08-31; **IMPLEMENTED (core) — with named follow-ons.** The
+registry-driven loop is now REAL: `lambda_port` runs `for spec in registry.active(vertical)`
+over a `FETCHERS` registry that applies vertical-gating + budget + delta + section-building
+uniformly, for the sector-agnostic + core document sources (regulatory, competitor, ofertas,
+dou, cade, sanctions, contracts). Adding such a source = a `SourceSpec` + one `FETCHERS`
+entry, no bespoke block and no payload edit. Still open (incremental, mostly matters for the
+not-yet-live sectorial deployment): (a) the side-effecting lens sources (sec content-enrich,
+fatos governance-sort + alias accrual, new_entrants receita/autocreate) and the numeric
+`moves` + `market` sources stay bespoke — their in-block side effects/special shapes make a
+clean move risky; (b) per-source knobs are co-located in the FETCHERS closures but not yet a
+declarative per-spec config (still read from `watchlist.yaml`/env); (c) the non-lens stores
+(datajud/reclamações/reclame-aqui/consumidor/macro) aren't `SourceSpec`s; (d) the bespoke FS
+sources are output-gated, not fetch-gated, under a sectorial vertical; (e) the Anteater fork
+is not retired — its sector entities/taxonomy/sources are a data migration. See "What's
+missing".
 Relates to ADR 011 (discovery/enrichment), ADR 003/006
 (axes & strategy frameworks over lenses), the narrative-signal taxonomy ADR (#34 lens/topic),
 ADR 015/016/017 (distribution tiers, Entry vertical scoping, conglomerate disambiguation),
@@ -176,14 +182,16 @@ output is gated but the fetch still runs); register the non-lens stores as specs
 
 Honest gap against the Decision above (ranked by how central to the ADR's promise):
 
-1. **The pipeline loop was never built.** The headline was "`lambda_port` becomes
-   `for spec in REGISTRY.active(vertical):` … the ~600-line god-function collapses to one
-   loop." What shipped is 7 sources calling `_gated_source` *individually* + ~9 lens sources
-   (market, new_entrants, pix/juros/inf_diario moves, fatos, sec, fiagro) still as bespoke
-   `try/with _source_budget` blocks. There is no loop; the god-function is smaller, not gone.
-2. **"Add a source = one spec, zero handler edits" is not true.** A new lens source still
-   needs a `_gated_source` call *and* a `_lens_section` entry in the payload dict. No
-   auto-registration. The core productivity claim is only partially delivered.
+1. **The pipeline loop — DONE for the clean sources, remaining for the side-effecting ones.**
+   `lambda_port` now runs a real `for spec in registry.active(vertical)` loop over `FETCHERS`
+   for regulatory/competitor/ofertas/dou/cade/sanctions/contracts (budget + delta + section
+   built in-loop). Still bespoke: the numeric `moves` sources (pix/juros/inf_diario), `market`,
+   and the side-effecting lens sources (`sec` content-enrich, `fatos` governance-sort + alias
+   accrual, `new_entrants` receita/autocreate) — their in-block side effects / special shapes
+   make a clean move risky and are the tracked follow-on.
+2. **"Add a source = one spec, zero handler edits" — TRUE for a standard document source**
+   (a `SourceSpec` + a `FETCHERS` entry; the section is built in the loop, no payload edit).
+   Not yet true for a `moves`/special/side-effecting source.
 3. **Per-source config not moved.** `config/watchlist.yaml` still holds the flat FS keyspace
    (`pix_move_threshold_pct`, `dou_lookback_days`, …); the ADR said these move onto the spec.
 4. **The fork is not retired.** Phase 4 shipped the *config scaffolding* (verticals recognized,

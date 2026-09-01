@@ -515,16 +515,9 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     deadline = _ingest_deadline(context)
     per_source = int(os.environ.get("ONCA_SOURCE_TIMEOUT_SEC", "90"))
 
-    # BCB normativos + CVM funds — fetch + delta together (ADR 019 Phase 2b). Their delta
-    # keeps seed_if_empty=False (first run reports all as new, per the spec).
-    normativos, new_normativos = _gated_source(
-        registry.by_id("regulatory"), deadline=deadline, per_source=per_source,
-        fetch=lambda: bcb_normativos.fetch_recent(days=lookback_days),
-    )
-    funds, new_funds = _gated_source(
-        registry.by_id("competitor"), deadline=deadline, per_source=per_source,
-        fetch=lambda: cvm_fundos.fetch_funds(watchlist_admins=competitors),
-    )
+    # regulatory (bcb_normativos) + competitor (cvm_fundos) are now produced by the registry
+    # loop below (ADR 019 — the FETCHERS registry), together with ofertas/dou/cade/sanctions/
+    # contracts. Their outputs are extracted from `loop_results` right before the digest.
 
     try:
         with _source_budget("IF.data market", deadline, per_source):
@@ -824,12 +817,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
         print(f"Warning: BCB juros médios fetch failed: {exc}")
 
-    # CVM ofertas — capital raise / product launch (seed suppressed on first run).
-    offerings, new_ofertas = _gated_source(
-        registry.by_id("ofertas"), deadline=deadline, per_source=per_source,
-        fetch=lambda: cvm_ofertas.fetch_recent(
-            lookback_days=ofertas_lookback, watchlist=ofertas_watch or None),
-    )
+    # CVM ofertas — produced by the registry loop below.
 
     # CVM material facts — Fato Relevante / Comunicado ao Mercado (strategic
     # disclosures from B3-listed competitors; seed suppressed on first run).
@@ -882,24 +870,11 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as exc:  # pragma: no cover - best-effort, never blocks ingest
             print(f"Warning: entity alias accumulation skipped: {exc}")
 
-    # Diário Oficial — official acts (SUSEP/CADE/BACEN) naming a competitor.
-    dou_acts, new_dou = _gated_source(
-        registry.by_id("dou"), deadline=deadline, per_source=per_source,
-        fetch=lambda: dou.fetch_dou(dou_terms, lookback_days=dou_lookback) if dou_terms else [],
-    )
+    # Diário Oficial (dou) — produced by the registry loop below.
 
-    # CADE antitrust (#61) — merger reviews (Atos de Concentração) via the DOU Defesa
-    # Econômica organ. Distinct from the `dou` lens: pulls ALL merger acts and resolves
-    # the parties by NAME (parties are the named subjects), so a deal surfaces as a
-    # dedicated M&A `antitrust` signal. Sector-agnostic. Best-effort; off via env.
+    # CADE antitrust (#61) — produced by the registry loop below (fetch resolves the merger
+    # parties by name; see the "antitrust" fetcher).
     from src.synth.entities import resolve_entities as _resolve_entities
-    cade_records, new_cade = _gated_source(
-        registry.by_id("cade"), deadline=deadline, per_source=per_source,
-        fetch=lambda: cade.map_to_entities(
-            cade.fetch_atos(lookback_days=int(os.environ.get("ONCA_CADE_LOOKBACK_DAYS", "45"))),
-            resolver=_resolve_entities,
-        ),
-    )
 
     # BCB macro — Copom/Selic decision + weekly Focus expectations (market-wide,
     # not entity-tied; surfaces as standalone "macro" cards). Best-effort.
@@ -990,16 +965,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         return ceis_cnep.map_to_entities(srows, cnpj_index=idx)
 
     _bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
-    sanctions_records, new_sanctions = _gated_source(
-        registry.by_id("sanctions"), deadline=deadline, per_source=per_source,
-        fetch=_fetch_sanctions,
-        store=(lambda recs: ceis_cnep.update_store(recs, _bucket)) if _bucket else None,
-    )
 
-    # PNCP federal contracts (#62) — demand signal, sector-agnostic. DEFAULT-OFF: PNCP has
-    # no supplier filter (~18k contracts/day scanned to find tracked suppliers), which yields
-    # ~0 for the FS registry; enable (ONCA_PNCP_CONTRATOS=true) for the sectorial deployment
-    # whose supplier universe genuinely appears here. CNPJ-only resolution (see the module).
     def _fetch_contracts() -> list[dict[str, Any]]:
         from src.synth import entity_registry
 
@@ -1013,11 +979,51 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         ) if idx else []
         return pncp_contratos.map_to_entities(crows, cnpj_index=idx)
 
-    contracts_records, new_contracts = _gated_source(
-        registry.by_id("contracts"), deadline=deadline, per_source=per_source,
-        fetch=_fetch_contracts,
-        store=(lambda recs: pncp_contratos.update_store(recs, _bucket)) if _bucket else None,
-    )
+    # ADR 019 — the registry-driven ingest loop. Each standard "document" lens source is one
+    # entry in FETCHERS (its fetch, keyed by spec.id); the loop applies vertical gating + the
+    # wall-clock budget + delta + section-building UNIFORMLY. Adding such a source = a
+    # SourceSpec + one FETCHERS entry, with no bespoke handler block and no payload edit.
+    # (The numeric "moves" sources and the special-shape/side-effecting ones remain bespoke
+    # below — they have distinct mechanics; migrating them is the tracked follow-on.)
+    _cade_lookback = int(os.environ.get("ONCA_CADE_LOOKBACK_DAYS", "45"))
+    _FETCHERS: dict[str, Any] = {
+        "regulatory": lambda: bcb_normativos.fetch_recent(days=lookback_days),
+        "competitor": lambda: cvm_fundos.fetch_funds(watchlist_admins=competitors),
+        "ofertas": lambda: cvm_ofertas.fetch_recent(
+            lookback_days=ofertas_lookback, watchlist=ofertas_watch or None),
+        "dou": lambda: dou.fetch_dou(dou_terms, lookback_days=dou_lookback) if dou_terms else [],
+        "cade": lambda: cade.map_to_entities(
+            cade.fetch_atos(lookback_days=_cade_lookback), resolver=_resolve_entities),
+        "sanctions": _fetch_sanctions,
+        "contracts": _fetch_contracts,
+    }
+    _STORES: dict[str, Any] = {
+        "sanctions": lambda recs: ceis_cnep.update_store(recs, _bucket) if _bucket else None,
+        "contracts": lambda recs: pncp_contratos.update_store(recs, _bucket) if _bucket else None,
+    }
+    _SECTION_EXTRA: dict[str, Any] = {}  # per-source extra keys (e.g. fatos governance_count)
+    loop_results: dict[str, tuple[list[dict[str, Any]], list[dict[str, Any]]]] = {}
+    loop_sections: dict[str, dict[str, Any]] = {}
+    for _spec in registry.active(_active_vertical()):
+        _fetch = _FETCHERS.get(_spec.id)
+        if _fetch is None:  # not (yet) loop-migrated — handled by a bespoke block
+            continue
+        _records, _new = _gated_source(
+            _spec, deadline=deadline, per_source=per_source,
+            fetch=_fetch, store=_STORES.get(_spec.id),
+        )
+        loop_results[_spec.id] = (_records, _new)
+        loop_sections[_spec.id] = _lens_section(
+            _records, _new, _spec, **_SECTION_EXTRA.get(_spec.id, {}))
+
+    # Extract for the payload/corpus. A vertical-gated-out source yields ([], []).
+    normativos, new_normativos = loop_results.get("regulatory", ([], []))
+    funds, new_funds = loop_results.get("competitor", ([], []))
+    offerings, new_ofertas = loop_results.get("ofertas", ([], []))
+    dou_acts, new_dou = loop_results.get("dou", ([], []))
+    cade_records, new_cade = loop_results.get("cade", ([], []))
+    sanctions_records, new_sanctions = loop_results.get("sanctions", ([], []))
+    contracts_records, new_contracts = loop_results.get("contracts", ([], []))
 
     # Reclame Aqui — consumer-reputation snapshots for retail-facing banks/fintechs
     # (issue #31). Unofficial source, so best-effort + off via env; writes a durable
@@ -1107,9 +1113,10 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # empty while pulls still succeed. Attach compact context samples and
     # tag delta rows with is_new for prioritization.
     payload = {
-        # ADR 019 Phase 2: lens sections built via _lens_section (limits from the registry).
-        "regulatory": _lens_section(normativos, new_normativos, registry.by_id("regulatory")),
-        "competitor": _lens_section(funds, new_funds, registry.by_id("competitor")),
+        # ADR 019 — sections for the registry-loop sources (regulatory/competitor/ofertas/
+        # dou/cade/sanctions/contracts) are built IN the loop; splice them in. The bespoke
+        # sources below still build their own sections (special shapes / side effects).
+        **loop_sections,
         "market": {"count": len(market), "items": market, "context": market},
         "new_entrants": {
             "count": len(authorized),
@@ -1129,19 +1136,12 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             "items": _tag_new(juros_moves[:10]),
             "context": _strip_raw(juros_focus[:15]),
         },
-        "ofertas": _lens_section(offerings, new_ofertas, registry.by_id("ofertas")),
+        # sec_filings + fatos are still bespoke (corpus write / alias accrual side effects).
         "sec_filings": _lens_section(sec_filings_rows, new_sec, registry.by_id("sec_filings")),
         "fatos": _lens_section(
             fatos, new_fatos, registry.by_id("fatos"),
             governance_count=sum(1 for f in new_fatos if f.get("governance")),
         ),
-        "dou": _lens_section(dou_acts, new_dou, registry.by_id("dou")),
-        # CEIS/CNEP sanctions (#60) — entity-tied (CNPJ-anchored); NEW sanction surfaces solo.
-        "sanctions": _lens_section(sanctions_records, new_sanctions, registry.by_id("sanctions")),
-        # CADE merger reviews (#61) — M&A signal; parties resolved by name, surfaces solo.
-        "cade": _lens_section(cade_records, new_cade, registry.by_id("cade")),
-        # PNCP federal contracts (#62) — demand signal (default-off; CNPJ-anchored).
-        "contracts": _lens_section(contracts_records, new_contracts, registry.by_id("contracts")),
         # In "all" mode news is fetched inline here; in "structured" mode the news
         # slice is empty and the parallel news branch supplies it (overlaid at synth).
         "news": _news_slice(context) if mode == "all" else _empty_news_slice(),
