@@ -56,7 +56,11 @@
 (function () {
   "use strict";
   const U = window.OncaUI, Ctx = window.OncaCtx, Ind = window.OncaIndustries;
-  let LICENSED = [];   // the tenant's licensed industry slugs (from scoped_modules)
+  // Admin/curator mode (?admin=1): the operator (basic-auth) previews EVERY industry's
+  // tenant-scoped view from the full feed.json. Same per-industry slice as a tenant — so the
+  // curator sees exactly what each tenant sees, industry by industry.
+  const ADMIN = new URLSearchParams(location.search).get("admin") === "1";
+  let LICENSED = [];   // industries in the nav: the tenant's licensed set, or ALL in admin mode
 
   function activeSlug() {
     const h = (location.hash || "").replace(/^#/, "").toLowerCase();
@@ -70,16 +74,27 @@
     // Only the industries this profile is licensed for — never a cross-industry menu.
     nav.innerHTML = LICENSED.map((s) =>
       `<a href="#${s}"${s === active ? ' aria-current="page"' : ""}>${U.esc(Ind.labelFor(s))}</a>`).join("");
-    document.getElementById("ctxName").textContent = Ind.labelFor(active) || "—";
+    document.getElementById("ctxName").textContent =
+      (ADMIN ? "Curadoria · " : "") + (Ind.labelFor(active) || "—");
   }
 
   let _askMounted = false;
   function mountAsk(cfg) {
     if (_askMounted) return;
     _askMounted = true;
-    window.OncaAsk.mount(document.getElementById("askBody"), {
+    const askEl = document.getElementById("askBody");
+    if (ADMIN) {   // the operator preview is about the PANELS; Ask needs a tenant token.
+      askEl.innerHTML = '<div class="empty"><div class="em-ico" aria-hidden="true">◑</div>' +
+        '<div class="em-t">Pré-visualização de curadoria</div><div class="em-d">O painel abaixo ' +
+        'reproduz o que o tenant deste setor vê. A pergunta fundamentada exige o login do tenant.</div></div>';
+      return;
+    }
+    window.OncaAsk.mount(askEl, {
       auth: Ctx,
       examples: cfg.ask || [],
+      // ADR 019 — the Ask carries the ACTIVE industry; the server narrows non-top-tier
+      // tenants to it (cross-industry answers are a top-tier/sovereign capability).
+      industry: activeSlug(),
       onCite: (en) => {
         const c = Ctx.feed(window.DATA).filter((x) => x.entity === en)
           .sort((a, b) => (b.date || "").localeCompare(a.date || ""))[0];
@@ -96,8 +111,22 @@
   }
 
   async function load() {
-    Ctx.renderAuthBox("authBox");
     const dash = document.getElementById("dash");
+    if (ADMIN) {
+      // Operator (basic-auth) preview: the FULL feed; the nav lists EVERY industry and each
+      // tab renders that industry's tenant-scoped slice.
+      document.getElementById("authBox").innerHTML = '<span class="sub">curadoria</span>';
+      try {
+        const r = await fetch("/feed.json", { cache: "no-store" });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        window.DATA = await r.json();
+      } catch (e) { Ctx.mountGate(dash, "feed.json indisponível", "curadoria"); return; }
+      Ctx.setData(window.DATA); Ctx.setAsOf(window.DATA);
+      LICENSED = (window.DATA.industries || []).map((i) => String(i.slug || i).toLowerCase());
+      renderActive();
+      return;
+    }
+    Ctx.renderAuthBox("authBox");
     const res = await Ctx.loadScopedFeed({});
     if (res.needAuth) { Ctx.mountGate(dash, "needAuth", "seu painel"); return; }
     if (res.noAccess) { Ctx.mountGate(dash, "noAccess", "seu painel"); return; }

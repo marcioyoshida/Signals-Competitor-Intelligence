@@ -773,11 +773,24 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # Provisioned-but-empty ⇒ [] ⇒ fail closed; no identity (legacy operator) ⇒ None
     # ⇒ unscoped (full access), so the current dashboard is unchanged until cutover.
     modules = None
+    cfg = None
     if identity is not None and identity.tenant:
         from src.dashboard.tenant_config import get_tenant_config
 
         cfg = get_tenant_config(identity.tenant)
         modules = list((cfg or {}).get("modules") or [])
+    # ADR 019 — cross-industry Ask is a TOP-TIER (sovereign) capability. A non-top-tier tenant
+    # asking from an industry tab is narrowed to that industry (which must be one it licenses —
+    # the client hint can only NARROW, never widen; the verified JWT tier is the trust boundary).
+    # A top-tier tenant keeps its full entitlement → cross-industry synthesis. Legacy operator
+    # (modules=None, unscoped) is unaffected.
+    top_tiers = {t.strip().lower() for t in
+                 os.environ.get("ONCA_ASK_CROSS_INDUSTRY_TIERS", "sovereign").split(",") if t.strip()}
+    industry = str(body.get("industry") or "").strip().lower() or None
+    if modules is not None and industry:
+        tier = str((cfg or {}).get("tier") or "").lower()
+        if tier not in top_tiers and industry in {str(m).strip().lower() for m in modules}:
+            modules = [industry]
     try:
         from src.synth.bedrock_llm import converse
         feed = _load_feed(bucket)

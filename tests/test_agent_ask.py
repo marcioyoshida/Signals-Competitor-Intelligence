@@ -415,3 +415,39 @@ def test_handler_needs_bucket(monkeypatch):
     monkeypatch.delenv("ONCA_SITE_BUCKET", raising=False)
     r = aa.lambda_handler({"body": json.dumps({"q": "o que o Itaú fez?"})}, None)
     assert r["statusCode"] == 500
+
+
+# --- ADR 019: cross-industry Ask is a top-tier (sovereign) capability -----------------
+def _ask_modules(monkeypatch, tier, modules, industry):
+    """Run the handler with a verified tenant; capture the `modules` passed to answer()."""
+    import json as _json
+    import src.dashboard.tenant_config as _tc
+    captured = {}
+    monkeypatch.setattr(aa, "_load_feed", lambda b: {"feed": []})
+    monkeypatch.setattr(aa, "answer",
+                        lambda q, **kw: captured.update(modules=kw.get("modules")) or {"answer": "x", "grounded": True})
+    monkeypatch.setattr(_tc, "get_tenant_config", lambda t: {"tier": tier, "modules": modules})
+    monkeypatch.setenv("ONCA_SITE_BUCKET", "b")
+    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.delenv("ONCA_ASK_CROSS_INDUSTRY_TIERS", raising=False)
+    ev = {"requestContext": {"authorizer": {"jwt": {"claims": {"sub": "u", "custom:tenant": "acme"}}}},
+          "headers": {}, "body": _json.dumps({"q": "como está o mercado?", "industry": industry})}
+    aa.lambda_handler(ev, None)
+    return captured.get("modules")
+
+
+def test_ask_narrows_non_top_tier_to_active_industry(monkeypatch):
+    assert _ask_modules(monkeypatch, "saas", ["acquiring", "banking"], "acquiring") == ["acquiring"]
+
+
+def test_ask_top_tier_keeps_cross_industry(monkeypatch):
+    assert set(_ask_modules(monkeypatch, "sovereign", ["acquiring", "banking"], "acquiring")) == {"acquiring", "banking"}
+
+
+def test_ask_client_industry_hint_cannot_widen_beyond_license(monkeypatch):
+    # a hint for an UNlicensed industry is ignored (never widens the entitlement)
+    assert _ask_modules(monkeypatch, "saas", ["acquiring"], "wealth-management") == ["acquiring"]
+
+
+def test_ask_no_industry_hint_keeps_full_entitlement(monkeypatch):
+    assert set(_ask_modules(monkeypatch, "saas", ["acquiring", "banking"], None)) == {"acquiring", "banking"}

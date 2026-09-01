@@ -278,7 +278,11 @@
         const r = await fetch(`${apiUrl}/api/ask`, {
           method: "POST",
           headers: { "content-type": "application/json", "authorization": `Bearer ${auth.getIdToken()}` },
-          body: JSON.stringify({ q, scope }),
+          // `industry` = the active tab. The SERVER narrows a non-top-tier tenant's grounding
+          // to it (cross-industry answers are a top-tier/sovereign capability); a top-tier
+          // tenant is answered across its full entitlement. The server (verified JWT tier) is
+          // the trust boundary — the client hint only ever narrows, never widens.
+          body: JSON.stringify({ q, scope, industry: opts.industry || null }),
         });
         if (r.status === 401) {
           try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) {}
