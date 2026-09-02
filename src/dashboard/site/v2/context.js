@@ -615,6 +615,37 @@
      Degrades honestly: <1 entity -> empty state; a single dot still places.
      Clicking a dot drills to that entity's most recent cited card.
      ====================================================================== */
+  // Data-sufficiency gate for the 2-D position map. A scatter is only legible when
+  // BOTH axes disperse — enough plotted competitors, at least two showing expansion
+  // (else the X axis collapses to a vertical strip at 0), and a threat SPAN (else Y
+  // collapses to a horizontal line). This is the regression-validity precondition
+  // (each marginal variance must be > 0) — NOT a correlation/R² test, which would
+  // wrongly reject a good quadrant whose points spread into all four corners. When
+  // it fails (typically thin early-corpus data), the hero is withdrawn rather than
+  // shown as a misleading 1-D strip; it auto-returns as the data fills in.
+  const QUAD_MIN_N = 3, QUAD_MIN_EXPANDERS = 2, QUAD_MIN_THREAT_RANGE = 0.12;
+  function quadStats(pts) {
+    const n = pts.length;
+    const moms = pts.map((p) => p.mom), thrs = pts.map((p) => p.thr);
+    const std = (a) => { if (!a.length) return 0;
+      const m = a.reduce((s, x) => s + x, 0) / a.length;
+      return Math.sqrt(a.reduce((s, x) => s + (x - m) * (x - m), 0) / a.length); };
+    return {
+      n, expanders: moms.filter((m) => m > 0).length,
+      threatRange: n ? Math.max(...thrs) - Math.min(...thrs) : 0,
+      momStd: std(moms), threatStd: std(thrs),
+    };
+  }
+  function quadrantViable(pts) {
+    const s = quadStats(pts);
+    if (s.n < QUAD_MIN_N) return { ok: false, reason: "poucos concorrentes com sinal", stats: s };
+    if (s.expanders < QUAD_MIN_EXPANDERS)
+      return { ok: false, reason: "sem variação de expansão (eixo X colapsa)", stats: s };
+    if (s.threatRange < QUAD_MIN_THREAT_RANGE)
+      return { ok: false, reason: "sem dispersão de ameaça (eixo Y colapsa)", stats: s };
+    return { ok: true, stats: s };
+  }
+
   function renderQuadrant(el, D, opts) {
     opts = opts || {};
     let ents = (D.entities || []).slice()
@@ -623,6 +654,16 @@
       // rank by relevance so a crowded roster keeps the signal-bearing dots.
       .sort((a, b) => (b.thr - a.thr) || (b.mom - a.mom))
       .slice(0, opts.limit || 16);
+    // Withdraw the hero when the scatter would be degenerate. The entities still
+    // appear in every panel below; only the position MAP is suppressed. Hiding the
+    // whole band (not a stub) keeps the layout clean; it un-hides when data returns.
+    const band = el.closest ? el.closest(".band") : null;
+    if (ents.length && !quadrantViable(ents).ok) {
+      if (band) { band.style.display = "none"; band.dataset.quadHidden = "1"; }
+      el.innerHTML = "";
+      return;
+    }
+    if (band && band.dataset.quadHidden) { band.style.display = ""; delete band.dataset.quadHidden; }
     if (!ents.length) {
       el.innerHTML = U.empty("Sem mapa de posição",
         "Nenhuma entidade escopada com sinal neste setor na janela.", "○");
@@ -763,7 +804,7 @@
     // panels
     renderKpis, renderComparar, renderRegulatorio, renderCalendar,
     renderEntrants, renderEntrantsFunnel, renderRisco, renderPix,
-    renderFundos, renderSWOT, renderMapa, renderQuadrant,
+    renderFundos, renderSWOT, renderMapa, renderQuadrant, quadrantViable, quadStats,
     // selectors / util
     feed, hasLens, hasTopic, setAsOf, labelOf,
   };
