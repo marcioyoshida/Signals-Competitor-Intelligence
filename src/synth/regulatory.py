@@ -278,7 +278,9 @@ def threads(narratives: list[dict[str, Any]], *, as_of: str, recency: int,
                 g["deadline"] = dl
             # Lifecycle timeline material (Wave 2): stage of this mention + its evidence.
             g["mentions"].append({
-                "date": d, "stage": stage_of(ctx), "summary": raw.strip()[:220],
+                # wider than the 220-char display snippet so the amending clause (often
+                # mid-text) survives for reg_change parsing (ADR-009 Phase A).
+                "date": d, "stage": stage_of(ctx), "summary": raw.strip()[:600],
                 "citations": [c for c in (n.get("citations") or []) if isinstance(c, dict)],
             })
     for g in groups.values():

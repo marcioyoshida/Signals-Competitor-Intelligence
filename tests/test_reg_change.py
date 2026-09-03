@@ -31,6 +31,14 @@ def test_numbers_are_not_truncated_undotted():
     assert ch and ch[0]["targets"][0]["instrument"] == "res-cmn-5304"
 
 
+def test_past_tense_news_narrative_is_parsed():
+    # our narratives are largely news-derived (preterite), not the act's present tense
+    t = ("O BCB alterou a Resolução CMN nº 5.304 para ampliar o prazo e revogou o art. 7º; "
+         "também deu nova redação ao art. 12.")
+    rels = {c["relation"] for c in RC.parse_changes(t, self_key="res-cmn-5337")}
+    assert {"amends", "revokes", "restates"} <= rels
+
+
 def test_self_reference_is_not_a_target():
     ch = RC.parse_changes("A Resolução BCB 999 altera a Resolução BCB 999.", self_key="res-bcb-999")
     # the act citing itself is not an amend TARGET; with no article + no other target,

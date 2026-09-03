@@ -30,16 +30,20 @@ def _norm(text: str) -> str:
 
 # Change verbs an amending act uses about a prior act / its own articles. Order matters:
 # a longer, more specific phrase is tried before a shorter one it contains.
+# Cover both the act's dispositive PRESENT ("altera") and the news-narrative PAST
+# ("alterou/alterada") — our regulatory narratives are largely news-derived, which use
+# the preterite/participle, so a present-only pattern misses most real changes.
 _VERBS: list[tuple[str, str, str]] = [
     # (relation, pt-BR label, accent-free regex)
-    ("restates", "dá nova redação", r"d[aá]\s+nova\s+redacao"),
-    ("revokes", "revoga", r"revoga(?:m|do|da|r)?\b"),
-    ("amends", "altera", r"altera(?:m|do|da|r|coes|cao)?\b"),
-    ("inserts", "inclui", r"inclui\b"),
-    ("adds", "acrescenta", r"acrescenta(?:m|r)?\b"),
-    ("renumbers", "renumera", r"renumera(?:m|r)?\b"),
-    ("extends", "prorroga o prazo", r"(prorroga|amplia\s+o\s+prazo|adia)\b"),
-    ("suspends", "suspende", r"suspende(?:m|r)?\b"),
+    ("restates", "dá nova redação", r"(d[aá]|deu)\s+nova\s+redacao"),
+    ("revokes", "revoga", r"revoga(?:m|do|da|r|ram|ndo|ções|cao)?\b|revogou\b"),
+    ("amends", "altera", r"altera(?:m|do|da|dos|das|r|coes|cao|ram|ndo)?\b|alterou\b"),
+    ("inserts", "inclui", r"inclui(?:u|ram|ndo|da|do)?\b"),
+    ("adds", "acrescenta", r"acrescenta(?:m|r|ram|ndo)?\b|acrescentou\b"),
+    ("renumbers", "renumera", r"renumera(?:m|r|ram)?\b|renumerou\b"),
+    ("extends", "prorroga o prazo",
+     r"(prorroga|prorrogou|amplia(?:r|ram)?\s+o\s+prazo|ampliou\s+o\s+prazo|adia|adiou)\b"),
+    ("suspends", "suspende", r"suspende(?:m|r|ram|ndo)?\b|suspendeu\b"),
 ]
 _VERB_RX = [(rel, lab, re.compile(rx)) for rel, lab, rx in _VERBS]
 
