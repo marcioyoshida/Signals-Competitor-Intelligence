@@ -373,6 +373,118 @@ def _agg_citations(drivers: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+# --- Instrument NEXUS (#51): a card's links + affected cohort must be ABOUT the
+#     instrument it names. A single DOU/news item references many instruments, so
+#     _agg_citations alone dumps a grab-bag (a "Resolução CMN 5304" card citing 5336,
+#     5337, an unrelated Comunicado and CVM downloads). We (a) synthesize the
+#     regulator's canonical page for the instrument as the authoritative checking
+#     link, (b) keep only source citations that actually reference the instrument,
+#     and (c) tag the affected FS industries so the card scopes and names its cohort.
+
+# Instrument key prefix -> (regulator, BCB "exibenormativo" `tipo`). Confirmed live:
+# .../exibenormativo?tipo=Resolução+CMN&numero=5337 is the canonical BCB norm page.
+_INSTRUMENT_TIPO = {
+    "in-bcb": ("bcb", "Instrução Normativa BCB"),
+    "res-bcb": ("bcb", "Resolução BCB"),
+    "res-cmn": ("bcb", "Resolução CMN"),
+    "circ": ("bcb", "Circular"),
+    "comunicado": ("bcb", "Comunicado"),
+}
+
+# Affected-domain -> FS industry taxonomy slugs (the cohort a sector rule acts on).
+# Industry-level nexus is deterministic; per-ENTITY compliance blast-radius is #28.
+_DOMAIN_INDUSTRIES = {
+    "Pagamentos / PIX": ["acquiring", "fintech", "banking"],
+    "Crédito & portabilidade": ["banking", "fintech", "consorcio"],
+    "Câmbio & mercado aberto": ["banking", "investment-banking"],
+    "Open Finance": ["banking", "fintech", "acquiring"],
+    "Autorizações & governança": ["banking", "fintech", "insurance", "investment-banking", "consorcio"],
+    "Setor financeiro": ["banking", "fintech", "insurance"],
+}
+_INDUSTRY_PT = {
+    "acquiring": "Adquirência", "fintech": "Fintechs", "banking": "Bancos",
+    "insurance": "Seguros", "investment-banking": "Banco de investimento",
+    "consorcio": "Consórcios",
+}
+
+
+def _industries_for(domain: str) -> list[str]:
+    return list(_DOMAIN_INDUSTRIES.get(domain) or _DOMAIN_INDUSTRIES["Setor financeiro"])
+
+
+def _instrument_number(instrument_key: str) -> str | None:
+    m = re.search(r"(\d+)$", instrument_key or "")
+    return m.group(1) if m else None
+
+
+def canonical_link(instrument_key: str, label: str) -> dict[str, Any] | None:
+    """The regulator's own page for this instrument — built deterministically from
+    (tipo, número), so it is ALWAYS about the named instrument. The checking-link
+    nexus. Returns None for instrument types without a stable canonical URL."""
+    from urllib.parse import quote
+
+    num = _instrument_number(instrument_key)
+    if not num:
+        return None
+    prefix = instrument_key.rsplit("-", 1)[0]
+    info = _INSTRUMENT_TIPO.get(prefix)
+    if not info:
+        return None
+    _reg, tipo = info
+    url = ("https://www.bcb.gov.br/estabilidadefinanceira/exibenormativo?"
+           f"tipo={quote(tipo)}&numero={num}")
+    return {"url": url, "source": "BCB", "title": f"{label} — norma oficial (BCB)",
+            "canonical": True}
+
+
+def _cite_matches_instrument(c: dict[str, Any], num: str) -> bool:
+    """True when a citation genuinely references the instrument number — an exact
+    `numero=<n>` (strongest), else the number as a standalone token on a regulator
+    host (gov.br). Opaque links (Google News RSS) carry no number and are dropped."""
+    if not num:
+        return False
+    blob = " ".join(str(c.get(f, "")) for f in ("url", "title", "text", "id")).lower()
+    m = re.search(r"numero=(\d+)", blob)
+    if m:
+        return m.group(1) == num
+    if "gov.br" in blob and re.search(rf"\b{re.escape(num)}\b", blob):
+        return True
+    return False
+
+
+def _instrument_citations(instrument_key: str, label: str,
+                          drivers: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Instrument-scoped citations: the canonical regulator page first, then only the
+    source links that actually reference the instrument. Never the whole grab-bag."""
+    num = _instrument_number(instrument_key)
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    # Any two BCB `exibenormativo` links with the same `numero=` are the SAME norm page
+    # regardless of `tipo`/encoding — so the canonical page and a source's own link to it
+    # collapse. Other links dedup on the normalized URL.
+    def _dedup_key(u: Any) -> str:
+        s = str(u or "").lower()
+        m = re.search(r"exibenormativo\?.*numero=(\d+)", s)
+        return f"bcb-normativo:{m.group(1)}" if m else s.replace("+", "%20")
+    canon = canonical_link(instrument_key, label)
+    if canon:
+        out.append(canon)
+        seen.add(_dedup_key(canon["url"]))
+    for c in _agg_citations(drivers):
+        if not _cite_matches_instrument(c, num):
+            continue
+        u = c.get("url") or c.get("id")
+        if _dedup_key(u) in seen:
+            continue
+        seen.add(_dedup_key(u))
+        out.append(c)
+    # No canonical page and nothing matched (e.g. a CVM instrument) — fall back to the
+    # single strongest driver's citations, not the whole aggregate.
+    if not out and drivers:
+        out = _agg_citations(drivers[:1])
+    return out
+
+
 def build_narrative(cand: dict[str, Any]) -> dict[str, Any]:
     """Heuristic pt-BR regulatory-radar card — sourced instrument, labeled inference."""
     label = cand["label"]
@@ -382,7 +494,8 @@ def build_narrative(cand: dict[str, Any]) -> dict[str, Any]:
     score = _reg_score(cand)
     is_alert = bool(deadline and dtd is not None and dtd <= ALERT_WITHIN)
     drivers = cand.get("drivers") or []
-    citations = _agg_citations(drivers)
+    citations = _instrument_citations(cand["instrument"], label, drivers)
+    industries = _industries_for(domain)
     source_ids: list[str] = []
     for d in drivers:
         source_ids.extend(d.get("source_ids") or [])
@@ -397,7 +510,8 @@ def build_narrative(cand: dict[str, Any]) -> dict[str, Any]:
         except Exception:
             dd = deadline
         head += f" Prazo: vence em {dd}" + (f" (faltam {dtd} dias)." if dtd is not None else ".")
-    head += f" Afeta: {domain}."
+    ind_pt = ", ".join(_INDUSTRY_PT.get(s, s) for s in industries)
+    head += f" Afeta: {domain} (exposição provável: {ind_pt})."
     tail = (
         " Instrumento e data extraídos da fonte reguladora; o domínio afetado e a "
         "urgência são inferência (não uma avaliação de conformidade por entidade)."
@@ -411,6 +525,7 @@ def build_narrative(cand: dict[str, Any]) -> dict[str, Any]:
         "instrument": cand["instrument"],
         "instrument_label": label,
         "domain": domain,
+        "industries": industries,
         "deadline": deadline,
         "days_to_deadline": dtd,
         "signature": cand["signature"],
@@ -500,16 +615,18 @@ def build_lifecycle_card(lc: dict[str, Any]) -> dict[str, Any]:
         f"{STAGE_LABELS[s]} ({_fmt(next(m['date'] for m in lc['timeline'] if m['stage'] == s))})"
         for s in lc["stages_seen"]
     )
+    industries = _industries_for(lc["domain"])
+    ind_pt = ", ".join(_INDUSTRY_PT.get(s, s) for s in industries)
     head = f"Ciclo regulatório: {lc['label']} — estágio atual {STAGE_LABELS[lc['current_stage']]}."
     if arc:
         head += f" Progressão: {arc}."
     if deadline:
         head += f" Prazo: vence em {_fmt(deadline)}" + (f" (faltam {dtd} dias)." if dtd is not None else ".")
-    head += f" Afeta: {lc['domain']}."
+    head += f" Afeta: {lc['domain']} (exposição provável: {ind_pt})."
     tail = (" Ciclo derivado do encadeamento de menções ao instrumento na fonte "
             "reguladora — estágio e urgência são inferência; cada menção cita a fonte.")
 
-    citations = _agg_citations(list(reversed(lc["timeline"])))
+    citations = _instrument_citations(lc["instrument"], lc["label"], list(reversed(lc["timeline"])))
     return {
         "id": f"reg-lifecycle-{lc['instrument']}",
         "kind": "regulatory_lifecycle",
@@ -518,6 +635,7 @@ def build_lifecycle_card(lc: dict[str, Any]) -> dict[str, Any]:
         "instrument": lc["instrument"],
         "instrument_label": lc["label"],
         "domain": lc["domain"],
+        "industries": industries,
         "deadline": deadline,
         "days_to_deadline": dtd,
         "status": lc["status"],

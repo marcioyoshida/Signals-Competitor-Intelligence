@@ -118,6 +118,61 @@ def test_single_date_instrument_is_not_a_lifecycle():
         as_of="2026-08-23") == {}
 
 
+# --- #51 instrument nexus: correct checking links + affected cohort -----------
+def test_canonical_link_is_the_regulator_page_for_the_instrument():
+    c = regulatory.canonical_link("res-cmn-5304", "Resolução CMN 5304")
+    assert c and "numero=5304" in c["url"] and "bcb.gov.br" in c["url"]
+    assert "Resolu" in c["url"] and "CMN" in c["url"] and c["source"] == "BCB"
+    # a type without a stable canonical page (CVM) -> no fabricated link
+    assert regulatory.canonical_link("res-cvm-175", "Resolução CVM 175") is None
+    assert regulatory.canonical_link("regulamento-pix", "Regulamento do Pix") is None
+
+
+def test_instrument_citations_drop_the_grab_bag():
+    drivers = [{"citations": [
+        {"url": "https://news.google.com/rss/articles/CBMijwFBVV"},                 # opaque
+        {"url": "https://www.bcb.gov.br/.../exibenormativo?tipo=Resolu+CMN&numero=5337"},
+        {"url": "https://www.bcb.gov.br/.../exibenormativo?tipo=Comunicado&numero=45835"},
+        {"url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?numProtocolo=1560374"},
+        {"url": "https://www.bcb.gov.br/.../exibenormativo?tipo=Resolu+CMN&numero=5304"},  # the right one
+    ]}]
+    cites = regulatory._instrument_citations("res-cmn-5304", "Resolução CMN 5304", drivers)
+    urls = " ".join(c["url"] for c in cites)
+    assert "numero=5304" in urls
+    assert "5337" not in urls and "5336" not in urls and "45835" not in urls
+    assert "cvm.gov.br" not in urls and "news.google" not in urls
+    # canonical page present exactly once (dedup collapses + vs %20)
+    assert sum(1 for c in cites if c.get("canonical")) == 1
+    assert sum("numero=5304" in c["url"] for c in cites) == 1
+
+
+def test_lifecycle_card_names_cohort_and_scopes_links():
+    t = {"instrument": "res-cmn-5304", "label": "Resolução CMN 5304",
+         "domain": "Câmbio & mercado aberto", "deadline": None, "days_to_deadline": None,
+         "status": "open", "current_stage": "vigencia", "stages_seen": ["vigencia"],
+         "first_seen": "2026-08-28", "last_updated": "2026-08-28", "n_dates": 1,
+         "timeline": [{"date": "2026-08-28", "stage": "vigencia", "summary": "...",
+                       "citations": [
+                           {"url": "https://www.bcb.gov.br/x/exibenormativo?tipo=Res+CMN&numero=5337"},
+                           {"url": "https://www.bcb.gov.br/x/exibenormativo?tipo=Res+CMN&numero=5304"}]}]}
+    card = regulatory.build_lifecycle_card(t)
+    assert card["industries"] == ["banking", "investment-banking"]
+    assert "exposição provável" in card["narrative"] and "Bancos" in card["narrative"]
+    urls = " ".join(c["url"] for c in card["citations"])
+    assert "numero=5304" in urls and "5337" not in urls
+
+
+def test_radar_narrative_tags_affected_industries():
+    c = regulatory.nominate(
+        [_card("Instrução Normativa BCB 770 sobre PIX; entra em vigor em 30/11/2026.",
+               date="2026-08-22")], as_of="2026-08-23")[0]
+    n = regulatory.build_narrative(c)
+    assert n["industries"] == ["acquiring", "fintech", "banking"]
+    assert "exposição provável" in n["narrative"]
+    # links are scoped to the instrument (canonical IN BCB 770 page present)
+    assert any("numero=770" in (cit.get("url") or "") for cit in n["citations"])
+
+
 def test_emit_on_change_suppresses_unchanged_and_refires_on_new_deadline():
     base = _card("Instrução Normativa BCB 770; entra em vigor em 30/11/2026.",
                  date="2026-08-22")

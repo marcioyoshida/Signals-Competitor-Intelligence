@@ -495,3 +495,25 @@ def test_thread_kept_when_latest_dev_not_in_feed():
                  latest_dev_id="cand-ent-bradesco")  # date 23 not present for this id
     feed = feed_builder.build_feed(narratives, thread_cards=[th])
     assert "threaded-bradesco--restructuring" in [x["id"] for x in feed["feed"]]
+
+
+def test_instrument_card_keeps_self_declared_industries():
+    # #51 nexus: a regulatory instrument card (no entity) carries its affected cohort;
+    # the ADR-017 entity-denorm must NOT wipe it off every industry tab.
+    reg_card = {
+        "id": "reg-lifecycle-res-cmn-5304", "kind": "regulatory_lifecycle",
+        "axis": "regulatory_lifecycle", "subject_type": "instrument",
+        "instrument": "res-cmn-5304", "instrument_label": "Resolução CMN 5304",
+        "industries": ["banking", "investment-banking"],
+        "entity": None, "entities": [], "run_date": "2026-08-28", "as_of": "2026-08-28",
+        "lenses": ["regulatory"], "narrative": "Ciclo regulatório: Resolução CMN 5304 ...",
+        "citations": [{"url": "https://www.bcb.gov.br/x?numero=5304"}],
+    }
+    narratives = [_narr("n1", "itau", "2026-08-28", 0.6)]
+    feed = feed_builder.build_feed(
+        narratives, thread_cards=[reg_card],
+        industry_map={"itau": ["banking"]},
+        entity_attrs={"itau": {"industries": ["banking"]}},
+    )
+    card = next(c for c in feed["feed"] if c["id"] == "reg-lifecycle-res-cmn-5304")
+    assert card["industries"] == ["banking", "investment-banking"]

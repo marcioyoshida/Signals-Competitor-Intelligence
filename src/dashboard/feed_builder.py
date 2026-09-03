@@ -335,6 +335,10 @@ def _project_item(n: dict[str, Any]) -> dict[str, Any]:
         "hub": n.get("hub"),  # ecosystem axis: the infrastructure hub
         "n_dependents": n.get("n_dependents"),  # ecosystem axis: exposed count
         "entities": n.get("entities") or [],
+        # A card's self-declared industries (e.g. regulatory instrument cards, #51 nexus).
+        # Entity-bearing cards get this overwritten by the ADR-017 denorm below; subject
+        # cards with no entities keep their own affected cohort.
+        "industries": n.get("industries") or [],
         "lenses": n.get("lenses") or [],
         # ADR #34 Phase 2: coarse topic rollup (from lenses+axis) for the dashboard
         # topic filter + agent grounding boost. Derived here so no synth/backfill.
@@ -500,7 +504,12 @@ def build_feed(
         for e in [c.get("entity"), *(c.get("entities") or [])]:
             if e:
                 s.update(imap.get(e, []))
-        return sorted(s)
+        if s:
+            return sorted(s)
+        # No entity to denormalize from — preserve a card's SELF-declared industries
+        # (regulatory instrument cards carry their affected cohort, #51 nexus), so the
+        # denorm doesn't wipe a subject card off every industry tab.
+        return sorted({str(i).strip().lower() for i in (c.get("industries") or []) if i})
 
     for c in items + thread_items:
         c["industries"] = _card_industries(c)
