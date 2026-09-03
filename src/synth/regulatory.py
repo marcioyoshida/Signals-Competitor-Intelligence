@@ -40,7 +40,7 @@ from typing import Any
 
 import boto3
 
-from src.synth import feature_store
+from src.synth import feature_store, reg_change
 from src.synth.synthesize import run_at_now, run_date_today
 
 AXIS = "regulatory"
@@ -74,8 +74,11 @@ def _days_between(a: str, b: str) -> int | None:
 
 # --- Instrument extraction --------------------------------------------------
 # Numbers may carry a pt-BR thousands separator ("5.333"); _num strips it so
-# "Resolução CMN 5.333" threads as one instrument, not "5333" AND "5".
-_NUM = r"(\d{1,3}(?:\.\d{3})*|\d{1,5})"
+# "Resolução CMN 5.333" threads as one instrument. Match the WHOLE digit run (with any
+# internal dots) — an ordered `\d{1,3}` first alternative used to win on an UNdotted
+# 4–5 digit number and truncate it ("5304" -> "530"); news text omits the dot, so that
+# silently mis-threaded. `\d[\d.]*\d` takes the full run; `_num` strips the dots.
+_NUM = r"(\d[\d.]*\d|\d)"
 
 _INSTRUMENTS = [
     ("in-bcb", "Instrução Normativa BCB {n}", re.compile(r"instrucao normativa\s*bcb[:\s]*" + _NUM)),
@@ -512,6 +515,12 @@ def build_narrative(cand: dict[str, Any]) -> dict[str, Any]:
         head += f" Prazo: vence em {dd}" + (f" (faltam {dtd} dias)." if dtd is not None else ".")
     ind_pt = ", ".join(_INDUSTRY_PT.get(s, s) for s in industries)
     head += f" Afeta: {domain} (exposição provável: {ind_pt})."
+    # ADR 009 Phase A: enumerate the act's own declared changes (amends/revokes/…).
+    changes = reg_change.parse_changes(
+        " ".join((d.get("narrative") or "") for d in drivers)[:3000],
+        self_key=cand["instrument"])
+    if changes:
+        head += f" Mudanças: {reg_change.summarize_changes(changes)}."
     tail = (
         " Instrumento e data extraídos da fonte reguladora; o domínio afetado e a "
         "urgência são inferência (não uma avaliação de conformidade por entidade)."
@@ -526,6 +535,8 @@ def build_narrative(cand: dict[str, Any]) -> dict[str, Any]:
         "instrument_label": label,
         "domain": domain,
         "industries": industries,
+        "changes": changes,
+        "n_changes": len(changes),
         "deadline": deadline,
         "days_to_deadline": dtd,
         "signature": cand["signature"],
@@ -617,12 +628,17 @@ def build_lifecycle_card(lc: dict[str, Any]) -> dict[str, Any]:
     )
     industries = _industries_for(lc["domain"])
     ind_pt = ", ".join(_INDUSTRY_PT.get(s, s) for s in industries)
+    changes = reg_change.parse_changes(
+        " ".join((m.get("summary") or "") for m in lc.get("timeline") or [])[:3000],
+        self_key=lc["instrument"])
     head = f"Ciclo regulatório: {lc['label']} — estágio atual {STAGE_LABELS[lc['current_stage']]}."
     if arc:
         head += f" Progressão: {arc}."
     if deadline:
         head += f" Prazo: vence em {_fmt(deadline)}" + (f" (faltam {dtd} dias)." if dtd is not None else ".")
     head += f" Afeta: {lc['domain']} (exposição provável: {ind_pt})."
+    if changes:
+        head += f" Mudanças: {reg_change.summarize_changes(changes)}."
     tail = (" Ciclo derivado do encadeamento de menções ao instrumento na fonte "
             "reguladora — estágio e urgência são inferência; cada menção cita a fonte.")
 
@@ -636,6 +652,8 @@ def build_lifecycle_card(lc: dict[str, Any]) -> dict[str, Any]:
         "instrument_label": lc["label"],
         "domain": lc["domain"],
         "industries": industries,
+        "changes": changes,
+        "n_changes": len(changes),
         "deadline": deadline,
         "days_to_deadline": dtd,
         "status": lc["status"],

@@ -1,7 +1,17 @@
 # ADR 009 — Regulatory Change Intelligence: document versioning, diff, and impact tagging
 
-- Status: **Proposed (design only)** — 2026-08-25. Owner-requested expansion of the
-  Regulatory axis. No code ships with this ADR.
+- Status: **Partial — Phase A SHIPPED** (2026-09-02); design 2026-08-25. Owner-requested
+  expansion of the Regulatory axis.
+  - **Phase A (deterministic amending-act parser) LIVE** — `src/synth/reg_change.py`
+    enumerates the discrete changes an act declares (`altera`/`revoga`/`dá nova
+    redação`/`inclui`/…) + the article/dispositivo refs + the base instrument each
+    targets, bound per-clause and quoted (sourced, no LLM/network). Attached to the
+    reg-lifecycle + radar cards as `changes[]`/`n_changes` + a "Mudanças: …" narrative
+    line (`regulatory.py`). Fixed a latent `_NUM` truncation (undotted "5304"→"530").
+  - **Deferred:** (1) full-text fetch + `regdocs/` versioned store + index; (2) versioned-
+    document section diff (Manual do DICT etc.); (3) the bounded LLM change-record with
+    rated impact/blast_radius/difficulty (Phase A is the grounded floor it builds on);
+    (5) the dashboard "Mudança regulatória" panel + "Regulatório/Mudanças" filter.
 - Extends [ADR 003](2026-08-19-adr-narrative-dimensions.md) — the **regulatory-lifecycle
   axis** (`src/synth/regulatory.py`), which today tracks *that* an instrument changed +
   its deadline + affected domain, and **explicitly deferred to v2**: "fetch/compare the

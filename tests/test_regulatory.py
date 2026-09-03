@@ -41,6 +41,27 @@ def test_instruments_in_extracts_and_excludes_comunicados():
     assert "comunicado-45785" in refs2
 
 
+def test_instrument_number_not_truncated_when_undotted():
+    # _NUM must take the whole digit run: an undotted 5304 threads as res-cmn-5304,
+    # not the truncated res-cmn-530 (news text omits the pt-BR thousands dot).
+    refs = regulatory.instruments_in(_card("a Resolução CMN 5304 e a Resolução CMN nº 5.130"))
+    assert "res-cmn-5304" in refs and "res-cmn-5130" in refs
+
+
+def test_build_lifecycle_card_enumerates_changes():
+    narrs = [
+        _card("Consulta pública sobre a minuta da Resolução BCB 999.", date="2026-07-10"),
+        _card("A Resolução BCB 999 altera a Resolução BCB 700 e revoga o art. 5º; "
+              "entra em vigor em 30/11/2026.", date="2026-08-15"),
+    ]
+    lc = regulatory.build_lifecycles(narrs, as_of="2026-08-23", window=90)["res-bcb-999"]
+    card = regulatory.build_lifecycle_card(lc)
+    assert card["n_changes"] >= 1
+    rels = {c["relation"] for c in card["changes"]}
+    assert "amends" in rels or "revokes" in rels
+    assert "Mudanças:" in card["narrative"]
+
+
 def test_future_deadline_needs_cue_and_future_date():
     t = "A norma entra em vigor em 15/12/2026 para todas as instituições."
     assert regulatory._future_deadline(t, "2026-08-23", 365) == "2026-12-15"
