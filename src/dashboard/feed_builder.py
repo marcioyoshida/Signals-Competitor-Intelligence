@@ -522,9 +522,28 @@ def build_feed(
 
         financials = _bcg.position_from_financials(financials, imap)
 
+    # Regulatory INSTRUMENT cards use a date-independent id (regulatory-<instrument>),
+    # so a re-emission on a new date leaves the older copy in the window — the same rule
+    # twice, the stale copy carrying pre-fix citations. Collapse instrument-subject cards
+    # to their latest date per id (entity cards keep every date — each is a distinct daily
+    # event, i.e. a timeline, not a duplicate).
+    def _dedup_instrument_cards(cards: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        best: dict[str, dict[str, Any]] = {}
+        out: list[dict[str, Any]] = []
+        for c in cards:
+            if c.get("subject_type") != "instrument":
+                out.append(c)
+                continue
+            cid = c.get("id")
+            prev = best.get(cid)
+            if prev is None or (c.get("date") or "") > (prev.get("date") or ""):
+                best[cid] = c
+        return out + list(best.values())
+
     # Merge incident threads into the displayed feed (after KPI/entity aggregation).
     feed_items = sorted(
-        items + thread_items, key=lambda x: (x["date"], x["threat_score"]), reverse=True
+        _dedup_instrument_cards(items + thread_items),
+        key=lambda x: (x["date"], x["threat_score"]), reverse=True,
     )
 
     return {

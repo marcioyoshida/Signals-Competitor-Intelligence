@@ -517,3 +517,26 @@ def test_instrument_card_keeps_self_declared_industries():
     )
     card = next(c for c in feed["feed"] if c["id"] == "reg-lifecycle-res-cmn-5304")
     assert card["industries"] == ["banking", "investment-banking"]
+
+
+def test_instrument_cards_dedup_to_latest_but_entity_timelines_keep_all():
+    # same instrument id emitted on two dates -> only the latest survives (no stale copy);
+    # an entity id across two dates is a timeline -> both kept.
+    def _inst(date, cites):
+        return {"id": "regulatory-res-cmn-5304", "kind": "regulatory_lifecycle",
+                "axis": "regulatory", "subject_type": "instrument", "entity": None,
+                "entities": [], "industries": ["banking"], "run_date": date, "as_of": date,
+                "lenses": ["regulatory"], "narrative": f"x {date}",
+                "citations": cites, "threat_factors": {"days_to_deadline": None}}
+    narratives = [
+        _inst("2026-08-31", [{"url": "https://bcb/x?numero=5337"}]),   # stale, wrong link
+        _inst("2026-09-02", [{"url": "https://bcb/x?numero=5304"}]),   # fresh
+        _narr("cand-ent-itau", "itau", "2026-09-01", 0.6),
+        _narr("cand-ent-itau", "itau", "2026-09-02", 0.7),             # next day's event
+    ]
+    feed = feed_builder.build_feed(
+        narratives, industry_map={"itau": ["banking"]},
+        entity_attrs={"itau": {"industries": ["banking"]}})
+    reg = [c for c in feed["feed"] if c["id"] == "regulatory-res-cmn-5304"]
+    assert len(reg) == 1 and reg[0]["date"] == "2026-09-02"
+    assert len([c for c in feed["feed"] if c["id"] == "cand-ent-itau"]) == 2
