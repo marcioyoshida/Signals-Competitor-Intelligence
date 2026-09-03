@@ -158,6 +158,45 @@ def _domain_of(text: str) -> str:
     return "Setor financeiro"
 
 
+# --- Tenant scoping bridge (issue #70) --------------------------------------
+# A regulatory card names no competitor entity (a sector rulebook has no single
+# subject), so the feed's entity->industry denormalization leaves its `industries`
+# empty and the per-tenant read boundary (scope_feed_to_modules) + Entry fork strip it
+# from EVERY context — a fintech/insurer would see an empty Radar Regulatório though the
+# rule squarely affects them. Bridge via the card's already-derived affected DOMAIN ->
+# the licensed verticals a rule in that domain touches. This is VISIBILITY scoping only,
+# never a displayed claim (the card stays is_inference=True). Recall-first: a sector-wide
+# or unclassified rule ("Setor financeiro") maps to ALL industries — a financial rule we
+# couldn't pin to a domain is shown to every financial tenant rather than hidden from all
+# (missing a rule that hits you is the costly error). Domain labels mirror _DOMAINS.
+_SECTOR_WIDE = "*"
+DOMAIN_INDUSTRIES: dict[str, list[str]] = {
+    "Pagamentos / PIX": ["acquiring", "banking", "fintech"],
+    "Crédito & portabilidade": ["banking", "fintech"],
+    "Câmbio & mercado aberto": ["asset-management", "banking", "investment-banking"],
+    "Open Finance": ["banking", "fintech"],
+    "Autorizações & governança": [_SECTOR_WIDE],
+    "Setor financeiro": [_SECTOR_WIDE],
+}
+
+
+def industries_for_domain(domain: str | None, all_industries: Any = ()) -> list[str]:
+    """Licensed verticals a regulatory card's DOMAIN touches — for tenant/entry scoping
+    only, never a displayed claim. Sector-wide or unknown domains -> every industry. The
+    result is intersected with the live industry universe so a stale mapping can never
+    invent a slug; an intersection that would empty the list falls back to the universe
+    rather than re-hiding the card."""
+    universe = sorted({str(i).strip().lower() for i in (all_industries or [])})
+    mapped = DOMAIN_INDUSTRIES.get((domain or "").strip())
+    if not mapped or _SECTOR_WIDE in mapped:
+        return universe
+    keep = {m.strip().lower() for m in mapped}
+    if not universe:
+        return sorted(keep)
+    scoped = [i for i in universe if i in keep]
+    return scoped or universe
+
+
 def _future_deadline(text: str, as_of: str, horizon: int) -> str | None:
     """Nearest future date co-occurring with a deadline cue, within the horizon."""
     t = _norm(text)

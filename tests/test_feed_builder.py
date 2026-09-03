@@ -554,3 +554,84 @@ def test_instrument_cards_dedup_to_latest_but_entity_timelines_keep_all():
     reg = [c for c in feed["feed"] if c["id"] == "regulatory-res-cmn-5304"]
     assert len(reg) == 1 and reg[0]["date"] == "2026-09-02"
     assert len([c for c in feed["feed"] if c["id"] == "cand-ent-itau"]) == 2
+
+
+# --- #70: entity-less regulatory cards scoped to tenant read boundaries by domain ---
+
+def _reg_card(id, domain, *, date="2026-09-02", axis="regulatory_lifecycle"):
+    """A regulatory card as build_narrative / build_lifecycle_card emit it: no entity,
+    an affected `domain`, is_inference. It carries NO `industries` key."""
+    return {
+        "id": id,
+        "kind": "regulatory_lifecycle",
+        "axis": axis,
+        "subject_type": "instrument",
+        "domain": domain,
+        "entity": None,
+        "entities": [],
+        "is_inference": True,
+        "threat_score": 0.4,
+        "threat_factors": {"has_deadline": True},
+        "lenses": ["regulatory"],
+        "run_date": date,
+        "as_of": date,
+        "narrative": f"Radar regulatório — {domain}.",
+        "citations": [{"url": "https://bcb/exibenormativo?numero=1"}],
+        "source_ids": [],
+        "mode": "derived",
+    }
+
+
+# Universe used for the scoping tests (mirrors entity_registry.INDUSTRIES subset).
+_UNIVERSE_META = {
+    s: {"display_name": s}
+    for s in ["banking", "fintech", "acquiring", "insurance", "asset-management",
+              "investment-banking", "wealth-management", "crypto"]
+}
+
+
+def test_regulatory_card_scoped_by_domain_survives_saas_boundary_70():
+    # #70 regression: a Pagamentos/PIX rule (no entity) must reach the fintech/acquiring
+    # tenants (empty Radar Regulatório before the fix) but NOT insurance/wealth.
+    feed = feed_builder.build_feed(
+        [_narr("bk", "itau", "2026-09-02", 0.6)],
+        industry_map={"itau": ["banking"]},
+        industry_meta=_UNIVERSE_META,
+        entity_attrs={"itau": {"industries": ["banking"]}},
+        thread_cards=[_reg_card("reg-pix", "Pagamentos / PIX")],
+    )
+    reg = next(c for c in feed["feed"] if c["id"] == "reg-pix")
+    # domain -> licensed verticals (intersected with the universe), never all-industries.
+    assert reg["industries"] == ["acquiring", "banking", "fintech"]
+    assert reg["domain"] == "Pagamentos / PIX"  # carried through _project_item
+
+    for mod in ("fintech", "acquiring", "banking"):
+        ids = {c["id"] for c in feed_builder.scope_feed_to_modules(feed, [mod])["feed"]}
+        assert "reg-pix" in ids, f"PIX rule should reach {mod}"
+    for mod in ("insurance", "wealth-management"):
+        ids = {c["id"] for c in feed_builder.scope_feed_to_modules(feed, [mod])["feed"]}
+        assert "reg-pix" not in ids, f"PIX rule should NOT reach {mod}"
+
+
+def test_sector_wide_regulatory_card_reaches_every_tenant_but_not_entry_70():
+    # A catch-all "Setor financeiro" rule (unclassified) is recall-first: visible to every
+    # licensed tenant. It still must NOT leak into the shallow Entry feed (#44 depth gate).
+    feed = feed_builder.build_feed(
+        [_narr("bk", "itau", "2026-09-02", 0.6)],
+        industry_map={"itau": ["banking"]},
+        industry_meta=_UNIVERSE_META,
+        entity_attrs={"itau": {"industries": ["banking"]}},
+        thread_cards=[_reg_card("reg-all", "Setor financeiro")],
+    )
+    reg = next(c for c in feed["feed"] if c["id"] == "reg-all")
+    assert reg["industries"] == sorted(_UNIVERSE_META)  # sector-wide -> all industries
+
+    for mod in ("fintech", "insurance", "wealth-management", "acquiring"):
+        ids = {c["id"] for c in feed_builder.scope_feed_to_modules(feed, [mod])["feed"]}
+        assert "reg-all" in ids, f"sector-wide rule should reach {mod}"
+    # fail-closed: empty modules still yields no cards.
+    assert feed_builder.scope_feed_to_modules(feed, [])["feed"] == []
+    # Entry drops it despite spanning entry industries (crypto in universe): it is an
+    # inference card, and Entry is shallow-public-filing only (#44).
+    entry_ids = {c["id"] for c in feed_builder.derive_entry_feed(feed)["feed"]}
+    assert "reg-all" not in entry_ids

@@ -38,6 +38,9 @@ except Exception:  # pragma: no cover - degrade to stored score if synth import 
     score_from_lenses = None
 
 NARRATIVES_PREFIX = "narratives/"
+# Card axes that represent a sector rule with no competitor subject (#70) — scoped to
+# tenant/entry read boundaries by affected domain, not by entity.
+_REGULATORY_AXES = {"regulatory", "regulatory_lifecycle"}
 # Published to the static site bucket root; index.html fetches "feed.json".
 FEED_KEY = "feed.json"
 # ADR 016 — the Entry Portal's scoped slice (entry-tier industries only). The Entry
@@ -313,6 +316,9 @@ def _project_item(n: dict[str, Any]) -> dict[str, Any]:
         # and flag inference. is_inference => label, not fact.
         "axis": n.get("axis"),
         "subject_type": n.get("subject_type"),
+        # Regulatory cards' affected domain (Pagamentos/PIX, Crédito, …) — the bridge
+        # that scopes an entity-less sector rule to tenant read boundaries (#70).
+        "domain": n.get("domain"),
         "is_inference": bool(n.get("is_inference")),
         "direction": n.get("direction"),
         "entity": n.get("entity"),
@@ -519,7 +525,18 @@ def build_feed(
         # No entity to denormalize from — preserve a card's SELF-declared industries
         # (regulatory instrument cards carry their affected cohort, #51 nexus), so the
         # denorm doesn't wipe a subject card off every industry tab.
-        return sorted({str(i).strip().lower() for i in (c.get("industries") or []) if i})
+        declared = sorted({str(i).strip().lower() for i in (c.get("industries") or []) if i})
+        if declared:
+            return declared
+        # Entity-less regulatory card with no self-declared cohort (#70): scope by its
+        # affected DOMAIN so it survives the per-tenant read boundary and Entry fork
+        # instead of being stripped from every context (an empty Radar Regulatório for
+        # SaaS/entry). Sector-wide/unknown domains -> all industries. Visibility only.
+        if c.get("kind") == "regulatory_lifecycle" or c.get("axis") in _REGULATORY_AXES:
+            from src.synth import regulatory as _reg
+
+            return _reg.industries_for_domain(c.get("domain"), (industry_meta or {}).keys())
+        return declared
 
     for c in items + thread_items:
         c["industries"] = _card_industries(c)

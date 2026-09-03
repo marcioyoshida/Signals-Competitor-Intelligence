@@ -208,3 +208,35 @@ def test_emit_on_change_suppresses_unchanged_and_refires_on_new_deadline():
     got = [c for c in regulatory.nominate([moved, prior], as_of="2026-08-23")
            if c["instrument"] == "in-bcb-770"]
     assert len(got) == 1 and got[0]["deadline"] == "2026-12-31"
+
+
+# --- #70: domain -> industries scoping bridge for entity-less regulatory cards ---
+
+_UNIVERSE = ["banking", "fintech", "acquiring", "insurance", "asset-management",
+             "investment-banking", "wealth-management"]
+
+
+def test_industries_for_domain_maps_specific_domain_to_its_verticals():
+    assert regulatory.industries_for_domain("Pagamentos / PIX", _UNIVERSE) == [
+        "acquiring", "banking", "fintech"]
+    assert regulatory.industries_for_domain("Crédito & portabilidade", _UNIVERSE) == [
+        "banking", "fintech"]
+    assert regulatory.industries_for_domain("Câmbio & mercado aberto", _UNIVERSE) == [
+        "asset-management", "banking", "investment-banking"]
+
+
+def test_industries_for_domain_sector_wide_and_unknown_map_to_all():
+    # explicit sector-wide sentinel, the catch-all label, and any unknown/None domain
+    # all resolve to the full universe (recall-first).
+    for domain in ("Autorizações & governança", "Setor financeiro", "algo novo", None, ""):
+        assert regulatory.industries_for_domain(domain, _UNIVERSE) == sorted(_UNIVERSE)
+
+
+def test_industries_for_domain_never_invents_a_slug_and_never_empties():
+    # intersection with the universe drops a mapped slug the taxonomy doesn't have...
+    assert regulatory.industries_for_domain("Pagamentos / PIX", ["fintech"]) == ["fintech"]
+    # ...but an intersection that would empty falls back to the universe rather than
+    # re-hiding the card.
+    assert regulatory.industries_for_domain("Pagamentos / PIX", ["insurance"]) == ["insurance"]
+    # with no universe at all, the raw mapped slugs are returned (best effort).
+    assert regulatory.industries_for_domain("Open Finance", []) == ["banking", "fintech"]
