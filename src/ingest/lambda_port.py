@@ -680,6 +680,36 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as exc:  # pragma: no cover - best-effort, never blocks ingest
             print(f"Warning: consórcio discovery skipped: {exc}")
 
+        # BCB-authorized institutions → registry (#14 Official Registry Sync). Behind an
+        # EXTRA sub-gate (ONCA_DISCOVER_BCB, default off even when discovery is on): the
+        # BCB registry is huge, so this stays dark until a dry-run validates brand quality.
+        # Relevance-gated to banks/IP/SCD-SEP-SCFI/corretoras; cooperativas need their own
+        # flag (thousands of singulars). Conglomerate arms nest under the tier-1 parent.
+        if os.environ.get("ONCA_DISCOVER_BCB", "false").lower() in ("1", "true", "yes"):
+            try:
+                with _source_budget("entity discovery BCB", deadline, per_source):
+                    from src.synth import entity_discovery
+
+                    auto = os.environ.get(
+                        "ONCA_ENTITY_DISCOVERY_AUTOCREATE", "true"
+                    ).lower() in ("1", "true", "yes")
+                    coops = os.environ.get(
+                        "ONCA_DISCOVER_BCB_COOPS", "false"
+                    ).lower() in ("1", "true", "yes")
+                    breport = entity_discovery.discover_bcb_institutions(
+                        auto_create=auto, include_coops=coops, max_new=40)
+                    print(
+                        "entity discovery BCB: "
+                        f"fetched={breport.get('fetched')} "
+                        f"created={len(breport.get('created') or [])} "
+                        f"enriched={len(breport.get('enriched') or [])} "
+                        f"already={breport.get('already')} "
+                        f"proposed={len(breport.get('proposed') or [])} "
+                        f"skipped={len(breport.get('skipped') or [])}"
+                    )
+            except Exception as exc:  # pragma: no cover - best-effort, never blocks ingest
+                print(f"Warning: BCB institutions discovery skipped: {exc}")
+
     # Financial statements (issue #7 / ADR 011 stage 6): CVM DFP → per-issuer key-metric
     # store (financials/index.json). Filings are annual/quarterly, so this is a periodic
     # best-effort refresh, gated OFF by default (ONCA_FINANCIALS=true to enable).

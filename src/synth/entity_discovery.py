@@ -420,6 +420,217 @@ def discover_consorcio(
     return report
 
 
+# --- #14 Official Registry Sync: BCB-authorized institutions -----------------
+# license_class -> (industry, arm_suffix). ONLY these classes are promoted; the long
+# tail is deliberately excluded so a sync can never flood the registry:
+#   - Cooperativa (thousands of singular credit unions) — gated behind include_coops;
+#   - Consórcio — owned by discover_consorcio (#46);
+#   - Leasing / Agência de Fomento / Companhia Hipotecária — marginal, skipped.
+# arm_suffix nests a conglomerate's NON-bank arm as a sub-entity (ADR 017) when its brand
+# collides with the tier-1 parent (e.g. "ITAÚ UNIBANCO ... PAGAMENTOS" -> itau-pagamentos).
+_BCB_CLASS_MAP: dict[str, tuple[str, str | None]] = {
+    "Banco": ("banking", None),
+    "Instituição de Pagamento": ("fintech", "pagamentos"),
+    "Crédito Direto (SCD)": ("fintech", "scd"),
+    "Empréstimo P2P (SEP)": ("fintech", "sep"),
+    "Financeira (SCFI)": ("fintech", "financeira"),
+    "Microcrédito (SCMEPP)": ("fintech", "microcredito"),
+    "Corretora/DTVM": ("investment-banking", "corretora"),
+}
+_BCB_COOP_CLASS = "Cooperativa"
+
+
+# Leading org words + the legal/type tail that carry no brand — a bank's DISTINCTIVE
+# name is what's left after "BANCO …" is stripped off the front and the license/legal
+# boilerplate off the back. Tokens here CUT the brand span; a bare generic result is
+# rejected (routed to review, not auto-created) so we never mint "banco"/"bank".
+_INST_LEADING = {"banco", "caixa", "cooperativo"}
+_INST_CUT = {
+    "bank", "sa", "s", "a", "ltda", "epp", "me", "multiplo", "comercial", "investimento",
+    "cctvm", "ctvm", "dtvm", "cvc", "cvmc", "corretora", "distribuidora", "instituicao",
+    "sociedade", "financeira", "financiamento", "credito", "cambio", "national",
+    "international", "brasil", "do", "de", "da", "e", "pagamento", "pagamentos", "ip",
+    "arrendamento", "fomento", "hipotecaria", "scd", "sep", "scfi", "scmepp", "holding",
+}
+_INST_GARBAGE = {"banco", "bank", "brasil", "caixa", "cooperativo", "social", ""}
+
+
+def _clean_institution_brand(name: str) -> str | None:
+    """A distinctive brand from a BCB institution legal name — accent-free, generic
+    prefix/suffix stripped. Returns None for a bare-generic name (→ propose, not create)."""
+    toks = [t for t in re.split(r"[^a-z0-9]+", _strip_accents(str(name or "")).lower()) if t]
+    while toks and toks[0] in _INST_LEADING:
+        toks = toks[1:]
+    brand: list[str] = []
+    for t in toks:
+        if t in _INST_CUT:
+            break
+        brand.append(t)
+        if len(brand) >= 3:
+            break
+    b = " ".join(brand)
+    if not b or b in _INST_GARBAGE or len(b) < 2:
+        return None
+    return b
+
+
+def _profile_from_bcb_institution(row: dict[str, Any]) -> dict[str, Any]:
+    """Compose a registry-ready profile from a BCB authorized-institution row."""
+    name = str(row.get("name") or "").strip()
+    root = _root8(row.get("cnpj"))
+    lclass = str(row.get("license_class") or "")
+    industry, suffix = _BCB_CLASS_MAP.get(lclass, (None, None))
+    if not industry and lclass == _BCB_COOP_CLASS:
+        industry = "banking"  # only reached when include_coops opens the gate
+    brand = _clean_institution_brand(name)
+    display = brand.title() if brand else f"Instituição {root or 'sem-cnpj'}"
+    forms: list[str] = []
+    if name and len(name) >= 4:
+        forms.append(name)              # keep the full legal name as a match alias
+    if brand and display.upper() not in {f.upper() for f in forms}:
+        forms.append(display)
+    return {
+        "entity_id": _slug(brand) or f"bcb-{root or 'unknown'}",
+        "display_name": display,
+        "auto_ok": bool(brand),  # a distinctive brand is required to auto-create
+        "aliases": forms,
+        "cnpj_roots": [root] if root else [],
+        "industries": [industry] if industry else [],
+        "license_class": lclass,
+        "arm_suffix": suffix,
+        "source": "bcb_autorizacoes",
+        # official BCB registry listing -> radar tier 'registry' (reg_coverage.radar_score)
+        "confidence": "structured",
+        "raw_name": name,
+    }
+
+
+def discover_bcb_institutions(
+    *,
+    max_new: int = 40,
+    auto_create: bool = True,
+    include_coops: bool = False,
+    table: Any | None = None,
+    rows: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """#14 Official Registry Sync — promote RELEVANT BCB-authorized institutions
+    (banks, payment institutions, SCD/SEP/SCFI/microcrédito, corretoras/DTVM) into the
+    entity registry, by CNPJ root. Deliberately relevance-gated so it cannot flood the
+    registry: cooperativas (thousands of singulars) are excluded unless ``include_coops``,
+    consórcios (discover_consorcio) and marginal classes are skipped. Mirrors
+    discover_consorcio: hit → enrich (industry + tier-1 parent); miss → auto-create a
+    clean brand or propose_review. A conglomerate's non-bank arm nests as a sub-entity.
+    """
+    if rows is None:
+        from src.ingest import bcb_autorizacoes
+
+        rows = bcb_autorizacoes.fetch_authorized()
+
+    def _relevant(r: dict[str, Any]) -> bool:
+        lc = str(r.get("license_class") or "")
+        return lc in _BCB_CLASS_MAP or (include_coops and lc == _BCB_COOP_CLASS)
+
+    rows = [r for r in rows if _relevant(r)]
+    report: dict[str, Any] = {
+        "fetched": len(rows), "created": [], "enriched": [], "already": 0,
+        "proposed": [], "skipped": [], "errors": [],
+    }
+    if not rows:
+        return report
+
+    entities = list(entity_registry.list_entities(table=table, include_inactive=True))
+    cnpj_idx: dict[str, str] = {}
+    disp_idx: dict[str, list[str]] = {}
+    for e in entities:
+        eid = e.get("entity_id")
+        if not eid:
+            continue
+        for r in e.get("cnpj_roots") or []:
+            cnpj_idx[str(r)[:8]] = eid
+        d = _norm_brand(e.get("display_name") or "")
+        if d:
+            disp_idx.setdefault(d, []).append(eid)
+    parent_idx = _build_parent_brand_idx(entities)
+
+    new_budget = max_new if auto_create else 0
+    for row in rows:
+        try:
+            profile = _profile_from_bcb_institution(row)
+        except Exception as exc:  # pragma: no cover
+            report["errors"].append({"row": row.get("cnpj"), "error": str(exc)})
+            continue
+        if not profile["industries"]:  # unmapped class slipped through — skip
+            report["skipped"].append(profile["entity_id"])
+            continue
+        root = (profile.get("cnpj_roots") or [None])[0]
+        industry = profile["industries"][0]
+        suffix = profile.get("arm_suffix")
+        parent = _resolve_parent(parent_idx, profile.get("display_name"))
+        # A conglomerate's NON-bank arm shares the parent's brand; the naive slug would
+        # collide with (and be blocked from overwriting) the parent — nest it as a distinct
+        # sub-entity. A bank whose brand IS the parent is the same tier-1 (handled below).
+        if parent and profile["entity_id"] == parent and suffix:
+            profile["entity_id"] = f"{parent}-{suffix}"
+            profile["display_name"] = f"{profile['display_name']} {suffix.title()}"
+        eid = cnpj_idx.get(root) if root else None
+
+        if eid:  # already tracked → enrich (industry + parent), never duplicate
+            try:
+                changed = entity_registry.accumulate_aliases(
+                    eid, profile.get("aliases") or [], table=table)
+                ent = entity_registry.get_entity(eid, table=table) or {}
+                if industry not in (ent.get("industries") or []):
+                    entity_registry.set_industries(
+                        eid, list(ent.get("industries") or []) + [industry],
+                        source="enrich", table=table)
+                    changed = True
+                if parent and parent != eid and not ent.get("parent"):
+                    changed = entity_registry.set_parent(eid, parent, source="enrich", table=table) or changed
+                report["enriched"].append(eid) if changed else report.__setitem__("already", report["already"] + 1)
+            except Exception as exc:  # pragma: no cover
+                report["errors"].append({"eid": eid, "error": str(exc)})
+            continue
+
+        if auto_create and new_budget > 0 and root and profile.get("auto_ok"):
+            nb = _norm_brand(profile["display_name"])
+            owners = {x for x in (disp_idx.get(nb) or []) if x != profile["entity_id"]}
+            # A NON-bank arm whose brand collides only with the resolved tier-1 parent is
+            # the expected sub-entity case ("ITAÚ … PAGAMENTOS" under itau) — nest it with a
+            # distinct id + label. A bank sharing a tracked brand is NOT auto-merged: it
+            # falls through to propose_review (a human decides same-vs-different institution).
+            if parent and owners and owners <= {parent} and suffix:
+                profile["entity_id"] = f"{parent}-{suffix}"
+                profile["display_name"] = f"{profile['display_name']} {suffix.title()}"
+                nb = _norm_brand(profile["display_name"])
+                owners = set()
+            if owners:  # collides with a DIFFERENT tracked entity → review, don't merge
+                pid = entity_registry.propose_review(
+                    kind="discovery", key=profile["entity_id"], proposed=profile["display_name"],
+                    reason="name_collision", hint=f"bcb_autorizacoes cnpj={root} owner={sorted(owners)[0]}",
+                    confidence="structured",
+                    payload={"profile": profile, "source": "bcb_autorizacoes", "cnpj": root},
+                    table=table)
+                report["proposed"].append(pid or profile["entity_id"])
+                continue
+            try:
+                entity_registry.put_entity(
+                    profile["entity_id"], profile["display_name"], profile.get("aliases") or [],
+                    cnpj_roots=profile.get("cnpj_roots") or [], industries=[industry],
+                    confidence="structured", parent=parent,
+                    # many institution brands are generic → structured-only, no fragile news match
+                    news_search=False, source="discovery", table=table)
+                report["created"].append(profile["entity_id"])
+                new_budget -= 1
+                cnpj_idx[root] = profile["entity_id"]
+                if nb:
+                    disp_idx.setdefault(nb, []).append(profile["entity_id"])
+            except Exception as exc:  # pragma: no cover
+                report["errors"].append({"profile": profile.get("entity_id"), "error": str(exc)})
+        else:
+            report["skipped"].append(profile.get("entity_id"))
+    return report
+
+
 def discover_fiagro(
     *,
     min_pl: float = 50_000_000.0,

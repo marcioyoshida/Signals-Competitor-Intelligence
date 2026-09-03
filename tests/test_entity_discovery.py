@@ -442,3 +442,80 @@ def test_propose_news_candidates_queues_review():
     queued = propose_news_candidates(cands, table=table)
     assert len(queued) == 1
     assert any(k.startswith("REVIEW#") for k in table.items)
+
+
+# --- #14 discover_bcb_institutions (relevance-gated BCB registry sync) ---------
+def _bcb_row(name, cnpj, license_class):
+    return {"name": name, "cnpj": cnpj, "license_class": license_class,
+            "is_fintech": False, "registry": "SedesSociedades"}
+
+
+def test_bcb_relevance_gate_excludes_the_long_tail():
+    from src.synth.entity_discovery import discover_bcb_institutions
+    table = _FakeTable()
+    rows = [
+        _bcb_row("BANCO ORIGINAL S.A.", "92894922", "Banco"),
+        _bcb_row("COOPERATIVA SICOOB CENTRAL", "01111111", "Cooperativa"),
+        _bcb_row("CONSÓRCIO LUIZA ADM", "02222222", "Consórcio"),
+        _bcb_row("XPTO ARRENDAMENTO MERCANTIL S.A.", "03333333", "Leasing"),
+    ]
+    r = discover_bcb_institutions(rows=rows, auto_create=True, table=table)
+    assert r["fetched"] == 1                       # only the bank is promotable
+    assert r["created"] == ["original"]
+    # cooperativas open only behind the explicit flag
+    r2 = discover_bcb_institutions(rows=rows, auto_create=True, include_coops=True, table=table)
+    assert r2["fetched"] == 2
+
+
+def test_bcb_creates_with_industry_and_registry_radar():
+    from src.synth import entity_registry
+    from src.ingest import reg_coverage
+    from src.synth.entity_discovery import discover_bcb_institutions
+    table = _FakeTable()
+    rows = [
+        _bcb_row("BANCO ORIGINAL S.A.", "92894922", "Banco"),
+        _bcb_row("CREDVERDE SOCIEDADE DE CRÉDITO DIRETO S.A.", "40404040", "Crédito Direto (SCD)"),
+    ]
+    r = discover_bcb_institutions(rows=rows, auto_create=True, table=table)
+    assert set(r["created"]) >= {"original"}
+    bank = entity_registry.get_entity("original", table=table)
+    assert bank["industries"] == ["banking"]
+    # official BCB listing -> radar tier 'registry'
+    assert reg_coverage.entity_radar(bank)["tier"] == "registry"
+
+
+def test_bcb_conglomerate_arm_nests_and_keeps_parent_intact():
+    from src.synth import entity_registry
+    from src.synth.entity_discovery import discover_bcb_institutions
+    table = _FakeTable()
+    entity_registry.put_entity("inter", "Inter", ["INTER"], industries=["banking"], table=table)
+    rows = [_bcb_row("INTER S.A.", "00416968", "Instituição de Pagamento")]
+    r = discover_bcb_institutions(rows=rows, auto_create=True, table=table)
+    arm = entity_registry.get_entity("inter-pagamentos", table=table)
+    assert arm and arm["parent"] == "inter" and arm["industries"] == ["fintech"]
+    # the tier-1 parent is untouched (not demoted to fintech, not overwritten)
+    assert entity_registry.get_entity("inter", table=table)["industries"] == ["banking"]
+
+
+def test_bcb_cnpj_match_enriches_not_duplicates_and_is_idempotent():
+    from src.synth import entity_registry
+    from src.synth.entity_discovery import discover_bcb_institutions
+    table = _FakeTable()
+    entity_registry.put_entity("itau", "Itaú", ["ITAU"], industries=["banking"],
+                               cnpj_roots=["60701190"], table=table)
+    rows = [_bcb_row("ITAU UNIBANCO HOLDING S.A.", "60701190", "Banco")]
+    r = discover_bcb_institutions(rows=rows, auto_create=True, table=table)
+    assert r["created"] == []                       # matched by CNPJ -> no duplicate
+    r2 = discover_bcb_institutions(rows=rows, auto_create=True, table=table)
+    assert r2["created"] == [] and r2["already"] >= 1
+
+
+def test_bcb_foreign_name_collision_is_proposed_not_merged():
+    from src.synth import entity_registry
+    from src.synth.entity_discovery import discover_bcb_institutions
+    table = _FakeTable()
+    # an existing entity whose id != its brand slug, so a same-brand newcomer collides
+    entity_registry.put_entity("acme_holdings", "Acme", ["ACME"], industries=["banking"], table=table)
+    rows = [_bcb_row("ACME S.A.", "70707070", "Banco")]
+    r = discover_bcb_institutions(rows=rows, auto_create=True, table=table)
+    assert r["created"] == [] and len(r["proposed"]) == 1
