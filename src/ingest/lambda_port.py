@@ -696,8 +696,17 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                     coops = os.environ.get(
                         "ONCA_DISCOVER_BCB_COOPS", "false"
                     ).lower() in ("1", "true", "yes")
+                    # #67 prominence gate: override which license classes are proposed
+                    # (human-curated) vs auto-created. Unset -> default micro-lender tail;
+                    # "" -> auto-create everything.
+                    _pc = os.environ.get("ONCA_DISCOVER_BCB_PROPOSE_CLASSES")
+                    propose_only = (
+                        None if _pc is None
+                        else frozenset(c.strip() for c in _pc.split(",") if c.strip())
+                    )
                     breport = entity_discovery.discover_bcb_institutions(
-                        auto_create=auto, include_coops=coops, max_new=40)
+                        auto_create=auto, include_coops=coops, max_new=40,
+                        propose_only_classes=propose_only)
                     print(
                         "entity discovery BCB: "
                         f"fetched={breport.get('fetched')} "

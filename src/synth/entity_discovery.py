@@ -439,6 +439,16 @@ _BCB_CLASS_MAP: dict[str, tuple[str, str | None]] = {
 }
 _BCB_COOP_CLASS = "Cooperativa"
 
+# #67 prominence gate — the micro-lender tail (hundreds of tiny SCD/SEP/SCFI/microcrédito
+# fintechs, e.g. ffcred/rapidium/conpay) is COMPETITIVELY thin per-entity and best human-
+# curated, so by default it is PROPOSED (review queue), not auto-created. The competitively
+# central segments (banks, payment institutions, corretoras/DTVM) still auto-create. Tunable
+# per run / via env so the digital-lender frontier can be opened when wanted.
+_BCB_PROPOSE_ONLY = frozenset({
+    "Crédito Direto (SCD)", "Empréstimo P2P (SEP)",
+    "Financeira (SCFI)", "Microcrédito (SCMEPP)",
+})
+
 # #67 relevance filter — real BCB licensees that are NOT FS competitors a war-room tracks:
 # captive manufacturer/equipment finance arms + wholesale clearing/custody vehicles. These
 # are FILTERED (not created, not proposed) so they can't pollute the `banking` roster.
@@ -552,6 +562,7 @@ def discover_bcb_institutions(
     max_new: int = 40,
     auto_create: bool = True,
     include_coops: bool = False,
+    propose_only_classes: "frozenset[str] | None" = None,
     table: Any | None = None,
     rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
@@ -600,6 +611,7 @@ def discover_bcb_institutions(
             disp_idx.setdefault(d, []).append(eid)
     parent_idx = _build_parent_brand_idx(entities)
 
+    propose_only = _BCB_PROPOSE_ONLY if propose_only_classes is None else propose_only_classes
     new_budget = max_new if auto_create else 0
     for row in rows:
         try:
@@ -637,6 +649,20 @@ def discover_bcb_institutions(
                 report["enriched"].append(eid) if changed else report.__setitem__("already", report["already"] + 1)
             except Exception as exc:  # pragma: no cover
                 report["errors"].append({"eid": eid, "error": str(exc)})
+            continue
+
+        # #67 prominence gate: a NEW micro-lender-tail institution is PROPOSED (human-
+        # curated), not auto-created — doesn't consume the create budget.
+        if (root and profile.get("auto_ok")
+                and profile.get("license_class") in propose_only):
+            pid = entity_registry.propose_review(
+                kind="discovery", key=profile["entity_id"], proposed=profile["display_name"],
+                reason="prominence_gate",
+                hint=f"bcb {profile.get('license_class')} cnpj={root}",
+                confidence="structured",
+                payload={"profile": profile, "source": "bcb_autorizacoes", "cnpj": root},
+                table=table)
+            report["proposed"].append(pid or profile["entity_id"])
             continue
 
         if auto_create and new_budget > 0 and root and profile.get("auto_ok"):

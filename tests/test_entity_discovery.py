@@ -562,3 +562,25 @@ def test_bcb_brand_cleaner_fixes():
     assert clean("BNY MELLON BANCO S.A.") == "bny mellon"    # embedded 'banco' stripped
     assert clean("BANCO INDUSTRIAL DO BRASIL S.A.") is None  # generic -> propose, not create
     assert clean("BANCO NEON S.A.") == "neon"
+
+
+def test_bcb_prominence_gate_proposes_microlender_tail():
+    from src.synth.entity_discovery import discover_bcb_institutions
+    table = _FakeTable()
+    rows = [
+        _bcb_row("BANCO NEON S.A.", "30306294", "Banco"),                       # auto-create
+        _bcb_row("FFCRED SOCIEDADE DE CREDITO DIRETO S.A.", "40404041", "Crédito Direto (SCD)"),
+        _bcb_row("RAPIDIUM SCD S.A.", "40404042", "Crédito Direto (SCD)"),
+        _bcb_row("ACME FINANCIAMENTOS S.A.", "40404043", "Financeira (SCFI)"),
+    ]
+    r = discover_bcb_institutions(rows=rows, auto_create=True, table=table)
+    assert r["created"] == ["neon"]                      # bank auto-created
+    assert len(r["proposed"]) == 3                        # SCD/SCFI tail proposed, not created
+    from src.synth import entity_registry
+    assert entity_registry.get_entity("ffcred", table=table) is None   # not in the registry
+
+    # opening the tail (empty propose set) auto-creates them instead
+    table2 = _FakeTable()
+    r2 = discover_bcb_institutions(rows=rows, auto_create=True, table=table2,
+                                   propose_only_classes=frozenset())
+    assert set(r2["created"]) >= {"neon", "ffcred", "rapidium"}
