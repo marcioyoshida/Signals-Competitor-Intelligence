@@ -748,8 +748,18 @@ def list_entity_attributes(table: Any | None = None) -> dict[str, dict[str, Any]
             # ADR 017: the tier-1 conglomerate this entity is a sub-entity of, if any —
             # lets the dashboard fold a parent's lower-industry group in on demand.
             "parent": e.get("parent"),
+            # #14 radar tier: how strong the evidence for this entity is (official
+            # registry > structured filing > CNPJ-only > news-only), from its ADR-018
+            # provenance. A reliability read, not a threat score.
+            "radar": _entity_radar_tier(e),
         }
     return out
+
+
+def _entity_radar_tier(entity: dict[str, Any]) -> dict[str, Any]:
+    """#14 radar score for an entity from its strongest provenance confidence."""
+    from src.ingest import reg_coverage
+    return reg_coverage.entity_radar(entity)
 
 
 def resolve_by_alias(name: str, table: Any | None = None) -> str | None:

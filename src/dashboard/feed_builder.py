@@ -375,6 +375,16 @@ def _is_shallow_card(c: dict[str, Any]) -> bool:
     return True
 
 
+def _regulatory_coverage() -> dict[str, Any]:
+    """#2 CVM/BCB regulated-segment coverage scan (best-effort; {} on failure)."""
+    try:
+        from src.ingest import reg_coverage
+        return reg_coverage.coverage_report()
+    except Exception as exc:  # pragma: no cover - best-effort, never break the feed
+        print(f"Warning: regulatory coverage unavailable: {exc}")
+        return {}
+
+
 def _build_groups(entity_attrs: dict[str, Any] | None) -> dict[str, list[str]]:
     """ADR 017 corporate groups: {parent_id: sorted[child sub-entity ids]} from the
     entities' `parent` links. Only parents that are themselves tracked are kept."""
@@ -571,6 +581,10 @@ def build_feed(
             {"slug": s, "display_name": (m or {}).get("display_name") or s}
             for s, m in sorted((industry_meta or {}).items())
         ],
+        # #2 CVM/BCB coverage scan: which regulated segments we ingest as signals vs.
+        # maintain an entity roster for (registry sync). The gap/signal-only list is the
+        # #14 Official-Registry-Sync roadmap. A durable, measured artifact, not a one-off.
+        "regulatory_coverage": _regulatory_coverage(),
         # ADR #34 Phase 2: topic filter options (only topics present in the feed).
         "topic_options": topic_options(feed_items),
 
@@ -715,6 +729,7 @@ def scope_feed_to_modules(feed: dict[str, Any], modules: Any) -> dict[str, Any]:
             "coverage_gaps": [r for r in (feed.get("coverage_gaps") or []) if row_ok(r)],
             "financials": [r for r in (feed.get("financials") or []) if row_ok(r)],
             "integrity": {"findings": [], "counts": {}, "total": 0},  # operator-only
+            "regulatory_coverage": {},                                # operator-only (#2)
         }
     )
     return out
@@ -826,6 +841,7 @@ def derive_entry_feed(
             "coverage_gaps": [r for r in (feed.get("coverage_gaps") or []) if row_ok(r)],
             "financials": [r for r in (feed.get("financials") or []) if row_ok(r)],
             "integrity": {"findings": [], "counts": {}, "total": 0},  # operator-only
+            "regulatory_coverage": {},                                # operator-only (#2)
         }
     )
     return out

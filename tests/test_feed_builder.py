@@ -519,6 +519,20 @@ def test_instrument_card_keeps_self_declared_industries():
     assert card["industries"] == ["banking", "investment-banking"]
 
 
+def test_regulatory_coverage_scan_present_in_full_feed_but_stripped_when_scoped():
+    # #2: the CVM/BCB coverage scan is an operator artifact — in the full feed, not the
+    # per-tenant or entry slices.
+    narratives = [_narr("n1", "itau", "2026-09-02", 0.6)]
+    feed = feed_builder.build_feed(
+        narratives, industry_map={"itau": ["banking"]},
+        entity_attrs={"itau": {"industries": ["banking"]}})
+    rc = feed.get("regulatory_coverage") or {}
+    assert rc.get("summary", {}).get("segments", 0) >= 10
+    assert rc["summary"]["by_regulator"].get("BCB") and rc["summary"]["by_regulator"].get("CVM")
+    assert not feed_builder.scope_feed_to_modules(feed, ["banking"]).get("regulatory_coverage")
+    assert not feed_builder.derive_entry_feed(feed).get("regulatory_coverage")
+
+
 def test_instrument_cards_dedup_to_latest_but_entity_timelines_keep_all():
     # same instrument id emitted on two dates -> only the latest survives (no stale copy);
     # an entity id across two dates is a timeline -> both kept.
