@@ -439,28 +439,70 @@ _BCB_CLASS_MAP: dict[str, tuple[str, str | None]] = {
 }
 _BCB_COOP_CLASS = "Cooperativa"
 
+# #67 relevance filter — real BCB licensees that are NOT FS competitors a war-room tracks:
+# captive manufacturer/equipment finance arms + wholesale clearing/custody vehicles. These
+# are FILTERED (not created, not proposed) so they can't pollute the `banking` roster.
+_NONCOMPETITOR_TOKENS = frozenset({
+    "deere", "honda", "volvo", "hyundai", "traton", "xcmg", "toyota", "scania",
+    "caterpillar", "komatsu", "iveco", "volkswagen", "renault", "stellantis", "yamaha",
+    "kawasaki", "paccar", "daimler", "nissan", "mitsubishi", "suzuki", "agco", "hino",
+    "kia", "mercedes", "bmw", "ford", "cnh", "fiat", "moneo", "randon",
+})
+_NONCOMPETITOR_PHRASES = (
+    "john deere", "new holland", "cnh industrial", "mercedes benz", "general motors",
+    "national association", "clearing", "de custodia", "custody", "montadora",
+)
+
+
+def _is_noncompetitor(name: str) -> bool:
+    """A captive-finance / wholesale-clearing institution — real license, not a competitor."""
+    low = _strip_accents(str(name or "")).lower()
+    toks = set(re.split(r"[^a-z0-9]+", low))
+    if toks & _NONCOMPETITOR_TOKENS:
+        return True
+    return any(p in low for p in _NONCOMPETITOR_PHRASES)
+
+
+def _interleave_by_class(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Round-robin rows across license classes so a single create budget is shared #68
+    (banks are the first OLINDA resource and used to eat the whole budget)."""
+    from collections import OrderedDict, deque
+
+    buckets: "OrderedDict[str, deque]" = OrderedDict()
+    for r in rows:
+        buckets.setdefault(str(r.get("license_class") or ""), deque()).append(r)
+    out: list[dict[str, Any]] = []
+    while any(buckets.values()):
+        for q in buckets.values():
+            if q:
+                out.append(q.popleft())
+    return out
+
 
 # Leading org words + the legal/type tail that carry no brand — a bank's DISTINCTIVE
 # name is what's left after "BANCO …" is stripped off the front and the license/legal
 # boilerplate off the back. Tokens here CUT the brand span; a bare generic result is
 # rejected (routed to review, not auto-created) so we never mint "banco"/"bank".
 _INST_LEADING = {"banco", "caixa", "cooperativo"}
+# `banco`/`bank` also CUT the span (embedded/trailing "… BANCO", #69: bny-mellon-banco).
 _INST_CUT = {
-    "bank", "sa", "s", "a", "ltda", "epp", "me", "multiplo", "comercial", "investimento",
-    "cctvm", "ctvm", "dtvm", "cvc", "cvmc", "corretora", "distribuidora", "instituicao",
-    "sociedade", "financeira", "financiamento", "credito", "cambio", "national",
-    "international", "brasil", "do", "de", "da", "e", "pagamento", "pagamentos", "ip",
-    "arrendamento", "fomento", "hipotecaria", "scd", "sep", "scfi", "scmepp", "holding",
+    "banco", "bank", "sa", "s", "a", "ltda", "epp", "me", "multiplo", "comercial",
+    "investimento", "cctvm", "ctvm", "dtvm", "cvc", "cvmc", "corretora", "distribuidora",
+    "instituicao", "sociedade", "financeira", "financiamento", "credito", "cambio",
+    "national", "international", "brasil", "do", "de", "da", "e", "pagamento", "pagamentos",
+    "ip", "arrendamento", "fomento", "hipotecaria", "scd", "sep", "scfi", "scmepp", "holding",
 }
-_INST_GARBAGE = {"banco", "bank", "brasil", "caixa", "cooperativo", "social", ""}
-
-
+# A bare single generic token is not a brand — route it to review, never auto-create.
+_INST_GARBAGE = {
+    "banco", "bank", "brasil", "caixa", "cooperativo", "social", "industrial", "comercial",
+    "central", "nacional", "popular", "regional", "credito", "financeira", "",
+}
 def _clean_institution_brand(name: str) -> str | None:
     """A distinctive brand from a BCB institution legal name — accent-free, generic
     prefix/suffix stripped. Returns None for a bare-generic name (→ propose, not create)."""
     toks = [t for t in re.split(r"[^a-z0-9]+", _strip_accents(str(name or "")).lower()) if t]
-    while toks and toks[0] in _INST_LEADING:
-        toks = toks[1:]
+    while toks and (toks[0] in _INST_LEADING or len(toks[0]) == 1):
+        toks = toks[1:]                       # drop leading org words + initials ("J SAFRA")
     brand: list[str] = []
     for t in toks:
         if t in _INST_CUT:
@@ -531,9 +573,15 @@ def discover_bcb_institutions(
         return lc in _BCB_CLASS_MAP or (include_coops and lc == _BCB_COOP_CLASS)
 
     rows = [r for r in rows if _relevant(r)]
+    # #67: drop captive-finance / wholesale-clearing licensees BEFORE the budget loop, so
+    # they neither create nor consume a slot. #68: round-robin the rest across classes so
+    # the create budget is shared (banks no longer eat it all).
+    filtered = [r for r in rows if _is_noncompetitor(r.get("name"))]
+    rows = _interleave_by_class([r for r in rows if not _is_noncompetitor(r.get("name"))])
     report: dict[str, Any] = {
         "fetched": len(rows), "created": [], "enriched": [], "already": 0,
         "proposed": [], "skipped": [], "errors": [],
+        "filtered": [str(r.get("name") or "")[:60] for r in filtered],
     }
     if not rows:
         return report

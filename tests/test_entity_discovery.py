@@ -519,3 +519,46 @@ def test_bcb_foreign_name_collision_is_proposed_not_merged():
     rows = [_bcb_row("ACME S.A.", "70707070", "Banco")]
     r = discover_bcb_institutions(rows=rows, auto_create=True, table=table)
     assert r["created"] == [] and len(r["proposed"]) == 1
+
+
+# --- #67/#68/#69 discover_bcb_institutions quality fixes ------------------------
+def test_bcb_noncompetitor_captive_banks_are_filtered_not_created():
+    from src.synth.entity_discovery import discover_bcb_institutions
+    table = _FakeTable()
+    rows = [
+        _bcb_row("BANCO JOHN DEERE S.A.", "91884981", "Banco"),
+        _bcb_row("BANCO HONDA S.A.", "03634220", "Banco"),
+        _bcb_row("ABN AMRO CLEARING S.A.", "05612884", "Banco"),
+        _bcb_row("BANCO NEON S.A.", "30306294", "Banco"),          # a real competitor
+    ]
+    r = discover_bcb_institutions(rows=rows, auto_create=True, table=table)
+    assert r["created"] == ["neon"]                # only the competitor is created
+    assert len(r["filtered"]) == 3                 # deere/honda/clearing filtered out
+    assert "banco-john-deere" not in "".join(r["created"])
+
+
+def test_bcb_create_budget_is_shared_across_classes():
+    from src.synth.entity_discovery import discover_bcb_institutions
+    table = _FakeTable()
+    # 3 banks then 3 payment institutions; a budget of 2 must not be eaten by banks alone
+    rows = [
+        _bcb_row("BANCO ALFA S.A.", "10000001", "Banco"),
+        _bcb_row("BANCO BETA S.A.", "10000002", "Banco"),
+        _bcb_row("BANCO GAMA S.A.", "10000003", "Banco"),
+        _bcb_row("DELTA INSTITUICAO DE PAGAMENTO S.A.", "10000004", "Instituição de Pagamento"),
+        _bcb_row("EPSILON INSTITUICAO DE PAGAMENTO S.A.", "10000005", "Instituição de Pagamento"),
+        _bcb_row("ZETA INSTITUICAO DE PAGAMENTO S.A.", "10000006", "Instituição de Pagamento"),
+    ]
+    r = discover_bcb_institutions(rows=rows, auto_create=True, max_new=2, table=table)
+    from src.synth import entity_registry
+    inds = {i for cid in r["created"]
+            for i in (entity_registry.get_entity(cid, table=table)["industries"])}
+    assert inds == {"banking", "fintech"}          # one of each class, not two banks
+
+
+def test_bcb_brand_cleaner_fixes():
+    from src.synth.entity_discovery import _clean_institution_brand as clean
+    assert clean("BANCO J. SAFRA S.A.") == "safra"           # leading initial dropped
+    assert clean("BNY MELLON BANCO S.A.") == "bny mellon"    # embedded 'banco' stripped
+    assert clean("BANCO INDUSTRIAL DO BRASIL S.A.") is None  # generic -> propose, not create
+    assert clean("BANCO NEON S.A.") == "neon"
