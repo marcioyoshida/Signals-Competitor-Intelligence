@@ -1384,6 +1384,12 @@ NEWS_TERM_OVERRIDES: dict[str, str] = {
     # headlines (0 results); bare "Caixa" is the common word (cashbox) and is
     # dropped in free-text. "Caixa Econômica" is the phrase the press actually uses.
     "caixa": "Caixa Econômica",
+    # EFPCs + securitizadoras: disambiguated queries (bare PREVI/VALIA/CERC are common
+    # words → the query adds context so the press coverage is the right subject).
+    "previ": "Previ previdência", "petros": "Fundação Petros", "funcef": "Funcef Caixa",
+    "valia": "Valia previdência", "opea_sec": "Opea Securitizadora",
+    "true_sec": "True Securitizadora", "virgo_sec": "Virgo Securitizadora",
+    "cerc": "CERC recebíveis",
 }
 
 

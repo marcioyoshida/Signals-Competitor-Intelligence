@@ -322,7 +322,9 @@ def line_of_business_cross_refs(item: dict[str, Any], found: list[str]) -> list[
 # token barely costs recall. (Nomad's only alias is the bare word — it is the one
 # entity that loses free-text recall; add a distinctive alias if that matters.)
 AMBIGUOUS_TOKENS: frozenset[str] = frozenset(
-    {"STONE", "NEON", "NOMAD", "NU", "BB", "CAIXA", "XP"}
+    # PREVI/VALIA (verb forms of prever/valer), CERC (short), TRUE (English) are common
+    # words — untrustworthy as a bare token in free-text (NEWS/DOU) without more context.
+    {"STONE", "NEON", "NOMAD", "NU", "BB", "CAIXA", "XP", "PREVI", "VALIA", "CERC", "TRUE"}
 )
 
 # Sources whose entity mentions are FREE TEXT (headlines), where a bare ambiguous
