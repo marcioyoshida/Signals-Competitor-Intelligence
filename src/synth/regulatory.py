@@ -116,6 +116,9 @@ _DOMAINS = [
     ("Crédito & portabilidade", [r"\bcredito\b", r"emprestimo", r"portabilidade", r"consignad"]),
     ("Câmbio & mercado aberto", [r"\bcambio\b", r"\bswap\b", r"compromissad", r"oferta publica", r"\bofpub\b", r"leilao"]),
     ("Open Finance", [r"open finance", r"open banking", r"compartilhamento de dados"]),
+    # #71 — insurance/pension rules classify precisely instead of the catch-all.
+    ("Seguros & previdência", [r"\bseguro", r"seguradora", r"resseguro", r"previdenc",
+                               r"capitalizac", r"\bsusep\b"]),
     ("Autorizações & governança", [r"orgaos estatutarios", r"autorizada a funcionar", r"cancelamento da autorizacao", r"eleit"]),
 ]
 _DOMAIN_PATS = [(label, [re.compile(p) for p in pats]) for label, pats in _DOMAINS]
@@ -403,6 +406,7 @@ _DOMAIN_INDUSTRIES = {
     "Crédito & portabilidade": ["banking", "fintech", "consorcio"],
     "Câmbio & mercado aberto": ["banking", "investment-banking"],
     "Open Finance": ["banking", "fintech", "acquiring"],
+    "Seguros & previdência": ["insurance"],                                        # #71
     "Autorizações & governança": ["banking", "fintech", "insurance", "investment-banking", "consorcio"],
     "Setor financeiro": ["banking", "fintech", "insurance"],
 }
@@ -414,7 +418,26 @@ _INDUSTRY_PT = {
 
 
 def _industries_for(domain: str) -> list[str]:
+    """The PRECISE affected cohort for DISPLAY (narrative + chips) — the domain's mapped
+    verticals; unknown → the core FS set."""
     return list(_DOMAIN_INDUSTRIES.get(domain) or _DOMAIN_INDUSTRIES["Setor financeiro"])
+
+
+def industries_for_domain(domain: str, universe: Any = None) -> list[str]:
+    """SCOPING industries for an entity-less regulatory card (#70). A specific domain scopes
+    to its mapped verticals; the catch-all `Setor financeiro` / an unknown domain scopes to
+    the WHOLE licensed universe — recall-first, so a sector-wide rule never vanishes from any
+    tenant's Radar Regulatório. Intersected with the live universe so a stale map can't invent
+    a slug. Scopes VISIBILITY only; the displayed cohort stays `affected_industries` (precise).
+    """
+    uni = None if universe is None else [str(u).strip().lower() for u in universe if u]
+    mapped = _DOMAIN_INDUSTRIES.get(domain)
+    if mapped is None or domain == "Setor financeiro":         # catch-all / unknown → all
+        return list(uni) if uni else list(_DOMAIN_INDUSTRIES["Setor financeiro"])
+    if uni is not None:
+        keep = set(uni)
+        return [i for i in mapped if i in keep]
+    return list(mapped)
 
 
 def _instrument_number(instrument_key: str) -> str | None:
@@ -537,6 +560,8 @@ def build_narrative(cand: dict[str, Any], *, change_record: dict[str, Any] | Non
         "instrument_label": label,
         "domain": domain,
         "industries": industries,
+        # #70: precise cohort for DISPLAY (chips); `industries` is overridden recall-first at feed-build for scoping.
+        "affected_industries": industries,
         "changes": changes,
         "n_changes": len(changes),
         # ADR 009 §3: the LLM change-record (rated), when drafted (radar cards too).
@@ -693,6 +718,8 @@ def build_lifecycle_card(lc: dict[str, Any]) -> dict[str, Any]:
         "instrument_label": lc["label"],
         "domain": lc["domain"],
         "industries": industries,
+        # #70: precise cohort for DISPLAY (chips); `industries` is overridden recall-first at feed-build for scoping.
+        "affected_industries": industries,
         "changes": changes,
         "n_changes": len(changes),
         # ADR 009 §3: the LLM change-record (rated impact/blast/difficulty), when drafted.

@@ -238,7 +238,9 @@
           `<li>${esc(ch.verb || "")} ${esc((ch.targets || []).map((t) => t.label).join(" e "))}` +
           `${(ch.articles || []).length ? ` <span class="cvsub">(${esc((ch.articles || []).join("; "))})</span>` : ""}</li>`).join("")}</ul>`
       : "";
-    const inds = c.industries || (rec && rec.affected_industries) || [];
+    // Show the PRECISE affected cohort (#70) — `industries` is recall-first for scoping.
+    const inds = (c.affected_industries && c.affected_industries.length ? c.affected_industries
+      : (rec && rec.affected_industries)) || c.industries || [];
     const chips = inds.length
       ? `<div class="chiprow">${inds.map((s) => `<span class="chip">${esc(indLabel(s))}</span>`).join("")}</div>` : "";
     let rated = "";

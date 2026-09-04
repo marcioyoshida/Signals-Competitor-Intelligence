@@ -343,6 +343,10 @@ def _project_item(n: dict[str, Any]) -> dict[str, Any]:
         # Entity-bearing cards get this overwritten by the ADR-017 denorm below; subject
         # cards with no entities keep their own affected cohort.
         "industries": n.get("industries") or [],
+        # ADR 009 / #70: the affected DOMAIN drives recall-first SCOPING for entity-less reg
+        # cards; `affected_industries` is the PRECISE cohort kept for display (chips).
+        "domain": n.get("domain"),
+        "affected_industries": n.get("affected_industries") or [],
         "lenses": n.get("lenses") or [],
         # ADR #34 Phase 2: coarse topic rollup (from lenses+axis) for the dashboard
         # topic filter + agent grounding boost. Derived here so no synth/backfill.
@@ -509,6 +513,12 @@ def build_feed(
         if (s := _source_of(c))
     }
 
+    # The licensed vertical universe — the recall-first target for a sector-wide reg card
+    # (#70). A tenant can license ANY canonical module (even before an entity exists for it),
+    # so scope to the canonical taxonomy (+ any live extras), not just industries in play.
+    from src.ingest.reg_coverage import INDUSTRY_SLUGS as _CANON_INDUSTRIES
+    _reg_universe = sorted(set(_CANON_INDUSTRIES) | set(industry_meta or {}))
+
     # ADR 017: denormalize each card's industries (union of its entities' registry
     # industries) onto the card, so the Entry fork, the per-tenant read boundary, and
     # the dashboard toggles all scope by the CARD — exact once a conglomerate's lines
@@ -520,9 +530,15 @@ def build_feed(
                 s.update(imap.get(e, []))
         if s:
             return sorted(s)
-        # No entity to denormalize from — preserve a card's SELF-declared industries
-        # (regulatory instrument cards carry their affected cohort, #51 nexus), so the
-        # denorm doesn't wipe a subject card off every industry tab.
+        # No entity to denormalize from. A regulatory card scopes by its affected DOMAIN,
+        # RECALL-FIRST (#70): a sector-wide rule (catch-all `Setor financeiro` / unknown
+        # domain) reaches EVERY licensed tenant, so no tenant's Radar Regulatório is empty;
+        # a specific domain scopes to its verticals. Intersected with the live universe.
+        dom = c.get("domain")
+        if dom:
+            from src.synth import regulatory
+            return regulatory.industries_for_domain(dom, universe=_reg_universe)
+        # else preserve a subject card's self-declared industries (#51 nexus).
         return sorted({str(i).strip().lower() for i in (c.get("industries") or []) if i})
 
     for c in items + thread_items:

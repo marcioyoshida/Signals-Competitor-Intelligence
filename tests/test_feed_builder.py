@@ -497,6 +497,29 @@ def test_thread_kept_when_latest_dev_not_in_feed():
     assert "threaded-bradesco--restructuring" in [x["id"] for x in feed["feed"]]
 
 
+def test_regulatory_card_reaches_every_tenant_recall_first():
+    # #70: a sector-wide reg card (catch-all domain) must reach EVERY tenant's read boundary
+    # (no empty Radar Regulatório); a specific-domain card scopes precisely; chips stay precise.
+    def reg(i, domain, inds):
+        return {"id": i, "kind": "regulatory_lifecycle", "axis": "regulatory",
+                "subject_type": "instrument", "entity": None, "entities": [], "domain": domain,
+                "industries": inds, "affected_industries": inds, "run_date": "2026-09-04",
+                "as_of": "2026-09-04", "lenses": ["regulatory"], "narrative": "x",
+                "citations": [{"url": "https://in.gov.br/x"}]}
+    cards = [reg("wide", "Setor financeiro", ["banking", "fintech", "insurance"]),
+             reg("fx", "Câmbio & mercado aberto", ["banking", "investment-banking"])]
+    imap = {"itau": ["banking"], "wm": ["wealth-management"]}
+    feed = feed_builder.build_feed(
+        [], thread_cards=cards, industry_map=imap,
+        entity_attrs={k: {"industries": v} for k, v in imap.items()})
+    byid = {c["id"]: c for c in feed["feed"]}
+    assert len(byid["wide"]["industries"]) >= 12          # recall-first (whole universe)
+    assert byid["wide"]["affected_industries"] == ["banking", "fintech", "insurance"]  # precise
+    assert byid["fx"]["industries"] == ["banking", "investment-banking"]  # specific stays precise
+    wm = {c["id"] for c in feed_builder.scope_feed_to_modules(feed, ["wealth-management"])["feed"]}
+    assert "wide" in wm and "fx" not in wm                # sector-wide reaches wealth; câmbio doesn't
+
+
 def test_instrument_card_keeps_self_declared_industries():
     # #51 nexus: a regulatory instrument card (no entity) carries its affected cohort;
     # the ADR-017 entity-denorm must NOT wipe it off every industry tab.

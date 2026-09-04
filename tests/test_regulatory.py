@@ -41,6 +41,23 @@ def test_instruments_in_extracts_and_excludes_comunicados():
     assert "comunicado-45785" in refs2
 
 
+def test_industries_for_domain_is_recall_first_for_sector_wide():
+    uni = ["banking", "fintech", "insurance", "wealth-management", "crypto", "investment-banking"]
+    # catch-all / unknown -> the WHOLE universe (#70: no empty Radar Regulatório)
+    assert set(regulatory.industries_for_domain("Setor financeiro", uni)) == set(uni)
+    assert set(regulatory.industries_for_domain("Domínio Desconhecido", uni)) == set(uni)
+    # a specific domain scopes precisely, intersected with the live universe
+    assert regulatory.industries_for_domain("Câmbio & mercado aberto", uni) == ["banking", "investment-banking"]
+    assert regulatory.industries_for_domain("Seguros & previdência", uni) == ["insurance"]  # #71
+    # display cohort stays precise (never the whole universe)
+    assert regulatory._industries_for("Setor financeiro") == ["banking", "fintech", "insurance"]
+
+
+def test_insurance_domain_classifies_susep_and_seguro():
+    assert regulatory._domain_of("Circular SUSEP sobre resseguro e previdência") == "Seguros & previdência"
+    assert regulatory._domain_of("nova regra para seguradoras") == "Seguros & previdência"
+
+
 def test_instrument_number_not_truncated_when_undotted():
     # _NUM must take the whole digit run: an undotted 5304 threads as res-cmn-5304,
     # not the truncated res-cmn-530 (news text omits the pt-BR thousands dot).
