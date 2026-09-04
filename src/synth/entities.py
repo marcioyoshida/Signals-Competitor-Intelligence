@@ -44,6 +44,14 @@ ENTITY_ALIASES: dict[str, list[str]] = {
     "virgo_sec": ["VIRGO SECURITIZADORA", "ISEC SECURITIZADORA"],
     # Receivables registradora (credit registration infrastructure).
     "cerc": ["CERC", "CENTRAL DE RECEBIVEIS"],
+    # Major insurers (SUSEP/CNSP-regulated) — distinctive brand phrases.
+    "bradesco_seguros": ["BRADESCO SEGUROS", "BRADESCO SAUDE", "BRADESCO VIDA E PREVIDENCIA"],
+    "sulamerica": ["SULAMERICA", "SUL AMERICA", "SUL AMÉRICA"],
+    "caixa_seguradora": ["CAIXA SEGURADORA", "CAIXA VIDA E PREVIDENCIA", "CAIXA SEGUROS"],
+    "mapfre": ["MAPFRE"],
+    "tokio_marine": ["TOKIO MARINE"],
+    "zurich_seguros": ["ZURICH SEGUROS", "ZURICH MINAS BRASIL", "ZURICH SANTANDER"],
+    "allianz_seguros": ["ALLIANZ"],
 }
 
 # Curated entity -> industry module(s) (ADR 002 Phase B). Entities can span
@@ -67,6 +75,10 @@ ENTITY_INDUSTRIES: dict[str, list[str]] = {
     # Securitization & credit.
     "opea_sec": ["securitization"], "true_sec": ["securitization"], "virgo_sec": ["securitization"],
     "cerc": ["securitization", "financial-data-analytics"],
+    # Insurers (#71).
+    "bradesco_seguros": ["insurance"], "sulamerica": ["insurance"],
+    "caixa_seguradora": ["insurance"], "mapfre": ["insurance"], "tokio_marine": ["insurance"],
+    "zurich_seguros": ["insurance"], "allianz_seguros": ["insurance"],
 }
 
 

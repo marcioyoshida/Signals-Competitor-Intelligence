@@ -58,7 +58,7 @@ def test_origin_secret_enforced(monkeypatch):
 def test_list_and_get_entities(monkeypatch):
     _setup(monkeypatch)
     code, body = _call(monkeypatch, "GET", "/api/registry/entities")
-    assert code == 200 and body["count"] == 28
+    assert code == 200 and body["count"] == 35
     code, body = _call(monkeypatch, "GET", "/api/registry/entities/c6")
     assert code == 200 and body["entity"]["display_name"] == "C6 Bank"
     code, body = _call(monkeypatch, "GET", "/api/registry/entities/ghost")

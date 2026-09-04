@@ -58,6 +58,17 @@ def test_insurance_domain_classifies_susep_and_seguro():
     assert regulatory._domain_of("nova regra para seguradoras") == "Seguros & previdência"
 
 
+def test_susep_cnsp_instruments_thread_like_bcb():
+    # #71: insurance normativos (fetched via the DOU organ filter) must thread into the
+    # reg axis — Resolução CNSP + Circular SUSEP recognized alongside BCB/CMN/CVM.
+    assert regulatory.instruments_in(_card("Resolução CNSP 447 sobre corretores de seguros")) == {"res-cnsp-447": "Resolução CNSP 447"}
+    assert regulatory.instruments_in(_card("Circular SUSEP 603 altera o capital mínimo")) == {"circ-susep-603": "Circular SUSEP 603"}
+    # BCB circular still parses (no regression from the SUSEP pattern)
+    assert "circ-4111" in regulatory.instruments_in(_card("Circular BCB 4111 sobre PIX"))
+    # scopes to insurance via the Seguros domain
+    assert regulatory._domain_of("Resolução CNSP 447 seguros") == "Seguros & previdência"
+
+
 def test_securitization_and_closed_pension_domains():
     # securitization classifies before generic "crédito"; EFPC splits from open pension
     assert regulatory._domain_of("securitização de recebíveis via FIDC") == "Securitização & crédito"

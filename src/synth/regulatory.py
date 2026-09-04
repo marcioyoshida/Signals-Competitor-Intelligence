@@ -85,6 +85,11 @@ _INSTRUMENTS = [
     ("res-bcb", "Resolução BCB {n}", re.compile(r"resolucao\s+bcb\s*(?:n[o]?\s*)?[:\s]*" + _NUM)),
     ("res-cmn", "Resolução CMN {n}", re.compile(r"resolucao\s+cmn\s*(?:n[o]?\s*)?[:\s]*" + _NUM)),
     ("res-cvm", "Resolução CVM {n}", re.compile(r"resolucao\s+cvm\s*(?:n[o]?\s*)?[:\s]*" + _NUM)),
+    # #71 — insurance regulator: CNSP resolutions + SUSEP circulars thread like BCB acts,
+    # so insurance normativos (already fetched via the DOU organ filter) get the full
+    # reg-lifecycle + change-record + "Mudança regulatória" treatment.
+    ("res-cnsp", "Resolução CNSP {n}", re.compile(r"resolucao\s+cnsp\s*(?:n[o]?\s*)?[:\s]*" + _NUM)),
+    ("circ-susep", "Circular SUSEP {n}", re.compile(r"circular\s+susep\s*(?:n[o]?\s*)?[:\s]*" + _NUM)),
     ("circ", "Circular BCB {n}", re.compile(r"circular\s+(?:bcb\s+)?" + _NUM)),
 ]
 _PIX_REGULAMENTO = re.compile(r"(manual de padroes[^.]{0,40}pix|regulamento do pix)")
