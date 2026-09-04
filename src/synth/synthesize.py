@@ -66,6 +66,10 @@ def _strip_dangling_opener(text: str) -> str:
     return s
 
 ENTITY_LABELS = {
+    "previ": "Previ (BB)", "petros": "Petros (Petrobras)", "funcef": "Funcef (Caixa)",
+    "valia": "Valia (Vale)",
+    "opea": "Opea Securitizadora", "true_sec": "True Securitizadora",
+    "virgo_sec": "Virgo Securitizadora", "cerc": "CERC",
     "nubank": "Nubank / Nu Holdings",
     "stone": "Stone / StoneCo",
     "pagseguro": "PagSeguro / PagBank",

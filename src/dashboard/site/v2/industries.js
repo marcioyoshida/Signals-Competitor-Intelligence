@@ -167,6 +167,28 @@
         [L("comparar", "Comparar", "ameaça × momentum", { opts: { limit: 12 } }),
          L("swot", "SWOT", "teses vetadas")]],
     },
+    "closed-pension": {
+      label: "Previdência Fechada", title: "Previdência fechada — EFPCs e alocação",
+      lede: "O regulatório (PREVIC, via DOU) lidera; Comparar posiciona as EFPCs; a alocação " +
+        "em fundos e o risco ancoram.",
+      ask: ["Que atos da PREVIC saíram na janela?", "Como se posicionam as maiores EFPCs?",
+        "Alguma mudança em previdência complementar?"],
+      leads: [L("regulatorio", "PREVIC · DOU", "atos de previdência complementar"),
+        [L("comparar", "Comparar EFPCs", "ameaça × momentum", { opts: { limit: 12 } }),
+         L("risco", "Risco", "estresse e reclamações", { scroll: true })]],
+      fold: [L("fundos", "Fundos e alocação", "secundário"), L("swot", "SWOT", "teses vetadas")],
+    },
+    securitization: {
+      label: "Securitização & Crédito", title: "Securitização & crédito — originação e recebíveis",
+      lede: "Fundos (FIDC) e ofertas (CRI/CRA) lideram; Comparar posiciona securitizadoras e " +
+        "originadores; o risco lê a solvência do originador.",
+      ask: ["Quais FIDCs/CRIs foram registrados na janela?", "Como se posicionam as securitizadoras?",
+        "Algum originador de crédito em estresse?"],
+      leads: [L("fundos", "FIDC · CRI · CRA", "registros e ofertas"),
+        [L("comparar", "Comparar", "securitizadoras e originadores", { opts: { limit: 12 } }),
+         L("risco", "Risco do originador", "estresse + reclamações", { scroll: true })]],
+      fold: [L("regulatorio", "Regulatório", "CVM/BCB · registradoras"), L("swot", "SWOT", "teses vetadas")],
+    },
   };
 
   // Generic fallback for any industry without a bespoke design (never blank).

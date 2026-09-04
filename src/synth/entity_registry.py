@@ -1261,6 +1261,11 @@ INDUSTRIES: dict[str, dict[str, str]] = {
     "real-estate-funds": {"display_name": "Fundos Imobiliários (FIIs)", "tier": "mid"},
     "agri-funds": {"display_name": "Fundos do Agro (FIAGRO)", "tier": "mid"},
     "acquiring": {"display_name": "Adquirência (Maquininhas)", "tier": "mid"},
+    # Closed pension funds (EFPCs) — PREVIC-regulated (like insurance is SUSEP-regulated).
+    "closed-pension": {"display_name": "Previdência Fechada (EFPCs)", "tier": "premium"},
+    # Securitization & credit — securitizadoras, FIDC/CRI/CRA, receivables registradoras,
+    # credit originators (SCDs, retailers/embedded finance). CVM + BCB regulated.
+    "securitization": {"display_name": "Securitização & Crédito", "tier": "premium"},
 }
 _PARENT_SECTOR = "financial-services"
 

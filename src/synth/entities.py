@@ -33,6 +33,17 @@ ENTITY_ALIASES: dict[str, list[str]] = {
     "infinitepay": ["INFINITEPAY", "INFINITE PAY", "CLOUDWALK", "CLOUD WALK"],
     # Nomad has no BCB footprint (US-facing) — matches via CVM/news only.
     "nomad": ["NOMAD"],
+    # Closed pension funds (EFPCs) — PREVIC-regulated; the largest, unambiguous ones.
+    "previ": ["PREVI", "CAIXA DE PREVIDENCIA DOS FUNCIONARIOS DO BANCO DO BRASIL"],
+    "petros": ["PETROS", "FUNDACAO PETROBRAS DE SEGURIDADE SOCIAL"],
+    "funcef": ["FUNCEF", "FUNDACAO DOS ECONOMIARIOS FEDERAIS"],
+    "valia": ["VALIA", "FUNDACAO VALE DO RIO DOCE DE SEGURIDADE SOCIAL"],
+    # Securitizadoras (CRI/CRA) — distinctive legal names to avoid brand collisions.
+    "opea": ["OPEA SECURITIZADORA", "GAIA SECURITIZADORA", "OPEA"],
+    "true_sec": ["TRUE SECURITIZADORA"],
+    "virgo_sec": ["VIRGO SECURITIZADORA", "ISEC SECURITIZADORA"],
+    # Receivables registradora (credit registration infrastructure).
+    "cerc": ["CERC", "CENTRAL DE RECEBIVEIS"],
 }
 
 # Curated entity -> industry module(s) (ADR 002 Phase B). Entities can span
@@ -48,6 +59,14 @@ ENTITY_INDUSTRIES: dict[str, list[str]] = {
     "stone": ["fintech"], "pagseguro": ["fintech"], "mercado_pago": ["fintech"],
     "picpay": ["fintech"], "neon": ["fintech"], "creditas": ["fintech"],
     "recargapay": ["fintech"], "infinitepay": ["fintech"], "nomad": ["fintech"],
+    # Closed pension funds (EFPCs) — institutional; major asset allocators.
+    "previ": ["closed-pension", "asset-management"],
+    "petros": ["closed-pension", "asset-management"],
+    "funcef": ["closed-pension", "asset-management"],
+    "valia": ["closed-pension", "asset-management"],
+    # Securitization & credit.
+    "opea": ["securitization"], "true_sec": ["securitization"], "virgo_sec": ["securitization"],
+    "cerc": ["securitization", "financial-data-analytics"],
 }
 
 

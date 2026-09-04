@@ -58,6 +58,18 @@ def test_insurance_domain_classifies_susep_and_seguro():
     assert regulatory._domain_of("nova regra para seguradoras") == "Seguros & previdência"
 
 
+def test_securitization_and_closed_pension_domains():
+    # securitization classifies before generic "crédito"; EFPC splits from open pension
+    assert regulatory._domain_of("securitização de recebíveis via FIDC") == "Securitização & crédito"
+    assert regulatory._domain_of("registradora de recebíveis") == "Securitização & crédito"
+    assert regulatory._domain_of("crédito consignado portabilidade") == "Crédito & portabilidade"
+    assert regulatory._domain_of("PREVIC — entidades fechadas de previdência complementar") == "Previdência complementar"
+    assert regulatory._domain_of("SUSEP previdência aberta") == "Seguros & previdência"
+    # scoping maps to the new slugs; recall-first catch-all includes them
+    assert "securitization" in regulatory.industries_for_domain("Securitização & crédito")
+    assert regulatory._industries_for("Previdência complementar") == ["closed-pension", "asset-management"]
+
+
 def test_instrument_number_not_truncated_when_undotted():
     # _NUM must take the whole digit run: an undotted 5304 threads as res-cmn-5304,
     # not the truncated res-cmn-530 (news text omits the pt-BR thousands dot).

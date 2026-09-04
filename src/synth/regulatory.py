@@ -113,9 +113,17 @@ _DATE_TXT = re.compile(r"(\d{1,2})\s+de\s+(" + "|".join(_MONTHS) + r")\s+de\s+(\
 # Affected-domain taxonomy (accent-free keyword -> domain label).
 _DOMAINS = [
     ("Pagamentos / PIX", [r"\bpix\b", r"iniciacao do pix", r"regulamento do pix", r"arranjo de pagament"]),
+    # Before the generic "Crédito" so securitização/recebíveis classify precisely.
+    ("Securitização & crédito", [r"securitiz", r"\bfidc\b", r"\bcri\b", r"\bcra\b",
+                                 r"recebiveis", r"registradora", r"direitos credit",
+                                 r"cedula de credito"]),
     ("Crédito & portabilidade", [r"\bcredito\b", r"emprestimo", r"portabilidade", r"consignad"]),
     ("Câmbio & mercado aberto", [r"\bcambio\b", r"\bswap\b", r"compromissad", r"oferta publica", r"\bofpub\b", r"leilao"]),
     ("Open Finance", [r"open finance", r"open banking", r"compartilhamento de dados"]),
+    # Before "Seguros & previdência" so CLOSED pension (EFPC/PREVIC) splits from open
+    # (previdência aberta = SUSEP/insurance).
+    ("Previdência complementar", [r"previdencia complementar", r"\befpc\b", r"\bprevic\b",
+                                  r"entidade[s]? fechada", r"fundo de pensao", r"fundos de pensao"]),
     # #71 — insurance/pension rules classify precisely instead of the catch-all.
     ("Seguros & previdência", [r"\bseguro", r"seguradora", r"resseguro", r"previdenc",
                                r"capitalizac", r"\bsusep\b"]),
@@ -406,6 +414,8 @@ _DOMAIN_INDUSTRIES = {
     "Crédito & portabilidade": ["banking", "fintech", "consorcio"],
     "Câmbio & mercado aberto": ["banking", "investment-banking"],
     "Open Finance": ["banking", "fintech", "acquiring"],
+    "Securitização & crédito": ["securitization", "fintech", "banking", "real-estate-funds"],
+    "Previdência complementar": ["closed-pension", "asset-management"],
     "Seguros & previdência": ["insurance"],                                        # #71
     "Autorizações & governança": ["banking", "fintech", "insurance", "investment-banking", "consorcio"],
     "Setor financeiro": ["banking", "fintech", "insurance"],
