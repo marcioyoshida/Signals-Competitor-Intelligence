@@ -85,6 +85,27 @@
     </div>
   </section>
 
+  <!-- ===================== Descoberta & Cobertura (#14) ===================== -->
+  <!-- The discovery/coverage asset made legible: which CVM/BCB regulated segments we
+       roster-sync vs. only see as signals vs. don't cover (feed.regulatory_coverage),
+       and the base's provenance strength by radar tier (entity_attrs.radar). -->
+  <section class="band">
+    <div class="band-hd"><span class="overline">Descoberta &amp; Cobertura</span><span class="rule"></span>
+      <span class="badge badge--ghost">CVM/BCB · radar da base</span></div>
+    <div class="grid lead-3" style="grid-template-columns:1fr 1fr">
+      <div class="panel">
+        <div class="panel__hd"><h2>Cobertura CVM/BCB</h2><span class="count" id="segCount">0</span>
+          <span class="spacer"></span><span class="hd-note">segmentos regulados · roster / sinal / lacuna</span></div>
+        <div class="panel__bd" id="segCoverage"></div>
+      </div>
+      <div class="panel">
+        <div class="panel__hd"><h2>Radar da base</h2><span class="count" id="radarCount">0</span>
+          <span class="spacer"></span><span class="hd-note">força de proveniência por entidade</span></div>
+        <div class="panel__bd" id="radarRoll"></div>
+      </div>
+    </div>
+  </section>
+
   <!-- ===================== Perguntar à Onça (operator utility) ======== -->
   <!-- Secondary to the decision panels above: the operator's grounded Q&A over
        the FULL feed (no tenant scoping — modules=None server-side). Its own
@@ -174,9 +195,54 @@ function render() {
   renderGaps();
   renderIntegrity();
   renderCoverage();
+  renderDescoberta();
   renderKpis();
   renderMapa();
   renderExceptions();
+}
+
+// #14 — the discovery/coverage asset: CVM/BCB regulated-segment coverage (roster-synced
+// vs. signal-only vs. gap) + the base's radar-tier provenance rollup. Read-only, from the
+// data build_feed already publishes (regulatory_coverage + entity_attrs.radar).
+function renderDescoberta() {
+  const rc = DATA.regulatory_coverage || {};
+  const seg = document.getElementById("segCoverage");
+  if (seg) {
+    const groups = [
+      ["entity_covered", "Roster sincronizado", "low"],
+      ["signal_only", "Só sinais", "med"],
+      ["gap", "Lacuna", "crit"],
+    ];
+    document.getElementById("segCount").textContent = (rc.summary || {}).segments || 0;
+    const rows = (rc.summary ? groups : []).map(([k, label, cls]) => {
+      const items = rc[k] || [];
+      const names = items.map((x) => U.esc(x.label || x.key)).join(" · ") || "—";
+      return `<div class="covrow" style="grid-template-columns:160px 1fr 48px">
+        <div class="cvname"><span class="badge badge--${cls}">${U.esc(label)}</span></div>
+        <div class="cvsub">${names}</div>
+        <div class="cvflag num">${items.length}</div></div>`;
+    }).join("");
+    seg.innerHTML = rows || U.empty("Sem cobertura", "feed.regulatory_coverage ausente.", "○");
+  }
+  const rr = document.getElementById("radarRoll");
+  if (rr) {
+    const tiers = {};
+    Object.values(DATA.entity_attrs || {}).forEach((a) => {
+      const t = (a.radar || {}).tier || "unknown"; tiers[t] = (tiers[t] || 0) + 1;
+    });
+    const order = [["official", "oficial", "crit"], ["registry", "registro", "high"],
+      ["identified", "identificado", "med"], ["news", "notícia", "low"], ["unknown", "—", "low"]];
+    const total = Object.values(tiers).reduce((a, b) => a + b, 0) || 1;
+    document.getElementById("radarCount").textContent = total;
+    rr.innerHTML = order.filter(([k]) => tiers[k]).map(([k, label, cls]) => {
+      const n = tiers[k], pct = Math.round((n / total) * 100);
+      return `<div class="covrow" style="grid-template-columns:120px 1fr 48px">
+        <div class="cvname"><span class="badge badge--${cls}">${U.esc(label)}</span></div>
+        <div class="cvspark"><div style="height:8px;border-radius:999px;background:var(--surface-3);overflow:hidden">
+          <span style="display:block;height:100%;width:${pct}%;background:var(--t-${cls})"></span></div></div>
+        <div class="cvflag num">${n}</div></div>`;
+    }).join("") || U.empty("Sem radar", "entity_attrs sem radar.", "○");
+  }
 }
 
 /* ======================= LEAD 1 — Action queue ======================= */
