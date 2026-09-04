@@ -1524,6 +1524,47 @@ class OncaPrototypeStack(Stack):
                 )
             ],
         )
+        # Write-capable Agent API (ADR 020, Phase 1): POST /api/act — a typed, allow-
+        # listed, audited action catalog over the safe mutation primitives (trigger a
+        # run, resolve a proposal, roll a field back, propose a registry change). Same
+        # auth model (basic-auth edge + origin secret); registered BEFORE the /api/*
+        # catch-all (insertion order). Pipeline env (ONCA_PIPELINE_ARN /
+        # ONCA_SCHEDULER_ROLE_ARN) is attached after the state machine, below.
+        act_fn = lambda_.Function(
+            self,
+            "OncaActApi",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.dashboard.act_api.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.seconds(30),
+            memory_size=256,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_ORIGIN_SECRET": origin_secret,
+                "ONCA_ENTITIES_TABLE": entities_table.table_name,
+                "ONCA_CURATION_LOG_TABLE": curation_log_table.table_name,
+                "ONCA_SCHEDULE_NAME": "onca-adhoc-run",
+            },
+        )
+        entities_table.grant_read_write_data(act_fn)  # resolve_review / rollback / idempotency
+        curation_log_table.grant_read_write_data(act_fn)  # ADR 018 audit + rollback-over-journal
+        act_url = act_fn.add_function_url(auth_type=lambda_.FunctionUrlAuthType.NONE)
+        distribution.add_behavior(
+            "/api/act*",
+            cf_origins.FunctionUrlOrigin(
+                act_url, custom_headers={"X-Onca-Origin": origin_secret}
+            ),
+            viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+            allowed_methods=cloudfront.AllowedMethods.ALLOW_ALL,
+            cache_policy=cloudfront.CachePolicy.CACHING_DISABLED,
+            origin_request_policy=cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+            function_associations=[
+                cloudfront.FunctionAssociation(
+                    function=auth_fn,
+                    event_type=cloudfront.FunctionEventType.VIEWER_REQUEST,
+                )
+            ],
+        )
         # Agent Q&A (ADR 010): read-only, grounded, curated NL question answering
         # over the tool's own data (feed.json + KB). Same auth model; registered
         # BEFORE the /api/* catch-all (insertion order). It reads the published
@@ -2255,6 +2296,29 @@ class OncaPrototypeStack(Stack):
             )
         )
         run_fn.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["iam:PassRole"],
+                resources=[scheduler_role.role_arn],
+                conditions={"StringEquals": {"iam:PassedToService": "scheduler.amazonaws.com"}},
+            )
+        )
+
+        # ADR 020 /api/act: the write agent's `trigger_run` action reuses the SAME
+        # debounced ad-hoc schedule as OncaRunTrigger, so it needs the same scheduler
+        # create/update + PassRole grants and the pipeline arn env.
+        act_fn.add_environment("ONCA_PIPELINE_ARN", pipeline.state_machine_arn)
+        act_fn.add_environment("ONCA_SCHEDULER_ROLE_ARN", scheduler_role.role_arn)
+        act_fn.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=[
+                    "scheduler:CreateSchedule",
+                    "scheduler:UpdateSchedule",
+                    "scheduler:GetSchedule",
+                ],
+                resources=[adhoc_schedule_arn],
+            )
+        )
+        act_fn.add_to_role_policy(
             iam.PolicyStatement(
                 actions=["iam:PassRole"],
                 resources=[scheduler_role.role_arn],

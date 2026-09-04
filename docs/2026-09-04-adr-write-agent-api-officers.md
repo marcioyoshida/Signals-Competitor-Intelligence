@@ -1,6 +1,7 @@
 # ADR 020 — Write-capable Agent API + four specialist officer agents
 
-- Status: **PROPOSED** — 2026-09-04. Owner-requested (issue #20). Extends
+- Status: **Phase 1 SHIPPED** — 2026-09-04 (was PROPOSED same day). Owner-requested
+  (issue #20). Phase 1 = the `/api/act` write contract (no officers yet). Extends
   [ADR 010](2026-08-25-adr-agent-chat-ui.md) — which shipped the **read-only** half of the
   Agent API (`/api/ask/`, grounded/cited Q&A) — with (a) a **write-capable** surface that
   *acts on the system* and (b) a **persona layer of four specialist "officer" agents**.
@@ -142,13 +143,28 @@ dispatch and hand-off is journaled.
 
 ## Status / phasing
 
-PROPOSED. Implementation order when picked up:
+Implementation order:
 
-1. **`/api/act` framework** — the tier authz gate + `OncaCurationLog` audit + idempotency +
-   the propose-vs-apply classifier, exposing the existing safe primitives (trigger run,
-   accept/reject proposal, rollback). **No officers yet** — prove the write contract first.
+1. **`/api/act` framework — SHIPPED (Phase 1).** The tier authz gate + `OncaCurationLog`
+   audit + idempotency + the propose-vs-apply classifier, exposing the existing safe
+   primitives. **No officers yet** — the write contract is proven first.
+   - `src/dashboard/act_api.py` — `POST /api/act` `{intent, args, idempotency_key}`:
+     origin-secret edge gate + **fail-closed elevated-capability** authz (origin-secret
+     operator is elevated; a JWT identity must carry an `operator`/`sovereign` tier or an
+     elevated group), a **fixed typed catalog** (`_CATALOG`) so an arbitrary-mutation
+     surface never exists, per-request **idempotency** (`ACT#<key>` in the registry table,
+     replay returns the stored result), and an **append-only journal** entry to
+     `OncaCurationLog` for every call (actor, args, outcome ∈ applied|proposed|blocked|noop).
+   - Catalog: `trigger_run` (apply — reuse the debounced ad-hoc schedule), `resolve_review`
+     (apply — promote/reject a queued proposal), `rollback_field` / `revert_entity`
+     (apply — reversible curated write over the journal), `propose_registry_change`
+     (**propose** — the SAFE high-stakes path: queues a review, never mutates).
+   - Infra: `OncaActApi` Lambda + Function URL + CloudFront `/api/act*` behavior (before the
+     `/api/*` catch-all), entities-table RW + curation-log RW + the ad-hoc scheduler grants.
+   - `tests/test_act_api.py` — authz (operator vs non-elevated JWT vs elevated JWT), catalog
+     dispatch, propose-vs-apply, idempotent replay, journaling.
 2. **The four officer personas** — each a specialized read (an Ask persona over its lens) +
-   its bounded action catalog, review-gated.
+   its bounded action catalog, review-gated. *(next)*
 3. **Auto-apply safe classes + the chief-of-staff router + inter-officer hand-off.**
 
 Related: issue #20; supersedes nothing (extends ADR-010). Depends on ADR-018 (audit/rollback)
