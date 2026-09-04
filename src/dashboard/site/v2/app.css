@@ -420,6 +420,20 @@ details.fold[open] > summary .tw { transform: rotate(90deg); }
 details.fold > summary .demoted { color: var(--muted); font-weight: 600; text-transform: none; letter-spacing: 0; font-size: var(--fs-micro); }
 .fold__bd { padding: 0 var(--s4) var(--s4); }
 
+/* ADR 009 §5 — "Mudança regulatória" panel on a regulatory card. */
+details.fold.chg { margin-top: var(--s2); box-shadow: none; background: var(--surface-2); }
+details.fold.chg > summary { padding: var(--s2) var(--s3); font-size: var(--fs-meta); }
+.chg-bd { padding: 0 var(--s3) var(--s3); display: flex; flex-direction: column; gap: var(--s2); }
+.chiprow { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.chip {
+  display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: var(--fs-micro);
+  font-weight: 600; color: var(--ink-2); background: var(--surface-3); border: 1px solid var(--border);
+}
+.chg-list { margin: 0; padding-left: 18px; font-size: var(--fs-sm); }
+.chg-line { font-size: var(--fs-sm); line-height: 1.45; }
+.chg-rated { display: flex; flex-direction: column; gap: 4px;
+  border-top: 1px solid var(--border); padding-top: var(--s2); }
+
 /* ============================ empty states ============================= */
 .empty {
   display: flex; flex-direction: column; align-items: center; justify-content: center;

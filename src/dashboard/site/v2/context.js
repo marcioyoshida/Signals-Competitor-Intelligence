@@ -200,6 +200,69 @@
      entity, date, linkified narrative, inference label when derived, and the
      clickable citation footer. Clicking opens the shared drawer.
      ====================================================================== */
+  // Industry slug -> pt-BR label (screen-agnostic: the standalone screens don't load
+  // industries.js, so the change panel carries its own labels).
+  const INDUSTRY_LABELS = {
+    acquiring: "Adquirência", fintech: "Fintechs", banking: "Bancos", insurance: "Seguros",
+    "investment-banking": "Banco de investimento", consorcio: "Consórcios",
+    "asset-management": "Gestão de ativos", "wealth-management": "Wealth",
+    "real-estate-funds": "FIIs", "agri-funds": "FIAGRO", "private-markets": "Private markets",
+    "financial-data-analytics": "Dados & analytics", advisory: "Advisory", crypto: "Cripto",
+    betting: "Apostas",
+  };
+  const indLabel = (s) => INDUSTRY_LABELS[s] || s;
+
+  /* ADR 009 §5 — "Mudança regulatória" panel: the change intelligence carried on a
+     regulatory card (Phase A change list + §3 rated record). Blast radius + difficulty
+     are color+glyph+WORD (never color alone) and labeled inference; the change text +
+     effective date are sourced. Empty string for a card with no change intel. */
+  function _blastBadge(b) {
+    const m = { market: ["crit", "▲", "amplo"], sector: ["high", "◆", "setorial"],
+                narrow: ["med", "●", "restrito"] };
+    const [cls, g, word] = m[b.band] || ["low", "▬", b.band || "—"];
+    return `<span class="badge badge--${cls}"><span class="g" aria-hidden="true">${g}</span>` +
+      `alcance ${word}${b.n_entities != null ? " · " + b.n_entities + " entid." : ""}</span>`;
+  }
+  function _diffBadge(d) {
+    const m = { high: ["crit", "▲", "alta"], medium: ["high", "◆", "média"], low: ["low", "▬", "baixa"] };
+    const [cls, g, word] = m[d.band] || ["low", "▬", d.band || "—"];
+    return `<span class="badge badge--${cls}"><span class="g" aria-hidden="true">${g}</span>dificuldade ${word}</span>`;
+  }
+  function hasChange(c) { return !!(c && (c.change_record || c.n_changes || (c.changes || []).length)); }
+  function changePanel(c) {
+    if (!hasChange(c)) return "";
+    const rec = c.change_record;
+    const changes = c.changes || [];
+    const list = changes.length
+      ? `<ul class="chg-list">${changes.slice(0, 6).map((ch) =>
+          `<li>${esc(ch.verb || "")} ${esc((ch.targets || []).map((t) => t.label).join(" e "))}` +
+          `${(ch.articles || []).length ? ` <span class="cvsub">(${esc((ch.articles || []).join("; "))})</span>` : ""}</li>`).join("")}</ul>`
+      : "";
+    const inds = c.industries || (rec && rec.affected_industries) || [];
+    const chips = inds.length
+      ? `<div class="chiprow">${inds.map((s) => `<span class="chip">${esc(indLabel(s))}</span>`).join("")}</div>` : "";
+    let rated = "";
+    if (rec) {
+      const eff = rec.effective_date ? `<span class="badge badge--ghost">vigência ${esc(U.fmtDate(rec.effective_date))}</span>`
+        : (c.days_to_deadline != null ? `<span class="badge badge--ghost">${c.days_to_deadline}d p/ vigência</span>` : "");
+      const drivers = (rec.difficulty && rec.difficulty.drivers || []).length
+        ? `<div class="cvsub">Fatores: ${(rec.difficulty.drivers).map(esc).join(" · ")}</div>` : "";
+      const surfaces = (rec.affected_surfaces || []).length
+        ? `<div class="cvsub">Superfícies: ${rec.affected_surfaces.map(esc).join(" · ")}</div>` : "";
+      rated = `<div class="chg-rated">
+        <div class="chiprow">${_blastBadge(rec.blast_radius || {})} ${_diffBadge(rec.difficulty || {})} ${eff}
+          <span class="badge badge--infer">inferência</span></div>
+        ${rec.change ? `<div class="chg-line"><b>Mudança:</b> ${esc(rec.change)}</div>` : ""}
+        ${rec.impact ? `<div class="chg-line"><b>Impacto:</b> ${esc(rec.impact)}</div>` : ""}
+        ${rec.action_required ? `<div class="chg-line"><b>Ação:</b> ${esc(rec.action_required)}</div>` : ""}
+        ${surfaces}${drivers}</div>`;
+    }
+    const n = c.n_changes || changes.length || 0;
+    return `<details class="fold chg"><summary><span class="tw" aria-hidden="true">▸</span> Mudança regulatória` +
+      `<span class="demoted">— ${n} alteração(ões)${rec ? " · impacto avaliado (inferência)" : ""}</span></summary>` +
+      `<div class="chg-bd">${chips}${list}${rated}</div></details>`;
+  }
+
   function cardHTML(c, i) {
     const model = U.citationModel(c);
     const infer = c.is_inference
@@ -218,6 +281,7 @@
       </div>
       <div class="exc__body">${U.linkifyNarrative(c.narrative, model)}</div>
       ${footer}
+      ${changePanel(c)}
     </div>`;
   }
   // Render a list of cards into `el`, wiring the drawer. `empty` = honest empty state.
@@ -227,7 +291,10 @@
     const open = (i) => openCard(cards[i]);
     el.querySelectorAll(".exc[data-i]").forEach((row) => {
       const i = +row.dataset.i;
-      row.addEventListener("click", (e) => { if (e.target.closest("a")) return; open(i); });
+      row.addEventListener("click", (e) => {
+        if (e.target.closest("a") || e.target.closest(".chg")) return;  // link / change panel
+        open(i);
+      });
       row.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(i); } });
     });
   }
@@ -256,6 +323,7 @@
       <div class="callout" style="margin-top:var(--s3)">${U.linkifyNarrative(c.narrative, model)}
         ${model.entries.length ? U.citationFooter(model)
           : `<div class="cites"><span class="cite-grp"><span class="src">Sem fonte pública clicável</span></span></div>`}</div>
+      ${changePanel(c)}
       ${spark}
       <dl class="kv">
         <dt>Entidade</dt><dd>${esc(a.display_name || c.entity_label || c.entity || "—")}</dd>
@@ -355,18 +423,28 @@
      ====================================================================== */
   function renderRegulatorio(el, D, opts) {
     opts = opts || {};
-    let cards = feed(D).filter((c) =>
+    const all = feed(D).filter((c) =>
       (opts.lenses ? hasLens(c, ...opts.lenses) : hasLens(c, "regulatory", "dou")) || (!opts.lenses && hasTopic(c, "regulacao")));
-    cards.sort(byDateThreat);
-    const caveat = opts.caveat && cards.length < (opts.caveatBelow || 4)
+    all.sort(byDateThreat);
+    const caveat = opts.caveat && all.length < (opts.caveatBelow || 4)
       ? `<div class="callout callout--warn" style="margin-bottom:var(--s3)">${esc(opts.caveat)}</div>` : "";
-    if (!cards.length) {
+    if (!all.length) {
       el.innerHTML = caveat + U.empty("Sem sinais regulatórios", opts.emptyD || "Nenhum normativo no feed escopado nesta janela.", "○");
       return;
     }
+    // ADR 009 §5 — "Regulatório / Mudanças" facet: pull just the cards carrying a
+    // regulatory CHANGE (Phase A list or the §3 rated record). Off by default.
+    const nChg = all.filter(hasChange).length;
+    const bar = nChg ? `<div class="filterbar" style="margin-bottom:var(--s3)">
+        <label class="cvsub"><input type="checkbox" id="__regChg"> só mudanças
+          <span class="badge badge--ghost">${nChg}</span></label></div>` : "";
     const wrap = document.createElement("div");
-    el.innerHTML = caveat; el.appendChild(wrap);
-    renderCards(wrap, cards, { t: "Sem sinais regulatórios", d: opts.emptyD });
+    el.innerHTML = caveat + bar; el.appendChild(wrap);
+    const draw = (only) => renderCards(wrap, only ? all.filter(hasChange) : all,
+      { t: "Sem mudanças regulatórias", d: "Nenhum normativo com alteração enumerada na janela." });
+    draw(false);
+    const cb = el.querySelector("#__regChg");
+    if (cb) cb.addEventListener("change", () => draw(cb.checked));
   }
 
   /* ======================================================================

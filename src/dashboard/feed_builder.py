@@ -327,6 +327,7 @@ def _project_item(n: dict[str, Any]) -> dict[str, Any]:
         "status": n.get("status"),
         # ADR 009: regulatory change intelligence — Phase A change list + §3 LLM record.
         "n_changes": n.get("n_changes"),
+        "changes": n.get("changes") or [],
         "change_record": n.get("change_record"),
         "n_developments": n.get("n_developments"),
         "latest_dev_id": n.get("latest_dev_id"),      # thread: the card its latest dev shows
