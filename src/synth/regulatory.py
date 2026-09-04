@@ -693,6 +693,8 @@ def build_lifecycle_card(lc: dict[str, Any]) -> dict[str, Any]:
         "industries": industries,
         "changes": changes,
         "n_changes": len(changes),
+        # ADR 009 §3: the LLM change-record (rated impact/blast/difficulty), when drafted.
+        "change_record": lc.get("change_record"),
         "deadline": deadline,
         "days_to_deadline": dtd,
         "status": lc["status"],
@@ -778,8 +780,28 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     # Wave 2: the full regulatory-lifecycle thread — stage progression per instrument.
     n_lifecycles = 0
+    n_records = 0
     try:
         lifecycles = build_lifecycles(recent, as_of=run_date, window=window_days)
+        # ADR 009 §3: rate the changes with a bounded LLM (labeled inference). Gated OFF by
+        # default (Bedrock cost); grounded facts (n_entities per industry) come from the
+        # registry, not the model.
+        if os.environ.get("ONCA_REG_LLM", "false").lower() in ("1", "true", "yes"):
+            try:
+                from src.synth import feature_store as _fs
+                from src.synth import reg_change_record
+
+                imap = _fs.load_industry_map()
+                counts: dict[str, int] = {}
+                for inds in imap.values():
+                    for i in inds:
+                        counts[i] = counts.get(i, 0) + 1
+                n_records = reg_change_record.enrich_lifecycles(
+                    lifecycles, industry_counts=counts,
+                    max_records=int(_f("ONCA_REG_LLM_MAX", 20)))
+                print(f"reg change-records: drafted={n_records}")
+            except Exception as exc:  # pragma: no cover - best-effort
+                print(f"Warning: reg change-record drafting failed: {exc}")
         n_lifecycles = publish_lifecycles(lifecycles, digests_bucket, s3=s3, as_of=run_date)
     except Exception as exc:  # pragma: no cover - best-effort
         print(f"Warning: regulatory lifecycle publish failed: {exc}")
@@ -811,6 +833,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 "nominated": len(cands),
                 "emitted": len(keys),
                 "lifecycles": n_lifecycles,
+                "change_records": n_records,
                 "regdocs": ({"stored": len(regdocs["stored"]), "unchanged": regdocs["unchanged"],
                              "skipped": regdocs["skipped"], "errors": len(regdocs["errors"])}
                             if regdocs else None),

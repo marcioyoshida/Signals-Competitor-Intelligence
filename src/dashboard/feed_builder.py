@@ -325,6 +325,9 @@ def _project_item(n: dict[str, Any]) -> dict[str, Any]:
         "days_to_deadline": n.get("days_to_deadline"),
         # thread payload (Wave 2): status + development count + reg-lifecycle stage.
         "status": n.get("status"),
+        # ADR 009: regulatory change intelligence — Phase A change list + §3 LLM record.
+        "n_changes": n.get("n_changes"),
+        "change_record": n.get("change_record"),
         "n_developments": n.get("n_developments"),
         "latest_dev_id": n.get("latest_dev_id"),      # thread: the card its latest dev shows
         "latest_dev_date": n.get("latest_dev_date"),
