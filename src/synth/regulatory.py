@@ -490,7 +490,7 @@ def _instrument_citations(instrument_key: str, label: str,
     return out
 
 
-def build_narrative(cand: dict[str, Any]) -> dict[str, Any]:
+def build_narrative(cand: dict[str, Any], *, change_record: dict[str, Any] | None = None) -> dict[str, Any]:
     """Heuristic pt-BR regulatory-radar card — sourced instrument, labeled inference."""
     label = cand["label"]
     domain = cand["domain"]
@@ -539,6 +539,8 @@ def build_narrative(cand: dict[str, Any]) -> dict[str, Any]:
         "industries": industries,
         "changes": changes,
         "n_changes": len(changes),
+        # ADR 009 §3: the LLM change-record (rated), when drafted (radar cards too).
+        "change_record": change_record,
         "deadline": deadline,
         "days_to_deadline": dtd,
         "signature": cand["signature"],
@@ -762,10 +764,43 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     recent = feature_store.load_history(digests_bucket, window_days, s3=s3)
     cands = nominate(recent, as_of=run_date)
 
+    # ADR 009 §3: rate changes with a bounded LLM (labeled inference). Gated OFF by default
+    # (Bedrock cost). One shared budget across radar cards + lifecycles; the concrete
+    # blast-radius n_entities comes from the registry industry counts, not the model.
+    llm_on = os.environ.get("ONCA_REG_LLM", "false").lower() in ("1", "true", "yes")
+    llm_budget = int(_f("ONCA_REG_LLM_MAX", 20))
+    ind_counts: dict[str, int] = {}
+    n_records = 0
+    if llm_on:
+        try:
+            from src.synth import feature_store as _fs
+
+            for inds in _fs.load_industry_map().values():
+                for i in inds:
+                    ind_counts[i] = ind_counts.get(i, 0) + 1
+        except Exception as exc:  # pragma: no cover
+            print(f"Warning: industry counts unavailable, §3 off: {exc}")
+            llm_on = False
+
     keys: list[str] = []
     fired = {c["instrument"] for c in cands}
     for cand in cands:
-        key = _write(build_narrative(cand), digests_bucket, s3)
+        rec = None
+        if llm_on and n_records < llm_budget:
+            try:
+                from src.synth import reg_change_record
+
+                changes = reg_change.parse_changes(
+                    " ".join((d.get("narrative") or "") for d in cand.get("drivers") or [])[:3000],
+                    self_key=cand["instrument"])
+                rec = reg_change_record.record_for(
+                    cand.get("label", ""), cand.get("domain", ""), changes, ind_counts,
+                    effective_date=cand.get("deadline"))
+                if rec:
+                    n_records += 1
+            except Exception as exc:  # pragma: no cover
+                print(f"Warning: radar change-record failed: {exc}")
+        key = _write(build_narrative(cand, change_record=rec), digests_bucket, s3)
         if key:
             keys.append(key)
 
@@ -780,28 +815,21 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     # Wave 2: the full regulatory-lifecycle thread — stage progression per instrument.
     n_lifecycles = 0
-    n_records = 0
     try:
         lifecycles = build_lifecycles(recent, as_of=run_date, window=window_days)
-        # ADR 009 §3: rate the changes with a bounded LLM (labeled inference). Gated OFF by
-        # default (Bedrock cost); grounded facts (n_entities per industry) come from the
-        # registry, not the model.
-        if os.environ.get("ONCA_REG_LLM", "false").lower() in ("1", "true", "yes"):
+        # §3 continues on the lifecycles with the REMAINING shared budget (radar cards drew
+        # from it first).
+        if llm_on and n_records < llm_budget:
             try:
-                from src.synth import feature_store as _fs
                 from src.synth import reg_change_record
 
-                imap = _fs.load_industry_map()
-                counts: dict[str, int] = {}
-                for inds in imap.values():
-                    for i in inds:
-                        counts[i] = counts.get(i, 0) + 1
-                n_records = reg_change_record.enrich_lifecycles(
-                    lifecycles, industry_counts=counts,
-                    max_records=int(_f("ONCA_REG_LLM_MAX", 20)))
-                print(f"reg change-records: drafted={n_records}")
+                n_records += reg_change_record.enrich_lifecycles(
+                    lifecycles, industry_counts=ind_counts,
+                    max_records=llm_budget - n_records)
             except Exception as exc:  # pragma: no cover - best-effort
                 print(f"Warning: reg change-record drafting failed: {exc}")
+        if llm_on:
+            print(f"reg change-records: drafted={n_records}")
         n_lifecycles = publish_lifecycles(lifecycles, digests_bucket, s3=s3, as_of=run_date)
     except Exception as exc:  # pragma: no cover - best-effort
         print(f"Warning: regulatory lifecycle publish failed: {exc}")

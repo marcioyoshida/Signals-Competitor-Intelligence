@@ -57,6 +57,20 @@ def test_none_when_llm_unavailable_or_unparseable():
                                    changes=[{"verb": "altera"}], converse_fn=_fake_converse("no json here")) is None
 
 
+def test_record_for_derives_industries_and_count_then_rates():
+    rec = RCR.record_for(
+        "Resolução CMN 5304", "Câmbio & mercado aberto",
+        [{"verb": "altera", "targets": [{"label": "Resolução CMN 5130"}], "articles": ["art. 5"]}],
+        {"banking": 10, "investment-banking": 4, "fintech": 99},
+        effective_date="2026-12-01", converse_fn=_fake_converse(_GOOD))
+    # Câmbio → banking + investment-banking (not fintech) → n_entities = 14
+    assert rec["affected_industries"] == ["banking", "investment-banking"]
+    assert rec["blast_radius"]["n_entities"] == 14
+    assert rec["effective_date"] == "2026-12-01" and rec["is_inference"] is True
+    # no changes -> no record (radar cards without an amendment aren't rated)
+    assert RCR.record_for("x", "d", [], {"banking": 5}, converse_fn=_fake_converse(_GOOD)) is None
+
+
 def test_enrich_lifecycles_only_records_real_changes_and_is_bounded():
     lifecycles = {
         "res-cmn-5304": {"instrument": "res-cmn-5304", "label": "Resolução CMN 5304",

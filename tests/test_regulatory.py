@@ -183,6 +183,19 @@ def test_lifecycle_card_names_cohort_and_scopes_links():
     assert "numero=5304" in urls and "5337" not in urls
 
 
+def test_radar_narrative_carries_change_record_when_provided():
+    # §3-on-radar: a drafted record passed to build_narrative rides on the radar card.
+    c = regulatory.nominate(
+        [_card("Instrução Normativa BCB 770 altera a Resolução CMN 5130; entra em vigor em 30/11/2026.",
+               date="2026-08-22")], as_of="2026-08-23")[0]
+    rec = {"change": "x", "blast_radius": {"band": "sector", "n_entities": 5},
+           "difficulty": {"band": "low"}, "is_inference": True}
+    n = regulatory.build_narrative(c, change_record=rec)
+    assert n["change_record"] is rec
+    # default (no record) stays None
+    assert regulatory.build_narrative(c)["change_record"] is None
+
+
 def test_radar_narrative_tags_affected_industries():
     c = regulatory.nominate(
         [_card("Instrução Normativa BCB 770 sobre PIX; entra em vigor em 30/11/2026.",

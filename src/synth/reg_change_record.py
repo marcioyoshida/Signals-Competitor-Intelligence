@@ -123,6 +123,27 @@ def build_change_record(
     }
 
 
+def record_for(
+    label: str, domain: str, changes: list[dict[str, Any]],
+    industry_counts: dict[str, int] | None = None, *, effective_date: str | None = None,
+    source_url: str | None = None, converse_fn: Callable[..., "str | None"] = _default_converse,
+    model_id: str | None = None,
+) -> dict[str, Any] | None:
+    """Draft a change record for any changed instrument (radar OR lifecycle): derive the
+    affected industries from the domain and the concrete n_entities from the registry counts,
+    then rate. Returns None if there is no change or the LLM is unavailable."""
+    if not changes:
+        return None
+    from src.synth import regulatory
+
+    industries = regulatory._industries_for(domain or "")
+    n_entities = sum((industry_counts or {}).get(i, 0) for i in industries)
+    return build_change_record(
+        label=label or "", domain=domain or "", industries=industries, n_entities=n_entities,
+        changes=changes, effective_date=effective_date, source_url=source_url,
+        converse_fn=converse_fn, model_id=model_id)
+
+
 def enrich_lifecycles(
     lifecycles: dict[str, dict[str, Any]], *, industry_counts: dict[str, int] | None = None,
     max_records: int = 20, converse_fn: Callable[..., "str | None"] = _default_converse,
@@ -130,9 +151,8 @@ def enrich_lifecycles(
 ) -> int:
     """Attach a `change_record` to each lifecycle that declares a real change (Phase A list),
     bounded by max_records. Mutates in place; returns how many were drafted."""
-    from src.synth import reg_change, regulatory
+    from src.synth import reg_change
 
-    counts = industry_counts or {}
     drafted = 0
     for lc in lifecycles.values():
         if drafted >= max_records:
@@ -140,15 +160,9 @@ def enrich_lifecycles(
         changes = reg_change.parse_changes(
             " ".join((m.get("summary") or "") for m in lc.get("timeline") or [])[:3000],
             self_key=lc.get("instrument"))
-        if not changes:
-            continue
-        industries = regulatory._industries_for(lc.get("domain") or "")
-        n_entities = sum(counts.get(i, 0) for i in industries)
-        rec = build_change_record(
-            label=lc.get("label") or lc.get("instrument") or "",
-            domain=lc.get("domain") or "", industries=industries, n_entities=n_entities,
-            changes=changes, effective_date=lc.get("deadline"),
-            converse_fn=converse_fn, model_id=model_id)
+        rec = record_for(lc.get("label") or lc.get("instrument") or "", lc.get("domain") or "",
+                         changes, industry_counts, effective_date=lc.get("deadline"),
+                         converse_fn=converse_fn, model_id=model_id)
         if rec:
             lc["change_record"] = rec
             drafted += 1
