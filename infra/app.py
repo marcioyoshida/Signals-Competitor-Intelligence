@@ -360,6 +360,7 @@ class OncaPrototypeStack(Stack):
         curation_log_table.grant_write_data(func)  # ADR 018 Phase 1b
         func.add_environment("ONCA_CURATION_LOG_TABLE", curation_log_table.table_name)
         digests_bucket.grant_put(func)
+        digests_bucket.grant_read(func)  # #14 NER harvest reads recent narratives (ListBucket)
         # GOV_DADOS_TOKEN access (#63 / Tier-3): the ingester reads the token from the
         # api-key secret (via boto3) to reach the dados.gov.br catalog. The token now
         # authenticates and catalog search/resource-resolution work live. Grant read on

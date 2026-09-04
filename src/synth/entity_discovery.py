@@ -35,7 +35,7 @@ import unicodedata
 from typing import Any, Iterable
 
 from src.synth import entity_registry
-from src.synth.entities import detect_b3_tickers, resolve_entities
+from src.synth.entities import detect_b3_tickers
 
 # Industry keyword → registry industry slug (must exist in INDUSTRIES).
 INDUSTRY_KEYWORDS: dict[str, str] = {
@@ -1099,22 +1099,10 @@ def harvest_keyword(
         or INDUSTRY_KEYWORDS.get(primary.rstrip("S"))
     )
 
-    resolved_map: dict[str, Any] = {}
-    try:
-        resolved_map = resolve_entities(list(hits.keys()), table=table) or {}
-    except Exception:
-        resolved_map = {}
-
     candidates: list[dict[str, Any]] = []
     for label, ids in hits.items():
         n_docs = len(set(ids))
         if n_docs < min_docs:
-            continue
-        if (
-            resolved_map.get(label)
-            or resolved_map.get(label.upper())
-            or resolved_map.get(label.lower())
-        ):
             continue
         try:
             if entity_registry.resolve_by_alias(label, table=table):
@@ -1181,17 +1169,21 @@ def harvest_ner(
             for m in rx.finditer(text):
                 _add(m.group(1), doc_id, text[max(0, m.start() - 30): m.end() + 30])
 
-    try:
-        resolved = resolve_entities(list(hits.keys()), table=table) or {}
-    except Exception:
-        resolved = {}
+    # A candidate is "known" iff its name resolves to a registry entity (alias or name,
+    # table-aware — reads the DB alias map when a table is supplied). Non-empty ⇒ drop.
+    def _is_known(name: str) -> bool:
+        try:
+            return bool(
+                entity_registry.resolve_by_alias(name, table=table)
+                or entity_registry.resolve_by_name(name, table=table)
+            )
+        except Exception:  # pragma: no cover - resolution best-effort
+            return False
 
     cands: list[dict[str, Any]] = []
     for label, ids in hits.items():
-        if len(ids) < min_mentions:
-            continue
-        if resolved.get(label) or resolved.get(label.upper()) or resolved.get(label.lower()):
-            continue  # already a known entity
+        if len(ids) < min_mentions or _is_known(label):
+            continue  # too rare, or already a known entity
         cands.append({
             "surface": label, "kind": "ner", "keyword": "ner", "industry": None,
             "doc_count": len(ids), "evidence": evidence.get(label, [])[:3],
