@@ -1,7 +1,7 @@
 # ADR 009 — Regulatory Change Intelligence: document versioning, diff, and impact tagging
 
-- Status: **Partial — Phase A SHIPPED** (2026-09-02); design 2026-08-25. Owner-requested
-  expansion of the Regulatory axis.
+- Status: **FULLY REALIZED** (2026-09-03) — Phases A, B, §2, §3, §5 all live; design
+  2026-08-25. Owner-requested expansion of the Regulatory axis.
   - **Phase A (deterministic amending-act parser) LIVE** — `src/synth/reg_change.py`
     enumerates the discrete changes an act declares (`altera`/`revoga`/`dá nova
     redação`/`inclui`/…) + the article/dispositivo refs + the base instrument each
@@ -34,8 +34,15 @@
     bounded by `ONCA_REG_LLM_MAX`; gated `ONCA_REG_LLM` (needs Bedrock + entities-table on
     the regulatory role — granted in CDK). Live: 2 records (CMN 5339 blast=market/278 diff=
     high; CMN 5304 blast=market/135 diff=medium), carried through to `feed.json`.
-  - **Deferred:** (5) the dashboard "Mudança regulatória" panel + "Regulatório/Mudanças"
-    filter — the change_record now rides on the reg card in `feed.json`, ready to render.
+  - **§5 dashboard LIVE** — `context.js` `changePanel(c)` renders an expandable "Mudança
+    regulatória" block on any reg card carrying change intel: affected-industry chips, the
+    enumerated changes (Phase A), and when a §3 record exists a rated row — blast-radius +
+    difficulty as color+glyph+WORD badges, effective-date/countdown, impact/action/surfaces,
+    labeled inferência. `renderRegulatorio` gains a "só mudanças" facet (the Regulatório/
+    Mudanças filter). Rendered on the card + drawer across the v2 industry tabs.
+  - **All phases live.** Follow-on (optional): also draft a §3 rated record for the single-
+    date RADAR cards (today §3 enriches the multi-date lifecycles); today radar cards show
+    the deterministic change list without the rating.
 - Extends [ADR 003](2026-08-19-adr-narrative-dimensions.md) — the **regulatory-lifecycle
   axis** (`src/synth/regulatory.py`), which today tracks *that* an instrument changed +
   its deadline + affected domain, and **explicitly deferred to v2**: "fetch/compare the
