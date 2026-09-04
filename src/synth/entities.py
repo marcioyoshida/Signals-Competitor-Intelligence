@@ -39,7 +39,7 @@ ENTITY_ALIASES: dict[str, list[str]] = {
     "funcef": ["FUNCEF", "FUNDACAO DOS ECONOMIARIOS FEDERAIS"],
     "valia": ["VALIA", "FUNDACAO VALE DO RIO DOCE DE SEGURIDADE SOCIAL"],
     # Securitizadoras (CRI/CRA) — distinctive legal names to avoid brand collisions.
-    "opea": ["OPEA SECURITIZADORA", "GAIA SECURITIZADORA", "OPEA"],
+    "opea_sec": ["OPEA SECURITIZADORA", "GAIA SECURITIZADORA"],
     "true_sec": ["TRUE SECURITIZADORA"],
     "virgo_sec": ["VIRGO SECURITIZADORA", "ISEC SECURITIZADORA"],
     # Receivables registradora (credit registration infrastructure).
@@ -65,7 +65,7 @@ ENTITY_INDUSTRIES: dict[str, list[str]] = {
     "funcef": ["closed-pension", "asset-management"],
     "valia": ["closed-pension", "asset-management"],
     # Securitization & credit.
-    "opea": ["securitization"], "true_sec": ["securitization"], "virgo_sec": ["securitization"],
+    "opea_sec": ["securitization"], "true_sec": ["securitization"], "virgo_sec": ["securitization"],
     "cerc": ["securitization", "financial-data-analytics"],
 }
 
