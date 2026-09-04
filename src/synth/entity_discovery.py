@@ -35,7 +35,7 @@ import unicodedata
 from typing import Any, Iterable
 
 from src.synth import entity_registry
-from src.synth.entities import detect_b3_tickers
+from src.synth.entities import detect_b3_tickers, resolve_entities
 
 # Industry keyword → registry industry slug (must exist in INDUSTRIES).
 INDUSTRY_KEYWORDS: dict[str, str] = {
@@ -182,6 +182,8 @@ _NER_STOP = frozenset({
     "multiplo", "comercial", "investimento", "cambio", "credito", "financiamento",
     "arrendamento", "cooperativo", "cooperativa", "taxa", "basica", "referencial", "selic",
     "financeira", "consorcio", "administradora", "corretora", "distribuidora", "holding",
+    # abbreviation of "banco" in registry/ranking legal names + generic person words
+    "bco", "pessoas", "pessoa",
 })
 
 
@@ -1169,14 +1171,25 @@ def harvest_ner(
             for m in rx.finditer(text):
                 _add(m.group(1), doc_id, text[max(0, m.start() - 30): m.end() + 30])
 
-    # A candidate is "known" iff its name resolves to a registry entity (alias or name,
-    # table-aware — reads the DB alias map when a table is supplied). Non-empty ⇒ drop.
+    # A candidate is "known" iff it resolves to a registry entity — by exact alias/name
+    # (table-aware) OR by a whole-word distinctive alias embedded in the legal name
+    # (``resolve_entities`` context-gates ambiguous tokens, so "Master" survives while
+    # "BANCO ITAÚ VEÍCULOS" / "Banco Sicoob" drop). A ``BCO→Banco`` variant covers the
+    # BCB-registry abbreviation. Non-empty ⇒ drop.
+    def _known_variants(name: str) -> list[str]:
+        exp = re.sub(r"(?i)\bbco\b", "Banco", name)
+        return [name] if exp == name else [name, exp]
+
     def _is_known(name: str) -> bool:
         try:
-            return bool(
-                entity_registry.resolve_by_alias(name, table=table)
-                or entity_registry.resolve_by_name(name, table=table)
-            )
+            for v in _known_variants(name):
+                if (
+                    entity_registry.resolve_by_alias(v, table=table)
+                    or entity_registry.resolve_by_name(v, table=table)
+                    or resolve_entities({"narrative": v, "title": v})
+                ):
+                    return True
+            return False
         except Exception:  # pragma: no cover - resolution best-effort
             return False
 
