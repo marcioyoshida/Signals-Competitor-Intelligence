@@ -584,3 +584,31 @@ def test_bcb_prominence_gate_proposes_microlender_tail():
     r2 = discover_bcb_institutions(rows=rows, auto_create=True, table=table2,
                                    propose_only_classes=frozenset())
     assert set(r2["created"]) >= {"neon", "ffcred", "rapidium"}
+
+
+# --- #14 general NER harvest -----------------------------------------------------
+def test_harvest_ner_extracts_new_companies_drops_known_and_gates_frequency():
+    from src.synth.entity_discovery import harvest_ner
+    narrs = [
+        {"id": "n1", "narrative": "A fintech Zignet cresceu; o Banco Fictício S.A. teve lucro."},
+        {"id": "n2", "narrative": "A gestora Arqueia Capital avança. O Banco Fictício ampliou crédito."},
+        {"id": "n3", "narrative": "A securitizadora Novra emitiu CRIs; a seguradora Prumo Seguros entrou."},
+    ]
+    cands = harvest_ner(narrs, min_mentions=2, table=None)
+    surfaces = {c["surface"] for c in cands}
+    # Banco Fictício recurs (2 narratives) -> surfaces; single-mention names are gated out
+    assert any("Fictício" in s for s in surfaces)
+    assert "Zignet" not in surfaces and "Novra" not in surfaces   # only 1 mention each
+    # brand capture stops at the first lowercase word (no verb-phrase bleed)
+    all1 = {c["surface"] for c in harvest_ner(narrs, min_mentions=1)}
+    assert "Zignet" in all1 and "Arqueia Capital" in all1
+    assert not any("levantou" in s or "emitiu" in s or "entrou" in s for s in all1)
+
+
+def test_harvest_ner_skips_generic_and_regulator_heads():
+    from src.synth.entity_discovery import harvest_ner
+    narrs = [{"id": "x", "narrative": "O Conselho Monetário Nacional e o Banco Central publicaram. "
+                                       "A Comissão de Valores Mobiliários também."}] * 2
+    surfaces = {c["surface"] for c in harvest_ner(narrs, min_mentions=1)}
+    # regulator/generic heads are stripped -> no "Banco Central"/"Conselho ..." candidate
+    assert not any(s.lower().startswith(("banco central", "conselho", "comissao")) for s in surfaces)

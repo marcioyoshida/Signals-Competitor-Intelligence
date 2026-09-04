@@ -719,6 +719,26 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             except Exception as exc:  # pragma: no cover - best-effort, never blocks ingest
                 print(f"Warning: BCB institutions discovery skipped: {exc}")
 
+        # #14 general NER harvest — company candidates from the narrative corpus →
+        # review-queue proposals (never auto-creates). Sub-gate ONCA_NER_HARVEST (default
+        # off). Reads recent narratives (previous runs) via the feature store.
+        if os.environ.get("ONCA_NER_HARVEST", "false").lower() in ("1", "true", "yes"):
+            try:
+                with _source_budget("NER harvest", deadline, per_source):
+                    from src.synth import entity_discovery, feature_store
+
+                    _bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
+                    _win = int(os.environ.get("ONCA_NER_WINDOW_DAYS", "30"))
+                    _narrs = feature_store.load_history(_bucket, _win) if _bucket else []
+                    _mm = int(os.environ.get("ONCA_NER_MIN_MENTIONS", "3"))
+                    _cands = entity_discovery.harvest_ner(_narrs, min_mentions=_mm)
+                    _pids = entity_discovery.propose_news_candidates(
+                        _cands, max_propose=int(os.environ.get("ONCA_NER_MAX_PROPOSE", "20")))
+                    print(f"NER harvest: narratives={len(_narrs)} candidates={len(_cands)} "
+                          f"proposed={len(_pids)}")
+            except Exception as exc:  # pragma: no cover - best-effort, never blocks ingest
+                print(f"Warning: NER harvest skipped: {exc}")
+
     # Financial statements (issue #7 / ADR 011 stage 6): CVM DFP → per-issuer key-metric
     # store (financials/index.json). Filings are annual/quarterly, so this is a periodic
     # best-effort refresh, gated OFF by default (ONCA_FINANCIALS=true to enable).

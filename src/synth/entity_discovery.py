@@ -150,6 +150,40 @@ _BRAND_SINGLE_RE = re.compile(
     r"\b([A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç][\wáéíóúâêôãõç]{1,19})\b"
 )
 
+# --- #14 general NER harvest: company candidates anchored on company CUES ------------
+# A proper-name span next to a legal suffix / sector word / typed article ("a fintech X")
+# is a company mention — industry-agnostic, so a genuinely new player surfaces from ANY
+# narrative, not just near a seeded keyword.
+_NER_BRAND = (r"[A-Z0-9ÁÉÍÓÚÂÊÔÃÕÇ][\wÁÉÍÓÚÂÊÔÃÕÇáéíóúâêôãõç&]{1,20}"
+              r"(?:\s+[A-Z0-9ÁÉÍÓÚÂÊÔÃÕÇ][\wÁÉÍÓÚÂÊÔÃÕÇáéíóúâêôãõç&]{1,20}){0,3}")
+_NER_SECTOR_WORD = (r"S\.?\s?A\.?|Ltda\.?|Seguradora|Seguros|Resseguradora|Securitizadora|"
+                    r"Previd[êe]ncia|Capital|Asset|Gest[ãa]o|Gestora|Administradora|"
+                    r"Pagamentos|Cons[óo]rcio|Financeira|Corretora|Distribuidora|Holding|"
+                    r"Participa[çc][õo]es|Fintech|Cooperativa")
+_NER_SUFFIX_RE = re.compile(rf"\b({_NER_BRAND})\s+(?:{_NER_SECTOR_WORD})\b")
+_NER_PREFIX_RE = re.compile(
+    rf"\b(?:Banco|Funda[çc][ãa]o|Cooperativa|Seguradora|Securitizadora|Gestora)\s+({_NER_BRAND})")
+# The article + type word are case-insensitive (scoped `(?i:…)`) but the BRAND capture is
+# case-SENSITIVE, so it stops at the first non-capitalized word ("a fintech Zignet levantou"
+# → "Zignet", not "Zignet levantou uma rodada").
+_NER_TYPED_RE = re.compile(
+    r"\b(?i:[ao]s?)\s+(?i:fintech|gestora|seguradora|resseguradora|securitizadora|corretora|"
+    r"administradora|financeira|adquirente|cooperativa|distribuidora|banco\s+digital|"
+    r"previd[êe]ncia)\s+"
+    rf"({_NER_BRAND})")
+# Generic heads / regulator words / legal-&-economic type fragments that are never a
+# standalone company candidate. A candidate must have ≥1 token outside this set.
+_NER_STOP = frozenset({
+    "banco", "fundo", "fundacao", "grupo", "companhia", "central", "federal", "nacional",
+    "brasil", "conselho", "superintendencia", "comissao", "ministerio", "governo", "uniao",
+    "diario", "oficial", "resolucao", "circular", "instrucao", "the", "de", "da", "do",
+    "e", "seguros", "seguradora", "capital", "gestao", "gestora", "pagamentos",
+    # legal-type + economic-indicator fragments that recur in reg/entrant narratives
+    "multiplo", "comercial", "investimento", "cambio", "credito", "financiamento",
+    "arrendamento", "cooperativo", "cooperativa", "taxa", "basica", "referencial", "selic",
+    "financeira", "consorcio", "administradora", "corretora", "distribuidora", "holding",
+})
+
 
 def _strip_accents(s: str) -> str:
     return "".join(
@@ -1111,6 +1145,60 @@ def harvest_keyword(
         key=lambda c: (-c["doc_count"], 0 if c["kind"] == "ticker" else 1, c["surface"])
     )
     return candidates
+
+
+def harvest_ner(
+    narratives: Iterable[dict[str, Any]], *,
+    min_mentions: int = 2, max_candidates: int = 40, table: Any | None = None,
+) -> list[dict[str, Any]]:
+    """#14 general NER harvest — company-name candidates from the narrative corpus.
+
+    Heuristic (no ML): a proper-name span next to a legal-suffix / sector-word / typed-
+    article cue is a company mention. Drops names that already resolve to a registry entity,
+    strips generic/regulator heads, and frequency-gates across distinct narratives. Returns
+    candidate dicts for `propose_news_candidates` — PROPOSE-ONLY (news never auto-creates,
+    ADR 011 §4)."""
+    hits: dict[str, set[str]] = {}
+    evidence: dict[str, list[str]] = {}
+
+    def _add(label: str, doc_id: str, snippet: str) -> None:
+        label = re.sub(r"\s+", " ", str(label or "")).strip(" .,-")
+        toks = [t for t in label.split() if _strip_accents(t).lower() not in _NER_STOP]
+        # need a distinctive token, ≥3 chars, and not just short/generic heads
+        if not label or not toks or len(label) < 3 or all(len(t) <= 2 for t in toks):
+            return
+        hits.setdefault(label, set()).add(doc_id)
+        evidence.setdefault(label, []).append(re.sub(r"\s+", " ", snippet[:120]).strip())
+
+    for n in narratives or []:
+        if not isinstance(n, dict):
+            continue
+        text = " ".join(str(n.get(k) or "") for k in ("narrative", "title", "text", "summary"))
+        if not text:
+            continue
+        doc_id = str(n.get("id") or hash(text) % 10**10)
+        for rx in (_NER_SUFFIX_RE, _NER_PREFIX_RE, _NER_TYPED_RE):
+            for m in rx.finditer(text):
+                _add(m.group(1), doc_id, text[max(0, m.start() - 30): m.end() + 30])
+
+    try:
+        resolved = resolve_entities(list(hits.keys()), table=table) or {}
+    except Exception:
+        resolved = {}
+
+    cands: list[dict[str, Any]] = []
+    for label, ids in hits.items():
+        if len(ids) < min_mentions:
+            continue
+        if resolved.get(label) or resolved.get(label.upper()) or resolved.get(label.lower()):
+            continue  # already a known entity
+        cands.append({
+            "surface": label, "kind": "ner", "keyword": "ner", "industry": None,
+            "doc_count": len(ids), "evidence": evidence.get(label, [])[:3],
+            "evidence_ids": sorted(ids)[:5],
+        })
+    cands.sort(key=lambda c: -c["doc_count"])
+    return cands[:max_candidates]
 
 
 def propose_news_candidates(
