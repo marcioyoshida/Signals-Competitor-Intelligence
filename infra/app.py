@@ -827,7 +827,9 @@ class OncaPrototypeStack(Stack):
         # normative instruments (IN BCB, Resolução, Regulamento do Pix) out of the
         # regulatory narratives, extracts best-effort deadlines, infers the affected
         # domain, and writes "radar regulatório" cards (subject = instrument).
-        # Deterministic/LLM-free; digests read/write (put + same-day retract).
+        # Deterministic axis + ADR-009 change intelligence: Phase A/§2 are LLM-free; §3 (the
+        # bounded change-record, gated ONCA_REG_LLM) uses Bedrock and the registry industry
+        # map for the concrete blast-radius count. digests read/write (put + same-day retract).
         regulatory_fn = lambda_.Function(
             self,
             "OncaRegulatory",
@@ -839,10 +841,21 @@ class OncaPrototypeStack(Stack):
             environment={
                 "PYTHONPATH": "/var/task",
                 "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+                "ONCA_ENTITIES_TABLE": entities_table.table_name,
                 "ONCA_FEATURE_WINDOW_DAYS": "90",
             },
         )
         digests_bucket.grant_read_write(regulatory_fn)
+        entities_table.grant_read_data(regulatory_fn)  # #28 §3 blast-radius entity counts
+        regulatory_fn.add_to_role_policy(               # #28 §3 change-record (gated)
+            iam.PolicyStatement(
+                actions=["bedrock:InvokeModel", "bedrock:Converse"],
+                resources=[
+                    f"arn:aws:bedrock:{self.region}::foundation-model/*",
+                    f"arn:aws:bedrock:{self.region}:{self.account}:inference-profile/*",
+                ],
+            )
+        )
 
         # Cohort/vintage detector (ADR 003 Wave 1 / ADR 004 O-T feeder): set-longitudinal
         # over industry cohorts — recomputes each segment's recent-vs-baseline threat
