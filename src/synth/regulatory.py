@@ -624,23 +624,29 @@ def regdoc_targets(narratives: list[dict[str, Any]], *, as_of: str | None = None
                      include_comunicados=include_com, horizon=horizon)
     out: list[dict[str, Any]] = []
     for key, g in groups.items():
+        num = _instrument_number(key)
+        # DOU slugs write the number with the pt-BR thousands dot ("5.336"), so match the
+        # number with an optional separator, bounded by non-digits.
+        num_pat = None
+        if num:
+            core = num if len(num) < 4 else num[:-3] + r"\.?" + num[-3:]
+            num_pat = re.compile(rf"(?<!\d){core}(?!\d)")
         dou_url = None
-        fallback = None
         for m in g.get("mentions") or []:
             for c in m.get("citations") or []:
                 u = c.get("url") if isinstance(c, dict) else None
-                if not u or not str(u).startswith("http"):
+                if not u or "in.gov.br" not in str(u):
                     continue
-                if "in.gov.br" in u:      # DOU = full norm text (preferred)
+                # Scope to THIS instrument: a thread aggregates cards that may cite other
+                # acts' DOU pages — require the instrument number in the URL slug, else we'd
+                # store the wrong document (nexus, cf. #51).
+                if num_pat and num_pat.search(str(u)):
                     dou_url = u
                     break
-                if fallback is None:
-                    fallback = u
             if dou_url:
                 break
-        url = dou_url or fallback
-        if url:
-            out.append({"instrument_key": key, "label": g.get("label"), "url": url})
+        if dou_url:
+            out.append({"instrument_key": key, "label": g.get("label"), "url": dou_url})
     return out
 
 

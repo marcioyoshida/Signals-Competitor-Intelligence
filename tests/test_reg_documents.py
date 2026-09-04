@@ -97,4 +97,12 @@ def test_regdoc_targets_prefers_dou_citation():
             {"url": "https://www.bcb.gov.br/exibenormativo?numero=5336"}])]
     tg = regulatory.regdoc_targets(narrs, as_of="2026-08-23")
     row = next(t for t in tg if t["instrument_key"] == "res-cmn-5336")
-    assert "in.gov.br" in row["url"]                # DOU preferred over news/bcb shell
+    assert "in.gov.br" in row["url"] and "5.336" in row["url"]
+
+
+def test_regdoc_targets_rejects_wrong_document():
+    # the only DOU citation is a DIFFERENT act (a SUSEP portaria) — store nothing, not the
+    # wrong document (nexus discipline, cf. #51).
+    narrs = [_narr("A Resolução BCB 585 dispõe sobre X.", cites=[
+        {"url": "https://www.in.gov.br/web/dou/-/portaria-susep-n-8.186-de-21-728000000"}])]
+    assert regulatory.regdoc_targets(narrs, as_of="2026-08-23") == []
