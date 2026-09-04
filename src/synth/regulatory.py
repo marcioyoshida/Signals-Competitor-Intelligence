@@ -613,6 +613,37 @@ def build_lifecycles(
     return out
 
 
+def regdoc_targets(narratives: list[dict[str, Any]], *, as_of: str | None = None,
+                   window: int = 90) -> list[dict[str, Any]]:
+    """ADR 009 Phase B input: [{instrument_key, label, url}] for tracked instruments,
+    preferring an in.gov.br DOU citation (full text) among the instrument's cards."""
+    as_of = as_of or run_date_today()
+    horizon = int(_f("ONCA_REG_DEADLINE_HORIZON", DEADLINE_HORIZON))
+    include_com = bool(int(_f("ONCA_REG_INCLUDE_COMUNICADOS", 0)))
+    groups = threads(narratives, as_of=as_of, recency=window,
+                     include_comunicados=include_com, horizon=horizon)
+    out: list[dict[str, Any]] = []
+    for key, g in groups.items():
+        dou_url = None
+        fallback = None
+        for m in g.get("mentions") or []:
+            for c in m.get("citations") or []:
+                u = c.get("url") if isinstance(c, dict) else None
+                if not u or not str(u).startswith("http"):
+                    continue
+                if "in.gov.br" in u:      # DOU = full norm text (preferred)
+                    dou_url = u
+                    break
+                if fallback is None:
+                    fallback = u
+            if dou_url:
+                break
+        url = dou_url or fallback
+        if url:
+            out.append({"instrument_key": key, "label": g.get("label"), "url": url})
+    return out
+
+
 def build_lifecycle_card(lc: dict[str, Any]) -> dict[str, Any]:
     """A feed-ready card for one instrument's lifecycle thread (grounded, labeled)."""
     def _fmt(d: str) -> str:
@@ -747,6 +778,23 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     except Exception as exc:  # pragma: no cover - best-effort
         print(f"Warning: regulatory lifecycle publish failed: {exc}")
 
+    # ADR 009 Phase B: fetch + version the full text of tracked instruments into the
+    # regdocs/ store (the diff enabler). Gated OFF by default (network fetch of DOU pages);
+    # content-hash-cached so steady-state runs only write changed/new docs.
+    regdocs = None
+    if os.environ.get("ONCA_REGDOCS", "false").lower() in ("1", "true", "yes"):
+        try:
+            from src.ingest import reg_documents
+
+            bucket = os.environ.get("ONCA_RAW_BUCKET") or digests_bucket
+            targets = regdoc_targets(recent, as_of=run_date, window=window_days)
+            regdocs = reg_documents.sync_documents(targets, bucket, s3=s3, as_of=run_date)
+            print(f"regdocs: targets={regdocs['targets']} stored={len(regdocs['stored'])} "
+                  f"unchanged={regdocs['unchanged']} skipped={regdocs['skipped']} "
+                  f"errors={len(regdocs['errors'])}")
+        except Exception as exc:  # pragma: no cover - best-effort, never blocks
+            print(f"Warning: regdocs sync failed: {exc}")
+
     return {
         "statusCode": 200,
         "body": json.dumps(
@@ -757,6 +805,9 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 "nominated": len(cands),
                 "emitted": len(keys),
                 "lifecycles": n_lifecycles,
+                "regdocs": ({"stored": len(regdocs["stored"]), "unchanged": regdocs["unchanged"],
+                             "skipped": regdocs["skipped"], "errors": len(regdocs["errors"])}
+                            if regdocs else None),
                 "instruments": [
                     f"{c['instrument']}"
                     + (f"@{c['deadline']}" if c["deadline"] else "")
