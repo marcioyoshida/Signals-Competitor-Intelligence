@@ -24,10 +24,18 @@
     persists `regdocs/<key>/<old>__<new>.diff.json` + a summary on the version entry. Fires
     on any changed version (rare for discrete acts; the enabler is in place). The grounded
     diff the §3 LLM record will describe + rate.
-  - **Deferred:** (3) the bounded **LLM change-record** with rated impact/blast_radius/
-    difficulty (Phases A + §2 are the grounded floor it builds on: the change list + the
-    section delta); (4) attach the diff to the reg-lifecycle card; (5) the dashboard
-    "Mudança regulatória" panel + "Regulatório/Mudanças" filter.
+  - **§3 LLM change-record LIVE** — `src/synth/reg_change_record.py` asks a bounded Bedrock
+    (nova-lite) call to DESCRIBE + RATE the change (impact, affected_surfaces, blast_radius,
+    difficulty), on top of Phase A's change list. Discipline held: the LLM only rates; the
+    GROUNDED facts come from our data — `affected_industries` from the domain→taxonomy map,
+    `blast_radius.n_entities` from the registry count (the model's number/tags are ignored),
+    `effective_date` from the deadline, `is_inference` always True; bands derived
+    deterministically. `enrich_lifecycles` drafts only for lifecycles with a real change,
+    bounded by `ONCA_REG_LLM_MAX`; gated `ONCA_REG_LLM` (needs Bedrock + entities-table on
+    the regulatory role — granted in CDK). Live: 2 records (CMN 5339 blast=market/278 diff=
+    high; CMN 5304 blast=market/135 diff=medium), carried through to `feed.json`.
+  - **Deferred:** (5) the dashboard "Mudança regulatória" panel + "Regulatório/Mudanças"
+    filter — the change_record now rides on the reg card in `feed.json`, ready to render.
 - Extends [ADR 003](2026-08-19-adr-narrative-dimensions.md) — the **regulatory-lifecycle
   axis** (`src/synth/regulatory.py`), which today tracks *that* an instrument changed +
   its deadline + affected domain, and **explicitly deferred to v2**: "fetch/compare the
