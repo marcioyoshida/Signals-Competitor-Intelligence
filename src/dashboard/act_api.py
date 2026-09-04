@@ -87,23 +87,29 @@ def _act_key(idempotency_key: str) -> dict[str, str]:
 
 
 def _get_act(idempotency_key: str, table: Any | None = None) -> dict[str, Any] | None:
+    """Return the stored {status, result} for a prior request, or None. The result is
+    kept as a JSON string so DynamoDB never coerces numbers to Decimal (which would
+    break json.dumps on replay)."""
     try:
         item = entity_registry._table(table).get_item(Key=_act_key(idempotency_key)).get("Item")
     except Exception:
         return None
     if not item:
         return None
-    stored = item.get("result")
-    return stored if isinstance(stored, dict) else None
+    try:
+        return {"status": int(item.get("status") or 200),
+                "result": json.loads(item.get("result_json") or "{}")}
+    except (ValueError, TypeError):
+        return None
 
 
-def _put_act(idempotency_key: str, result: dict[str, Any], table: Any | None = None) -> None:
+def _put_act(idempotency_key: str, status: int, result: dict[str, Any],
+             table: Any | None = None) -> None:
     try:
         entity_registry._table(table).put_item(
-            Item=entity_registry._ddb_safe(
-                {**_act_key(idempotency_key), "type": "act", "result": result,
-                 "created_at": entity_registry._now_iso()}
-            )
+            Item={**_act_key(idempotency_key), "type": "act", "status": int(status),
+                  "result_json": json.dumps(result, ensure_ascii=False),
+                  "created_at": entity_registry._now_iso()}
         )
     except Exception as exc:  # pragma: no cover - best-effort, never blocks the response
         print(f"Warning: act idempotency store failed for {idempotency_key}: {exc}")
@@ -272,7 +278,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     if idem:
         prior = _get_act(idem)
         if prior is not None:
-            return _resp(int(prior.get("_status") or 200), {**prior, "idempotent_replay": True})
+            return _resp(prior["status"], {**prior["result"], "idempotent_replay": True})
 
     outcome, status, detail = handler(args, actor)
     subject = str(args.get(subject_key)) if subject_key and args.get(subject_key) else _ACT_SUBJECT
@@ -291,5 +297,5 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         "request_id": result["request_id"], "idempotency_key": idem or None,
     })
     if idem:
-        _put_act(idem, {**result, "_status": status})
+        _put_act(idem, status, result)
     return _resp(status, result)

@@ -194,7 +194,8 @@ def test_idempotent_replay_returns_stored_result(monkeypatch):
     monkeypatch.setattr(er, "_log", lambda *a, **k: None)
     store: dict[str, dict] = {}
     monkeypatch.setattr(act_api, "_get_act", lambda k, table=None: store.get(k))
-    monkeypatch.setattr(act_api, "_put_act", lambda k, r, table=None: store.__setitem__(k, r))
+    monkeypatch.setattr(act_api, "_put_act",
+                        lambda k, status, r, table=None: store.__setitem__(k, {"status": status, "result": r}))
     calls = {"n": 0}
 
     def _revert(eid, ts, **k):
