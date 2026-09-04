@@ -84,6 +84,20 @@ def test_sync_documents_fetches_stores_and_indexes():
     assert rep2["stored"] == [] and rep2["unchanged"] == 2
 
 
+def test_store_second_version_computes_and_persists_a_diff():
+    s3 = _FakeS3(); index = {}
+    v1 = "Art. 1º O limite é de R$ 100,00.\nArt. 2º Vigência imediata."
+    v2 = "Art. 1º O limite é de R$ 250,00.\nArt. 2º Vigência imediata.\nArt. 3º Nova regra."
+    RD.store_document("raw", "res-cmn-5336", v1, url="u1", index=index, s3=s3)
+    r2 = RD.store_document("raw", "res-cmn-5336", v2, url="u2", index=index, s3=s3)
+    # the new version carries a diff vs the prior, persisted as a .diff.json
+    assert r2["stored"] and "diff" in r2
+    assert r2["diff"]["modified"] == 1 and r2["diff"]["added"] == 1
+    assert "modifica Art. 1" in r2["diff"]["summary"]
+    assert any(k.endswith(".diff.json") for k in s3.store)
+    assert index["res-cmn-5336"]["versions"][1]["diff"]["vs"] == index["res-cmn-5336"]["versions"][0]["hash"]
+
+
 def _narr(text, date="2026-08-20", cites=None):
     return {"entity": None, "narrative": text, "run_date": date, "lenses": ["regulatory"],
             "citations": cites or []}

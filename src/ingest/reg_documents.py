@@ -98,14 +98,38 @@ def store_document(
         rec["label"] = label
     if any(v.get("hash") == h for v in rec["versions"]):
         return {"stored": False, "hash": h, "reason": "unchanged"}
+    prior = rec["versions"][-1] if rec["versions"] else None
     key = f"{REGDOCS_PREFIX}{instrument_key}/{h}.txt"
     s3.put_object(Bucket=bucket, Key=key, Body=str(text).encode("utf-8"),
                   ContentType="text/plain; charset=utf-8")
-    rec["versions"].append({
+    entry: dict[str, Any] = {
         "hash": h, "key": key, "url": url, "chars": len(text or ""),
         "fetched": as_of or dt.date.today().isoformat(),
-    })
-    return {"stored": True, "hash": h, "key": key}
+    }
+    result = {"stored": True, "hash": h, "key": key}
+    # ADR 009 §2: a NEW version over a prior one → compute + persist the section diff.
+    if prior and prior.get("key"):
+        try:
+            from src.synth import reg_diff
+
+            old_text = _load_doc(bucket, prior["key"], s3=s3)
+            diff = reg_diff.diff_versions(old_text, text)
+            diff_key = f"{REGDOCS_PREFIX}{instrument_key}/{prior['hash']}__{h}.diff.json"
+            s3.put_object(Bucket=bucket, Key=diff_key,
+                          Body=json.dumps(diff, ensure_ascii=False).encode("utf-8"),
+                          ContentType="application/json")
+            entry["diff"] = {"vs": prior["hash"], "key": diff_key, "summary": reg_diff.summarize_diff(diff),
+                             **diff["summary"]}
+            result["diff"] = entry["diff"]
+        except Exception as exc:  # pragma: no cover - diff is best-effort, never blocks store
+            print(f"Warning: regdoc diff {instrument_key} failed: {exc}")
+    rec["versions"].append(entry)
+    return result
+
+
+def _load_doc(bucket: str, key: str, *, s3: Any | None = None) -> str:
+    s3 = s3 or boto3.client("s3")
+    return s3.get_object(Bucket=bucket, Key=key)["Body"].read().decode("utf-8", "replace")
 
 
 def sync_documents(
