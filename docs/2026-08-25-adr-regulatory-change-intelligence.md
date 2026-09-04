@@ -17,11 +17,17 @@
     other acts' citations — same nexus discipline as #51). Gated `ONCA_REGDOCS`; live run
     stored 5 instruments' full text (5336 = 5,348 chars). This is the enabler the diff phase
     needs.
-  - **Deferred:** (2) versioned-document **section diff** (align Art./§, added/removed/
-    modified) over the stored versions — Phase B provides the prior version to diff against;
-    (3) the bounded **LLM change-record** with rated impact/blast_radius/difficulty (Phase A
-    is the grounded floor it builds on); (5) the dashboard "Mudança regulatória" panel +
-    "Regulatório/Mudanças" filter.
+  - **§2 section diff LIVE** — `src/synth/reg_diff.py` segments each stored version by
+    structural unit (preamble / Art. N / Anexo), aligns by key, marks added/removed/modified
+    (compact ± diff for modified), `summarize_diff` → "modifica Art. 1; inclui Art. 9;
+    revoga Art. 7". Wired into `reg_documents.store_document`: a new version over a prior one
+    persists `regdocs/<key>/<old>__<new>.diff.json` + a summary on the version entry. Fires
+    on any changed version (rare for discrete acts; the enabler is in place). The grounded
+    diff the §3 LLM record will describe + rate.
+  - **Deferred:** (3) the bounded **LLM change-record** with rated impact/blast_radius/
+    difficulty (Phases A + §2 are the grounded floor it builds on: the change list + the
+    section delta); (4) attach the diff to the reg-lifecycle card; (5) the dashboard
+    "Mudança regulatória" panel + "Regulatório/Mudanças" filter.
 - Extends [ADR 003](2026-08-19-adr-narrative-dimensions.md) — the **regulatory-lifecycle
   axis** (`src/synth/regulatory.py`), which today tracks *that* an instrument changed +
   its deadline + affected domain, and **explicitly deferred to v2**: "fetch/compare the
