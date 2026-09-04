@@ -40,9 +40,11 @@
     difficulty as color+glyph+WORD badges, effective-date/countdown, impact/action/surfaces,
     labeled inferência. `renderRegulatorio` gains a "só mudanças" facet (the Regulatório/
     Mudanças filter). Rendered on the card + drawer across the v2 industry tabs.
-  - **All phases live.** Follow-on (optional): also draft a §3 rated record for the single-
-    date RADAR cards (today §3 enriches the multi-date lifecycles); today radar cards show
-    the deterministic change list without the rating.
+  - **All phases live**, and §3 now rates the single-date RADAR cards too (not just the
+    multi-date lifecycles): `reg_change_record.record_for()` is the shared helper, the
+    lambda draws radar + lifecycles from one shared `ONCA_REG_LLM_MAX` budget. Live: 10/10
+    reg cards with a change now carry the rated record (e.g. CMN 5130 blast=market/278
+    diff=high, CMN 5304 market/135 medium).
 - Extends [ADR 003](2026-08-19-adr-narrative-dimensions.md) — the **regulatory-lifecycle
   axis** (`src/synth/regulatory.py`), which today tracks *that* an instrument changed +
   its deadline + affected domain, and **explicitly deferred to v2**: "fetch/compare the
