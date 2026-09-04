@@ -8,10 +8,20 @@
     targets, bound per-clause and quoted (sourced, no LLM/network). Attached to the
     reg-lifecycle + radar cards as `changes[]`/`n_changes` + a "Mudanças: …" narrative
     line (`regulatory.py`). Fixed a latent `_NUM` truncation (undotted "5304"→"530").
-  - **Deferred:** (1) full-text fetch + `regdocs/` versioned store + index; (2) versioned-
-    document section diff (Manual do DICT etc.); (3) the bounded LLM change-record with
-    rated impact/blast_radius/difficulty (Phase A is the grounded floor it builds on);
-    (5) the dashboard "Mudança regulatória" panel + "Regulatório/Mudanças" filter.
+  - **Phase B (versioned regdocs/ full-text store) LIVE** — `src/ingest/reg_documents.py`
+    fetches a tracked instrument's full text and persists it keyed by instrument +
+    content-hash (`regdocs/<instrument_key>/<hash>.txt` + `regdocs/index.json`), content-
+    hash-cached so a re-fetch is a no-op. Full-text source = the **in.gov.br DOU** page
+    (BCB `exibenormativo` is a JS shell); `regulatory.regdoc_targets()` derives the DOU URL
+    from the thread's citations, **number-scoped** to the instrument (a thread aggregates
+    other acts' citations — same nexus discipline as #51). Gated `ONCA_REGDOCS`; live run
+    stored 5 instruments' full text (5336 = 5,348 chars). This is the enabler the diff phase
+    needs.
+  - **Deferred:** (2) versioned-document **section diff** (align Art./§, added/removed/
+    modified) over the stored versions — Phase B provides the prior version to diff against;
+    (3) the bounded **LLM change-record** with rated impact/blast_radius/difficulty (Phase A
+    is the grounded floor it builds on); (5) the dashboard "Mudança regulatória" panel +
+    "Regulatório/Mudanças" filter.
 - Extends [ADR 003](2026-08-19-adr-narrative-dimensions.md) — the **regulatory-lifecycle
   axis** (`src/synth/regulatory.py`), which today tracks *that* an instrument changed +
   its deadline + affected domain, and **explicitly deferred to v2**: "fetch/compare the
