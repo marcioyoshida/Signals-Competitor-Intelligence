@@ -585,6 +585,21 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
         print(f"Warning: BCB autorizações fetch failed: {exc}")
 
+    # CVM market-participant registries (E5) — consultores/adm de carteira new-entrant scan.
+    # Gated (heavy CVM zip fetch) + seed-suppressed. Non-fintech → surfaces as entrant SIGNALS
+    # (entrants lens + Receita enrich), not auto-created, so a fuzzy advisory set never floods.
+    if os.environ.get("ONCA_INGEST_CVM_PARTICIPANTES", "false").lower() in ("1", "true", "yes"):
+        try:
+            from src.ingest import cvm_participantes
+
+            with _source_budget("CVM participantes", deadline, per_source):
+                parts = cvm_participantes.fetch_participants()
+                new_entrants += _new_since_last_run(
+                    "cvm_participantes", parts, seed_if_empty=True
+                )
+        except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
+            print(f"Warning: CVM participantes fetch failed: {exc}")
+
     # Receita Federal enrichment: resolve the brand + controllers behind each new
     # entrant's (otherwise anonymous) CNPJ. Own budget so a slow lookup can't lose
     # the entrants list; only new entrants (bounded volume) are enriched.
