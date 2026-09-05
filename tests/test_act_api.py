@@ -377,6 +377,25 @@ def test_set_outcome_applies(monkeypatch):
     assert missing["statusCode"] == 404
 
 
+def test_record_engagement_applies_and_is_not_journaled(monkeypatch):
+    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setattr(act_api, "_get_act", lambda *a, **k: None)
+    monkeypatch.setattr(act_api, "_put_act", lambda *a, **k: None)
+    logged = []
+    monkeypatch.setattr(er, "_log", lambda *a, **k: logged.append(a))
+    from src.synth import engagement_log
+    monkeypatch.setattr(engagement_log, "record_engagement",
+                        lambda **kw: {"engagement_id": "e1", "kind": kw["kind"], "action": kw.get("action") or "expand"})
+    resp = act_api.lambda_handler(_event(
+        {"intent": "record_engagement", "officer": "cso",
+         "args": {"kind": "headline", "action": "expand", "card_id": "n1", "entity": "itau",
+                  "officer": "cso", "sector": "banking"}}), None)
+    assert resp["statusCode"] == 200
+    assert json.loads(resp["body"])["outcome"] == "applied"
+    assert logged == []  # telemetry is NOT written to the curation journal
+    assert "record_engagement" in act_api._NO_JOURNAL
+
+
 def test_append_reference_applies(monkeypatch):
     _no_journal(monkeypatch)
     monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)

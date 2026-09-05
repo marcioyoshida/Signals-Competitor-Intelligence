@@ -41,11 +41,27 @@ def _slice(decisions: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def compute_metrics(decisions: list[dict[str, Any]]) -> dict[str, Any]:
+def compute_metrics(decisions: list[dict[str, Any]],
+                    engagement: dict[str, Any] | None = None) -> dict[str, Any]:
     """Roll up the decision log into the honest, available Decision-Trust metrics + per-officer /
-    per-industry slices. `ets`/`tdr` are intentionally None (inputs not yet captured)."""
+    per-industry slices, folding the §E **Engagement** component from the engagement rollup.
+
+    ETS = 0.40·Feedback + 0.25·Influence + 0.20·Engagement + 0.15·Board. Feedback/Influence/
+    Engagement are now measurable; **Board adoption is not**, so `ets` is a PARTIAL composite —
+    the weighted average of the measured components, renormalized to their summed weight (0.85),
+    on a 0–10 scale, clearly labelled. `tdr` stays None (needs a per-tenant baseline)."""
     decisions = [d for d in (decisions or []) if isinstance(d, dict)]
     overall = _slice(decisions)
+
+    # component scores (0–10); None when not yet measurable
+    feedback = overall.get("ets_feedback")                        # 0.40
+    influence = round(overall["influence_rate"] * 10, 1) if overall["n_decisions"] else None  # 0.25
+    n_interest = (engagement or {}).get("n_interest") or 0
+    engagement_score = round(min(n_interest / 50.0, 1.0) * 10, 1) if n_interest else None      # 0.20
+
+    comps = [(0.40, feedback), (0.25, influence), (0.20, engagement_score)]
+    measured = [(w, v) for w, v in comps if v is not None]
+    ets = round(sum(w * v for w, v in measured) / sum(w for w, _ in measured), 1) if measured else None
 
     by_officer: dict[str, Any] = {}
     for off in ("cso", "cro", "cco", "cpo"):
@@ -59,9 +75,12 @@ def compute_metrics(decisions: list[dict[str, Any]]) -> dict[str, Any]:
 
     return {
         **overall,
-        "ets": None,
-        "ets_note": "parcial — só o componente Feedback (resultado favorável) é medível hoje; "
-                    "Influência/Engajamento/Adoção exigem a telemetria do beacon (Passo 5).",
+        "ets": ets,
+        "ets_components": {"feedback": feedback, "influence": influence,
+                           "engagement": engagement_score, "board": None},
+        "ets_note": "parcial (0–10) — média ponderada dos componentes medidos (Feedback 0.40 · "
+                    "Influência 0.25 · Engajamento 0.20), renormalizada; Adoção do board (0.15) "
+                    "ainda não instrumentada.",
         "tdr": None,
         "tdr_note": "requer baseline de tempo-para-decisão por tenant (registrado, não assumido).",
         "by_officer": by_officer,

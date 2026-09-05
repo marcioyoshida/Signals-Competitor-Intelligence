@@ -380,20 +380,30 @@ async function captureTraj(btn) {
 // --- Decision-Trust metrics band (§E) — honest, only what the log holds ------
 function pct(x) { return x == null ? "—" : Math.round(x * 100) + "%"; }
 function metricsBand() {
-  const m = EX.metrics || {};
+  const m = EX.metrics || {}, eng = EX.engagement || {};
   if (m.n_decisions == null) return "";
   const mm = (m.by_officer && m.by_officer[OFFICER]) ? m.by_officer[OFFICER] : m;
-  const ets = mm.ets_feedback;
+  const ets = m.ets;  // partial composite (Feedback+Influence+Engagement, renormalized)
   const [bc, bl] = ets == null ? ["low", "sem dados"] : ets >= 7.6 ? ["ok", "Confiável"] : ets >= 6.1 ? ["warn", "Útil"] : ["high", "Baixa confiança"];
-  const hero = heroGauge("ETS · componente Feedback", ets == null ? "—" : ets, bandBadge(bc, bl),
+  const hero = heroGauge("ETS (parcial)", ets == null ? "—" : ets, bandBadge(bc, bl),
     "--" + (bc === "ok" ? "ok" : bc === "warn" ? "warn" : "t-high"), (ets || 0) * 10);
-  const tilesArr = [tile("Decisões", mm.n_decisions, "capturadas"),
-    tile("Aprovação", pct(mm.approval_rate), "das decisões"),
-    tile("Influência", pct(mm.influence_rate), "com resultado"),
-    tile("Favorável", pct(mm.favorable_rate), "dos resolvidos")];
-  const note = `<p class="hd-note" style="padding:2px var(--s2) 0;line-height:1.4">ETS composto e TDR: `
-    + `${U.esc(m.ets_note || "")} ${U.esc(m.tdr_note || "")}</p>`;
-  return band("Confiança & decisão", "ETS parcial · TDR requer baseline", readout(hero, tilesArr) + note);
+  const c = m.ets_components || {};
+  const tilesArr = [tile("Feedback", c.feedback == null ? "—" : c.feedback, "resultado favorável"),
+    tile("Influência", c.influence == null ? "—" : c.influence, "com resultado"),
+    tile("Engajamento", c.engagement == null ? "—" : c.engagement, `${eng.n_interest || 0} interações`),
+    tile("Decisões", mm.n_decisions, "capturadas")];
+  const note = `<p class="hd-note" style="padding:2px var(--s2) 0;line-height:1.4">${U.esc(m.ets_note || "")} · ${U.esc(m.tdr_note || "")}</p>`;
+  // §E intelligence: which entities/sectors draw executive attention (from the engagement rollup).
+  const te = eng.top_entities || [], tsec = eng.top_sectors || [];
+  const interestPanel = (te.length || tsec.length)
+    ? band("Interesse executivo", "atenção capturada · engajamento",
+        grid("1fr 1fr", [
+          panel("Entidades mais abertas", null, "expansões de manchete", `<div class="panel__bd--flush">${
+            te.length ? hbars(te.slice(0, 8).map(x => ({ label: x.label, value: x.hits, bar: x.hits / (te[0].hits || 1) * 100, colorTok: "var(--cat-steel)" }))) : U.empty("Sem sinais de atenção ainda.", "clique numa manchete", "○")}</div>`),
+          panel("Setores mais abertos", null, "expansões por setor", `<div class="panel__bd--flush">${
+            tsec.length ? hbars(tsec.slice(0, 8).map(x => ({ label: (EX.sectors.find(s => s.slug === x.sector) || {}).label || x.sector, value: x.hits, bar: x.hits / (tsec[0].hits || 1) * 100, colorTok: "var(--cat-gold)" }))) : U.empty("Sem sinais de atenção ainda.", "", "○")}</div>`)]))
+    : "";
+  return band("Confiança & decisão", "ETS parcial · TDR requer baseline", readout(hero, tilesArr) + note) + interestPanel;
 }
 
 // --- Reference / playbook band (§H) — curated baseline per officer ----------
@@ -415,6 +425,18 @@ function beacon(did, url, officer) {
     if (navigator.sendBeacon) navigator.sendBeacon("/api/act", new Blob([body], { type: "application/json" }));
     else fetch("/api/act", { method: "POST", credentials: "include", keepalive: true, headers: { "content-type": "application/json" }, body });
   } catch (e) { /* best-effort — never blocks navigation */ }
+}
+// §E engagement telemetry — an attention event (headline expand/open), tagged for intelligence.
+function engage(kind, action, cardId) {
+  const c = cardId ? BYID[cardId] : null;
+  const body = JSON.stringify({ intent: "record_engagement", officer: OFFICER, args: {
+    kind, action, officer: OFFICER, sector: SECTOR, card_id: cardId,
+    entity: c && c.entity, threat_score: c && c.threat_score,
+    industries: (c && c.industries) || [], topics: (c && c.topics) || [] } });
+  try {
+    if (navigator.sendBeacon) navigator.sendBeacon("/api/act", new Blob([body], { type: "application/json" }));
+    else fetch("/api/act", { method: "POST", credentials: "include", keepalive: true, headers: { "content-type": "application/json" }, body });
+  } catch (e) { /* best-effort */ }
 }
 function evUrl(evId) { const c = BYID[evId]; return (c && (c.citations || [])[0] && c.citations[0].url) || ("card:" + evId); }
 function onEvidence(a) {
@@ -620,9 +642,14 @@ function render() {
     }
   }
   el.innerHTML = flowBand() + board + metricsBand() + referenceBand();
-  // Click the headline to expand/collapse it inline (doesn't open the drawer).
+  // Click the headline to expand/collapse it inline (doesn't open the drawer); an expand is
+  // an attention event (§E engagement telemetry) tagged with the card's entity/sector/threat.
   el.querySelectorAll(".exrow .ttl").forEach(t => t.addEventListener("click", (e) => {
-    e.stopPropagation(); t.classList.toggle("is-expanded"); }));
+    e.stopPropagation();
+    const expanded = t.classList.toggle("is-expanded");
+    const row = t.closest(".exrow");
+    engage("headline", expanded ? "expand" : "collapse", row && row.getAttribute("data-id"));
+  }));
   el.querySelectorAll(".exrow[data-id]").forEach(row => row.addEventListener("click", () => inspect(row.getAttribute("data-id"))));
   el.querySelectorAll(".exrow[data-url],.exrow[data-href]").forEach(row => row.addEventListener("click", () => {
     const u = row.getAttribute("data-url") || row.getAttribute("data-href"); if (u) window.open(u, "_blank", "noopener"); }));

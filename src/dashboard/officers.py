@@ -44,7 +44,7 @@ OFFICERS: dict[str, Officer] = {
             "porter", "tows", "posicao", "ameaca", "expansao", "momentum", "grupo",
             "mercado", "participacao",
         ),
-        actions=("open_watch", "curate_belief", "trigger_run", "record_decision", "set_outcome", "append_reference"),
+        actions=("open_watch", "curate_belief", "trigger_run", "record_decision", "set_outcome", "append_reference", "record_engagement"),
     ),
     "regulator": Officer(
         role="regulator",
@@ -60,7 +60,7 @@ OFFICERS: dict[str, Officer] = {
             "instrucao", "cvm", "bcb", "susep", "previc", "prazo", "vigencia", "mudanca",
             "deliberacao", "portaria",
         ),
-        actions=("open_watch", "trigger_run", "record_decision", "set_outcome", "append_reference"),
+        actions=("open_watch", "trigger_run", "record_decision", "set_outcome", "append_reference", "record_engagement"),
     ),
     "compliance": Officer(
         role="compliance",
@@ -77,7 +77,7 @@ OFFICERS: dict[str, Officer] = {
             "distress", "recuperacao", "falencia", "rollback", "reverter", "auditoria",
             "risco", "governanca", "insolvencia",
         ),
-        actions=("run_integrity_audit", "flag_entity", "rollback_field", "revert_entity", "record_decision", "set_outcome", "append_reference"),
+        actions=("run_integrity_audit", "flag_entity", "rollback_field", "revert_entity", "record_decision", "set_outcome", "append_reference", "record_engagement"),
     ),
     "product": Officer(
         role="product",
@@ -92,7 +92,7 @@ OFFICERS: dict[str, Officer] = {
             "cobertura", "lacuna", "cego", "descoberta", "radar", "proposta", "vertical",
             "jtbd", "produto", "fonte", "detector", "onboarding", "entrante",
         ),
-        actions=("resolve_review", "propose_vertical", "propose_registry_change", "record_decision", "set_outcome", "append_reference"),
+        actions=("resolve_review", "propose_vertical", "propose_registry_change", "record_decision", "set_outcome", "append_reference", "record_engagement"),
     ),
 }
 

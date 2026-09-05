@@ -667,20 +667,25 @@ def build_reference() -> dict[str, Any]:
 
 
 # --- top level ------------------------------------------------------------------------
-def build_executive(feed: dict[str, Any], *, decisions: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+def build_executive(feed: dict[str, Any], *, decisions: list[dict[str, Any]] | None = None,
+                    engagement: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """`feed.executive` — the four enriched officer blocks + shared sectors + the Executive Flow
-    (§D trajectories) + the Decision-Trust metrics (§E, from `decisions` if supplied)."""
+    (§D trajectories) + the Decision-Trust metrics (§E, from `decisions`) + the Executive
+    Engagement rollup (§E, from `engagement`)."""
     cards = _cards(feed)
     dates = list(feed.get("dates") or [])
     recent, _prior = _recent_window(dates)
     sectors = [{"slug": o.get("slug"), "label": o.get("display_name") or o.get("label") or o.get("slug")}
                for o in (feed.get("industry_options") or []) if o.get("slug")]
-    ctx = {"cards": cards, "dates": dates, "recent": recent, "labels": _labels(feed),
+    labels = _labels(feed)
+    ctx = {"cards": cards, "dates": dates, "recent": recent, "labels": labels,
            "sectors": sectors, "reg_cards": [c for c in cards if c.get("kind") in _REG_KINDS]}
+    engagement_roll = {}
     metrics = {}
     try:
-        from src.synth import decision_metrics
-        metrics = decision_metrics.compute_metrics(decisions or [])
+        from src.synth import decision_metrics, engagement_log
+        engagement_roll = engagement_log.aggregate(engagement or [], labels=labels)
+        metrics = decision_metrics.compute_metrics(decisions or [], engagement=engagement_roll)
     except Exception as exc:  # pragma: no cover - metrics best-effort
         print(f"Warning: decision metrics skipped: {exc}")
     return {
@@ -690,6 +695,7 @@ def build_executive(feed: dict[str, Any], *, decisions: list[dict[str, Any]] | N
         "sectors": sectors,
         "flow": build_flow(feed, ctx),
         "metrics": metrics,
+        "engagement": engagement_roll,
         "reference": REFERENCE,
         "cso": build_cso(feed, ctx),
         "cro": build_cro(feed, ctx),

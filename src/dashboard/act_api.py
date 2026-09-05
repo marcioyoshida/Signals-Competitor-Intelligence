@@ -382,6 +382,30 @@ def _act_append_reference(args: dict[str, Any], actor: str) -> tuple[str, int, d
     return "applied", 200, {"decision_id": did, "url": url}
 
 
+def _act_record_engagement(args: dict[str, Any], actor: str) -> tuple[str, int, dict[str, Any]]:
+    """apply (telemetry): capture an executive attention event — a headline expand/open (§E
+    Engagement). Append-only, NOT journaled (high-frequency). Best-effort."""
+    from src.synth import engagement_log
+
+    try:
+        item = engagement_log.record_engagement(
+            kind=str(args.get("kind") or "headline"), actor=actor,
+            officer=args.get("officer"), sector=args.get("sector"),
+            card_id=args.get("card_id"), entity=args.get("entity"),
+            action=args.get("action"), threat_score=args.get("threat_score"),
+            industries=args.get("industries") if isinstance(args.get("industries"), list) else None,
+            topics=args.get("topics") if isinstance(args.get("topics"), list) else None)
+    except Exception as exc:  # pragma: no cover - telemetry best-effort
+        return "noop", 200, {"detail": f"engagement skipped: {exc}"}
+    return "applied", 200, {"engagement_id": item["engagement_id"], "kind": item["kind"],
+                            "action": item["action"]}
+
+
+# Intents whose calls are NOT written to the OncaCurationLog audit journal (high-frequency
+# telemetry, not a state mutation).
+_NO_JOURNAL = frozenset({"record_engagement"})
+
+
 # intent -> (execution class, handler, journal-subject key in args)
 _CATALOG: dict[str, tuple[str, Callable[..., tuple[str, int, dict[str, Any]]], str | None]] = {
     "trigger_run": (APPLY, _act_trigger_run, None),
@@ -400,6 +424,8 @@ _CATALOG: dict[str, tuple[str, Callable[..., tuple[str, int, dict[str, Any]]], s
     "set_outcome": (APPLY, _act_set_outcome, None),
     # ADR 021 §H — CORS followed-link beacon (shared)
     "append_reference": (APPLY, _act_append_reference, None),
+    # ADR 021 §E — engagement telemetry (attention signal)
+    "record_engagement": (APPLY, _act_record_engagement, None),
 }
 
 
@@ -480,12 +506,14 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     }
     if handoff:
         result["handoff"] = handoff
-    # Journal every call (applied|proposed|blocked|noop) to OncaCurationLog.
-    _journal(subject, intent, actor, {
-        "outcome": outcome, "execution_class": exec_class, "args": args,
-        "officer": effective_officer, "handoff": handoff,
-        "request_id": result["request_id"], "idempotency_key": idem or None,
-    })
+    # Journal every call (applied|proposed|blocked|noop) to OncaCurationLog — except
+    # high-frequency telemetry intents (engagement), which have their own append-only store.
+    if intent not in _NO_JOURNAL:
+        _journal(subject, intent, actor, {
+            "outcome": outcome, "execution_class": exec_class, "args": args,
+            "officer": effective_officer, "handoff": handoff,
+            "request_id": result["request_id"], "idempotency_key": idem or None,
+        })
     if idem:
         _put_act(idem, status, result)
     return _resp(status, result)
