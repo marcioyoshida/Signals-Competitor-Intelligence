@@ -206,6 +206,20 @@ def test_answer_no_grounding_short_circuits():
     assert r["answer"] == aa.NO_GROUND_TEXT
 
 
+def test_persona_prepends_officer_mandate_without_dropping_the_contract():
+    from src.dashboard import officers
+    cap = {}
+    def conv(user, system=None, max_tokens=700):
+        cap["system"] = system
+        return "Itaú mudou adquirência [n1]."
+    r = aa.answer("o que o Itaú mudou na regulação?", feed=_feed(), converser=conv,
+                  persona=officers.brief_persona("regulator"))
+    # officer mandate leads, but the non-negotiable grounding rules still follow
+    assert cap["system"].startswith("Você é o Oficial regulatório")
+    assert "NÃO invente" in cap["system"] and "CITE as fontes" in cap["system"]
+    assert r["grounded"]
+
+
 def test_answer_grounds_on_reputation_store():
     feed = _feed()
     feed["reputation"] = [{"id": "reclameaqui:nubank", "entity": "nubank",

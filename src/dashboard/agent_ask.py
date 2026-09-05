@@ -314,8 +314,13 @@ def build_messages(
     *,
     kb_snippets: list[dict[str, Any]] | None = None,
     macro: dict[str, Any] | None = None,
+    persona: str | None = None,
 ) -> tuple[str, str]:
-    """Strict grounded-cited contract (system) + the grounded context (user)."""
+    """Strict grounded-cited contract (system) + the grounded context (user).
+
+    ``persona`` (ADR-020 Phase 2): an officer mandate prepended to the contract. It
+    reframes priorities/voice but NEVER relaxes the grounding/citation/anti-fabrication
+    rules that follow it."""
     system = (
         "Você é o analista da Onça, uma plataforma de inteligência competitiva sobre "
         "o mercado financeiro brasileiro. Responda SOMENTE com base nos dados fornecidos "
@@ -335,6 +340,8 @@ def build_messages(
         "cards cujo id começa com distress:. Nunca atribua insolvência à entidade de "
         "um card de notícia só porque o texto menciona o processo de OUTRA empresa."
     )
+    if persona:
+        system = f"{persona}\n\n{system}"
     lines: list[str] = [f"PERGUNTA: {q}", "", "=== CARDS (dados citáveis) ==="]
     for c in cards:
         ent = c.get("entity_label") or c.get("entity") or "—"
@@ -629,6 +636,7 @@ def answer(
     limit: int = 12,
     max_tokens: int = 700,
     modules: list[str] | None = None,
+    persona: str | None = None,
 ) -> dict[str, Any]:
     """Pure orchestration: scope gate → ground → generate → validate citations.
 
@@ -675,7 +683,8 @@ def answer(
         return {"answer": NO_GROUND_TEXT, "refused": False, "grounded": False,
                 "reason": "no-grounding", "citations": []}
 
-    system, user = build_messages(q, cards, kb_snippets=kb_snippets, macro=feed.get("macro"))
+    system, user = build_messages(q, cards, kb_snippets=kb_snippets,
+                                  macro=feed.get("macro"), persona=persona)
     text = converser(user, system=system, max_tokens=max_tokens)
     if not text:
         return {"answer": NO_GROUND_TEXT, "refused": False, "grounded": False,
@@ -765,6 +774,19 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     if len(q) > 500:
         q = q[:500]
     scope = body.get("scope") if isinstance(body.get("scope"), dict) else None
+    # ADR-020 Phase 2: an officer persona reframes the read (voice/priorities) over its lens,
+    # without loosening the grounding contract. `officer` may be an explicit role or "auto"
+    # (chief-of-staff router picks one from the question).
+    from src.dashboard import officers as _officers
+
+    officer = str(body.get("officer") or "").strip() or None
+    if officer == "auto":
+        officer = _officers.route(q)
+    persona = _officers.brief_persona(officer) if officer else None
+    if officer and persona is None:
+        return _resp(400, {"error": "unknown officer", "officers": list(_officers.OFFICERS)})
+    if persona and (scope is None or not scope.get("lens")):
+        scope = {**(scope or {}), "lens": _officers.primary_lens(officer)}
 
     bucket = os.environ.get("ONCA_SITE_BUCKET")
     if not bucket:
@@ -797,8 +819,10 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         result = answer(
             q, feed=feed, scope=scope, converser=converse,
             kb_retrieve=_kb_retrieve if os.environ.get("ONCA_KB_ID") else None,
-            modules=modules,
+            modules=modules, persona=persona,
         )
+        if officer:
+            result["officer"] = officer
         # Coverage-gap loop (capture stage): an IN-DOMAIN question that produced no
         # grounded answer is a data gap — record it for triage/remediation. An
         # off-domain refusal is not a gap. Best-effort; never breaks the response.

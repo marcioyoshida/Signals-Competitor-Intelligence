@@ -1,7 +1,9 @@
 # ADR 020 — Write-capable Agent API + four specialist officer agents
 
-- Status: **Phase 1 SHIPPED** — 2026-09-04 (was PROPOSED same day). Owner-requested
-  (issue #20). Phase 1 = the `/api/act` write contract (no officers yet). Extends
+- Status: **FULLY REALIZED (Phases 1–3 SHIPPED)** — 2026-09-04 (was PROPOSED same day).
+  Owner-requested (issue #20). Phase 1 = the `/api/act` write contract; Phase 2 = the four
+  officer personas (bounded action catalogs + the persona read); Phase 3 = the chief-of-staff
+  router + inter-officer hand-off + auto-apply safe classes. Extends
   [ADR 010](2026-08-25-adr-agent-chat-ui.md) — which shipped the **read-only** half of the
   Agent API (`/api/ask/`, grounded/cited Q&A) — with (a) a **write-capable** surface that
   *acts on the system* and (b) a **persona layer of four specialist "officer" agents**.
@@ -163,9 +165,34 @@ Implementation order:
      `/api/*` catch-all), entities-table RW + curation-log RW + the ad-hoc scheduler grants.
    - `tests/test_act_api.py` — authz (operator vs non-elevated JWT vs elevated JWT), catalog
      dispatch, propose-vs-apply, idempotent replay, journaling.
-2. **The four officer personas** — each a specialized read (an Ask persona over its lens) +
-   its bounded action catalog, review-gated. *(next)*
-3. **Auto-apply safe classes + the chief-of-staff router + inter-officer hand-off.**
+2. **The four officer personas — SHIPPED (Phase 2).** Declarative registry
+   `src/dashboard/officers.py`: each officer = `{title, mandate, primary_lens, cues,
+   actions}`. Strategic/Regulator/Compliance/Product, each with a **bounded action catalog**
+   (a subset of `_CATALOG`) and a **persona read**.
+   - Read side (`src/dashboard/agent_ask.py`): `answer(..., persona=)` prepends the officer
+     mandate to the grounded-cited system contract **without loosening** the
+     grounding/citation/anti-fabrication rules, and biases grounding to the officer's lens.
+     `/api/ask` accepts `officer` (an explicit role or `"auto"` → routed).
+   - Action side (`src/dashboard/act_api.py`): five new officer-backed actions, each wired to
+     an existing safe primitive — `open_watch` (apply; a durable `WATCH#` item),
+     `run_integrity_audit` (apply, read-only; ADR-018 detectors over the live feed+registry),
+     `flag_entity` / `curate_belief` / `propose_vertical` (**propose** — review-gated).
+   - `tests/test_officers.py` + officer cases in `tests/test_act_api.py` / `test_agent_ask.py`.
+3. **Auto-apply safe classes + chief-of-staff router + hand-off — SHIPPED (Phase 3).**
+   - **Auto-apply safe class** = the `apply` execution class (reversible/idempotent/low-blast:
+     `trigger_run`, `resolve_review`, `rollback_field`, `revert_entity`, `open_watch`,
+     `run_integrity_audit`); everything high-stakes stays `propose`.
+   - **Chief-of-staff router** (`officers.route`): classify a free-text intent to an officer by
+     accent-folded cue overlap (deterministic; a router model is the documented upgrade path).
+   - **Officer scoping + hand-off** (in `act_api`): an `officer` may emit only its own catalog
+     actions; an action owned **exclusively** by another officer is **handed off** to that
+     owner (journaled `handoff {from,to}`), never rejected — e.g. the Regulator's
+     `rollback_field` lands on Compliance. With no `officer`, an exclusively-owned action
+     auto-routes to its owner. Both the officer and any hand-off are recorded on the result
+     and in the `OncaCurationLog` journal.
+
+Officers here are **runtime product agents acting within Onça** (persona + catalog over the
+live data) — not to be confused with the dev-time Claude Code subagents in `.claude/agents/`.
 
 Related: issue #20; supersedes nothing (extends ADR-010). Depends on ADR-018 (audit/rollback)
 and ADR-002 (identity/tier).

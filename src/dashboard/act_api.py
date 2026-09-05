@@ -31,7 +31,7 @@ import json
 import os
 from typing import Any, Callable
 
-from src.dashboard import auth
+from src.dashboard import auth, officers
 from src.synth import entity_registry
 
 # Tier/group claims that carry the elevated write capability (ADR 002 tiers).
@@ -230,6 +230,101 @@ def _act_propose_registry_change(
     return "proposed", 202, {"review_id": rid, "entity_id": entity_id, "field": field}
 
 
+# ---- Phase 2 officer actions (each backed by an existing safe primitive) -----------
+def _act_open_watch(args: dict[str, Any], actor: str) -> tuple[str, int, dict[str, Any]]:
+    """apply: open a durable watch on an entity/segment/instrument (Strategic/Regulator).
+    Additive, reversible (a WATCH# item), low-blast — the auto-apply safe class."""
+    target = str(args.get("target") or "").strip()
+    if not target:
+        return "blocked", 400, {"error": "target required"}
+    kind = str(args.get("kind") or "watch").strip()
+    note = str(args.get("note") or "").strip()
+    pk = f"WATCH#{kind}#{entity_registry.normalize_alias(target)}"
+    try:
+        entity_registry._table().put_item(Item={
+            "pk": pk, "type": "watch", "target": target, "kind": kind, "note": note,
+            "by": actor, "created_at": entity_registry._now_iso(),
+        })
+    except Exception as exc:  # pragma: no cover - store best-effort
+        return "blocked", 500, {"error": f"watch store failed: {exc}"}
+    return "applied", 200, {"watch": pk, "target": target, "kind": kind}
+
+
+def _act_run_integrity_audit(args: dict[str, Any], actor: str) -> tuple[str, int, dict[str, Any]]:
+    """apply (read-only): run the integrity detectors over the live feed + registry and
+    return the finding counts (Compliance). No mutation — a diagnostic."""
+    from src.synth import integrity
+
+    bucket = os.environ.get("ONCA_SITE_BUCKET")
+    feed: dict[str, Any] = {}
+    if bucket:
+        try:
+            import boto3
+
+            obj = boto3.client("s3").get_object(Bucket=bucket, Key="feed.json")
+            feed = json.loads(obj["Body"].read())
+        except Exception as exc:  # pragma: no cover - feed best-effort
+            print(f"Warning: integrity audit could not load feed.json: {exc}")
+    report = integrity.audit(feed, entity_registry.list_entities())
+    top = [f for f in report.get("findings", []) if f.get("severity") == "high"][:10]
+    return "applied", 200, {"total": report.get("total"), "counts": report.get("counts"),
+                            "high": top}
+
+
+def _act_flag_entity(args: dict[str, Any], actor: str) -> tuple[str, int, dict[str, Any]]:
+    """propose: flag a sanction/distress/integrity hit on an entity for human review
+    (Compliance). Queues a review — never mutates the entity."""
+    entity_id = str(args.get("entity_id") or "").strip()
+    reason = str(args.get("reason") or "").strip()
+    if not entity_id or not reason:
+        return "blocked", 400, {"error": "entity_id and reason required"}
+    rid = entity_registry.propose_review(
+        kind="compliance_flag", key=entity_id, entity_id=entity_id,
+        reason=reason, hint=f"flag by={actor}", confidence="curated",
+        payload={"entity_id": entity_id, "reason": reason, "actor": actor,
+                 "risk": args.get("risk")},
+    )
+    if rid is None:
+        return "noop", 409, {"detail": "already flagged", "entity_id": entity_id}
+    return "proposed", 202, {"review_id": rid, "entity_id": entity_id}
+
+
+def _act_curate_belief(args: dict[str, Any], actor: str) -> tuple[str, int, dict[str, Any]]:
+    """propose: propose a competitive-belief bullet for review (Strategic). Never writes
+    the belief store directly — the ADR-004 vetting path promotes it."""
+    entity_id = str(args.get("entity_id") or "").strip()
+    bullet = str(args.get("bullet") or "").strip()
+    axis = str(args.get("axis") or "strength").strip()
+    if not entity_id or not bullet:
+        return "blocked", 400, {"error": "entity_id and bullet required"}
+    rid = entity_registry.propose_review(
+        kind="belief_bullet", key=f"{entity_id}:{axis}:{bullet[:40]}", entity_id=entity_id,
+        proposed=bullet, reason=f"tese ({axis})", hint=f"axis={axis} by={actor}",
+        confidence="fuzzy",
+        payload={"entity_id": entity_id, "axis": axis, "bullet": bullet, "actor": actor},
+    )
+    if rid is None:
+        return "noop", 409, {"detail": "already proposed", "entity_id": entity_id}
+    return "proposed", 202, {"review_id": rid, "entity_id": entity_id, "axis": axis}
+
+
+def _act_propose_vertical(args: dict[str, Any], actor: str) -> tuple[str, int, dict[str, Any]]:
+    """propose: propose a new industry/vertical for review (Product, ADR-019). Queues a
+    review — provisioning a vertical stays a curated decision."""
+    name = str(args.get("name") or "").strip()
+    rationale = str(args.get("rationale") or "").strip()
+    if not name:
+        return "blocked", 400, {"error": "name required"}
+    rid = entity_registry.propose_review(
+        kind="vertical_proposal", key=entity_registry.normalize_alias(name),
+        proposed=name, reason=rationale or "nova vertical", hint=f"by={actor}",
+        confidence="fuzzy", payload={"name": name, "rationale": rationale, "actor": actor},
+    )
+    if rid is None:
+        return "noop", 409, {"detail": "already proposed", "name": name}
+    return "proposed", 202, {"review_id": rid, "name": name}
+
+
 # intent -> (execution class, handler, journal-subject key in args)
 _CATALOG: dict[str, tuple[str, Callable[..., tuple[str, int, dict[str, Any]]], str | None]] = {
     "trigger_run": (APPLY, _act_trigger_run, None),
@@ -237,6 +332,12 @@ _CATALOG: dict[str, tuple[str, Callable[..., tuple[str, int, dict[str, Any]]], s
     "rollback_field": (APPLY, _act_rollback_field, "entity_id"),
     "revert_entity": (APPLY, _act_revert_entity, "entity_id"),
     "propose_registry_change": (PROPOSE, _act_propose_registry_change, "entity_id"),
+    # Phase 2 officer actions
+    "open_watch": (APPLY, _act_open_watch, "target"),
+    "run_integrity_audit": (APPLY, _act_run_integrity_audit, None),
+    "flag_entity": (PROPOSE, _act_flag_entity, "entity_id"),
+    "curate_belief": (PROPOSE, _act_curate_belief, "entity_id"),
+    "propose_vertical": (PROPOSE, _act_propose_vertical, None),
 }
 
 
@@ -253,10 +354,10 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     if secret and headers.get("x-onca-origin") != secret:
         return _resp(403, {"error": "forbidden"})
 
-    # GET → advertise the catalog (read-only; helps officers/clients discover intents).
+    # GET → advertise the catalog + officer roster (helps clients discover intents/officers).
     method = str(((event.get("requestContext") or {}).get("http") or {}).get("method") or "POST")
     if method.upper() == "GET":
-        return _resp(200, {"catalog": catalog()})
+        return _resp(200, {"catalog": catalog(), "officers": officers.roster()})
 
     body = _body(event)
     if body is None:
@@ -274,6 +375,29 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     args = body.get("args") if isinstance(body.get("args"), dict) else {}
     idem = str(body.get("idempotency_key") or "").strip()
 
+    # Phase 2/3: officer scoping + chief-of-staff hand-off. An `officer` may only emit its
+    # own catalog actions; an action owned EXCLUSIVELY by another officer is handed off to
+    # that owner (journaled), not rejected. With no `officer`, an exclusively-owned action
+    # auto-routes to its owner (the chief-of-staff dispatch).
+    requested_officer = str(body.get("officer") or "").strip() or None
+    handoff: dict[str, str] | None = None
+    if requested_officer is not None:
+        if not officers.is_officer(requested_officer):
+            return _resp(400, {"error": "unknown officer", "officers": list(officers.OFFICERS)})
+        if intent in officers.catalog(requested_officer):
+            effective_officer: str | None = requested_officer
+        else:
+            owner = officers.owner_of(intent)
+            if owner and owner != requested_officer:
+                effective_officer = owner
+                handoff = {"from": requested_officer, "to": owner}
+            else:
+                return _resp(403, {"error": "intent not in officer catalog",
+                                   "officer": requested_officer,
+                                   "allowed": list(officers.catalog(requested_officer))})
+    else:
+        effective_officer = officers.owner_of(intent)  # auto-route (may be None for shared)
+
     # Idempotent replay: a prior result for this key wins (no double-application).
     if idem:
         prior = _get_act(idem)
@@ -288,12 +412,16 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         "execution_class": exec_class,
         "outcome": outcome,
         "actor": actor,
+        "officer": effective_officer,
         "request_id": getattr(context, "aws_request_id", None),
         **detail,
     }
+    if handoff:
+        result["handoff"] = handoff
     # Journal every call (applied|proposed|blocked|noop) to OncaCurationLog.
     _journal(subject, intent, actor, {
         "outcome": outcome, "execution_class": exec_class, "args": args,
+        "officer": effective_officer, "handoff": handoff,
         "request_id": result["request_id"], "idempotency_key": idem or None,
     })
     if idem:

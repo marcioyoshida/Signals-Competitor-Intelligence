@@ -237,3 +237,116 @@ def test_base64_body(monkeypatch):
          "args": {"entity_id": "btg", "field": "parent", "before_ts": "2026-01-01"}}).encode()).decode()
     resp = act_api.lambda_handler(_event(raw, b64=True), None)
     assert resp["statusCode"] == 200
+
+
+# ---- ADR 020 Phases 2–3: officers, scoping, hand-off, new actions ------------------
+def test_get_advertises_officer_roster(monkeypatch):
+    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    resp = act_api.lambda_handler(_event("{}", method="GET"), None)
+    roles = {o["role"] for o in json.loads(resp["body"])["officers"]}
+    assert roles == {"strategic", "regulator", "compliance", "product"}
+
+
+def test_officer_may_emit_its_own_action(monkeypatch):
+    _no_journal(monkeypatch)
+    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setattr(er, "propose_review", lambda **kw: "REVIEW#belief_bullet:btg")
+    resp = act_api.lambda_handler(_event(
+        {"intent": "curate_belief", "officer": "strategic",
+         "args": {"entity_id": "btg", "bullet": "avança em atacado", "axis": "strength"}}), None)
+    assert resp["statusCode"] == 202
+    b = json.loads(resp["body"])
+    assert b["outcome"] == "proposed" and b["officer"] == "strategic"
+    assert "handoff" not in b
+
+
+def test_officer_out_of_catalog_shared_action_is_rejected(monkeypatch):
+    # curate_belief is exclusively strategic's; the regulator cannot emit it and it is
+    # NOT handed off to strategic (that IS a hand-off — tested below); here we assert the
+    # regulator emitting a compliance-only action hands off, but its OWN non-owned reject.
+    _no_journal(monkeypatch)
+    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    # trigger_run is shared (strategic+regulator) but NOT in compliance's catalog and has
+    # no single owner → compliance emitting it is rejected (no owner to hand off to).
+    resp = act_api.lambda_handler(_event(
+        {"intent": "trigger_run", "officer": "compliance"}), None)
+    assert resp["statusCode"] == 403
+    assert json.loads(resp["body"])["error"] == "intent not in officer catalog"
+
+
+def test_hand_off_routes_to_the_owning_officer(monkeypatch):
+    # The Regulator asks to roll back — an exclusively-Compliance action → handed off.
+    _no_journal(monkeypatch)
+    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setattr(er, "rollback_field", lambda eid, f, ts, **k: True)
+    resp = act_api.lambda_handler(_event(
+        {"intent": "rollback_field", "officer": "regulator",
+         "args": {"entity_id": "btg", "field": "industries", "before_ts": "2026-01-01"}}), None)
+    assert resp["statusCode"] == 200
+    b = json.loads(resp["body"])
+    assert b["officer"] == "compliance"
+    assert b["handoff"] == {"from": "regulator", "to": "compliance"}
+
+
+def test_auto_route_picks_owner_when_no_officer(monkeypatch):
+    _no_journal(monkeypatch)
+    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setattr(er, "propose_review", lambda **kw: "REVIEW#vertical_proposal:x")
+    resp = act_api.lambda_handler(_event(
+        {"intent": "propose_vertical", "args": {"name": "Câmbio", "rationale": "demanda"}}), None)
+    assert resp["statusCode"] == 202
+    assert json.loads(resp["body"])["officer"] == "product"
+
+
+def test_unknown_officer_400(monkeypatch):
+    _no_journal(monkeypatch)
+    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    resp = act_api.lambda_handler(_event(
+        {"intent": "trigger_run", "officer": "nobody"}), None)
+    assert resp["statusCode"] == 400
+    assert json.loads(resp["body"])["error"] == "unknown officer"
+
+
+def test_flag_entity_proposes(monkeypatch):
+    _no_journal(monkeypatch)
+    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    calls = {}
+    monkeypatch.setattr(er, "propose_review", lambda **kw: calls.update(kw) or "REVIEW#compliance_flag:x")
+    resp = act_api.lambda_handler(_event(
+        {"intent": "flag_entity", "officer": "compliance",
+         "args": {"entity_id": "x", "reason": "consta CEIS"}}), None)
+    assert resp["statusCode"] == 202
+    assert calls["kind"] == "compliance_flag"
+
+
+def test_open_watch_applies(monkeypatch):
+    _no_journal(monkeypatch)
+    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    puts = []
+
+    class _T:
+        def put_item(self, Item):
+            puts.append(Item)
+
+    monkeypatch.setattr(er, "_table", lambda table=None: _T())
+    resp = act_api.lambda_handler(_event(
+        {"intent": "open_watch", "officer": "regulator",
+         "args": {"target": "Resolução CVM 175", "kind": "instrument"}}), None)
+    assert resp["statusCode"] == 200
+    assert json.loads(resp["body"])["outcome"] == "applied"
+    assert puts and puts[0]["type"] == "watch"
+
+
+def test_run_integrity_audit_reads_only(monkeypatch):
+    _no_journal(monkeypatch)
+    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.delenv("ONCA_SITE_BUCKET", raising=False)
+    monkeypatch.setattr(er, "list_entities", lambda *a, **k: [])
+    from src.synth import integrity
+    monkeypatch.setattr(integrity, "audit",
+                        lambda feed, ents: {"total": 0, "counts": {}, "findings": []})
+    resp = act_api.lambda_handler(_event(
+        {"intent": "run_integrity_audit", "officer": "compliance"}), None)
+    assert resp["statusCode"] == 200
+    b = json.loads(resp["body"])
+    assert b["outcome"] == "applied" and b["total"] == 0
