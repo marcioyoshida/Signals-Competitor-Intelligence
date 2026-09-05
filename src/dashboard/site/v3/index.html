@@ -35,8 +35,9 @@
     border-bottom:1px solid var(--border); cursor:pointer; }
   .exrow:last-child { border-bottom:0; }
   .exrow:hover { background:var(--surface-2); }
-  .exrow .ent { font-weight:600; min-width:118px; color:var(--ink); }
-  .exrow .ttl { flex:1; color:var(--ink-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:var(--fs-sm); }
+  .exrow .ent { font-weight:600; min-width:118px; max-width:40%; color:var(--ink);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .exrow .ttl { flex:1; min-width:0; color:var(--ink-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:var(--fs-sm); }
   .exrow .dt { color:var(--muted); font-size:var(--fs-micro); min-width:64px; font-variant-numeric:tabular-nums; }
   .exrow .meta { color:var(--muted); font-size:var(--fs-micro); font-variant-numeric:tabular-nums; }
 
@@ -58,7 +59,8 @@
   .cov:last-child { border-bottom:0; }
   .cov .dot { width:9px; height:9px; border-radius:50%; flex:none; }
   .cov .dot.ok { background:var(--ok); } .cov .dot.warn { background:var(--warn); } .cov .dot.gap { background:var(--t-crit); }
-  .cov .ent { font-weight:600; min-width:180px; color:var(--ink); }
+  .cov .ent { font-weight:600; min-width:150px; max-width:46%; color:var(--ink);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
   /* provenance radar — stat tiles */
   .radarwrap { display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:var(--s3); padding:var(--s4); }
@@ -255,16 +257,16 @@ function rowsCard(list) {
   if (!list.length) return U.empty("Nada no escopo.", "", "○");
   return list.map(r => `<div class="exrow" data-id="${U.esc(r.id)}">
     <span class="dt">${r.date ? U.fmtDate(r.date) : ""}</span>
-    <span class="ent">${U.esc(r.entity_label || r.label || "—")}</span>
-    <span class="ttl">${U.esc(r.title || "")}</span>
+    <span class="ent" title="${U.esc(r.entity_label || r.label || "—")}">${U.esc(r.entity_label || r.label || "—")}</span>
+    <span class="ttl" title="${U.esc(r.title || "")}">${U.esc(r.title || "")}</span>
     ${r.threat_score != null ? U.heat(r.threat_score) : ""}</div>`).join("");
 }
 function rowsReg(list) {
   list = (list || []).filter(inSector);
   if (!list.length) return U.empty("Sem itens regulatórios no escopo.", "", "○");
   return list.map(r => `<div class="exrow" data-id="${U.esc(r.id)}">
-    <span class="ent" style="min-width:160px">${U.esc(r.domain || "Regulação")}</span>
-    <span class="ttl">${U.esc(r.change || (r.affected_industries || []).join(", ") || "")}</span>
+    <span class="ent" style="min-width:160px" title="${U.esc(r.domain || "Regulação")}">${U.esc(r.domain || "Regulação")}</span>
+    <span class="ttl" title="${U.esc(r.change || (r.affected_industries || []).join(", ") || "")}">${U.esc(r.change || (r.affected_industries || []).join(", ") || "")}</span>
     ${r.blast_band ? sevBadge(r.blast_band) : `<span class="meta">${r.blast || 0} setor(es)</span>`}
     ${r.difficulty_band ? sevBadge(r.difficulty_band) : ""}
     ${r.days_to_deadline != null ? `<span class="dt">${r.days_to_deadline}d</span>` : ""}
@@ -276,7 +278,7 @@ function rowsMomentum(list) {
   const max = Math.max(1, ...list.map(r => Math.abs(r.momentum)));
   return list.slice(0, 25).map(r => {
     const up = r.momentum >= 0, w = Math.round(Math.abs(r.momentum) / max * 48) + 1;
-    return `<div class="mom"><span class="lbl">${U.esc(r.label)}</span>
+    return `<div class="mom"><span class="lbl" title="${U.esc(r.label)}">${U.esc(r.label)}</span>
       <span class="track"><i class="${up ? "up" : "down"}" style="width:${w}%"></i></span>
       <span class="val ${up ? "up" : "down"}">${r.momentum > 0 ? "+" : ""}${r.momentum}</span></div>`;
   }).join("");
@@ -285,21 +287,21 @@ function rowsRisk(list) {
   list = (list || []).filter(inSector);
   if (!list.length) return U.empty("Sem riscos no escopo.", "", "○");
   return list.map(r => `<div class="exrow">${sevBadge(r.severity)}
-    <span class="ent" style="min-width:128px">${U.esc(r.label || "—")}</span>
-    <span class="ttl">${U.esc(r.detail || "")}</span></div>`).join("");
+    <span class="ent" style="min-width:128px" title="${U.esc(r.label || "—")}">${U.esc(r.label || "—")}</span>
+    <span class="ttl" title="${U.esc(r.detail || "")}">${U.esc(r.detail || "")}</span></div>`).join("");
 }
 function rowsIntegrity(list) {
   list = (list || []).filter(inSector);
   if (!list.length) return U.empty("Registro íntegro no escopo.", "", "○");
   return list.map(r => `<div class="exrow" ${r.card_id ? `data-id="${U.esc(r.card_id)}"` : ""}>${sevBadge(r.severity)}
-    <span class="ent" style="min-width:148px">${U.esc(r.kind)}</span>
-    <span class="ttl">${U.esc(r.summary || "")}</span></div>`).join("");
+    <span class="ent" style="min-width:148px" title="${U.esc(r.kind)}">${U.esc(r.kind)}</span>
+    <span class="ttl" title="${U.esc(r.summary || "")}">${U.esc(r.summary || "")}</span></div>`).join("");
 }
 function rowsRep(list) {
   list = (list || []).filter(inSector);
   if (!list.length) return U.empty("Sem dados de reputação no escopo.", "", "○");
   return list.map(r => `<div class="exrow" ${r.url ? `data-url="${U.esc(r.url)}"` : ""}>
-    <span class="ent" style="min-width:148px">${U.esc(r.label)}</span>
+    <span class="ent" style="min-width:148px" title="${U.esc(r.label)}">${U.esc(r.label)}</span>
     <span class="ttl">${U.esc(r.category || "")} · ${U.esc(r.period || "")}</span>
     <span class="meta">#${r.rank != null ? r.rank : "—"} · índice ${r.index != null ? r.index : "—"}</span></div>`).join("");
 }
@@ -307,14 +309,14 @@ function rowsGap(list) {
   if (!(list || []).length) return U.empty("Sem pontos cegos.", "", "○");
   return list.map(r => `<div class="exrow" ${r.issue_url ? `data-href="${U.esc(r.issue_url)}"` : ""}>
     <span class="badge badge--${r.status === "open" ? "high" : "low"}">${U.esc(r.status)}</span>
-    <span class="ttl">${U.esc(r.question || "")}</span>
+    <span class="ttl" title="${U.esc(r.question || "")}">${U.esc(r.question || "")}</span>
     <span class="meta">${r.count || 0}× · ${U.esc(r.triage || "")}</span></div>`).join("");
 }
 function rowsDiscovery(list) {
   list = (list || []).filter(inSectorStrict);
   if (!list.length) return U.empty("Sem propostas de descoberta no escopo.", "", "○");
   return list.map(r => `<div class="exrow">
-    <span class="ent" style="min-width:148px">${U.esc(r.proposed || "—")}</span>
+    <span class="ent" style="min-width:148px" title="${U.esc(r.proposed || "—")}">${U.esc(r.proposed || "—")}</span>
     <span class="ttl">${U.esc(r.reason || "")} · ${U.esc(r.hint || "")}</span>
     <span class="badge badge--low">${U.esc(r.confidence || "")}</span></div>`).join("");
 }
@@ -324,7 +326,7 @@ function rowsCoverage(list) {
   return list.map(i => { const cls = i.coverage_gap ? "gap" : (i.low_volume ? "warn" : "ok");
     const badge = i.coverage_gap ? bandBadge("high", "lacuna") : (i.low_volume ? bandBadge("warn", "baixo volume") : bandBadge("ok", "ok"));
     return `<div class="cov"><span class="dot ${cls}"></span>
-      <span class="ent">${U.esc(i.label)}</span>
+      <span class="ent" title="${U.esc(i.label)}">${U.esc(i.label)}</span>
       <span class="meta">${i.active_entities || 0} entidades · ${i.narratives || 0} narrativas</span>
       <span class="spacer" style="flex:1"></span>${badge}</div>`; }).join("");
 }
@@ -423,7 +425,7 @@ function matBand(v) { return v >= 70 ? "ok" : v >= 50 ? "warn" : "high"; }
 
 function hbars(rows) { // rows: [{label, value, max, bar (0-100), badge, colorTok}]
   return `<div class="chart">` + rows.map(r => `<div class="crow">
-    <span class="cl">${U.esc(r.label)}</span>
+    <span class="cl" title="${U.esc(r.label)}">${U.esc(r.label)}</span>
     <span class="bar"><i style="width:${Math.max(2, Math.min(100, r.bar))}%;background:${r.colorTok || "var(--primary)"}"></i></span>
     <span class="cv">${r.value}${r.badge ? " " + r.badge : ""}</span></div>`).join("") + `</div>`;
 }
@@ -445,7 +447,7 @@ function provStack(mix) {
 }
 function provenanceChart(port) {
   return provenanceLegend() + `<div class="chart">` + port.filter(p => Object.keys(p.provenance || {}).length)
-    .map(p => `<div class="crow"><span class="cl">${U.esc(p.label)}</span>${provStack(p.provenance)}
+    .map(p => `<div class="crow"><span class="cl" title="${U.esc(p.label)}">${U.esc(p.label)}</span>${provStack(p.provenance)}
       <span class="cv">${p.provenance_score}</span></div>`).join("") + `</div>`;
 }
 const FIELD_LABEL = { ownership: "Controle", ticker: "Ticker", parent: "Grupo/parent", esg: "ESG", certifications: "Certificações" };
@@ -464,7 +466,7 @@ function discoveryChart(port) {
 function rowsTopEntities(list) {
   if (!(list || []).length) return U.empty("Sem entidades rastreadas no setor.", "", "○");
   const max = Math.max(...list.map(e => e.cards));
-  return list.map(e => `<div class="crow"><span class="cl">${U.esc(e.label)}</span>
+  return list.map(e => `<div class="crow"><span class="cl" title="${U.esc(e.label)}">${U.esc(e.label)}</span>
     <span class="bar"><i style="width:${e.cards / max * 100}%;background:var(--cat-steel)"></i></span>
     <span class="cv">${e.cards}</span></div>`).join("");
 }
@@ -495,7 +497,7 @@ function sourceHealthChart(list) {
   if (!(list || []).length) return U.empty("Sem sinais de fontes.", "", "○");
   const bmap = { ok: "ok", warn: "warn", stale: "gap" };
   return `<div class="chart">` + list.slice(0, 14).map(s => `<div class="cov" style="padding:5px 0">
-    <span class="dot ${bmap[s.band]}"></span><span class="cl" style="min-width:120px">${U.esc(s.lens)}</span>
+    <span class="dot ${bmap[s.band]}"></span><span class="cl" style="min-width:120px" title="${U.esc(s.lens)}">${U.esc(s.lens)}</span>
     <span class="meta" style="flex:1">${s.docs} docs</span>
     <span class="cv">${s.staleness_days == null ? "—" : s.staleness_days + "d"}</span></div>`).join("") + `</div>`;
 }
@@ -598,7 +600,7 @@ function render() {
            tile("Frescor", pr.freshness_days == null ? "—" : pr.freshness_days + "d", "desde o último sinal"),
            tile("Descoberta", pr.discovery, "propostas no setor")]) +
         band("Proveniência & metadados", "",
-          grid("1fr 1fr", [panel("Proveniência da base", null, "official → identified", `<div class="panel__bd--flush">${provenanceLegend()}<div class="chart"><div class="crow"><span class="cl">${U.esc(pr.label || "")}</span>${provStack(pr.provenance || {})}<span class="cv">${pr.provenance_score || 0}</span></div></div></div>`),
+          grid("1fr 1fr", [panel("Proveniência da base", null, "official → identified", `<div class="panel__bd--flush">${provenanceLegend()}<div class="chart"><div class="crow"><span class="cl" title="${U.esc(pr.label || "")}">${U.esc(pr.label || "")}</span>${provStack(pr.provenance || {})}<span class="cv">${pr.provenance_score || 0}</span></div></div></div>`),
             panel("Completude de metadados", null, "% das entidades do setor", `<div class="panel__bd--flush">${completenessChart(pr.completeness)}</div>`)])) +
         band("Posição de mercado & preço", "",
           grid("1.2fr 1fr", [panel("Estrutura de mercado (CVM)", null, "receita · share · concentração", `<div class="panel__bd--flush">${marketDetail((p.market_structure || {})[SECTOR])}</div>`),

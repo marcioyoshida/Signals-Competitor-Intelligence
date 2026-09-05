@@ -161,10 +161,26 @@ class OncaPrototypeStack(Stack):
             self,
             "OncaVectorIndex",
             vector_bucket_name=vector_bucket.vector_bucket_name,
-            index_name="onca-corpus",
+            # Renamed (…-v2) because the metadata_configuration below forces index
+            # replacement, and CloudFormation cannot replace a custom-named resource
+            # in place — the new name lets it create-new then delete-old. The KB +
+            # data source are renamed in step with it for the same reason.
+            index_name="onca-corpus-v2",
             data_type="float32",
             dimension=VECTOR_DIMENSION,
             distance_metric="cosine",
+            # S3 Vectors caps *filterable* metadata at 2048 bytes/vector. Bedrock stores
+            # the chunk text (AMAZON_BEDROCK_TEXT) and the source-metadata blob
+            # (AMAZON_BEDROCK_METADATA) as metadata; if they're left filterable, every
+            # chunk with a real body blows the cap and fails to index (the full-text
+            # docs were being silently dropped). Mark the two Bedrock-reserved keys
+            # non-filterable so only our small attributes filter.
+            metadata_configuration=s3vectors.CfnIndex.MetadataConfigurationProperty(
+                non_filterable_metadata_keys=[
+                    "AMAZON_BEDROCK_METADATA",
+                    "AMAZON_BEDROCK_TEXT",
+                ]
+            ),
         )
         vector_index.add_dependency(vector_bucket)
 
@@ -190,7 +206,7 @@ class OncaPrototypeStack(Stack):
         knowledge_base = bedrock.CfnKnowledgeBase(
             self,
             "OncaKnowledgeBase",
-            name="onca-corpus",
+            name="onca-corpus-v2",  # replaced with the index (see index rename note)
             role_arn=kb_role.role_arn,
             knowledge_base_configuration=bedrock.CfnKnowledgeBase.KnowledgeBaseConfigurationProperty(
                 type="VECTOR",
@@ -213,7 +229,7 @@ class OncaPrototypeStack(Stack):
             self,
             "OncaKnowledgeBaseDataSource",
             knowledge_base_id=knowledge_base.attr_knowledge_base_id,
-            name="onca-raw-corpus",
+            name="onca-raw-corpus-v2",  # replaced with the KB (see index rename note)
             data_source_configuration=bedrock.CfnDataSource.DataSourceConfigurationProperty(
                 type="S3",
                 s3_configuration=bedrock.CfnDataSource.S3DataSourceConfigurationProperty(
