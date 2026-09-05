@@ -82,7 +82,7 @@ def _headline(card: dict[str, Any]) -> dict[str, Any]:
         "threat_score": card.get("threat_score"),
         "is_alert": bool(card.get("is_alert")),
         "industries": card.get("industries") or [],
-        "title": (card.get("narrative") or "")[:180],
+        "title": (card.get("narrative") or "")[:240],
     }
 
 
@@ -209,7 +209,7 @@ def _reg_row(c: dict[str, Any]) -> dict[str, Any]:
     cr = c.get("change_record") or {}
     # The headline: the change summary if the card has one, else its own narrative (most reg
     # cards — BCB Comunicados/fusions — carry only a narrative, no change_record). Never blank.
-    title = cr.get("change") or (c.get("narrative") or "")[:180]
+    title = cr.get("change") or (c.get("narrative") or "")[:240]
     return {"id": c.get("id"), "domain": c.get("domain") or c.get("subject_label"),
             "title": title,
             "affected_industries": c.get("affected_industries") or [],
