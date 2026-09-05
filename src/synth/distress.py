@@ -200,6 +200,26 @@ def _creditor_headline(norm_title: str) -> bool:
     return bool(_CREDITOR_FRAMING.search(norm_title))
 
 
+# 4. Counterparty framing (issue #73) — the distress SUBJECT is another (usually non-tracked)
+#    party and the tracked entity is named only as a COUNTERPARTY-OBJECT of that party's action:
+#    a beneficiary ("Casas Bahia aprova garantia ... AO Banco Digio"), a legal target ("Casas
+#    Bahia desiste de pedidos CONTRA Banco do Brasil em recuperação judicial"), etc. The RJ
+#    belongs to the acting party, never the bank named after the preposition. Precision-first:
+#    a genuine self-distress headline ("Banco X pede recuperação judicial") never prefixes the
+#    bank with contra/ao/perante/junto a/em favor de, so it is unaffected.
+_COUNTERPARTY_FRAMING = re.compile(
+    r"\b(?:contra|perante|junto\s+a[os]?|em\s+favor\s+d[eoa]s?|ao|aos)\s+"
+    r"(?:[oa]s?\s+)?(?:banco|financeira|seguradora|corretora|fintech|instituicao|"
+    r"administradora|gestora|cooperativa|consorcio)\w*"
+)
+
+
+def _counterparty_headline(norm_title: str) -> bool:
+    """True when the tracked entity appears only as a prepositional COUNTERPARTY of another
+    party's action in a distress headline (issue #73). Attribute to no one."""
+    return bool(_COUNTERPARTY_FRAMING.search(norm_title))
+
+
 def label_for(kind: str) -> str:
     return DISTRESS_KINDS.get(kind, {}).get("label", kind)
 
@@ -228,7 +248,10 @@ def detect_distress_events(
         # actor. Precision-first: attribute to no one. (issue #33)
         # Guard 3: creditor/exposure framing — the resolved entity is a creditor
         # of / exposed to a distressed debtor, not the distressed party. (issue #55)
-        if _actor_headline(norm_title) or _creditor_headline(norm_title):
+        # Guard 4: counterparty framing — the entity is only a prepositional counterparty
+        # (ao/contra/perante/…) of another party's action; the RJ is that party's. (issue #73)
+        if (_actor_headline(norm_title) or _creditor_headline(norm_title)
+                or _counterparty_headline(norm_title)):
             continue
         try:
             entities = resolver(item) or []

@@ -105,6 +105,27 @@ def test_detect_keeps_bank_own_rj_despite_mentioning_creditors():
     assert [e["entity"] for e in evs] == ["banco_y"]
 
 
+def test_detect_drops_counterparty_bank_in_another_partys_rj():
+    # issue #73: the RJ subject is a non-tracked retailer; the tracked bank is named only as a
+    # counterparty ("ao Banco Digio" beneficiary; "contra Banco do Brasil" target) — never its RJ.
+    items = [
+        {"id": "a", "date": "2026-08-29", "url": "http://x/a", "source": "News",
+         "title": "Após pedir recuperação judicial, Casas Bahia aprova garantia de R$ 50 mi ao Banco Digio"},
+        {"id": "b", "date": "2026-08-29", "url": "http://x/b", "source": "News",
+         "title": "Casas Bahia desiste de pedidos contra Banco do Brasil em recuperação judicial"},
+    ]
+    evs = ds.detect_distress_events(items, resolver=_resolver({"a": ["digio"], "b": ["bb"]}))
+    assert evs == []  # neither bank is the distressed party
+
+
+def test_detect_keeps_bank_own_rj_not_a_counterparty():
+    # Over-suppression guard: a bank's OWN self-distress headline has no counterparty preposition.
+    items = [{"id": "a", "date": "2026-08-29",
+              "title": "Banco Digio pede recuperação judicial"}]
+    evs = ds.detect_distress_events(items, resolver=_resolver({"a": ["digio"]}))
+    assert [e["entity"] for e in evs] == ["digio"]
+
+
 def test_detect_keeps_debtor_filing_directly_without_possessive():
     # "Empresa devedora pede RJ" — the devedora IS the subject (no "do <banco>"),
     # so it must be kept; the possessive is what marks the creditor framing.
