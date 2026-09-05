@@ -87,6 +87,28 @@ new source is a new ingester + a lens mapping, not new machinery.
   confirmed by the `internet-ingestion` path.
 - Provenance-stamped writes (ADR-018); review-gated where the source is fuzzy.
 
+## Build status (2026-09-05)
+
+| Src | Status | Notes |
+|---|---|---|
+| **E5** CVM participants | **✅ SHIPPED + LIVE-VERIFIED** | `src/ingest/cvm_participantes.py` (consultores, 564 active); gated `ONCA_INGEST_CVM_PARTICIPANTES`, seed-suppressed. Discovery via **CKAN `package_show` → DADOS zip** (the authoritative-URL method). |
+| **P4** CVM products (FIDC/CRI/CRA, RCVM 175) | 🟡 method proven | same CKAN method (`fidc-doc-inf_mensal`, `adm_cart-cad` discovered) — each cadastro needs its column set verified, then plugs into `CADASTROS` / a products lens. |
+| **P2/P3** BCB arranjos / consórcio grupos | 🟡 host reachable | BCB OLINDA base is up, but the exact service names (arranjos de pagamento; grupos delta) need verification; reuse `bcb_consorcio`/`bcb_autorizacoes` OLINDA plumbing. |
+| **E4** BCB VASP (crypto) | 🔴 pending publication | the BCB VASP authorization registry is still being implemented (Lei 14.478); monitor. |
+| **E1/P1** SUSEP | 🔴 endpoint discovery | `dadosabertos.susep.gov.br` 404; `www2.susep.gov.br` 302; the `dados.gov.br` CKAN catalog is **401 (the `GOV_DADOS_TOKEN` is dead)** — needs the real SUSEP SES/dados-abertos path (internet-ingestion). |
+| **E2** PREVIC | 🔴 endpoint discovery | same `dados.gov.br` 401 block; needs the PREVIC EFPC relação URL. |
+| **E3** SPA/MF betting | 🔴 endpoint discovery | the authorized-operators list needs its machine-readable form located on gov.br/fazenda/spa. |
+
+**Verified discovery recipe (reuse for every CVM source):** `GET
+https://dados.cvm.gov.br/api/3/action/package_search?q=<term>` → pick the dataset `name` → `GET
+.../package_show?id=<name>` → use the **DADOS** resource URL (a zip of semicolon-delimited,
+latin-1 CSVs). Never guess the `/dados/...` path — CKAN gives the authoritative one.
+
+**Honest scope note:** 10 live regulator integrations is a multi-batch effort — each non-CVM
+source needs its own live endpoint discovery, and SUSEP/PREVIC are currently blocked on the dead
+`dados.gov.br` token (or a direct portal path). E5 ships as the working exemplar + reusable CVM
+foundation; the rest are unblocked one regulator at a time via the internet-ingestion path.
+
 ## Priority
 
 1. **E1 SUSEP entrants + P1 SUSEP products** — insurance is a fully-uncovered premium sector; one
