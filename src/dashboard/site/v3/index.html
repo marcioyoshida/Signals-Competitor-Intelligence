@@ -37,9 +37,12 @@
   .exrow:hover { background:var(--surface-2); }
   .exrow .ent { font-weight:600; min-width:118px; max-width:36%; color:var(--ink);
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  /* headline: up to 3 lines, then clamp (full text still on hover / in the drawer) */
+  /* headline: clamps to 3 lines; CLICK the headline to expand/collapse it inline */
   .exrow .ttl { flex:1; min-width:0; color:var(--ink-2); font-size:var(--fs-sm); line-height:1.4;
-    display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+    display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; cursor:pointer; }
+  .exrow .ttl:hover { color:var(--ink); }
+  .exrow .ttl.is-expanded { -webkit-line-clamp:unset; display:block; overflow:visible;
+    background:var(--surface-2); border-radius:var(--r-sm); padding:2px 6px; margin:-2px -6px; }
   .exrow .dt, .exrow .meta, .exrow .heat, .exrow .badge { margin-top:1px; }
   .exrow .dt { color:var(--muted); font-size:var(--fs-micro); min-width:64px; font-variant-numeric:tabular-nums; }
   .exrow .meta { color:var(--muted); font-size:var(--fs-micro); font-variant-numeric:tabular-nums; }
@@ -617,6 +620,9 @@ function render() {
     }
   }
   el.innerHTML = flowBand() + board + metricsBand() + referenceBand();
+  // Click the headline to expand/collapse it inline (doesn't open the drawer).
+  el.querySelectorAll(".exrow .ttl").forEach(t => t.addEventListener("click", (e) => {
+    e.stopPropagation(); t.classList.toggle("is-expanded"); }));
   el.querySelectorAll(".exrow[data-id]").forEach(row => row.addEventListener("click", () => inspect(row.getAttribute("data-id"))));
   el.querySelectorAll(".exrow[data-url],.exrow[data-href]").forEach(row => row.addEventListener("click", () => {
     const u = row.getAttribute("data-url") || row.getAttribute("data-href"); if (u) window.open(u, "_blank", "noopener"); }));
