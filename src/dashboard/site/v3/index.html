@@ -103,6 +103,19 @@
   .traj-f button:disabled { opacity:.45; cursor:default; }
   .traj-f .done { color:var(--ok); font-weight:600; }
 
+  /* CPO charts (inline, token-based, dual-theme) */
+  .chart { padding:var(--s3) var(--s4); }
+  .crow { display:grid; grid-template-columns:150px 1fr 92px; align-items:center; gap:var(--s3); padding:5px 0; }
+  .crow .cl { font-size:var(--fs-sm); color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .crow .cv { text-align:right; font-variant-numeric:tabular-nums; font-size:var(--fs-meta); color:var(--ink-2); display:flex; gap:var(--s2); justify-content:flex-end; align-items:center; }
+  .bar { height:14px; border-radius:var(--r-sm); background:var(--surface-3); overflow:hidden; }
+  .bar > i { height:100%; display:block; border-radius:var(--r-sm); }
+  .stack { height:14px; border-radius:var(--r-sm); overflow:hidden; display:flex; background:var(--surface-3); }
+  .stack > i { height:100%; }
+  .legend { display:flex; gap:var(--s4); flex-wrap:wrap; padding:0 var(--s4) var(--s3); font-size:var(--fs-micro); color:var(--muted); }
+  .legend span { display:inline-flex; align-items:center; gap:5px; }
+  .legend i { width:10px; height:10px; border-radius:2px; display:inline-block; }
+
   /* Reference / playbook */
   .refwrap { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:var(--s4); }
   .ref-col h4 { font-size:var(--fs-micro); text-transform:uppercase; letter-spacing:.06em; color:var(--muted);
@@ -402,6 +415,60 @@ function onEvidence(a) {
   inspect(evId);
 }
 
+// --- CPO charts (inline SVG-free bars; sequential provenance ramp on --info) -
+const TIER_ORDER = ["official", "structured", "registry", "identified"];
+const TIER_MIX = { official: 88, structured: 60, registry: 38, identified: 20 }; // % of --info
+function tierColor(t) { return `color-mix(in srgb, var(--info) ${TIER_MIX[t] || 30}%, transparent)`; }
+function matBand(v) { return v >= 70 ? "ok" : v >= 50 ? "warn" : "high"; }
+
+function hbars(rows) { // rows: [{label, value, max, bar (0-100), badge, colorTok}]
+  return `<div class="chart">` + rows.map(r => `<div class="crow">
+    <span class="cl">${U.esc(r.label)}</span>
+    <span class="bar"><i style="width:${Math.max(2, Math.min(100, r.bar))}%;background:${r.colorTok || "var(--primary)"}"></i></span>
+    <span class="cv">${r.value}${r.badge ? " " + r.badge : ""}</span></div>`).join("") + `</div>`;
+}
+function maturityChart(port) {
+  return hbars(port.map(p => ({ label: p.label, value: p.maturity, bar: p.maturity,
+    colorTok: `var(--${matBand(p.maturity) === "ok" ? "ok" : matBand(p.maturity) === "warn" ? "warn" : "t-high"})`,
+    badge: `<span class="badge badge--${p.tier === "premium" ? "info" : p.tier === "mid" ? "ghost" : "low"}">${U.esc(p.tier || "")}</span>` })));
+}
+function provenanceLegend() {
+  return `<div class="legend">` + TIER_ORDER.map(t =>
+    `<span><i style="background:${tierColor(t)}"></i>${t}</span>`).join("") + `</div>`;
+}
+function provStack(mix) {
+  const total = TIER_ORDER.reduce((s, t) => s + (mix[t] || 0), 0) || 1;
+  return `<span class="stack">` + TIER_ORDER.map(t => {
+    const w = (mix[t] || 0) / total * 100;
+    return w ? `<i title="${t}: ${mix[t]}" style="width:${w}%;background:${tierColor(t)}"></i>` : "";
+  }).join("") + `</span>`;
+}
+function provenanceChart(port) {
+  return provenanceLegend() + `<div class="chart">` + port.filter(p => Object.keys(p.provenance || {}).length)
+    .map(p => `<div class="crow"><span class="cl">${U.esc(p.label)}</span>${provStack(p.provenance)}
+      <span class="cv">${p.provenance_score}</span></div>`).join("") + `</div>`;
+}
+const FIELD_LABEL = { ownership: "Controle", ticker: "Ticker", parent: "Grupo/parent", esg: "ESG", certifications: "Certificações" };
+function completenessChart(obj) {
+  const rows = Object.entries(obj || {}).sort((a, b) => a[1] - b[1]);
+  return hbars(rows.map(([f, v]) => ({ label: FIELD_LABEL[f] || f, value: v + "%", bar: v,
+    colorTok: `var(--${v >= 60 ? "ok" : v >= 20 ? "warn" : "t-crit"})` })));
+}
+function discoveryChart(port) {
+  const rows = port.filter(p => p.discovery > 0).sort((a, b) => b.discovery - a.discovery);
+  if (!rows.length) return U.empty("Sem pipeline de descoberta.", "", "○");
+  const max = Math.max(...rows.map(p => p.discovery));
+  return hbars(rows.map(p => ({ label: p.label, value: p.discovery, bar: p.discovery / max * 100,
+    colorTok: "var(--cat-teal)" })));
+}
+function rowsTopEntities(list) {
+  if (!(list || []).length) return U.empty("Sem entidades rastreadas no setor.", "", "○");
+  const max = Math.max(...list.map(e => e.cards));
+  return list.map(e => `<div class="crow"><span class="cl">${U.esc(e.label)}</span>
+    <span class="bar"><i style="width:${e.cards / max * 100}%;background:var(--cat-steel)"></i></span>
+    <span class="cv">${e.cards}</span></div>`).join("");
+}
+
 // --- board (per officer) ---------------------------------------------------
 function render() {
   document.querySelectorAll("#officerTabs a").forEach(a =>
@@ -453,28 +520,53 @@ function render() {
         grid("1fr 1fr", [panel("Auditoria de integridade", null, "achados do registro", rowsIntegrity(p.integrity)),
                         panel("Reputação (reclamações)", null, "pior ranking primeiro", rowsRep(p.reputation))]));
   } else if (OFFICER === "cpo") {
-    // Compute the CPO readout from the SCOPED panels so a sector selection actually scopes.
-    const covRows = (p.coverage_map || []).filter(i => SECTOR === "__all__" || i.slug === SECTOR);
-    const total = covRows.length || 1, covered = covRows.filter(i => i.covered).length;
-    const cgap = covRows.filter(i => i.coverage_gap).length;
-    const nDisc = (p.discovery || []).filter(inSectorStrict).length;
-    const nGaps = (p.blind_spots || []).filter(g => g.status === "open").length; // gaps are cross-sector
-    const scoped = SECTOR !== "__all__";
-    const covPct = Math.round(covered / total * 100), [bc, bl] = bandGood(covPct, 70, 40);
-    board =
-      readout(heroGauge(scoped ? "Cobertura do setor" : "Cobertura de setores",
-                        scoped ? (covered ? "Coberto" : "Lacuna") : `${covPct}%`,
-                        bandBadge(scoped ? (covered ? "ok" : "high") : bc, scoped ? (covered ? "Coberto" : "Sem roster") : bl),
-                        "--" + (bc === "crit" ? "t-crit" : bc === "warn" ? "warn" : "ok"), covPct),
-        [tile("Setores cobertos", `${covered}/${total}`, "roster sincronizado"),
-         tile("Propostas", nDisc, scoped ? "no setor" : "descoberta"),
-         tile("Lacunas", cgap, "setores", cgap > 0 ? "warn" : "ok"),
-         tile("Pontos cegos", nGaps, "perguntas · geral", nGaps > 0 ? "high" : "ok")]) +
-      band("Cobertura por setor", "", panel("Mapa de cobertura", null, "ok · baixo volume · lacuna", rowsCoverage(p.coverage_map))) +
-      band("Pontos cegos & descoberta", "",
-        grid("1fr 1fr", [panel("Pontos cegos", null, "cross-setor · sem tag de indústria", rowsGap(p.blind_spots)),
-                        panel("Propostas de descoberta", null, "revisão pendente", rowsDiscovery(p.discovery))])) +
-      band("Força da base", "", panel("Radar de proveniência", null, "por tier", radarBlock(p.radar)));
+    const port = p.portfolio || [];
+    const nGaps = (p.blind_spots || []).filter(g => g.status === "open").length; // cross-sector
+    if (SECTOR === "__all__") {
+      // Portfolio view — cross-sector comparison + the Product-metadata exposé.
+      const covered = port.filter(x => x.covered).length, total = port.length || 1;
+      const avgMat = Math.round(port.reduce((s, x) => s + x.maturity, 0) / total);
+      const nDisc = (p.discovery || []).length;
+      const thin = Object.entries(p.field_completeness || {}).sort((a, b) => a[1] - b[1])[0] || ["—", 0];
+      const [bc, bl] = bandGood(avgMat, 70, 50);
+      board =
+        readout(heroGauge("Maturidade da cobertura", avgMat, bandBadge(bc, bl), "--" + (bc === "crit" ? "t-crit" : bc === "warn" ? "warn" : "ok"), avgMat),
+          [tile("Setores cobertos", `${covered}/${total}`, "roster"),
+           tile("Propostas", nDisc, "pipeline de descoberta"),
+           tile("Metadado + fraco", `${FIELD_LABEL[thin[0]] || thin[0]} ${thin[1]}%`, "cobertura da base", thin[1] < 20 ? "crit" : "warn"),
+           tile("Pontos cegos", nGaps, "perguntas · geral", nGaps > 0 ? "high" : "ok")]) +
+        band("Maturidade da cobertura por setor", "breadth×depth×frescor×proveniência · inferência",
+          `<div class="panel"><div class="panel__bd panel__bd--flush">${maturityChart(port)}</div></div>`) +
+        band("Força da proveniência por setor", "official → identified",
+          grid("1.2fr 1fr", [`<div class="panel"><div class="panel__bd panel__bd--flush">${provenanceChart(port)}</div></div>`,
+            `<div class="panel"><div class="panel__hd"><h2>Completude de metadados</h2><span class="spacer"></span><span class="hd-note">% da base · Produto</span></div><div class="panel__bd panel__bd--flush">${completenessChart(p.field_completeness)}</div></div>`])) +
+        band("Pipeline de descoberta & pontos cegos", "",
+          grid("1fr 1fr", [panel("Descoberta por setor", null, "novas entidades propostas", `<div class="panel__bd--flush">${discoveryChart(port)}</div>`),
+            panel("Pontos cegos", null, "cross-setor · sem tag de indústria", rowsGap(p.blind_spots))]));
+    } else {
+      // Deep per-sector Product profile.
+      const pr = port.find(x => x.slug === SECTOR) || {};
+      const mb = matBand(pr.maturity || 0);
+      board =
+        readout(heroGauge("Maturidade — " + (pr.label || SECTOR), pr.maturity, bandBadge(mb === "ok" ? "ok" : mb === "warn" ? "warn" : "high", (pr.tier || "").toString()),
+                          "--" + (mb === "ok" ? "ok" : mb === "warn" ? "warn" : "t-high"), pr.maturity || 0),
+          [tile("Universo", pr.universe, "entidades no setor"),
+           tile("Rastreadas", pr.tracked, "com atividade", (pr.tracked || 0) > 0 ? "ok" : "high"),
+           tile("Narrativas", pr.narratives, `${pr.narratives_latest || 0} recentes`),
+           tile("Proveniência", pr.provenance_score, "0–100 · força da fonte"),
+           tile("Concentração", pr.concentration, "top-3 · share dos cards"),
+           tile("Fontes", pr.lens_diversity, "lentes distintas"),
+           tile("Frescor", pr.freshness_days == null ? "—" : pr.freshness_days + "d", "desde o último sinal"),
+           tile("Descoberta", pr.discovery, "propostas no setor")]) +
+        band("Proveniência & metadados", "",
+          grid("1fr 1fr", [panel("Proveniência da base", null, "official → identified", `<div class="panel__bd--flush">${provenanceLegend()}<div class="chart"><div class="crow"><span class="cl">${U.esc(pr.label || "")}</span>${provStack(pr.provenance || {})}<span class="cv">${pr.provenance_score || 0}</span></div></div></div>`),
+            panel("Completude de metadados", null, "% das entidades do setor", `<div class="panel__bd--flush">${completenessChart(pr.completeness)}</div>`)])) +
+        band("Conjunto competitivo", "top entidades por volume de sinais",
+          `<div class="panel"><div class="panel__bd panel__bd--flush">${rowsTopEntities((p.top_entities || {})[SECTOR])}</div></div>`) +
+        band("Descoberta & pontos cegos", "",
+          grid("1fr 1fr", [panel("Propostas de descoberta", null, "no setor · revisão pendente", rowsDiscovery(p.discovery)),
+            panel("Pontos cegos", null, "cross-setor", rowsGap(p.blind_spots))]));
+    }
   }
   el.innerHTML = flowBand() + board + metricsBand() + referenceBand();
   el.querySelectorAll(".exrow[data-id]").forEach(row => row.addEventListener("click", () => inspect(row.getAttribute("data-id"))));

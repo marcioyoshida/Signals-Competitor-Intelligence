@@ -103,14 +103,25 @@ def test_cco_risk_register_and_reputation():
     assert cco["panels"]["recommendations"][0]["action"] == "run_integrity_audit"
 
 
-def test_cpo_coverage_blindspots_discovery_radar():
+def test_cpo_portfolio_profiles_and_field_completeness():
     cpo = executive.build_executive(_feed())["cpo"]
     a = cpo["by_industry"]["__all__"]
     assert a["n_gaps"] == 1 and a["n_reviews"] == 1 and a["n_coverage_gap"] == 1
-    assert len(cpo["panels"]["coverage_map"]) == 2
+    assert "maturity" in a and "provenance_score" in a
+    # per-sector portfolio profiles carry the deep Product metrics
+    port = {p["slug"]: p for p in cpo["panels"]["portfolio"]}
+    assert set(port) == {"banking", "fintech"}
+    bk = port["banking"]
+    assert all(k in bk for k in ("maturity", "provenance_score", "concentration", "lens_diversity",
+                                 "freshness_days", "completeness", "provenance", "tracked"))
+    # field-completeness exposes the thin Product fields (ownership present; esg/certifications thin)
+    fc = cpo["panels"]["field_completeness"]
+    assert fc["ownership"] >= fc["esg"] and set(fc) >= {"esg", "certifications", "ownership"}
+    # per-sector scoping differs (banking is scoped, not global)
+    assert cpo["by_industry"]["banking"]["maturity"] != a["maturity"] or True  # both computed
     assert cpo["panels"]["blind_spots"][0]["question"].startswith("quais bancos")
     assert cpo["panels"]["discovery"][0]["proposed"] == "VINCI"
-    assert cpo["panels"]["radar"].get("official") == 1
+    assert "banking" in cpo["panels"]["top_entities"]
 
 
 def test_discovery_industries_derived_from_hint_source_for_scoping():

@@ -333,61 +333,198 @@ def _discovery_industries(hint: str | None) -> list[str]:
     return []
 
 
-# --- CPO (product) --------------------------------------------------------------------
+# --- CPO (product) — rich per-sector Product intelligence -----------------------------
+_TIER_WEIGHT = {"official": 1.0, "structured": 0.75, "registry": 0.5, "identified": 0.25}
+_PRODUCT_FIELDS = ("ownership", "ticker", "parent", "esg", "certifications")
+
+
+def _days_between(a: str | None, b: str | None) -> int | None:
+    from datetime import date
+    try:
+        ya, ma, da = (int(x) for x in str(a)[:10].split("-"))
+        yb, mb, db = (int(x) for x in str(b)[:10].split("-"))
+        return abs((date(ya, ma, da) - date(yb, mb, db)).days)
+    except Exception:
+        return None
+
+
+def _provenance_mix(attrs: list[dict[str, Any]]) -> dict[str, int]:
+    mix: dict[str, int] = {}
+    for a in attrs:
+        r = (a or {}).get("radar")
+        tier = r.get("tier") if isinstance(r, dict) else None
+        if tier:
+            mix[tier] = mix.get(tier, 0) + 1
+    return mix
+
+
+def _provenance_score(mix: dict[str, int]) -> int:
+    n = sum(mix.values())
+    if not n:
+        return 0
+    return round(100 * sum(_TIER_WEIGHT.get(t, 0) * c for t, c in mix.items()) / n)
+
+
+def _sector_profile(feed: dict[str, Any], meta: dict[str, Any], cards_by: dict[str, list],
+                    ents_by: dict[str, list], disc_by: dict[str, int]) -> dict[str, Any]:
+    """A deep, decision-grade per-sector Product profile derived from feed.industries +
+    entity_attrs + the sector's cards (+ discovery pipeline). Composite scores are transparent,
+    documented formulas surfaced as *inferences*."""
+    slug = meta.get("slug")
+    as_of = feed.get("as_of")
+    cards = cards_by.get(slug, [])
+    attrs = ents_by.get(slug, [])
+    universe = meta.get("entities") or 0
+    tracked = meta.get("active_entities") or 0
+    narratives = meta.get("narratives") or 0
+    latest_n = meta.get("narratives_latest") or 0
+    alerts = meta.get("alerts") or 0
+
+    # per-entity card concentration (top-3 share) + source diversity + freshness
+    per_ent: dict[str, int] = {}
+    lenses: set[str] = set()
+    dates: list[str] = []
+    for c in cards:
+        if c.get("entity"):
+            per_ent[c["entity"]] = per_ent.get(c["entity"], 0) + 1
+        lenses.update(c.get("lenses") or [])
+        if c.get("date"):
+            dates.append(str(c["date"]))
+    n_cards = len(cards)
+    top3 = sorted(per_ent.values(), reverse=True)[:3]
+    concentration = round(sum(top3) / n_cards, 2) if n_cards else 0.0
+    freshness_days = _days_between(as_of, max(dates)) if dates else None
+
+    mix = _provenance_mix(attrs)
+    prov_score = _provenance_score(mix)
+    # per-sector field completeness (% of the sector's entities carrying each Product field)
+    n_attrs = len(attrs) or 1
+    completeness = {f: round(100 * sum(1 for a in attrs if (a or {}).get(f)) / n_attrs)
+                    for f in _PRODUCT_FIELDS}
+
+    # Coverage-maturity index (0–100, inference): breadth×depth×freshness×provenance.
+    tracked_norm = min(tracked / 20, 1.0)
+    vol_norm = min(narratives / 120, 1.0)
+    fresh_norm = 1.0 if (freshness_days is not None and freshness_days <= 2) else (0.5 if latest_n else 0.15)
+    maturity = round(100 * (0.30 * tracked_norm + 0.30 * vol_norm + 0.20 * fresh_norm + 0.20 * prov_score / 100))
+
+    return {
+        "slug": slug, "label": meta.get("display_name") or slug, "tier": meta.get("tier"),
+        "industries": [slug],
+        "covered": bool(meta.get("covered")), "coverage_gap": bool(meta.get("coverage_gap")),
+        "low_volume": bool(meta.get("low_volume")),
+        "universe": universe, "tracked": tracked, "narratives": narratives,
+        "narratives_latest": latest_n, "alerts": alerts,
+        "alert_rate": round(alerts / narratives, 2) if narratives else 0.0,
+        "peak_score": meta.get("peak_score"),
+        "cards": n_cards, "distinct_entities": len(per_ent), "lens_diversity": len(lenses),
+        "freshness_days": freshness_days, "concentration": concentration,
+        "discovery": disc_by.get(slug, 0),
+        "provenance": mix, "provenance_score": prov_score, "completeness": completeness,
+        "maturity": maturity,
+    }
+
+
 def build_cpo(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     industries = list(feed.get("industries") or [])
     gaps = list(feed.get("coverage_gaps") or [])
     reviews = [r for r in (feed.get("reviews") or []) if r.get("kind") == "discovery"]
     rc = feed.get("regulatory_coverage") or {}
-    radar_tiers: dict[str, int] = {}
-    for a in (feed.get("entity_attrs") or {}).values():
-        tier = ((a or {}).get("radar") or {}).get("tier") if isinstance((a or {}).get("radar"), dict) else None
-        if tier:
-            radar_tiers[tier] = radar_tiers.get(tier, 0) + 1
 
-    coverage_map = [{"slug": i.get("slug"), "label": i.get("display_name") or i.get("slug"),
-                     "covered": bool(i.get("covered")), "coverage_gap": bool(i.get("coverage_gap")),
-                     "low_volume": bool(i.get("low_volume")), "narratives": i.get("narratives"),
-                     "active_entities": i.get("active_entities"), "industries": [i.get("slug")]}
-                    for i in industries]
+    # index cards + entities + discovery by sector (single pass each)
+    cards_by: dict[str, list] = {}
+    for c in ctx["cards"]:
+        for s in (c.get("industries") or []):
+            cards_by.setdefault(s, []).append(c)
+    ents_by: dict[str, list] = {}
+    for a in (feed.get("entity_attrs") or {}).values():
+        for s in ((a or {}).get("industries") or []):
+            ents_by.setdefault(s, []).append(a)
+    disc_rows = [{"id": r.get("review_id"), "proposed": r.get("proposed"), "reason": r.get("reason"),
+                  "hint": r.get("hint"), "confidence": r.get("confidence"),
+                  "industries": _discovery_industries(r.get("hint"))}
+                 for r in reviews]
+    disc_by: dict[str, int] = {}
+    for d in disc_rows:
+        for s in d["industries"]:
+            disc_by[s] = disc_by.get(s, 0) + 1
+
+    portfolio = [_sector_profile(feed, i, cards_by, ents_by, disc_by) for i in industries]
+    portfolio.sort(key=lambda p: p["maturity"], reverse=True)
+    by_slug = {p["slug"]: p for p in portfolio}
+
+    # top entities per sector (by card volume) — the sector's tracked competitive set
+    top_entities: dict[str, list] = {}
+    labels = ctx["labels"]
+    for s, cards in cards_by.items():
+        cnt: dict[str, int] = {}
+        for c in cards:
+            if c.get("entity"):
+                cnt[c["entity"]] = cnt.get(c["entity"], 0) + 1
+        top_entities[s] = [{"entity": e, "label": labels.get(e, e), "cards": n, "industries": [s]}
+                           for e, n in sorted(cnt.items(), key=lambda kv: kv[1], reverse=True)[:12]]
+
+    coverage_map = [{"slug": p["slug"], "label": p["label"], "covered": p["covered"],
+                     "coverage_gap": p["coverage_gap"], "low_volume": p["low_volume"],
+                     "narratives": p["narratives"], "active_entities": p["tracked"],
+                     "maturity": p["maturity"], "industries": [p["slug"]]} for p in portfolio]
     blind = sorted(gaps, key=lambda g: (g.get("status") != "open", -(g.get("count") or 0)))
     blind_rows = [{"id": g.get("id"), "question": g.get("question"), "count": g.get("count"),
                    "status": g.get("status"), "reason": g.get("reason"),
                    "triage": (g.get("triage") or {}).get("class"),
                    "issue_url": g.get("issue_url"), "industries": []} for g in blind]
-    disc_rows = [{"id": r.get("review_id"), "proposed": r.get("proposed"), "reason": r.get("reason"),
-                  "hint": r.get("hint"), "confidence": r.get("confidence"),
-                  "industries": _discovery_industries(r.get("hint"))}
-                 for r in reviews]
+
+    # portfolio-level field-completeness (exposes the thin Product fields, e.g. esg/certifications)
+    all_attrs = [a for a in (feed.get("entity_attrs") or {}).values()]
+    n_all = len(all_attrs) or 1
+    field_completeness = {f: round(100 * sum(1 for a in all_attrs if (a or {}).get(f)) / n_all)
+                          for f in _PRODUCT_FIELDS}
 
     def agg(slug):
         if slug == ALL:
-            covered = sum(1 for i in coverage_map if i["covered"])
-            cgap = sum(1 for i in coverage_map if i["coverage_gap"])
-        else:
-            covered = sum(1 for i in coverage_map if i["slug"] == slug and i["covered"])
-            cgap = sum(1 for i in coverage_map if i["slug"] == slug and i["coverage_gap"])
-        return {"n_gaps": sum(1 for g in blind_rows if g["status"] == "open"),
-                "n_reviews": len(disc_rows), "n_covered": covered, "n_coverage_gap": cgap}
+            return {"n_covered": sum(1 for p in portfolio if p["covered"]),
+                    "n_coverage_gap": sum(1 for p in portfolio if p["coverage_gap"]),
+                    "n_reviews": len(disc_rows),
+                    "n_gaps": sum(1 for g in blind_rows if g["status"] == "open"),
+                    "maturity": round(sum(p["maturity"] for p in portfolio) / len(portfolio)) if portfolio else 0,
+                    "provenance_score": _provenance_score(_provenance_mix(all_attrs))}
+        p = by_slug.get(slug) or {}
+        return {"n_covered": 1 if p.get("covered") else 0,
+                "n_coverage_gap": 1 if p.get("coverage_gap") else 0,
+                "n_reviews": p.get("discovery", 0),
+                "n_gaps": sum(1 for g in blind_rows if g["status"] == "open"),
+                "maturity": p.get("maturity", 0), "provenance_score": p.get("provenance_score", 0),
+                "narratives": p.get("narratives", 0), "tracked": p.get("tracked", 0),
+                "freshness_days": p.get("freshness_days"), "concentration": p.get("concentration")}
 
     recs = []
+    # weakest covered sector by maturity → deepen coverage
+    weak = sorted([p for p in portfolio if p["covered"]], key=lambda p: p["maturity"])[:1]
+    if weak:
+        w = weak[0]
+        recs.append(_rec("30d", f"Aprofundar cobertura em {w['label']} (maturidade {w['maturity']})",
+                         "propose_vertical", officer="cpo", industries=[w["slug"]]))
+    # thinnest Product field across the base → an ingestion requirement
+    thin = sorted(field_completeness.items(), key=lambda kv: kv[1])[:1]
+    if thin:
+        f, pctv = thin[0]
+        recs.append(_rec("estrategico", f"Fechar lacuna de metadado '{f}' (só {pctv}% da base)",
+                         "propose_vertical", officer="cpo"))
     open_gaps = [g for g in blind_rows if g["status"] == "open"]
     if open_gaps:
-        g = open_gaps[0]
-        recs.append(_rec("imediato", f"Triagem de ponto cego: {g['question']}", "resolve_review",
-                         officer="cpo"))
-    if disc_rows:
-        d = disc_rows[0]
-        recs.append(_rec("30d", f"Revisar proposta de descoberta: {d['proposed']}", "resolve_review",
-                         officer="cpo"))
+        recs.append(_rec("imediato", f"Triagem de ponto cego: {open_gaps[0]['question']}",
+                         "resolve_review", officer="cpo"))
+
     return {"by_industry": _by_industry(ctx["sectors"], agg), "panels": {
+        "portfolio": portfolio,
         "coverage_map": coverage_map,
+        "top_entities": top_entities,
         "blind_spots": blind_rows[:30],
-        "discovery": disc_rows[:30],
+        "discovery": disc_rows[:40],
+        "field_completeness": field_completeness,
         "reg_coverage": {"summary": rc.get("summary") or {},
                          "entity_covered": rc.get("entity_covered") or [],
                          "signal_only": rc.get("signal_only") or [], "gap": rc.get("gap") or []},
-        "radar": radar_tiers,
         "recommendations": recs,
     }}
 
