@@ -1327,9 +1327,14 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # ADR 021 §D/§G: the per-officer executive block (read-track: CSO), industry-scoped.
     # Derived from the feed above — no new data; best-effort so a failure never blocks publish.
     try:
-        from src.synth import executive
+        from src.synth import decision_log, executive
 
-        feed["executive"] = executive.build_executive(feed)
+        try:
+            _decisions = decision_log.list_decisions()  # OncaDecisionLog → §E metrics
+        except Exception as exc:  # pragma: no cover - decision store best-effort
+            print(f"Warning: decision log read skipped: {exc}")
+            _decisions = []
+        feed["executive"] = executive.build_executive(feed, decisions=_decisions)
     except Exception as exc:  # pragma: no cover - best-effort, read-only
         print(f"Warning: executive block skipped: {exc}")
         feed["executive"] = {"officers": [], "cso": {}}

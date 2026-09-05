@@ -84,6 +84,24 @@
   .rec .cap .ocsel { font:inherit; font-size:var(--fs-micro); background:var(--surface); color:var(--ink);
     border:1px solid var(--border); border-radius:var(--r-sm); padding:3px var(--s2); }
   .hz-empty { color:var(--muted); font-size:var(--fs-micro); padding:var(--s2) 0; }
+
+  /* Executive Flow — incident → decision trajectory cards */
+  .trajs { display:grid; grid-template-columns:repeat(auto-fill,minmax(330px,1fr)); gap:var(--s3); padding:var(--s3); }
+  .traj { background:var(--surface-2); border:1px solid var(--border); border-left:3px solid var(--border-2);
+    border-radius:var(--r-md); padding:var(--s3); }
+  .traj[data-sev="crit"] { border-left-color:var(--t-crit); }
+  .traj[data-sev="high"] { border-left-color:var(--t-high); }
+  .traj[data-sev="med"]  { border-left-color:var(--warn); }
+  .traj-hd { display:flex; align-items:center; gap:var(--s2); margin-bottom:var(--s2); }
+  .traj-t { font-weight:600; font-size:var(--fs-sm); color:var(--ink); flex:1; line-height:1.3; }
+  .traj-b { font-size:var(--fs-meta); color:var(--ink-2); line-height:1.45; }
+  .traj-f { display:flex; align-items:center; gap:var(--s2); margin-top:var(--s3); font-size:var(--fs-micro); flex-wrap:wrap; }
+  .traj-f button { font:inherit; font-size:var(--fs-micro); font-weight:600; padding:3px var(--s2); border-radius:var(--r-sm);
+    border:1px solid var(--border); background:var(--surface); color:var(--ink-2); cursor:pointer; }
+  .traj-f button[data-tv="aprovado"]:hover { border-color:var(--ok); color:var(--ok); }
+  .traj-f button[data-tv="rejeitado"]:hover { border-color:var(--t-high); color:var(--t-high); }
+  .traj-f button:disabled { opacity:.45; cursor:default; }
+  .traj-f .done { color:var(--ok); font-weight:600; }
 </style>
 </head>
 <body>
@@ -291,6 +309,56 @@ function radarBlock(obj) {
   return `<div class="radarwrap">` + ent.map(([t, n]) => `<div class="rt"><b>${n}</b><span>${U.esc(t)}</span></div>`).join("") + `</div>`;
 }
 
+// --- Executive Flow band (§D) — incident → decision, capture built in --------
+let FLOW = [];
+function officerShort(k) { return (OFFICERS[k] ? OFFICERS[k].label.split(" ")[0] : (k || "").toUpperCase()); }
+function flowBand() {
+  // CSO (chief-of-staff) sees every trajectory; each officer sees the ones routed to it or handed to it.
+  FLOW = (EX.flow || []).filter(t => (OFFICER === "cso" || t.officer === OFFICER || t.handoff === OFFICER) && inSector(t));
+  if (!FLOW.length) return "";
+  const cards = FLOW.map((t, i) => `<div class="traj" data-sev="${U.esc(t.severity)}" data-i="${i}">
+    <div class="traj-hd"><span class="traj-t">${U.esc(t.title)}</span>
+      <span class="badge badge--ghost">${U.esc(officerShort(t.officer))}${t.handoff ? " → " + officerShort(t.handoff) : ""}</span></div>
+    <div class="traj-b">${U.esc(t.briefing)}</div>
+    <div class="traj-f">${t.evidence_ids && t.evidence_ids.length ? `<a href="#" data-ev="${U.esc(t.evidence_ids[0])}">evidência</a> · ` : ""}
+      <span class="hd-note">${U.esc(t.action || "")}</span><span class="spacer" style="flex:1"></span>
+      <button data-tv="aprovado" data-i="${i}">Aprovar</button><button data-tv="rejeitado" data-i="${i}">Rejeitar</button></div></div>`).join("");
+  return band("Fluxo executivo", "incidente → decisão", `<div class="trajs">${cards}</div>`);
+}
+async function captureTraj(btn) {
+  const t = FLOW[Number(btn.getAttribute("data-i"))]; if (!t) return;
+  const verdict = btn.getAttribute("data-tv"), f = btn.closest(".traj-f");
+  f.querySelectorAll("button").forEach(x => { x.disabled = true; });
+  const industry = SECTOR !== "__all__" ? SECTOR : (t.industries && t.industries[0]) || null;
+  const res = await postAct({ intent: "record_decision", officer: t.officer,
+    args: { officer: t.officer, recommendation: t.title, verdict, industry, action_ref: t.action_ref,
+            evidence_id: (t.evidence_ids || [])[0], context_id: t.id } });
+  if (!res || !res.decision_id) { f.insertAdjacentHTML("beforeend", `<span class="done" style="color:var(--t-high)">falha</span>`); return; }
+  f.insertAdjacentHTML("beforeend", `<span class="done">✓ ${verdict}</span>
+    <select data-did="${res.decision_id}" class="ocsel"><option value="pendente">pendente</option>
+      <option value="favoravel">favorável</option><option value="desfavoravel">desfavorável</option><option value="neutro">neutro</option></select>`);
+  f.querySelector(".ocsel").addEventListener("change", (e) => setOutcome(res.decision_id, e.target.value, e.target));
+}
+
+// --- Decision-Trust metrics band (§E) — honest, only what the log holds ------
+function pct(x) { return x == null ? "—" : Math.round(x * 100) + "%"; }
+function metricsBand() {
+  const m = EX.metrics || {};
+  if (m.n_decisions == null) return "";
+  const mm = (m.by_officer && m.by_officer[OFFICER]) ? m.by_officer[OFFICER] : m;
+  const ets = mm.ets_feedback;
+  const [bc, bl] = ets == null ? ["low", "sem dados"] : ets >= 7.6 ? ["ok", "Confiável"] : ets >= 6.1 ? ["warn", "Útil"] : ["high", "Baixa confiança"];
+  const hero = heroGauge("ETS · componente Feedback", ets == null ? "—" : ets, bandBadge(bc, bl),
+    "--" + (bc === "ok" ? "ok" : bc === "warn" ? "warn" : "t-high"), (ets || 0) * 10);
+  const tilesArr = [tile("Decisões", mm.n_decisions, "capturadas"),
+    tile("Aprovação", pct(mm.approval_rate), "das decisões"),
+    tile("Influência", pct(mm.influence_rate), "com resultado"),
+    tile("Favorável", pct(mm.favorable_rate), "dos resolvidos")];
+  const note = `<p class="hd-note" style="padding:2px var(--s2) 0;line-height:1.4">ETS composto e TDR: `
+    + `${U.esc(m.ets_note || "")} ${U.esc(m.tdr_note || "")}</p>`;
+  return band("Confiança & decisão", "ETS parcial · TDR requer baseline", readout(hero, tilesArr) + note);
+}
+
 // --- board (per officer) ---------------------------------------------------
 function render() {
   document.querySelectorAll("#officerTabs a").forEach(a =>
@@ -300,10 +368,11 @@ function render() {
   document.getElementById("pgLede").textContent = meta.lede;
   const p = block().panels || {}, a = agg();
   const el = document.getElementById("board");
+  let board = "";
 
   if (OFFICER === "cso") {
     const [bc, bl] = bandGood(a.climate || 0, 70, 45);
-    el.innerHTML =
+    board =
       readout(heroGauge("Clima estratégico", a.climate, bandBadge(bc, bl), "--" + (bc === "crit" ? "t-crit" : bc === "warn" ? "warn" : "ok"), a.climate),
         [tile("Alertas", a.n_alerts, "em aberto", a.n_alerts > 0 ? "high" : "ok"),
          tile("Ameaça média", a.avg_threat, "0–100"),
@@ -320,7 +389,7 @@ function render() {
       band("Inteligência regulatória (resumo)", "", panel("Mudanças por alcance", null, "domínio·setores·prazo", rowsReg(p.regulatory)));
   } else if (OFFICER === "cro") {
     const [bc, bl] = bandThreat(a.reg_threat || 0, 65, 40);
-    el.innerHTML =
+    board =
       readout(heroGauge("Ameaça regulatória", a.reg_threat, bandBadge(bc, bl), "--" + (bc === "crit" ? "t-crit" : bc === "high" ? "t-high" : "ok"), a.reg_threat),
         [tile("Cartões regulatórios", a.n_reg, "no escopo"),
          tile("Atos alterados", a.n_changes, "com mudança enumerada"),
@@ -331,7 +400,7 @@ function render() {
       band("Calendário de conformidade", "", panel("Prazos", null, "dias até o prazo", rowsReg(p.deadlines)));
   } else if (OFFICER === "cco") {
     const risk = (a.n_high || 0), rc = risk > 3 ? ["crit", "Crítico"] : risk > 0 ? ["high", "Atenção"] : ["ok", "Controlado"];
-    el.innerHTML =
+    board =
       readout(heroCount("Achados graves", a.n_high, bandBadge(rc[0], rc[1]), "severidade alta na auditoria"),
         [tile("Achados de integridade", a.n_integrity, "registro", a.n_integrity > 0 ? "warn" : "ok"),
          tile("Distress (confirmado)", a.n_distress, "insolvência", a.n_distress > 0 ? "crit" : "ok"),
@@ -342,9 +411,9 @@ function render() {
                         panel("Reputação (reclamações)", null, "pior ranking primeiro", rowsRep(p.reputation))]));
   } else if (OFFICER === "cpo") {
     const total = (block().panels.coverage_map || []).length || 1, covered = a.n_covered || 0;
-    const pct = Math.round(covered / total * 100), [bc, bl] = bandGood(pct, 70, 40);
-    el.innerHTML =
-      readout(heroGauge("Cobertura de setores", `${pct}%`, bandBadge(bc, bl), "--" + (bc === "crit" ? "t-crit" : bc === "warn" ? "warn" : "ok"), pct),
+    const covPct = Math.round(covered / total * 100), [bc, bl] = bandGood(covPct, 70, 40);
+    board =
+      readout(heroGauge("Cobertura de setores", `${covPct}%`, bandBadge(bc, bl), "--" + (bc === "crit" ? "t-crit" : bc === "warn" ? "warn" : "ok"), covPct),
         [tile("Setores cobertos", `${covered}/${total}`, "roster sincronizado"),
          tile("Pontos cegos", a.n_gaps, "perguntas sem resposta", a.n_gaps > 0 ? "high" : "ok"),
          tile("Propostas", a.n_reviews, "descoberta"),
@@ -355,9 +424,12 @@ function render() {
                         panel("Propostas de descoberta", null, "revisão pendente", rowsDiscovery(p.discovery))])) +
       band("Força da base", "", panel("Radar de proveniência", null, "por tier", radarBlock(p.radar)));
   }
+  el.innerHTML = flowBand() + board + metricsBand();
   el.querySelectorAll(".exrow[data-id]").forEach(row => row.addEventListener("click", () => inspect(row.getAttribute("data-id"))));
   el.querySelectorAll(".exrow[data-url],.exrow[data-href]").forEach(row => row.addEventListener("click", () => {
     const u = row.getAttribute("data-url") || row.getAttribute("data-href"); if (u) window.open(u, "_blank", "noopener"); }));
+  el.querySelectorAll(".traj-f button[data-tv]").forEach(b => b.addEventListener("click", () => captureTraj(b)));
+  el.querySelectorAll(".traj-f a[data-ev]").forEach(a => a.addEventListener("click", (e) => { e.preventDefault(); inspect(a.getAttribute("data-ev")); }));
   renderRecs((p.recommendations || []).filter(inSector));
 }
 

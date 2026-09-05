@@ -113,6 +113,36 @@ def test_cpo_coverage_blindspots_discovery_radar():
     assert cpo["panels"]["radar"].get("official") == 1
 
 
+def test_flow_routes_reg_change_to_cro_with_handoff_to_cco():
+    ex = executive.build_executive(_feed())
+    flow = ex["flow"]
+    assert flow, "expected trajectories"
+    reg = [t for t in flow if t["trigger"] == "mudanca_regulatoria"]
+    assert reg and reg[0]["officer"] == "cro"
+    assert reg[0]["handoff"] == "cco"  # r1 blast band = market → hand off to compliance
+    assert reg[0]["evidence_ids"] == ["r1"] and reg[0]["action_ref"] == "open_watch"
+
+
+def test_flow_trajectory_ids_are_stable():
+    a = executive.build_executive(_feed())["flow"]
+    b = executive.build_executive(_feed())["flow"]
+    assert [t["id"] for t in a] == [t["id"] for t in b]  # stable → decisions can link back
+    assert all(t["id"].startswith("traj-") for t in a)
+
+
+def test_flow_sorted_by_severity():
+    flow = executive.build_executive(_feed())["flow"]
+    rank = {"crit": 0, "high": 1, "med": 2}
+    sev = [rank[t["severity"]] for t in flow]
+    assert sev == sorted(sev)
+
+
+def test_metrics_attached_from_decisions():
+    ex = executive.build_executive(_feed(), decisions=[
+        {"officer": "cso", "verdict": "aprovado", "outcome": "favoravel", "industry": "banking"}])
+    assert ex["metrics"]["n_decisions"] == 1 and ex["metrics"]["ets_feedback"] == 10.0
+
+
 def test_recommendations_map_to_catalog_actions_for_all_officers():
     ex = executive.build_executive(_feed())
     allowed = {"flag_entity", "open_watch", "curate_belief", "propose_vertical",

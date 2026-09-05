@@ -368,9 +368,93 @@ def build_cpo(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     }}
 
 
+# --- Executive Flow (§D) — incident → Trajectory → officer → briefing -----------------
+import hashlib
+
+
+def _tid(kind: str, key: str) -> str:
+    """Stable Trajectory id (a decision's context_id links back to it across builds)."""
+    return "traj-" + hashlib.sha1(f"{kind}:{key}".encode()).hexdigest()[:12]
+
+
+def _traj(kind, title, officer, severity, briefing, *, industries=None, evidence_ids=None,
+          action=None, action_ref=None, handoff=None, key="") -> dict[str, Any]:
+    return {"id": _tid(kind, key or title), "trigger": kind, "title": title, "officer": officer,
+            "severity": severity, "briefing": briefing, "industries": industries or [],
+            "evidence_ids": [e for e in (evidence_ids or []) if e], "action": action,
+            "action_ref": action_ref, "handoff": handoff}
+
+
+_SEV_RANK = {"crit": 0, "high": 1, "med": 2}
+
+
+def build_flow(feed: dict[str, Any], ctx: dict[str, Any]) -> list[dict[str, Any]]:
+    """The Executive Flow: detect qualifying events → open a durable Trajectory (stable id) →
+    route to the owning officer (the correlation engine) → a deterministic, cited briefing +
+    the recommended catalog action. Grounded only — briefings restate the trigger's own fields,
+    never invented facts. High-blast reg changes hand off CRO→CCO (compliance impact)."""
+    labels, reg_cards = ctx["labels"], ctx["reg_cards"]
+    out: list[dict[str, Any]] = []
+
+    # Regulatory change with material blast-radius → CRO (hand off to CCO when market-wide).
+    for c in sorted(reg_cards, key=lambda c: (c.get("change_record") or {}).get("blast_radius", {}).get("score", 0),
+                    reverse=True):
+        cr = c.get("change_record") or {}
+        band = (cr.get("blast_radius") or {}).get("band")
+        if band not in ("market", "broad", "sector"):
+            continue
+        sev = "crit" if band == "market" else "high"
+        n_ind = len(c.get("affected_industries") or [])
+        brief = (cr.get("impact") or f"Alcance {band}: afeta {n_ind} setor(es); "
+                 f"dificuldade {(cr.get('difficulty') or {}).get('band') or 'n/d'}.")
+        out.append(_traj("mudanca_regulatoria", f"Mudança regulatória — {c.get('domain') or 'regulação'}",
+                         "cro", sev, brief, industries=c.get("affected_industries") or [],
+                         evidence_ids=[c.get("id")], action="Avaliar e roteirizar a mudança",
+                         action_ref="open_watch", key=c.get("id") or "",
+                         handoff=("cco" if band == "market" else None)))
+        if len(out) >= 4:
+            break
+
+    # Confirmed insolvency on the roster → CCO.
+    for d in _trusted_distress(feed):
+        e = d.get("entity")
+        out.append(_traj("distress", f"Sinal de insolvência — {labels.get(e, e)}", "cco", "crit",
+                         f"Processo de {d.get('label') or 'distress'} (confiança {d.get('confidence')}).",
+                         industries=_industries_of(feed, e), evidence_ids=(d.get("evidence") or [])[:2],
+                         action="Sinalizar para revisão de compliance", action_ref="flag_entity", key=e or ""))
+
+    # High-severity integrity finding → CCO.
+    for f in [x for x in ((feed.get("integrity") or {}).get("findings") or []) if x.get("severity") == "high"][:3]:
+        out.append(_traj("integridade", f"Achado de integridade — {f.get('kind')}", "cco", "high",
+                         f.get("summary") or "Anomalia de registro detectada.",
+                         industries=_industries_of(feed, f.get("entity_id")),
+                         evidence_ids=[f.get("card_id")], action="Rodar auditoria de integridade",
+                         action_ref="run_integrity_audit", key=f.get("id") or ""))
+
+    # Competitor gaining the most momentum → CSO.
+    momentum = _momentum(ctx["cards"], ctx["dates"], labels)
+    for m in [x for x in momentum if x["momentum"] >= 15][:3]:
+        out.append(_traj("avanco_competitivo", f"Avanço competitivo — {m['label']}", "cso",
+                         "high" if m["momentum"] >= 25 else "med",
+                         f"Momentum +{m['momentum']} na janela (ameaça {m['prior']}→{m['recent']}).",
+                         industries=m["industries"], action="Formular tese competitiva",
+                         action_ref="curate_belief", key=m["entity"]))
+
+    # Recurring blind spot (unanswered demand) → CPO.
+    for g in sorted([x for x in (feed.get("coverage_gaps") or []) if x.get("status") == "open"],
+                    key=lambda g: -(g.get("count") or 0))[:2]:
+        out.append(_traj("ponto_cego", f"Ponto cego recorrente — {(g.get('question') or '')[:60]}", "cpo",
+                         "med", f"Pergunta sem resposta {g.get('count') or 0}× · {(g.get('triage') or {}).get('class') or 'lacuna'}.",
+                         action="Triar lacuna de cobertura", action_ref="resolve_review", key=g.get("id") or ""))
+
+    out.sort(key=lambda t: _SEV_RANK.get(t["severity"], 9))
+    return out[:14]
+
+
 # --- top level ------------------------------------------------------------------------
-def build_executive(feed: dict[str, Any]) -> dict[str, Any]:
-    """`feed.executive` — the four enriched officer blocks + the shared sector list."""
+def build_executive(feed: dict[str, Any], *, decisions: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """`feed.executive` — the four enriched officer blocks + shared sectors + the Executive Flow
+    (§D trajectories) + the Decision-Trust metrics (§E, from `decisions` if supplied)."""
     cards = _cards(feed)
     dates = list(feed.get("dates") or [])
     recent, _prior = _recent_window(dates)
@@ -378,11 +462,19 @@ def build_executive(feed: dict[str, Any]) -> dict[str, Any]:
                for o in (feed.get("industry_options") or []) if o.get("slug")]
     ctx = {"cards": cards, "dates": dates, "recent": recent, "labels": _labels(feed),
            "sectors": sectors, "reg_cards": [c for c in cards if c.get("kind") in _REG_KINDS]}
+    metrics = {}
+    try:
+        from src.synth import decision_metrics
+        metrics = decision_metrics.compute_metrics(decisions or [])
+    except Exception as exc:  # pragma: no cover - metrics best-effort
+        print(f"Warning: decision metrics skipped: {exc}")
     return {
         "officers": list(OFFICERS),
         "generated_at": feed.get("generated_at"),
         "as_of": feed.get("as_of"),
         "sectors": sectors,
+        "flow": build_flow(feed, ctx),
+        "metrics": metrics,
         "cso": build_cso(feed, ctx),
         "cro": build_cro(feed, ctx),
         "cco": build_cco(feed, ctx),
