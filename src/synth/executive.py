@@ -82,7 +82,7 @@ def _headline(card: dict[str, Any]) -> dict[str, Any]:
         "threat_score": card.get("threat_score"),
         "is_alert": bool(card.get("is_alert")),
         "industries": card.get("industries") or [],
-        "title": (card.get("narrative") or "")[:140],
+        "title": (card.get("narrative") or "")[:180],
     }
 
 
@@ -207,7 +207,11 @@ def build_cso(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
 
 def _reg_row(c: dict[str, Any]) -> dict[str, Any]:
     cr = c.get("change_record") or {}
-    return {"id": c.get("id"), "domain": c.get("domain"),
+    # The headline: the change summary if the card has one, else its own narrative (most reg
+    # cards — BCB Comunicados/fusions — carry only a narrative, no change_record). Never blank.
+    title = cr.get("change") or (c.get("narrative") or "")[:180]
+    return {"id": c.get("id"), "domain": c.get("domain") or c.get("subject_label"),
+            "title": title,
             "affected_industries": c.get("affected_industries") or [],
             "current_stage": c.get("current_stage"), "days_to_deadline": c.get("days_to_deadline"),
             "threat_score": c.get("threat_score"), "blast": len(c.get("affected_industries") or []),

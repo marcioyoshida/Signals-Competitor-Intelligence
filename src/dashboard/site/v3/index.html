@@ -31,13 +31,16 @@
   .tile.is-warn { border-left:3px solid var(--warn); } .tile.is-ok { border-left:3px solid var(--ok); }
 
   /* rows */
-  .exrow { display:flex; gap:var(--s3); align-items:baseline; padding:var(--s2) var(--s4);
+  .exrow { display:flex; gap:var(--s3); align-items:flex-start; padding:var(--s2) var(--s4);
     border-bottom:1px solid var(--border); cursor:pointer; }
   .exrow:last-child { border-bottom:0; }
   .exrow:hover { background:var(--surface-2); }
-  .exrow .ent { font-weight:600; min-width:118px; max-width:40%; color:var(--ink);
+  .exrow .ent { font-weight:600; min-width:118px; max-width:36%; color:var(--ink);
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .exrow .ttl { flex:1; min-width:0; color:var(--ink-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:var(--fs-sm); }
+  /* headline: up to 2 lines (far more text than a 1-line ellipsis), then clamp */
+  .exrow .ttl { flex:1; min-width:0; color:var(--ink-2); font-size:var(--fs-sm); line-height:1.4;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .exrow .dt, .exrow .meta, .exrow .heat, .exrow .badge { margin-top:1px; }
   .exrow .dt { color:var(--muted); font-size:var(--fs-micro); min-width:64px; font-variant-numeric:tabular-nums; }
   .exrow .meta { color:var(--muted); font-size:var(--fs-micro); font-variant-numeric:tabular-nums; }
 
@@ -264,13 +267,14 @@ function rowsCard(list) {
 function rowsReg(list) {
   list = (list || []).filter(inSector);
   if (!list.length) return U.empty("Sem itens regulatórios no escopo.", "", "○");
-  return list.map(r => `<div class="exrow" data-id="${U.esc(r.id)}">
-    <span class="ent" style="min-width:160px" title="${U.esc(r.domain || "Regulação")}">${U.esc(r.domain || "Regulação")}</span>
-    <span class="ttl" title="${U.esc(r.change || (r.affected_industries || []).join(", ") || "")}">${U.esc(r.change || (r.affected_industries || []).join(", ") || "")}</span>
-    ${r.blast_band ? sevBadge(r.blast_band) : `<span class="meta">${r.blast || 0} setor(es)</span>`}
+  return list.map(r => { const txt = r.title || r.change || (r.affected_industries || []).join(", ") || "";
+    return `<div class="exrow" data-id="${U.esc(r.id)}">
+    <span class="ent" style="min-width:150px" title="${U.esc(r.domain || "Regulação")}">${U.esc(r.domain || "Regulação")}</span>
+    <span class="ttl" title="${U.esc(txt)}">${U.esc(txt)}</span>
+    ${r.blast_band ? sevBadge(r.blast_band) : (r.blast ? `<span class="meta">${r.blast} setor(es)</span>` : "")}
     ${r.difficulty_band ? sevBadge(r.difficulty_band) : ""}
     ${r.days_to_deadline != null ? `<span class="dt">${r.days_to_deadline}d</span>` : ""}
-    ${r.threat_score != null ? U.heat(r.threat_score) : ""}</div>`).join("");
+    ${r.threat_score != null ? U.heat(r.threat_score) : ""}</div>`; }).join("");
 }
 function rowsMomentum(list) {
   list = (list || []).filter(inSector);
