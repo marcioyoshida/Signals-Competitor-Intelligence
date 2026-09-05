@@ -195,4 +195,7 @@ Officers here are **runtime product agents acting within Onça** (persona + cata
 live data) — not to be confused with the dev-time Claude Code subagents in `.claude/agents/`.
 
 Related: issue #20; supersedes nothing (extends ADR-010). Depends on ADR-018 (audit/rollback)
-and ADR-002 (identity/tier).
+and ADR-002 (identity/tier). **Extended by [ADR 021](2026-09-04-adr-executive-flow-officer-dashboards.md)**
+— the Executive Flow, Decision-Trust metrics, the decision→KB expertise flywheel, the per-officer
+sectorial dashboards, and the CORS followed-link beacon (the delivery + decision-learning layer on
+top of this write contract + officer set).
