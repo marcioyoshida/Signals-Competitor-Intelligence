@@ -7,34 +7,83 @@
 <title>Onça · Sala Executiva</title>
 <link rel="stylesheet" href="/v2/app.css" />
 <style>
+  /* v3 executive — built on the shared design tokens (dual-theme, no hardcoded hex) */
   .officer-tabs { display:flex; gap:2px; }
-  .selwrap { display:flex; align-items:center; gap:6px; }
-  .selwrap select { background:var(--surface-2,#1a1a1a); color:inherit; border:1px solid var(--line,#333);
-    border-radius:6px; padding:4px 8px; font:inherit; font-size:12px; }
-  .exrow { display:flex; gap:10px; align-items:baseline; padding:8px 12px; border-bottom:1px solid var(--line,#2a2a2a); cursor:pointer; }
-  .exrow:hover { background:var(--surface-2,#181818); }
-  .exrow .ent { font-weight:600; min-width:120px; }
-  .exrow .ttl { flex:1; opacity:.85; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .exrow .dt { opacity:.5; font-size:11px; min-width:72px; }
-  .chip { font-size:10px; padding:1px 7px; border-radius:10px; border:1px solid var(--line,#333); opacity:.85; }
-  .chip.market { border-color:#e0603a; color:#e0603a; } .chip.sector { border-color:#c9903a; }
-  .chip.high { border-color:#e0603a; color:#e0603a; } .chip.med { border-color:#c9903a; } .chip.low { opacity:.6; }
-  .mom { display:flex; align-items:center; gap:8px; padding:7px 12px; border-bottom:1px solid var(--line,#2a2a2a); }
-  .mom .bar { height:6px; border-radius:3px; } .mom .up { color:#e0603a; } .mom .down { color:#3aa06a; }
-  .rec { padding:10px 12px; border-bottom:1px solid var(--line,#2a2a2a); }
-  .rec .rec-t { font-weight:500; } .rec .rec-a { font-size:11px; opacity:.7; margin-top:3px; }
-  .rec .cap { margin-top:8px; display:flex; gap:6px; align-items:center; }
-  .rec .cap button { font:inherit; font-size:11px; padding:3px 10px; border-radius:6px; border:1px solid var(--line,#333); background:transparent; color:inherit; cursor:pointer; }
-  .rec .cap button:hover { background:var(--surface-2,#181818); }
-  .rec .cap button[data-v="aprovado"] { border-color:#3aa06a; } .rec .cap button[data-v="rejeitado"] { border-color:#e0603a; }
-  .rec .cap button:disabled { opacity:.4; cursor:default; }
-  .rec .cap .ocsel { font:inherit; font-size:11px; background:var(--surface-2,#1a1a1a); color:inherit; border:1px solid var(--line,#333); border-radius:6px; padding:2px 6px; }
-  .horizons { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
-  .hz h3 { font-size:12px; text-transform:uppercase; letter-spacing:.06em; opacity:.6; margin:0 0 6px; }
-  .cov { display:flex; gap:8px; align-items:center; padding:6px 12px; border-bottom:1px solid var(--line,#2a2a2a); }
-  .cov .dot { width:8px; height:8px; border-radius:50%; } .cov .ok { background:#3aa06a; } .cov .gap { background:#e0603a; } .cov .low { background:#c9903a; }
-  .radarwrap, .rcwrap { display:flex; gap:14px; flex-wrap:wrap; padding:12px; }
-  .radarwrap .rt { text-align:center; } .radarwrap .rt b { font-size:22px; display:block; }
+  .officer-tabs a { border-bottom:2px solid transparent; border-radius:0; padding:var(--s2) var(--s3); }
+  .officer-tabs a[aria-current="page"] { color:var(--ink); background:transparent; border-bottom-color:var(--primary); }
+  .selwrap { display:flex; align-items:center; gap:var(--s2); }
+  .selwrap select { background:var(--surface-2); color:var(--ink); border:1px solid var(--border);
+    border-radius:var(--r-sm); padding:5px var(--s2); font:inherit; font-size:var(--fs-meta); }
+
+  /* Hero readout — the promoted metric that leads every board */
+  .readout { display:grid; grid-template-columns:minmax(230px,.85fr) 2fr; gap:var(--s4); margin-bottom:var(--s4); }
+  .hero { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg);
+    padding:var(--s4) var(--s5); box-shadow:var(--shadow-1); display:flex; flex-direction:column; justify-content:center; gap:6px; }
+  .hero .h-lbl { font-size:var(--fs-micro); text-transform:uppercase; letter-spacing:.9px; color:var(--muted); }
+  .hero .h-row { display:flex; align-items:baseline; gap:var(--s3); }
+  .hero .h-val { font-size:var(--fs-hero); font-weight:800; line-height:1; letter-spacing:.3px; color:var(--ink); }
+  .hero .h-sub { font-size:var(--fs-meta); color:var(--muted); margin-top:2px; }
+  .gauge { height:8px; border-radius:var(--r-pill); background:var(--surface-3); overflow:hidden; margin-top:var(--s2); }
+  .gauge > i { display:block; height:100%; border-radius:var(--r-pill); }
+  .readout .tiles { align-content:center; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); }
+  .tile { position:relative; }
+  .tile.is-crit { border-left:3px solid var(--t-crit); } .tile.is-high { border-left:3px solid var(--t-high); }
+  .tile.is-warn { border-left:3px solid var(--warn); } .tile.is-ok { border-left:3px solid var(--ok); }
+
+  /* rows */
+  .exrow { display:flex; gap:var(--s3); align-items:baseline; padding:var(--s2) var(--s4);
+    border-bottom:1px solid var(--border); cursor:pointer; }
+  .exrow:last-child { border-bottom:0; }
+  .exrow:hover { background:var(--surface-2); }
+  .exrow .ent { font-weight:600; min-width:118px; color:var(--ink); }
+  .exrow .ttl { flex:1; color:var(--ink-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:var(--fs-sm); }
+  .exrow .dt { color:var(--muted); font-size:var(--fs-micro); min-width:64px; font-variant-numeric:tabular-nums; }
+  .exrow .meta { color:var(--muted); font-size:var(--fs-micro); font-variant-numeric:tabular-nums; }
+
+  /* momentum — diverging bar anchored to a center baseline (rising vs receding) */
+  .mom { display:grid; grid-template-columns:140px 1fr 66px; align-items:center; gap:var(--s3);
+    padding:6px var(--s4); border-bottom:1px solid var(--border); }
+  .mom:last-child { border-bottom:0; }
+  .mom .lbl { font-weight:600; color:var(--ink); font-size:var(--fs-sm); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .mom .track { position:relative; height:12px; }
+  .mom .track::before { content:""; position:absolute; left:50%; top:0; bottom:0; width:1px; background:var(--border-2); }
+  .mom .track i { position:absolute; top:1px; bottom:1px; border-radius:var(--r-sm); }
+  .mom .track i.up { left:50%; background:color-mix(in srgb,var(--t-high) 72%,transparent); }
+  .mom .track i.down { right:50%; background:color-mix(in srgb,var(--ok) 66%,transparent); }
+  .mom .val { text-align:right; font-variant-numeric:tabular-nums; font-size:var(--fs-sm); font-weight:600; }
+  .mom .val.up { color:var(--t-high); } .mom .val.down { color:var(--ok); }
+
+  /* coverage */
+  .cov { display:flex; gap:var(--s2); align-items:center; padding:7px var(--s4); border-bottom:1px solid var(--border); }
+  .cov:last-child { border-bottom:0; }
+  .cov .dot { width:9px; height:9px; border-radius:50%; flex:none; }
+  .cov .dot.ok { background:var(--ok); } .cov .dot.warn { background:var(--warn); } .cov .dot.gap { background:var(--t-crit); }
+  .cov .ent { font-weight:600; min-width:180px; color:var(--ink); }
+
+  /* provenance radar — stat tiles */
+  .radarwrap { display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:var(--s3); padding:var(--s4); }
+  .radarwrap .rt { text-align:center; background:var(--surface-2); border:1px solid var(--border); border-radius:var(--r-md); padding:var(--s3); }
+  .radarwrap .rt b { font-size:var(--fs-stat); font-weight:700; display:block; line-height:1; color:var(--ink); }
+  .radarwrap .rt span { font-size:var(--fs-micro); color:var(--muted); text-transform:uppercase; letter-spacing:.6px; }
+
+  /* recommendations + capture */
+  .horizons { display:grid; grid-template-columns:repeat(4,1fr); gap:var(--s4); }
+  .hz h3 { font-size:var(--fs-micro); text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:0 0 var(--s2);
+    padding-bottom:var(--s1); border-bottom:1px solid var(--border); }
+  .rec { padding:var(--s3); background:var(--surface-2); border:1px solid var(--border); border-radius:var(--r-md); margin-bottom:var(--s2); }
+  .rec .rec-t { font-weight:600; font-size:var(--fs-sm); color:var(--ink); line-height:1.35; }
+  .rec .rec-a { font-size:var(--fs-micro); color:var(--muted); margin-top:var(--s1); font-family:var(--f-mono); }
+  .rec .cap { margin-top:var(--s2); display:flex; gap:var(--s2); align-items:center; flex-wrap:wrap; }
+  .rec .cap button { font:inherit; font-size:var(--fs-micro); font-weight:600; padding:4px var(--s3); border-radius:var(--r-sm);
+    border:1px solid var(--border); background:var(--surface); color:var(--ink-2); cursor:pointer; }
+  .rec .cap button:hover { border-color:var(--border-2); color:var(--ink); }
+  .rec .cap button[data-v="aprovado"]:hover { border-color:var(--ok); color:var(--ok); }
+  .rec .cap button[data-v="rejeitado"]:hover { border-color:var(--t-high); color:var(--t-high); }
+  .rec .cap button:disabled { opacity:.45; cursor:default; }
+  .rec .cap .done { font-size:var(--fs-micro); color:var(--ok); font-weight:600; }
+  .rec .cap .ocsel { font:inherit; font-size:var(--fs-micro); background:var(--surface); color:var(--ink);
+    border:1px solid var(--border); border-radius:var(--r-sm); padding:3px var(--s2); }
+  .hz-empty { color:var(--muted); font-size:var(--fs-micro); padding:var(--s2) 0; }
 </style>
 </head>
 <body>
@@ -71,14 +120,14 @@ const U = window.OncaUI;
 let DATA = {}, EX = {}, OFFICER = "cso", SECTOR = "__all__", BYID = {};
 
 const OFFICERS = {
-  cso: { label: "CSO · Estratégia", title: "Estrategista-chefe (CSO)",
-    lede: "Clima competitivo, riscos e oportunidades, momentum dos concorrentes e ações por horizonte." },
-  cro: { label: "CRO · Regulatório", title: "Oficial regulatório (CRO)",
-    lede: "O eixo regulatório: linha do tempo consulta→norma→fiscalização, impacto/blast-radius, mudanças e prazos." },
-  cco: { label: "CCO · Compliance", title: "Oficial de compliance (CCO)",
-    lede: "Integridade, registro de risco (distress/reputação/achados) e triagem de watchlist." },
-  cpo: { label: "CPO · Produto", title: "Oficial de produto (CPO)",
-    lede: "Cobertura por setor, pontos cegos, propostas de descoberta e a força de proveniência da base." },
+  cso: { label:"CSO · Estratégia", title:"Estrategista-chefe (CSO)",
+    lede:"Clima competitivo, riscos e oportunidades, momentum dos concorrentes e ações por horizonte." },
+  cro: { label:"CRO · Regulatório", title:"Oficial regulatório (CRO)",
+    lede:"O eixo regulatório: linha do tempo consulta→norma→fiscalização, impacto/blast-radius, mudanças e prazos." },
+  cco: { label:"CCO · Compliance", title:"Oficial de compliance (CCO)",
+    lede:"Integridade, registro de risco (distress/reputação/achados) e triagem de watchlist." },
+  cpo: { label:"CPO · Produto", title:"Oficial de produto (CPO)",
+    lede:"Cobertura por setor, pontos cegos, propostas de descoberta e a força de proveniência da base." },
 };
 
 U.initTheme();
@@ -87,7 +136,6 @@ document.getElementById("drClose").addEventListener("click", closeDrawer);
 document.getElementById("scrim").addEventListener("click", closeDrawer);
 document.getElementById("sectorSel").addEventListener("change", (e) => { SECTOR = e.target.value; render(); });
 
-// officer tabs
 document.getElementById("officerTabs").innerHTML = Object.entries(OFFICERS)
   .map(([k, o]) => `<a href="#${k}" data-officer="${k}">${o.label}</a>`).join("");
 document.querySelectorAll("#officerTabs a").forEach(a => a.addEventListener("click", (e) => {
@@ -111,30 +159,51 @@ function boot() {
   render();
 }
 
-// --- filter + block helpers ------------------------------------------------
+// --- filter + layout helpers -----------------------------------------------
 function inSector(item) {
   if (SECTOR === "__all__") return true;
   const inds = item.industries || item.affected_industries || [];
-  return inds.length === 0 || inds.indexOf(SECTOR) !== -1; // empty = sector-agnostic
+  return inds.length === 0 || inds.indexOf(SECTOR) !== -1;
 }
 function block() { return EX[OFFICER] || {}; }
-function agg() { const bi = (block().by_industry || {}); return bi[SECTOR] || bi.__all__ || {}; }
+function agg() { const bi = block().by_industry || {}; return bi[SECTOR] || bi.__all__ || {}; }
+
 function panel(title, count, note, body) {
-  return `<div class="panel"><div class="panel__hd"><h2>${U.esc(title)}</h2>` +
-    (count != null ? `<span class="count">${count}</span>` : "") +
-    `<span class="spacer"></span><span class="hd-note">${U.esc(note || "")}</span></div>` +
+  const c = count == null ? "" : `<span class="count${count === 0 ? " count--zero" : ""}">${count}</span>`;
+  return `<div class="panel"><div class="panel__hd"><h2>${U.esc(title)}</h2>${c}` +
+    `<span class="spacer"></span>${note ? `<span class="hd-note">${U.esc(note)}</span>` : ""}</div>` +
     `<div class="panel__bd panel__bd--flush panel__bd--scroll">${body}</div></div>`;
 }
-function tiles(list) {
-  return `<div class="tiles">` + list.map(([t, v, d]) =>
-    `<div class="tile"><div class="tile__v">${v == null ? "—" : v}</div><div class="tile__t">${U.esc(t)}</div>` +
-    `<div class="tile__d">${U.esc(d)}</div></div>`).join("") + `</div>`;
+function tile(label, value, sub, cls) {
+  return `<div class="tile${cls ? " is-" + cls : ""}"><div class="tile__n">${value == null ? "—" : value}</div>` +
+    `<div class="tile__l">${U.esc(label)}${sub ? ` · ${U.esc(sub)}` : ""}</div></div>`;
 }
 function band(overline, badge, inner) {
   return `<section class="band"><div class="band-hd"><span class="overline">${U.esc(overline)}</span>` +
     `<span class="rule"></span>${badge ? `<span class="badge badge--infer">${U.esc(badge)}</span>` : ""}</div>${inner}</section>`;
 }
-function grid(cols, panels) { return `<div class="grid" style="grid-template-columns:${cols};gap:12px">${panels.join("")}</div>`; }
+function grid(cols, panels) { return `<div class="grid" style="grid-template-columns:${cols};gap:var(--s4)">${panels.join("")}</div>`; }
+
+// hero readout: a big promoted metric (gauge for 0–100, plain for counts) + supporting tiles
+function heroGauge(label, value, band, fillTok, pct) {
+  return `<div class="hero"><div class="h-lbl">${U.esc(label)}</div>
+    <div class="h-row"><span class="h-val">${value == null ? "—" : value}</span>${band}</div>
+    <div class="gauge"><i style="width:${Math.max(0, Math.min(100, pct))}%;background:var(${fillTok})"></i></div></div>`;
+}
+function heroCount(label, value, band, sub) {
+  return `<div class="hero"><div class="h-lbl">${U.esc(label)}</div>
+    <div class="h-row"><span class="h-val">${value == null ? "—" : value}</span>${band}</div>
+    <div class="h-sub">${U.esc(sub || "")}</div></div>`;
+}
+function bandBadge(cls, text) { return `<span class="badge badge--${cls}">${U.esc(text)}</span>`; }
+function readout(hero, tiles) { return `<div class="readout">${hero}<div class="tiles">${tiles.join("")}</div></div>`; }
+
+// higher-is-better band (climate, coverage) vs higher-is-worse (threat, risk)
+function bandGood(v, hi, mid) { return v >= hi ? ["ok", "Saudável"] : v >= mid ? ["warn", "Atenção"] : ["crit", "Crítico"]; }
+function bandThreat(v, hi, mid) { return v >= hi ? ["crit", "Elevada"] : v >= mid ? ["high", "Moderada"] : ["ok", "Baixa"]; }
+const SEV = { high: "high", med: "med", low: "low", market: "crit", broad: "high", sector: "high",
+  regional: "med", local: "low", medium: "med" };
+function sevBadge(x) { return x ? `<span class="badge badge--${SEV[x] || "low"}">${U.esc(x)}</span>` : ""; }
 
 // --- row renderers ---------------------------------------------------------
 function rowsCard(list) {
@@ -150,10 +219,10 @@ function rowsReg(list) {
   list = (list || []).filter(inSector);
   if (!list.length) return U.empty("Sem itens regulatórios no escopo.", "", "○");
   return list.map(r => `<div class="exrow" data-id="${U.esc(r.id)}">
-    <span class="ent" style="min-width:170px">${U.esc(r.domain || "Regulação")}</span>
-    <span class="ttl">${U.esc((r.change || (r.affected_industries || []).join(", ")) || "")}</span>
-    ${r.blast_band ? `<span class="chip ${r.blast_band}">${U.esc(r.blast_band)}</span>` : `<span class="hd-note">${r.blast || 0} setor(es)</span>`}
-    ${r.difficulty_band ? `<span class="chip ${r.difficulty_band}">dif: ${U.esc(r.difficulty_band)}</span>` : ""}
+    <span class="ent" style="min-width:160px">${U.esc(r.domain || "Regulação")}</span>
+    <span class="ttl">${U.esc(r.change || (r.affected_industries || []).join(", ") || "")}</span>
+    ${r.blast_band ? sevBadge(r.blast_band) : `<span class="meta">${r.blast || 0} setor(es)</span>`}
+    ${r.difficulty_band ? sevBadge(r.difficulty_band) : ""}
     ${r.days_to_deadline != null ? `<span class="dt">${r.days_to_deadline}d</span>` : ""}
     ${r.threat_score != null ? U.heat(r.threat_score) : ""}</div>`).join("");
 }
@@ -161,68 +230,65 @@ function rowsMomentum(list) {
   list = (list || []).filter(inSector);
   if (!list.length) return U.empty("Sem momentum na janela.", "", "○");
   const max = Math.max(1, ...list.map(r => Math.abs(r.momentum)));
-  return list.slice(0, 25).map(r => { const up = r.momentum >= 0, w = Math.round(Math.abs(r.momentum) / max * 90) + 6;
-    return `<div class="mom"><span class="ent" style="min-width:130px">${U.esc(r.label)}</span>
-      <span class="bar ${up ? "up" : "down"}" style="width:${w}px;background:currentColor"></span>
-      <span class="${up ? "up" : "down"}">${up ? "▲" : "▼"} ${r.momentum > 0 ? "+" : ""}${r.momentum}</span>
-      <span class="hd-note" style="margin-left:auto">${r.prior} → ${r.recent}</span></div>`; }).join("");
+  return list.slice(0, 25).map(r => {
+    const up = r.momentum >= 0, w = Math.round(Math.abs(r.momentum) / max * 48) + 1;
+    return `<div class="mom"><span class="lbl">${U.esc(r.label)}</span>
+      <span class="track"><i class="${up ? "up" : "down"}" style="width:${w}%"></i></span>
+      <span class="val ${up ? "up" : "down"}">${r.momentum > 0 ? "+" : ""}${r.momentum}</span></div>`;
+  }).join("");
 }
 function rowsRisk(list) {
   list = (list || []).filter(inSector);
   if (!list.length) return U.empty("Sem riscos no escopo.", "", "○");
-  return list.map(r => `<div class="exrow">
-    <span class="chip ${r.severity}">${U.esc(r.kind)}</span>
-    <span class="ent" style="min-width:130px">${U.esc(r.label || "—")}</span>
+  return list.map(r => `<div class="exrow">${sevBadge(r.severity)}
+    <span class="ent" style="min-width:128px">${U.esc(r.label || "—")}</span>
     <span class="ttl">${U.esc(r.detail || "")}</span></div>`).join("");
 }
 function rowsIntegrity(list) {
   list = (list || []).filter(inSector);
   if (!list.length) return U.empty("Registro íntegro no escopo.", "", "○");
-  return list.map(r => `<div class="exrow" ${r.card_id ? `data-id="${U.esc(r.card_id)}"` : ""}>
-    <span class="chip ${r.severity}">${U.esc(r.severity)}</span>
-    <span class="ent" style="min-width:150px">${U.esc(r.kind)}</span>
+  return list.map(r => `<div class="exrow" ${r.card_id ? `data-id="${U.esc(r.card_id)}"` : ""}>${sevBadge(r.severity)}
+    <span class="ent" style="min-width:148px">${U.esc(r.kind)}</span>
     <span class="ttl">${U.esc(r.summary || "")}</span></div>`).join("");
 }
 function rowsRep(list) {
   list = (list || []).filter(inSector);
   if (!list.length) return U.empty("Sem dados de reputação no escopo.", "", "○");
   return list.map(r => `<div class="exrow" ${r.url ? `data-url="${U.esc(r.url)}"` : ""}>
-    <span class="ent" style="min-width:150px">${U.esc(r.label)}</span>
+    <span class="ent" style="min-width:148px">${U.esc(r.label)}</span>
     <span class="ttl">${U.esc(r.category || "")} · ${U.esc(r.period || "")}</span>
-    <span class="hd-note">#${r.rank != null ? r.rank : "—"} · índice ${r.index != null ? r.index : "—"}</span></div>`).join("");
+    <span class="meta">#${r.rank != null ? r.rank : "—"} · índice ${r.index != null ? r.index : "—"}</span></div>`).join("");
 }
 function rowsGap(list) {
-  list = (list || []);
-  if (!list.length) return U.empty("Sem pontos cegos.", "", "○");
+  if (!(list || []).length) return U.empty("Sem pontos cegos.", "", "○");
   return list.map(r => `<div class="exrow" ${r.issue_url ? `data-href="${U.esc(r.issue_url)}"` : ""}>
-    <span class="chip ${r.status === "open" ? "high" : "low"}">${U.esc(r.status)}</span>
+    <span class="badge badge--${r.status === "open" ? "high" : "low"}">${U.esc(r.status)}</span>
     <span class="ttl">${U.esc(r.question || "")}</span>
-    <span class="hd-note">${r.count || 0}× · ${U.esc(r.triage || "")}</span></div>`).join("");
+    <span class="meta">${r.count || 0}× · ${U.esc(r.triage || "")}</span></div>`).join("");
 }
 function rowsDiscovery(list) {
   if (!(list || []).length) return U.empty("Sem propostas de descoberta.", "", "○");
   return list.map(r => `<div class="exrow">
-    <span class="ent" style="min-width:150px">${U.esc(r.proposed || "—")}</span>
+    <span class="ent" style="min-width:148px">${U.esc(r.proposed || "—")}</span>
     <span class="ttl">${U.esc(r.reason || "")} · ${U.esc(r.hint || "")}</span>
-    <span class="chip low">${U.esc(r.confidence || "")}</span></div>`).join("");
+    <span class="badge badge--low">${U.esc(r.confidence || "")}</span></div>`).join("");
 }
 function rowsCoverage(list) {
   list = (list || []).filter(i => SECTOR === "__all__" || i.slug === SECTOR);
   if (!list.length) return U.empty("Sem setores no escopo.", "", "○");
-  return list.map(i => { const cls = i.coverage_gap ? "gap" : (i.low_volume ? "low" : "ok");
+  return list.map(i => { const cls = i.coverage_gap ? "gap" : (i.low_volume ? "warn" : "ok");
+    const badge = i.coverage_gap ? bandBadge("high", "lacuna") : (i.low_volume ? bandBadge("warn", "baixo volume") : bandBadge("ok", "ok"));
     return `<div class="cov"><span class="dot ${cls}"></span>
-      <span class="ent" style="min-width:170px">${U.esc(i.label)}</span>
-      <span class="hd-note">${i.active_entities || 0} entidades · ${i.narratives || 0} narrativas</span>
-      <span class="spacer" style="flex:1"></span>
-      ${i.coverage_gap ? `<span class="chip high">lacuna</span>` : (i.low_volume ? `<span class="chip med">baixo volume</span>` : `<span class="chip low">ok</span>`)}</div>`; }).join("");
+      <span class="ent">${U.esc(i.label)}</span>
+      <span class="meta">${i.active_entities || 0} entidades · ${i.narratives || 0} narrativas</span>
+      <span class="spacer" style="flex:1"></span>${badge}</div>`; }).join("");
 }
 function radarBlock(obj) {
   const ent = Object.entries(obj || {});
   if (!ent.length) return U.empty("Sem radar de proveniência.", "", "○");
   const order = { official: 0, structured: 1, registry: 2, identified: 3 };
   ent.sort((a, b) => (order[a[0]] ?? 9) - (order[b[0]] ?? 9));
-  return `<div class="radarwrap">` + ent.map(([t, n]) =>
-    `<div class="rt"><b>${n}</b><span class="hd-note">${U.esc(t)}</span></div>`).join("") + `</div>`;
+  return `<div class="radarwrap">` + ent.map(([t, n]) => `<div class="rt"><b>${n}</b><span>${U.esc(t)}</span></div>`).join("") + `</div>`;
 }
 
 // --- board (per officer) ---------------------------------------------------
@@ -234,13 +300,18 @@ function render() {
   document.getElementById("pgLede").textContent = meta.lede;
   const p = block().panels || {}, a = agg();
   const el = document.getElementById("board");
+
   if (OFFICER === "cso") {
+    const [bc, bl] = bandGood(a.climate || 0, 70, 45);
     el.innerHTML =
-      tiles([["Clima estratégico", a.climate, "0–100 · maior = mais calmo"], ["Alertas", a.n_alerts, "cartões em alerta"],
-             ["Ameaça média", a.avg_threat, "0–100"], ["Ameaça regulatória", a.reg_threat, "0–100"], ["Movimentos", a.n_moves, "entrada·oferta·M&A"]]) +
+      readout(heroGauge("Clima estratégico", a.climate, bandBadge(bc, bl), "--" + (bc === "crit" ? "t-crit" : bc === "warn" ? "warn" : "ok"), a.climate),
+        [tile("Alertas", a.n_alerts, "em aberto", a.n_alerts > 0 ? "high" : "ok"),
+         tile("Ameaça média", a.avg_threat, "0–100"),
+         tile("Ameaça regulatória", a.reg_threat, "0–100"),
+         tile("Movimentos", a.n_moves, "entrada·oferta·M&A")]) +
       band("Situação", "índice de clima · inferência",
-        grid("1.3fr .9fr", [panel("Manchetes executivas", null, "maior ameaça · recente", rowsCard(p.headlines)),
-                            panel("Sinais emergentes", null, "janela recente · ameaça ≥ 60", rowsCard(p.emerging))])) +
+        grid("1.4fr .9fr", [panel("Manchetes executivas", null, "maior ameaça · recente", rowsCard(p.headlines)),
+                            panel("Sinais emergentes", null, "janela recente", rowsCard(p.emerging))])) +
       band("Riscos & Oportunidades", "", grid("1fr 1fr", [panel("Radar de risco", null, "alertas", rowsCard(p.risks)),
                             panel("Radar de oportunidade", null, "fraqueza do concorrente", rowsCard(p.opportunities))])) +
       band("Inteligência competitiva", "momentum na janela · inferência",
@@ -248,25 +319,36 @@ function render() {
                         panel("Movimentos estratégicos", null, "entrada·oferta·M&A", rowsCard(p.moves))])) +
       band("Inteligência regulatória (resumo)", "", panel("Mudanças por alcance", null, "domínio·setores·prazo", rowsReg(p.regulatory)));
   } else if (OFFICER === "cro") {
+    const [bc, bl] = bandThreat(a.reg_threat || 0, 65, 40);
     el.innerHTML =
-      tiles([["Cartões regulatórios", a.n_reg, "no escopo"], ["Ameaça regulatória", a.reg_threat, "0–100"],
-             ["Atos alterados", a.n_changes, "com enumeração de mudança"], ["Maior alcance", a.max_blast, "setores afetados"]]) +
-      band("Impacto & alcance", "blast-radius · ADR-009", panel("Mudanças por impacto", null, "banda de alcance·dificuldade", rowsReg(p.impact))) +
+      readout(heroGauge("Ameaça regulatória", a.reg_threat, bandBadge(bc, bl), "--" + (bc === "crit" ? "t-crit" : bc === "high" ? "t-high" : "ok"), a.reg_threat),
+        [tile("Cartões regulatórios", a.n_reg, "no escopo"),
+         tile("Atos alterados", a.n_changes, "com mudança enumerada"),
+         tile("Maior alcance", a.max_blast, "setores", a.max_blast >= 3 ? "high" : null)]) +
+      band("Impacto & alcance", "blast-radius · ADR-009", panel("Mudanças por impacto", null, "banda de alcance · dificuldade", rowsReg(p.impact))) +
       band("Linha do tempo regulatória", "", grid("1fr 1fr", [panel("Consulta → norma → fiscalização", null, "recente", rowsReg(p.timeline)),
                             panel("Atos com mudanças enumeradas", null, "amending acts", rowsReg(p.changes))])) +
       band("Calendário de conformidade", "", panel("Prazos", null, "dias até o prazo", rowsReg(p.deadlines)));
   } else if (OFFICER === "cco") {
+    const risk = (a.n_high || 0), rc = risk > 3 ? ["crit", "Crítico"] : risk > 0 ? ["high", "Atenção"] : ["ok", "Controlado"];
     el.innerHTML =
-      tiles([["Achados de integridade", a.n_integrity, "auditoria do registro"], ["Achados graves", a.n_high, "severidade alta"],
-             ["Distress (confirmado)", a.n_distress, "insolvência"], ["Reputação", a.n_rep, "rankings de reclamação"]]) +
+      readout(heroCount("Achados graves", a.n_high, bandBadge(rc[0], rc[1]), "severidade alta na auditoria"),
+        [tile("Achados de integridade", a.n_integrity, "registro", a.n_integrity > 0 ? "warn" : "ok"),
+         tile("Distress (confirmado)", a.n_distress, "insolvência", a.n_distress > 0 ? "crit" : "ok"),
+         tile("Reputação", a.n_rep, "rankings BCB")]) +
       band("Registro de risco", "", panel("Distress · reputação · integridade", null, "prioridade", rowsRisk(p.risk_register))) +
       band("Integridade & reputação", "",
         grid("1fr 1fr", [panel("Auditoria de integridade", null, "achados do registro", rowsIntegrity(p.integrity)),
                         panel("Reputação (reclamações)", null, "pior ranking primeiro", rowsRep(p.reputation))]));
   } else if (OFFICER === "cpo") {
+    const total = (block().panels.coverage_map || []).length || 1, covered = a.n_covered || 0;
+    const pct = Math.round(covered / total * 100), [bc, bl] = bandGood(pct, 70, 40);
     el.innerHTML =
-      tiles([["Pontos cegos", a.n_gaps, "perguntas sem resposta"], ["Propostas", a.n_reviews, "descoberta"],
-             ["Setores cobertos", a.n_covered, "roster sincronizado"], ["Lacunas de cobertura", a.n_coverage_gap, "setores"]]) +
+      readout(heroGauge("Cobertura de setores", `${pct}%`, bandBadge(bc, bl), "--" + (bc === "crit" ? "t-crit" : bc === "warn" ? "warn" : "ok"), pct),
+        [tile("Setores cobertos", `${covered}/${total}`, "roster sincronizado"),
+         tile("Pontos cegos", a.n_gaps, "perguntas sem resposta", a.n_gaps > 0 ? "high" : "ok"),
+         tile("Propostas", a.n_reviews, "descoberta"),
+         tile("Lacunas", a.n_coverage_gap, "setores", a.n_coverage_gap > 0 ? "warn" : "ok")]) +
       band("Cobertura por setor", "", panel("Mapa de cobertura", null, "ok · baixo volume · lacuna", rowsCoverage(p.coverage_map))) +
       band("Pontos cegos & descoberta", "",
         grid("1fr 1fr", [panel("Pontos cegos", null, "perguntas sem resposta", rowsGap(p.blind_spots)),
@@ -291,7 +373,7 @@ function renderRecs(recs) {
       `<div class="rec" data-i="${i}"><div class="rec-t">${U.esc(r.text)}</div>
         <div class="rec-a">→ ${U.esc(r.action)}${r.evidence_id ? ` · <a href="#" data-ev="${U.esc(r.evidence_id)}">evidência</a>` : ""}</div>
         <div class="cap"><button data-v="aprovado" data-i="${i}">Aprovar</button><button data-v="rejeitado" data-i="${i}">Rejeitar</button></div></div>`).join("")
-      : `<div class="hd-note" style="padding:4px 0">—</div>`) + `</div>`;
+      : `<div class="hz-empty">—</div>`) + `</div>`;
   }).join("") + `</div>`;
   el.querySelectorAll("a[data-ev]").forEach(a => a.addEventListener("click", (e) => { e.preventDefault(); inspect(a.getAttribute("data-ev")); }));
   el.querySelectorAll(".cap button[data-v]").forEach(b => b.addEventListener("click", () => capture(b)));
@@ -303,8 +385,8 @@ async function capture(btn) {
   const industry = SECTOR !== "__all__" ? SECTOR : (r.industries && r.industries[0]) || null;
   const res = await postAct({ intent: "record_decision", officer: OFFICER,
     args: { officer: OFFICER, recommendation: r.text, verdict, industry, action_ref: r.action, evidence_id: r.evidence_id, context_id: r.horizon } });
-  if (!res || !res.decision_id) { cap.innerHTML = `<span class="hd-note" style="color:#e0603a">falha ao registrar</span>`; return; }
-  cap.innerHTML = `<span class="hd-note">✓ ${verdict} · <span style="opacity:.6">resultado:</span></span>
+  if (!res || !res.decision_id) { cap.innerHTML = `<span class="done" style="color:var(--t-high)">falha ao registrar</span>`; return; }
+  cap.innerHTML = `<span class="done">✓ ${verdict}</span><span class="hd-note">resultado:</span>
     <select data-did="${res.decision_id}" class="ocsel"><option value="pendente">pendente</option>
       <option value="favoravel">favorável</option><option value="desfavoravel">desfavorável</option><option value="neutro">neutro</option></select>`;
   cap.querySelector(".ocsel").addEventListener("change", (e) => setOutcome(res.decision_id, e.target.value, e.target));
