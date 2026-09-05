@@ -737,6 +737,37 @@ def _kb_retrieve(q: str, *, max_results: int = 4) -> list[dict[str, Any]]:
     return out
 
 
+def _kb_precedents(q: str, officer: str | None, *, max_results: int = 3) -> list[dict[str, Any]]:
+    """ADR 021 §F Mechanism 1 — retrieve THIS officer's own decision precedents (decisions +
+    outcomes) from the KB for a similar question, so its grounded read learns from what it did
+    before. Metadata-filtered to the officer's precedents; best-effort (degrades to []; the
+    unfiltered `_kb_retrieve` still surfaces precedents if the filter is unavailable)."""
+    from src.dashboard import officers
+
+    short = officers.short_role(officer)
+    kb_id = os.environ.get("ONCA_KB_ID")
+    if not kb_id or not short:
+        return []
+    try:
+        import boto3
+
+        resp = boto3.client("bedrock-agent-runtime").retrieve(
+            knowledgeBaseId=kb_id, retrievalQuery={"text": q[:1000]},
+            retrievalConfiguration={"vectorSearchConfiguration": {"numberOfResults": max_results,
+                "filter": {"andAll": [
+                    {"equals": {"key": "doc_type", "value": "decision_precedent"}},
+                    {"equals": {"key": "officer", "value": short}}]}}})
+        out: list[dict[str, Any]] = []
+        for i, r in enumerate(resp.get("retrievalResults") or []):
+            t = (r.get("content") or {}).get("text") or ""
+            if t:
+                out.append({"id": f"kb:prec:{i}", "subject": "[precedente] " + t[:500]})
+        return out
+    except Exception as exc:  # pragma: no cover - precedent retrieval best-effort
+        print(f"Warning: precedent retrieval skipped: {exc}")
+        return []
+
+
 def _record_gap(q: str, scope: dict[str, Any] | None, reason: str) -> None:
     """Persist an unanswered in-domain question to the coverage-gap store (the
     remediation loop reads it out-of-band). Writes to the digests bucket; no-op if
@@ -816,10 +847,13 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     try:
         from src.synth.bedrock_llm import converse
         feed = _load_feed(bucket)
+        # §F Mechanism 1: an officer read also grounds on its own past decisions+outcomes.
+        kb_fn = None
+        if os.environ.get("ONCA_KB_ID"):
+            kb_fn = (lambda qq: _kb_retrieve(qq) + _kb_precedents(qq, officer)) if officer else _kb_retrieve
         result = answer(
             q, feed=feed, scope=scope, converser=converse,
-            kb_retrieve=_kb_retrieve if os.environ.get("ONCA_KB_ID") else None,
-            modules=modules, persona=persona,
+            kb_retrieve=kb_fn, modules=modules, persona=persona,
         )
         if officer:
             result["officer"] = officer

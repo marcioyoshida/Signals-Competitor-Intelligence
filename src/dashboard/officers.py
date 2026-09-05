@@ -44,7 +44,7 @@ OFFICERS: dict[str, Officer] = {
             "porter", "tows", "posicao", "ameaca", "expansao", "momentum", "grupo",
             "mercado", "participacao",
         ),
-        actions=("open_watch", "curate_belief", "trigger_run", "record_decision", "set_outcome"),
+        actions=("open_watch", "curate_belief", "trigger_run", "record_decision", "set_outcome", "append_reference"),
     ),
     "regulator": Officer(
         role="regulator",
@@ -60,7 +60,7 @@ OFFICERS: dict[str, Officer] = {
             "instrucao", "cvm", "bcb", "susep", "previc", "prazo", "vigencia", "mudanca",
             "deliberacao", "portaria",
         ),
-        actions=("open_watch", "trigger_run", "record_decision", "set_outcome"),
+        actions=("open_watch", "trigger_run", "record_decision", "set_outcome", "append_reference"),
     ),
     "compliance": Officer(
         role="compliance",
@@ -77,7 +77,7 @@ OFFICERS: dict[str, Officer] = {
             "distress", "recuperacao", "falencia", "rollback", "reverter", "auditoria",
             "risco", "governanca", "insolvencia",
         ),
-        actions=("run_integrity_audit", "flag_entity", "rollback_field", "revert_entity", "record_decision", "set_outcome"),
+        actions=("run_integrity_audit", "flag_entity", "rollback_field", "revert_entity", "record_decision", "set_outcome", "append_reference"),
     ),
     "product": Officer(
         role="product",
@@ -92,7 +92,7 @@ OFFICERS: dict[str, Officer] = {
             "cobertura", "lacuna", "cego", "descoberta", "radar", "proposta", "vertical",
             "jtbd", "produto", "fonte", "detector", "onboarding", "entrante",
         ),
-        actions=("resolve_review", "propose_vertical", "propose_registry_change", "record_decision", "set_outcome"),
+        actions=("resolve_review", "propose_vertical", "propose_registry_change", "record_decision", "set_outcome", "append_reference"),
     ),
 }
 
@@ -104,10 +104,20 @@ _DEFAULT_ROLE = "product"
 _ALIASES = {"cso": "strategic", "cro": "regulator", "cco": "compliance", "cpo": "product"}
 
 
+_REVERSE_ALIASES = {v: k for k, v in _ALIASES.items()}
+
+
 def resolve_role(role: str | None) -> str | None:
     """Canonicalize an officer id (accepts the CSO/CRO/CCO/CPO aliases → role key)."""
     r = (role or "").strip().lower()
     return _ALIASES.get(r, r) if (r in _ALIASES or r in OFFICERS) else None
+
+
+def short_role(role: str | None) -> str | None:
+    """The buyer-facing C-suite id (cso/cro/cco/cpo) for a role key or alias — the form the
+    decision log / KB precedent metadata is keyed by."""
+    canonical = resolve_role(role)
+    return _REVERSE_ALIASES.get(canonical) if canonical else None
 
 
 def _fold(s: str) -> str:

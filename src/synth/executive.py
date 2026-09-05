@@ -451,6 +451,53 @@ def build_flow(feed: dict[str, Any], ctx: dict[str, Any]) -> list[dict[str, Any]
     return out[:14]
 
 
+# --- Reference / playbooks (§H) — curated baseline per officer, labelled *referência* -
+REFERENCE: dict[str, Any] = {
+    "cso": {"title": "Playbook estratégico", "sections": [
+        {"h": "Frameworks de estratégia (8)", "items": [
+            "SWOT — forças, fraquezas, oportunidades, ameaças",
+            "TOWS — cruzamento SO / ST / WO / WT", "Cinco Forças de Porter", "PESTLE",
+            "Ansoff — matriz produto × mercado", "BCG — crescimento × participação",
+            "Quatro Cantos (Four Corners)", "McKinsey 7S"]},
+        {"h": "Eixos de posição", "items": [
+            "Ameaça (0–100) × Expansão — o mapa de posição competitiva",
+            "Momentum na janela (média recente − anterior)", "Grupos econômicos (feed.groups)"]}]},
+    "cro": {"title": "Referência regulatória", "sections": [
+        {"h": "Ciclo do ato normativo", "items": [
+            "Consulta pública → norma → fiscalização", "Blast-radius (alcance) × dificuldade",
+            "Prazos de vigência e de adequação"]},
+        {"h": "Reguladores e instrumentos (BR-FS)", "items": [
+            "CVM — Resolução / Instrução / Deliberação",
+            "BCB / CMN — Resolução BCB/CMN, Circular, Instrução Normativa",
+            "SUSEP / CNSP — Circular / Resolução", "PREVIC — previdência complementar fechada"]}]},
+    "cco": {"title": "Playbook de compliance", "sections": [
+        {"h": "Taxonomia de risco", "items": [
+            "Distress societário (recuperação judicial / falência)", "Sanções — CEIS / CNEP",
+            "Antitruste — CADE", "Reputação-como-risco — reclamações (BCB / Reclame Aqui)",
+            "Integridade do registro (anomalias / atribuição)"]},
+        {"h": "Modelo de governança (ADR-018)", "items": [
+            "Proveniência por campo (inferido < enrich < descoberta < estruturado < curado < fixture)",
+            "Precedência de escrita — automação não rebaixa o curado",
+            "Auditoria contínua + rollback sobre o journal"]},
+        {"h": "Guardrails", "items": [
+            "LGPD — pessoas só como figuras públicas em papel público",
+            "Difamação — não atribuir insolvência à contraparte citada numa notícia",
+            "attribution_role — observadores (B3 / Serasa / reguladores) não são sujeitos"]}]},
+    "cpo": {"title": "Referência de produto & cobertura", "sections": [
+        {"h": "Cobertura", "items": [
+            "Mapa CVM / BCB — segmentos regulados (roster / sinal / lacuna)",
+            "Radar de proveniência por tier (official / structured / registry / identified)",
+            "Pontos cegos — perguntas sem resposta (loop de cobertura)"]},
+        {"h": "Descoberta & fontes", "items": [
+            "Propostas de descoberta (review-gated)", "Registro de fontes por vertical (ADR-019)",
+            "JTBD — quais tarefas do comprador a base atende"]}]},
+}
+
+
+def build_reference() -> dict[str, Any]:
+    return REFERENCE
+
+
 # --- top level ------------------------------------------------------------------------
 def build_executive(feed: dict[str, Any], *, decisions: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """`feed.executive` — the four enriched officer blocks + shared sectors + the Executive Flow
@@ -475,6 +522,7 @@ def build_executive(feed: dict[str, Any], *, decisions: list[dict[str, Any]] | N
         "sectors": sectors,
         "flow": build_flow(feed, ctx),
         "metrics": metrics,
+        "reference": REFERENCE,
         "cso": build_cso(feed, ctx),
         "cro": build_cro(feed, ctx),
         "cco": build_cco(feed, ctx),

@@ -330,6 +330,37 @@ def _populate_corpus_and_sync(new_docs: list[dict[str, Any]]) -> None:
         print(f"Warning: KB ingestion sync failed: {exc}")
 
 
+def _promote_decisions_to_kb() -> None:
+    """ADR 021 §H/§F — continuous, seen-set-gated promotion of closed decisions (+ the officer
+    reference) into the KB, so an officer's next grounded read retrieves its own precedents.
+    Gated by ONCA_DECISION_KB; best-effort — never breaks the ingest run."""
+    if os.environ.get("ONCA_DECISION_KB", "").lower() not in ("1", "true", "yes"):
+        return
+    raw_bucket = os.environ.get("ONCA_RAW_BUCKET")
+    if not raw_bucket:
+        return
+    try:
+        from src.synth import decision_kb, decision_log, executive
+
+        promoted = decision_kb.promote_decisions(decision_log.list_decisions(), bucket=raw_bucket)
+        seeded = decision_kb.seed_reference(executive.build_reference(), bucket=raw_bucket)
+    except Exception as exc:  # pragma: no cover - promotion best-effort
+        print(f"Warning: decision KB promotion failed: {exc}")
+        return
+    if not promoted and not seeded:
+        return
+    print(f"Decision KB: promoted={len(promoted)} decisions, reference seeded={seeded}")
+    kb_id = os.environ.get("ONCA_KB_ID")
+    data_source_id = os.environ.get("ONCA_KB_DATA_SOURCE_ID")
+    if kb_id and data_source_id:
+        try:
+            boto3.client("bedrock-agent").start_ingestion_job(
+                knowledgeBaseId=kb_id, dataSourceId=data_source_id
+            )
+        except Exception as exc:  # pragma: no cover
+            print(f"Warning: decision KB ingestion sync failed: {exc}")
+
+
 def _news_slice(context: Any) -> dict[str, Any]:
     """Trade-press (Google News RSS + outlet feeds) news slice of the digest.
 
@@ -1167,6 +1198,9 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         new_normativos + new_funds + new_entrants + new_ofertas + new_sec
         + new_fatos + new_dou
     )
+
+    # ADR 021 §H/§F — promote closed decisions (+ officer reference) into the KB (gated).
+    _promote_decisions_to_kb()
 
     # Stage B fusion needs more than deltas: after seeding, items[] is often
     # empty while pulls still succeed. Attach compact context samples and

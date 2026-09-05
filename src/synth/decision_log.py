@@ -129,6 +129,19 @@ def append_reference(
     return True
 
 
+def mark_promoted(decision_id: str, table: Any | None = None) -> bool:
+    """Seen-set gate for §H decision→KB promotion: stamp a decision as promoted so the next
+    pipeline cycle never re-ingests it. Returns True if stamped."""
+    t = _table(table)
+    it = t.get_item(Key={"pk": f"DECISION#{decision_id}"}).get("Item")
+    if not it:
+        return False
+    it["kb_promoted"] = True
+    it["kb_promoted_at"] = _er._now_iso()
+    t.put_item(Item=it)
+    return True
+
+
 def list_decisions(
     *,
     officer: str | None = None,

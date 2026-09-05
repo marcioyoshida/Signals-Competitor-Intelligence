@@ -367,6 +367,21 @@ def _act_set_outcome(args: dict[str, Any], actor: str) -> tuple[str, int, dict[s
     return "applied", 200, {"decision_id": did, "decision_outcome": item["outcome"]}
 
 
+def _act_append_reference(args: dict[str, Any], actor: str) -> tuple[str, int, dict[str, Any]]:
+    """apply: the §H CORS-beacon target — append a consulted first-party source link to a
+    decision's evidence trail (feeds the decision's KB precedent). Best-effort, no PII."""
+    from src.synth import decision_log
+
+    did = str(args.get("decision_id") or "").strip()
+    url = str(args.get("url") or "").strip()
+    if not did or not url:
+        return "blocked", 400, {"error": "decision_id and url required"}
+    ok = decision_log.append_reference(did, url, officer=args.get("officer"))
+    if not ok:
+        return "noop", 404, {"detail": "decision not found or duplicate url", "decision_id": did}
+    return "applied", 200, {"decision_id": did, "url": url}
+
+
 # intent -> (execution class, handler, journal-subject key in args)
 _CATALOG: dict[str, tuple[str, Callable[..., tuple[str, int, dict[str, Any]]], str | None]] = {
     "trigger_run": (APPLY, _act_trigger_run, None),
@@ -383,6 +398,8 @@ _CATALOG: dict[str, tuple[str, Callable[..., tuple[str, int, dict[str, Any]]], s
     # ADR 021 §D Step 1 — decision capture (shared across officers)
     "record_decision": (APPLY, _act_record_decision, None),
     "set_outcome": (APPLY, _act_set_outcome, None),
+    # ADR 021 §H — CORS followed-link beacon (shared)
+    "append_reference": (APPLY, _act_append_reference, None),
 }
 
 

@@ -37,6 +37,13 @@ def test_owner_of_is_exclusive_only():
     assert officers.owner_of("nonexistent") is None
 
 
+def test_short_role_maps_to_csuite_id():
+    assert officers.short_role("strategic") == "cso"
+    assert officers.short_role("cco") == "cco"  # already short
+    assert officers.short_role("regulator") == "cro"
+    assert officers.short_role("nobody") is None
+
+
 def test_catalog_and_persona_lookup():
     assert "curate_belief" in officers.catalog("strategic")
     assert officers.brief_persona("compliance").startswith("Você é o Oficial de compliance")

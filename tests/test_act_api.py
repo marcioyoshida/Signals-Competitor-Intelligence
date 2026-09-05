@@ -377,6 +377,31 @@ def test_set_outcome_applies(monkeypatch):
     assert missing["statusCode"] == 404
 
 
+def test_append_reference_applies(monkeypatch):
+    _no_journal(monkeypatch)
+    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    from src.synth import decision_log
+    seen = {}
+    monkeypatch.setattr(decision_log, "append_reference",
+                        lambda did, url, officer=None: seen.update(did=did, url=url) or True)
+    resp = act_api.lambda_handler(_event(
+        {"intent": "append_reference", "officer": "cso",
+         "args": {"decision_id": "d1", "url": "https://bcb.gov.br/x", "officer": "cso"}}), None)
+    assert resp["statusCode"] == 200
+    assert json.loads(resp["body"])["outcome"] == "applied"
+    assert seen == {"did": "d1", "url": "https://bcb.gov.br/x"}
+
+
+def test_append_reference_missing_decision_404(monkeypatch):
+    _no_journal(monkeypatch)
+    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    from src.synth import decision_log
+    monkeypatch.setattr(decision_log, "append_reference", lambda *a, **k: False)
+    resp = act_api.lambda_handler(_event(
+        {"intent": "append_reference", "args": {"decision_id": "nope", "url": "https://x/1"}}), None)
+    assert resp["statusCode"] == 404
+
+
 def test_run_integrity_audit_reads_only(monkeypatch):
     _no_journal(monkeypatch)
     monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
