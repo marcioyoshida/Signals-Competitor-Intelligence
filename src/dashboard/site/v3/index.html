@@ -190,6 +190,12 @@ function inSector(item) {
   const inds = item.industries || item.affected_industries || [];
   return inds.length === 0 || inds.indexOf(SECTOR) !== -1;
 }
+// Strict: an untagged (empty-industry) item is shown ONLY in "todos", never under a specific
+// sector — used where a passthrough would dilute scoping (e.g. discovery proposals).
+function inSectorStrict(item) {
+  if (SECTOR === "__all__") return true;
+  return (item.industries || []).indexOf(SECTOR) !== -1;
+}
 function block() { return EX[OFFICER] || {}; }
 function agg() { const bi = block().by_industry || {}; return bi[SECTOR] || bi.__all__ || {}; }
 
@@ -292,7 +298,8 @@ function rowsGap(list) {
     <span class="meta">${r.count || 0}× · ${U.esc(r.triage || "")}</span></div>`).join("");
 }
 function rowsDiscovery(list) {
-  if (!(list || []).length) return U.empty("Sem propostas de descoberta.", "", "○");
+  list = (list || []).filter(inSectorStrict);
+  if (!list.length) return U.empty("Sem propostas de descoberta no escopo.", "", "○");
   return list.map(r => `<div class="exrow">
     <span class="ent" style="min-width:148px">${U.esc(r.proposed || "—")}</span>
     <span class="ttl">${U.esc(r.reason || "")} · ${U.esc(r.hint || "")}</span>
@@ -446,17 +453,26 @@ function render() {
         grid("1fr 1fr", [panel("Auditoria de integridade", null, "achados do registro", rowsIntegrity(p.integrity)),
                         panel("Reputação (reclamações)", null, "pior ranking primeiro", rowsRep(p.reputation))]));
   } else if (OFFICER === "cpo") {
-    const total = (block().panels.coverage_map || []).length || 1, covered = a.n_covered || 0;
+    // Compute the CPO readout from the SCOPED panels so a sector selection actually scopes.
+    const covRows = (p.coverage_map || []).filter(i => SECTOR === "__all__" || i.slug === SECTOR);
+    const total = covRows.length || 1, covered = covRows.filter(i => i.covered).length;
+    const cgap = covRows.filter(i => i.coverage_gap).length;
+    const nDisc = (p.discovery || []).filter(inSectorStrict).length;
+    const nGaps = (p.blind_spots || []).filter(g => g.status === "open").length; // gaps are cross-sector
+    const scoped = SECTOR !== "__all__";
     const covPct = Math.round(covered / total * 100), [bc, bl] = bandGood(covPct, 70, 40);
     board =
-      readout(heroGauge("Cobertura de setores", `${covPct}%`, bandBadge(bc, bl), "--" + (bc === "crit" ? "t-crit" : bc === "warn" ? "warn" : "ok"), covPct),
+      readout(heroGauge(scoped ? "Cobertura do setor" : "Cobertura de setores",
+                        scoped ? (covered ? "Coberto" : "Lacuna") : `${covPct}%`,
+                        bandBadge(scoped ? (covered ? "ok" : "high") : bc, scoped ? (covered ? "Coberto" : "Sem roster") : bl),
+                        "--" + (bc === "crit" ? "t-crit" : bc === "warn" ? "warn" : "ok"), covPct),
         [tile("Setores cobertos", `${covered}/${total}`, "roster sincronizado"),
-         tile("Pontos cegos", a.n_gaps, "perguntas sem resposta", a.n_gaps > 0 ? "high" : "ok"),
-         tile("Propostas", a.n_reviews, "descoberta"),
-         tile("Lacunas", a.n_coverage_gap, "setores", a.n_coverage_gap > 0 ? "warn" : "ok")]) +
+         tile("Propostas", nDisc, scoped ? "no setor" : "descoberta"),
+         tile("Lacunas", cgap, "setores", cgap > 0 ? "warn" : "ok"),
+         tile("Pontos cegos", nGaps, "perguntas · geral", nGaps > 0 ? "high" : "ok")]) +
       band("Cobertura por setor", "", panel("Mapa de cobertura", null, "ok · baixo volume · lacuna", rowsCoverage(p.coverage_map))) +
       band("Pontos cegos & descoberta", "",
-        grid("1fr 1fr", [panel("Pontos cegos", null, "perguntas sem resposta", rowsGap(p.blind_spots)),
+        grid("1fr 1fr", [panel("Pontos cegos", null, "cross-setor · sem tag de indústria", rowsGap(p.blind_spots)),
                         panel("Propostas de descoberta", null, "revisão pendente", rowsDiscovery(p.discovery))])) +
       band("Força da base", "", panel("Radar de proveniência", null, "por tier", radarBlock(p.radar)));
   }

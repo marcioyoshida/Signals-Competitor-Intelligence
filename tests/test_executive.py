@@ -113,6 +113,16 @@ def test_cpo_coverage_blindspots_discovery_radar():
     assert cpo["panels"]["radar"].get("official") == 1
 
 
+def test_discovery_industries_derived_from_hint_source_for_scoping():
+    # §G CPO scoping: discovery proposals get an industry from their hint SOURCE so the
+    # dashboard can filter them by sector (fiagro→agri-funds, bcb class→its industry).
+    assert executive._discovery_industries("cvm_fiagro cnpj=1 ticker=X owner=y") == ["agri-funds"]
+    assert executive._discovery_industries("bcb_consorcio cnpj=1 owner=y") == ["consorcio"]
+    assert executive._discovery_industries("bcb Crédito Direto (SCD) cnpj=48529228") == ["fintech"]
+    assert executive._discovery_industries("bcb Banco cnpj=1") == ["banking"]
+    assert executive._discovery_industries("news_keyword_harvest:ner foo") == []  # untagged
+
+
 def test_flow_routes_reg_change_to_cro_with_handoff_to_cco():
     ex = executive.build_executive(_feed())
     flow = ex["flow"]

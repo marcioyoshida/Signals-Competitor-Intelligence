@@ -310,6 +310,29 @@ def build_cco(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     }}
 
 
+# discovery proposals carry their SOURCE in the hint prefix — the sector signal for §G scoping.
+_DISCOVERY_SOURCE_IND = {
+    "cvm_fiagro": ["agri-funds"], "bcb_consorcio": ["consorcio"],
+    "cvm_fii": ["real-estate-funds"], "bcb_fii": ["real-estate-funds"],
+}
+
+
+def _discovery_industries(hint: str | None) -> list[str]:
+    h = (hint or "").strip()
+    src = h.split(" ", 1)[0]
+    if src in _DISCOVERY_SOURCE_IND:
+        return list(_DISCOVERY_SOURCE_IND[src])
+    if src == "bcb":  # discover_bcb_institutions: "bcb <ClassLabel> cnpj=..." → class→industry
+        try:
+            from src.synth.entity_discovery import _BCB_CLASS_MAP
+            klass = h[4:].rsplit(" cnpj=", 1)[0].strip()
+            ind = (_BCB_CLASS_MAP.get(klass) or (None,))[0]
+            return [ind] if ind else []
+        except Exception:  # pragma: no cover
+            return []
+    return []
+
+
 # --- CPO (product) --------------------------------------------------------------------
 def build_cpo(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     industries = list(feed.get("industries") or [])
@@ -333,7 +356,8 @@ def build_cpo(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
                    "triage": (g.get("triage") or {}).get("class"),
                    "issue_url": g.get("issue_url"), "industries": []} for g in blind]
     disc_rows = [{"id": r.get("review_id"), "proposed": r.get("proposed"), "reason": r.get("reason"),
-                  "hint": r.get("hint"), "confidence": r.get("confidence"), "industries": []}
+                  "hint": r.get("hint"), "confidence": r.get("confidence"),
+                  "industries": _discovery_industries(r.get("hint"))}
                  for r in reviews]
 
     def agg(slug):
