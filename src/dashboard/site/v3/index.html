@@ -468,6 +468,42 @@ function rowsTopEntities(list) {
     <span class="bar"><i style="width:${e.cards / max * 100}%;background:var(--cat-steel)"></i></span>
     <span class="cv">${e.cards}</span></div>`).join("");
 }
+const fmtBi = v => v == null ? "—" : "R$" + (v / 1e9).toFixed(v >= 1e10 ? 0 : 1) + "bi";
+// R3 — per-sector market size (todos) bars
+function marketSizeChart(ms, sectors) {
+  const rows = Object.entries(ms || {}).map(([s, m]) => ({ slug: s, m })).filter(x => x.m.covered);
+  if (!rows.length) return U.empty("Sem emissores listados (CVM) no escopo.", "", "○");
+  const label = s => (sectors.find(x => x.slug === s) || {}).label || s;
+  const max = Math.max(...rows.map(x => x.m.size_revenue));
+  rows.sort((a, b) => b.m.size_revenue - a.m.size_revenue);
+  return hbars(rows.map(x => ({ label: label(x.slug), value: fmtBi(x.m.size_revenue), bar: x.m.size_revenue / max * 100,
+    colorTok: "var(--cat-gold)", badge: `<span class="badge badge--ghost">${x.m.issuers} emissor(es)</span>` })));
+}
+// R3 — a single sector's constituents by revenue share
+function marketDetail(m) {
+  if (!m || !m.covered) return U.empty("Sem emissores listados (CVM) neste setor.", "sem tamanho fabricado", "○");
+  const max = Math.max(...m.constituents.map(c => c.revenue));
+  return `<div class="chart"><div class="crow"><span class="cl" style="color:var(--muted)">Tamanho (receita)</span>
+      <span class="cv">${fmtBi(m.size_revenue)}</span></div>
+    <div class="crow"><span class="cl" style="color:var(--muted)">Concentração (HHI)</span>
+      <span class="cv">${m.hhi}</span></div></div>` +
+    hbars(m.constituents.map(c => ({ label: c.label, value: Math.round((c.rev_share || 0) * 100) + "%",
+      bar: c.revenue / max * 100, colorTok: "var(--cat-gold)" })));
+}
+// R5 — source health rows
+function sourceHealthChart(list) {
+  if (!(list || []).length) return U.empty("Sem sinais de fontes.", "", "○");
+  const bmap = { ok: "ok", warn: "warn", stale: "gap" };
+  return `<div class="chart">` + list.slice(0, 14).map(s => `<div class="cov" style="padding:5px 0">
+    <span class="dot ${bmap[s.band]}"></span><span class="cl" style="min-width:120px">${U.esc(s.lens)}</span>
+    <span class="meta" style="flex:1">${s.docs} docs</span>
+    <span class="cv">${s.staleness_days == null ? "—" : s.staleness_days + "d"}</span></div>`).join("") + `</div>`;
+}
+function pricingBadge(p) {
+  if (!p) return "";
+  const cls = p.pressure === "alta" ? "high" : p.pressure === "média" ? "warn" : "low";
+  return `<span class="badge badge--${cls}">pressão ${U.esc(p.pressure)}</span> <span class="hd-note">${p.recent} sinais recentes · inferência</span>`;
+}
 
 // --- board (per officer) ---------------------------------------------------
 function render() {
@@ -542,7 +578,10 @@ function render() {
             `<div class="panel"><div class="panel__hd"><h2>Completude de metadados</h2><span class="spacer"></span><span class="hd-note">% da base · Produto</span></div><div class="panel__bd panel__bd--flush">${completenessChart(p.field_completeness)}</div></div>`])) +
         band("Pipeline de descoberta & pontos cegos", "",
           grid("1fr 1fr", [panel("Descoberta por setor", null, "novas entidades propostas", `<div class="panel__bd--flush">${discoveryChart(port)}</div>`),
-            panel("Pontos cegos", null, "cross-setor · sem tag de indústria", rowsGap(p.blind_spots))]));
+            panel("Pontos cegos", null, "cross-setor · sem tag de indústria", rowsGap(p.blind_spots))])) +
+        band("Estrutura de mercado & saúde das fontes", "receita CVM · frescor por fonte",
+          grid("1.1fr 1fr", [panel("Tamanho de mercado por setor", null, "receita dos emissores listados (CVM)", `<div class="panel__bd--flush">${marketSizeChart(p.market_structure, EX.sectors)}</div>`),
+            panel("Saúde das fontes", null, "frescor · volume · defasagem", `<div class="panel__bd--flush">${sourceHealthChart(p.source_health)}</div>`)]));
     } else {
       // Deep per-sector Product profile.
       const pr = port.find(x => x.slug === SECTOR) || {};
@@ -561,6 +600,9 @@ function render() {
         band("Proveniência & metadados", "",
           grid("1fr 1fr", [panel("Proveniência da base", null, "official → identified", `<div class="panel__bd--flush">${provenanceLegend()}<div class="chart"><div class="crow"><span class="cl">${U.esc(pr.label || "")}</span>${provStack(pr.provenance || {})}<span class="cv">${pr.provenance_score || 0}</span></div></div></div>`),
             panel("Completude de metadados", null, "% das entidades do setor", `<div class="panel__bd--flush">${completenessChart(pr.completeness)}</div>`)])) +
+        band("Posição de mercado & preço", "",
+          grid("1.2fr 1fr", [panel("Estrutura de mercado (CVM)", null, "receita · share · concentração", `<div class="panel__bd--flush">${marketDetail((p.market_structure || {})[SECTOR])}</div>`),
+            panel("Pressão de preço", null, "proxy · lentes juros/ofertas", `<div style="padding:var(--s4)">${pricingBadge((p.pricing || {})[SECTOR]) || U.empty("Sem sinais de preço no setor.", "", "○")}</div>`)])) +
         band("Conjunto competitivo", "top entidades por volume de sinais",
           `<div class="panel"><div class="panel__bd panel__bd--flush">${rowsTopEntities((p.top_entities || {})[SECTOR])}</div></div>`) +
         band("Descoberta & pontos cegos", "",

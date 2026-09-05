@@ -522,6 +522,9 @@ def build_cpo(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         "blind_spots": blind_rows[:30],
         "discovery": disc_rows[:40],
         "field_completeness": field_completeness,
+        "source_health": feed.get("source_health") or [],       # R5
+        "market_structure": feed.get("market_structure") or {},  # R3
+        "pricing": feed.get("pricing") or {},                    # R4
         "reg_coverage": {"summary": rc.get("summary") or {},
                          "entity_covered": rc.get("entity_covered") or [],
                          "signal_only": rc.get("signal_only") or [], "gap": rc.get("gap") or []},

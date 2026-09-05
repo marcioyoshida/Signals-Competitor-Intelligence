@@ -1,9 +1,32 @@
 # Product Officer (CPO) — ingestion requirements & the per-sector intelligence model
 
-- Status: **REQUIREMENTS (raised 2026-09-05)** — accompanies the rich per-sector CPO build
-  (`src/synth/executive.py` `build_cpo`/`_sector_profile`, v3 `/exec` CPO board). Extends
-  [ADR 021](2026-09-04-adr-executive-flow-officer-dashboards.md) §G (CPO) and the coverage-gap
-  loop ([ADR 014](2026-08-25-adr-coverage-gap-loop.md)).
+- Status: **R2–R6 SHIPPED (grounded) 2026-09-05 · R1 at its grounded ceiling** — the derivations
+  live in `src/synth/product_intel.py` (`enrich_feed`), wired into `feed_builder` and surfaced on
+  the `/exec` CPO board. Accompanies the rich per-sector CPO build (`executive.build_cpo`).
+  Extends [ADR 021](2026-09-04-adr-executive-flow-officer-dashboards.md) §G (CPO) and the
+  coverage-gap loop ([ADR 014](2026-08-25-adr-coverage-gap-loop.md)).
+
+## What shipped (grounded in existing registry/feed data)
+
+- **R2 Certifications — SHIPPED.** `derive_certifications` → `entity_attrs.certifications` from
+  registry facts (sector regulator BCB/CVM/SUSEP/PREVIC, B3 listing, ISE membership, parent). Base
+  completeness **0% → 100%** of tracked entities; each certification cites its basis.
+- **R3 Market structure — SHIPPED (real, where an issuer files).** `market_structure` from the CVM
+  `financials` store → `feed.market_structure[sector]` = {size_revenue, leader rev-share, HHI,
+  constituents}. Live: banking R$971bi / Itaú 34.5% / HHI 0.267; acquiring, insurance, asset-mgmt,
+  IB, wealth, advisory, financial-data. Sectors with no listed issuer report `covered:false` — **no
+  fabricated size.** (BCB IF.data `bcb_ifdata.market_share` merges in when its store is populated.)
+- **R4 Pricing — SHIPPED (proxy, labelled inference).** `pricing_signals` → `feed.pricing[sector]`
+  = price-pressure proxy from the juros/ofertas/pix lenses (volume+recency). Labelled an inference
+  until R4's structured rate source lands.
+- **R5 Source-health — SHIPPED.** `source_health` → `feed.source_health` = per-lens freshness /
+  volume / staleness band, derived from the feed with NO ingester change. New CPO data-quality panel.
+- **R6 Firmographics — SHIPPED (coarse, labelled inference).** `derive_firmographics` →
+  `entity_attrs.firmographics` = public/private + signal-volume size band.
+- **R1 ESG — at its grounded ceiling.** `esg_ise_b3` already sets `entity_attrs.esg` for the tracked
+  B3-ISE members (7 FS names — ISE is selective); now also surfaced as an "ISE B3" certification.
+  **Broader ESG needs a licensed source** (MSCI/S&P) or a labelled news-derived classifier — tracked
+  as #30. Follow-up: wire the `esg_ise_b3` refresh into the pipeline (currently CLI-run).
 - Owner ask: the CPO board "was not differentiating across industries — we're running thin on
   ingestion/narrative fields for Product." This doc (a) documents the **per-sector Product
   intelligence model** now built from existing data, and (b) **raises concrete ingestion

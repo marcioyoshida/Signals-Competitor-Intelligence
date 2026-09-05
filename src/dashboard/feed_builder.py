@@ -1324,6 +1324,14 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     except Exception as exc:  # pragma: no cover - best-effort, read-only
         print(f"Warning: integrity audit skipped: {exc}")
         feed["integrity"] = {"findings": [], "counts": {}, "total": 0}
+    # Product ingestion enrichment (R1–R6): certifications/firmographics per entity + source-health
+    # / market-structure / pricing — grounded in registry+feed data. Best-effort, before executive.
+    try:
+        from src.synth import product_intel
+
+        product_intel.enrich_feed(feed)
+    except Exception as exc:  # pragma: no cover - best-effort, read-only
+        print(f"Warning: product enrichment skipped: {exc}")
     # ADR 021 §D/§G: the per-officer executive block (read-track: CSO), industry-scoped.
     # Derived from the feed above — no new data; best-effort so a failure never blocks publish.
     try:
