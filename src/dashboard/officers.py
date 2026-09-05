@@ -44,7 +44,7 @@ OFFICERS: dict[str, Officer] = {
             "porter", "tows", "posicao", "ameaca", "expansao", "momentum", "grupo",
             "mercado", "participacao",
         ),
-        actions=("open_watch", "curate_belief", "trigger_run"),
+        actions=("open_watch", "curate_belief", "trigger_run", "record_decision", "set_outcome"),
     ),
     "regulator": Officer(
         role="regulator",
@@ -60,7 +60,7 @@ OFFICERS: dict[str, Officer] = {
             "instrucao", "cvm", "bcb", "susep", "previc", "prazo", "vigencia", "mudanca",
             "deliberacao", "portaria",
         ),
-        actions=("open_watch", "trigger_run"),
+        actions=("open_watch", "trigger_run", "record_decision", "set_outcome"),
     ),
     "compliance": Officer(
         role="compliance",
@@ -77,7 +77,7 @@ OFFICERS: dict[str, Officer] = {
             "distress", "recuperacao", "falencia", "rollback", "reverter", "auditoria",
             "risco", "governanca", "insolvencia",
         ),
-        actions=("run_integrity_audit", "flag_entity", "rollback_field", "revert_entity"),
+        actions=("run_integrity_audit", "flag_entity", "rollback_field", "revert_entity", "record_decision", "set_outcome"),
     ),
     "product": Officer(
         role="product",
@@ -92,12 +92,22 @@ OFFICERS: dict[str, Officer] = {
             "cobertura", "lacuna", "cego", "descoberta", "radar", "proposta", "vertical",
             "jtbd", "produto", "fonte", "detector", "onboarding", "entrante",
         ),
-        actions=("resolve_review", "propose_vertical", "propose_registry_change"),
+        actions=("resolve_review", "propose_vertical", "propose_registry_change", "record_decision", "set_outcome"),
     ),
 }
 
 # The router's fallback when nothing matches — product owns "where are our blind spots?"
 _DEFAULT_ROLE = "product"
+
+# ADR-021 uses the buyer-facing C-suite titles (CSO/CRO/CCO/CPO); ADR-020 keys officers by
+# role. They are the same four officers — accept either spelling everywhere via this alias map.
+_ALIASES = {"cso": "strategic", "cro": "regulator", "cco": "compliance", "cpo": "product"}
+
+
+def resolve_role(role: str | None) -> str | None:
+    """Canonicalize an officer id (accepts the CSO/CRO/CCO/CPO aliases → role key)."""
+    r = (role or "").strip().lower()
+    return _ALIASES.get(r, r) if (r in _ALIASES or r in OFFICERS) else None
 
 
 def _fold(s: str) -> str:
@@ -106,15 +116,15 @@ def _fold(s: str) -> str:
 
 
 def is_officer(role: str) -> bool:
-    return role in OFFICERS
+    return resolve_role(role) is not None
 
 
 def get(role: str) -> Officer | None:
-    return OFFICERS.get(role)
+    return OFFICERS.get(resolve_role(role) or "")
 
 
 def catalog(role: str) -> tuple[str, ...]:
-    off = OFFICERS.get(role)
+    off = OFFICERS.get(resolve_role(role) or "")
     return off.actions if off else ()
 
 
@@ -143,12 +153,12 @@ def route(text: str) -> str:
 def brief_persona(role: str) -> str | None:
     """The officer's mandate preamble for the grounded read (prepended to the Ask system
     contract, never replacing its grounding/citation/anti-fabrication rules)."""
-    off = OFFICERS.get(role)
+    off = OFFICERS.get(resolve_role(role) or "")
     return off.mandate if off else None
 
 
 def primary_lens(role: str) -> str | None:
-    off = OFFICERS.get(role)
+    off = OFFICERS.get(resolve_role(role) or "")
     return off.primary_lens if off else None
 
 

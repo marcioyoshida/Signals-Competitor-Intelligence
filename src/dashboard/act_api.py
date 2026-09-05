@@ -325,6 +325,48 @@ def _act_propose_vertical(args: dict[str, Any], actor: str) -> tuple[str, int, d
     return "proposed", 202, {"review_id": rid, "name": name}
 
 
+# ---- ADR 021 §D Step 1: decision capture (append-only, auto-apply) -----------------
+def _act_record_decision(args: dict[str, Any], actor: str) -> tuple[str, int, dict[str, Any]]:
+    """apply: capture an executive decision on an officer recommendation (append-only). The
+    reward-signal label for the ADR-021 metrics + KB flywheel. Low-blast (a new DECISION# item)."""
+    from src.synth import decision_log
+
+    try:
+        item = decision_log.record_decision(
+            officer=str(args.get("officer") or "").strip(),
+            recommendation=str(args.get("recommendation") or "").strip(),
+            verdict=str(args.get("verdict") or "").strip(),
+            actor=actor,
+            industry=(args.get("industry") or None),
+            action_ref=(args.get("action_ref") or None),
+            evidence_id=(args.get("evidence_id") or None),
+            context_id=(args.get("context_id") or None),
+            rationale=(args.get("rationale") or None),
+        )
+    except ValueError as exc:
+        return "blocked", 400, {"error": str(exc)}
+    return "applied", 200, {"decision_id": item["decision_id"], "verdict": item["verdict"],
+                            "officer": item.get("officer"), "industry": item.get("industry")}
+
+
+def _act_set_outcome(args: dict[str, Any], actor: str) -> tuple[str, int, dict[str, Any]]:
+    """apply: stamp the realized outcome on a captured decision (the §E/§F label)."""
+    from src.synth import decision_log
+
+    did = str(args.get("decision_id") or "").strip()
+    if not did:
+        return "blocked", 400, {"error": "decision_id required"}
+    try:
+        item = decision_log.set_outcome(did, str(args.get("outcome") or "").strip(),
+                                        actor=actor, note=args.get("note"))
+    except ValueError as exc:
+        return "blocked", 400, {"error": str(exc)}
+    if item is None:
+        return "noop", 404, {"detail": "decision not found", "decision_id": did}
+    # NB: not "outcome" — that key is the top-level result verb (applied|noop|…).
+    return "applied", 200, {"decision_id": did, "decision_outcome": item["outcome"]}
+
+
 # intent -> (execution class, handler, journal-subject key in args)
 _CATALOG: dict[str, tuple[str, Callable[..., tuple[str, int, dict[str, Any]]], str | None]] = {
     "trigger_run": (APPLY, _act_trigger_run, None),
@@ -338,6 +380,9 @@ _CATALOG: dict[str, tuple[str, Callable[..., tuple[str, int, dict[str, Any]]], s
     "flag_entity": (PROPOSE, _act_flag_entity, "entity_id"),
     "curate_belief": (PROPOSE, _act_curate_belief, "entity_id"),
     "propose_vertical": (PROPOSE, _act_propose_vertical, None),
+    # ADR 021 §D Step 1 — decision capture (shared across officers)
+    "record_decision": (APPLY, _act_record_decision, None),
+    "set_outcome": (APPLY, _act_set_outcome, None),
 }
 
 

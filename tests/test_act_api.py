@@ -337,6 +337,46 @@ def test_open_watch_applies(monkeypatch):
     assert puts and puts[0]["type"] == "watch"
 
 
+def test_record_decision_applies_for_any_officer(monkeypatch):
+    _no_journal(monkeypatch)
+    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    from src.synth import decision_log
+    monkeypatch.setattr(decision_log, "record_decision",
+                        lambda **kw: {"decision_id": "d1", "verdict": kw["verdict"],
+                                      "officer": kw.get("officer"), "industry": kw.get("industry")})
+    resp = act_api.lambda_handler(_event(
+        {"intent": "record_decision", "officer": "cso",
+         "args": {"officer": "cso", "recommendation": "Abrir watch em Itaú",
+                  "verdict": "aprovado", "industry": "banking", "action_ref": "open_watch"}}), None)
+    assert resp["statusCode"] == 200
+    b = json.loads(resp["body"])
+    assert b["outcome"] == "applied" and b["decision_id"] == "d1" and b["officer"] == "cso"
+
+
+def test_record_decision_bad_verdict_400(monkeypatch):
+    _no_journal(monkeypatch)
+    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    resp = act_api.lambda_handler(_event(
+        {"intent": "record_decision",
+         "args": {"officer": "cso", "recommendation": "x", "verdict": "talvez"}}), None)
+    assert resp["statusCode"] == 400
+
+
+def test_set_outcome_applies(monkeypatch):
+    _no_journal(monkeypatch)
+    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    from src.synth import decision_log
+    monkeypatch.setattr(decision_log, "set_outcome",
+                        lambda did, outcome, **k: {"outcome": outcome} if did == "d1" else None)
+    ok = act_api.lambda_handler(_event(
+        {"intent": "set_outcome", "args": {"decision_id": "d1", "outcome": "favoravel"}}), None)
+    ob = json.loads(ok["body"])
+    assert ok["statusCode"] == 200 and ob["outcome"] == "applied" and ob["decision_outcome"] == "favoravel"
+    missing = act_api.lambda_handler(_event(
+        {"intent": "set_outcome", "args": {"decision_id": "nope", "outcome": "favoravel"}}), None)
+    assert missing["statusCode"] == 404
+
+
 def test_run_integrity_audit_reads_only(monkeypatch):
     _no_journal(monkeypatch)
     monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)

@@ -27,9 +27,15 @@
   .rec { padding:10px 12px; border-bottom:1px solid var(--line,#2a2a2a); }
   .rec .rec-t { font-weight:500; }
   .rec .rec-a { font-size:11px; opacity:.7; margin-top:3px; }
-  .rec .cap { margin-top:8px; display:flex; gap:6px; }
+  .rec .cap { margin-top:8px; display:flex; gap:6px; align-items:center; }
   .rec .cap button { font:inherit; font-size:11px; padding:3px 10px; border-radius:6px; border:1px solid var(--line,#333);
-    background:transparent; color:inherit; opacity:.4; cursor:not-allowed; }
+    background:transparent; color:inherit; cursor:pointer; }
+  .rec .cap button:hover { background:var(--surface-2,#181818); }
+  .rec .cap button[data-v="aprovado"] { border-color:#3aa06a; }
+  .rec .cap button[data-v="rejeitado"] { border-color:#e0603a; }
+  .rec .cap button:disabled { opacity:.4; cursor:default; }
+  .rec .cap .ocsel { font:inherit; font-size:11px; background:var(--surface-2,#1a1a1a); color:inherit;
+    border:1px solid var(--line,#333); border-radius:6px; padding:2px 6px; }
   .horizons { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
   .hz h3 { font-size:12px; text-transform:uppercase; letter-spacing:.06em; opacity:.6; margin:0 0 6px; }
 </style>
@@ -60,8 +66,8 @@
     <h1>Sala executiva — Estrategista-chefe (CSO)</h1>
     <p class="lede">A leitura do estrategista sobre o mercado: clima competitivo, riscos e
       oportunidades, momentum dos concorrentes, o eixo regulatório e as ações recomendadas por
-      horizonte. Filtre por setor no topo. As decisões (aprovar/rejeitar) chegam com o backend
-      de captura (ADR-021).</p>
+      horizonte. Filtre por setor no topo. Aprovar/rejeitar uma ação registra a decisão (e depois
+      o resultado) no OncaDecisionLog — o corpus que treina os oficiais (ADR-021).</p>
   </div>
 
   <!-- 1 · Situação -->
@@ -132,7 +138,7 @@
   <!-- 5 · Ações recomendadas -->
   <section class="band">
     <div class="band-hd"><span class="overline">Ações recomendadas</span><span class="rule"></span>
-      <span class="badge badge--ghost">captura desabilitada até o backend de decisão</span></div>
+      <span class="badge badge--ghost">captura ativa · decisões → OncaDecisionLog</span></div>
     <div class="panel">
       <div class="panel__bd" id="recs"></div>
     </div>
@@ -151,6 +157,7 @@
 <script src="/v2/app.js"></script>
 <script>
 const U = window.OncaUI;
+const OFFICER = "cso";
 let DATA = {}, EX = {}, CSO = {}, SECTOR = "__all__", BYID = {};
 
 U.initTheme();
@@ -264,21 +271,71 @@ function renderRegulatory(rows) {
 }
 
 const HZ = [["imediato", "Imediato"], ["30d", "30 dias"], ["90d", "90 dias"], ["estrategico", "Estratégico"]];
+let RECS = [];
 function renderRecs(recs) {
+  RECS = recs;
   const el = document.getElementById("recs");
   if (!recs.length) { el.innerHTML = U.empty("Sem ações recomendadas no escopo.", "", "○"); return; }
   el.innerHTML = `<div class="horizons">` + HZ.map(([key, label]) => {
-    const items = recs.filter(r => r.horizon === key);
-    return `<div class="hz"><h3>${label}</h3>` + (items.length ? items.map(r =>
-      `<div class="rec">
+    const items = recs.map((r, i) => [r, i]).filter(([r]) => r.horizon === key);
+    return `<div class="hz"><h3>${label}</h3>` + (items.length ? items.map(([r, i]) =>
+      `<div class="rec" data-i="${i}">
          <div class="rec-t">${U.esc(r.text)}</div>
          <div class="rec-a">→ ${U.esc(r.action)}${r.evidence_id ? ` · <a href="#" data-ev="${U.esc(r.evidence_id)}">evidência</a>` : ""}</div>
-         <div class="cap"><button disabled title="captura chega com o backend de decisão">Aprovar</button>
-           <button disabled>Rejeitar</button></div>
+         <div class="cap">
+           <button data-v="aprovado" data-i="${i}">Aprovar</button>
+           <button data-v="rejeitado" data-i="${i}">Rejeitar</button>
+         </div>
        </div>`).join("") : `<div class="hd-note" style="padding:4px 0">—</div>`) + `</div>`;
   }).join("") + `</div>`;
   el.querySelectorAll("a[data-ev]").forEach(a =>
     a.addEventListener("click", (e) => { e.preventDefault(); inspect(a.getAttribute("data-ev")); }));
+  el.querySelectorAll(".cap button[data-v]").forEach(b =>
+    b.addEventListener("click", () => capture(b)));
+}
+
+// ADR-021 §D Step 1 — capture the decision (aprovar/rejeitar) to /api/act. Same-origin;
+// CloudFront injects the origin secret so the operator authorizes. Best-effort UI.
+async function capture(btn) {
+  const r = RECS[Number(btn.getAttribute("data-i"))];
+  if (!r) return;
+  const verdict = btn.getAttribute("data-v");
+  const cap = btn.closest(".cap");
+  cap.querySelectorAll("button").forEach(x => { x.disabled = true; });
+  const industry = SECTOR !== "__all__" ? SECTOR : (r.industries && r.industries[0]) || null;
+  const res = await postAct({
+    intent: "record_decision",
+    officer: OFFICER,
+    args: { officer: OFFICER, recommendation: r.text, verdict, industry,
+            action_ref: r.action, evidence_id: r.evidence_id, context_id: r.horizon },
+  });
+  if (!res || !res.decision_id) {
+    cap.innerHTML = `<span class="hd-note" style="color:#e0603a">falha ao registrar</span>`;
+    return;
+  }
+  cap.innerHTML =
+    `<span class="hd-note">✓ ${verdict} · <span style="opacity:.6">resultado:</span></span>
+     <select data-did="${res.decision_id}" class="ocsel">
+       <option value="pendente">pendente</option><option value="favoravel">favorável</option>
+       <option value="desfavoravel">desfavorável</option><option value="neutro">neutro</option>
+     </select>`;
+  cap.querySelector(".ocsel").addEventListener("change", (e) => setOutcome(res.decision_id, e.target.value, e.target));
+}
+
+async function setOutcome(did, outcome, sel) {
+  sel.disabled = true;
+  const res = await postAct({ intent: "set_outcome", officer: OFFICER,
+    args: { decision_id: did, outcome } });
+  sel.disabled = false;
+  if (res && res.decision_outcome) sel.title = "resultado registrado";
+}
+
+async function postAct(body) {
+  try {
+    const r = await fetch("/api/act", { method: "POST", credentials: "include",
+      headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    return await r.json();
+  } catch (e) { console.error("act failed", e); return null; }
 }
 
 // --- drill-down -----------------------------------------------------------
