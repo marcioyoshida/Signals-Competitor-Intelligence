@@ -932,6 +932,32 @@ def discover_fiagro(
                         and cnpj_idx.get(root) != profile["entity_id"]):
                     owners.add(profile["entity_id"])
                 if brand and owners:
+                    # ADR-017 auto-resolution: a fund with its OWN distinct id (a ticker like
+                    # `xpag11`) whose ONLY clash is the shared BRAND display of a *parentable*
+                    # institution IS that institution's sub-entity — create it linked to the
+                    # parent, never queue a human. The dangerous #52 case (the brand-slug EQUALS
+                    # an existing entity id, e.g. a tickerless "XP" fund → the `xp` bank) still
+                    # goes to review: `id_collision` gates it out, and the parent link never
+                    # mutates the parent (distinct id; accumulate_aliases drops ticker forms).
+                    id_collision = profile["entity_id"] in existing_ids
+                    parent_id = _parent_of(brand)
+                    if parent_id and not id_collision and new_budget > 0:
+                        entity_registry.put_entity(
+                            profile["entity_id"],
+                            f"{brand} {ticker}".strip() if ticker else profile["display_name"],
+                            profile.get("aliases") or [],
+                            cnpj_roots=profile.get("cnpj_roots") or [],
+                            industries=[industry], ticker=ticker, confidence="cnpj",
+                            parent=parent_id, source="discovery", table=table,
+                        )
+                        report["created"].append(profile["entity_id"])
+                        report.setdefault("auto_linked", []).append(profile["entity_id"])
+                        new_budget -= 1
+                        existing_ids.add(profile["entity_id"])
+                        cnpj_idx[root] = profile["entity_id"]
+                        if nb:
+                            disp_idx.setdefault(nb, []).append(profile["entity_id"])
+                        continue
                     pid = entity_registry.propose_review(
                         kind="discovery",
                         key=profile["entity_id"],

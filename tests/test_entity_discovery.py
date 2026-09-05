@@ -193,6 +193,37 @@ def test_fiagro_create_never_overwrites_existing_entity():
     assert rep["proposed"] and "xp" not in rep["created"]
 
 
+def test_fiagro_brand_collision_with_ticker_auto_links_as_subentity():
+    # ADR-017: a fund whose bare BRAND display collides with a parentable institution but has
+    # its OWN distinct ticker id is auto-created as that parent's sub-entity — NOT queued for
+    # review — and the parent is never polluted.
+    from src.synth import entity_registry
+
+    table = _FakeTable()
+    entity_registry.put_entity("xp", "XP", ["XP"], industries=["asset-management"], table=table)
+    rows = [{"fund_name": "XP", "ticker": "XPAG11", "cnpj": "43741189000100",
+             "pl": 1e9, "as_of": "2026-03-01", "url": "x"}]
+    rep = discover_fiagro(rows=rows, min_pl=0, auto_create=True, max_new=5, table=table)
+    assert rep.get("auto_linked") == ["xpag11"] and not rep["proposed"]
+    child = entity_registry.get_entity("xpag11", table=table)
+    assert child["parent"] == "xp" and child["industries"] == ["agri-funds"]
+    parent = entity_registry.get_entity("xp", table=table)
+    assert parent["industries"] == ["asset-management"] and "parent" not in parent
+    assert "XPAG11" not in (parent.get("alias_forms") or [])  # no fund ticker on the parent
+
+
+def test_fiagro_brand_collision_without_parent_still_proposed():
+    # A brand collision with a NON-parentable entity (no parent resolvable) stays a review.
+    from src.synth import entity_registry
+
+    table = _FakeTable()
+    entity_registry.put_entity("somefund", "VALORA", ["VALORA"], industries=["agri-funds"], table=table)
+    rows = [{"fund_name": "VALORA", "ticker": "VLRA11", "cnpj": "64221668000100",
+             "pl": 1e9, "as_of": "2026-03-01", "url": "x"}]
+    rep = discover_fiagro(rows=rows, min_pl=0, auto_create=True, max_new=5, table=table)
+    assert rep["proposed"] and not rep.get("auto_linked")  # no parentable owner → review
+
+
 def test_discover_fiagro_quality_gate():
     """Junk-named funds (no ticker, generic legal name) are proposed, not
     auto-created; clean ticker funds are created."""
