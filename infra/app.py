@@ -499,6 +499,13 @@ class OncaPrototypeStack(Stack):
                 "    key = key.substring(0, key.length - 1);\n"
                 "  }\n"
                 '  if (routes[key]) { r.uri = "/v2/" + routes[key] + "/index.html"; }\n'
+                "  // Generic directory-index for S3-served paths so a raw trailing-slash URL\n"
+                "  // (e.g. /v2/admin/, /entry/) resolves to its index.html object instead of\n"
+                "  // 403-ing on a nonexistent 'directory' key. /api/* is Lambda-backed — never\n"
+                "  // rewrite it (a trailing slash there is a real path segment).\n"
+                '  else if (r.uri.charAt(r.uri.length - 1) === "/" && r.uri.indexOf("/api/") !== 0) {\n'
+                '    r.uri = r.uri + "index.html";\n'
+                "  }\n"
                 f'  var expected = "Basic {basic}";\n'
                 "  if (!h.authorization || h.authorization.value !== expected) {\n"
                 "    return { statusCode: 401, statusDescription: 'Unauthorized',\n"
