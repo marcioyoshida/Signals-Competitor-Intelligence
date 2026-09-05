@@ -1,43 +1,44 @@
-"""ADR 021 §D/§G — the per-officer executive block (`feed.executive`).
+"""ADR 021 §D/§G — the per-officer executive blocks (`feed.executive`).
 
-Read-track slice: a DERIVED, per-industry-aware **CSO Executive Dashboard** block built
-entirely from fields the feed already carries (feed cards, groups, distress, integrity,
-regulatory lifecycle, kpis) — no new data, no fabrication. Every panel item references a real
-card `id` so the v3 app can link to its grounding; the one composite score (the Strategic
-Climate Index) is a transparent, documented formula surfaced as an *inference*, never a fact.
+Four **enriched** officer dashboards (CSO/CRO/CCO/CPO), each a DERIVED, per-industry-aware view
+built entirely from fields the feed already carries — no new data, no fabrication. Every panel
+item references a real card/entity id so the v3 app links to its grounding; composite scores
+(e.g. the Strategic Climate Index) are transparent, documented formulas surfaced as *inferences*,
+never facts.
 
-Industry scoping (§G) is a client-side filter: each panel item carries `industries`, and the
-per-industry aggregates are precomputed here under `by_industry[slug]` (+ `__all__`). CRO/CCO/CPO
-blocks are the next slice; `build_executive` already lists only the officers it actually builds.
+Industry scoping (§G) is a client-side filter: each item carries `industries` (empty ⇒
+sector-agnostic, shown under every sector); per-industry headline aggregates are precomputed
+here under each block's `by_industry[slug]` (+ `__all__`). Defamation guardrail: distress on an
+executive surface is gated to CONFIRMED confidence (`_trusted_distress`) — `reported` news
+distress carries the #33 counterparty mis-attribution risk and stays off the board.
 """
 from __future__ import annotations
 
 from typing import Any
 
 ALL = "__all__"
+OFFICERS = ("cso", "cro", "cco", "cpo")
 
-# Card lenses/topics that read as a competitive "strategic move" (used for the M&A / moves panel).
 _MOVE_TOPICS = {"concorrencia", "novos_entrantes"}
 _MOVE_LENSES = {"entrants", "ofertas", "market"}
 _MA_CUES = ("aquisi", "fusão", "fusao", "compra", "incorpora", "joint venture", "m&a", "cade")
+_REG_KINDS = ("regulatory_lifecycle", "regulatory_fusion")
 
 
+# --- shared helpers -------------------------------------------------------------------
 def _cards(feed: dict[str, Any]) -> list[dict[str, Any]]:
     return [c for c in (feed.get("feed") or []) if isinstance(c, dict)]
 
 
-def _in_industry(card: dict[str, Any], slug: str | None) -> bool:
-    """A card belongs to a sector iff its denormalized `industries` (or, for reg cards,
-    `affected_industries`) includes the slug. slug None/ALL ⇒ every card."""
+def _in_industry(item: dict[str, Any], slug: str | None) -> bool:
     if not slug or slug == ALL:
         return True
-    inds = set(card.get("industries") or []) | set(card.get("affected_industries") or [])
+    inds = set(item.get("industries") or []) | set(item.get("affected_industries") or [])
     return slug in inds
 
 
 def _threat(card: dict[str, Any]) -> float:
-    """Threat on a 0–100 scale. Feed threat_score is 0–1 (e.g. 0.806); normalize so the
-    climate index, thresholds and displayed averages are all in the same 0–100 space."""
+    """Threat on a 0–100 scale (feed threat_score is 0–1)."""
     try:
         v = float(card.get("threat_score") or 0)
     except (TypeError, ValueError):
@@ -46,47 +47,34 @@ def _threat(card: dict[str, Any]) -> float:
 
 
 def _trusted_distress(feed: dict[str, Any]) -> list[dict[str, Any]]:
-    """Distress entries safe to surface on an executive/board surface: CONFIRMED confidence
-    only (ADR-013's CVM-fatos-grade seed). `reported`-confidence news distress is excluded —
-    it carries the #33 counterparty mis-attribution risk (a bank named in a retailer's RJ news
-    must never be shown as itself insolvent). Defamation guardrail, applied at the delivery edge."""
+    """Distress safe for an executive/board surface: CONFIRMED confidence only. `reported`
+    news distress carries #33 counterparty mis-attribution risk (a bank named in a retailer's
+    RJ news must never show as itself insolvent)."""
     return [d for d in (feed.get("distress") or []) if d.get("confidence") == "confirmed"]
 
 
 def _recent_window(dates: list[str]) -> tuple[set[str], set[str]]:
-    """(recent 7 dates, prior 7 dates) from the feed's sorted date list."""
     ds = sorted(str(d) for d in (dates or []))
     return set(ds[-7:]), set(ds[-14:-7])
 
 
-def _climate_index(cards: list[dict[str, Any]], n_distress: int) -> int:
-    """Strategic Climate Index (0–100, higher = calmer). Transparent composite — labelled an
-    inference in the UI, never a fact: 100 minus the recent average competitor-threat (0–100),
-    the alert ratio, and a distress penalty. Empty cohort ⇒ neutral 50."""
-    if not cards:
-        return 50
-    avg_threat = sum(_threat(c) for c in cards) / len(cards)
-    alert_ratio = sum(1 for c in cards if c.get("is_alert")) / len(cards)
-    penalty = 0.6 * avg_threat + 0.3 * (alert_ratio * 100) + 0.1 * min(n_distress * 20, 100)
-    return max(0, min(100, round(100 - penalty)))
+def _labels(feed: dict[str, Any]) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for e in (feed.get("entities") or []):
+        if e.get("entity"):
+            out[e["entity"]] = e.get("label") or e["entity"]
+    for eid, a in (feed.get("entity_attrs") or {}).items():
+        out.setdefault(eid, (a or {}).get("label") or eid)
+    return out
 
 
-def _aggregate(cards: list[dict[str, Any]], reg: list[dict[str, Any]],
-               n_distress: int, n_moves: int) -> dict[str, Any]:
-    n = len(cards)
-    alerts = sum(1 for c in cards if c.get("is_alert"))
-    avg = round(sum(_threat(c) for c in cards) / n, 1) if n else 0.0
-    reg_threat = round(sum(_threat(c) for c in reg) / len(reg), 1) if reg else 0.0
-    return {
-        "climate": _climate_index(cards, n_distress),
-        "n_cards": n, "n_alerts": alerts, "avg_threat": avg,
-        "n_risks": alerts + n_distress, "reg_threat": reg_threat,
-        "n_reg": len(reg), "distress": n_distress, "n_moves": n_moves,
-    }
+def _industries_of(feed: dict[str, Any], entity: str | None) -> list[str]:
+    if not entity:
+        return []
+    return list(((feed.get("entity_attrs") or {}).get(entity) or {}).get("industries") or [])
 
 
 def _headline(card: dict[str, Any]) -> dict[str, Any]:
-    """Minimal citable projection — the v3 app resolves the full card from feed.feed by id."""
     return {
         "id": card.get("id"),
         "entity_label": card.get("entity_label") or card.get("entity") or "—",
@@ -105,10 +93,20 @@ def _is_move(card: dict[str, Any]) -> bool:
     return any(cue in blob for cue in _MA_CUES)
 
 
+def _climate_index(cards: list[dict[str, Any]], n_distress: int) -> int:
+    """Strategic Climate Index (0–100, higher = calmer) — transparent composite, labelled an
+    inference in the UI. 100 minus recent avg threat, alert ratio, and a distress penalty."""
+    if not cards:
+        return 50
+    avg_threat = sum(_threat(c) for c in cards) / len(cards)
+    alert_ratio = sum(1 for c in cards if c.get("is_alert")) / len(cards)
+    penalty = 0.6 * avg_threat + 0.3 * (alert_ratio * 100) + 0.1 * min(n_distress * 20, 100)
+    return max(0, min(100, round(100 - penalty)))
+
+
 def _momentum(cards: list[dict[str, Any]], dates: list[str],
               labels: dict[str, str]) -> list[dict[str, Any]]:
-    """Per-entity competitor momentum = recent-window avg threat − prior-window avg threat.
-    Positive ⇒ the competitor is gaining ground (rising threat)."""
+    """Per-entity competitor momentum = recent-window avg threat − prior-window avg threat."""
     recent, prior = _recent_window(dates)
     acc: dict[str, dict[str, list[float]]] = {}
     inds: dict[str, set[str]] = {}
@@ -128,130 +126,265 @@ def _momentum(cards: list[dict[str, Any]], dates: list[str],
             continue
         rec = sum(w["recent"]) / len(w["recent"])
         pri = sum(w["prior"]) / len(w["prior"]) if w["prior"] else rec
-        out.append({
-            "entity": e, "label": labels.get(e, e),
-            "recent": round(rec, 1), "prior": round(pri, 1),
-            "momentum": round(rec - pri, 1), "industries": sorted(inds.get(e, set())),
-        })
+        out.append({"entity": e, "label": labels.get(e, e), "recent": round(rec, 1),
+                    "prior": round(pri, 1), "momentum": round(rec - pri, 1),
+                    "industries": sorted(inds.get(e, set()))})
     out.sort(key=lambda x: x["momentum"], reverse=True)
     return out
 
 
-def _recommendations(cards: list[dict[str, Any]], reg: list[dict[str, Any]],
-                     distress: list[dict[str, Any]], momentum: list[dict[str, Any]],
-                     labels: dict[str, str]) -> list[dict[str, Any]]:
-    """Honest, horizon-bucketed recommendations, each grounded in a real card/entity and mapped
-    to an ADR-020 catalog action. Capture (aprovar/rejeitar + outcome) renders DISABLED until the
-    ADR-021 decision backend lands — these are read-track suggestions, never auto-applied."""
-    recs: list[dict[str, Any]] = []
-
-    def add(horizon: str, text: str, action: str, *, entity: str | None = None,
-            evidence_id: str | None = None, industries: list[str] | None = None):
-        recs.append({"horizon": horizon, "text": text, "action": action, "entity": entity,
-                     "evidence_id": evidence_id, "industries": industries or []})
-
-    # Imediato — a fresh insolvency signal on the roster (escalate to Compliance).
-    for dst in distress[:2]:
-        e = dst.get("entity")
-        add("imediato", f"Escalar risco de insolvência: {labels.get(e, e)} ({dst.get('label')})",
-            "flag_entity", entity=e,
-            evidence_id=(dst.get("evidence") or [None])[0], industries=[])
-    # Imediato — the highest-threat alert card ON A REAL COMPETITOR (not a regulatory/placeholder
-    # card) → open a strategic watch.
-    named_alerts = sorted(
-        (c for c in cards if c.get("is_alert") and c.get("entity") in labels
-         and c.get("kind") not in ("regulatory_lifecycle", "regulatory_fusion")),
-        key=_threat, reverse=True)
-    if named_alerts:
-        top = named_alerts[0]
-        add("imediato", f"Abrir watch estratégico: {top.get('entity_label') or top.get('entity')}",
-            "open_watch", entity=top.get("entity"), evidence_id=top.get("id"),
-            industries=top.get("industries") or [])
-    # 30 dias — a regulatory change with the widest blast-radius.
-    reg_sorted = sorted(reg, key=lambda c: len(c.get("affected_industries") or []), reverse=True)
-    if reg_sorted:
-        r = reg_sorted[0]
-        n_aff = len(r.get("affected_industries") or [])
-        add("30d", f"Avaliar mudança regulatória — {r.get('domain') or 'regulação'} "
-                   f"(afeta {n_aff} setor{'es' if n_aff != 1 else ''})",
-            "open_watch", evidence_id=r.get("id"), industries=r.get("affected_industries") or [])
-    # 90 dias — the competitor gaining the most momentum → curate a thesis.
-    rising = [m for m in momentum if m["momentum"] > 0][:1]
-    if rising:
-        m = rising[0]
-        add("90d", f"Formular tese sobre o avanço de {m['label']} (momentum +{m['momentum']})",
-            "curate_belief", entity=m["entity"], industries=m["industries"])
-    return recs
+def _by_industry(sectors: list[dict[str, str]], fn) -> dict[str, Any]:
+    """Apply an aggregate builder `fn(slug)` for every sector + __all__."""
+    return {slug: fn(slug) for slug in [ALL] + [s["slug"] for s in sectors]}
 
 
-def build_cso(feed: dict[str, Any]) -> dict[str, Any]:
-    """The CSO (Estrategista-chefe) Executive Dashboard block — §D panels, industry-scoped (§G)."""
-    cards = _cards(feed)
-    dates = list(feed.get("dates") or [])
-    recent, _prior = _recent_window(dates)
-    labels: dict[str, str] = {}
-    for e in (feed.get("entities") or []):
-        if e.get("entity"):
-            labels[e["entity"]] = e.get("label") or e["entity"]
-    for eid, a in (feed.get("entity_attrs") or {}).items():
-        labels.setdefault(eid, (a or {}).get("label") or eid)
+def _rec(horizon: str, text: str, action: str, *, officer: str, entity=None,
+         evidence_id=None, industries=None) -> dict[str, Any]:
+    return {"horizon": horizon, "text": text, "action": action, "officer": officer,
+            "entity": entity, "evidence_id": evidence_id, "industries": industries or []}
 
-    reg_cards = [c for c in cards if c.get("kind") in ("regulatory_lifecycle", "regulatory_fusion")]
-    distress = _trusted_distress(feed)  # confirmed-only; keeps #33 mis-attributions off the board
 
-    # Panels (all-industry lists; the client filters by the selected sector).
+# --- CSO (strategic) ------------------------------------------------------------------
+def build_cso(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
+    cards, dates, labels = ctx["cards"], ctx["dates"], ctx["labels"]
+    recent = ctx["recent"]
+    reg_cards = ctx["reg_cards"]
+    distress = _trusted_distress(feed)
     news = [c for c in cards if c.get("kind") != "regulatory_lifecycle"]
     headlines = sorted(news, key=lambda c: (str(c.get("date") or ""), _threat(c)), reverse=True)
     emerging = [c for c in news if str(c.get("date") or "") in recent and _threat(c) >= 60]
     risks = sorted((c for c in cards if c.get("is_alert")), key=_threat, reverse=True)
-    opportunities = [c for c in cards
-                     if (c.get("swot_hint") or {}).get("dimension") == "O"
-                     or (c.get("swot_hint") or {}).get("sign") == "-"]  # competitor weakness = our opening
+    opps = [c for c in cards if (c.get("swot_hint") or {}).get("dimension") == "O"
+            or (c.get("swot_hint") or {}).get("sign") == "-"]
     moves = [c for c in news if _is_move(c)]
     momentum = _momentum(cards, dates, labels)
 
-    # Per-industry aggregates (+ __all__) for the selector's headline tiles / climate index.
-    sectors = [{"slug": o.get("slug"), "label": o.get("display_name") or o.get("label") or o.get("slug")}
-               for o in (feed.get("industry_options") or []) if o.get("slug")]
-    by_industry: dict[str, Any] = {}
-    for slug in [ALL] + [s["slug"] for s in sectors]:
+    def agg(slug):
         sc = [c for c in cards if _in_industry(c, slug)]
         sreg = [c for c in reg_cards if _in_industry(c, slug)]
-        sdist = [d for d in distress
-                 if slug in (ALL, None) or slug in set(
-                     (feed.get("entity_attrs") or {}).get(d.get("entity"), {}).get("industries") or [])]
+        sdist = [d for d in distress if slug in (ALL, None)
+                 or slug in _industries_of(feed, d.get("entity"))]
         smoves = [c for c in moves if _in_industry(c, slug)]
-        by_industry[slug] = _aggregate(sc, sreg, len(sdist), len(smoves))
+        n = len(sc)
+        return {"climate": _climate_index(sc, len(sdist)), "n_cards": n,
+                "n_alerts": sum(1 for c in sc if c.get("is_alert")),
+                "avg_threat": round(sum(_threat(c) for c in sc) / n, 1) if n else 0.0,
+                "reg_threat": round(sum(_threat(c) for c in sreg) / len(sreg), 1) if sreg else 0.0,
+                "n_moves": len(smoves), "distress": len(sdist)}
 
-    return {
-        "sectors": sectors,
-        "by_industry": by_industry,
-        "panels": {
-            "headlines": [_headline(c) for c in headlines[:30]],
-            "emerging": [_headline(c) for c in emerging[:20]],
-            "risks": [_headline(c) for c in risks[:30]],
-            "opportunities": [_headline(c) for c in opportunities[:20]],
-            "moves": [_headline(c) for c in moves[:20]],
-            "momentum": momentum[:30],
-            "regulatory": [{
-                "id": c.get("id"), "domain": c.get("domain"),
-                "affected_industries": c.get("affected_industries") or [],
-                "current_stage": c.get("current_stage"),
-                "days_to_deadline": c.get("days_to_deadline"),
-                "threat_score": c.get("threat_score"),
-                "blast": len(c.get("affected_industries") or []),
-            } for c in sorted(reg_cards, key=lambda c: len(c.get("affected_industries") or []),
-                              reverse=True)[:20]],
-            "recommendations": _recommendations(cards, reg_cards, distress, momentum, labels),
-        },
-    }
+    recs = []
+    named = sorted((c for c in cards if c.get("is_alert") and c.get("entity") in labels
+                    and c.get("kind") not in _REG_KINDS), key=_threat, reverse=True)
+    if named:
+        t = named[0]
+        recs.append(_rec("imediato", f"Abrir watch estratégico: {t.get('entity_label') or t.get('entity')}",
+                         "open_watch", officer="cso", entity=t.get("entity"),
+                         evidence_id=t.get("id"), industries=t.get("industries") or []))
+    reg_sorted = sorted(reg_cards, key=lambda c: len(c.get("affected_industries") or []), reverse=True)
+    if reg_sorted:
+        r = reg_sorted[0]
+        na = len(r.get("affected_industries") or [])
+        recs.append(_rec("30d", f"Avaliar mudança regulatória — {r.get('domain') or 'regulação'} "
+                         f"(afeta {na} setor{'es' if na != 1 else ''})", "open_watch",
+                         officer="cso", evidence_id=r.get("id"), industries=r.get("affected_industries") or []))
+    rising = [m for m in momentum if m["momentum"] > 0][:1]
+    if rising:
+        m = rising[0]
+        recs.append(_rec("90d", f"Formular tese sobre o avanço de {m['label']} (momentum +{m['momentum']})",
+                         "curate_belief", officer="cso", entity=m["entity"], industries=m["industries"]))
+
+    return {"by_industry": _by_industry(ctx["sectors"], agg), "panels": {
+        "headlines": [_headline(c) for c in headlines[:30]],
+        "emerging": [_headline(c) for c in emerging[:20]],
+        "risks": [_headline(c) for c in risks[:30]],
+        "opportunities": [_headline(c) for c in opps[:20]],
+        "moves": [_headline(c) for c in moves[:20]],
+        "momentum": momentum[:30],
+        "regulatory": [_reg_row(c) for c in reg_sorted[:20]],
+        "recommendations": recs,
+    }}
 
 
+def _reg_row(c: dict[str, Any]) -> dict[str, Any]:
+    cr = c.get("change_record") or {}
+    return {"id": c.get("id"), "domain": c.get("domain"),
+            "affected_industries": c.get("affected_industries") or [],
+            "current_stage": c.get("current_stage"), "days_to_deadline": c.get("days_to_deadline"),
+            "threat_score": c.get("threat_score"), "blast": len(c.get("affected_industries") or []),
+            "date": c.get("date"), "n_changes": c.get("n_changes"),
+            "blast_band": (cr.get("blast_radius") or {}).get("band"),
+            "difficulty_band": (cr.get("difficulty") or {}).get("band"),
+            "change": cr.get("change"), "impact": cr.get("impact")}
+
+
+# --- CRO (regulator) ------------------------------------------------------------------
+def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
+    reg = ctx["reg_cards"]
+    timeline = sorted(reg, key=lambda c: str(c.get("date") or ""), reverse=True)
+    impact = sorted((c for c in reg if c.get("change_record")),
+                    key=lambda c: (c.get("change_record") or {}).get("blast_radius", {}).get("score", 0),
+                    reverse=True)
+    deadlines = sorted((c for c in reg if c.get("days_to_deadline") is not None),
+                       key=lambda c: c.get("days_to_deadline"))
+    changes = [c for c in reg if (c.get("n_changes") or 0) > 0]
+
+    def agg(slug):
+        sr = [c for c in reg if _in_industry(c, slug)]
+        blasts = [len(c.get("affected_industries") or []) for c in sr]
+        return {"n_reg": len(sr),
+                "reg_threat": round(sum(_threat(c) for c in sr) / len(sr), 1) if sr else 0.0,
+                "n_changes": sum(1 for c in sr if (c.get("n_changes") or 0) > 0),
+                "n_deadlines": sum(1 for c in sr if c.get("days_to_deadline") is not None),
+                "max_blast": max(blasts) if blasts else 0}
+
+    recs = []
+    if impact:
+        r = impact[0]
+        recs.append(_rec("imediato", f"Acompanhar norma de maior alcance — {r.get('domain') or 'regulação'}",
+                         "open_watch", officer="cro", evidence_id=r.get("id"),
+                         industries=r.get("affected_industries") or []))
+    if deadlines:
+        r = deadlines[0]
+        recs.append(_rec("30d", f"Prazo em {r.get('days_to_deadline')}d — {r.get('domain') or 'regulação'}",
+                         "open_watch", officer="cro", evidence_id=r.get("id"),
+                         industries=r.get("affected_industries") or []))
+    return {"by_industry": _by_industry(ctx["sectors"], agg), "panels": {
+        "timeline": [_reg_row(c) for c in timeline[:30]],
+        "impact": [_reg_row(c) for c in impact[:20]],
+        "deadlines": [_reg_row(c) for c in deadlines[:20]],
+        "changes": [{**_reg_row(c), "changes": (c.get("changes") or [])[:6]} for c in changes[:20]],
+        "recommendations": recs,
+    }}
+
+
+# --- CCO (compliance) -----------------------------------------------------------------
+def build_cco(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
+    labels = ctx["labels"]
+    findings = list((feed.get("integrity") or {}).get("findings") or [])
+    distress = _trusted_distress(feed)
+    reputation = sorted((feed.get("reputation") or []),
+                        key=lambda r: (r.get("rank") if r.get("rank") is not None else 999))
+
+    def f_inds(f):
+        return _industries_of(feed, f.get("entity_id"))
+
+    integrity_rows = [{"id": f.get("id"), "kind": f.get("kind"), "severity": f.get("severity"),
+                       "summary": f.get("summary"), "entity_id": f.get("entity_id"),
+                       "card_id": f.get("card_id"), "industries": f_inds(f)} for f in findings]
+    rep_rows = [{"id": r.get("id"), "entity": r.get("entity"), "label": r.get("company") or r.get("entity"),
+                 "index": r.get("index"), "rank": r.get("rank"), "category": r.get("category"),
+                 "period": r.get("period"), "url": r.get("url"),
+                 "industries": _industries_of(feed, r.get("entity"))} for r in reputation]
+    # Risk register = confirmed distress + worst-reputation + high-severity integrity.
+    risk_register = (
+        [{"kind": "distress", "label": labels.get(d.get("entity"), d.get("entity")),
+          "detail": d.get("label"), "industries": _industries_of(feed, d.get("entity")),
+          "severity": "high"} for d in distress]
+        + [{"kind": "reputacao", "label": r["label"], "detail": f"#{r['rank']} reclamações · índice {r['index']}",
+            "industries": r["industries"], "severity": "med"} for r in rep_rows[:8]]
+        + [{"kind": "integridade", "label": (i.get("entity_id") or i.get("card_id") or "—"),
+            "detail": i.get("summary"), "industries": i.get("industries"), "severity": i.get("severity")}
+           for i in integrity_rows if i.get("severity") == "high"]
+    )
+
+    def agg(slug):
+        si = [i for i in integrity_rows if _in_industry(i, slug)]
+        sd = [d for d in distress if slug in (ALL, None) or slug in _industries_of(feed, d.get("entity"))]
+        sr = [r for r in rep_rows if _in_industry(r, slug)]
+        return {"n_integrity": len(si), "n_distress": len(sd), "n_rep": len(sr),
+                "n_high": sum(1 for i in si if i.get("severity") == "high"),
+                "worst_rank": min([r["rank"] for r in sr if r.get("rank")], default=None)}
+
+    recs = [_rec("imediato", "Rodar auditoria de integridade do registro", "run_integrity_audit",
+                 officer="cco")]
+    high = [i for i in integrity_rows if i.get("severity") == "high"]
+    if high:
+        i = high[0]
+        recs.append(_rec("imediato", f"Sinalizar achado de integridade: {i.get('entity_id') or i.get('card_id')}",
+                         "flag_entity", officer="cco", entity=i.get("entity_id"), industries=i.get("industries")))
+    return {"by_industry": _by_industry(ctx["sectors"], agg), "panels": {
+        "integrity": integrity_rows[:40],
+        "risk_register": risk_register[:30],
+        "reputation": rep_rows[:30],
+        "recommendations": recs,
+    }}
+
+
+# --- CPO (product) --------------------------------------------------------------------
+def build_cpo(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
+    industries = list(feed.get("industries") or [])
+    gaps = list(feed.get("coverage_gaps") or [])
+    reviews = [r for r in (feed.get("reviews") or []) if r.get("kind") == "discovery"]
+    rc = feed.get("regulatory_coverage") or {}
+    radar_tiers: dict[str, int] = {}
+    for a in (feed.get("entity_attrs") or {}).values():
+        tier = ((a or {}).get("radar") or {}).get("tier") if isinstance((a or {}).get("radar"), dict) else None
+        if tier:
+            radar_tiers[tier] = radar_tiers.get(tier, 0) + 1
+
+    coverage_map = [{"slug": i.get("slug"), "label": i.get("display_name") or i.get("slug"),
+                     "covered": bool(i.get("covered")), "coverage_gap": bool(i.get("coverage_gap")),
+                     "low_volume": bool(i.get("low_volume")), "narratives": i.get("narratives"),
+                     "active_entities": i.get("active_entities"), "industries": [i.get("slug")]}
+                    for i in industries]
+    blind = sorted(gaps, key=lambda g: (g.get("status") != "open", -(g.get("count") or 0)))
+    blind_rows = [{"id": g.get("id"), "question": g.get("question"), "count": g.get("count"),
+                   "status": g.get("status"), "reason": g.get("reason"),
+                   "triage": (g.get("triage") or {}).get("class"),
+                   "issue_url": g.get("issue_url"), "industries": []} for g in blind]
+    disc_rows = [{"id": r.get("review_id"), "proposed": r.get("proposed"), "reason": r.get("reason"),
+                  "hint": r.get("hint"), "confidence": r.get("confidence"), "industries": []}
+                 for r in reviews]
+
+    def agg(slug):
+        if slug == ALL:
+            covered = sum(1 for i in coverage_map if i["covered"])
+            cgap = sum(1 for i in coverage_map if i["coverage_gap"])
+        else:
+            covered = sum(1 for i in coverage_map if i["slug"] == slug and i["covered"])
+            cgap = sum(1 for i in coverage_map if i["slug"] == slug and i["coverage_gap"])
+        return {"n_gaps": sum(1 for g in blind_rows if g["status"] == "open"),
+                "n_reviews": len(disc_rows), "n_covered": covered, "n_coverage_gap": cgap}
+
+    recs = []
+    open_gaps = [g for g in blind_rows if g["status"] == "open"]
+    if open_gaps:
+        g = open_gaps[0]
+        recs.append(_rec("imediato", f"Triagem de ponto cego: {g['question']}", "resolve_review",
+                         officer="cpo"))
+    if disc_rows:
+        d = disc_rows[0]
+        recs.append(_rec("30d", f"Revisar proposta de descoberta: {d['proposed']}", "resolve_review",
+                         officer="cpo"))
+    return {"by_industry": _by_industry(ctx["sectors"], agg), "panels": {
+        "coverage_map": coverage_map,
+        "blind_spots": blind_rows[:30],
+        "discovery": disc_rows[:30],
+        "reg_coverage": {"summary": rc.get("summary") or {},
+                         "entity_covered": rc.get("entity_covered") or [],
+                         "signal_only": rc.get("signal_only") or [], "gap": rc.get("gap") or []},
+        "radar": radar_tiers,
+        "recommendations": recs,
+    }}
+
+
+# --- top level ------------------------------------------------------------------------
 def build_executive(feed: dict[str, Any]) -> dict[str, Any]:
-    """`feed.executive` — the per-officer blocks. Read-track: CSO only (CRO/CCO/CPO next slice)."""
+    """`feed.executive` — the four enriched officer blocks + the shared sector list."""
+    cards = _cards(feed)
+    dates = list(feed.get("dates") or [])
+    recent, _prior = _recent_window(dates)
+    sectors = [{"slug": o.get("slug"), "label": o.get("display_name") or o.get("label") or o.get("slug")}
+               for o in (feed.get("industry_options") or []) if o.get("slug")]
+    ctx = {"cards": cards, "dates": dates, "recent": recent, "labels": _labels(feed),
+           "sectors": sectors, "reg_cards": [c for c in cards if c.get("kind") in _REG_KINDS]}
     return {
-        "officers": ["cso"],
+        "officers": list(OFFICERS),
         "generated_at": feed.get("generated_at"),
         "as_of": feed.get("as_of"),
-        "cso": build_cso(feed),
+        "sectors": sectors,
+        "cso": build_cso(feed, ctx),
+        "cro": build_cro(feed, ctx),
+        "cco": build_cco(feed, ctx),
+        "cpo": build_cpo(feed, ctx),
     }

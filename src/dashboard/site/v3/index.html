@@ -7,158 +7,79 @@
 <title>Onça · Sala Executiva</title>
 <link rel="stylesheet" href="/v2/app.css" />
 <style>
-  /* v3 executive-only affordances (layered on the shared v2 design system) */
   .officer-tabs { display:flex; gap:2px; }
-  .officer-tabs a { position:relative; }
-  .officer-tabs a[aria-disabled="true"] { opacity:.45; pointer-events:none; }
-  .officer-tabs a .soon { font-size:9px; letter-spacing:.04em; vertical-align:super; opacity:.7; }
   .selwrap { display:flex; align-items:center; gap:6px; }
   .selwrap select { background:var(--surface-2,#1a1a1a); color:inherit; border:1px solid var(--line,#333);
     border-radius:6px; padding:4px 8px; font:inherit; font-size:12px; }
-  .exrow { display:flex; gap:10px; align-items:baseline; padding:8px 12px; border-bottom:1px solid var(--line,#2a2a2a);
-    cursor:pointer; }
+  .exrow { display:flex; gap:10px; align-items:baseline; padding:8px 12px; border-bottom:1px solid var(--line,#2a2a2a); cursor:pointer; }
   .exrow:hover { background:var(--surface-2,#181818); }
   .exrow .ent { font-weight:600; min-width:120px; }
   .exrow .ttl { flex:1; opacity:.85; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .exrow .dt { opacity:.5; font-size:11px; min-width:72px; }
+  .chip { font-size:10px; padding:1px 7px; border-radius:10px; border:1px solid var(--line,#333); opacity:.85; }
+  .chip.market { border-color:#e0603a; color:#e0603a; } .chip.sector { border-color:#c9903a; }
+  .chip.high { border-color:#e0603a; color:#e0603a; } .chip.med { border-color:#c9903a; } .chip.low { opacity:.6; }
   .mom { display:flex; align-items:center; gap:8px; padding:7px 12px; border-bottom:1px solid var(--line,#2a2a2a); }
-  .mom .bar { height:6px; border-radius:3px; }
-  .mom .up { color:#e0603a; } .mom .down { color:#3aa06a; }
+  .mom .bar { height:6px; border-radius:3px; } .mom .up { color:#e0603a; } .mom .down { color:#3aa06a; }
   .rec { padding:10px 12px; border-bottom:1px solid var(--line,#2a2a2a); }
-  .rec .rec-t { font-weight:500; }
-  .rec .rec-a { font-size:11px; opacity:.7; margin-top:3px; }
+  .rec .rec-t { font-weight:500; } .rec .rec-a { font-size:11px; opacity:.7; margin-top:3px; }
   .rec .cap { margin-top:8px; display:flex; gap:6px; align-items:center; }
-  .rec .cap button { font:inherit; font-size:11px; padding:3px 10px; border-radius:6px; border:1px solid var(--line,#333);
-    background:transparent; color:inherit; cursor:pointer; }
+  .rec .cap button { font:inherit; font-size:11px; padding:3px 10px; border-radius:6px; border:1px solid var(--line,#333); background:transparent; color:inherit; cursor:pointer; }
   .rec .cap button:hover { background:var(--surface-2,#181818); }
-  .rec .cap button[data-v="aprovado"] { border-color:#3aa06a; }
-  .rec .cap button[data-v="rejeitado"] { border-color:#e0603a; }
+  .rec .cap button[data-v="aprovado"] { border-color:#3aa06a; } .rec .cap button[data-v="rejeitado"] { border-color:#e0603a; }
   .rec .cap button:disabled { opacity:.4; cursor:default; }
-  .rec .cap .ocsel { font:inherit; font-size:11px; background:var(--surface-2,#1a1a1a); color:inherit;
-    border:1px solid var(--line,#333); border-radius:6px; padding:2px 6px; }
+  .rec .cap .ocsel { font:inherit; font-size:11px; background:var(--surface-2,#1a1a1a); color:inherit; border:1px solid var(--line,#333); border-radius:6px; padding:2px 6px; }
   .horizons { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
   .hz h3 { font-size:12px; text-transform:uppercase; letter-spacing:.06em; opacity:.6; margin:0 0 6px; }
+  .cov { display:flex; gap:8px; align-items:center; padding:6px 12px; border-bottom:1px solid var(--line,#2a2a2a); }
+  .cov .dot { width:8px; height:8px; border-radius:50%; } .cov .ok { background:#3aa06a; } .cov .gap { background:#e0603a; } .cov .low { background:#c9903a; }
+  .radarwrap, .rcwrap { display:flex; gap:14px; flex-wrap:wrap; padding:12px; }
+  .radarwrap .rt { text-align:center; } .radarwrap .rt b { font-size:22px; display:block; }
 </style>
 </head>
 <body>
 <header class="appbar">
-  <div class="brand">
-    <span class="mark">ON<b>Ç</b>A</span>
-    <span class="ctx">Executivo</span>
-  </div>
-  <nav class="ctxnav officer-tabs" aria-label="Officiais">
-    <a href="#cso" data-officer="cso" aria-current="page">CSO · Estratégia</a>
-    <a href="#cro" data-officer="cro" aria-disabled="true">CRO · Regulatório <span class="soon">em breve</span></a>
-    <a href="#cco" data-officer="cco" aria-disabled="true">CCO · Compliance <span class="soon">em breve</span></a>
-    <a href="#cpo" data-officer="cpo" aria-disabled="true">CPO · Produto <span class="soon">em breve</span></a>
-  </nav>
+  <div class="brand"><span class="mark">ON<b>Ç</b>A</span><span class="ctx">Executivo</span></div>
+  <nav class="ctxnav officer-tabs" id="officerTabs" aria-label="Oficiais"></nav>
   <span class="spacer"></span>
-  <span class="selwrap">
-    <label for="sectorSel" class="hd-note">Setor</label>
-    <select id="sectorSel"><option value="__all__">Todos os setores</option></select>
-  </span>
+  <span class="selwrap"><label for="sectorSel" class="hd-note">Setor</label>
+    <select id="sectorSel"><option value="__all__">Todos os setores</option></select></span>
   <span class="sub" id="asof">—</span>
-  <button class="icnbtn" id="themeBtn" title="Alternar tema" aria-label="Alternar tema claro/escuro">◐</button>
+  <button class="icnbtn" id="themeBtn" title="Alternar tema" aria-label="Alternar tema">◐</button>
 </header>
 
 <main class="wrap">
-  <div class="pagehead">
-    <h1>Sala executiva — Estrategista-chefe (CSO)</h1>
-    <p class="lede">A leitura do estrategista sobre o mercado: clima competitivo, riscos e
-      oportunidades, momentum dos concorrentes, o eixo regulatório e as ações recomendadas por
-      horizonte. Filtre por setor no topo. Aprovar/rejeitar uma ação registra a decisão (e depois
-      o resultado) no OncaDecisionLog — o corpus que treina os oficiais (ADR-021).</p>
-  </div>
-
-  <!-- 1 · Situação -->
-  <section class="band">
-    <div class="band-hd"><span class="overline">Situação</span><span class="rule"></span>
-      <span class="badge badge--infer">índice de clima · inferência</span></div>
-    <div class="tiles" id="tiles" style="margin-bottom:var(--s4);"></div>
-    <div class="grid lead-3" style="grid-template-columns:1.3fr .9fr;">
-      <div class="panel">
-        <div class="panel__hd"><h2>Manchetes executivas</h2><span class="count" id="hdCount">0</span>
-          <span class="spacer"></span><span class="hd-note">maior ameaça · recente</span></div>
-        <div class="panel__bd panel__bd--flush panel__bd--scroll" id="headlines"></div>
-      </div>
-      <div class="panel">
-        <div class="panel__hd"><h2>Sinais emergentes</h2><span class="count" id="emCount">0</span>
-          <span class="spacer"></span><span class="hd-note">janela recente · ameaça ≥ 60</span></div>
-        <div class="panel__bd panel__bd--flush panel__bd--scroll" id="emerging"></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- 2 · Riscos & Oportunidades -->
-  <section class="band">
-    <div class="band-hd"><span class="overline">Riscos &amp; Oportunidades</span><span class="rule"></span></div>
-    <div class="grid lead-3" style="grid-template-columns:1fr 1fr;">
-      <div class="panel">
-        <div class="panel__hd"><h2>Radar de risco</h2><span class="count" id="rkCount">0</span>
-          <span class="spacer"></span><span class="hd-note">alertas · maior ameaça</span></div>
-        <div class="panel__bd panel__bd--flush panel__bd--scroll" id="risks"></div>
-      </div>
-      <div class="panel">
-        <div class="panel__hd"><h2>Radar de oportunidade</h2><span class="count" id="opCount">0</span>
-          <span class="spacer"></span><span class="hd-note">fraqueza do concorrente = abertura</span></div>
-        <div class="panel__bd panel__bd--flush panel__bd--scroll" id="opps"></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- 3 · Inteligência competitiva -->
-  <section class="band">
-    <div class="band-hd"><span class="overline">Inteligência competitiva</span><span class="rule"></span>
-      <span class="badge badge--infer">momentum na janela · inferência</span></div>
-    <div class="grid lead-3" style="grid-template-columns:1fr 1fr;">
-      <div class="panel">
-        <div class="panel__hd"><h2>Momentum do concorrente</h2><span class="count" id="moCount">0</span>
-          <span class="spacer"></span><span class="hd-note">↑ ganha terreno · ↓ recua</span></div>
-        <div class="panel__bd panel__bd--flush panel__bd--scroll" id="momentum"></div>
-      </div>
-      <div class="panel">
-        <div class="panel__hd"><h2>Movimentos estratégicos</h2><span class="count" id="mvCount">0</span>
-          <span class="spacer"></span><span class="hd-note">entrada · oferta · M&amp;A</span></div>
-        <div class="panel__bd panel__bd--flush panel__bd--scroll" id="moves"></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- 4 · Regulatória (resumo) -->
-  <section class="band">
-    <div class="band-hd"><span class="overline">Inteligência regulatória (resumo)</span><span class="rule"></span>
-      <span class="badge badge--ghost">ADR-009 · blast-radius</span></div>
-    <div class="panel">
-      <div class="panel__hd"><h2>Mudanças por alcance</h2><span class="count" id="rgCount">0</span>
-        <span class="spacer"></span><span class="hd-note">domínio · setores afetados · prazo</span></div>
-      <div class="panel__bd panel__bd--flush panel__bd--scroll" id="regulatory"></div>
-    </div>
-  </section>
-
-  <!-- 5 · Ações recomendadas -->
+  <div class="pagehead"><h1 id="pgTitle">Sala executiva</h1><p class="lede" id="pgLede"></p></div>
+  <div id="board"></div>
   <section class="band">
     <div class="band-hd"><span class="overline">Ações recomendadas</span><span class="rule"></span>
       <span class="badge badge--ghost">captura ativa · decisões → OncaDecisionLog</span></div>
-    <div class="panel">
-      <div class="panel__bd" id="recs"></div>
-    </div>
+    <div class="panel"><div class="panel__bd" id="recs"></div></div>
   </section>
 </main>
 
 <div class="scrim" id="scrim"></div>
 <aside class="drawer" id="drawer" aria-hidden="true" role="dialog" aria-labelledby="drTitle">
-  <div class="drawer__hd">
-    <h3 id="drTitle">Inspeção</h3>
-    <button class="drawer__close" id="drClose" aria-label="Fechar">×</button>
-  </div>
+  <div class="drawer__hd"><h3 id="drTitle">Inspeção</h3>
+    <button class="drawer__close" id="drClose" aria-label="Fechar">×</button></div>
   <div class="drawer__bd" id="drBody"></div>
 </aside>
 
 <script src="/v2/app.js"></script>
 <script>
 const U = window.OncaUI;
-const OFFICER = "cso";
-let DATA = {}, EX = {}, CSO = {}, SECTOR = "__all__", BYID = {};
+let DATA = {}, EX = {}, OFFICER = "cso", SECTOR = "__all__", BYID = {};
+
+const OFFICERS = {
+  cso: { label: "CSO · Estratégia", title: "Estrategista-chefe (CSO)",
+    lede: "Clima competitivo, riscos e oportunidades, momentum dos concorrentes e ações por horizonte." },
+  cro: { label: "CRO · Regulatório", title: "Oficial regulatório (CRO)",
+    lede: "O eixo regulatório: linha do tempo consulta→norma→fiscalização, impacto/blast-radius, mudanças e prazos." },
+  cco: { label: "CCO · Compliance", title: "Oficial de compliance (CCO)",
+    lede: "Integridade, registro de risco (distress/reputação/achados) e triagem de watchlist." },
+  cpo: { label: "CPO · Produto", title: "Oficial de produto (CPO)",
+    lede: "Cobertura por setor, pontos cegos, propostas de descoberta e a força de proveniência da base." },
+};
 
 U.initTheme();
 document.getElementById("themeBtn").addEventListener("click", () => { U.toggleTheme(); render(); });
@@ -166,202 +87,251 @@ document.getElementById("drClose").addEventListener("click", closeDrawer);
 document.getElementById("scrim").addEventListener("click", closeDrawer);
 document.getElementById("sectorSel").addEventListener("change", (e) => { SECTOR = e.target.value; render(); });
 
+// officer tabs
+document.getElementById("officerTabs").innerHTML = Object.entries(OFFICERS)
+  .map(([k, o]) => `<a href="#${k}" data-officer="${k}">${o.label}</a>`).join("");
+document.querySelectorAll("#officerTabs a").forEach(a => a.addEventListener("click", (e) => {
+  e.preventDefault(); OFFICER = a.getAttribute("data-officer"); render();
+}));
+
 fetch("/feed.json").then(r => r.json()).then(d => { DATA = d; boot(); })
-  .catch(e => { document.getElementById("headlines").innerHTML =
+  .catch(e => { document.getElementById("board").innerHTML =
     U.empty("Feed indisponível", "Não foi possível carregar feed.json.", "!"); console.error(e); });
 
 function boot() {
   EX = DATA.executive || {};
-  CSO = EX.cso || {};
   BYID = {}; (DATA.feed || []).forEach(c => { BYID[c.id] = c; });
   document.getElementById("asof").textContent = DATA.as_of ? `dados de ${U.fmtDate(DATA.as_of)}` : "";
-  // populate the sector selector from the executive block
   const sel = document.getElementById("sectorSel");
-  (CSO.sectors || []).forEach(s => {
-    const o = document.createElement("option"); o.value = s.slug; o.textContent = s.label; sel.appendChild(o);
-  });
+  (EX.sectors || []).forEach(s => { const o = document.createElement("option"); o.value = s.slug; o.textContent = s.label; sel.appendChild(o); });
   if (!EX.officers || !EX.officers.length) {
-    document.getElementById("headlines").innerHTML =
-      U.empty("Bloco executivo ausente", "feed.executive ainda não foi publicado pelo pipeline.", "○");
-    return;
+    document.getElementById("board").innerHTML =
+      U.empty("Bloco executivo ausente", "feed.executive ainda não foi publicado.", "○"); return;
   }
   render();
 }
 
-// --- sector filter --------------------------------------------------------
+// --- filter + block helpers ------------------------------------------------
 function inSector(item) {
   if (SECTOR === "__all__") return true;
   const inds = item.industries || item.affected_industries || [];
-  return inds.indexOf(SECTOR) !== -1;
+  return inds.length === 0 || inds.indexOf(SECTOR) !== -1; // empty = sector-agnostic
 }
-function agg() { return (CSO.by_industry || {})[SECTOR] || (CSO.by_industry || {}).__all__ || {}; }
+function block() { return EX[OFFICER] || {}; }
+function agg() { const bi = (block().by_industry || {}); return bi[SECTOR] || bi.__all__ || {}; }
+function panel(title, count, note, body) {
+  return `<div class="panel"><div class="panel__hd"><h2>${U.esc(title)}</h2>` +
+    (count != null ? `<span class="count">${count}</span>` : "") +
+    `<span class="spacer"></span><span class="hd-note">${U.esc(note || "")}</span></div>` +
+    `<div class="panel__bd panel__bd--flush panel__bd--scroll">${body}</div></div>`;
+}
+function tiles(list) {
+  return `<div class="tiles">` + list.map(([t, v, d]) =>
+    `<div class="tile"><div class="tile__v">${v == null ? "—" : v}</div><div class="tile__t">${U.esc(t)}</div>` +
+    `<div class="tile__d">${U.esc(d)}</div></div>`).join("") + `</div>`;
+}
+function band(overline, badge, inner) {
+  return `<section class="band"><div class="band-hd"><span class="overline">${U.esc(overline)}</span>` +
+    `<span class="rule"></span>${badge ? `<span class="badge badge--infer">${U.esc(badge)}</span>` : ""}</div>${inner}</section>`;
+}
+function grid(cols, panels) { return `<div class="grid" style="grid-template-columns:${cols};gap:12px">${panels.join("")}</div>`; }
 
-// --- render ---------------------------------------------------------------
+// --- row renderers ---------------------------------------------------------
+function rowsCard(list) {
+  list = (list || []).filter(inSector);
+  if (!list.length) return U.empty("Nada no escopo.", "", "○");
+  return list.map(r => `<div class="exrow" data-id="${U.esc(r.id)}">
+    <span class="dt">${r.date ? U.fmtDate(r.date) : ""}</span>
+    <span class="ent">${U.esc(r.entity_label || r.label || "—")}</span>
+    <span class="ttl">${U.esc(r.title || "")}</span>
+    ${r.threat_score != null ? U.heat(r.threat_score) : ""}</div>`).join("");
+}
+function rowsReg(list) {
+  list = (list || []).filter(inSector);
+  if (!list.length) return U.empty("Sem itens regulatórios no escopo.", "", "○");
+  return list.map(r => `<div class="exrow" data-id="${U.esc(r.id)}">
+    <span class="ent" style="min-width:170px">${U.esc(r.domain || "Regulação")}</span>
+    <span class="ttl">${U.esc((r.change || (r.affected_industries || []).join(", ")) || "")}</span>
+    ${r.blast_band ? `<span class="chip ${r.blast_band}">${U.esc(r.blast_band)}</span>` : `<span class="hd-note">${r.blast || 0} setor(es)</span>`}
+    ${r.difficulty_band ? `<span class="chip ${r.difficulty_band}">dif: ${U.esc(r.difficulty_band)}</span>` : ""}
+    ${r.days_to_deadline != null ? `<span class="dt">${r.days_to_deadline}d</span>` : ""}
+    ${r.threat_score != null ? U.heat(r.threat_score) : ""}</div>`).join("");
+}
+function rowsMomentum(list) {
+  list = (list || []).filter(inSector);
+  if (!list.length) return U.empty("Sem momentum na janela.", "", "○");
+  const max = Math.max(1, ...list.map(r => Math.abs(r.momentum)));
+  return list.slice(0, 25).map(r => { const up = r.momentum >= 0, w = Math.round(Math.abs(r.momentum) / max * 90) + 6;
+    return `<div class="mom"><span class="ent" style="min-width:130px">${U.esc(r.label)}</span>
+      <span class="bar ${up ? "up" : "down"}" style="width:${w}px;background:currentColor"></span>
+      <span class="${up ? "up" : "down"}">${up ? "▲" : "▼"} ${r.momentum > 0 ? "+" : ""}${r.momentum}</span>
+      <span class="hd-note" style="margin-left:auto">${r.prior} → ${r.recent}</span></div>`; }).join("");
+}
+function rowsRisk(list) {
+  list = (list || []).filter(inSector);
+  if (!list.length) return U.empty("Sem riscos no escopo.", "", "○");
+  return list.map(r => `<div class="exrow">
+    <span class="chip ${r.severity}">${U.esc(r.kind)}</span>
+    <span class="ent" style="min-width:130px">${U.esc(r.label || "—")}</span>
+    <span class="ttl">${U.esc(r.detail || "")}</span></div>`).join("");
+}
+function rowsIntegrity(list) {
+  list = (list || []).filter(inSector);
+  if (!list.length) return U.empty("Registro íntegro no escopo.", "", "○");
+  return list.map(r => `<div class="exrow" ${r.card_id ? `data-id="${U.esc(r.card_id)}"` : ""}>
+    <span class="chip ${r.severity}">${U.esc(r.severity)}</span>
+    <span class="ent" style="min-width:150px">${U.esc(r.kind)}</span>
+    <span class="ttl">${U.esc(r.summary || "")}</span></div>`).join("");
+}
+function rowsRep(list) {
+  list = (list || []).filter(inSector);
+  if (!list.length) return U.empty("Sem dados de reputação no escopo.", "", "○");
+  return list.map(r => `<div class="exrow" ${r.url ? `data-url="${U.esc(r.url)}"` : ""}>
+    <span class="ent" style="min-width:150px">${U.esc(r.label)}</span>
+    <span class="ttl">${U.esc(r.category || "")} · ${U.esc(r.period || "")}</span>
+    <span class="hd-note">#${r.rank != null ? r.rank : "—"} · índice ${r.index != null ? r.index : "—"}</span></div>`).join("");
+}
+function rowsGap(list) {
+  list = (list || []);
+  if (!list.length) return U.empty("Sem pontos cegos.", "", "○");
+  return list.map(r => `<div class="exrow" ${r.issue_url ? `data-href="${U.esc(r.issue_url)}"` : ""}>
+    <span class="chip ${r.status === "open" ? "high" : "low"}">${U.esc(r.status)}</span>
+    <span class="ttl">${U.esc(r.question || "")}</span>
+    <span class="hd-note">${r.count || 0}× · ${U.esc(r.triage || "")}</span></div>`).join("");
+}
+function rowsDiscovery(list) {
+  if (!(list || []).length) return U.empty("Sem propostas de descoberta.", "", "○");
+  return list.map(r => `<div class="exrow">
+    <span class="ent" style="min-width:150px">${U.esc(r.proposed || "—")}</span>
+    <span class="ttl">${U.esc(r.reason || "")} · ${U.esc(r.hint || "")}</span>
+    <span class="chip low">${U.esc(r.confidence || "")}</span></div>`).join("");
+}
+function rowsCoverage(list) {
+  list = (list || []).filter(i => SECTOR === "__all__" || i.slug === SECTOR);
+  if (!list.length) return U.empty("Sem setores no escopo.", "", "○");
+  return list.map(i => { const cls = i.coverage_gap ? "gap" : (i.low_volume ? "low" : "ok");
+    return `<div class="cov"><span class="dot ${cls}"></span>
+      <span class="ent" style="min-width:170px">${U.esc(i.label)}</span>
+      <span class="hd-note">${i.active_entities || 0} entidades · ${i.narratives || 0} narrativas</span>
+      <span class="spacer" style="flex:1"></span>
+      ${i.coverage_gap ? `<span class="chip high">lacuna</span>` : (i.low_volume ? `<span class="chip med">baixo volume</span>` : `<span class="chip low">ok</span>`)}</div>`; }).join("");
+}
+function radarBlock(obj) {
+  const ent = Object.entries(obj || {});
+  if (!ent.length) return U.empty("Sem radar de proveniência.", "", "○");
+  const order = { official: 0, structured: 1, registry: 2, identified: 3 };
+  ent.sort((a, b) => (order[a[0]] ?? 9) - (order[b[0]] ?? 9));
+  return `<div class="radarwrap">` + ent.map(([t, n]) =>
+    `<div class="rt"><b>${n}</b><span class="hd-note">${U.esc(t)}</span></div>`).join("") + `</div>`;
+}
+
+// --- board (per officer) ---------------------------------------------------
 function render() {
-  const p = CSO.panels || {};
-  renderTiles();
-  fillRows("headlines", (p.headlines || []).filter(inSector), "hdCount");
-  fillRows("emerging", (p.emerging || []).filter(inSector), "emCount", "Sem sinais emergentes nesta janela.");
-  fillRows("risks", (p.risks || []).filter(inSector), "rkCount", "Sem alertas de risco.");
-  fillRows("opps", (p.opportunities || []).filter(inSector), "opCount", "Sem oportunidades sinalizadas.");
-  fillRows("moves", (p.moves || []).filter(inSector), "mvCount", "Sem movimentos estratégicos.");
-  renderMomentum((p.momentum || []).filter(inSector));
-  renderRegulatory((p.regulatory || []).filter(inSector));
+  document.querySelectorAll("#officerTabs a").forEach(a =>
+    a.setAttribute("aria-current", a.getAttribute("data-officer") === OFFICER ? "page" : "false"));
+  const meta = OFFICERS[OFFICER];
+  document.getElementById("pgTitle").textContent = "Sala executiva — " + meta.title;
+  document.getElementById("pgLede").textContent = meta.lede;
+  const p = block().panels || {}, a = agg();
+  const el = document.getElementById("board");
+  if (OFFICER === "cso") {
+    el.innerHTML =
+      tiles([["Clima estratégico", a.climate, "0–100 · maior = mais calmo"], ["Alertas", a.n_alerts, "cartões em alerta"],
+             ["Ameaça média", a.avg_threat, "0–100"], ["Ameaça regulatória", a.reg_threat, "0–100"], ["Movimentos", a.n_moves, "entrada·oferta·M&A"]]) +
+      band("Situação", "índice de clima · inferência",
+        grid("1.3fr .9fr", [panel("Manchetes executivas", null, "maior ameaça · recente", rowsCard(p.headlines)),
+                            panel("Sinais emergentes", null, "janela recente · ameaça ≥ 60", rowsCard(p.emerging))])) +
+      band("Riscos & Oportunidades", "", grid("1fr 1fr", [panel("Radar de risco", null, "alertas", rowsCard(p.risks)),
+                            panel("Radar de oportunidade", null, "fraqueza do concorrente", rowsCard(p.opportunities))])) +
+      band("Inteligência competitiva", "momentum na janela · inferência",
+        grid("1fr 1fr", [panel("Momentum do concorrente", null, "↑ ganha · ↓ recua", rowsMomentum(p.momentum)),
+                        panel("Movimentos estratégicos", null, "entrada·oferta·M&A", rowsCard(p.moves))])) +
+      band("Inteligência regulatória (resumo)", "", panel("Mudanças por alcance", null, "domínio·setores·prazo", rowsReg(p.regulatory)));
+  } else if (OFFICER === "cro") {
+    el.innerHTML =
+      tiles([["Cartões regulatórios", a.n_reg, "no escopo"], ["Ameaça regulatória", a.reg_threat, "0–100"],
+             ["Atos alterados", a.n_changes, "com enumeração de mudança"], ["Maior alcance", a.max_blast, "setores afetados"]]) +
+      band("Impacto & alcance", "blast-radius · ADR-009", panel("Mudanças por impacto", null, "banda de alcance·dificuldade", rowsReg(p.impact))) +
+      band("Linha do tempo regulatória", "", grid("1fr 1fr", [panel("Consulta → norma → fiscalização", null, "recente", rowsReg(p.timeline)),
+                            panel("Atos com mudanças enumeradas", null, "amending acts", rowsReg(p.changes))])) +
+      band("Calendário de conformidade", "", panel("Prazos", null, "dias até o prazo", rowsReg(p.deadlines)));
+  } else if (OFFICER === "cco") {
+    el.innerHTML =
+      tiles([["Achados de integridade", a.n_integrity, "auditoria do registro"], ["Achados graves", a.n_high, "severidade alta"],
+             ["Distress (confirmado)", a.n_distress, "insolvência"], ["Reputação", a.n_rep, "rankings de reclamação"]]) +
+      band("Registro de risco", "", panel("Distress · reputação · integridade", null, "prioridade", rowsRisk(p.risk_register))) +
+      band("Integridade & reputação", "",
+        grid("1fr 1fr", [panel("Auditoria de integridade", null, "achados do registro", rowsIntegrity(p.integrity)),
+                        panel("Reputação (reclamações)", null, "pior ranking primeiro", rowsRep(p.reputation))]));
+  } else if (OFFICER === "cpo") {
+    el.innerHTML =
+      tiles([["Pontos cegos", a.n_gaps, "perguntas sem resposta"], ["Propostas", a.n_reviews, "descoberta"],
+             ["Setores cobertos", a.n_covered, "roster sincronizado"], ["Lacunas de cobertura", a.n_coverage_gap, "setores"]]) +
+      band("Cobertura por setor", "", panel("Mapa de cobertura", null, "ok · baixo volume · lacuna", rowsCoverage(p.coverage_map))) +
+      band("Pontos cegos & descoberta", "",
+        grid("1fr 1fr", [panel("Pontos cegos", null, "perguntas sem resposta", rowsGap(p.blind_spots)),
+                        panel("Propostas de descoberta", null, "revisão pendente", rowsDiscovery(p.discovery))])) +
+      band("Força da base", "", panel("Radar de proveniência", null, "por tier", radarBlock(p.radar)));
+  }
+  el.querySelectorAll(".exrow[data-id]").forEach(row => row.addEventListener("click", () => inspect(row.getAttribute("data-id"))));
+  el.querySelectorAll(".exrow[data-url],.exrow[data-href]").forEach(row => row.addEventListener("click", () => {
+    const u = row.getAttribute("data-url") || row.getAttribute("data-href"); if (u) window.open(u, "_blank", "noopener"); }));
   renderRecs((p.recommendations || []).filter(inSector));
 }
 
-function renderTiles() {
-  const a = agg();
-  const tiles = [
-    ["Clima estratégico", (a.climate != null ? a.climate : "—"), "0–100 · maior = mais calmo"],
-    ["Alertas", (a.n_alerts || 0), "cartões em alerta"],
-    ["Ameaça média", (a.avg_threat != null ? a.avg_threat : "—"), "0–100 · concorrência"],
-    ["Ameaça regulatória", (a.reg_threat != null ? a.reg_threat : "—"), "0–100 · eixo normativo"],
-    ["Movimentos", (a.n_moves || 0), "entrada · oferta · M&A"],
-  ];
-  document.getElementById("tiles").innerHTML = tiles.map(([t, v, d]) =>
-    `<div class="tile"><div class="tile__v">${v}</div><div class="tile__t">${U.esc(t)}</div>
-     <div class="tile__d">${U.esc(d)}</div></div>`).join("");
-}
-
-function fillRows(id, rows, countId, emptyMsg) {
-  document.getElementById(countId).textContent = rows.length;
-  const el = document.getElementById(id);
-  if (!rows.length) { el.innerHTML = U.empty(emptyMsg || "Nada aqui.", "", "○"); return; }
-  el.innerHTML = rows.map(r =>
-    `<div class="exrow" data-id="${U.esc(r.id)}">
-       <span class="dt">${r.date ? U.fmtDate(r.date) : ""}</span>
-       <span class="ent">${U.esc(r.entity_label || "—")}</span>
-       <span class="ttl">${U.esc(r.title || "")}</span>
-       ${r.threat_score != null ? U.heat(r.threat_score) : ""}
-     </div>`).join("");
-  el.querySelectorAll(".exrow").forEach(row =>
-    row.addEventListener("click", () => inspect(row.getAttribute("data-id"))));
-}
-
-function renderMomentum(rows) {
-  document.getElementById("moCount").textContent = rows.length;
-  const el = document.getElementById("momentum");
-  if (!rows.length) { el.innerHTML = U.empty("Sem momentum na janela.", "", "○"); return; }
-  const max = Math.max(1, ...rows.map(r => Math.abs(r.momentum)));
-  el.innerHTML = rows.slice(0, 20).map(r => {
-    const up = r.momentum >= 0, w = Math.round(Math.abs(r.momentum) / max * 90) + 6;
-    return `<div class="mom">
-      <span class="ent" style="min-width:130px">${U.esc(r.label)}</span>
-      <span class="bar ${up ? "up" : "down"}" style="width:${w}px;background:currentColor"></span>
-      <span class="${up ? "up" : "down"}">${up ? "▲" : "▼"} ${r.momentum > 0 ? "+" : ""}${r.momentum}</span>
-      <span class="hd-note" style="margin-left:auto">${r.prior} → ${r.recent}</span>
-    </div>`;
-  }).join("");
-}
-
-function renderRegulatory(rows) {
-  document.getElementById("rgCount").textContent = rows.length;
-  const el = document.getElementById("regulatory");
-  if (!rows.length) { el.innerHTML = U.empty("Sem mudanças regulatórias no escopo.", "", "○"); return; }
-  el.innerHTML = rows.map(r =>
-    `<div class="exrow" data-id="${U.esc(r.id)}">
-       <span class="ent" style="min-width:180px">${U.esc(r.domain || "Regulação")}</span>
-       <span class="ttl">${r.blast} setor(es): ${U.esc((r.affected_industries || []).join(", "))}</span>
-       ${r.days_to_deadline != null ? `<span class="dt">${r.days_to_deadline}d p/ prazo</span>` : ""}
-       ${r.threat_score != null ? U.heat(r.threat_score) : ""}
-     </div>`).join("");
-  el.querySelectorAll(".exrow").forEach(row =>
-    row.addEventListener("click", () => inspect(row.getAttribute("data-id"))));
-}
-
+// --- recommendations + capture (ADR-021 Step 1) ----------------------------
 const HZ = [["imediato", "Imediato"], ["30d", "30 dias"], ["90d", "90 dias"], ["estrategico", "Estratégico"]];
 let RECS = [];
 function renderRecs(recs) {
-  RECS = recs;
-  const el = document.getElementById("recs");
+  RECS = recs; const el = document.getElementById("recs");
   if (!recs.length) { el.innerHTML = U.empty("Sem ações recomendadas no escopo.", "", "○"); return; }
   el.innerHTML = `<div class="horizons">` + HZ.map(([key, label]) => {
     const items = recs.map((r, i) => [r, i]).filter(([r]) => r.horizon === key);
     return `<div class="hz"><h3>${label}</h3>` + (items.length ? items.map(([r, i]) =>
-      `<div class="rec" data-i="${i}">
-         <div class="rec-t">${U.esc(r.text)}</div>
-         <div class="rec-a">→ ${U.esc(r.action)}${r.evidence_id ? ` · <a href="#" data-ev="${U.esc(r.evidence_id)}">evidência</a>` : ""}</div>
-         <div class="cap">
-           <button data-v="aprovado" data-i="${i}">Aprovar</button>
-           <button data-v="rejeitado" data-i="${i}">Rejeitar</button>
-         </div>
-       </div>`).join("") : `<div class="hd-note" style="padding:4px 0">—</div>`) + `</div>`;
+      `<div class="rec" data-i="${i}"><div class="rec-t">${U.esc(r.text)}</div>
+        <div class="rec-a">→ ${U.esc(r.action)}${r.evidence_id ? ` · <a href="#" data-ev="${U.esc(r.evidence_id)}">evidência</a>` : ""}</div>
+        <div class="cap"><button data-v="aprovado" data-i="${i}">Aprovar</button><button data-v="rejeitado" data-i="${i}">Rejeitar</button></div></div>`).join("")
+      : `<div class="hd-note" style="padding:4px 0">—</div>`) + `</div>`;
   }).join("") + `</div>`;
-  el.querySelectorAll("a[data-ev]").forEach(a =>
-    a.addEventListener("click", (e) => { e.preventDefault(); inspect(a.getAttribute("data-ev")); }));
-  el.querySelectorAll(".cap button[data-v]").forEach(b =>
-    b.addEventListener("click", () => capture(b)));
+  el.querySelectorAll("a[data-ev]").forEach(a => a.addEventListener("click", (e) => { e.preventDefault(); inspect(a.getAttribute("data-ev")); }));
+  el.querySelectorAll(".cap button[data-v]").forEach(b => b.addEventListener("click", () => capture(b)));
 }
-
-// ADR-021 §D Step 1 — capture the decision (aprovar/rejeitar) to /api/act. Same-origin;
-// CloudFront injects the origin secret so the operator authorizes. Best-effort UI.
 async function capture(btn) {
-  const r = RECS[Number(btn.getAttribute("data-i"))];
-  if (!r) return;
-  const verdict = btn.getAttribute("data-v");
-  const cap = btn.closest(".cap");
+  const r = RECS[Number(btn.getAttribute("data-i"))]; if (!r) return;
+  const verdict = btn.getAttribute("data-v"), cap = btn.closest(".cap");
   cap.querySelectorAll("button").forEach(x => { x.disabled = true; });
   const industry = SECTOR !== "__all__" ? SECTOR : (r.industries && r.industries[0]) || null;
-  const res = await postAct({
-    intent: "record_decision",
-    officer: OFFICER,
-    args: { officer: OFFICER, recommendation: r.text, verdict, industry,
-            action_ref: r.action, evidence_id: r.evidence_id, context_id: r.horizon },
-  });
-  if (!res || !res.decision_id) {
-    cap.innerHTML = `<span class="hd-note" style="color:#e0603a">falha ao registrar</span>`;
-    return;
-  }
-  cap.innerHTML =
-    `<span class="hd-note">✓ ${verdict} · <span style="opacity:.6">resultado:</span></span>
-     <select data-did="${res.decision_id}" class="ocsel">
-       <option value="pendente">pendente</option><option value="favoravel">favorável</option>
-       <option value="desfavoravel">desfavorável</option><option value="neutro">neutro</option>
-     </select>`;
+  const res = await postAct({ intent: "record_decision", officer: OFFICER,
+    args: { officer: OFFICER, recommendation: r.text, verdict, industry, action_ref: r.action, evidence_id: r.evidence_id, context_id: r.horizon } });
+  if (!res || !res.decision_id) { cap.innerHTML = `<span class="hd-note" style="color:#e0603a">falha ao registrar</span>`; return; }
+  cap.innerHTML = `<span class="hd-note">✓ ${verdict} · <span style="opacity:.6">resultado:</span></span>
+    <select data-did="${res.decision_id}" class="ocsel"><option value="pendente">pendente</option>
+      <option value="favoravel">favorável</option><option value="desfavoravel">desfavorável</option><option value="neutro">neutro</option></select>`;
   cap.querySelector(".ocsel").addEventListener("change", (e) => setOutcome(res.decision_id, e.target.value, e.target));
 }
-
 async function setOutcome(did, outcome, sel) {
-  sel.disabled = true;
-  const res = await postAct({ intent: "set_outcome", officer: OFFICER,
-    args: { decision_id: did, outcome } });
-  sel.disabled = false;
-  if (res && res.decision_outcome) sel.title = "resultado registrado";
+  sel.disabled = true; const res = await postAct({ intent: "set_outcome", officer: OFFICER, args: { decision_id: did, outcome } });
+  sel.disabled = false; if (res && res.decision_outcome) sel.title = "resultado registrado";
 }
-
 async function postAct(body) {
-  try {
-    const r = await fetch("/api/act", { method: "POST", credentials: "include",
-      headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-    return await r.json();
-  } catch (e) { console.error("act failed", e); return null; }
+  try { const r = await fetch("/api/act", { method: "POST", credentials: "include",
+    headers: { "content-type": "application/json" }, body: JSON.stringify(body) }); return await r.json(); }
+  catch (e) { console.error("act failed", e); return null; }
 }
 
-// --- drill-down -----------------------------------------------------------
+// --- drill-down ------------------------------------------------------------
 function inspect(id) {
   const c = BYID[id];
-  document.getElementById("drTitle").textContent =
-    (c && (c.entity_label || c.subject_label || c.entity)) || "Detalhe";
-  if (!c) {
-    document.getElementById("drBody").innerHTML = U.empty("Sem cartão citável", `id: ${id || "—"}`, "○");
-  } else {
-    const model = U.citationModel(c);
-    document.getElementById("drBody").innerHTML =
-      `<div class="callout">${U.linkifyNarrative(c.narrative || "", model)}${U.citationFooter(model)}</div>`;
-  }
+  document.getElementById("drTitle").textContent = (c && (c.entity_label || c.subject_label || c.entity)) || "Detalhe";
+  document.getElementById("drBody").innerHTML = c
+    ? `<div class="callout">${U.linkifyNarrative(c.narrative || "", U.citationModel(c))}${U.citationFooter(U.citationModel(c))}</div>`
+    : U.empty("Sem cartão citável", `id: ${id || "—"}`, "○");
   openDrawer();
 }
-function openDrawer() {
-  document.getElementById("drawer").setAttribute("aria-hidden", "false");
-  document.getElementById("scrim").classList.add("on");
-  document.getElementById("drawer").classList.add("on");
-}
-function closeDrawer() {
-  document.getElementById("drawer").setAttribute("aria-hidden", "true");
-  document.getElementById("scrim").classList.remove("on");
-  document.getElementById("drawer").classList.remove("on");
-}
+function openDrawer() { document.getElementById("drawer").setAttribute("aria-hidden", "false");
+  document.getElementById("scrim").classList.add("on"); document.getElementById("drawer").classList.add("on"); }
+function closeDrawer() { document.getElementById("drawer").setAttribute("aria-hidden", "true");
+  document.getElementById("scrim").classList.remove("on"); document.getElementById("drawer").classList.remove("on"); }
 </script>
 </body>
 </html>
