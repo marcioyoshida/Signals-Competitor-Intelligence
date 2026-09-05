@@ -1536,8 +1536,8 @@ class OncaPrototypeStack(Stack):
             runtime=lambda_.Runtime.PYTHON_3_11,
             handler="src.dashboard.act_api.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
-            timeout=Duration.seconds(30),
-            memory_size=256,
+            timeout=Duration.seconds(60),  # ADR-020 Phase 2: run_integrity_audit scans the registry
+            memory_size=1024,
             environment={
                 "PYTHONPATH": "/var/task",
                 "ONCA_ORIGIN_SECRET": origin_secret,
