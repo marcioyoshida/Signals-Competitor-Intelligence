@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Onça · Sala Executiva</title>
+<link rel="stylesheet" href="/v2/app.css" />
+<style>
+  /* v3 executive-only affordances (layered on the shared v2 design system) */
+  .officer-tabs { display:flex; gap:2px; }
+  .officer-tabs a { position:relative; }
+  .officer-tabs a[aria-disabled="true"] { opacity:.45; pointer-events:none; }
+  .officer-tabs a .soon { font-size:9px; letter-spacing:.04em; vertical-align:super; opacity:.7; }
+  .selwrap { display:flex; align-items:center; gap:6px; }
+  .selwrap select { background:var(--surface-2,#1a1a1a); color:inherit; border:1px solid var(--line,#333);
+    border-radius:6px; padding:4px 8px; font:inherit; font-size:12px; }
+  .exrow { display:flex; gap:10px; align-items:baseline; padding:8px 12px; border-bottom:1px solid var(--line,#2a2a2a);
+    cursor:pointer; }
+  .exrow:hover { background:var(--surface-2,#181818); }
+  .exrow .ent { font-weight:600; min-width:120px; }
+  .exrow .ttl { flex:1; opacity:.85; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .exrow .dt { opacity:.5; font-size:11px; min-width:72px; }
+  .mom { display:flex; align-items:center; gap:8px; padding:7px 12px; border-bottom:1px solid var(--line,#2a2a2a); }
+  .mom .bar { height:6px; border-radius:3px; }
+  .mom .up { color:#e0603a; } .mom .down { color:#3aa06a; }
+  .rec { padding:10px 12px; border-bottom:1px solid var(--line,#2a2a2a); }
+  .rec .rec-t { font-weight:500; }
+  .rec .rec-a { font-size:11px; opacity:.7; margin-top:3px; }
+  .rec .cap { margin-top:8px; display:flex; gap:6px; }
+  .rec .cap button { font:inherit; font-size:11px; padding:3px 10px; border-radius:6px; border:1px solid var(--line,#333);
+    background:transparent; color:inherit; opacity:.4; cursor:not-allowed; }
+  .horizons { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+  .hz h3 { font-size:12px; text-transform:uppercase; letter-spacing:.06em; opacity:.6; margin:0 0 6px; }
+</style>
+</head>
+<body>
+<header class="appbar">
+  <div class="brand">
+    <span class="mark">ON<b>Ç</b>A</span>
+    <span class="ctx">Executivo</span>
+  </div>
+  <nav class="ctxnav officer-tabs" aria-label="Officiais">
+    <a href="#cso" data-officer="cso" aria-current="page">CSO · Estratégia</a>
+    <a href="#cro" data-officer="cro" aria-disabled="true">CRO · Regulatório <span class="soon">em breve</span></a>
+    <a href="#cco" data-officer="cco" aria-disabled="true">CCO · Compliance <span class="soon">em breve</span></a>
+    <a href="#cpo" data-officer="cpo" aria-disabled="true">CPO · Produto <span class="soon">em breve</span></a>
+  </nav>
+  <span class="spacer"></span>
+  <span class="selwrap">
+    <label for="sectorSel" class="hd-note">Setor</label>
+    <select id="sectorSel"><option value="__all__">Todos os setores</option></select>
+  </span>
+  <span class="sub" id="asof">—</span>
+  <button class="icnbtn" id="themeBtn" title="Alternar tema" aria-label="Alternar tema claro/escuro">◐</button>
+</header>
+
+<main class="wrap">
+  <div class="pagehead">
+    <h1>Sala executiva — Estrategista-chefe (CSO)</h1>
+    <p class="lede">A leitura do estrategista sobre o mercado: clima competitivo, riscos e
+      oportunidades, momentum dos concorrentes, o eixo regulatório e as ações recomendadas por
+      horizonte. Filtre por setor no topo. As decisões (aprovar/rejeitar) chegam com o backend
+      de captura (ADR-021).</p>
+  </div>
+
+  <!-- 1 · Situação -->
+  <section class="band">
+    <div class="band-hd"><span class="overline">Situação</span><span class="rule"></span>
+      <span class="badge badge--infer">índice de clima · inferência</span></div>
+    <div class="tiles" id="tiles" style="margin-bottom:var(--s4);"></div>
+    <div class="grid lead-3" style="grid-template-columns:1.3fr .9fr;">
+      <div class="panel">
+        <div class="panel__hd"><h2>Manchetes executivas</h2><span class="count" id="hdCount">0</span>
+          <span class="spacer"></span><span class="hd-note">maior ameaça · recente</span></div>
+        <div class="panel__bd panel__bd--flush panel__bd--scroll" id="headlines"></div>
+      </div>
+      <div class="panel">
+        <div class="panel__hd"><h2>Sinais emergentes</h2><span class="count" id="emCount">0</span>
+          <span class="spacer"></span><span class="hd-note">janela recente · ameaça ≥ 60</span></div>
+        <div class="panel__bd panel__bd--flush panel__bd--scroll" id="emerging"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2 · Riscos & Oportunidades -->
+  <section class="band">
+    <div class="band-hd"><span class="overline">Riscos &amp; Oportunidades</span><span class="rule"></span></div>
+    <div class="grid lead-3" style="grid-template-columns:1fr 1fr;">
+      <div class="panel">
+        <div class="panel__hd"><h2>Radar de risco</h2><span class="count" id="rkCount">0</span>
+          <span class="spacer"></span><span class="hd-note">alertas · maior ameaça</span></div>
+        <div class="panel__bd panel__bd--flush panel__bd--scroll" id="risks"></div>
+      </div>
+      <div class="panel">
+        <div class="panel__hd"><h2>Radar de oportunidade</h2><span class="count" id="opCount">0</span>
+          <span class="spacer"></span><span class="hd-note">fraqueza do concorrente = abertura</span></div>
+        <div class="panel__bd panel__bd--flush panel__bd--scroll" id="opps"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 · Inteligência competitiva -->
+  <section class="band">
+    <div class="band-hd"><span class="overline">Inteligência competitiva</span><span class="rule"></span>
+      <span class="badge badge--infer">momentum na janela · inferência</span></div>
+    <div class="grid lead-3" style="grid-template-columns:1fr 1fr;">
+      <div class="panel">
+        <div class="panel__hd"><h2>Momentum do concorrente</h2><span class="count" id="moCount">0</span>
+          <span class="spacer"></span><span class="hd-note">↑ ganha terreno · ↓ recua</span></div>
+        <div class="panel__bd panel__bd--flush panel__bd--scroll" id="momentum"></div>
+      </div>
+      <div class="panel">
+        <div class="panel__hd"><h2>Movimentos estratégicos</h2><span class="count" id="mvCount">0</span>
+          <span class="spacer"></span><span class="hd-note">entrada · oferta · M&amp;A</span></div>
+        <div class="panel__bd panel__bd--flush panel__bd--scroll" id="moves"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 · Regulatória (resumo) -->
+  <section class="band">
+    <div class="band-hd"><span class="overline">Inteligência regulatória (resumo)</span><span class="rule"></span>
+      <span class="badge badge--ghost">ADR-009 · blast-radius</span></div>
+    <div class="panel">
+      <div class="panel__hd"><h2>Mudanças por alcance</h2><span class="count" id="rgCount">0</span>
+        <span class="spacer"></span><span class="hd-note">domínio · setores afetados · prazo</span></div>
+      <div class="panel__bd panel__bd--flush panel__bd--scroll" id="regulatory"></div>
+    </div>
+  </section>
+
+  <!-- 5 · Ações recomendadas -->
+  <section class="band">
+    <div class="band-hd"><span class="overline">Ações recomendadas</span><span class="rule"></span>
+      <span class="badge badge--ghost">captura desabilitada até o backend de decisão</span></div>
+    <div class="panel">
+      <div class="panel__bd" id="recs"></div>
+    </div>
+  </section>
+</main>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-hidden="true" role="dialog" aria-labelledby="drTitle">
+  <div class="drawer__hd">
+    <h3 id="drTitle">Inspeção</h3>
+    <button class="drawer__close" id="drClose" aria-label="Fechar">×</button>
+  </div>
+  <div class="drawer__bd" id="drBody"></div>
+</aside>
+
+<script src="/v2/app.js"></script>
+<script>
+const U = window.OncaUI;
+let DATA = {}, EX = {}, CSO = {}, SECTOR = "__all__", BYID = {};
+
+U.initTheme();
+document.getElementById("themeBtn").addEventListener("click", () => { U.toggleTheme(); render(); });
+document.getElementById("drClose").addEventListener("click", closeDrawer);
+document.getElementById("scrim").addEventListener("click", closeDrawer);
+document.getElementById("sectorSel").addEventListener("change", (e) => { SECTOR = e.target.value; render(); });
+
+fetch("/feed.json").then(r => r.json()).then(d => { DATA = d; boot(); })
+  .catch(e => { document.getElementById("headlines").innerHTML =
+    U.empty("Feed indisponível", "Não foi possível carregar feed.json.", "!"); console.error(e); });
+
+function boot() {
+  EX = DATA.executive || {};
+  CSO = EX.cso || {};
+  BYID = {}; (DATA.feed || []).forEach(c => { BYID[c.id] = c; });
+  document.getElementById("asof").textContent = DATA.as_of ? `dados de ${U.fmtDate(DATA.as_of)}` : "";
+  // populate the sector selector from the executive block
+  const sel = document.getElementById("sectorSel");
+  (CSO.sectors || []).forEach(s => {
+    const o = document.createElement("option"); o.value = s.slug; o.textContent = s.label; sel.appendChild(o);
+  });
+  if (!EX.officers || !EX.officers.length) {
+    document.getElementById("headlines").innerHTML =
+      U.empty("Bloco executivo ausente", "feed.executive ainda não foi publicado pelo pipeline.", "○");
+    return;
+  }
+  render();
+}
+
+// --- sector filter --------------------------------------------------------
+function inSector(item) {
+  if (SECTOR === "__all__") return true;
+  const inds = item.industries || item.affected_industries || [];
+  return inds.indexOf(SECTOR) !== -1;
+}
+function agg() { return (CSO.by_industry || {})[SECTOR] || (CSO.by_industry || {}).__all__ || {}; }
+
+// --- render ---------------------------------------------------------------
+function render() {
+  const p = CSO.panels || {};
+  renderTiles();
+  fillRows("headlines", (p.headlines || []).filter(inSector), "hdCount");
+  fillRows("emerging", (p.emerging || []).filter(inSector), "emCount", "Sem sinais emergentes nesta janela.");
+  fillRows("risks", (p.risks || []).filter(inSector), "rkCount", "Sem alertas de risco.");
+  fillRows("opps", (p.opportunities || []).filter(inSector), "opCount", "Sem oportunidades sinalizadas.");
+  fillRows("moves", (p.moves || []).filter(inSector), "mvCount", "Sem movimentos estratégicos.");
+  renderMomentum((p.momentum || []).filter(inSector));
+  renderRegulatory((p.regulatory || []).filter(inSector));
+  renderRecs((p.recommendations || []).filter(inSector));
+}
+
+function renderTiles() {
+  const a = agg();
+  const tiles = [
+    ["Clima estratégico", (a.climate != null ? a.climate : "—"), "0–100 · maior = mais calmo"],
+    ["Alertas", (a.n_alerts || 0), "cartões em alerta"],
+    ["Ameaça média", (a.avg_threat != null ? a.avg_threat : "—"), "0–100 · concorrência"],
+    ["Ameaça regulatória", (a.reg_threat != null ? a.reg_threat : "—"), "0–100 · eixo normativo"],
+    ["Movimentos", (a.n_moves || 0), "entrada · oferta · M&A"],
+  ];
+  document.getElementById("tiles").innerHTML = tiles.map(([t, v, d]) =>
+    `<div class="tile"><div class="tile__v">${v}</div><div class="tile__t">${U.esc(t)}</div>
+     <div class="tile__d">${U.esc(d)}</div></div>`).join("");
+}
+
+function fillRows(id, rows, countId, emptyMsg) {
+  document.getElementById(countId).textContent = rows.length;
+  const el = document.getElementById(id);
+  if (!rows.length) { el.innerHTML = U.empty(emptyMsg || "Nada aqui.", "", "○"); return; }
+  el.innerHTML = rows.map(r =>
+    `<div class="exrow" data-id="${U.esc(r.id)}">
+       <span class="dt">${r.date ? U.fmtDate(r.date) : ""}</span>
+       <span class="ent">${U.esc(r.entity_label || "—")}</span>
+       <span class="ttl">${U.esc(r.title || "")}</span>
+       ${r.threat_score != null ? U.heat(r.threat_score) : ""}
+     </div>`).join("");
+  el.querySelectorAll(".exrow").forEach(row =>
+    row.addEventListener("click", () => inspect(row.getAttribute("data-id"))));
+}
+
+function renderMomentum(rows) {
+  document.getElementById("moCount").textContent = rows.length;
+  const el = document.getElementById("momentum");
+  if (!rows.length) { el.innerHTML = U.empty("Sem momentum na janela.", "", "○"); return; }
+  const max = Math.max(1, ...rows.map(r => Math.abs(r.momentum)));
+  el.innerHTML = rows.slice(0, 20).map(r => {
+    const up = r.momentum >= 0, w = Math.round(Math.abs(r.momentum) / max * 90) + 6;
+    return `<div class="mom">
+      <span class="ent" style="min-width:130px">${U.esc(r.label)}</span>
+      <span class="bar ${up ? "up" : "down"}" style="width:${w}px;background:currentColor"></span>
+      <span class="${up ? "up" : "down"}">${up ? "▲" : "▼"} ${r.momentum > 0 ? "+" : ""}${r.momentum}</span>
+      <span class="hd-note" style="margin-left:auto">${r.prior} → ${r.recent}</span>
+    </div>`;
+  }).join("");
+}
+
+function renderRegulatory(rows) {
+  document.getElementById("rgCount").textContent = rows.length;
+  const el = document.getElementById("regulatory");
+  if (!rows.length) { el.innerHTML = U.empty("Sem mudanças regulatórias no escopo.", "", "○"); return; }
+  el.innerHTML = rows.map(r =>
+    `<div class="exrow" data-id="${U.esc(r.id)}">
+       <span class="ent" style="min-width:180px">${U.esc(r.domain || "Regulação")}</span>
+       <span class="ttl">${r.blast} setor(es): ${U.esc((r.affected_industries || []).join(", "))}</span>
+       ${r.days_to_deadline != null ? `<span class="dt">${r.days_to_deadline}d p/ prazo</span>` : ""}
+       ${r.threat_score != null ? U.heat(r.threat_score) : ""}
+     </div>`).join("");
+  el.querySelectorAll(".exrow").forEach(row =>
+    row.addEventListener("click", () => inspect(row.getAttribute("data-id"))));
+}
+
+const HZ = [["imediato", "Imediato"], ["30d", "30 dias"], ["90d", "90 dias"], ["estrategico", "Estratégico"]];
+function renderRecs(recs) {
+  const el = document.getElementById("recs");
+  if (!recs.length) { el.innerHTML = U.empty("Sem ações recomendadas no escopo.", "", "○"); return; }
+  el.innerHTML = `<div class="horizons">` + HZ.map(([key, label]) => {
+    const items = recs.filter(r => r.horizon === key);
+    return `<div class="hz"><h3>${label}</h3>` + (items.length ? items.map(r =>
+      `<div class="rec">
+         <div class="rec-t">${U.esc(r.text)}</div>
+         <div class="rec-a">→ ${U.esc(r.action)}${r.evidence_id ? ` · <a href="#" data-ev="${U.esc(r.evidence_id)}">evidência</a>` : ""}</div>
+         <div class="cap"><button disabled title="captura chega com o backend de decisão">Aprovar</button>
+           <button disabled>Rejeitar</button></div>
+       </div>`).join("") : `<div class="hd-note" style="padding:4px 0">—</div>`) + `</div>`;
+  }).join("") + `</div>`;
+  el.querySelectorAll("a[data-ev]").forEach(a =>
+    a.addEventListener("click", (e) => { e.preventDefault(); inspect(a.getAttribute("data-ev")); }));
+}
+
+// --- drill-down -----------------------------------------------------------
+function inspect(id) {
+  const c = BYID[id];
+  document.getElementById("drTitle").textContent =
+    (c && (c.entity_label || c.subject_label || c.entity)) || "Detalhe";
+  if (!c) {
+    document.getElementById("drBody").innerHTML = U.empty("Sem cartão citável", `id: ${id || "—"}`, "○");
+  } else {
+    const model = U.citationModel(c);
+    document.getElementById("drBody").innerHTML =
+      `<div class="callout">${U.linkifyNarrative(c.narrative || "", model)}${U.citationFooter(model)}</div>`;
+  }
+  openDrawer();
+}
+function openDrawer() {
+  document.getElementById("drawer").setAttribute("aria-hidden", "false");
+  document.getElementById("scrim").classList.add("on");
+  document.getElementById("drawer").classList.add("on");
+}
+function closeDrawer() {
+  document.getElementById("drawer").setAttribute("aria-hidden", "true");
+  document.getElementById("scrim").classList.remove("on");
+  document.getElementById("drawer").classList.remove("on");
+}
+</script>
+</body>
+</html>

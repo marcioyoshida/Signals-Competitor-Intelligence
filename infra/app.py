@@ -498,7 +498,8 @@ class OncaPrototypeStack(Stack):
                 '  if (key.length > 1 && key.charAt(key.length - 1) === "/") {\n'
                 "    key = key.substring(0, key.length - 1);\n"
                 "  }\n"
-                '  if (routes[key]) { r.uri = "/v2/" + routes[key] + "/index.html"; }\n'
+                '  if (key === "/exec" || key === "/executivo") { r.uri = "/v3/index.html"; }\n'
+                '  else if (routes[key]) { r.uri = "/v2/" + routes[key] + "/index.html"; }\n'
                 "  // Generic directory-index for S3-served paths so a raw trailing-slash URL\n"
                 "  // (e.g. /v2/admin/, /entry/) resolves to its index.html object instead of\n"
                 "  // 403-ing on a nonexistent 'directory' key. /api/* is Lambda-backed — never\n"
@@ -721,6 +722,8 @@ class OncaPrototypeStack(Stack):
                 "/v2/app.css",
                 "/v2/app.js",
                 "/v2/context.js",
+                # v3 executive dashboard (ADR 021) — clean route /exec.
+                "/v3/index.html",
             ],
             prune=False,
         )

@@ -1324,6 +1324,15 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     except Exception as exc:  # pragma: no cover - best-effort, read-only
         print(f"Warning: integrity audit skipped: {exc}")
         feed["integrity"] = {"findings": [], "counts": {}, "total": 0}
+    # ADR 021 §D/§G: the per-officer executive block (read-track: CSO), industry-scoped.
+    # Derived from the feed above — no new data; best-effort so a failure never blocks publish.
+    try:
+        from src.synth import executive
+
+        feed["executive"] = executive.build_executive(feed)
+    except Exception as exc:  # pragma: no cover - best-effort, read-only
+        print(f"Warning: executive block skipped: {exc}")
+        feed["executive"] = {"officers": [], "cso": {}}
     # ADR 019 Phase 3b — vertical feed scoping: a sectorial deployment publishes ONLY its
     # own vertical's industries. financial-services (default) spans the whole taxonomy →
     # vertical_industries is None → no scoping, so Onça's feed is unchanged (non-breaking).
