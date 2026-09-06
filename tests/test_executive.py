@@ -93,6 +93,30 @@ def test_cro_impact_sorts_by_blast_and_surfaces_changes():
     assert cro["panels"]["changes"] and cro["panels"]["changes"][0]["n_changes"] == 2
 
 
+def test_cro_solvency_panel_and_weak_recommendation():
+    feed = _feed()
+    feed["industry_options"] = [{"slug": "asset-management", "label": "Asset Mgmt"},
+                                {"slug": "investment-banking", "label": "IB"}]
+    feed["entities"] = [
+        {"entity": "xp", "label": "XP", "industries": ["asset-management"],
+         "soundness": {"indice_basileia": 11.93, "capital_nivel_i": 10.01, "capital_principal": 7.17,
+                       "band": "atenção", "base_date": 202603}},
+        {"entity": "btg", "label": "BTG", "industries": ["investment-banking"],
+         "soundness": {"indice_basileia": 15.91, "capital_nivel_i": 12.44, "capital_principal": 11.36,
+                       "band": "sólido", "base_date": 202603}},
+        {"entity": "noone", "label": "Sem dado"},  # no soundness → excluded
+    ]
+    cro = executive.build_executive(feed)["cro"]
+    sv = cro["panels"]["solvency"]
+    assert [r["entity"] for r in sv] == ["xp", "btg"]           # weakest (lowest Basileia) first
+    assert sv[0]["band"] == "atenção" and sv[0]["capital_principal"] == 7.17
+    # a weak competitor raises an immediate CRO recommendation
+    assert any("Solidez" in r["text"] and "XP" in r["text"] for r in cro["panels"]["recommendations"])
+    # per-sector aggregate carries the min Basileia + weak count
+    am = cro["by_industry"]["asset-management"]
+    assert am["min_basileia"] == 11.93 and am["n_weak_solvency"] == 1
+
+
 def test_cco_risk_register_and_reputation():
     cco = executive.build_executive(_feed())["cco"]
     assert cco["by_industry"]["__all__"]["n_integrity"] == 2

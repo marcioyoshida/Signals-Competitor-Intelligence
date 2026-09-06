@@ -221,9 +221,38 @@ def _reg_row(c: dict[str, Any]) -> dict[str, Any]:
             "change": cr.get("change"), "impact": cr.get("impact")}
 
 
+_WEAK_BANDS = ("frágil", "atenção")
+
+
+def _solvency_rows(feed: dict[str, Any]) -> list[dict[str, Any]]:
+    """Per-entity prudential solvency (ADR 022 Tier A) from feed.entities[].soundness, weakest
+    (lowest Índice de Basileia) first — the CRO's competitor-soundness view."""
+    labels = _labels(feed)
+    rows: list[dict[str, Any]] = []
+    for e in (feed.get("entities") or []):
+        s = e.get("soundness") or {}
+        if s.get("indice_basileia") is None:
+            continue
+        rows.append({
+            "entity": e.get("entity"),
+            "label": e.get("label") or labels.get(e.get("entity")) or e.get("entity"),
+            "indice_basileia": s.get("indice_basileia"),
+            "capital_nivel_i": s.get("capital_nivel_i"),
+            "capital_principal": s.get("capital_principal"),
+            "razao_alavancagem": s.get("razao_alavancagem"),
+            "band": s.get("band"),
+            "base_date": s.get("base_date"),
+            "industries": e.get("industries") or _industries_of(feed, e.get("entity")),
+        })
+    rows.sort(key=lambda r: r["indice_basileia"])
+    return rows
+
+
 # --- CRO (regulator) ------------------------------------------------------------------
 def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     reg = ctx["reg_cards"]
+    solvency = _solvency_rows(feed)
+    weak_solvency = [r for r in solvency if r.get("band") in _WEAK_BANDS]
     timeline = sorted(reg, key=lambda c: str(c.get("date") or ""), reverse=True)
     impact = sorted((c for c in reg if c.get("change_record")),
                     key=lambda c: (c.get("change_record") or {}).get("blast_radius", {}).get("score", 0),
@@ -235,11 +264,15 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     def agg(slug):
         sr = [c for c in reg if _in_industry(c, slug)]
         blasts = [len(c.get("affected_industries") or []) for c in sr]
+        ss = [r for r in solvency if slug in (r.get("industries") or [])]
         return {"n_reg": len(sr),
                 "reg_threat": round(sum(_threat(c) for c in sr) / len(sr), 1) if sr else 0.0,
                 "n_changes": sum(1 for c in sr if (c.get("n_changes") or 0) > 0),
                 "n_deadlines": sum(1 for c in sr if c.get("days_to_deadline") is not None),
-                "max_blast": max(blasts) if blasts else 0}
+                "max_blast": max(blasts) if blasts else 0,
+                # ADR 022 Phase 4: prudential solvency of the sector's tracked competitors.
+                "min_basileia": min((r["indice_basileia"] for r in ss), default=None),
+                "n_weak_solvency": sum(1 for r in ss if r.get("band") in _WEAK_BANDS)}
 
     recs = []
     if impact:
@@ -252,11 +285,19 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         recs.append(_rec("30d", f"Prazo em {r.get('days_to_deadline')}d — {r.get('domain') or 'regulação'}",
                          "open_watch", officer="cro", evidence_id=r.get("id"),
                          industries=r.get("affected_industries") or []))
+    if weak_solvency:
+        w = weak_solvency[0]
+        recs.append(_rec("imediato",
+                         f"Solidez sob {w['band']} — {w['label']} (Basileia {w['indice_basileia']}%)",
+                         "open_watch", officer="cro", evidence_id=w.get("entity"),
+                         industries=w.get("industries") or []))
     return {"by_industry": _by_industry(ctx["sectors"], agg), "panels": {
         "timeline": [_reg_row(c) for c in timeline[:30]],
         "impact": [_reg_row(c) for c in impact[:20]],
         "deadlines": [_reg_row(c) for c in deadlines[:20]],
         "changes": [{**_reg_row(c), "changes": (c.get("changes") or [])[:6]} for c in changes[:20]],
+        # ADR 022 Phase 4: prudential solvency (Índice de Basileia et al.), weakest first.
+        "solvency": solvency[:25],
         "recommendations": recs,
     }}
 
