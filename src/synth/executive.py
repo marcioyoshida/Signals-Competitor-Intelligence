@@ -571,11 +571,17 @@ def build_cpo(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         c = solv_cov.get(s)
         return round(100 * c["with_soundness"] / c["tracked"]) if c and c["tracked"] else None
 
+    # Only sectors where prudential soundness APPLIES. A non-prudential sector (betting/funds/VC has
+    # no Índice de Basileia) shows 0% — or a misleading low % from a single outlier institution
+    # mis-clustered into it (e.g. one bank arm tagged into agri-funds). We ingest the whole IF.data
+    # universe, so applicability = a CLUSTER of regulated institutions (≥2 with Basileia); anything
+    # less is excluded rather than shown as a false coverage "gap".
+    _PRUDENTIAL_MIN = 2
     soundness_coverage = sorted(
         [{"slug": s, "label": (by_slug.get(s) or {}).get("label", s),
           "tracked": c["tracked"], "with_soundness": c["with_soundness"],
           "with_pilar3": c["with_pilar3"], "coverage_pct": _cov_pct(s),
-          "industries": [s]} for s, c in solv_cov.items()],
+          "industries": [s]} for s, c in solv_cov.items() if c["with_soundness"] >= _PRUDENTIAL_MIN],
         key=lambda r: (r["coverage_pct"] if r["coverage_pct"] is not None else 999))
 
     def agg(slug):
