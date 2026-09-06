@@ -259,9 +259,19 @@ their own schedule, matched to the monthly balancete release.
    base-date probe, 3-try `_get`, `conglomerates_only` bounds resolution to the ~567 `- PRUDENCIAL`
    rows) after a hang on the flaky endpoint. Refresh is Phase 3's job (monthly pipeline) — quarterly
    data is stable until the next quarter publishes.
-2. **Tier B — monthly balancete trajectory.** Ingest the monthly COSIF balancete (doc 4010), map
-   the account→line set (crédito, PDD, depósitos, PL, liquidez), append one **`series[]`** point per
-   month; validate the overlap month against Tier A. Feeds `feature_store` / `longitudinal`.
+2. **Tier B — monthly balancete trajectory. SHIPPED + LIVE (2026-09-06).** `src/ingest/
+   bcb_balancete.py` reads BCB's monthly bulk balancete CSV (doc 4010,
+   `.../cosif/Bancos/{YYYYMM}BANCOS.csv.zip`; `;`/latin-1/decimal comma) with a **pinned COSIF
+   account→line map** (crédito 1600000007, depósitos 4100000009, PL 6000000004, disponibilidades
+   1100000002, PDD 1899600005+1899900004 — the map is cited in-store), resolves the institution name
+   to a tracked entity, and **appends one point per month** to a durable `balancete/index.json`
+   `series[]` (append-only; a stored `Índice de Imobilização`-style liquidity proxy noted as NOT the
+   LCR). `trajectory()` = latest + MoM % per line. Runs as the **BalanceteTask** (2nd task on
+   `OncaFinancialsPipeline`, `OncaBalancete` Lambda 1024 MB/10 min). 5 tests (958 green). Live store:
+   **69 entities**, 3 months backfilled (202604–202606) → real MoM (e.g. Bradesco PDD −8.9%, BTG
+   depósitos +6.3%). NB IF.data is quarterly-only (verified) so this is a genuinely separate monthly
+   source; a `{"months":[…]}` handler override backfills history. **Feeds `feature_store`/
+   `longitudinal` + the Phase-4 slope firing = remaining wiring** (store is live and accumulating).
 3. **`OncaFinancialsPipeline` on a monthly EventBridge cron — SHIPPED + LIVE (2026-09-06,
    `dd468ff`).** A dedicated `OncaFinancials` Lambda (`bcb_soundness.lambda_handler`, 1024 MB, digests
    RW + entities read) → a `OncaFinancialsPipeline` Step Functions state machine (SoundnessTask +
@@ -291,6 +301,18 @@ their own schedule, matched to the monthly balancete release.
    DLC Batch Transform — this environment has no usable docker and a zip Lambda can't hold
    torch+model (~2 GB). The module is written to be that task's handler body; the live store was
    populated via a one-shot local FinBERT run.
+
+   **Update (2026-09-06) — automation deployed; endpoint provisioning blocked in-env.** The automated
+   task is now LIVE: `financial_tone.run/lambda_handler` + `sagemaker_score_fn()` invoke a
+   scale-to-zero SageMaker HuggingFace-DLC endpoint (env `ONCA_FINBERT_ENDPOINT`); wired as
+   **ToneTask**, the 3rd task on `OncaFinancialsPipeline` (soundness→balancete→tone). With no endpoint
+   set it **no-ops gracefully** (the local-computed shadow store stands — never fabricates tone); the
+   full 3-task pipeline runs green. **The endpoint itself was NOT provisioned here**: the SageMaker
+   SDK can't install on Python 3.14 (native `python-rapidjson` wheel fails) and hand-resolving the
+   DLC image URI is too fragile to do safely — no endpoint/model created (no orphaned cost; only an
+   inert `OncaSageMakerFinBERT` IAM role remains as the prereq). Completing it = a ~15-line
+   HuggingFace-SDK serverless deploy from a Py≤3.12 env, then set `ONCA_FINBERT_ENDPOINT` on the
+   ToneTask Lambda. Shadow either way.
 6. Pilar 3 / risk-report PDF ingest → existing synth + KB (grounded, cited); officer-retrievable.
 
 ## Revision note
