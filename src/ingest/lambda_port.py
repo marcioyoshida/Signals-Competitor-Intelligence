@@ -86,6 +86,7 @@ def _ingest_deadline(context: Any) -> float:
 from src.ingest import (
     bcb_autorizacoes,
     bcb_ifdata,
+    bcb_soundness,
     bcb_juros,
     bcb_macro,
     bcb_normativos,
@@ -572,6 +573,30 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
         market = []
         print(f"Warning: IF.data market fetch failed: {exc}")
+
+    # ADR 022 Tier A — prudential SOLVENCY (Índice de Basileia et al.) from IF.data Relatório 5.
+    # Gated OFF by default: the ADR §4 home for this quarterly data is the separate MONTHLY
+    # OncaFinancialsPipeline (Phase 3), not this 3×/day cycle. When enabled it writes the durable
+    # soundness/index.json the feed_builder already reads (harmless/no-op when the quarter is
+    # unchanged). Best-effort — a failure never touches the rest of the ingest.
+    if os.environ.get("ONCA_SOUNDNESS", "").lower() == "true":
+        try:
+            with _source_budget("prudential solvency", deadline, per_source):
+                bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
+                if bucket:
+                    from src.synth.entities import resolve_entities
+
+                    base_date = bcb_soundness.latest_base_date()
+                    rows = bcb_soundness.fetch_capital(base_date)
+                    names = bcb_soundness.fetch_institution_names(base_date)
+                    solvency = bcb_soundness.extract_solvency(rows)
+                    recs = bcb_soundness.map_to_entities(
+                        solvency, names, resolver=resolve_entities, base_date=base_date
+                    )
+                    if recs:
+                        bcb_soundness.update_store(recs, bucket)
+        except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
+            print(f"Warning: prudential solvency fetch failed: {exc}")
 
     # New entrants — authorized-entities registry (seed suppressed on first run).
     authorized: list[dict[str, Any]] = []

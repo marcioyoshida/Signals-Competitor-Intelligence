@@ -430,6 +430,7 @@ def build_feed(
     reputation: list[dict[str, Any]] | None = None,
     financials: list[dict[str, Any]] | None = None,
     market_share: dict[str, float] | None = None,
+    soundness: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Pure aggregation: narratives -> feed payload. No I/O.
 
@@ -483,6 +484,7 @@ def build_feed(
 
     imap = industry_map or {}
     share_map = market_share or {}
+    soundness_map = soundness or {}
     entities: list[dict[str, Any]] = []
     for rec in by_entity.values():
         timeline = [rec["by_date"][d] for d in sorted(rec["by_date"])]
@@ -497,6 +499,9 @@ def build_feed(
                 # ADR 015 §3: IF.data market share (%) if the entity resolved to an
                 # IF.data row, else None — never an invented number.
                 "market_share_pct": share_map.get(rec["entity"]),
+                # ADR 022 Tier A: BCB prudential solvency (Índice de Basileia et al.,
+                # + band) if the entity resolved to a capital-report row, else None.
+                "soundness": soundness_map.get(rec["entity"]),
                 "total": sum(t["count"] for t in timeline),
                 # industry slugs this entity belongs to — lets the dashboard group
                 # the entity monitor under each industry (fused coverage panel).
@@ -1069,6 +1074,18 @@ def _load_market_share(digests_bucket: str) -> dict[str, float]:
         return {}
 
 
+def _load_soundness(digests_bucket: str) -> dict[str, dict[str, Any]]:
+    """Read the prudential-solvency store (ADR 022 Tier A) as {entity_id: {basileia,...,band}},
+    best-effort. {} when absent so entities emit soundness=null."""
+    try:
+        from src.ingest import bcb_soundness
+
+        return bcb_soundness.soundness_by_entity(bcb_soundness.load_index(digests_bucket))
+    except Exception as exc:  # pragma: no cover - best-effort, read-only
+        print(f"Warning: load prudential-solvency store failed: {exc}")
+        return {}
+
+
 def _load_coverage_gaps(digests_bucket: str) -> list[dict[str, Any]]:
     """Read the coverage-gap store (ADR-014), best-effort. [] if absent."""
     try:
@@ -1314,6 +1331,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         reputation=_load_reputation(digests_bucket),
         financials=_load_financials(digests_bucket),
         market_share=_load_market_share(digests_bucket),
+        soundness=_load_soundness(digests_bucket),
     )
     # ADR 018 Phase 3: continuous integrity audit over the registry + this feed —
     # operator-facing findings (scoped OUT of the entry/tenant slices below).
