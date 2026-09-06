@@ -383,8 +383,16 @@ inadimplência/NPL (#9) — the highest-value single number, named in §1 and st
 product-mix intelligence from carteira composition (#11).
 
 ### Recommended sequencing (this addendum drives the next builds)
-1. **Tier 1 — quick wins (trivial, data in hand) → CSO financial axis:** ROE/ROA, LDR, leverage,
-   capital headroom, share-by-metric. **← IN PROGRESS.**
+1. **Tier 1 — CSO financial axis. SHIPPED + LIVE (2026-09-06).** `src/ingest/bcb_fundamentals.py`
+   (one IF.data Rel. 1 fetch) → ROE/ROA (annualised, YTD-aware), alavancagem, crédito÷captações,
+   capital headroom, share of crédito/lucro → `fundamentals/index.json` (runs in the monthly
+   OncaFinancials Lambda, folded into the soundness handler). `feed_builder` joins
+   `entities[].fundamentals`; `build_cso` adds a "Força financeira dos concorrentes" panel +
+   avg_roe/n_negative_roe aggregates + two recs (profitability leader as benchmark; loss-maker as
+   fragility thesis); v3 CSO board renders it. Live (122 entities): Itaú 21% of sector profit, XP
+   ROE −1.2% (weak on a 3rd axis). +5 tests (970 green). **Known edge:** insurers appear via their
+   bank arm with a tiny IF.data asset base → an inflated ROA (e.g. SulAmérica) — labelled inference;
+   a per-metric sanity guard is a follow-up.
 2. **Tier 2 — Inadimplência/NPL (#9)** via IF.data Rel. 8 → the marquee CRO addition.
 3. **Tier 3 — Eficiência + custo de crédito (#6/#8)** from the balancete P&L (with YTD handling).
 4. **Later/optional:** composite fragility (#16), valuation (#15), tone-vs-numbers (#17).
