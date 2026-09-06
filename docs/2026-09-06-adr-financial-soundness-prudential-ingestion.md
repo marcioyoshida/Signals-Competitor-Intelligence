@@ -302,17 +302,21 @@ their own schedule, matched to the monthly balancete release.
    torch+model (~2 GB). The module is written to be that task's handler body; the live store was
    populated via a one-shot local FinBERT run.
 
-   **Update (2026-09-06) — automation deployed; endpoint provisioning blocked in-env.** The automated
-   task is now LIVE: `financial_tone.run/lambda_handler` + `sagemaker_score_fn()` invoke a
-   scale-to-zero SageMaker HuggingFace-DLC endpoint (env `ONCA_FINBERT_ENDPOINT`); wired as
-   **ToneTask**, the 3rd task on `OncaFinancialsPipeline` (soundness→balancete→tone). With no endpoint
-   set it **no-ops gracefully** (the local-computed shadow store stands — never fabricates tone); the
-   full 3-task pipeline runs green. **The endpoint itself was NOT provisioned here**: the SageMaker
-   SDK can't install on Python 3.14 (native `python-rapidjson` wheel fails) and hand-resolving the
-   DLC image URI is too fragile to do safely — no endpoint/model created (no orphaned cost; only an
-   inert `OncaSageMakerFinBERT` IAM role remains as the prereq). Completing it = a ~15-line
-   HuggingFace-SDK serverless deploy from a Py≤3.12 env, then set `ONCA_FINBERT_ENDPOINT` on the
-   ToneTask Lambda. Shadow either way.
+   **Update (2026-09-06) — FULLY REALIZED (automation + endpoint LIVE).** The FinBERT-PT-BR endpoint
+   is provisioned and the automated compute runs end-to-end. `financial_tone.run/lambda_handler` +
+   `sagemaker_score_fn()` invoke a **scale-to-zero SageMaker HuggingFace-DLC Serverless Inference
+   endpoint** (`onca-finbert-ptbr`, 3072 MB — no idle cost, no docker) running
+   `lucas-leme/FinBERT-PT-BR`; wired as **ToneTask** (3rd on `OncaFinancialsPipeline`,
+   soundness→balancete→tone), `ONCA_FINBERT_ENDPOINT` set via CDK. **Verified live:** the full 3-task
+   pipeline runs green and `financial_tone/index.json` = **122 entities computed by FinBERT via the
+   endpoint** (tracks the band: frágil ≈ −0.38, sólido ≈ +0.61). Still **shadow** — nothing surfaces
+   it. Reproducible via `scripts/deploy_finbert_endpoint.py`.
+
+   *The earlier blocker, resolved:* it was never a Python-3.14 incompatibility — the SageMaker SDK's
+   transitive `python-rapidjson` simply had no cp314 wheel and compiled from source needing `Python.h`
+   (fixed by extracting the `python3.14-dev` .deb + `CPLUS_INCLUDE_PATH`, no sudo). And the deploy API
+   needs **SageMaker SDK v2** (`pip install "sagemaker<3"` — v3 dropped `image_uris`/`HuggingFaceModel`).
+   Role: `OncaSageMakerFinBERT`.
 6. Pilar 3 / risk-report PDF ingest → existing synth + KB (grounded, cited); officer-retrievable.
 
 ## Revision note
