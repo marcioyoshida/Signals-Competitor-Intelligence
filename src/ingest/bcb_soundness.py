@@ -50,15 +50,21 @@ METRIC_COLUMNS: dict[str, str] = {
 _PRUDENCIAL_SUFFIX = re.compile(r"\s*-\s*PRUDENCIAL\s*$", re.I)
 
 
-def _get(url: str, *, tries: int = 6, timeout: int = 180) -> list[dict[str, Any]]:
-    """Robust IF.data GET: the OData service throws transient 500s and sometimes wraps the JSON
-    body in ``/* ... */`` — retry with backoff and unwrap before parsing."""
+def _get(url: str, *, tries: int = 3, timeout: int = 90) -> list[dict[str, Any]]:
+    """IF.data GET, fast-failing: the OData service throws transient 500s and sometimes wraps the
+    JSON body in ``/* ... */``. Retry a FEW times with a short backoff (a blocking network call the
+    per-source budget can't interrupt, so keep the worst case small) and unwrap before parsing."""
     last = ""
     for i in range(tries):
-        resp = requests.get(url, timeout=timeout, headers={"User-Agent": "Mozilla/5.0"})
+        try:
+            resp = requests.get(url, timeout=timeout, headers={"User-Agent": "Mozilla/5.0"})
+        except requests.RequestException as exc:  # pragma: no cover - network
+            last = str(exc)
+            time.sleep(1 + i)
+            continue
         if resp.status_code != 200:
             last = f"HTTP {resp.status_code}"
-            time.sleep(2 + 2 * i)
+            time.sleep(1 + i)
             continue
         body = resp.text.strip()
         if body.startswith("/*"):
@@ -68,26 +74,33 @@ def _get(url: str, *, tries: int = 6, timeout: int = 180) -> list[dict[str, Any]
         body = body.strip()
         if not body:
             last = "empty body"
-            time.sleep(2 + 2 * i)
+            time.sleep(1 + i)
             continue
         return json.loads(body).get("value", [])
     raise requests.RequestException(f"IF.data capital fetch failed after {tries} ({last})")
 
 
-def fetch_capital(base_date: int) -> list[dict[str, Any]]:
-    """Long-format capital rows (CodInst, NomeColuna, Saldo) for a base date."""
+def _capital_url(base_date: int, *, top: int | None = None) -> str:
     url = (
         f"{BASE}/IfDataValores(AnoMes=@A,TipoInstituicao=@T,Relatorio=@R)"
         f"?@A={base_date}&@T={TIPO_INSTITUICAO}&@R='{RELATORIO_CAPITAL}'&$format=json"
     )
-    return _get(url)
+    return f"{url}&$top={top}" if top else url
+
+
+def fetch_capital(base_date: int) -> list[dict[str, Any]]:
+    """Long-format capital rows (CodInst, NomeColuna, Saldo) for a base date."""
+    return _get(_capital_url(base_date))
 
 
 def latest_base_date() -> int:
-    """Most recent quarter for which the capital report has data (YYYYMM)."""
+    """Most recent quarter for which the capital report has data (YYYYMM).
+
+    Probes with ``$top=1`` (cheap) rather than pulling the whole 33k-row report per candidate, so a
+    flaky endpoint can't turn base-date discovery into a multi-minute retry storm."""
     for base_date in (202603, 202512, 202509, 202506, 202503, 202412):
         try:
-            if fetch_capital(base_date):
+            if _get(_capital_url(base_date, top=1), tries=2):
                 return base_date
         except requests.RequestException:
             continue
@@ -131,15 +144,22 @@ def map_to_entities(
     resolver: Callable[[dict[str, Any]], list[str]],
     base_date: int | None = None,
     today: dt.date | None = None,
+    conglomerates_only: bool = True,
 ) -> list[dict[str, Any]]:
     """Resolve each capital-report institution (``'<BRAND> - PRUDENCIAL'``) to a tracked entity and
     emit one solvency record per entity — the highest Basileia if an entity resolves from more than
-    one prudential code."""
+    one prudential code.
+
+    `conglomerates_only` (default True) resolves ONLY the prudential-conglomerate rows (name ends
+    ``- PRUDENCIAL``) — the conglomerate-level solvency view, and it keeps the resolver call count
+    bounded (~230 not ~1300+) so the source stays inside its ingest budget."""
     today = today or dt.date.today()
     best: dict[str, dict[str, Any]] = {}
     for code, metrics in solvency.items():
         raw_name = names.get(code)
         if not raw_name or "indice_basileia" not in metrics:
+            continue
+        if conglomerates_only and not _PRUDENCIAL_SUFFIX.search(raw_name):
             continue
         brand = _PRUDENCIAL_SUFFIX.sub("", raw_name).strip()
         try:
