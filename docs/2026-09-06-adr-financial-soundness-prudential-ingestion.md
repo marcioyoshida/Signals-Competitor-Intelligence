@@ -72,25 +72,38 @@ conflict with accepted ADRs; the third (FinBERT) is a **good idea placed in the 
 
 ### 1. A prudential-soundness ingester — `src/ingest/bcb_soundness.py`
 
-Not a new Lambda. A new source under the ADR-019 registry, run inside the existing
-`structured` ingest branch of the parallel fan-out.
+Not a new Lambda. A new source under the ADR-019 registry. **Two complementary tiers, at their
+own native cadences** — a quarterly *level* and a monthly *trajectory*:
 
-- **Source.** The **same Olinda OData service** `bcb_ifdata` already calls — the prudential
-  relatórios are just different `Relatorio` codes on that client (Resumo prudencial with
-  Índice de Basileia; carteira-de-crédito relatório with inadimplência). So this is an
-  *extension of an existing integration*, not a new one. COSIF micro-accounts stay a Phase-2
-  option only if the OData relatórios prove insufficient — most soundness ratios are already
-  published pre-computed.
-- **Indicators (all pre-computed by BCB or a ratio of two reported lines — never invented):**
-  `basileia_pct`, `inadimplencia_pct` (NPL), `roe_pct`, `roa_pct`, `liquidez`, plus a coarse
-  `soundness_band` (sólido / atenção / frágil) derived from published regulatory thresholds
-  (e.g. Basileia < 11% → atenção). Every field carries its `_prov` (ADR 018) and the
-  as-of quarter; unresolved institutions stay **null**, never a fabricated number
-  (CLAUDE.md no-unlabeled-proxy rule, same discipline as `bcb_ifdata`).
-- **Resolution + store.** Reuse `bcb_reclamacoes.map_to_entities` name→`entity_id` resolution
-  and persist a durable `soundness/index.json` (same shape as `bcb_ifdata/index.json`), merged
-  into the #7 `financials/index.json` read so a competitor card shows *size, growth AND
-  soundness* in one place. Covers the **non-listed** universe the CVM path cannot reach.
+- **Tier A — quarterly prudential ratios (the level).** The **same Olinda OData service**
+  `bcb_ifdata` already calls — the prudential relatórios are just different `Relatorio` codes on
+  that client (Resumo prudencial with Índice de Basileia; carteira-de-crédito relatório with
+  inadimplência). An *extension of an existing integration*, not a new one. Pre-computed indicators
+  (never invented): `basileia_pct`, `inadimplencia_pct` (NPL), `roe_pct`, `roa_pct`, `liquidez`,
+  plus a coarse `soundness_band` (sólido / atenção / frágil) from published regulatory thresholds
+  (e.g. Basileia < 11% → atenção). Quarterly `as-of`.
+
+- **Tier B — monthly COSIF balancetes (the trajectory).** BCB publishes **monthly balancetes** per
+  institution (COSIF *Balancete Patrimonial Analítico*, documento 4010 — a public "Balancetes e
+  Balanços Patrimoniais" dataset). This is the **granular monthly series** the request asks for:
+  raw account balances every month → **month-over-month deltas** on the lines that move first —
+  carteira de crédito, **provisão/PDD** (loan-loss provisions), depósitos, patrimônio líquido,
+  liquidez — giving a **12-point-a-year trajectory** between the quarterly Basileia snapshots.
+  A rising PDD or deposit outflow shows up **months before** it lands in a quarterly ratio, so
+  Tier B is the **leading indicator** and Tier A the confirmation. Monthly `as-of`. (Balancetes
+  are large numeric files — the heavy structured parse — which is another reason they belong in
+  the separate monthly pipeline of §4, not the 3×/day cycle.)
+
+- **Honesty on ratios.** A ratio computed from two balancete lines is labelled **inference** with
+  its formula + basis; a value BCB publishes pre-computed is labelled reported. Every field carries
+  its `_prov` (ADR 018) and its `as-of` month/quarter; unresolved institutions stay **null**, never
+  a fabricated number (CLAUDE.md no-unlabeled-proxy rule, same discipline as `bcb_ifdata`).
+- **Resolution + store.** Reuse `bcb_reclamacoes.map_to_entities` name→`entity_id` resolution.
+  Persist a durable `soundness/index.json` that holds **both** the latest level (Tier A) **and a
+  monthly `series[]` trajectory (Tier B)** per entity; the monthly series also folds into
+  `feature_store` / the `longitudinal` stage as per-entity rolling features. Merged into the #7
+  `financials/index.json` read so a competitor card shows *size, growth, soundness AND its monthly
+  trajectory* in one place. Covers the **non-listed** universe the CVM path cannot reach.
 
 ### 2. A financial-soundness **belief axis** (ADR 003), not a new inference stage
 
@@ -98,7 +111,10 @@ Soundness is surfaced through the mechanisms that already exist:
 
 - A new axis feeds SWOT/frameworks: a deteriorating Basileia or rising inadimplência at a
   competitor is a **Strength** for us / **Threat** to them (mirrors the crédito-&-inadimplência
-  thematic current already in [`src/synth/thematic.py`](../src/synth/thematic.py)).
+  thematic current already in [`src/synth/thematic.py`](../src/synth/thematic.py)). The **monthly
+  Tier-B trajectory** sharpens this from a static level into a *direction* — the axis fires on a
+  worsening **slope** (three months of rising PDD, steady deposit outflow) as an early warning,
+  not only on a breached quarterly threshold.
 - Surfaced on the **CRO** board (prudential risk of a competitor) and the **CPO** portfolio
   (soundness as a coverage/maturity signal), reusing the ADR-021 officer dashboards — no new
   screen.
@@ -138,24 +154,29 @@ not a narrative stage — the two are complementary and both are kept:
 
 ### 4. Cadence-matched scheduling — a separate **monthly** financial pipeline
 
-BCB *Resultados e Balanços* refresh roughly **monthly** (IF.data quarterly), while the main
-pipeline runs **3×/day** (`OncaPipeline`, three EventBridge cron rules → the state machine).
-Folding §1 + §3 into that daily cadence would **reprocess unchanged data every run** and pay the
-SageMaker Batch Transform cost daily for zero new signal. So they get their own schedule.
+The **monthly balancetes** (Tier B) are the genuinely monthly driver; the quarterly ratios
+(Tier A) overlay on top. The main pipeline runs **3×/day** (`OncaPipeline`, three EventBridge cron
+rules → the state machine). Folding §1 + §3 into that daily cadence would **reprocess unchanged
+data ~90×/month** and pay the SageMaker Batch Transform cost daily for zero new signal. So they get
+their own schedule, matched to the monthly balancete release.
 
 - **A second state machine, `OncaFinancialsPipeline`**, on its **own monthly EventBridge rule**
-  (`Schedule.cron` on a day-of-month a few days after month-end, so BCB has published):
-  `bcb_soundness` ingest → **FinBERT-PT-BR Batch Transform** → tone-feature merge. Isolated so the
-  long SageMaker step lives **outside the daily latency budget** and a financial-run failure never
-  touches the 3×/day cycle.
+  (`Schedule.cron` on a day-of-month a few days after month-end, so BCB has published the balancete):
+  `bcb_soundness` ingest (Tier A quarterly ratios *when a new quarter exists* + Tier B monthly
+  balancete → append the new trajectory point) → **FinBERT-PT-BR Batch Transform** → tone-feature
+  merge. Isolated so the long SageMaker + heavy balancete parse live **outside the daily latency
+  budget** and a financial-run failure never touches the 3×/day cycle.
 - **Decoupled by the same S3-as-contract pattern the pipeline already uses.** The monthly run only
   *writes* durable stores (`soundness/index.json`, the per-entity financial-tone feature into
   `feature_store` / `features/latest.json`); the **daily** pipeline + feed-builder only *read* them.
   No execution coupling — if a monthly run is late or fails, the daily feed keeps serving the
-  last-known stores, each carrying its **as-of quarter** so staleness is visible, never silent.
-- **Cheap, idempotent re-runs.** The monthly job first checks the latest published base date
-  (reusing `bcb_ifdata.latest_base_date`) against what it already processed and **no-ops** if
-  unchanged — so a retry, a manual trigger, or a mis-timed month-end costs almost nothing.
+  last-known stores, each point carrying its **as-of month/quarter** so staleness is visible, never
+  silent, and the trajectory simply shows a gap rather than a fabricated value.
+- **Cheap, idempotent, append-only re-runs.** The monthly job checks the latest published base
+  month (a balancete analogue of `bcb_ifdata.latest_base_date`) against the last point already in
+  `series[]` and **no-ops** if unchanged; when a new month exists it **appends one trajectory
+  point** (never rewrites history). So a retry, a manual trigger, or a mis-timed month-end costs
+  almost nothing, and the monthly series stays a clean audit trail.
 - **Same deploy/orchestration idioms** as `OncaPipeline` (Step Functions + EventBridge cron +
   the ad-hoc "run soon" one-shot Scheduler), so there is no new operational model — just a second,
   slower cadence for slower-moving data.
@@ -176,6 +197,9 @@ SageMaker Batch Transform cost daily for zero new signal. So they get their own 
 - **Cadence-matched cost** (§4): the monthly `OncaFinancialsPipeline` runs the heavy SageMaker step
   ~once a month (matching the data), not ~90×/month — the daily pipeline stays fast and cheap, and
   the two decouple cleanly through durable S3 stores.
+- **Leading-indicator trajectory** (Tier B): a monthly balancete series turns soundness from a
+  quarterly *snapshot* into a *direction* — rising PDD or deposit outflow surfaces months before the
+  quarterly ratio moves, which is the difference between a warning and a post-mortem.
 
 **Cons / risks.**
 - **Entity resolution** is the hard part — thousands of institution names → registry ids; the
@@ -183,6 +207,11 @@ SageMaker Batch Transform cost daily for zero new signal. So they get their own 
   ADR-011 discovery of the unresolved names).
 - **OData relatório shape drift** — BCB has renamed endpoints before (already handled defensively
   in `bcb_ifdata.latest_base_date`); the soundness fetch inherits that fragility and its retries.
+- **Balancete volume + COSIF account mapping** — monthly balancetes are large per-institution
+  numeric files, and the COSIF chart of accounts must be mapped correctly to the trajectory lines
+  (crédito, PDD, depósitos, PL). This is the real work of Tier B: mis-mapping an account silently
+  corrupts the slope. Mitigated by pinning a small, explicit account→line map (cited in-store) and
+  validating the derived monthly total against the quarterly Tier-A figure where they overlap.
 - **Band thresholds are regulatory-judgement**, not fact — `soundness_band` must cite the
   threshold it applied and stay separable from the raw published ratios.
 - **New service class — SageMaker is the first in the stack.** The real cost of §3 is *operational
@@ -205,18 +234,22 @@ SageMaker Batch Transform cost daily for zero new signal. So they get their own 
 
 ## Phasing
 
-1. `bcb_soundness.py` — soundness relatórios off the existing Olinda client → `soundness/index.json`,
-   merged into the financials read + competitor cards (Basileia, inadimplência, ROE, band). Runs
-   first as a one-shot/manual job; the daily feed already reads the store.
-2. **`OncaFinancialsPipeline` on a monthly EventBridge cron** (§4) wrapping step 1 (and step 3),
-   with the base-date no-op guard; decoupled from `OncaPipeline` via the S3 stores.
-3. Soundness **belief axis** → SWOT/frameworks + CRO/CPO panels (consumed by the daily pipeline).
-4. **Financial-tone feature** — FinBERT-PT-BR as the SageMaker Batch Transform step *inside*
+1. **Tier A — quarterly ratios.** `bcb_soundness.py` soundness relatórios off the existing Olinda
+   client → `soundness/index.json` (latest level), merged into the financials read + competitor
+   cards (Basileia, inadimplência, ROE, band). One-shot/manual first; the daily feed already reads
+   the store.
+2. **Tier B — monthly balancete trajectory.** Ingest the monthly COSIF balancete (doc 4010), map
+   the account→line set (crédito, PDD, depósitos, PL, liquidez), append one **`series[]`** point per
+   month; validate the overlap month against Tier A. Feeds `feature_store` / `longitudinal`.
+3. **`OncaFinancialsPipeline` on a monthly EventBridge cron** (§4) wrapping steps 1–2 (and step 5),
+   with the append-only base-month no-op guard; decoupled from `OncaPipeline` via the S3 stores.
+4. Soundness **belief axis** → SWOT/frameworks + CRO/CPO panels, firing on both a breached Tier-A
+   threshold and a worsening Tier-B **slope** (consumed by the daily pipeline).
+5. **Financial-tone feature** — FinBERT-PT-BR as the SageMaker Batch Transform step *inside*
    `OncaFinancialsPipeline` → per-entity tone in `feature_store` → soundness axis + agent grounding.
    Ships **shadow** (flag-gated, computed & stored, not surfaced) until validated against pt-BR
    results-release language and its per-run cost is measured; then flipped on.
-5. Pilar 3 / risk-report PDF ingest → existing synth + KB (grounded, cited); officer-retrievable.
-6. *(Optional)* COSIF micro-account fallback only if the pre-computed relatórios prove insufficient.
+6. Pilar 3 / risk-report PDF ingest → existing synth + KB (grounded, cited); officer-retrievable.
 
 ## Revision note
 
