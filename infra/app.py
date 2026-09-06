@@ -2399,6 +2399,24 @@ class OncaPrototypeStack(Stack):
         digests_bucket.grant_read_write(financials_fn)   # read prior index + write soundness/
         entities_table.grant_read_data(financials_fn)    # resolve_entities reads the registry
 
+        # ADR 022 Tier B — monthly COSIF balancete trajectory (a 2nd task on the same monthly SM).
+        balancete_fn = lambda_.Function(
+            self,
+            "OncaBalancete",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.ingest.bcb_balancete.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.minutes(10),   # downloads + parses a ~10MB monthly CSV
+            memory_size=1024,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+                "ONCA_ENTITIES_TABLE": entities_table.table_name,
+            },
+        )
+        digests_bucket.grant_read_write(balancete_fn)
+        entities_table.grant_read_data(balancete_fn)
+
         soundness_task = sfn_tasks.LambdaInvoke(
             self,
             "SoundnessTask",
@@ -2412,11 +2430,26 @@ class OncaPrototypeStack(Stack):
             interval=Duration.seconds(30),
             backoff_rate=2.0,
         )
+        balancete_task = sfn_tasks.LambdaInvoke(
+            self,
+            "BalanceteTask",
+            lambda_function=balancete_fn,
+            payload=sfn.TaskInput.from_object({}),
+            result_path="$.balancete",
+        )
+        balancete_task.add_retry(
+            errors=["States.ALL"],
+            max_attempts=2,
+            interval=Duration.seconds(30),
+            backoff_rate=2.0,
+        )
         financials_pipeline = sfn.StateMachine(
             self,
             "OncaFinancialsPipeline",
-            definition_body=sfn.DefinitionBody.from_chainable(soundness_task),
-            timeout=Duration.minutes(20),
+            definition_body=sfn.DefinitionBody.from_chainable(
+                soundness_task.next(balancete_task)
+            ),
+            timeout=Duration.minutes(30),
         )
         # Monthly: the 6th at 06:00 UTC (03:00 BRT) — a few days after month-end so BCB has
         # published. The no-op guard skips cheaply on months where the quarter is unchanged.
