@@ -91,6 +91,8 @@
   .rec .cap .done { font-size:var(--fs-micro); color:var(--ok); font-weight:600; }
   .rec .cap .ocsel { font:inherit; font-size:var(--fs-micro); background:var(--surface); color:var(--ink);
     border:1px solid var(--border); border-radius:var(--r-sm); padding:3px var(--s2); }
+  .brd { font-size:var(--fs-micro); color:var(--muted); display:inline-flex; align-items:center; gap:3px; cursor:pointer; }
+  .brd.on { color:var(--primary); font-weight:600; }
   .hz-empty { color:var(--muted); font-size:var(--fs-micro); padding:var(--s2) 0; }
 
   /* Executive Flow — incident → decision trajectory cards */
@@ -373,8 +375,20 @@ async function captureTraj(btn) {
   const card = btn.closest(".traj"); if (card) { card.dataset.did = res.decision_id; card.dataset.off = t.officer; }
   f.insertAdjacentHTML("beforeend", `<span class="done">✓ ${verdict}</span>
     <select data-did="${res.decision_id}" class="ocsel"><option value="pendente">pendente</option>
-      <option value="favoravel">favorável</option><option value="desfavoravel">desfavorável</option><option value="neutro">neutro</option></select>`);
+      <option value="favoravel">favorável</option><option value="desfavoravel">desfavorável</option><option value="neutro">neutro</option></select>${boardHtml()}`);
   f.querySelector(".ocsel").addEventListener("change", (e) => setOutcome(res.decision_id, e.target.value, e.target));
+  wireBoard(f, res.decision_id);
+}
+function boardHtml() { return `<label class="brd" title="Escalado ao board"><input type="checkbox"> board</label>`; }
+function wireBoard(root, did) {
+  const cb = root.querySelector(".brd input");
+  if (cb) cb.addEventListener("change", (e) => setBoard(did, e.target.checked, cb));
+}
+async function setBoard(did, adopted, cb) {
+  cb.disabled = true;
+  const res = await postAct({ intent: "set_board_adoption", officer: OFFICER, args: { decision_id: did, adopted } });
+  cb.disabled = false;
+  if (res && res.decision_id) cb.parentElement.classList.toggle("on", adopted);
 }
 
 // --- Decision-Trust metrics band (§E) — honest, only what the log holds ------
@@ -385,13 +399,13 @@ function metricsBand() {
   const mm = (m.by_officer && m.by_officer[OFFICER]) ? m.by_officer[OFFICER] : m;
   const ets = m.ets;  // partial composite (Feedback+Influence+Engagement, renormalized)
   const [bc, bl] = ets == null ? ["low", "sem dados"] : ets >= 7.6 ? ["ok", "Confiável"] : ets >= 6.1 ? ["warn", "Útil"] : ["high", "Baixa confiança"];
-  const hero = heroGauge("ETS (parcial)", ets == null ? "—" : ets, bandBadge(bc, bl),
+  const hero = heroGauge(m.ets_full ? "ETS (composto)" : "ETS (parcial)", ets == null ? "—" : ets, bandBadge(bc, bl),
     "--" + (bc === "ok" ? "ok" : bc === "warn" ? "warn" : "t-high"), (ets || 0) * 10);
   const c = m.ets_components || {};
   const tilesArr = [tile("Feedback", c.feedback == null ? "—" : c.feedback, "resultado favorável"),
     tile("Influência", c.influence == null ? "—" : c.influence, "com resultado"),
     tile("Engajamento", c.engagement == null ? "—" : c.engagement, `${eng.n_interest || 0} interações`),
-    tile("Decisões", mm.n_decisions, "capturadas")];
+    tile("Board", c.board == null ? "—" : c.board, `${mm.n_board_flagged || 0} escalados`)];
   const note = `<p class="hd-note" style="padding:2px var(--s2) 0;line-height:1.4">${U.esc(m.ets_note || "")} · ${U.esc(m.tdr_note || "")}</p>`;
   // §E intelligence: which entities/sectors draw executive attention (from the engagement rollup).
   const te = eng.top_entities || [], tsec = eng.top_sectors || [];
@@ -403,7 +417,7 @@ function metricsBand() {
           panel("Setores mais abertos", null, "expansões por setor", `<div class="panel__bd--flush">${
             tsec.length ? hbars(tsec.slice(0, 8).map(x => ({ label: (EX.sectors.find(s => s.slug === x.sector) || {}).label || x.sector, value: x.hits, bar: x.hits / (tsec[0].hits || 1) * 100, colorTok: "var(--cat-gold)" }))) : U.empty("Sem sinais de atenção ainda.", "", "○")}</div>`)]))
     : "";
-  return band("Confiança & decisão", "ETS parcial · TDR requer baseline", readout(hero, tilesArr) + note) + interestPanel;
+  return band("Confiança & decisão", (m.ets_full ? "ETS composto" : "ETS parcial") + " · TDR requer baseline", readout(hero, tilesArr) + note) + interestPanel;
 }
 
 // --- Reference / playbook band (§H) — curated baseline per officer ----------
@@ -686,8 +700,9 @@ async function capture(btn) {
   const rcard = cap.closest(".rec"); if (rcard) { rcard.dataset.did = res.decision_id; rcard.dataset.off = OFFICER; }
   cap.innerHTML = `<span class="done">✓ ${verdict}</span><span class="hd-note">resultado:</span>
     <select data-did="${res.decision_id}" class="ocsel"><option value="pendente">pendente</option>
-      <option value="favoravel">favorável</option><option value="desfavoravel">desfavorável</option><option value="neutro">neutro</option></select>`;
+      <option value="favoravel">favorável</option><option value="desfavoravel">desfavorável</option><option value="neutro">neutro</option></select>${boardHtml()}`;
   cap.querySelector(".ocsel").addEventListener("change", (e) => setOutcome(res.decision_id, e.target.value, e.target));
+  wireBoard(cap, res.decision_id);
 }
 async function setOutcome(did, outcome, sel) {
   sel.disabled = true; const res = await postAct({ intent: "set_outcome", officer: OFFICER, args: { decision_id: did, outcome } });

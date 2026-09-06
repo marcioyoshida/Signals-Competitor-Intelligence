@@ -28,6 +28,9 @@ def _slice(decisions: list[dict[str, Any]]) -> dict[str, Any]:
     favorable = sum(1 for d in resolved if d.get("outcome") == "favoravel")
     mix = Counter(d.get("outcome") or "pendente" for d in decisions)
     fav_rate = (favorable / len(resolved)) if resolved else 0.0
+    # Board-adoption: measurable once ANY decision has been board-flagged (True/False set).
+    flagged = [d for d in decisions if d.get("board_at") or d.get("board_adopted") is not None]
+    board_adopted = sum(1 for d in flagged if d.get("board_adopted"))
     return {
         "n_decisions": n,
         "n_approved": approved,
@@ -36,6 +39,8 @@ def _slice(decisions: list[dict[str, Any]]) -> dict[str, Any]:
         "influence_rate": round(len(resolved) / n, 3) if n else 0.0,
         "favorable_rate": round(fav_rate, 3),
         "outcome_mix": {k: mix.get(k, 0) for k in ("favoravel", "desfavoravel", "neutro", "pendente")},
+        "n_board_flagged": len(flagged),
+        "board_rate": round(board_adopted / len(flagged), 3) if flagged else 0.0,
         # measurable ETS input only — 0–10 feedback component; composite deferred (honest).
         "ets_feedback": round(fav_rate * 10, 1) if resolved else None,
     }
@@ -58,10 +63,12 @@ def compute_metrics(decisions: list[dict[str, Any]],
     influence = round(overall["influence_rate"] * 10, 1) if overall["n_decisions"] else None  # 0.25
     n_interest = (engagement or {}).get("n_interest") or 0
     engagement_score = round(min(n_interest / 50.0, 1.0) * 10, 1) if n_interest else None      # 0.20
+    board = round(overall["board_rate"] * 10, 1) if overall["n_board_flagged"] else None       # 0.15
 
-    comps = [(0.40, feedback), (0.25, influence), (0.20, engagement_score)]
+    comps = [(0.40, feedback), (0.25, influence), (0.20, engagement_score), (0.15, board)]
     measured = [(w, v) for w, v in comps if v is not None]
     ets = round(sum(w * v for w, v in measured) / sum(w for w, _ in measured), 1) if measured else None
+    full = len(measured) == 4  # all four components measured ⇒ the FULL composite
 
     by_officer: dict[str, Any] = {}
     for off in ("cso", "cro", "cco", "cpo"):
@@ -76,11 +83,15 @@ def compute_metrics(decisions: list[dict[str, Any]],
     return {
         **overall,
         "ets": ets,
+        "ets_full": full,
         "ets_components": {"feedback": feedback, "influence": influence,
-                           "engagement": engagement_score, "board": None},
-        "ets_note": "parcial (0–10) — média ponderada dos componentes medidos (Feedback 0.40 · "
-                    "Influência 0.25 · Engajamento 0.20), renormalizada; Adoção do board (0.15) "
-                    "ainda não instrumentada.",
+                           "engagement": engagement_score, "board": board},
+        "ets_note": ("ETS composto (0–10): Feedback 0.40 · Influência 0.25 · Engajamento 0.20 · "
+                     "Adoção do board 0.15."
+                     if full else
+                     "ETS parcial (0–10) — média ponderada dos componentes medidos (Feedback 0.40 · "
+                     "Influência 0.25 · Engajamento 0.20 · Adoção do board 0.15), renormalizada aos "
+                     "que já têm sinal."),
         "tdr": None,
         "tdr_note": "requer baseline de tempo-para-decisão por tenant (registrado, não assumido).",
         "by_officer": by_officer,

@@ -105,6 +105,26 @@ def set_outcome(
     return it
 
 
+def set_board_adoption(
+    decision_id: str,
+    adopted: bool,
+    *,
+    actor: str,
+    table: Any | None = None,
+) -> dict[str, Any] | None:
+    """Flag whether a decision was escalated to / adopted by the board — the §E Board-Adoption
+    component of the ETS. Returns the updated item, or None if the decision does not exist."""
+    t = _table(table)
+    it = t.get_item(Key={"pk": f"DECISION#{decision_id}"}).get("Item")
+    if not it:
+        return None
+    it["board_adopted"] = bool(adopted)
+    it["board_at"] = _er._now_iso()
+    it["board_by"] = actor
+    t.put_item(Item=it)
+    return it
+
+
 def append_reference(
     decision_id: str,
     url: str,

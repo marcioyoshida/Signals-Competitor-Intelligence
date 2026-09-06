@@ -396,6 +396,20 @@ def test_record_engagement_applies_and_is_not_journaled(monkeypatch):
     assert "record_engagement" in act_api._NO_JOURNAL
 
 
+def test_set_board_adoption_applies(monkeypatch):
+    _no_journal(monkeypatch)
+    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    from src.synth import decision_log
+    monkeypatch.setattr(decision_log, "set_board_adoption",
+                        lambda did, adopted, **k: {"board_adopted": adopted} if did == "d1" else None)
+    ok = act_api.lambda_handler(_event(
+        {"intent": "set_board_adoption", "args": {"decision_id": "d1", "adopted": True}}), None)
+    assert ok["statusCode"] == 200 and json.loads(ok["body"])["board_adopted"] is True
+    missing = act_api.lambda_handler(_event(
+        {"intent": "set_board_adoption", "args": {"decision_id": "nope"}}), None)
+    assert missing["statusCode"] == 404
+
+
 def test_append_reference_applies(monkeypatch):
     _no_journal(monkeypatch)
     monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)

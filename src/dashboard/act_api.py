@@ -367,6 +367,21 @@ def _act_set_outcome(args: dict[str, Any], actor: str) -> tuple[str, int, dict[s
     return "applied", 200, {"decision_id": did, "decision_outcome": item["outcome"]}
 
 
+def _act_set_board_adoption(args: dict[str, Any], actor: str) -> tuple[str, int, dict[str, Any]]:
+    """apply: flag a decision as escalated to / adopted by the board — the §E Board-Adoption
+    ETS component."""
+    from src.synth import decision_log
+
+    did = str(args.get("decision_id") or "").strip()
+    if not did:
+        return "blocked", 400, {"error": "decision_id required"}
+    adopted = bool(args.get("adopted", True))
+    item = decision_log.set_board_adoption(did, adopted, actor=actor)
+    if item is None:
+        return "noop", 404, {"detail": "decision not found", "decision_id": did}
+    return "applied", 200, {"decision_id": did, "board_adopted": item["board_adopted"]}
+
+
 def _act_append_reference(args: dict[str, Any], actor: str) -> tuple[str, int, dict[str, Any]]:
     """apply: the §H CORS-beacon target — append a consulted first-party source link to a
     decision's evidence trail (feeds the decision's KB precedent). Best-effort, no PII."""
@@ -422,6 +437,7 @@ _CATALOG: dict[str, tuple[str, Callable[..., tuple[str, int, dict[str, Any]]], s
     # ADR 021 §D Step 1 — decision capture (shared across officers)
     "record_decision": (APPLY, _act_record_decision, None),
     "set_outcome": (APPLY, _act_set_outcome, None),
+    "set_board_adoption": (APPLY, _act_set_board_adoption, None),
     # ADR 021 §H — CORS followed-link beacon (shared)
     "append_reference": (APPLY, _act_append_reference, None),
     # ADR 021 §E — engagement telemetry (attention signal)

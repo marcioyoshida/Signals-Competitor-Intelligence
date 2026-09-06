@@ -42,8 +42,19 @@ def test_engagement_folds_into_ets():
     roll = {"n_interest": 25}  # 25/50 → engagement 5.0
     m = dm.compute_metrics([_d("cso", "aprovado", "favoravel")], engagement=roll)
     assert m["ets_components"]["engagement"] == 5.0
-    # ets = (0.40*10 + 0.25*10 + 0.20*5) / 0.85
+    # ets = (0.40*10 + 0.25*10 + 0.20*5) / 0.85 (no board component yet → renormalized)
     assert m["ets"] == round((0.40 * 10 + 0.25 * 10 + 0.20 * 5) / 0.85, 1)
+    assert m["ets_full"] is False
+
+
+def test_board_component_completes_the_full_composite():
+    d = {**_d("cso", "aprovado", "favoravel"), "board_adopted": True, "board_at": "2026-09-05"}
+    m = dm.compute_metrics([d], engagement={"n_interest": 25})
+    assert m["n_board_flagged"] == 1 and m["board_rate"] == 1.0
+    assert m["ets_components"]["board"] == 10.0
+    assert m["ets_full"] is True  # all four components measured
+    assert m["ets"] == round(0.40 * 10 + 0.25 * 10 + 0.20 * 5 + 0.15 * 10, 1) == 9.0
+    assert "composto" in m["ets_note"]
 
 
 def test_per_officer_and_industry_slices():
