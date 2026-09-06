@@ -393,6 +393,17 @@ product-mix intelligence from carteira composition (#11).
    ROE −1.2% (weak on a 3rd axis). +5 tests (970 green). **Known edge:** insurers appear via their
    bank arm with a tiny IF.data asset base → an inflated ROA (e.g. SulAmérica) — labelled inference;
    a per-metric sanity guard is a follow-up.
-2. **Tier 2 — Inadimplência/NPL (#9)** via IF.data Rel. 8 → the marquee CRO addition.
+2. **Tier 2 — Inadimplência/NPL. SHIPPED + LIVE (2026-09-06).** IF.data **Rel. 8** (nível de risco
+   AA–H) is NOT exposed via OData (verified — 0 rows every quarter/tipo), so NPL is computed from
+   **Rel. 11 (PF) + Rel. 13 (PJ)** — each carries a *"Vencido a Partir de 15 Dias"* overdue bucket +
+   portfolio Total: `inadimplência = Σ vencido15+ ÷ Σ total`, with the PF/PJ split (labelled **15+
+   dias**, broader than the 90+ standard). `src/ingest/bcb_inadimplencia.py` → `inadimplencia/index.
+   json` (runs in the monthly OncaFinancials Lambda). Joined onto the **CRO** solvency rows (NPL +
+   PF/PJ + band) with an "Inadimplência elevada" rec (band elevada ≥7%) + per-sector
+   max_npl/n_npl_elevada. The CRO now has the full credit-risk picture per competitor: Basileia
+   (capital) · PDD slope (provisioning trend) · NPL (actual delinquency) · tone. Live (63 entities):
+   Nubank 12.93% elevada, Inter 4.78% atenção, Itaú 1.98% (prime). +5 tests (974 green). **Known
+   edge:** small/atypical credit books yield extreme ratios (e.g. SumUp 40.9%) — inference-labelled,
+   same class as the Tier-1 insurer-ROA edge; a small-book/denominator guard is a shared follow-up.
 3. **Tier 3 — Eficiência + custo de crédito (#6/#8)** from the balancete P&L (with YTD handling).
 4. **Later/optional:** composite fragility (#16), valuation (#15), tone-vs-numbers (#17).
