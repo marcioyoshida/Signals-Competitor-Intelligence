@@ -262,8 +262,15 @@ their own schedule, matched to the monthly balancete release.
 2. **Tier B — monthly balancete trajectory.** Ingest the monthly COSIF balancete (doc 4010), map
    the account→line set (crédito, PDD, depósitos, PL, liquidez), append one **`series[]`** point per
    month; validate the overlap month against Tier A. Feeds `feature_store` / `longitudinal`.
-3. **`OncaFinancialsPipeline` on a monthly EventBridge cron** (§4) wrapping steps 1–2 (and step 5),
-   with the append-only base-month no-op guard; decoupled from `OncaPipeline` via the S3 stores.
+3. **`OncaFinancialsPipeline` on a monthly EventBridge cron — SHIPPED + LIVE (2026-09-06,
+   `dd468ff`).** A dedicated `OncaFinancials` Lambda (`bcb_soundness.lambda_handler`, 1024 MB, digests
+   RW + entities read) → a `OncaFinancialsPipeline` Step Functions state machine (SoundnessTask +
+   retry) → `OncaFinancialsScheduleMonthly` cron (6th, 06:00 UTC / 03:00 BRT, after month-end).
+   Decoupled from `OncaPipeline` purely via S3 (writes `soundness/index.json`, daily feed reads it).
+   **Base-month no-op guard** in `run()` (skip the whole fetch/resolve when the stored quarter ==
+   latest published; `merge()` carries top-level `base_date`; `force=True` bypasses). `cdk deploy`d;
+   verified live — run 1 SUCCEEDED (`ok`, base 202603, 118 mapped), run 2 SUCCEEDED (`noop`, "quarter
+   unchanged"). Wraps steps 1–2 today; step 5 (FinBERT) joins as a second task later.
 4. Soundness **belief axis** → SWOT/frameworks + CRO/CPO panels, firing on both a breached Tier-A
    threshold and a worsening Tier-B **slope** (consumed by the daily pipeline).
 5. **Financial-tone feature** — FinBERT-PT-BR as the SageMaker Batch Transform step *inside*
