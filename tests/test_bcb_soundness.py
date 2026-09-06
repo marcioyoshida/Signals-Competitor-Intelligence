@@ -83,3 +83,35 @@ def test_summarize_weakest_first():
     s = snd.summarize(recs)
     assert s["kind"] == "prudential_solvency" and s["total"] == 2
     assert s["weakest"][0]["entity"] == "xp"   # lowest Basileia first
+
+
+def test_merge_carries_base_date():
+    recs = snd.map_to_entities(snd.extract_solvency(_ROWS), _NAMES, resolver=_resolver, base_date=202603)
+    assert snd.merge(None, recs)["base_date"] == 202603
+    # a later merge whose records omit base_date keeps the prior one
+    idx = snd.merge(snd.merge(None, recs), [{"entity": "xp", "indice_basileia": 12.5}])
+    assert idx["base_date"] == 202603
+
+
+def test_run_noops_when_quarter_unchanged(monkeypatch):
+    monkeypatch.setattr(snd, "latest_base_date", lambda: 202603)
+    monkeypatch.setattr(snd, "load_index", lambda bucket, s3=None: {"base_date": 202603, "count": 5})
+    # fetch must NOT be called on a no-op
+    monkeypatch.setattr(snd, "fetch_capital", lambda b: (_ for _ in ()).throw(AssertionError("fetched")))
+    out = snd.run(bucket="b")
+    assert out["status"] == "noop" and out["base_date"] == 202603 and out["records"] == 5
+
+
+def test_run_fetches_when_quarter_changed(monkeypatch):
+    monkeypatch.setattr(snd, "latest_base_date", lambda: 202603)
+    monkeypatch.setattr(snd, "load_index", lambda bucket, s3=None: {"base_date": 202512, "count": 5})
+    monkeypatch.setattr(snd, "fetch_capital", lambda b: _ROWS)
+    monkeypatch.setattr(snd, "fetch_institution_names", lambda b: _NAMES)
+    monkeypatch.setattr("src.synth.entities.resolve_entities",
+                        lambda item: _resolver(item))
+    captured = {}
+    monkeypatch.setattr(snd, "update_store",
+                        lambda recs, bucket, s3=None, today=None: captured.update(n=len(recs)))
+    out = snd.run(bucket="b")
+    assert out["status"] == "ok" and out["base_date"] == 202603 and out["mapped"] == 2
+    assert captured["n"] == 2

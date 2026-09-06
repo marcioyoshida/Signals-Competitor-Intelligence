@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import os
 import re
 import time
 from typing import Any, Callable, Iterable
@@ -210,7 +211,11 @@ def merge(existing: dict[str, Any] | None, records: list[dict[str, Any]], *,
         eid = r.get("entity")
         if eid:
             store[eid] = r
-    return {"as_of": today.isoformat(), "count": len(store), "records": store}
+    # Carry the base quarter at the top level so the monthly pipeline can no-op cheaply
+    # when the published quarter hasn't changed (falls back to the previous value).
+    base_date = next((r.get("base_date") for r in records if r.get("base_date")),
+                     (existing or {}).get("base_date"))
+    return {"as_of": today.isoformat(), "base_date": base_date, "count": len(store), "records": store}
 
 
 def load_index(bucket: str, *, s3: Any | None = None) -> dict[str, Any]:
@@ -262,18 +267,38 @@ def update_store(records: list[dict[str, Any]], bucket: str, *,
     return {"updated": len(records), "records": merged.get("count", 0)}
 
 
-def run(bucket: str | None = None, *, today: dt.date | None = None) -> dict[str, Any]:
-    """Fetch capital report → extract solvency → resolve → persist. Standalone/scheduled entrypoint."""
+def run(bucket: str | None = None, *, today: dt.date | None = None,
+        force: bool = False, s3: Any | None = None) -> dict[str, Any]:
+    """Fetch capital report → extract solvency → resolve → persist. Standalone/scheduled entrypoint.
+
+    **Base-month no-op guard** (ADR 022 §4): if the store already holds the latest published quarter,
+    skip the whole fetch/resolve — so the monthly pipeline (and any retry) costs almost nothing when
+    the data hasn't changed. `force=True` bypasses it."""
     from src.synth.entities import resolve_entities
 
     base_date = latest_base_date()
+    if bucket and not force:
+        idx = load_index(bucket, s3=s3)
+        if idx.get("base_date") == base_date and idx.get("count"):
+            return {"status": "noop", "base_date": base_date, "reason": "quarter unchanged",
+                    "records": idx.get("count")}
+
     rows = fetch_capital(base_date)
     names = fetch_institution_names(base_date)
     solvency = extract_solvency(rows)
     recs = map_to_entities(solvency, names, resolver=resolve_entities, base_date=base_date, today=today)
     if bucket and recs:
-        update_store(recs, bucket, today=today)
-    return {"rows": len(rows), "institutions": len(solvency), "mapped": len(recs), **summarize(recs)}
+        update_store(recs, bucket, s3=s3, today=today)
+    return {"status": "ok", "base_date": base_date, "rows": len(rows),
+            "institutions": len(solvency), "mapped": len(recs), **summarize(recs)}
+
+
+def lambda_handler(event: dict[str, Any] | None, context: Any) -> dict[str, Any]:
+    """Entry point for the monthly OncaFinancialsPipeline (ADR 022 Phase 3). Reads
+    ONCA_DIGESTS_BUCKET, honours ``{"force": true}`` to bypass the base-month no-op guard."""
+    bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
+    result = run(bucket, force=bool((event or {}).get("force")))
+    return {"statusCode": 200, "body": json.dumps(result, ensure_ascii=False)}
 
 
 if __name__ == "__main__":

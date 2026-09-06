@@ -2375,6 +2375,58 @@ class OncaPrototypeStack(Stack):
             )
             rule.add_target(targets.SfnStateMachine(pipeline))
 
+        # --- ADR 022 Phase 3: OncaFinancialsPipeline (monthly, decoupled) --------------------
+        # Financial-soundness data (Basileia et al.; later the monthly balancete trajectory + the
+        # FinBERT tone Batch Transform) refreshes ~monthly, not 3×/day. It gets its OWN state
+        # machine on a monthly cron so the slow/heavy financial work lives OUTSIDE the daily
+        # latency budget and a financial-run failure never touches the 3×/day cycle. The two
+        # pipelines are decoupled purely through S3: this one WRITES soundness/index.json, the
+        # daily feed_builder READS it. A base-month no-op guard makes re-runs almost free.
+        financials_fn = lambda_.Function(
+            self,
+            "OncaFinancials",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.ingest.bcb_soundness.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.minutes(5),
+            memory_size=1024,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+                "ONCA_ENTITIES_TABLE": entities_table.table_name,
+            },
+        )
+        digests_bucket.grant_read_write(financials_fn)   # read prior index + write soundness/
+        entities_table.grant_read_data(financials_fn)    # resolve_entities reads the registry
+
+        soundness_task = sfn_tasks.LambdaInvoke(
+            self,
+            "SoundnessTask",
+            lambda_function=financials_fn,
+            payload=sfn.TaskInput.from_object({}),
+            result_path="$.soundness",
+        )
+        soundness_task.add_retry(
+            errors=["States.ALL"],
+            max_attempts=2,
+            interval=Duration.seconds(30),
+            backoff_rate=2.0,
+        )
+        financials_pipeline = sfn.StateMachine(
+            self,
+            "OncaFinancialsPipeline",
+            definition_body=sfn.DefinitionBody.from_chainable(soundness_task),
+            timeout=Duration.minutes(20),
+        )
+        # Monthly: the 6th at 06:00 UTC (03:00 BRT) — a few days after month-end so BCB has
+        # published. The no-op guard skips cheaply on months where the quarter is unchanged.
+        events.Rule(
+            self,
+            "OncaFinancialsScheduleMonthly",
+            schedule=events.Schedule.cron(minute="0", hour="6", day="6"),
+            enabled=True,
+        ).add_target(targets.SfnStateMachine(financials_pipeline))
+
         CfnOutput(
             self,
             "DashboardUrl",
