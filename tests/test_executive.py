@@ -342,3 +342,32 @@ def test_build_cso_includes_posture_panel():
     ex = executive.build_executive(feed)
     assert "posture" in ex["cso"]["panels"]
     assert ex["cso"]["panels"]["posture"][0]["entity"] == "itau"
+
+
+# --- SURF-2/3/4/5: framework routing + product-move feed -------------------------
+def test_framework_rows_projects_curated_bullets():
+    feed = {"entity_attrs": {"itau": {"industries": ["banking"]}},
+            "porter": {"itau": [{"dimension": "rivalry", "text": "alta rivalidade", "confidence": 0.7, "status": "active"},
+                                {"dimension": "new_entrants", "text": "fintechs", "confidence": 0.9, "status": "active"},
+                                {"dimension": "x", "text": "retired", "status": "retired"}]}}
+    rows = executive._framework_rows(feed, "porter")
+    assert rows[0]["entity"] == "itau" and rows[0]["industries"] == ["banking"]
+    assert [b["dimension"] for b in rows[0]["bullets"]] == ["new_entrants", "rivalry"]  # conf desc, retired dropped
+
+
+def test_officer_panels_carry_frameworks_and_product_moves():
+    feed = {"dates": ["2026-09-06"],
+            "industry_options": [{"slug": "banking", "label": "Banking"}],
+            "entity_attrs": {"itau": {"industries": ["banking"]}},
+            "feed": [{"id": "c1", "date": "2026-09-06", "lenses": ["ofertas"], "entity": "itau",
+                      "industries": ["banking"], "narrative": "novo cartão"}],
+            "porter": {"itau": [{"dimension": "rivalry", "text": "r", "status": "active"}]},
+            "four_corners": {"itau": [{"dimension": "assumptions", "text": "a", "status": "active"}]},
+            "pestle": {"itau": [{"dimension": "legal", "text": "l", "status": "active"}]},
+            "ansoff": {"itau": [{"dimension": "penetration", "text": "p", "status": "active"}]},
+            "bcg": {"itau": [{"dimension": "star", "text": "s", "status": "active"}]}}
+    ex = executive.build_executive(feed)
+    assert ex["cso"]["panels"]["porter"] and ex["cso"]["panels"]["four_corners"]
+    assert ex["cco"]["panels"]["pestle"]
+    assert ex["cpo"]["panels"]["ansoff"] and ex["cpo"]["panels"]["bcg"]
+    assert ex["cpo"]["panels"]["product_moves"][0]["id"] == "c1"  # ofertas-lens card surfaced

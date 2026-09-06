@@ -207,6 +207,27 @@ def _posture_rows(feed: dict[str, Any]) -> list[dict[str, Any]]:
     return rows
 
 
+def _framework_rows(feed: dict[str, Any], key: str) -> list[dict[str, Any]]:
+    """Route a curated ADR-006 framework belief set (`feed.<key>` = {entity: [bullets]}) into an
+    officer panel: per-entity rows of the vetted, evidence-linked bullets (SURF-2/3/4). Pure
+    re-projection — the frameworks already gather their OWN narrative evidence, no new inference."""
+    fw = feed.get(key) or {}
+    labels = _labels(feed)
+    rows: list[dict[str, Any]] = []
+    for ent, bullets in fw.items():
+        active = [{"dimension": b.get("dimension"), "text": b.get("text"),
+                   "confidence": b.get("confidence")}
+                  for b in (bullets or []) if b.get("status") in (None, "active")]
+        if not active:
+            continue
+        active.sort(key=lambda x: x.get("confidence") or 0, reverse=True)
+        rows.append({"entity": ent,
+                     "label": labels.get(ent) or str(ent).replace("_", " ").title(),
+                     "industries": _industries_of(feed, ent), "bullets": active[:6]})
+    rows.sort(key=lambda r: len(r["bullets"]), reverse=True)
+    return rows
+
+
 def build_cso(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     cards, dates, labels = ctx["cards"], ctx["dates"], ctx["labels"]
     financials = _fundamentals_rows(feed)
@@ -286,6 +307,9 @@ def build_cso(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         "financials": financials[:25],
         # SURF-1: strategic posture — SWOT beliefs + TOWS postures routed to the CSO.
         "posture": _posture_rows(feed)[:24],
+        # SURF-2: competitive frameworks (Porter five-forces + Four Corners) routed to the CSO.
+        "porter": _framework_rows(feed, "porter")[:20],
+        "four_corners": _framework_rows(feed, "four_corners")[:20],
         "recommendations": recs,
     }}
 
@@ -572,6 +596,9 @@ def build_cco(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         "integrity": integrity_rows[:40],
         "risk_register": risk_register[:30],
         "reputation": rep_rows[:30],
+        # SURF-3: PESTLE macro/regulatory environment routed to the CCO (7S dropped — internal,
+        # no external signal to ground it).
+        "pestle": _framework_rows(feed, "pestle")[:20],
         "recommendations": recs,
     }}
 
@@ -833,6 +860,13 @@ def build_cpo(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         "blind_spots": blind_rows[:30],
         "discovery": disc_rows[:40],
         "field_completeness": field_completeness,
+        # SURF-4: growth/portfolio frameworks (Ansoff vectors + BCG quadrant) routed to the CPO.
+        "ansoff": _framework_rows(feed, "ansoff")[:20],
+        "bcg": _framework_rows(feed, "bcg")[:20],
+        # SURF-5: product-move feed — launches/offers (ofertas/produto lens) for the CPO.
+        "product_moves": [_headline(c) for c in sorted(
+            (c for c in ctx["cards"] if set(c.get("lenses") or []) & {"ofertas", "produto"}),
+            key=lambda c: str(c.get("date") or ""), reverse=True)[:24]],
         "soundness_coverage": soundness_coverage,               # ADR 022 (CPO instrumentation angle)
         "source_health": feed.get("source_health") or [],       # R5
         "market_structure": feed.get("market_structure") or {},  # R3

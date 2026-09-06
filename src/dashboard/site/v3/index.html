@@ -352,6 +352,17 @@ function rowsPosture(list) {
       <div style="display:flex;gap:var(--s2);align-items:center"><b style="flex:1;min-width:0">${U.esc(r.label)}</b>${chips}</div>${post}</div>`;
   }).join("") + `</div>`;
 }
+// SURF-2/3/4: generic framework belief renderer (Porter/PESTLE/Ansoff/BCG/Four-Corners).
+function prettyDim(d) { return String(d || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()); }
+function rowsFramework(list) {
+  const rows = (list || []).filter(inSector);
+  if (!rows.length) return U.empty("Sem framework no escopo.", "beliefs vetados (ADR-006)", "○");
+  return `<div class="chart">` + rows.slice(0, 16).map(r =>
+    `<div style="padding:var(--s2) var(--s3)"><b>${U.esc(r.label)}</b>` +
+    (r.bullets || []).slice(0, 4).map(b =>
+      `<div class="hd-note" style="margin-top:2px"><b>${U.esc(prettyDim(b.dimension))}</b> — ${U.esc(b.text || "")}</div>`).join("") +
+    `</div>`).join("") + `</div>`;
+}
 function rowsFinancials(list) {
   list = (list || []).filter(inSector);
   if (!list.length) return U.empty("Sem fundamentos financeiros no escopo.", "", "○");
@@ -798,6 +809,21 @@ function render() {
             panel("Pontos cegos", null, "cross-setor", rowsGap(p.blind_spots))]));
     }
   }
+  // SURF-2/3/4: framework belief bands routed per officer (ADR-006 curated, evidence-linked).
+  if (OFFICER === "cso") board +=
+    band("Cinco forças de Porter", "rivalidade·entrantes·substitutos·poder · beliefs vetados",
+      panel("Concorrentes por força", null, "dimensão · avaliação", rowsFramework(p.porter))) +
+    band("Quatro Cantos (Four Corners)", "motivação·premissas·estratégia·capacidades",
+      panel("Concorrentes por canto", null, "dimensão · avaliação", rowsFramework(p.four_corners)));
+  else if (OFFICER === "cco") board +=
+    band("Ambiente PESTLE", "político·econômico·social·tecnológico·legal·ambiental · beliefs vetados",
+      panel("Entidades por dimensão", null, "dimensão · avaliação", rowsFramework(p.pestle)));
+  else if (OFFICER === "cpo") board +=
+    band("Movimentos de produto", "lançamentos & ofertas · lente ofertas/produto",
+      panel("Feed de produto", null, "mais recente primeiro", rowsCard(p.product_moves))) +
+    band("Crescimento (Ansoff) & portfólio (BCG)", "vetores de crescimento · quadrante · beliefs vetados",
+      grid("1fr 1fr", [panel("Ansoff", null, "penetração·desenvolvimento·diversificação", rowsFramework(p.ansoff)),
+                       panel("BCG", null, "estrela·vaca·interrogação·abacaxi", rowsFramework(p.bcg))]));
   el.innerHTML = flowBand() + board + outcomesDueBand() + metricsBand() + referenceBand();
   // Click the headline to expand/collapse it inline (doesn't open the drawer); an expand is
   // an attention event (§E engagement telemetry) tagged with the card's entity/sector/threat.
