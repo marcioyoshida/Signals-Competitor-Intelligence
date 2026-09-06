@@ -153,6 +153,15 @@ def test_cro_tier_b_slope_fires_on_rising_pdd():
     ]
     cro = executive.build_executive(feed)["cro"]
     sv = {r["entity"]: r for r in cro["panels"]["solvency"]}
+    # Tier-2 NPL surfaces on the same CRO rows + fires on the elevated band
+    feed["entities"][0]["inadimplencia"] = {"npl_total": 12.9, "npl_pf": 12.8, "npl_pj": 14.4, "band": "elevada"}
+    cro = executive.build_executive(feed)["cro"]
+    sv = {r["entity"]: r for r in cro["panels"]["solvency"]}
+    assert sv["bb"]["npl_total"] == 12.9 and sv["bb"]["npl_band"] == "elevada"
+    assert any("Inadimplência elevada" in r["text"] and "12.9%" in r["text"]
+               for r in cro["panels"]["recommendations"])
+    assert cro["by_industry"]["banking"]["max_npl"] == 12.9 and cro["by_industry"]["banking"]["n_npl_elevada"] == 1
+    sv = {r["entity"]: r for r in executive.build_executive(feed)["cro"]["panels"]["solvency"]}
     assert sv["bb"]["slope_warning"] is True and sv["bb"]["pdd_mom_pct"] == 6.9  # +6.9% ≥ 5% → warns
     assert sv["xp"]["slope_warning"] is False                                    # +1.0% → calm
     # a rising-PDD competitor raises an immediate credit-deterioration rec

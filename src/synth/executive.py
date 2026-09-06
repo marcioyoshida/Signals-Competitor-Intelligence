@@ -276,11 +276,12 @@ def _solvency_rows(feed: dict[str, Any]) -> list[dict[str, Any]]:
         s = e.get("soundness") or {}
         bt = e.get("balancete") or {}
         ftone = e.get("financial_tone") or {}
+        ina = e.get("inadimplencia") or {}
         has_solv = s.get("indice_basileia") is not None
         pdd_mom = bt.get("pdd_mom_pct")
         cred_mom = bt.get("credito_mom_pct")
         slope_warn = pdd_mom is not None and pdd_mom >= _PDD_SLOPE_WARN_PCT
-        if not has_solv and not bt:
+        if not has_solv and not bt and not ina:
             continue
         rows.append({
             "entity": e.get("entity"),
@@ -300,6 +301,11 @@ def _solvency_rows(feed: dict[str, Any]) -> list[dict[str, Any]]:
             # ADR 022 Phase 5 (inference): FinBERT tone + which corpus it read.
             "financial_tone_net": ftone.get("net"),
             "tone_corpus": ftone.get("corpus"),
+            # ADR 022 Tier-2: inadimplência / NPL (15+ dias) + PF/PJ split + band.
+            "npl_total": ina.get("npl_total"),
+            "npl_pf": ina.get("npl_pf"),
+            "npl_pj": ina.get("npl_pj"),
+            "npl_band": ina.get("band"),
             "industries": e.get("industries") or _industries_of(feed, e.get("entity")),
         })
     # weakest capital first; entities with only a slope (no Basileia) sink to the end
@@ -315,6 +321,9 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     # Tier-B slope firing: competitors whose provisions are rising fastest MoM (credit deterioration).
     slope_warnings = sorted((r for r in solvency if r.get("slope_warning")),
                             key=lambda r: r.get("pdd_mom_pct") or 0, reverse=True)
+    # Tier-2 asset-quality firing: highest inadimplência in the "elevada" band.
+    npl_high = sorted((r for r in solvency if r.get("npl_band") == "elevada"),
+                      key=lambda r: r.get("npl_total") or 0, reverse=True)
     timeline = sorted(reg, key=lambda c: str(c.get("date") or ""), reverse=True)
     impact = sorted((c for c in reg if c.get("change_record")),
                     key=lambda c: (c.get("change_record") or {}).get("blast_radius", {}).get("score", 0),
@@ -327,6 +336,7 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         sr = [c for c in reg if _in_industry(c, slug)]
         blasts = [len(c.get("affected_industries") or []) for c in sr]
         ss = [r for r in solvency if slug in (r.get("industries") or [])]
+        npls = [r["npl_total"] for r in ss if r.get("npl_total") is not None]
         return {"n_reg": len(sr),
                 "reg_threat": round(sum(_threat(c) for c in sr) / len(sr), 1) if sr else 0.0,
                 "n_changes": sum(1 for c in sr if (c.get("n_changes") or 0) > 0),
@@ -335,7 +345,10 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
                 # ADR 022 Phase 4: prudential solvency of the sector's tracked competitors.
                 "min_basileia": min((r["indice_basileia"] for r in ss if r["indice_basileia"] is not None), default=None),
                 "n_weak_solvency": sum(1 for r in ss if r.get("band") in _WEAK_BANDS),
-                "n_slope_warning": sum(1 for r in ss if r.get("slope_warning"))}
+                "n_slope_warning": sum(1 for r in ss if r.get("slope_warning")),
+                # ADR 022 Tier-2: sector asset quality (max/avg inadimplência).
+                "max_npl": max(npls) if npls else None,
+                "n_npl_elevada": sum(1 for r in ss if r.get("npl_band") == "elevada")}
 
     recs = []
     if impact:
@@ -358,6 +371,13 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         w = slope_warnings[0]
         recs.append(_rec("imediato",
                          f"Deterioração de crédito — {w['label']}: provisões (PDD) +{w['pdd_mom_pct']}% no mês",
+                         "open_watch", officer="cro", evidence_id=w.get("entity"),
+                         industries=w.get("industries") or []))
+    if npl_high:
+        w = npl_high[0]
+        recs.append(_rec("imediato",
+                         f"Inadimplência elevada — {w['label']}: {w['npl_total']}% da carteira (15+ dias; "
+                         f"PF {w.get('npl_pf')}% · PJ {w.get('npl_pj')}%)",
                          "open_watch", officer="cro", evidence_id=w.get("entity"),
                          industries=w.get("industries") or []))
     return {"by_industry": _by_industry(ctx["sectors"], agg), "panels": {

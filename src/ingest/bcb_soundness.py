@@ -304,6 +304,11 @@ def lambda_handler(event: dict[str, Any] | None, context: Any) -> dict[str, Any]
         result["fundamentals"] = bcb_fundamentals.run(bucket)
     except Exception as exc:  # pragma: no cover
         result["fundamentals"] = {"status": "error", "reason": str(exc)}
+    try:  # ADR 022 Tier-2 — inadimplência / NPL (asset quality) for the CRO (best-effort)
+        from src.ingest import bcb_inadimplencia
+        result["inadimplencia"] = bcb_inadimplencia.run(bucket)
+    except Exception as exc:  # pragma: no cover
+        result["inadimplencia"] = {"status": "error", "reason": str(exc)}
     return {"statusCode": 200, "body": json.dumps(result, ensure_ascii=False)}
 
 
