@@ -235,6 +235,7 @@ def _solvency_rows(feed: dict[str, Any]) -> list[dict[str, Any]]:
     for e in (feed.get("entities") or []):
         s = e.get("soundness") or {}
         bt = e.get("balancete") or {}
+        ftone = e.get("financial_tone") or {}
         has_solv = s.get("indice_basileia") is not None
         pdd_mom = bt.get("pdd_mom_pct")
         cred_mom = bt.get("credito_mom_pct")
@@ -256,6 +257,9 @@ def _solvency_rows(feed: dict[str, Any]) -> list[dict[str, Any]]:
             "balancete_month": bt.get("month"),
             "balancete_months": bt.get("months"),
             "slope_warning": slope_warn,
+            # ADR 022 Phase 5 (inference): FinBERT tone + which corpus it read.
+            "financial_tone_net": ftone.get("net"),
+            "tone_corpus": ftone.get("corpus"),
             "industries": e.get("industries") or _industries_of(feed, e.get("entity")),
         })
     # weakest capital first; entities with only a slope (no Basileia) sink to the end

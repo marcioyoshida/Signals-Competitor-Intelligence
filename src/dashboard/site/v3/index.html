@@ -93,6 +93,7 @@
     border:1px solid var(--border); border-radius:var(--r-sm); padding:3px var(--s2); }
   .sl-warn { color:var(--t-high); font-weight:600; font-variant-numeric:tabular-nums; }
   .sl-ok { color:var(--muted); font-variant-numeric:tabular-nums; }
+  .tone-src { font-size:var(--fs-micro); color:var(--muted); text-transform:uppercase; letter-spacing:.4px; }
   .brd { font-size:var(--fs-micro); color:var(--muted); display:inline-flex; align-items:center; gap:3px; cursor:pointer; }
   .brd.on { color:var(--primary); font-weight:600; }
   .hz-empty { color:var(--muted); font-size:var(--fs-micro); padding:var(--s2) 0; }
@@ -352,10 +353,17 @@ function rowsSolvency(list) {
       const warn = r.slope_warning;
       slope = ` · <span class="${warn ? "sl-warn" : "sl-ok"}">PDD ${r.pdd_mom_pct > 0 ? "+" : ""}${r.pdd_mom_pct}%/mês${warn ? " ▲" : ""}</span>`;
     }
+    // ADR 022 Phase 5: FinBERT tone (inference). pilar3 = real risk-report text; else solvency-derived.
+    let tone = "";
+    if (r.financial_tone_net != null) {
+      const t = r.financial_tone_net, tcls = t > 0.15 ? "sl-ok" : (t < -0.05 ? "sl-warn" : "");
+      const src = r.tone_corpus === "pilar3" ? "Pilar 3" : "inf.";
+      tone = ` · <span class="${tcls}" title="tom financeiro FinBERT-PT-BR (inferência · ${U.esc(r.tone_corpus || "")})">tom ${t > 0 ? "+" : ""}${t} <span class="tone-src">${src}</span></span>`;
+    }
     return `<div class="exrow">
       <span class="badge badge--${b}" title="banda de solidez / trajetória">${U.esc(bandTxt)}</span>
       <span class="ent" style="min-width:148px" title="${U.esc(r.label || "—")}">${U.esc(r.label || "—")}</span>
-      <span class="ttl">${bas}${slope}</span></div>`;
+      <span class="ttl">${bas}${slope}${tone}</span></div>`;
   }).join("");
 }
 function rowsCoverage(list) {
@@ -618,8 +626,8 @@ function render() {
          tile("Maior alcance", a.max_blast, "setores", a.max_blast >= 3 ? "high" : null),
          tile("Solidez sob atenção", a.n_weak_solvency, a.min_basileia != null ? "mín. Basileia " + a.min_basileia + "%" : "prudencial",
               (a.n_weak_solvency || 0) > 0 ? "high" : null)]) +
-      band("Solidez prudencial dos concorrentes", "Basileia (trimestral) + trajetória mensal de PDD · ADR 022",
-           panel("Solvência & trajetória (mais frágil primeiro)", null, "Basileia · Tier 1 · CET1 · PDD/mês", rowsSolvency(p.solvency))) +
+      band("Solidez prudencial dos concorrentes", "Basileia trimestral + PDD mensal + tom FinBERT-PT-BR · ADR 022",
+           panel("Solvência, trajetória & tom (mais frágil primeiro)", null, "Basileia · Tier 1 · CET1 · PDD/mês · tom", rowsSolvency(p.solvency))) +
       band("Impacto & alcance", "blast-radius · ADR-009", panel("Mudanças por impacto", null, "banda de alcance · dificuldade", rowsReg(p.impact))) +
       band("Linha do tempo regulatória", "", grid("1fr 1fr", [panel("Consulta → norma → fiscalização", null, "recente", rowsReg(p.timeline)),
                             panel("Atos com mudanças enumeradas", null, "amending acts", rowsReg(p.changes))])) +

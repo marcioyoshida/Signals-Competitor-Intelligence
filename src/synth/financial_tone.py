@@ -52,11 +52,17 @@ def _net_tone(sentences: list[str], score_fn: ScoreFn) -> float | None:
     return round(sum(nets) / len(nets), 3) if nets else None
 
 
-def build_tone(soundness_index: dict[str, Any], score_fn: ScoreFn) -> dict[str, Any]:
-    """Roll the solvency store into a per-entity shadow tone store."""
+def build_tone(soundness_index: dict[str, Any], score_fn: ScoreFn,
+               pilar3_corpus: dict[str, list[str]] | None = None) -> dict[str, Any]:
+    """Roll the solvency store into a per-entity shadow tone store. When a `pilar3_corpus`
+    (`{entity: [sentences]}`, ADR 022 Phase 6) has real risk-report prose for an entity, tone is
+    read from THAT (`corpus="pilar3"`) — the non-circular signal; otherwise it falls back to the
+    deterministic solvency-fact paraphrases (`corpus="solvency_facts"`)."""
+    pilar3_corpus = pilar3_corpus or {}
     records: dict[str, dict[str, Any]] = {}
     for eid, rec in ((soundness_index or {}).get("records") or {}).items():
-        sents = sentences_for(rec)
+        p3 = pilar3_corpus.get(eid)
+        sents = p3 if p3 else sentences_for(rec)
         if not sents:
             continue
         records[eid] = {
@@ -65,12 +71,14 @@ def build_tone(soundness_index: dict[str, Any], score_fn: ScoreFn) -> dict[str, 
             "band": rec.get("band"),
             "base_date": rec.get("base_date"),
             "n_sentences": len(sents),
-            "corpus": "solvency_facts",     # Phase 6 swaps this to results-release/pilar3 text
+            "corpus": "pilar3" if p3 else "solvency_facts",
             "is_inference": True,
         }
     return {"as_of": (soundness_index or {}).get("as_of"),
             "base_date": (soundness_index or {}).get("base_date"),
-            "model": MODEL, "shadow": True, "count": len(records), "records": records}
+            "model": MODEL, "shadow": True, "count": len(records),
+            "n_pilar3": sum(1 for r in records.values() if r["corpus"] == "pilar3"),
+            "records": records}
 
 
 def tone_by_entity(index: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -136,10 +144,17 @@ def run(bucket: str | None = None, *, score_fn: ScoreFn | None = None, s3: Any |
         soundness = _json.loads(s3.get_object(Bucket=bucket, Key=soundness_key)["Body"].read())
     except Exception as exc:  # pragma: no cover
         return {"status": "error", "reason": f"soundness store unreadable: {exc}"}
-    idx = build_tone(soundness, score_fn)
+    # Phase 6: prefer real Pilar 3 risk-report prose per entity, else solvency-fact fallback.
+    pilar3_corpus: dict[str, list[str]] = {}
+    try:
+        from src.ingest import pilar3
+        pilar3_corpus = pilar3.corpus_by_entity(pilar3.load_index(bucket, s3=s3))
+    except Exception:  # pragma: no cover - best-effort
+        pilar3_corpus = {}
+    idx = build_tone(soundness, score_fn, pilar3_corpus=pilar3_corpus)
     if bucket:
         publish(idx, bucket, s3=s3)
-    return {"status": "ok", "count": idx["count"], "shadow": True}
+    return {"status": "ok", "count": idx["count"], "n_pilar3": idx.get("n_pilar3", 0), "shadow": True}
 
 
 def lambda_handler(event: dict[str, Any] | None, context: Any) -> dict[str, Any]:

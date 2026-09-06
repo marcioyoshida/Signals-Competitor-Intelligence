@@ -432,6 +432,7 @@ def build_feed(
     market_share: dict[str, float] | None = None,
     soundness: dict[str, dict[str, Any]] | None = None,
     balancete: dict[str, dict[str, Any]] | None = None,
+    financial_tone: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Pure aggregation: narratives -> feed payload. No I/O.
 
@@ -487,6 +488,7 @@ def build_feed(
     share_map = market_share or {}
     soundness_map = soundness or {}
     balancete_map = balancete or {}
+    tone_map = financial_tone or {}
     entities: list[dict[str, Any]] = []
     for rec in by_entity.values():
         timeline = [rec["by_date"][d] for d in sorted(rec["by_date"])]
@@ -506,6 +508,8 @@ def build_feed(
                 "soundness": soundness_map.get(rec["entity"]),
                 # ADR 022 Tier B: monthly balancete trajectory (latest + MoM slope), else None.
                 "balancete": balancete_map.get(rec["entity"]),
+                # ADR 022 Phase 5: FinBERT financial-tone (inference; corpus pilar3|solvency_facts).
+                "financial_tone": tone_map.get(rec["entity"]),
                 "total": sum(t["count"] for t in timeline),
                 # industry slugs this entity belongs to — lets the dashboard group
                 # the entity monitor under each industry (fused coverage panel).
@@ -1102,6 +1106,21 @@ def _load_balancete(digests_bucket: str) -> dict[str, dict[str, Any]]:
         return {}
 
 
+def _load_financial_tone(digests_bucket: str) -> dict[str, dict[str, Any]]:
+    """Read the FinBERT financial-tone store (ADR 022 Phase 5) as {entity_id: {net, corpus}},
+    best-effort. Labelled inference; corpus='pilar3' (real risk-report text) or 'solvency_facts'."""
+    try:
+        from src.synth import financial_tone
+
+        idx = financial_tone.load_index(digests_bucket)
+        return {eid: {"net": r.get("financial_tone_net"), "corpus": r.get("corpus")}
+                for eid, r in (idx.get("records") or {}).items()
+                if r.get("financial_tone_net") is not None}
+    except Exception as exc:  # pragma: no cover - best-effort, read-only
+        print(f"Warning: load financial-tone store failed: {exc}")
+        return {}
+
+
 def _load_coverage_gaps(digests_bucket: str) -> list[dict[str, Any]]:
     """Read the coverage-gap store (ADR-014), best-effort. [] if absent."""
     try:
@@ -1349,6 +1368,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         market_share=_load_market_share(digests_bucket),
         soundness=_load_soundness(digests_bucket),
         balancete=_load_balancete(digests_bucket),
+        financial_tone=_load_financial_tone(digests_bucket),
     )
     # ADR 018 Phase 3: continuous integrity audit over the registry + this feed —
     # operator-facing findings (scoped OUT of the entry/tenant slices below).

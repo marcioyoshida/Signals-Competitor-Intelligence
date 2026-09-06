@@ -100,7 +100,8 @@ def test_cro_solvency_panel_and_weak_recommendation():
     feed["entities"] = [
         {"entity": "xp", "label": "XP", "industries": ["asset-management"],
          "soundness": {"indice_basileia": 11.93, "capital_nivel_i": 10.01, "capital_principal": 7.17,
-                       "band": "atenção", "base_date": 202603}},
+                       "band": "atenção", "base_date": 202603},
+         "financial_tone": {"net": 0.27, "corpus": "pilar3"}},
         {"entity": "btg", "label": "BTG", "industries": ["investment-banking"],
          "soundness": {"indice_basileia": 15.91, "capital_nivel_i": 12.44, "capital_principal": 11.36,
                        "band": "sólido", "base_date": 202603}},
@@ -110,6 +111,7 @@ def test_cro_solvency_panel_and_weak_recommendation():
     sv = cro["panels"]["solvency"]
     assert [r["entity"] for r in sv] == ["xp", "btg"]           # weakest (lowest Basileia) first
     assert sv[0]["band"] == "atenção" and sv[0]["capital_principal"] == 7.17
+    assert sv[0]["financial_tone_net"] == 0.27 and sv[0]["tone_corpus"] == "pilar3"  # ADR022 P5 surfaced
     # a weak competitor raises an immediate CRO recommendation
     assert any("Solidez" in r["text"] and "XP" in r["text"] for r in cro["panels"]["recommendations"])
     # per-sector aggregate carries the min Basileia + weak count

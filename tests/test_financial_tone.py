@@ -18,7 +18,7 @@ _SOUNDNESS = {
 
 def _fake_score(text: str) -> dict[str, float]:
     # crude stand-in: 'sólido' reads positive, 'atenção' negative
-    if "sólido" in text:
+    if "sólid" in text:
         return {"POSITIVE": 0.9, "NEGATIVE": 0.1, "NEUTRAL": 0.1}
     if "atenção" in text:
         return {"POSITIVE": 0.2, "NEGATIVE": 0.8, "NEUTRAL": 0.1}
@@ -52,3 +52,13 @@ def test_tone_by_entity_projection():
     proj = ft.tone_by_entity(ft.build_tone(_SOUNDNESS, _fake_score))
     assert set(proj) == {"xp", "btg"}
     assert "financial_tone_net" in proj["xp"] and proj["xp"]["band"] == "atenção"
+
+
+def test_pilar3_corpus_overrides_solvency_facts():
+    corpus = {"xp": ["A gestão de riscos manteve a instituição sólida no trimestre."]}
+    idx = ft.build_tone(_SOUNDNESS, _fake_score, pilar3_corpus=corpus)
+    assert idx["records"]["xp"]["corpus"] == "pilar3"       # real text wins
+    assert idx["records"]["btg"]["corpus"] == "solvency_facts"  # no pilar3 → fallback
+    assert idx["n_pilar3"] == 1
+    # xp tone now reads the sólido pilar3 sentence, not the 'atenção' fact
+    assert idx["records"]["xp"]["financial_tone_net"] > 0
