@@ -405,5 +405,13 @@ product-mix intelligence from carteira composition (#11).
    Nubank 12.93% elevada, Inter 4.78% atenção, Itaú 1.98% (prime). +5 tests (974 green). **Known
    edge:** small/atypical credit books yield extreme ratios (e.g. SumUp 40.9%) — inference-labelled,
    same class as the Tier-1 insurer-ROA edge; a small-book/denominator guard is a shared follow-up.
-3. **Tier 3 — Eficiência + custo de crédito (#6/#8)** from the balancete P&L (with YTD handling).
+3. **Tier 3 — operating efficiency. SHIPPED + LIVE (2026-09-06).** `src/ingest/bcb_resultados.py`
+   computes **custo operacional / ativo** = annualised admin+pessoal opex (COSIF `8170000004`, YTD
+   ×12/month) ÷ ativo (`1000000009`) from the monthly balancete P&L → `resultados/index.json` (monthly
+   OncaFinancials Lambda); merged onto the **CSO** financial rows as `opex/ativo%`. Validated against
+   reality (Itaú 1.54%, matches). +4 tests (977 green). **Honestly de-scoped:** shipped only the
+   validated ratio. **Custo de crédito** from 4010 came out **~2× known figures** (the gross
+   despesa/reversão gross-up overstates net PDD) → NOT shipped; it's deferred to the DRE (doc 4016),
+   and the CRO already reads credit cost via NPL (Tier-2) + the PDD slope (Tier-B), so it's redundant
+   there. A textbook **cost-to-income** needs the DRE's net-income denominator — also deferred.
 4. **Later/optional:** composite fragility (#16), valuation (#15), tone-vs-numbers (#17).
