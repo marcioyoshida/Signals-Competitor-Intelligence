@@ -417,6 +417,19 @@ def _act_record_engagement(args: dict[str, Any], actor: str) -> tuple[str, int, 
                             "action": item["action"]}
 
 
+def _act_set_tdr_baseline(args: dict[str, Any], actor: str) -> tuple[str, int, dict[str, Any]]:
+    """apply: record the per-tenant §E **TDR baseline** (DEC-2) — the executive's typical pre-Onça
+    decision latency, in hours. A REAL measured number supplied by the tenant, never assumed; it
+    survives without a redeploy and activates the Time-to-Decision-Reduction metric."""
+    from src.synth import decision_log
+
+    try:
+        item = decision_log.set_tdr_baseline(args.get("hours"), actor=actor)
+    except ValueError as exc:
+        return "blocked", 400, {"error": str(exc)}
+    return "applied", 200, {"baseline_hours": item["baseline_hours"], "set_at": item["set_at"]}
+
+
 # Intents whose calls are NOT written to the OncaCurationLog audit journal (high-frequency
 # telemetry, not a state mutation).
 _NO_JOURNAL = frozenset({"record_engagement"})
@@ -439,6 +452,7 @@ _CATALOG: dict[str, tuple[str, Callable[..., tuple[str, int, dict[str, Any]]], s
     "record_decision": (APPLY, _act_record_decision, None),
     "set_outcome": (APPLY, _act_set_outcome, None),
     "set_board_adoption": (APPLY, _act_set_board_adoption, None),
+    "set_tdr_baseline": (APPLY, _act_set_tdr_baseline, None),
     # ADR 021 §H — CORS followed-link beacon (shared)
     "append_reference": (APPLY, _act_append_reference, None),
     # ADR 021 §E — engagement telemetry (attention signal)

@@ -410,6 +410,25 @@ def test_set_board_adoption_applies(monkeypatch):
     assert missing["statusCode"] == 404
 
 
+def test_set_tdr_baseline_applies_and_validates(monkeypatch):
+    _no_journal(monkeypatch)
+    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    from src.synth import decision_log
+    monkeypatch.setattr(decision_log, "set_tdr_baseline",
+                        lambda hours, **k: {"baseline_hours": float(hours), "set_at": "2026-09-06T00:00:00+00:00"})
+    ok = act_api.lambda_handler(_event(
+        {"intent": "set_tdr_baseline", "officer": "cso", "args": {"hours": 16}}), None)
+    assert ok["statusCode"] == 200 and json.loads(ok["body"])["baseline_hours"] == 16.0
+    assert "set_tdr_baseline" in act_api.catalog()
+
+    def _raise(hours, **k):
+        raise ValueError("baseline hours must be > 0")
+    monkeypatch.setattr(decision_log, "set_tdr_baseline", _raise)
+    bad = act_api.lambda_handler(_event(
+        {"intent": "set_tdr_baseline", "officer": "cso", "args": {"hours": 0}}), None)
+    assert bad["statusCode"] == 400
+
+
 def test_append_reference_applies(monkeypatch):
     _no_journal(monkeypatch)
     monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)

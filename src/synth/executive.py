@@ -166,6 +166,47 @@ def _fundamentals_rows(feed: dict[str, Any]) -> list[dict[str, Any]]:
     return rows
 
 
+_TOWS_LABELS = {"SO": "Maximizar (SO)", "ST": "Contra-atacar (ST)",
+                "WO": "Superar (WO)", "WT": "Evitar (WT)"}
+
+
+def _posture_rows(feed: dict[str, Any]) -> list[dict[str, Any]]:
+    """CSO strategic-posture panel (SURF-1): route the ADR-006 framework belief store
+    (`feed.swot` counts + `feed.tows` postures) into the executive block. Curated, evidence-linked
+    — a re-projection of existing vetted beliefs, NOT new inference. Entities with the most
+    strategic content (TOWS postures, then SWOT bullets) lead."""
+    swot = feed.get("swot") or {}
+    tows = feed.get("tows") or {}
+    labels = _labels(feed)
+    rows: list[dict[str, Any]] = []
+    for ent in set(swot) | set(tows):
+        sb = swot.get(ent) or {}
+        counts = sb.get("counts") or {}
+        dims = sb.get("dimensions") or {}
+        postures = [{"dimension": b.get("dimension"),
+                     "label": _TOWS_LABELS.get(b.get("dimension"), b.get("dimension")),
+                     "text": b.get("text"), "confidence": b.get("confidence")}
+                    for b in (tows.get(ent) or []) if b.get("status") in (None, "active")]
+        postures.sort(key=lambda x: x.get("confidence") or 0, reverse=True)
+
+        def _top(d: str) -> str | None:
+            arr = [x for x in (dims.get(d) or []) if x.get("status") == "active"]
+            return arr[0].get("text") if arr else None
+
+        if not counts and not postures:
+            continue
+        rows.append({
+            "entity": ent,
+            "label": sb.get("label") or labels.get(ent) or str(ent).replace("_", " ").title(),
+            "industries": _industries_of(feed, ent),
+            "counts": {d: int(counts.get(d) or 0) for d in ("S", "W", "O", "T")},
+            "postures": postures[:4],
+            "top": {d: _top(d) for d in ("S", "W", "O", "T")},
+        })
+    rows.sort(key=lambda r: (len(r["postures"]), sum(r["counts"].values())), reverse=True)
+    return rows
+
+
 def build_cso(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     cards, dates, labels = ctx["cards"], ctx["dates"], ctx["labels"]
     financials = _fundamentals_rows(feed)
@@ -243,6 +284,8 @@ def build_cso(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         "regulatory": [_reg_row(c) for c in reg_sorted[:20]],
         # ADR 022 Tier-1: competitor financial strength (ROE/ROA/leverage/headroom/share), inference.
         "financials": financials[:25],
+        # SURF-1: strategic posture — SWOT beliefs + TOWS postures routed to the CSO.
+        "posture": _posture_rows(feed)[:24],
         "recommendations": recs,
     }}
 
@@ -934,7 +977,8 @@ def build_reference() -> dict[str, Any]:
 # --- top level ------------------------------------------------------------------------
 def build_executive(feed: dict[str, Any], *, decisions: list[dict[str, Any]] | None = None,
                     engagement: list[dict[str, Any]] | None = None,
-                    tdr_baseline_hours: float | None = None) -> dict[str, Any]:
+                    tdr_baseline_hours: float | None = None,
+                    outcome_review_days: int = 7) -> dict[str, Any]:
     """`feed.executive` — the four enriched officer blocks + shared sectors + the Executive Flow
     (§D trajectories) + the Decision-Trust metrics (§E, from `decisions`) + the Executive
     Engagement rollup (§E, from `engagement`)."""
@@ -952,7 +996,8 @@ def build_executive(feed: dict[str, Any], *, decisions: list[dict[str, Any]] | N
         from src.synth import decision_metrics, engagement_log
         engagement_roll = engagement_log.aggregate(engagement or [], labels=labels)
         metrics = decision_metrics.compute_metrics(decisions or [], engagement=engagement_roll,
-                                                   tdr_baseline_hours=tdr_baseline_hours)
+                                                   tdr_baseline_hours=tdr_baseline_hours,
+                                                   outcome_review_days=outcome_review_days)
     except Exception as exc:  # pragma: no cover - metrics best-effort
         print(f"Warning: decision metrics skipped: {exc}")
     return {

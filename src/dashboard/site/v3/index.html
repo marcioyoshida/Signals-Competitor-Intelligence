@@ -337,6 +337,21 @@ function rowsDiscovery(list) {
     <span class="badge badge--low">${U.esc(r.confidence || "")}</span></div>`).join("");
 }
 // ADR 022 Tier-1 — competitor financial strength (ROE/ROA/leverage/headroom/share). Inference.
+// SURF-1: strategic posture — SWOT counts + TOWS postures (ADR-006 belief store) for the CSO.
+function rowsPosture(list) {
+  const rows = (list || []).filter(inSector);
+  if (!rows.length) return U.empty("Sem postura estratégica no escopo.", "requer beliefs SWOT/TOWS", "○");
+  return `<div class="chart">` + rows.slice(0, 18).map(r => {
+    const c = r.counts || {};
+    const chips = [["S", c.S, "ok"], ["W", c.W, "high"], ["O", c.O, "med"], ["T", c.T, "warn"]]
+      .map(([k, v, tone]) => `<span class="badge badge--${tone}" title="${k}">${U.esc(k)} ${v || 0}</span>`).join(" ");
+    const post = (r.postures || []).slice(0, 3).map(pp =>
+      `<div class="hd-note" style="margin-top:2px"><b>${U.esc(pp.dimension || "")}</b> ${U.esc(pp.text || "")}</div>`).join("")
+      || `<div class="hd-note" style="margin-top:2px;opacity:.7">sem postura TOWS vetada</div>`;
+    return `<div style="padding:var(--s2) var(--s3)">
+      <div style="display:flex;gap:var(--s2);align-items:center"><b style="flex:1;min-width:0">${U.esc(r.label)}</b>${chips}</div>${post}</div>`;
+  }).join("") + `</div>`;
+}
 function rowsFinancials(list) {
   list = (list || []).filter(inSector);
   if (!list.length) return U.empty("Sem fundamentos financeiros no escopo.", "", "○");
@@ -482,6 +497,25 @@ async function setBoard(did, adopted, cb) {
   if (res && res.decision_id) cb.parentElement.classList.toggle("on", adopted);
 }
 
+// --- Outcome-review queue (§E, DEC-1) — DRIVES set_outcome, the reward signal ------
+// Decisions still `pendente` and old enough to have an observable result. CSO (chief) sees all;
+// each officer sees its own. Stamping the outcome here is what accrues the favorable-rate signal.
+function outcomesDueBand() {
+  const due = ((EX.metrics || {}).outcomes_due || []).filter(d => OFFICER === "cso" || d.officer === OFFICER);
+  if (!due.length) return "";
+  const rows = due.map(d => `<div class="due-row" data-did="${U.esc(d.decision_id)}" data-off="${U.esc(d.officer || "")}"
+      style="display:flex;gap:var(--s3);align-items:center;padding:var(--s2) var(--s3)">
+    <span class="badge badge--ghost">${U.esc(officerShort(d.officer))}</span>
+    <span style="flex:1;min-width:0">${U.esc(d.recommendation || "")}</span>
+    <span class="hd-note" style="white-space:nowrap">${U.esc(d.verdict || "")} · há ${d.age_days}d</span>
+    <select data-did="${U.esc(d.decision_id)}" class="ocsel due-sel"><option value="pendente">pendente</option>
+      <option value="favoravel">favorável</option><option value="desfavoravel">desfavorável</option>
+      <option value="neutro">neutro</option></select>${boardHtml()}</div>`).join("");
+  const rd = (EX.metrics || {}).outcome_review_days || 7;
+  return band("Decisões aguardando desfecho", `pendentes há ≥${rd} dias · registre o resultado observado`,
+    `<div class="panel"><div class="panel__bd panel__bd--flush">${rows}</div></div>`);
+}
+
 // --- Decision-Trust metrics band (§E) — honest, only what the log holds ------
 function pct(x) { return x == null ? "—" : Math.round(x * 100) + "%"; }
 function metricsBand() {
@@ -498,7 +532,13 @@ function metricsBand() {
     tile("Engajamento", c.engagement == null ? "—" : c.engagement, `${eng.n_interest || 0} interações`),
     tile("Board", c.board == null ? "—" : c.board, `${mm.n_board_flagged || 0} escalados`)];
   const tdrStr = m.tdr != null ? `<b style="color:var(--primary)">TDR ${m.tdr}%</b> · ` : "";
-  const note = `<p class="hd-note" style="padding:2px var(--s2) 0;line-height:1.4">${tdrStr}${U.esc(m.ets_note || "")}<br>${U.esc(m.tdr_note || "")}</p>`;
+  // DEC-2: record the per-tenant TDR baseline (real pre-Onça latency) — no baseline yet ⇒ offer it.
+  const needBase = m.tdr == null && m.tdr_baseline_hours == null;
+  const baseCtl = needBase
+    ? `<div style="padding:2px var(--s2) 0"><span class="hd-note">Registrar baseline — tempo médio de decisão ANTES do Onça (h): </span>
+        <input id="tdrBase" type="number" min="1" step="1" style="width:76px"> <button id="tdrSet">Registrar</button></div>`
+    : "";
+  const note = `<p class="hd-note" style="padding:2px var(--s2) 0;line-height:1.4">${tdrStr}${U.esc(m.ets_note || "")}<br>${U.esc(m.tdr_note || "")}</p>${baseCtl}`;
   // §E intelligence: which entities/sectors draw executive attention (from the engagement rollup).
   const te = eng.top_entities || [], tsec = eng.top_sectors || [];
   const interestPanel = (te.length || tsec.length)
@@ -509,7 +549,8 @@ function metricsBand() {
           panel("Setores mais abertos", null, "expansões por setor", `<div class="panel__bd--flush">${
             tsec.length ? hbars(tsec.slice(0, 8).map(x => ({ label: (EX.sectors.find(s => s.slug === x.sector) || {}).label || x.sector, value: x.hits, bar: x.hits / (tsec[0].hits || 1) * 100, colorTok: "var(--cat-gold)" }))) : U.empty("Sem sinais de atenção ainda.", "", "○")}</div>`)]))
     : "";
-  return band("Confiança & decisão", (m.ets_full ? "ETS composto" : "ETS parcial") + " · TDR requer baseline", readout(hero, tilesArr) + note) + interestPanel;
+  const tdrSub = m.tdr != null ? `TDR ${m.tdr}%` : (m.tdr_baseline_hours != null ? "TDR medindo" : "TDR requer baseline");
+  return band("Confiança & decisão", (m.ets_full ? "ETS composto" : "ETS parcial") + " · " + tdrSub, readout(hero, tilesArr) + note) + interestPanel;
 }
 
 // --- Reference / playbook band (§H) — curated baseline per officer ----------
@@ -669,6 +710,8 @@ function render() {
       band("Inteligência competitiva", "momentum na janela · inferência",
         grid("1fr 1fr", [panel("Momentum do concorrente", null, "↑ ganha · ↓ recua", rowsMomentum(p.momentum)),
                         panel("Movimentos estratégicos", null, "entrada·oferta·M&A", rowsCard(p.moves))])) +
+      band("Postura estratégica", "SWOT + TOWS · beliefs vetados (ADR-006)",
+        panel("Concorrentes por postura", null, "S·W·O·T + postura TOWS", rowsPosture(p.posture))) +
       band("Força financeira dos concorrentes", "ROE·ROA·alavancagem·eficiência·share de lucro · IF.data + balancete · inferência",
         panel("Rentabilidade & eficiência (maior ROE primeiro)", null, "ROE anual · ROA · alav · opex/ativo · headroom · share", rowsFinancials(p.financials))) +
       band("Inteligência regulatória (resumo)", "", panel("Mudanças por alcance", null, "domínio·setores·prazo", rowsReg(p.regulatory)));
@@ -755,7 +798,7 @@ function render() {
             panel("Pontos cegos", null, "cross-setor", rowsGap(p.blind_spots))]));
     }
   }
-  el.innerHTML = flowBand() + board + metricsBand() + referenceBand();
+  el.innerHTML = flowBand() + board + outcomesDueBand() + metricsBand() + referenceBand();
   // Click the headline to expand/collapse it inline (doesn't open the drawer); an expand is
   // an attention event (§E engagement telemetry) tagged with the card's entity/sector/threat.
   el.querySelectorAll(".exrow .ttl").forEach(t => t.addEventListener("click", (e) => {
@@ -769,6 +812,19 @@ function render() {
     const u = row.getAttribute("data-url") || row.getAttribute("data-href"); if (u) window.open(u, "_blank", "noopener"); }));
   el.querySelectorAll(".traj-f button[data-tv]").forEach(b => b.addEventListener("click", () => captureTraj(b)));
   el.querySelectorAll(".traj-f a[data-ev]").forEach(a => a.addEventListener("click", (e) => { e.preventDefault(); onEvidence(a); }));
+  // DEC-1: the outcome-review queue — stamp a realized outcome on a decision that has aged out.
+  el.querySelectorAll(".due-sel").forEach(sel => sel.addEventListener("change", (e) =>
+    setOutcome(e.target.getAttribute("data-did"), e.target.value, e.target)));
+  el.querySelectorAll(".due-row").forEach(row => wireBoard(row, row.getAttribute("data-did")));
+  // DEC-2: record the per-tenant TDR baseline (a real number; takes effect on the next build).
+  const tdrBtn = document.getElementById("tdrSet");
+  if (tdrBtn) tdrBtn.addEventListener("click", async () => {
+    const h = parseFloat((document.getElementById("tdrBase") || {}).value);
+    if (!h || h <= 0) { return; }
+    const res = await postAct({ intent: "set_tdr_baseline", officer: OFFICER, args: { hours: h } });
+    if (res && res.baseline_hours) { tdrBtn.textContent = "✓ registrada (próxima atualização)"; tdrBtn.disabled = true; }
+    else { tdrBtn.textContent = "falha"; }
+  });
   renderRecs((p.recommendations || []).filter(inSector));
 }
 

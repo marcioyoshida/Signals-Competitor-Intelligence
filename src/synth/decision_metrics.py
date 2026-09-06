@@ -58,9 +58,45 @@ def _hours_between(start: str | None, end: str | None) -> float | None:
         return None
 
 
+def outcomes_due(decisions: list[dict[str, Any]], *, min_age_days: int = 7,
+                 now: str | None = None, cap: int = 30) -> list[dict[str, Any]]:
+    """The **outcome-review queue** (ADR-021 §E, DEC-1): captured decisions whose outcome is still
+    ``pendente`` and that are old enough (``min_age_days``) to have an observable result. This is
+    what DRIVES :func:`decision_log.set_outcome` — without it, outcomes are only ever stamped in
+    the same session as capture, and the favorable-rate reward signal never accrues. Oldest first
+    (most overdue), capped. Pure projection over the passed decisions — no store access."""
+    import datetime as _dt
+    try:
+        ref = (_dt.datetime.fromisoformat(str(now).replace("Z", "+00:00")) if now
+               else _dt.datetime.now(_dt.timezone.utc))
+    except Exception:
+        ref = _dt.datetime.now(_dt.timezone.utc)
+    out: list[dict[str, Any]] = []
+    for d in decisions:
+        if (d.get("outcome") or "pendente") != "pendente":
+            continue
+        age_h = _hours_between(d.get("created_at"), ref.isoformat())
+        if age_h is None or age_h / 24.0 < min_age_days:
+            continue
+        out.append({
+            "decision_id": d.get("decision_id"),
+            "officer": (d.get("officer") or "").lower() or None,
+            "industry": d.get("industry"),
+            "recommendation": d.get("recommendation"),
+            "verdict": d.get("verdict"),
+            "created_at": d.get("created_at"),
+            "age_days": int(age_h / 24.0),
+            "context_id": d.get("context_id"),
+            "evidence_id": d.get("evidence_id"),
+        })
+    out.sort(key=lambda x: str(x.get("created_at") or ""))  # oldest (most overdue) first
+    return out[:cap]
+
+
 def compute_metrics(decisions: list[dict[str, Any]],
                     engagement: dict[str, Any] | None = None,
-                    tdr_baseline_hours: float | None = None) -> dict[str, Any]:
+                    tdr_baseline_hours: float | None = None,
+                    outcome_review_days: int = 7) -> dict[str, Any]:
     """Roll up the decision log into the honest, available Decision-Trust metrics + per-officer /
     per-industry slices, folding the §E **Engagement** component from the engagement rollup.
 
@@ -106,6 +142,8 @@ def compute_metrics(decisions: list[dict[str, Any]],
                      "Influência 0.25 · Engajamento 0.20 · Adoção do board 0.15), renormalizada aos "
                      "que já têm sinal."),
         **_tdr(decisions, tdr_baseline_hours),
+        "outcomes_due": outcomes_due(decisions, min_age_days=outcome_review_days),
+        "outcome_review_days": outcome_review_days,
         "by_officer": by_officer,
         "by_industry": by_industry,
     }

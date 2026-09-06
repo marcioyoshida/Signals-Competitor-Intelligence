@@ -165,6 +165,38 @@ def mark_promoted(decision_id: str, table: Any | None = None) -> bool:
     return True
 
 
+_TDR_CONFIG_PK = "CONFIG#tdr_baseline"
+
+
+def set_tdr_baseline(hours: Any, *, actor: str, table: Any | None = None) -> dict[str, Any]:
+    """Record the per-tenant **TDR baseline** (ADR-021 §E, DEC-2): the executive's typical
+    *pre-Onça* decision latency in hours — a REAL number supplied by the tenant, never assumed.
+    Stored as a singleton ``CONFIG#tdr_baseline`` item so it survives without a redeploy (the env
+    ``ONCA_TDR_BASELINE_HOURS`` remains a fallback). Raises ValueError on a non-positive value."""
+    try:
+        h = float(hours)
+    except (TypeError, ValueError):
+        raise ValueError("hours must be a number")
+    if h <= 0:
+        raise ValueError("baseline hours must be > 0")
+    item = {"pk": _TDR_CONFIG_PK, "type": "config", "config": "tdr_baseline",
+            "baseline_hours": h, "actor": actor, "set_at": _er._now_iso()}
+    _table(table).put_item(Item=item)
+    return item
+
+
+def get_tdr_baseline(table: Any | None = None) -> float | None:
+    """The recorded per-tenant TDR baseline in hours, or None if never recorded."""
+    it = _table(table).get_item(Key={"pk": _TDR_CONFIG_PK}).get("Item")
+    if not it:
+        return None
+    try:
+        h = float(it.get("baseline_hours"))
+        return h if h > 0 else None
+    except (TypeError, ValueError):
+        return None
+
+
 def list_decisions(
     *,
     officer: str | None = None,

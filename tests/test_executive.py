@@ -309,3 +309,36 @@ def test_recommendations_map_to_catalog_actions_for_all_officers():
             assert r["action"] in allowed
             assert r["horizon"] in ("imediato", "30d", "90d", "estrategico")
             assert r["officer"] == off
+
+
+# --- SURF-1: strategic posture (SWOT + TOWS) routed to the CSO --------------------
+def test_posture_rows_projects_swot_and_tows():
+    feed = {
+        "entity_attrs": {"itau": {"industries": ["banking"]}, "nubank": {"industries": ["fintech"]}},
+        "swot": {
+            "itau": {"label": "Itaú", "counts": {"S": 3, "W": 1, "O": 2, "T": 1},
+                     "dimensions": {"S": [{"text": "escala", "status": "active"}], "W": [], "O": [], "T": []}},
+            "nubank": {"label": "Nubank", "counts": {"S": 1, "W": 0, "O": 1, "T": 0}, "dimensions": {}},
+        },
+        "tows": {
+            "itau": [{"dimension": "SO", "text": "usar escala para cross-sell", "confidence": 0.8, "status": "active"},
+                     {"dimension": "WT", "text": "reduzir exposição", "confidence": 0.6, "status": "active"}],
+        },
+    }
+    rows = executive._posture_rows(feed)
+    assert rows[0]["entity"] == "itau"  # most postures first
+    assert rows[0]["counts"] == {"S": 3, "W": 1, "O": 2, "T": 1}
+    assert rows[0]["postures"][0]["dimension"] == "SO"  # highest confidence first
+    assert rows[0]["postures"][0]["label"].startswith("Maximizar")
+    assert rows[0]["industries"] == ["banking"]
+    assert rows[0]["top"]["S"] == "escala"
+
+
+def test_build_cso_includes_posture_panel():
+    feed = {"dates": ["2026-09-06"], "industry_options": [{"slug": "banking", "label": "Banking"}],
+            "cards": [], "entity_attrs": {"itau": {"industries": ["banking"]}},
+            "swot": {"itau": {"label": "Itaú", "counts": {"S": 1, "W": 0, "O": 0, "T": 0}, "dimensions": {}}},
+            "tows": {}}
+    ex = executive.build_executive(feed)
+    assert "posture" in ex["cso"]["panels"]
+    assert ex["cso"]["panels"]["posture"][0]["entity"] == "itau"

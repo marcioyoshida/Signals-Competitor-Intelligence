@@ -77,3 +77,38 @@ def test_per_officer_and_industry_slices():
     assert m["by_officer"]["cso"]["favorable_rate"] == 1.0
     assert m["by_officer"]["cro"]["favorable_rate"] == 0.0
     assert set(m["by_industry"]) == {"banking", "seguros"}
+
+
+# --- DEC-1: outcome-review queue -------------------------------------------------
+def _dt(officer, outcome, created_at, verdict="aprovado", rec="r", did="x"):
+    return {"officer": officer, "verdict": verdict, "outcome": outcome, "recommendation": rec,
+            "created_at": created_at, "decision_id": did}
+
+
+def test_outcomes_due_filters_pending_and_aged():
+    now = "2026-09-06T00:00:00+00:00"
+    ds = [
+        _dt("cso", "pendente", "2026-08-20T00:00:00+00:00", did="old"),      # 17d → due
+        _dt("cro", "pendente", "2026-09-04T00:00:00+00:00", did="fresh"),    # 2d → not due
+        _dt("cso", "favoravel", "2026-08-01T00:00:00+00:00", did="resolved"),# resolved → excluded
+        _dt("cco", "pendente", "2026-08-28T00:00:00+00:00", did="mid"),      # 9d → due
+    ]
+    due = dm.outcomes_due(ds, min_age_days=7, now=now)
+    ids = [d["decision_id"] for d in due]
+    assert ids == ["old", "mid"]          # aged, pending only, OLDEST first
+    assert due[0]["age_days"] == 17 and due[0]["officer"] == "cso"
+
+
+def test_outcomes_due_cap_and_lowercase_officer():
+    now = "2026-09-06T00:00:00+00:00"
+    ds = [_dt("CSO", "pendente", "2026-08-01T00:00:00+00:00", did=str(i)) for i in range(40)]
+    due = dm.outcomes_due(ds, min_age_days=7, now=now, cap=5)
+    assert len(due) == 5 and all(d["officer"] == "cso" for d in due)
+
+
+def test_compute_metrics_includes_review_queue():
+    now_old = "2000-01-01T00:00:00+00:00"  # ancient → always due
+    ds = [_dt("cso", "pendente", now_old, did="a")]
+    m = dm.compute_metrics(ds, outcome_review_days=7)
+    assert m["outcome_review_days"] == 7
+    assert [d["decision_id"] for d in m["outcomes_due"]] == ["a"]

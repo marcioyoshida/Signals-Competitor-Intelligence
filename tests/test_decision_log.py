@@ -87,3 +87,17 @@ def test_list_decisions_filters_and_sorts(tbl):
     assert len(decision_log.list_decisions(table=tbl)) == 2
     assert len(decision_log.list_decisions(officer="cso", table=tbl)) == 1
     assert len(decision_log.list_decisions(industry="seguros", table=tbl)) == 1
+
+
+# --- DEC-2: durable per-tenant TDR baseline -------------------------------------
+def test_tdr_baseline_roundtrip_and_none_when_unset(tbl):
+    assert decision_log.get_tdr_baseline(table=tbl) is None      # never recorded → None (honest)
+    it = decision_log.set_tdr_baseline(16, actor="operator", table=tbl)
+    assert it["baseline_hours"] == 16.0 and it["type"] == "config"
+    assert decision_log.get_tdr_baseline(table=tbl) == 16.0
+
+
+def test_tdr_baseline_rejects_non_positive(tbl):
+    for bad in (0, -3, "x"):
+        with pytest.raises(ValueError):
+            decision_log.set_tdr_baseline(bad, actor="operator", table=tbl)

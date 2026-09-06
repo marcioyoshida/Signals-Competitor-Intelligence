@@ -1470,12 +1470,22 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as exc:  # pragma: no cover - engagement store best-effort
             print(f"Warning: engagement log read skipped: {exc}")
             _engagement = []
-        try:  # §E TDR: the per-tenant baseline is RECORDED (env), never assumed.
-            _tdr_base = float(os.environ.get("ONCA_TDR_BASELINE_HOURS") or 0) or None
-        except (TypeError, ValueError):
+        try:  # §E TDR: the per-tenant baseline is RECORDED (durable store, else env), never assumed.
+            _tdr_base = decision_log.get_tdr_baseline()
+        except Exception:  # pragma: no cover - baseline store best-effort
             _tdr_base = None
+        if _tdr_base is None:
+            try:
+                _tdr_base = float(os.environ.get("ONCA_TDR_BASELINE_HOURS") or 0) or None
+            except (TypeError, ValueError):
+                _tdr_base = None
+        try:  # DEC-1: outcome-review window (days a decision may stay pendente before it is due).
+            _review_days = int(os.environ.get("ONCA_OUTCOME_REVIEW_DAYS") or 7)
+        except (TypeError, ValueError):
+            _review_days = 7
         feed["executive"] = executive.build_executive(feed, decisions=_decisions,
-                                                       engagement=_engagement, tdr_baseline_hours=_tdr_base)
+                                                       engagement=_engagement, tdr_baseline_hours=_tdr_base,
+                                                       outcome_review_days=_review_days)
     except Exception as exc:  # pragma: no cover - best-effort, read-only
         print(f"Warning: executive block skipped: {exc}")
         feed["executive"] = {"officers": [], "cso": {}}
