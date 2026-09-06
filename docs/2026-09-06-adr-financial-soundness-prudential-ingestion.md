@@ -90,10 +90,11 @@ own native cadences** — a quarterly *level* and a monthly *trajectory*:
   from the `TipoInstituicao=2` codes the market-share flow uses — resolve against the
   `'<NAME> - PRUDENCIAL'` cadastro entries.
 - **Liquidity is NOT in IF.data** (pilot-verified: no relatório carries an LCR/NSFR/liquidez
-  column). True liquidity (LCR/NSFR) is published separately and lives in the banks' **Pilar 3**
-  reports → it comes from **Phase 6** (Pilar 3 PDFs via the existing synth + KB path) or a dedicated
-  LCR source, not the OData flow. A balance-sheet liquidity **proxy** is derivable but must be
-  labelled inference, never presented as the reported LCR.
+  column). **RESOLVED (2026-09-06) via multi-bank Pilar 3 KM1** — see the multi-bank addendum below:
+  BCB's **DASFN** catalog serves every institution's standardized Basel **KM1** table (`Api=pilar3`,
+  `/km1`), whose row `km1_17` = **LCR** and `km1_20` = **NSFR**. So LCR/NSFR are now ingested
+  (`bcb_km1.py` → `pilar3_km1/index.json`) and surfaced on the CRO — the reported ratios, not a proxy.
+  Live: Itaú LCR 202%, Santander 186%, BTG 177%, Bradesco 149%.
 - **`inadimplencia_pct` (NPL) / `roe_pct`** come from the credit-portfolio + DRE relatórios
   (Relatórios 4, 7–14) or are derived from two reported lines — labelled inference when derived.
 
@@ -430,3 +431,27 @@ product-mix intelligence from carteira composition (#11).
      401-blocked and the v8 proxy gives price only (no shares). Requires a shares-outstanding source
      (CVM capital social) or an unblocked marketCap feed — won't ship a fabricated valuation.
    - Still deferred from Tier-3: DRE-based custo-de-crédito + cost-to-income (doc 4016).
+
+## Addendum 2 (2026-09-06) — Multi-bank Pilar 3 via DASFN KM1 (SHIPPED + LIVE)
+
+Extending Phase 6 beyond Itaú (IPE-only) to **all banks**. Investigation ruled out the fragile paths
+(IR-site PDFs = opaque per-quarter URLs / mziq has no listable API / BB anti-bot 404) and found the
+**robust, uniform source**: BCB's **DASFN** catalog (`olinda.bcb.gov.br/.../DASFN`) registers every
+SFN institution's own open-data Pilar 3 API. The standardized Basel **KM1 "Key Metrics"** table
+(`Api=pilar3`, `Recurso=/km1`) carries, as a fixed template with a built-in 5-quarter trajectory
+(`t..t_4`): **LCR (km1_17), NSFR (km1_20), Índice de Basileia (km1_7), Tier 1/CET1 (km1_6/5),
+leverage (km1_14)**.
+
+`src/ingest/bcb_km1.py`: `list_km1_resources` (latest KM1 per CNPJ from DASFN) → `extract_km1` →
+`pilar3_km1/index.json` (monthly OncaFinancials Lambda). Robustness handled: **both grouped
+(Santander) and flat (Itaú) JSON layouts**, UTF-8 BOM, three URL date formats (dated file /
+`/km1/YYYY-Q` / filing date), and a **plausibility guard** dropping bad-scale parses (e.g. Banco
+Original 1444%). Joined onto the CRO solvency rows (LCR + band crítica<100/atenção<130/confortável +
+NSFR) with a "Liquidez sob X" rec.
+
+**Live:** 76 institutions publish KM1; 8 tracked banks mapped (Itaú LCR 202%, Santander 186%, BTG
+177%, Bradesco 149%, BMG 284% …); Basileia cross-checks IF.data (Santander KM1 15.3 ≈ IF.data 15.15).
+**This closes the ADR §1 liquidity gap** (LCR/NSFR were "NOT in IF.data"). **Honest limits:** coverage
+is partial — self-hosted endpoints vary (some 404/503, odd structure → degrade to null); it's the
+**quantitative** KM1, so the **narrative tone** corpus still needs the IR PDFs (Bradesco verified,
+others opaque) — multi-bank *tone* remains partial, so #17 sharpens only as tone coverage grows.
