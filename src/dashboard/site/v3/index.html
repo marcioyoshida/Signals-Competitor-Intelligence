@@ -336,6 +336,19 @@ function rowsDiscovery(list) {
     <span class="ttl">${U.esc(r.reason || "")} · ${U.esc(r.hint || "")}</span>
     <span class="badge badge--low">${U.esc(r.confidence || "")}</span></div>`).join("");
 }
+// ADR 022 (CPO angle) — prudential-soundness INSTRUMENTATION coverage per sector.
+function rowsSoundnessCov(list) {
+  list = (list || []).filter(inSector);
+  if (!list.length) return U.empty("Sem cobertura de solidez no escopo.", "", "○");
+  return list.map(r => {
+    const pct = r.coverage_pct;
+    const cls = pct == null ? "low" : (pct >= 80 ? "ok" : pct >= 40 ? "high" : "crit");
+    return `<div class="exrow">
+      <span class="badge badge--${cls}" title="% do portfólio do setor com Índice de Basileia">${pct == null ? "—" : pct + "%"}</span>
+      <span class="ent" style="min-width:148px" title="${U.esc(r.label || "—")}">${U.esc(r.label || "—")}</span>
+      <span class="ttl">${r.with_soundness}/${r.tracked} com Basileia · ${r.with_pilar3} com tom Pilar 3 <span class="tone-src">instrumentação</span></span></div>`;
+  }).join("");
+}
 // ADR 022 Phase 4 — prudential solvency (Índice de Basileia et al.), weakest first.
 const SOLV_BAND = { "frágil": "crit", "atenção": "high", "sólido": "ok" };
 function rowsSolvency(list) {
@@ -669,7 +682,9 @@ function render() {
             panel("Pontos cegos", null, "cross-setor · sem tag de indústria", rowsGap(p.blind_spots))])) +
         band("Estrutura de mercado & saúde das fontes", "receita CVM · frescor por fonte",
           grid("1.1fr 1fr", [panel("Tamanho de mercado por setor", null, "receita dos emissores listados (CVM)", `<div class="panel__bd--flush">${marketSizeChart(p.market_structure, EX.sectors)}</div>`),
-            panel("Saúde das fontes", null, "frescor · volume · defasagem", `<div class="panel__bd--flush">${sourceHealthChart(p.source_health)}</div>`)]));
+            panel("Saúde das fontes", null, "frescor · volume · defasagem", `<div class="panel__bd--flush">${sourceHealthChart(p.source_health)}</div>`)])) +
+        band("Instrumentação de solidez prudencial", "cobertura de Basileia + tom Pilar 3 por setor · ADR 022",
+          panel("Cobertura de solidez (menor primeiro)", null, "% do portfólio com dado prudencial", rowsSoundnessCov(p.soundness_coverage)));
     } else {
       // Deep per-sector Product profile.
       const pr = port.find(x => x.slug === SECTOR) || {};

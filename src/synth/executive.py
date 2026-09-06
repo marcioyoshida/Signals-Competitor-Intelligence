@@ -554,14 +554,41 @@ def build_cpo(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     field_completeness = {f: round(100 * sum(1 for a in all_attrs if (a or {}).get(f)) / n_all)
                           for f in _PRODUCT_FIELDS}
 
+    # ADR 022 (CPO angle): prudential-soundness INSTRUMENTATION coverage per sector — how much of
+    # each sector's tracked portfolio actually carries Basileia (Tier A) and a real-text tone
+    # (pilar3). A Product/coverage-maturity signal, NOT the CRO's competitor-risk read.
+    solv_cov: dict[str, dict[str, int]] = {}
+    for e in (feed.get("entities") or []):
+        has_s = (e.get("soundness") or {}).get("indice_basileia") is not None
+        has_p3 = (e.get("financial_tone") or {}).get("corpus") == "pilar3"
+        for s in (e.get("industries") or []):
+            c = solv_cov.setdefault(s, {"tracked": 0, "with_soundness": 0, "with_pilar3": 0})
+            c["tracked"] += 1
+            c["with_soundness"] += int(has_s)
+            c["with_pilar3"] += int(has_p3)
+
+    def _cov_pct(s):
+        c = solv_cov.get(s)
+        return round(100 * c["with_soundness"] / c["tracked"]) if c and c["tracked"] else None
+
+    soundness_coverage = sorted(
+        [{"slug": s, "label": (by_slug.get(s) or {}).get("label", s),
+          "tracked": c["tracked"], "with_soundness": c["with_soundness"],
+          "with_pilar3": c["with_pilar3"], "coverage_pct": _cov_pct(s),
+          "industries": [s]} for s, c in solv_cov.items()],
+        key=lambda r: (r["coverage_pct"] if r["coverage_pct"] is not None else 999))
+
     def agg(slug):
         if slug == ALL:
+            tot = sum(c["tracked"] for c in solv_cov.values())
+            hav = sum(c["with_soundness"] for c in solv_cov.values())
             return {"n_covered": sum(1 for p in portfolio if p["covered"]),
                     "n_coverage_gap": sum(1 for p in portfolio if p["coverage_gap"]),
                     "n_reviews": len(disc_rows),
                     "n_gaps": sum(1 for g in blind_rows if g["status"] == "open"),
                     "maturity": round(sum(p["maturity"] for p in portfolio) / len(portfolio)) if portfolio else 0,
-                    "provenance_score": _provenance_score(_provenance_mix(all_attrs))}
+                    "provenance_score": _provenance_score(_provenance_mix(all_attrs)),
+                    "soundness_coverage_pct": round(100 * hav / tot) if tot else None}
         p = by_slug.get(slug) or {}
         return {"n_covered": 1 if p.get("covered") else 0,
                 "n_coverage_gap": 1 if p.get("coverage_gap") else 0,
@@ -569,7 +596,8 @@ def build_cpo(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
                 "n_gaps": sum(1 for g in blind_rows if g["status"] == "open"),
                 "maturity": p.get("maturity", 0), "provenance_score": p.get("provenance_score", 0),
                 "narratives": p.get("narratives", 0), "tracked": p.get("tracked", 0),
-                "freshness_days": p.get("freshness_days"), "concentration": p.get("concentration")}
+                "freshness_days": p.get("freshness_days"), "concentration": p.get("concentration"),
+                "soundness_coverage_pct": _cov_pct(slug)}
 
     recs = []
     # weakest covered sector by maturity → deepen coverage
@@ -588,6 +616,14 @@ def build_cpo(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     if open_gaps:
         recs.append(_rec("imediato", f"Triagem de ponto cego: {open_gaps[0]['question']}",
                          "resolve_review", officer="cpo"))
+    # least-instrumented sector on prudential soundness → an instrumentation requirement (ADR 022)
+    low_cov = [r for r in soundness_coverage if r["coverage_pct"] is not None and r["tracked"] >= 2]
+    if low_cov and low_cov[0]["coverage_pct"] < 100:
+        w = low_cov[0]
+        recs.append(_rec("30d",
+                         f"Instrumentar solidez em {w['label']} — só {w['coverage_pct']}% dos "
+                         f"concorrentes com Basileia ({w['with_soundness']}/{w['tracked']})",
+                         "propose_vertical", officer="cpo", industries=[w["slug"]]))
 
     return {"by_industry": _by_industry(ctx["sectors"], agg), "panels": {
         "portfolio": portfolio,
@@ -596,6 +632,7 @@ def build_cpo(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         "blind_spots": blind_rows[:30],
         "discovery": disc_rows[:40],
         "field_completeness": field_completeness,
+        "soundness_coverage": soundness_coverage,               # ADR 022 (CPO instrumentation angle)
         "source_health": feed.get("source_health") or [],       # R5
         "market_structure": feed.get("market_structure") or {},  # R3
         "pricing": feed.get("pricing") or {},                    # R4

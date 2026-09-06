@@ -140,6 +140,27 @@ def test_cro_tier_b_slope_fires_on_rising_pdd():
     assert cro["by_industry"]["banking"]["n_slope_warning"] == 1
 
 
+def test_cpo_soundness_instrumentation_coverage():
+    feed = _feed()
+    feed["industry_options"] = [{"slug": "banking", "label": "Banking"}]
+    feed["entities"] = [
+        {"entity": "itau", "label": "Itaú", "industries": ["banking"],
+         "soundness": {"indice_basileia": 14.8, "band": "sólido"},
+         "financial_tone": {"net": 0.27, "corpus": "pilar3"}},
+        {"entity": "bb", "label": "BB", "industries": ["banking"],
+         "soundness": {"indice_basileia": 15.1, "band": "sólido"}},
+        {"entity": "fintechx", "label": "Fintech X", "industries": ["banking"]},  # no soundness
+    ]
+    cpo = executive.build_executive(feed)["cpo"]
+    cov = {r["slug"]: r for r in cpo["panels"]["soundness_coverage"]}["banking"]
+    assert cov["tracked"] == 3 and cov["with_soundness"] == 2 and cov["with_pilar3"] == 1
+    assert cov["coverage_pct"] == 67                       # 2 of 3
+    assert cpo["by_industry"]["banking"]["soundness_coverage_pct"] == 67
+    # an under-instrumented sector raises a CPO instrumentation requirement
+    assert any("Instrumentar solidez" in r["text"] and "Banking" in r["text"]
+               for r in cpo["panels"]["recommendations"])
+
+
 def test_cco_risk_register_and_reputation():
     cco = executive.build_executive(_feed())["cco"]
     assert cco["by_industry"]["__all__"]["n_integrity"] == 2
