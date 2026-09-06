@@ -179,29 +179,37 @@ def publish(index: dict[str, Any], bucket: str, *, s3: Any | None = None) -> str
     return f"s3://{bucket}/{INDEX_KEY}"
 
 
-def run(bucket: str | None = None, *, today: dt.date | None = None,
-        force: bool = False, s3: Any | None = None) -> dict[str, Any]:
-    """Fetch the latest month → resolve → append. Append-only base-month no-op guard."""
+def run(bucket: str | None = None, *, today: dt.date | None = None, force: bool = False,
+        months: list[int] | None = None, s3: Any | None = None) -> dict[str, Any]:
+    """Fetch month(s) → resolve → append. Default: the latest month with an append-only no-op guard.
+    `months` backfills an explicit list (each appended if absent — history is never rewritten)."""
     from src.synth.entities import resolve_entities
 
-    ym = latest_month(today)
-    if bucket and not force:
-        idx = load_index(bucket, s3=s3)
-        if idx.get("latest_month") == ym and idx.get("count"):
-            return {"status": "noop", "month": ym, "reason": "month unchanged", "records": idx.get("count")}
-    data = fetch_month(ym)
-    per_entity = map_to_entities(data, resolver=resolve_entities)
-    idx = append_month(load_index(bucket, s3=s3) if bucket else None, ym, per_entity, today=today)
-    if bucket and per_entity:
+    targets = list(months) if months else [latest_month(today)]
+    if not months and bucket and not force:
+        idx0 = load_index(bucket, s3=s3)
+        if idx0.get("latest_month") == targets[0] and idx0.get("count"):
+            return {"status": "noop", "month": targets[0], "reason": "month unchanged",
+                    "records": idx0.get("count")}
+    idx = load_index(bucket, s3=s3) if bucket else None
+    total_mapped = 0
+    for ym in sorted(targets):
+        data = fetch_month(ym)
+        per_entity = map_to_entities(data, resolver=resolve_entities)
+        idx = append_month(idx, ym, per_entity, today=today)
+        total_mapped += len(per_entity)
+    if bucket and idx and idx.get("count"):
         publish(idx, bucket, s3=s3)
-    return {"status": "ok", "month": ym, "institutions": len(data), "mapped": len(per_entity),
-            "records": idx.get("count")}
+    return {"status": "ok", "months": sorted(targets), "mapped": total_mapped,
+            "records": (idx or {}).get("count")}
 
 
 def lambda_handler(event: dict[str, Any] | None, context: Any) -> dict[str, Any]:
-    """OncaFinancialsPipeline BalanceteTask (ADR 022 Phase 2)."""
+    """OncaFinancialsPipeline BalanceteTask (ADR 022 Phase 2). `{"months":[YYYYMM,...]}` backfills."""
     import os
 
     bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
+    ev = event or {}
     return {"statusCode": 200,
-            "body": json.dumps(run(bucket, force=bool((event or {}).get("force")), ), ensure_ascii=False)}
+            "body": json.dumps(run(bucket, force=bool(ev.get("force")), months=ev.get("months")),
+                               ensure_ascii=False)}
