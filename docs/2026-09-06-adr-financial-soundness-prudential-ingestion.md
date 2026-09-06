@@ -3,7 +3,9 @@
 Status: **PROPOSED** 2026-09-06. **Rev. 2 (2026-09-06)** — FinBERT reinstated as a
 scale-to-zero *feature-extraction* stage (Batch Transform, FinBERT-PT-BR) after review;
 the Rev. 1 blanket rejection conflated SageMaker with an always-on endpoint. See
-*Revision note* and §3.
+*Revision note* and §3. **Pilot-validated (2026-09-06)** — the flow runs end-to-end on real
+IF.data with FinBERT-PT-BR local on Python 3.14/CPU; see
+[pilot findings](2026-09-06-adr022-pilot-findings.md).
 
 Relates to / constrained by: ADR 019 (declarative source registry — a new source is a
 `SourceSpec` + one `FETCHERS` entry, not a bespoke Lambda), the parallelized pipeline

@@ -16,3 +16,6 @@ data/latest_digest.json
 # v2 dashboards fetch a server-written scoped feed; never commit a synthetic fixture
 src/dashboard/site/v2/**/feed.json
 infra/cdk.out/
+
+# local FinBERT model cache (ADR 022 pilot)
+.hf_cache/
