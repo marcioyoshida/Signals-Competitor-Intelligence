@@ -285,6 +285,57 @@ from data already present, with the **aprovar/rejeitar + outcome** capture contr
    planning first; offline distillation (Mechanism 2) only later, behind an outcome-eval bar;
    tenant-isolated by default.
 
+## Backlog roadmap — surfacing gaps & decision-KB maturation (2026-09-06)
+
+Filed after an audit of the surfacing value chain. **The v3 officer dashboards read exactly one
+thing — `feed.executive`, assembled by `executive.py`.** "Surfaced to an officer" therefore means
+*routed through a `build_cso/cro/cco/cpo` / `build_flow` builder*. Everything else in `feed.json`
+feeds only the older `/` dashboard or is computational substrate.
+
+**Framework/SWOT clarification (answers the "are frameworks still derived from SWOT?" question):**
+the strategy frameworks are **already detached** — ADR-006 Wave 2. Only **TOWS** is a SWOT
+transform, by design. Porter/PESTLE/Ansoff/BCG/Four-Corners each carry their own `DIM_SIGNALS`
+axis+lens gate and gather their own narrative evidence (`_collect_evidence_ids`); SWOT is passed as
+*prompt context* only, not as the derivation base. So their thinness is **not** SWOT coupling —
+it is capped ~12 `key_claim` snippets, a single LLM pass, a narrow gate, and the new rich features
+(KM1/LCR, soundness, FinBERT tone, longitudinal trajectory) not yet fed in. Depth = richer evidence
++ multi-pass reasoning (SURF-9), **not** further detachment.
+
+### Surfacing backlog (inference → officer)
+Already wired: financial-soundness stack (soundness/balancete/fundamentals/inadimplência/KM1-LCR),
+financial_tone, distress, integrity, coverage, reg-change→CCO, discovery/provenance→CPO, flow,
+metrics, engagement, reference.
+
+| ID | Issue | Gap | Target | Effort |
+|---|---|---|---|---|
+| SURF-1 | #81 ⭐keystone | SWOT/TOWS not in exec block | CSO strategic-posture | M |
+| SURF-2 | #82 | Porter/Four-Corners not routed | CSO competitive | M |
+| SURF-3 | #83 | PESTLE not routed; drop 7S | CCO macro/reg | M |
+| SURF-4 | #84 | Ansoff/BCG not routed | CPO growth/portfolio | M |
+| SURF-5 | #85 | product_intel not routed | CPO product feed | S |
+| SURF-6 | #86 | relational/operatives not routed | CSO/CCO graph drawer | M–L |
+| SURF-7 | #87 | ecosystem/predictive not routed | CSO forward-look | M |
+| SURF-8 | #88 ⭐ | silence not in pipeline surface | cross-officer quiet-alert | S–M |
+| SURF-9 | #89 ⭐ | frameworks thin (evidence/reasoning) | frameworks depth | L |
+| SURF-10 | #90 | reg_change/reg_diff not distinct | CCO change-diff drawer | M |
+| SURF-11 | #91 | behavioral/cohort not routed | CPO/CSO peer-cohort | M |
+| SURF-12 | #92 | cost-to-income/custo-de-crédito | CSO/CRO (BLOCKED: DRE 4016) | L |
+| SURF-13 | #93 | valuation | CSO (BLOCKED: shares source, #15) | L |
+
+### Decision-capture-KB maturation (extends §D–§H, which are shipped)
+| ID | Issue | Capability | Effort |
+|---|---|---|---|
+| DEC-1 | #94 ⭐ | outcome-review loop → drives `set_outcome` reward signal | M |
+| DEC-2 | #95 ⭐ | per-tenant latency baseline → makes TDR real (`_tdr` is None) | S |
+| DEC-3 | #96 | auto-draft decisions from Executive Flow trajectories | M |
+| DEC-4 | #97 | precedent ranking = recency × outcome × similarity | M |
+| DEC-5 | #98 | decisions under ADR-018 governance (provenance/precedence/audit) | M–L |
+| DEC-6 | #99 | decision→action closure (log ↔ `/api/act` journal, ADR-020) | M |
+| DEC-7 | #100 | cross-tenant anonymized precedent (sovereign, governance-gated) | L |
+
+**Recommended sequencing:** DEC-1 + DEC-2 (make existing metrics honest, cheap) → SURF-8 + SURF-1
+(highest-value surfacing) → SURF-9 (depth) → remainder.
+
 ## Core principle
 
 ```text
