@@ -248,10 +248,17 @@ their own schedule, matched to the monthly balancete release.
 
 ## Phasing
 
-1. **Tier A — quarterly ratios.** `bcb_soundness.py` soundness relatórios off the existing Olinda
-   client → `soundness/index.json` (latest level), merged into the financials read + competitor
-   cards (Basileia, inadimplência, ROE, band). One-shot/manual first; the daily feed already reads
-   the store.
+1. **Tier A — quarterly ratios. SHIPPED + LIVE (2026-09-06, `a00882a` + fast-fail fix).**
+   `bcb_soundness.py` reads Relatório 5 solvency off the existing Olinda client → durable
+   `soundness/index.json` (latest level); `feed_builder` joins it onto `entities[].soundness`
+   (Basileia / Tier 1 / CET1 / leverage / imobilização + band). 7 unit tests + 945 suite green;
+   deployed to the ingest Lambda (gated `ONCA_SOUNDNESS`, **default OFF** — daily is not the home) +
+   feed-builder. Store populated live for base 202603: **122 tracked entities** with real Basileia
+   (micro-IPs with negative capital → frágil; XP/porto_seguro/mercado_pago/c6 → atenção; incumbents
+   ~15% → sólido); **32 in-feed entities carry `soundness`**. Fast-fail hardening (cheap `$top=1`
+   base-date probe, 3-try `_get`, `conglomerates_only` bounds resolution to the ~567 `- PRUDENCIAL`
+   rows) after a hang on the flaky endpoint. Refresh is Phase 3's job (monthly pipeline) — quarterly
+   data is stable until the next quarter publishes.
 2. **Tier B — monthly balancete trajectory.** Ingest the monthly COSIF balancete (doc 4010), map
    the account→line set (crédito, PDD, depósitos, PL, liquidez), append one **`series[]`** point per
    month; validate the overlap month against Tier A. Feeds `feature_store` / `longitudinal`.
