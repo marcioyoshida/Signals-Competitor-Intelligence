@@ -344,3 +344,47 @@ Transform** (and Serverless Inference) **scale to zero**, so a daily batch job h
 tool and does not replace Bedrock synthesis — but as a **deterministic financial-tone feature** over
 Resultados e Balanços, run scale-to-zero and folded into the existing feature stage, it is a genuine,
 distinctive enrichment across every entity. Reinstated as §3.
+
+## Addendum (2026-09-06) — Financial-statement dimensions roadmap (Resultados e Balanço)
+
+With the monthly balancete (balance sheet **+** P&L: COSIF 7xxx rendas / 8xxx despesas), the IF.data
+summary (Ativo, Carteira, Depósitos, Captações, **Lucro Líquido**, PL) and the Basileia set all
+flowing, a large set of new dimensions is derivable. Tabled by feasibility, ease and the officer who
+benefits most.
+
+| # | Dimension | Measures | Data status | Ease | Primary officer |
+|---|---|---|---|---|---|
+| 1 | ROE / ROA | Lucro ÷ PL / ÷ Ativo | have (IF.data) | trivial | **CSO** |
+| 2 | Loan-to-Deposit (LDR) | Carteira ÷ Depósitos | have | trivial | CRO |
+| 3 | Leverage / funding mix | Ativo÷PL; depósitos vs captações | have | trivial | CRO |
+| 4 | Capital headroom | Basileia − mínimo (buffer) | have | trivial | **CSO** / CCO |
+| 5 | Share-by-metric | share of crédito/depósitos/lucro | have | easy | CSO |
+| 6 | Índice de eficiência | Despesas Adm ÷ Receitas | balancete (extract) | easy | **CSO** |
+| 7 | NIM / spread | (rendas − despesas de captação) ÷ ativos rentáveis | balancete | easy | CSO/CPO |
+| 8 | Custo de crédito | Despesas de PDD ÷ Carteira | balancete (have PDD) | easy | CRO |
+| 9 | **Inadimplência / NPL** | carteira D–H ÷ total | need IF.data Rel. 8 | medium | **CRO** ⭐ |
+| 10 | Cobertura de provisões | PDD ÷ créditos problemáticos | Rel. 8 + PDD | medium | CRO |
+| 11 | Composição da carteira | PF/PJ, modalidade, CNAE | need Rel. 7/11–16 | medium | **CPO** |
+| 12 | Concentração de crédito | top-N / setorial | Rel. 12/14 | medium | CPO/CRO |
+| 13 | Liquidez estrutural (proxy) | (disponib.+TVM) ÷ passivo — NOT the LCR | have | easy | CRO |
+| 14 | Peer benchmarking / percentis | rank vs peers on every ratio | derived | medium | **CSO** |
+| 15 | Valuation (P/L, P/VP) | market cap ÷ lucro/PL | quotes+financials (listed) | medium-hard | CSO |
+| 16 | Composite fragility score | Basileia↓+PDD↑+ROE↓+LDR↑ | derived | hard | **CRO** |
+| 17 | Tone-vs-numbers divergence | FinBERT tone vs real ROE/NPL trajectory | derived | hard | CRO/CSO |
+
+**Caveats.** Balancete P&L (7xxx/8xxx) is **year-accumulated** (resets in January) — MoM/annualisation
+needs YTD-aware handling (#6/#7/#8 and ROE). Rows 9–12 need new IF.data relatórios (same Olinda client,
+different `Relatorio` code — the soundness recipe again). #15 is listed-only and needs a reliable
+market-cap join.
+
+**Where value concentrates.** **CSO** gains the most net-new — today it has no *financial* strength
+axis (narrative/momentum only); ROE/efficiency/headroom/benchmarking give it one. **CRO** deepens with
+inadimplência/NPL (#9) — the highest-value single number, named in §1 and still unbuilt. **CPO** gets
+product-mix intelligence from carteira composition (#11).
+
+### Recommended sequencing (this addendum drives the next builds)
+1. **Tier 1 — quick wins (trivial, data in hand) → CSO financial axis:** ROE/ROA, LDR, leverage,
+   capital headroom, share-by-metric. **← IN PROGRESS.**
+2. **Tier 2 — Inadimplência/NPL (#9)** via IF.data Rel. 8 → the marquee CRO addition.
+3. **Tier 3 — Eficiência + custo de crédito (#6/#8)** from the balancete P&L (with YTD handling).
+4. **Later/optional:** composite fragility (#16), valuation (#15), tone-vs-numbers (#17).
