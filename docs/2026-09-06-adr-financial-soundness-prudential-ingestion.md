@@ -414,4 +414,19 @@ product-mix intelligence from carteira composition (#11).
    despesa/reversão gross-up overstates net PDD) → NOT shipped; it's deferred to the DRE (doc 4016),
    and the CRO already reads credit cost via NPL (Tier-2) + the PDD slope (Tier-B), so it's redundant
    there. A textbook **cost-to-income** needs the DRE's net-income denominator — also deferred.
-4. **Later/optional:** composite fragility (#16), valuation (#15), tone-vs-numbers (#17).
+4. **Later/optional — #16 + #17 SHIPPED + LIVE (2026-09-06); #15 DEFERRED.**
+   - **#16 Composite fragility (CRO). LIVE.** `executive._fragility` = weighted 0–100 index over low
+     Basileia (.30), high NPL (.25), rising PDD (.20), weak ROE (.15), high leverage (.10),
+     renormalised to the components present; band resiliente<33/atenção/frágil≥60. On the CRO
+     solvency rows + per-sector max_fragility/n_fragil + a rec. Live: Mercado Pago 45/100 (good
+     capital, but NPL 16% + negative ROE).
+   - **#17 Tone-vs-numbers (CRO). LIVE.** `executive._tone_divergence` = FinBERT tone − a
+     numbers-health index (ROE/NPL/PDD); a large positive gap = narrative more upbeat than the
+     numbers (credibility watch). Rec: "Tom vs números — X: relato mais otimista que os indicadores".
+     Live: Mercado Pago +1.47. **Caveat:** the signal is only fully meaningful once the tone comes
+     from real Pilar 3 text; with the current `solvency_facts` tone (uniformly ~+0.5, only Itaú on
+     pilar3), the divergence mostly re-flags weak numbers — it sharpens as Pilar 3 coverage expands.
+   - **#15 Valuation (P/L, P/VP) — DEFERRED.** Needs market cap; Yahoo's v7 marketCap endpoint is
+     401-blocked and the v8 proxy gives price only (no shares). Requires a shares-outstanding source
+     (CVM capital social) or an unblocked marketCap feed — won't ship a fabricated valuation.
+   - Still deferred from Tier-3: DRE-based custo-de-crédito + cost-to-income (doc 4016).
