@@ -222,16 +222,24 @@ def _reg_row(c: dict[str, Any]) -> dict[str, Any]:
 
 
 _WEAK_BANDS = ("frágil", "atenção")
+_PDD_SLOPE_WARN_PCT = 5.0   # MoM rise in loan-loss provisions that flags credit deterioration
 
 
 def _solvency_rows(feed: dict[str, Any]) -> list[dict[str, Any]]:
-    """Per-entity prudential solvency (ADR 022 Tier A) from feed.entities[].soundness, weakest
-    (lowest Índice de Basileia) first — the CRO's competitor-soundness view."""
+    """Per-entity prudential solvency (ADR 022 Tier A) from feed.entities[].soundness, merged with
+    the Tier-B monthly balancete **slope** (feed.entities[].balancete). Weakest (lowest Índice de
+    Basileia) first — the CRO's competitor-soundness view. `slope_warning` = provisions (PDD) rising
+    MoM ≥ 5% — the leading indicator that moves months before the quarterly ratio."""
     labels = _labels(feed)
     rows: list[dict[str, Any]] = []
     for e in (feed.get("entities") or []):
         s = e.get("soundness") or {}
-        if s.get("indice_basileia") is None:
+        bt = e.get("balancete") or {}
+        has_solv = s.get("indice_basileia") is not None
+        pdd_mom = bt.get("pdd_mom_pct")
+        cred_mom = bt.get("credito_mom_pct")
+        slope_warn = pdd_mom is not None and pdd_mom >= _PDD_SLOPE_WARN_PCT
+        if not has_solv and not bt:
             continue
         rows.append({
             "entity": e.get("entity"),
@@ -242,9 +250,16 @@ def _solvency_rows(feed: dict[str, Any]) -> list[dict[str, Any]]:
             "razao_alavancagem": s.get("razao_alavancagem"),
             "band": s.get("band"),
             "base_date": s.get("base_date"),
+            # Tier-B slope (monthly): rising PDD / moving crédito, months = points in series
+            "pdd_mom_pct": pdd_mom,
+            "credito_mom_pct": cred_mom,
+            "balancete_month": bt.get("month"),
+            "balancete_months": bt.get("months"),
+            "slope_warning": slope_warn,
             "industries": e.get("industries") or _industries_of(feed, e.get("entity")),
         })
-    rows.sort(key=lambda r: r["indice_basileia"])
+    # weakest capital first; entities with only a slope (no Basileia) sink to the end
+    rows.sort(key=lambda r: (r["indice_basileia"] is None, r["indice_basileia"] if r["indice_basileia"] is not None else 0))
     return rows
 
 
@@ -253,6 +268,9 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     reg = ctx["reg_cards"]
     solvency = _solvency_rows(feed)
     weak_solvency = [r for r in solvency if r.get("band") in _WEAK_BANDS]
+    # Tier-B slope firing: competitors whose provisions are rising fastest MoM (credit deterioration).
+    slope_warnings = sorted((r for r in solvency if r.get("slope_warning")),
+                            key=lambda r: r.get("pdd_mom_pct") or 0, reverse=True)
     timeline = sorted(reg, key=lambda c: str(c.get("date") or ""), reverse=True)
     impact = sorted((c for c in reg if c.get("change_record")),
                     key=lambda c: (c.get("change_record") or {}).get("blast_radius", {}).get("score", 0),
@@ -271,8 +289,9 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
                 "n_deadlines": sum(1 for c in sr if c.get("days_to_deadline") is not None),
                 "max_blast": max(blasts) if blasts else 0,
                 # ADR 022 Phase 4: prudential solvency of the sector's tracked competitors.
-                "min_basileia": min((r["indice_basileia"] for r in ss), default=None),
-                "n_weak_solvency": sum(1 for r in ss if r.get("band") in _WEAK_BANDS)}
+                "min_basileia": min((r["indice_basileia"] for r in ss if r["indice_basileia"] is not None), default=None),
+                "n_weak_solvency": sum(1 for r in ss if r.get("band") in _WEAK_BANDS),
+                "n_slope_warning": sum(1 for r in ss if r.get("slope_warning"))}
 
     recs = []
     if impact:
@@ -289,6 +308,12 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         w = weak_solvency[0]
         recs.append(_rec("imediato",
                          f"Solidez sob {w['band']} — {w['label']} (Basileia {w['indice_basileia']}%)",
+                         "open_watch", officer="cro", evidence_id=w.get("entity"),
+                         industries=w.get("industries") or []))
+    if slope_warnings:
+        w = slope_warnings[0]
+        recs.append(_rec("imediato",
+                         f"Deterioração de crédito — {w['label']}: provisões (PDD) +{w['pdd_mom_pct']}% no mês",
                          "open_watch", officer="cro", evidence_id=w.get("entity"),
                          industries=w.get("industries") or []))
     return {"by_industry": _by_industry(ctx["sectors"], agg), "panels": {

@@ -91,6 +91,8 @@
   .rec .cap .done { font-size:var(--fs-micro); color:var(--ok); font-weight:600; }
   .rec .cap .ocsel { font:inherit; font-size:var(--fs-micro); background:var(--surface); color:var(--ink);
     border:1px solid var(--border); border-radius:var(--r-sm); padding:3px var(--s2); }
+  .sl-warn { color:var(--t-high); font-weight:600; font-variant-numeric:tabular-nums; }
+  .sl-ok { color:var(--muted); font-variant-numeric:tabular-nums; }
   .brd { font-size:var(--fs-micro); color:var(--muted); display:inline-flex; align-items:center; gap:3px; cursor:pointer; }
   .brd.on { color:var(--primary); font-weight:600; }
   .hz-empty { color:var(--muted); font-size:var(--fs-micro); padding:var(--s2) 0; }
@@ -339,13 +341,21 @@ function rowsSolvency(list) {
   list = (list || []).filter(inSector);
   if (!list.length) return U.empty("Sem dados de solidez prudencial no escopo.", "", "○");
   return list.map(r => {
-    const b = SOLV_BAND[r.band] || "low";
-    const meta = ["Tier1 " + (r.capital_nivel_i != null ? r.capital_nivel_i + "%" : "—"),
-                  "CET1 " + (r.capital_principal != null ? r.capital_principal + "%" : "—")].join(" · ");
+    const b = r.band ? (SOLV_BAND[r.band] || "low") : (r.slope_warning ? "high" : "low");
+    const bandTxt = r.band || (r.slope_warning ? "trajetória" : "—");
+    const bas = r.indice_basileia != null
+      ? `Basileia <b>${r.indice_basileia}%</b> · Tier1 ${r.capital_nivel_i != null ? r.capital_nivel_i + "%" : "—"} · CET1 ${r.capital_principal != null ? r.capital_principal + "%" : "—"}`
+      : "sem Basileia trimestral";
+    // Tier-B monthly slope: rising PDD is the early-warning line.
+    let slope = "";
+    if (r.pdd_mom_pct != null) {
+      const warn = r.slope_warning;
+      slope = ` · <span class="${warn ? "sl-warn" : "sl-ok"}">PDD ${r.pdd_mom_pct > 0 ? "+" : ""}${r.pdd_mom_pct}%/mês${warn ? " ▲" : ""}</span>`;
+    }
     return `<div class="exrow">
-      <span class="badge badge--${b}" title="banda de solidez">${U.esc(r.band || "—")}</span>
+      <span class="badge badge--${b}" title="banda de solidez / trajetória">${U.esc(bandTxt)}</span>
       <span class="ent" style="min-width:148px" title="${U.esc(r.label || "—")}">${U.esc(r.label || "—")}</span>
-      <span class="ttl">Basileia <b>${r.indice_basileia != null ? r.indice_basileia + "%" : "—"}</b> · ${meta}</span></div>`;
+      <span class="ttl">${bas}${slope}</span></div>`;
   }).join("");
 }
 function rowsCoverage(list) {
@@ -608,8 +618,8 @@ function render() {
          tile("Maior alcance", a.max_blast, "setores", a.max_blast >= 3 ? "high" : null),
          tile("Solidez sob atenção", a.n_weak_solvency, a.min_basileia != null ? "mín. Basileia " + a.min_basileia + "%" : "prudencial",
               (a.n_weak_solvency || 0) > 0 ? "high" : null)]) +
-      band("Solidez prudencial dos concorrentes", "Índice de Basileia · ADR 022 · IF.data",
-           panel("Solvência (mais frágil primeiro)", null, "Basileia · Tier 1 · CET1", rowsSolvency(p.solvency))) +
+      band("Solidez prudencial dos concorrentes", "Basileia (trimestral) + trajetória mensal de PDD · ADR 022",
+           panel("Solvência & trajetória (mais frágil primeiro)", null, "Basileia · Tier 1 · CET1 · PDD/mês", rowsSolvency(p.solvency))) +
       band("Impacto & alcance", "blast-radius · ADR-009", panel("Mudanças por impacto", null, "banda de alcance · dificuldade", rowsReg(p.impact))) +
       band("Linha do tempo regulatória", "", grid("1fr 1fr", [panel("Consulta → norma → fiscalização", null, "recente", rowsReg(p.timeline)),
                             panel("Atos com mudanças enumeradas", null, "amending acts", rowsReg(p.changes))])) +

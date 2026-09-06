@@ -117,6 +117,27 @@ def test_cro_solvency_panel_and_weak_recommendation():
     assert am["min_basileia"] == 11.93 and am["n_weak_solvency"] == 1
 
 
+def test_cro_tier_b_slope_fires_on_rising_pdd():
+    feed = _feed()
+    feed["industry_options"] = [{"slug": "banking", "label": "Banking"}]
+    feed["entities"] = [
+        {"entity": "bb", "label": "Banco do Brasil", "industries": ["banking"],
+         "soundness": {"indice_basileia": 15.1, "capital_principal": 11.0, "band": "sólido", "base_date": 202603},
+         "balancete": {"month": 202606, "months": 3, "pdd_mom_pct": 6.9, "credito_mom_pct": 0.3}},
+        {"entity": "xp", "label": "XP", "industries": ["banking"],
+         "soundness": {"indice_basileia": 15.0, "capital_principal": 11.2, "band": "sólido", "base_date": 202603},
+         "balancete": {"month": 202606, "months": 3, "pdd_mom_pct": 1.0, "credito_mom_pct": 2.0}},
+    ]
+    cro = executive.build_executive(feed)["cro"]
+    sv = {r["entity"]: r for r in cro["panels"]["solvency"]}
+    assert sv["bb"]["slope_warning"] is True and sv["bb"]["pdd_mom_pct"] == 6.9  # +6.9% ≥ 5% → warns
+    assert sv["xp"]["slope_warning"] is False                                    # +1.0% → calm
+    # a rising-PDD competitor raises an immediate credit-deterioration rec
+    assert any("Deterioração de crédito" in r["text"] and "Banco do Brasil" in r["text"]
+               for r in cro["panels"]["recommendations"])
+    assert cro["by_industry"]["banking"]["n_slope_warning"] == 1
+
+
 def test_cco_risk_register_and_reputation():
     cco = executive.build_executive(_feed())["cco"]
     assert cco["by_industry"]["__all__"]["n_integrity"] == 2

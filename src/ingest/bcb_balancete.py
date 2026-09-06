@@ -156,6 +156,18 @@ def trajectory(entry: dict[str, Any]) -> dict[str, Any]:
         out[line] = cur
         if prev and prev.get(line) not in (None, 0) and cur is not None:
             out[f"{line}_mom_pct"] = round(100 * (cur - prev[line]) / prev[line], 1)
+    out["months"] = len(s)
+    return out
+
+
+def trajectory_by_entity(index: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """{entity_id: trajectory} for entities with a series — the projection feed_builder joins onto
+    entities[].balancete so the CRO axis can read the monthly slope (ADR 022 Phase 4/slope)."""
+    out: dict[str, dict[str, Any]] = {}
+    for eid, entry in ((index or {}).get("records") or {}).items():
+        t = trajectory(entry)
+        if t:
+            out[eid] = t
     return out
 
 
