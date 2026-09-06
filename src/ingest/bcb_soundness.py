@@ -314,6 +314,11 @@ def lambda_handler(event: dict[str, Any] | None, context: Any) -> dict[str, Any]
         result["resultados"] = bcb_resultados.run(bucket)
     except Exception as exc:  # pragma: no cover
         result["resultados"] = {"status": "error", "reason": str(exc)}
+    try:  # multi-bank Pilar 3 — Basel KM1 (LCR/NSFR/Basileia) via DASFN (best-effort)
+        from src.ingest import bcb_km1
+        result["km1"] = bcb_km1.run(bucket)
+    except Exception as exc:  # pragma: no cover
+        result["km1"] = {"status": "error", "reason": str(exc)}
     return {"statusCode": 200, "body": json.dumps(result, ensure_ascii=False)}
 
 

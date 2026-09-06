@@ -323,11 +323,12 @@ def _solvency_rows(feed: dict[str, Any]) -> list[dict[str, Any]]:
         ftone = e.get("financial_tone") or {}
         ina = e.get("inadimplencia") or {}
         fu = e.get("fundamentals") or {}      # #16/#17: ROE + leverage
+        km1 = e.get("pilar3_km1") or {}       # multi-bank Pilar 3: LCR/NSFR (liquidity)
         has_solv = s.get("indice_basileia") is not None
         pdd_mom = bt.get("pdd_mom_pct")
         cred_mom = bt.get("credito_mom_pct")
         slope_warn = pdd_mom is not None and pdd_mom >= _PDD_SLOPE_WARN_PCT
-        if not has_solv and not bt and not ina:
+        if not has_solv and not bt and not ina and not km1:
             continue
         rows.append({
             "entity": e.get("entity"),
@@ -354,6 +355,10 @@ def _solvency_rows(feed: dict[str, Any]) -> list[dict[str, Any]]:
             "npl_band": ina.get("band"),
             "roe_pct": fu.get("roe_pct"),
             "leverage": fu.get("leverage"),
+            # Multi-bank Pilar 3 KM1: LCR/NSFR (liquidity — the ADR §1 gap) + band.
+            "lcr_pct": km1.get("lcr_pct"),
+            "nsfr_pct": km1.get("nsfr_pct"),
+            "lcr_band": km1.get("band_lcr"),
             "industries": e.get("industries") or _industries_of(feed, e.get("entity")),
         })
     # #16 composite fragility + #17 tone-vs-numbers divergence (derived from the row's own fields)
@@ -381,6 +386,9 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
                      key=lambda r: (r.get("fragility") or {}).get("score", 0), reverse=True)
     optimism = sorted((r for r in solvency if (r.get("tone_divergence") or {}).get("flag") == "otimismo desalinhado"),
                       key=lambda r: (r.get("tone_divergence") or {}).get("divergence", 0), reverse=True)
+    # Multi-bank Pilar 3: lowest LCR below the comfort band (liquidity watch).
+    lcr_low = sorted((r for r in solvency if r.get("lcr_band") in ("crítica", "atenção")),
+                     key=lambda r: r.get("lcr_pct") or 999)
     timeline = sorted(reg, key=lambda c: str(c.get("date") or ""), reverse=True)
     impact = sorted((c for c in reg if c.get("change_record")),
                     key=lambda c: (c.get("change_record") or {}).get("blast_radius", {}).get("score", 0),
@@ -454,6 +462,12 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
                          f"Tom vs números — {w['label']}: relato mais otimista que os indicadores "
                          f"(divergência +{w['tone_divergence']['divergence']}) — verificar credibilidade",
                          "curate_belief", officer="cro", evidence_id=w.get("entity"),
+                         industries=w.get("industries") or []))
+    if lcr_low:
+        w = lcr_low[0]
+        recs.append(_rec("30d",
+                         f"Liquidez sob {w['lcr_band']} — {w['label']}: LCR {w['lcr_pct']}% (Pilar 3)",
+                         "open_watch", officer="cro", evidence_id=w.get("entity"),
                          industries=w.get("industries") or []))
     return {"by_industry": _by_industry(ctx["sectors"], agg), "panels": {
         "timeline": [_reg_row(c) for c in timeline[:30]],

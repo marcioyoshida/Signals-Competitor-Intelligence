@@ -383,6 +383,12 @@ function rowsSolvency(list) {
       const warn = r.slope_warning;
       slope = ` · <span class="${warn ? "sl-warn" : "sl-ok"}">PDD ${r.pdd_mom_pct > 0 ? "+" : ""}${r.pdd_mom_pct}%/mês${warn ? " ▲" : ""}</span>`;
     }
+    // Multi-bank Pilar 3 KM1: LCR (liquidity — not in IF.data).
+    let lcr = "";
+    if (r.lcr_pct != null) {
+      const lb = r.lcr_band === "crítica" ? "sl-warn" : r.lcr_band === "atenção" ? "sl-warn" : "sl-ok";
+      lcr = ` · <span class="${lb}" title="Liquidez de Curto Prazo (LCR) · Pilar 3${r.nsfr_pct != null ? " · NSFR " + r.nsfr_pct + "%" : ""}">LCR ${r.lcr_pct}%${r.lcr_band && r.lcr_band !== "confortável" ? " ▲" : ""}</span>`;
+    }
     // ADR 022 Tier-2: inadimplência / NPL (15+ dias).
     let npl = "";
     if (r.npl_total != null) {
@@ -410,7 +416,7 @@ function rowsSolvency(list) {
     return `<div class="exrow">
       <span class="badge badge--${b}" title="banda de solidez / trajetória">${U.esc(bandTxt)}</span>
       <span class="ent" style="min-width:148px" title="${U.esc(r.label || "—")}">${U.esc(r.label || "—")}</span>
-      <span class="ttl">${bas}${slope}${npl}${tone}${frag}${diverge}</span></div>`;
+      <span class="ttl">${bas}${lcr}${slope}${npl}${tone}${frag}${diverge}</span></div>`;
   }).join("");
 }
 function rowsCoverage(list) {
@@ -675,7 +681,7 @@ function render() {
          tile("Maior alcance", a.max_blast, "setores", a.max_blast >= 3 ? "high" : null),
          tile("Solidez sob atenção", a.n_weak_solvency, a.min_basileia != null ? "mín. Basileia " + a.min_basileia + "%" : "prudencial",
               (a.n_weak_solvency || 0) > 0 ? "high" : null)]) +
-      band("Solidez prudencial dos concorrentes", "Basileia + PDD/mês + inadimplência + tom FinBERT · ADR 022",
+      band("Solidez prudencial dos concorrentes", "Basileia + LCR + PDD/mês + inadimplência + fragilidade + tom · ADR 022",
            panel("Solvência, inadimplência, trajetória & tom (mais frágil primeiro)", null, "Basileia · CET1 · PDD/mês · NPL · tom", rowsSolvency(p.solvency))) +
       band("Impacto & alcance", "blast-radius · ADR-009", panel("Mudanças por impacto", null, "banda de alcance · dificuldade", rowsReg(p.impact))) +
       band("Linha do tempo regulatória", "", grid("1fr 1fr", [panel("Consulta → norma → fiscalização", null, "recente", rowsReg(p.timeline)),

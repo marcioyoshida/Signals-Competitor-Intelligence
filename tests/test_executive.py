@@ -159,6 +159,14 @@ def test_cro_tier_b_slope_fires_on_rising_pdd():
     feed["entities"][0]["inadimplencia"] = {"npl_total": 12.9, "npl_pf": 12.8, "npl_pj": 14.4, "band": "elevada"}
     cro = executive.build_executive(feed)["cro"]
     sv = {r["entity"]: r for r in cro["panels"]["solvency"]}
+    # multi-bank Pilar 3 KM1: LCR surfaces on the CRO row + fires when below comfort
+    feed["entities"][1]["pilar3_km1"] = {"lcr_pct": 118.0, "nsfr_pct": 105.0, "band_lcr": "atenção"}
+    cro = executive.build_executive(feed)["cro"]
+    sv = {r["entity"]: r for r in cro["panels"]["solvency"]}
+    assert sv["xp"]["lcr_pct"] == 118.0 and sv["xp"]["lcr_band"] == "atenção"
+    assert any("Liquidez sob atenção" in r["text"] and "118.0%" in r["text"]
+               for r in cro["panels"]["recommendations"])
+    sv = {r["entity"]: r for r in executive.build_executive(feed)["cro"]["panels"]["solvency"]}
     assert sv["bb"]["npl_total"] == 12.9 and sv["bb"]["npl_band"] == "elevada"
     assert any("Inadimplência elevada" in r["text"] and "12.9%" in r["text"]
                for r in cro["panels"]["recommendations"])

@@ -436,6 +436,7 @@ def build_feed(
     fundamentals: dict[str, dict[str, Any]] | None = None,
     inadimplencia: dict[str, dict[str, Any]] | None = None,
     resultados: dict[str, dict[str, Any]] | None = None,
+    pilar3_km1: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Pure aggregation: narratives -> feed payload. No I/O.
 
@@ -495,6 +496,7 @@ def build_feed(
     fund_map = fundamentals or {}
     npl_map = inadimplencia or {}
     res_map = resultados or {}
+    km1_map = pilar3_km1 or {}
     entities: list[dict[str, Any]] = []
     for rec in by_entity.values():
         timeline = [rec["by_date"][d] for d in sorted(rec["by_date"])]
@@ -522,6 +524,8 @@ def build_feed(
                 "inadimplencia": npl_map.get(rec["entity"]),
                 # ADR 022 Tier-3: operating efficiency (opex/ativo), else None.
                 "resultados": res_map.get(rec["entity"]),
+                # Multi-bank Pilar 3 KM1: LCR/NSFR (liquidity, not in IF.data) + Basileia, else None.
+                "pilar3_km1": km1_map.get(rec["entity"]),
                 "total": sum(t["count"] for t in timeline),
                 # industry slugs this entity belongs to — lets the dashboard group
                 # the entity monitor under each industry (fused coverage panel).
@@ -1169,6 +1173,18 @@ def _load_resultados(digests_bucket: str) -> dict[str, dict[str, Any]]:
         return {}
 
 
+def _load_km1(digests_bucket: str) -> dict[str, dict[str, Any]]:
+    """Read the Pilar 3 KM1 store (multi-bank LCR/NSFR/Basileia via DASFN) as {entity_id: {...}},
+    best-effort. LCR/NSFR are the liquidity metrics NOT in IF.data."""
+    try:
+        from src.ingest import bcb_km1
+
+        return bcb_km1.km1_by_entity(bcb_km1.load_index(digests_bucket))
+    except Exception as exc:  # pragma: no cover - best-effort, read-only
+        print(f"Warning: load Pilar 3 KM1 store failed: {exc}")
+        return {}
+
+
 def _load_coverage_gaps(digests_bucket: str) -> list[dict[str, Any]]:
     """Read the coverage-gap store (ADR-014), best-effort. [] if absent."""
     try:
@@ -1420,6 +1436,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         fundamentals=_load_fundamentals(digests_bucket),
         inadimplencia=_load_inadimplencia(digests_bucket),
         resultados=_load_resultados(digests_bucket),
+        pilar3_km1=_load_km1(digests_bucket),
     )
     # ADR 018 Phase 3: continuous integrity audit over the registry + this feed —
     # operator-facing findings (scoped OUT of the entry/tenant slices below).
