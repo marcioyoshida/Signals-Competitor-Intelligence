@@ -622,14 +622,17 @@ def build_cpo(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     if open_gaps:
         recs.append(_rec("imediato", f"Triagem de ponto cego: {open_gaps[0]['question']}",
                          "resolve_review", officer="cpo"))
-    # least-instrumented sector on prudential soundness → an instrumentation requirement (ADR 022)
-    low_cov = [r for r in soundness_coverage if r["coverage_pct"] is not None and r["tracked"] >= 2]
-    if low_cov and low_cov[0]["coverage_pct"] < 100:
-        w = low_cov[0]
+    # Pilar 3 tone coverage is the UNCONFOUNDED instrumentation gap: among institutions that DO carry
+    # Basileia (prudential), how many have their real risk-report (Pilar 3) ingested for tone. Unlike
+    # a Basileia-coverage %, this can't be inflated by non-prudential entities (funds/betting/pure
+    # insurers have no Basileia and aren't in the denominator) — so it's the honest Product ask.
+    n_prudential = sum(r["with_soundness"] for r in soundness_coverage)
+    n_pilar3 = sum(r["with_pilar3"] for r in soundness_coverage)
+    if n_prudential and n_pilar3 < n_prudential:
         recs.append(_rec("30d",
-                         f"Instrumentar solidez em {w['label']} — só {w['coverage_pct']}% dos "
-                         f"concorrentes com Basileia ({w['with_soundness']}/{w['tracked']})",
-                         "propose_vertical", officer="cpo", industries=[w["slug"]]))
+                         f"Ampliar cobertura de tom Pilar 3 — só {n_pilar3}/{n_prudential} instituições "
+                         f"prudenciais com relatório de risco ingerido",
+                         "propose_vertical", officer="cpo"))
 
     return {"by_industry": _by_industry(ctx["sectors"], agg), "panels": {
         "portfolio": portfolio,

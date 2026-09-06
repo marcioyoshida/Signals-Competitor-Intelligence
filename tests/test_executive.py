@@ -156,8 +156,8 @@ def test_cpo_soundness_instrumentation_coverage():
     assert cov["tracked"] == 3 and cov["with_soundness"] == 2 and cov["with_pilar3"] == 1
     assert cov["coverage_pct"] == 67                       # 2 of 3
     assert cpo["by_industry"]["banking"]["soundness_coverage_pct"] == 67
-    # an under-instrumented sector raises a CPO instrumentation requirement
-    assert any("Instrumentar solidez" in r["text"] and "Banking" in r["text"]
+    # the UNCONFOUNDED gap is Pilar 3 tone coverage among prudential institutions (1 of 2 here)
+    assert any("Ampliar cobertura de tom Pilar 3" in r["text"] and "1/2" in r["text"]
                for r in cpo["panels"]["recommendations"])
 
 
