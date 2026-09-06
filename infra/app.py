@@ -2459,7 +2459,9 @@ class OncaPrototypeStack(Stack):
             environment={
                 "PYTHONPATH": "/var/task",
                 "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
-                "ONCA_FINBERT_ENDPOINT": os.environ.get("ONCA_FINBERT_ENDPOINT", ""),
+                # Scale-to-zero SageMaker HuggingFace-DLC serverless endpoint (FinBERT-PT-BR),
+                # provisioned out-of-band (scripts/deploy_finbert_endpoint.py). Override via env.
+                "ONCA_FINBERT_ENDPOINT": os.environ.get("ONCA_FINBERT_ENDPOINT", "onca-finbert-ptbr"),
             },
         )
         digests_bucket.grant_read_write(tone_fn)   # read soundness/ + write financial_tone/
