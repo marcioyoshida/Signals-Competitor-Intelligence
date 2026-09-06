@@ -271,12 +271,26 @@ their own schedule, matched to the monthly balancete release.
    latest published; `merge()` carries top-level `base_date`; `force=True` bypasses). `cdk deploy`d;
    verified live — run 1 SUCCEEDED (`ok`, base 202603, 118 mapped), run 2 SUCCEEDED (`noop`, "quarter
    unchanged"). Wraps steps 1–2 today; step 5 (FinBERT) joins as a second task later.
-4. Soundness **belief axis** → SWOT/frameworks + CRO/CPO panels, firing on both a breached Tier-A
-   threshold and a worsening Tier-B **slope** (consumed by the daily pipeline).
-5. **Financial-tone feature** — FinBERT-PT-BR as the SageMaker Batch Transform step *inside*
-   `OncaFinancialsPipeline` → per-entity tone in `feature_store` → soundness axis + agent grounding.
-   Ships **shadow** (flag-gated, computed & stored, not surfaced) until validated against pt-BR
-   results-release language and its per-run cost is measured; then flipped on.
+4. **Soundness surfacing — SHIPPED + LIVE (2026-09-06).** `executive.build_cro` derives a
+   solvency view from `feed.entities[].soundness`: a **CRO "Solidez prudencial dos concorrentes"**
+   band (weakest Basileia first, band chips + Tier 1/CET1), a "Solidez sob atenção" hero tile, a
+   per-sector `min_basileia`/`n_weak_solvency` aggregate, and an immediate rec when a competitor is
+   frágil/atenção. +1 test; headless-verified (0 JS errors); live feed carries
+   `executive.cro.solvency` (25 rows). **Scope note:** this surfaces the *level + band* on one
+   quarter of data; the deeper **belief-axis firing on a worsening slope** (a deteriorating Basileia
+   as a SWOT Threat) waits on Phase 2's monthly balancete trajectory.
+5. **Financial-tone feature (FinBERT-PT-BR) — SHADOW MODULE + LIVE STORE (2026-09-06); automated
+   cloud compute DEFERRED.** `src/synth/financial_tone.py` computes a per-entity net tone
+   (P(POS)−P(NEG) ∈ [−1,1]) from the solvency store, scored by FinBERT-PT-BR (`score_fn` injected;
+   `finbert_score_fn()` = lazy transformers). Durable **shadow** store `financial_tone/index.json` +
+   `tone_by_entity()`; every value `is_inference:True`, `corpus="solvency_facts"` (Phase 6 swaps to
+   results-release/Pilar 3 text). 4 tests. **Shadow-first honoured** — nothing reads it (no feed
+   join, no board). Live store computed by FinBERT over 122 entities (tone tracks the band: frágil
+   micro-IPs ≈ −0.38, sólido ≈ +0.61) and uploaded. **The automated monthly compute** (a 2nd
+   `OncaFinancialsPipeline` task) is deferred: it needs a container image or a SageMaker HuggingFace-
+   DLC Batch Transform — this environment has no usable docker and a zip Lambda can't hold
+   torch+model (~2 GB). The module is written to be that task's handler body; the live store was
+   populated via a one-shot local FinBERT run.
 6. Pilar 3 / risk-report PDF ingest → existing synth + KB (grounded, cited); officer-retrievable.
 
 ## Revision note
