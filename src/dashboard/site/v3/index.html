@@ -396,10 +396,21 @@ function rowsSolvency(list) {
       const src = r.tone_corpus === "pilar3" ? "Pilar 3" : "inf.";
       tone = ` · <span class="${tcls}" title="tom financeiro FinBERT-PT-BR (inferência · ${U.esc(r.tone_corpus || "")})">tom ${t > 0 ? "+" : ""}${t} <span class="tone-src">${src}</span></span>`;
     }
+    // ADR 022 #16 composite fragility + #17 tone-vs-numbers divergence.
+    let frag = "";
+    if (r.fragility) {
+      const fb = r.fragility.band === "frágil" ? "crit" : r.fragility.band === "atenção" ? "high" : "ok";
+      frag = ` · <span class="badge badge--${fb}" title="fragilidade composta (capital·NPL·PDD·ROE·alavancagem)">frag ${r.fragility.score}</span>`;
+    }
+    let diverge = "";
+    if (r.tone_divergence && r.tone_divergence.flag) {
+      const dv = r.tone_divergence.flag === "otimismo desalinhado" ? "sl-warn" : "sl-ok";
+      diverge = ` · <span class="${dv}" title="tom FinBERT vs números (div ${r.tone_divergence.divergence})">${r.tone_divergence.flag === "otimismo desalinhado" ? "tom↑vs números↓" : "tom↓vs números↑"}</span>`;
+    }
     return `<div class="exrow">
       <span class="badge badge--${b}" title="banda de solidez / trajetória">${U.esc(bandTxt)}</span>
       <span class="ent" style="min-width:148px" title="${U.esc(r.label || "—")}">${U.esc(r.label || "—")}</span>
-      <span class="ttl">${bas}${slope}${npl}${tone}</span></div>`;
+      <span class="ttl">${bas}${slope}${npl}${tone}${frag}${diverge}</span></div>`;
   }).join("");
 }
 function rowsCoverage(list) {

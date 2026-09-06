@@ -193,6 +193,34 @@ def test_cpo_soundness_instrumentation_coverage():
                for r in cpo["panels"]["recommendations"])
 
 
+def test_cro_composite_fragility_and_tone_divergence():
+    feed = _feed()
+    feed["industry_options"] = [{"slug": "banking", "label": "Banking"}]
+    feed["entities"] = [
+        # fragile + narrative more upbeat than the numbers → both #16 and #17 fire
+        {"entity": "weakco", "label": "WeakCo", "industries": ["banking"],
+         "soundness": {"indice_basileia": 9.0, "band": "frágil"},
+         "inadimplencia": {"npl_total": 11.0, "band": "elevada"},
+         "balancete": {"pdd_mom_pct": 10.0, "months": 3},
+         "fundamentals": {"roe_pct": -5.0, "leverage": 28.0},
+         "financial_tone": {"net": 0.55, "corpus": "solvency_facts"}},   # upbeat tone vs bad numbers
+        {"entity": "strongco", "label": "StrongCo", "industries": ["banking"],
+         "soundness": {"indice_basileia": 16.0, "band": "sólido"},
+         "inadimplencia": {"npl_total": 1.5, "band": "baixa"},
+         "fundamentals": {"roe_pct": 22.0, "leverage": 10.0},
+         "financial_tone": {"net": 0.5, "corpus": "solvency_facts"}},
+    ]
+    cro = executive.build_executive(feed)["cro"]
+    sv = {r["entity"]: r for r in cro["panels"]["solvency"]}
+    assert sv["weakco"]["fragility"]["band"] == "frágil" and sv["weakco"]["fragility"]["score"] >= 60
+    assert sv["strongco"]["fragility"]["band"] == "resiliente"
+    assert sv["weakco"]["tone_divergence"]["flag"] == "otimismo desalinhado"   # tone > numbers
+    recs = " ".join(r["text"] for r in cro["panels"]["recommendations"])
+    assert "Fragilidade composta" in recs and "WeakCo" in recs
+    assert "Tom vs números" in recs
+    assert cro["by_industry"]["banking"]["n_fragil"] == 1
+
+
 def test_cco_risk_register_and_reputation():
     cco = executive.build_executive(_feed())["cco"]
     assert cco["by_industry"]["__all__"]["n_integrity"] == 2

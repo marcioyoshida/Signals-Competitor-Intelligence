@@ -267,6 +267,49 @@ _WEAK_BANDS = ("frágil", "atenção")
 _PDD_SLOPE_WARN_PCT = 5.0   # MoM rise in loan-loss provisions that flags credit deterioration
 
 
+def _clamp(x: float, lo: float, hi: float) -> float:
+    return max(lo, min(hi, x))
+
+
+def _fragility(row: dict[str, Any]) -> dict[str, Any] | None:
+    """ADR 022 #16 — composite fragility (0–100, higher = more fragile) over the credit-risk signals
+    we already hold: low Basileia, high NPL, rising PDD, weak ROE, high leverage. A transparent
+    weighted average of the sub-scores that are present, renormalised to their weight (honest partial
+    — like ETS). Inference. Needs ≥2 components."""
+    bas, npl, pdd = row.get("indice_basileia"), row.get("npl_total"), row.get("pdd_mom_pct")
+    roe, lev = row.get("roe_pct"), row.get("leverage")
+    comps: list[tuple[float, float]] = []       # (weight, subscore 0–1, higher=worse)
+    if bas is not None:  comps.append((0.30, _clamp((11.0 - bas) / 6.0, 0, 1)))   # <11% → fragile
+    if npl is not None:  comps.append((0.25, _clamp(npl / 12.0, 0, 1)))           # 12%+ → 1
+    if pdd is not None:  comps.append((0.20, _clamp(pdd / 15.0, 0, 1)))           # +15%/mo → 1
+    if roe is not None:  comps.append((0.15, _clamp((10.0 - roe) / 25.0, 0, 1)))  # ROE −15% → 1
+    if lev is not None:  comps.append((0.10, _clamp((lev - 12.0) / 18.0, 0, 1)))  # 30x → 1
+    if len(comps) < 2:
+        return None
+    score = round(100 * sum(w * s for w, s in comps) / sum(w for w, _ in comps))
+    band = "frágil" if score >= 60 else ("atenção" if score >= 33 else "resiliente")
+    return {"score": score, "band": band, "n_components": len(comps)}
+
+
+def _tone_divergence(row: dict[str, Any]) -> dict[str, Any] | None:
+    """ADR 022 #17 — tone-vs-numbers divergence. FinBERT tone (−1..1) vs a numbers-health index
+    (−1..1) from ROE/NPL/PDD. A large positive gap = narrative more upbeat than the numbers
+    (credibility/spin watch); a large negative gap = numbers better than the tone. Inference."""
+    tone = row.get("financial_tone_net")
+    roe, npl, pdd = row.get("roe_pct"), row.get("npl_total"), row.get("pdd_mom_pct")
+    parts: list[float] = []
+    if roe is not None:  parts.append(_clamp((roe - 8.0) / 12.0, -1, 1))    # ROE 8%→0, 20%→+1, −4%→−1
+    if npl is not None:  parts.append(-_clamp((npl - 4.0) / 6.0, -1, 1))    # NPL 4%→0, 10%→−1
+    if pdd is not None:  parts.append(-_clamp(pdd / 10.0, -1, 1))           # rising PDD → negative
+    if tone is None or not parts:
+        return None
+    nh = sum(parts) / len(parts)
+    div = round(tone - nh, 2)
+    flag = ("otimismo desalinhado" if div >= 0.4 else
+            ("pessimismo desalinhado" if div <= -0.4 else None))
+    return {"numbers_health": round(nh, 2), "divergence": div, "flag": flag}
+
+
 def _solvency_rows(feed: dict[str, Any]) -> list[dict[str, Any]]:
     """Per-entity prudential solvency (ADR 022 Tier A) from feed.entities[].soundness, merged with
     the Tier-B monthly balancete **slope** (feed.entities[].balancete). Weakest (lowest Índice de
@@ -279,6 +322,7 @@ def _solvency_rows(feed: dict[str, Any]) -> list[dict[str, Any]]:
         bt = e.get("balancete") or {}
         ftone = e.get("financial_tone") or {}
         ina = e.get("inadimplencia") or {}
+        fu = e.get("fundamentals") or {}      # #16/#17: ROE + leverage
         has_solv = s.get("indice_basileia") is not None
         pdd_mom = bt.get("pdd_mom_pct")
         cred_mom = bt.get("credito_mom_pct")
@@ -308,8 +352,14 @@ def _solvency_rows(feed: dict[str, Any]) -> list[dict[str, Any]]:
             "npl_pf": ina.get("npl_pf"),
             "npl_pj": ina.get("npl_pj"),
             "npl_band": ina.get("band"),
+            "roe_pct": fu.get("roe_pct"),
+            "leverage": fu.get("leverage"),
             "industries": e.get("industries") or _industries_of(feed, e.get("entity")),
         })
+    # #16 composite fragility + #17 tone-vs-numbers divergence (derived from the row's own fields)
+    for r in rows:
+        r["fragility"] = _fragility(r)
+        r["tone_divergence"] = _tone_divergence(r)
     # weakest capital first; entities with only a slope (no Basileia) sink to the end
     rows.sort(key=lambda r: (r["indice_basileia"] is None, r["indice_basileia"] if r["indice_basileia"] is not None else 0))
     return rows
@@ -326,6 +376,11 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     # Tier-2 asset-quality firing: highest inadimplência in the "elevada" band.
     npl_high = sorted((r for r in solvency if r.get("npl_band") == "elevada"),
                       key=lambda r: r.get("npl_total") or 0, reverse=True)
+    # #16 composite fragility (most fragile first) + #17 optimism-divergence (tone > numbers).
+    fragile = sorted((r for r in solvency if (r.get("fragility") or {}).get("band") == "frágil"),
+                     key=lambda r: (r.get("fragility") or {}).get("score", 0), reverse=True)
+    optimism = sorted((r for r in solvency if (r.get("tone_divergence") or {}).get("flag") == "otimismo desalinhado"),
+                      key=lambda r: (r.get("tone_divergence") or {}).get("divergence", 0), reverse=True)
     timeline = sorted(reg, key=lambda c: str(c.get("date") or ""), reverse=True)
     impact = sorted((c for c in reg if c.get("change_record")),
                     key=lambda c: (c.get("change_record") or {}).get("blast_radius", {}).get("score", 0),
@@ -350,7 +405,11 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
                 "n_slope_warning": sum(1 for r in ss if r.get("slope_warning")),
                 # ADR 022 Tier-2: sector asset quality (max/avg inadimplência).
                 "max_npl": max(npls) if npls else None,
-                "n_npl_elevada": sum(1 for r in ss if r.get("npl_band") == "elevada")}
+                "n_npl_elevada": sum(1 for r in ss if r.get("npl_band") == "elevada"),
+                # ADR 022 #16: sector composite fragility (worst score + count frágil).
+                "max_fragility": max([(r.get("fragility") or {}).get("score") for r in ss
+                                      if r.get("fragility")], default=None),
+                "n_fragil": sum(1 for r in ss if (r.get("fragility") or {}).get("band") == "frágil")}
 
     recs = []
     if impact:
@@ -381,6 +440,20 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
                          f"Inadimplência elevada — {w['label']}: {w['npl_total']}% da carteira (15+ dias; "
                          f"PF {w.get('npl_pf')}% · PJ {w.get('npl_pj')}%)",
                          "open_watch", officer="cro", evidence_id=w.get("entity"),
+                         industries=w.get("industries") or []))
+    if fragile:
+        w = fragile[0]
+        recs.append(_rec("imediato",
+                         f"Fragilidade composta — {w['label']}: índice {w['fragility']['score']}/100 "
+                         f"(capital·NPL·PDD·ROE·alavancagem)",
+                         "open_watch", officer="cro", evidence_id=w.get("entity"),
+                         industries=w.get("industries") or []))
+    if optimism:
+        w = optimism[0]
+        recs.append(_rec("30d",
+                         f"Tom vs números — {w['label']}: relato mais otimista que os indicadores "
+                         f"(divergência +{w['tone_divergence']['divergence']}) — verificar credibilidade",
+                         "curate_belief", officer="cro", evidence_id=w.get("entity"),
                          industries=w.get("industries") or []))
     return {"by_industry": _by_industry(ctx["sectors"], agg), "panels": {
         "timeline": [_reg_row(c) for c in timeline[:30]],
