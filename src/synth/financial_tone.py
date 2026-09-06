@@ -94,6 +94,63 @@ def finbert_score_fn(model_id: str = MODEL) -> ScoreFn:
     return _score
 
 
+def sagemaker_score_fn(endpoint_name: str, *, client: Any | None = None) -> ScoreFn:
+    """Scale-to-zero cloud scorer — invoke a SageMaker (HuggingFace-DLC, serverless) endpoint
+    running FinBERT-PT-BR. The HF text-classification container returns a list of
+    ``[{"label","score"}, ...]`` (top_k=None); we fold it to ``{LABEL: prob}``."""
+    import json as _json
+
+    import boto3
+
+    rt = client or boto3.client("sagemaker-runtime")
+
+    def _score(text: str) -> dict[str, float]:
+        resp = rt.invoke_endpoint(
+            EndpointName=endpoint_name, ContentType="application/json",
+            Body=_json.dumps({"inputs": text, "parameters": {"top_k": None}}).encode("utf-8"),
+        )
+        out = _json.loads(resp["Body"].read())
+        preds = out[0] if out and isinstance(out[0], list) else out
+        return {p["label"]: float(p["score"]) for p in preds}
+
+    return _score
+
+
+def run(bucket: str | None = None, *, score_fn: ScoreFn | None = None, s3: Any | None = None,
+        soundness_key: str = "soundness/index.json") -> dict[str, Any]:
+    """Read the solvency store → build the SHADOW tone store → publish. `score_fn` defaults to a
+    SageMaker endpoint (env ONCA_FINBERT_ENDPOINT); with no scorer available it no-ops so the last
+    shadow store stands (never fabricates tone)."""
+    import json as _json
+    import os
+
+    import boto3
+
+    s3 = s3 or boto3.client("s3")
+    if score_fn is None:
+        ep = os.environ.get("ONCA_FINBERT_ENDPOINT")
+        if not ep:
+            return {"status": "noop", "reason": "no ONCA_FINBERT_ENDPOINT configured"}
+        score_fn = sagemaker_score_fn(ep)
+    try:
+        soundness = _json.loads(s3.get_object(Bucket=bucket, Key=soundness_key)["Body"].read())
+    except Exception as exc:  # pragma: no cover
+        return {"status": "error", "reason": f"soundness store unreadable: {exc}"}
+    idx = build_tone(soundness, score_fn)
+    if bucket:
+        publish(idx, bucket, s3=s3)
+    return {"status": "ok", "count": idx["count"], "shadow": True}
+
+
+def lambda_handler(event: dict[str, Any] | None, context: Any) -> dict[str, Any]:
+    """OncaFinancialsPipeline ToneTask (ADR 022 Phase 5) — SHADOW, scale-to-zero via SageMaker."""
+    import json as _json
+    import os
+
+    return {"statusCode": 200,
+            "body": _json.dumps(run(os.environ.get("ONCA_DIGESTS_BUCKET")), ensure_ascii=False)}
+
+
 # --- durable shadow store I/O (mirrors bcb_soundness) ----------------------------------
 def load_index(bucket: str, *, s3: Any | None = None) -> dict[str, Any]:
     import boto3

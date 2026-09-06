@@ -2443,11 +2443,44 @@ class OncaPrototypeStack(Stack):
             interval=Duration.seconds(30),
             backoff_rate=2.0,
         )
+
+        # ADR 022 Phase 5 — FinBERT-PT-BR financial-tone (SHADOW), scale-to-zero via a SageMaker
+        # HuggingFace-DLC endpoint. The Lambda invokes the endpoint (env ONCA_FINBERT_ENDPOINT); with
+        # no endpoint set it no-ops (the last shadow store stands — never fabricates tone). Kept a
+        # SHADOW task: it writes financial_tone/index.json but nothing surfaces it yet.
+        tone_fn = lambda_.Function(
+            self,
+            "OncaFinancialTone",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.synth.financial_tone.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.minutes(10),
+            memory_size=512,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+                "ONCA_FINBERT_ENDPOINT": os.environ.get("ONCA_FINBERT_ENDPOINT", ""),
+            },
+        )
+        digests_bucket.grant_read_write(tone_fn)   # read soundness/ + write financial_tone/
+        tone_fn.add_to_role_policy(iam.PolicyStatement(
+            actions=["sagemaker:InvokeEndpoint"], resources=["*"]))
+
+        tone_task = sfn_tasks.LambdaInvoke(
+            self,
+            "ToneTask",
+            lambda_function=tone_fn,
+            payload=sfn.TaskInput.from_object({}),
+            result_path="$.tone",
+        )
+        tone_task.add_retry(
+            errors=["States.ALL"], max_attempts=2, interval=Duration.seconds(20), backoff_rate=2.0,
+        )
         financials_pipeline = sfn.StateMachine(
             self,
             "OncaFinancialsPipeline",
             definition_body=sfn.DefinitionBody.from_chainable(
-                soundness_task.next(balancete_task)
+                soundness_task.next(balancete_task).next(tone_task)
             ),
             timeout=Duration.minutes(30),
         )
