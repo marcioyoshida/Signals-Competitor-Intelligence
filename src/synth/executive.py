@@ -145,8 +145,28 @@ def _rec(horizon: str, text: str, action: str, *, officer: str, entity=None,
 
 
 # --- CSO (strategic) ------------------------------------------------------------------
+def _fundamentals_rows(feed: dict[str, Any]) -> list[dict[str, Any]]:
+    """Per-entity financial strength (ADR 022 Tier-1) from feed.entities[].fundamentals — ROE/ROA/
+    leverage/funding/headroom + market share of crédito & lucro. Strongest ROE first. Inference."""
+    labels = _labels(feed)
+    keys = ("roe_pct", "roa_pct", "leverage", "credito_captacoes_pct", "basileia_headroom_pp",
+            "carteira_share_pct", "lucro_share_pct", "ativo_bi", "lucro_bi", "base_date")
+    rows: list[dict[str, Any]] = []
+    for e in (feed.get("entities") or []):
+        fu = e.get("fundamentals") or {}
+        if fu.get("roe_pct") is None:
+            continue
+        rows.append({"entity": e.get("entity"),
+                     "label": e.get("label") or labels.get(e.get("entity")) or e.get("entity"),
+                     "industries": e.get("industries") or _industries_of(feed, e.get("entity")),
+                     **{k: fu.get(k) for k in keys}})
+    rows.sort(key=lambda r: r["roe_pct"], reverse=True)
+    return rows
+
+
 def build_cso(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     cards, dates, labels = ctx["cards"], ctx["dates"], ctx["labels"]
+    financials = _fundamentals_rows(feed)
     recent = ctx["recent"]
     reg_cards = ctx["reg_cards"]
     distress = _trusted_distress(feed)
@@ -165,12 +185,17 @@ def build_cso(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         sdist = [d for d in distress if slug in (ALL, None)
                  or slug in _industries_of(feed, d.get("entity"))]
         smoves = [c for c in moves if _in_industry(c, slug)]
+        sfin = [r for r in financials if slug in (r.get("industries") or [])]
+        roes = [r["roe_pct"] for r in sfin if r.get("roe_pct") is not None]
         n = len(sc)
         return {"climate": _climate_index(sc, len(sdist)), "n_cards": n,
                 "n_alerts": sum(1 for c in sc if c.get("is_alert")),
                 "avg_threat": round(sum(_threat(c) for c in sc) / n, 1) if n else 0.0,
                 "reg_threat": round(sum(_threat(c) for c in sreg) / len(sreg), 1) if sreg else 0.0,
-                "n_moves": len(smoves), "distress": len(sdist)}
+                "n_moves": len(smoves), "distress": len(sdist),
+                # ADR 022 Tier-1: financial strength of the sector's tracked competitors.
+                "avg_roe": round(sum(roes) / len(roes), 1) if roes else None,
+                "n_negative_roe": sum(1 for r in sfin if (r.get("roe_pct") or 0) < 0)}
 
     recs = []
     named = sorted((c for c in cards if c.get("is_alert") and c.get("entity") in labels
@@ -192,6 +217,19 @@ def build_cso(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         m = rising[0]
         recs.append(_rec("90d", f"Formular tese sobre o avanço de {m['label']} (momentum +{m['momentum']})",
                          "curate_belief", officer="cso", entity=m["entity"], industries=m["industries"]))
+    # financial strength: the profitability leader → competitive benchmark; a loss-maker → thesis.
+    leader = sorted(financials, key=lambda r: (r.get("lucro_share_pct") or 0), reverse=True)[:1]
+    if leader:
+        w = leader[0]
+        recs.append(_rec("estrategico", f"Referência competitiva: {w['label']} lidera rentabilidade "
+                         f"(ROE {w['roe_pct']}% · {w['lucro_share_pct']}% do lucro do setor)",
+                         "curate_belief", officer="cso", entity=w.get("entity"), industries=w.get("industries") or []))
+    losers = [r for r in financials if (r.get("roe_pct") or 0) < 0]
+    if losers:
+        w = losers[0]
+        recs.append(_rec("90d", f"Tese sobre fragilidade de {w['label']} — ROE {w['roe_pct']}% "
+                         f"(alavancagem {w.get('leverage')}x, headroom {w.get('basileia_headroom_pp')}pp)",
+                         "curate_belief", officer="cso", entity=w.get("entity"), industries=w.get("industries") or []))
 
     return {"by_industry": _by_industry(ctx["sectors"], agg), "panels": {
         "headlines": [_headline(c) for c in headlines[:30]],
@@ -201,6 +239,8 @@ def build_cso(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         "moves": [_headline(c) for c in moves[:20]],
         "momentum": momentum[:30],
         "regulatory": [_reg_row(c) for c in reg_sorted[:20]],
+        # ADR 022 Tier-1: competitor financial strength (ROE/ROA/leverage/headroom/share), inference.
+        "financials": financials[:25],
         "recommendations": recs,
     }}
 

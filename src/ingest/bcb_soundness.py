@@ -294,10 +294,16 @@ def run(bucket: str | None = None, *, today: dt.date | None = None,
 
 
 def lambda_handler(event: dict[str, Any] | None, context: Any) -> dict[str, Any]:
-    """Entry point for the monthly OncaFinancialsPipeline (ADR 022 Phase 3). Reads
+    """Entry point for the monthly OncaFinancialsPipeline (ADR 022 Phase 3 + Tier-1). Runs the
+    solvency ingest AND the competitor-fundamentals ingest (both IF.data quarterly). Reads
     ONCA_DIGESTS_BUCKET, honours ``{"force": true}`` to bypass the base-month no-op guard."""
     bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
     result = run(bucket, force=bool((event or {}).get("force")))
+    try:  # ADR 022 Tier-1 — profitability/leverage/funding/headroom fundamentals (best-effort)
+        from src.ingest import bcb_fundamentals
+        result["fundamentals"] = bcb_fundamentals.run(bucket)
+    except Exception as exc:  # pragma: no cover
+        result["fundamentals"] = {"status": "error", "reason": str(exc)}
     return {"statusCode": 200, "body": json.dumps(result, ensure_ascii=False)}
 
 

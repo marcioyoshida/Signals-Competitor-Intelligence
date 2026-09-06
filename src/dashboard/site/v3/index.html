@@ -336,6 +336,22 @@ function rowsDiscovery(list) {
     <span class="ttl">${U.esc(r.reason || "")} · ${U.esc(r.hint || "")}</span>
     <span class="badge badge--low">${U.esc(r.confidence || "")}</span></div>`).join("");
 }
+// ADR 022 Tier-1 — competitor financial strength (ROE/ROA/leverage/headroom/share). Inference.
+function rowsFinancials(list) {
+  list = (list || []).filter(inSector);
+  if (!list.length) return U.empty("Sem fundamentos financeiros no escopo.", "", "○");
+  return list.map(r => {
+    const roe = r.roe_pct, cls = roe == null ? "low" : (roe < 0 ? "crit" : roe >= 15 ? "ok" : "high");
+    const meta = [r.roa_pct != null ? "ROA " + r.roa_pct + "%" : null,
+                  r.leverage != null ? "alav " + r.leverage + "x" : null,
+                  r.basileia_headroom_pp != null ? "headroom " + r.basileia_headroom_pp + "pp" : null,
+                  r.lucro_share_pct != null ? r.lucro_share_pct + "% do lucro" : null].filter(Boolean).join(" · ");
+    return `<div class="exrow">
+      <span class="badge badge--${cls}" title="ROE anualizado (inferência)">${roe == null ? "—" : "ROE " + roe + "%"}</span>
+      <span class="ent" style="min-width:148px" title="${U.esc(r.label || "—")}">${U.esc(r.label || "—")}</span>
+      <span class="ttl">${meta}</span></div>`;
+  }).join("");
+}
 // ADR 022 (CPO angle) — prudential-soundness INSTRUMENTATION coverage per sector.
 function rowsSoundnessCov(list) {
   list = (list || []).filter(inSector);
@@ -629,6 +645,8 @@ function render() {
       band("Inteligência competitiva", "momentum na janela · inferência",
         grid("1fr 1fr", [panel("Momentum do concorrente", null, "↑ ganha · ↓ recua", rowsMomentum(p.momentum)),
                         panel("Movimentos estratégicos", null, "entrada·oferta·M&A", rowsCard(p.moves))])) +
+      band("Força financeira dos concorrentes", "ROE·ROA·alavancagem·share de lucro · IF.data · inferência",
+        panel("Rentabilidade (maior ROE primeiro)", null, "ROE anualizado · ROA · alavancagem · headroom · share", rowsFinancials(p.financials))) +
       band("Inteligência regulatória (resumo)", "", panel("Mudanças por alcance", null, "domínio·setores·prazo", rowsReg(p.regulatory)));
   } else if (OFFICER === "cro") {
     const [bc, bl] = bandThreat(a.reg_threat || 0, 65, 40);

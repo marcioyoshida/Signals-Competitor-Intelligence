@@ -93,6 +93,27 @@ def test_cro_impact_sorts_by_blast_and_surfaces_changes():
     assert cro["panels"]["changes"] and cro["panels"]["changes"][0]["n_changes"] == 2
 
 
+def test_cso_financial_strength_panel_and_recs():
+    feed = _feed()
+    feed["entities"] = [
+        {"entity": "itau", "label": "Itaú", "industries": ["banking"],
+         "fundamentals": {"roe_pct": 20.9, "roa_pct": 1.7, "leverage": 12.2,
+                          "basileia_headroom_pp": 4.3, "lucro_share_pct": 21.3, "carteira_share_pct": 15.4}},
+        {"entity": "xp", "label": "XP", "industries": ["asset-management"],
+         "fundamentals": {"roe_pct": -1.2, "roa_pct": -0.04, "leverage": 28.8,
+                          "basileia_headroom_pp": 1.4, "lucro_share_pct": -0.1, "carteira_share_pct": 0.5}},
+    ]
+    cso = executive.build_executive(feed)["cso"]
+    fin = [r["entity"] for r in cso["panels"]["financials"]]
+    assert fin == ["itau", "xp"]                            # strongest ROE first
+    # the profitability leader (by lucro share) → competitive-benchmark rec
+    assert any("Referência competitiva" in r["text"] and "Itaú" in r["text"]
+               for r in cso["panels"]["recommendations"])
+    # a loss-maker → a fragility thesis
+    assert any("fragilidade de XP" in r["text"] and "-1.2%" in r["text"]
+               for r in cso["panels"]["recommendations"])
+
+
 def test_cro_solvency_panel_and_weak_recommendation():
     feed = _feed()
     feed["industry_options"] = [{"slug": "asset-management", "label": "Asset Mgmt"},
