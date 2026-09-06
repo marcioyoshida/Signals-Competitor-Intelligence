@@ -156,9 +156,11 @@ def _fundamentals_rows(feed: dict[str, Any]) -> list[dict[str, Any]]:
         fu = e.get("fundamentals") or {}
         if fu.get("roe_pct") is None:
             continue
+        res = e.get("resultados") or {}      # ADR 022 Tier-3: operating efficiency (opex/ativo)
         rows.append({"entity": e.get("entity"),
                      "label": e.get("label") or labels.get(e.get("entity")) or e.get("entity"),
                      "industries": e.get("industries") or _industries_of(feed, e.get("entity")),
+                     "opex_ativo_pct": res.get("opex_ativo_pct"),
                      **{k: fu.get(k) for k in keys}})
     rows.sort(key=lambda r: r["roe_pct"], reverse=True)
     return rows

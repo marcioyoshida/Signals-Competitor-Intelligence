@@ -435,6 +435,7 @@ def build_feed(
     financial_tone: dict[str, dict[str, Any]] | None = None,
     fundamentals: dict[str, dict[str, Any]] | None = None,
     inadimplencia: dict[str, dict[str, Any]] | None = None,
+    resultados: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Pure aggregation: narratives -> feed payload. No I/O.
 
@@ -493,6 +494,7 @@ def build_feed(
     tone_map = financial_tone or {}
     fund_map = fundamentals or {}
     npl_map = inadimplencia or {}
+    res_map = resultados or {}
     entities: list[dict[str, Any]] = []
     for rec in by_entity.values():
         timeline = [rec["by_date"][d] for d in sorted(rec["by_date"])]
@@ -518,6 +520,8 @@ def build_feed(
                 "fundamentals": fund_map.get(rec["entity"]),
                 # ADR 022 Tier-2: inadimplência/NPL (15+ dias, PF/PJ split), else None.
                 "inadimplencia": npl_map.get(rec["entity"]),
+                # ADR 022 Tier-3: operating efficiency (opex/ativo), else None.
+                "resultados": res_map.get(rec["entity"]),
                 "total": sum(t["count"] for t in timeline),
                 # industry slugs this entity belongs to — lets the dashboard group
                 # the entity monitor under each industry (fused coverage panel).
@@ -1153,6 +1157,18 @@ def _load_inadimplencia(digests_bucket: str) -> dict[str, dict[str, Any]]:
         return {}
 
 
+def _load_resultados(digests_bucket: str) -> dict[str, dict[str, Any]]:
+    """Read the operating-efficiency store (ADR 022 Tier-3) as {entity_id: {opex_ativo_pct}},
+    best-effort. Annualised opex ÷ ativo from the balancete P&L, labelled inference."""
+    try:
+        from src.ingest import bcb_resultados
+
+        return bcb_resultados.resultados_by_entity(bcb_resultados.load_index(digests_bucket))
+    except Exception as exc:  # pragma: no cover - best-effort, read-only
+        print(f"Warning: load resultados store failed: {exc}")
+        return {}
+
+
 def _load_coverage_gaps(digests_bucket: str) -> list[dict[str, Any]]:
     """Read the coverage-gap store (ADR-014), best-effort. [] if absent."""
     try:
@@ -1403,6 +1419,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         financial_tone=_load_financial_tone(digests_bucket),
         fundamentals=_load_fundamentals(digests_bucket),
         inadimplencia=_load_inadimplencia(digests_bucket),
+        resultados=_load_resultados(digests_bucket),
     )
     # ADR 018 Phase 3: continuous integrity audit over the registry + this feed —
     # operator-facing findings (scoped OUT of the entry/tenant slices below).

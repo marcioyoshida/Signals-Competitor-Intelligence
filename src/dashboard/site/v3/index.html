@@ -344,6 +344,7 @@ function rowsFinancials(list) {
     const roe = r.roe_pct, cls = roe == null ? "low" : (roe < 0 ? "crit" : roe >= 15 ? "ok" : "high");
     const meta = [r.roa_pct != null ? "ROA " + r.roa_pct + "%" : null,
                   r.leverage != null ? "alav " + r.leverage + "x" : null,
+                  r.opex_ativo_pct != null ? "opex/ativo " + r.opex_ativo_pct + "%" : null,
                   r.basileia_headroom_pp != null ? "headroom " + r.basileia_headroom_pp + "pp" : null,
                   r.lucro_share_pct != null ? r.lucro_share_pct + "% do lucro" : null].filter(Boolean).join(" · ");
     return `<div class="exrow">
@@ -651,8 +652,8 @@ function render() {
       band("Inteligência competitiva", "momentum na janela · inferência",
         grid("1fr 1fr", [panel("Momentum do concorrente", null, "↑ ganha · ↓ recua", rowsMomentum(p.momentum)),
                         panel("Movimentos estratégicos", null, "entrada·oferta·M&A", rowsCard(p.moves))])) +
-      band("Força financeira dos concorrentes", "ROE·ROA·alavancagem·share de lucro · IF.data · inferência",
-        panel("Rentabilidade (maior ROE primeiro)", null, "ROE anualizado · ROA · alavancagem · headroom · share", rowsFinancials(p.financials))) +
+      band("Força financeira dos concorrentes", "ROE·ROA·alavancagem·eficiência·share de lucro · IF.data + balancete · inferência",
+        panel("Rentabilidade & eficiência (maior ROE primeiro)", null, "ROE anual · ROA · alav · opex/ativo · headroom · share", rowsFinancials(p.financials))) +
       band("Inteligência regulatória (resumo)", "", panel("Mudanças por alcance", null, "domínio·setores·prazo", rowsReg(p.regulatory)));
   } else if (OFFICER === "cro") {
     const [bc, bl] = bandThreat(a.reg_threat || 0, 65, 40);

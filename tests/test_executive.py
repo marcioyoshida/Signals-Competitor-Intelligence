@@ -98,7 +98,8 @@ def test_cso_financial_strength_panel_and_recs():
     feed["entities"] = [
         {"entity": "itau", "label": "Itaú", "industries": ["banking"],
          "fundamentals": {"roe_pct": 20.9, "roa_pct": 1.7, "leverage": 12.2,
-                          "basileia_headroom_pp": 4.3, "lucro_share_pct": 21.3, "carteira_share_pct": 15.4}},
+                          "basileia_headroom_pp": 4.3, "lucro_share_pct": 21.3, "carteira_share_pct": 15.4},
+         "resultados": {"opex_ativo_pct": 1.9}},   # Tier-3 efficiency merged onto the CSO row
         {"entity": "xp", "label": "XP", "industries": ["asset-management"],
          "fundamentals": {"roe_pct": -1.2, "roa_pct": -0.04, "leverage": 28.8,
                           "basileia_headroom_pp": 1.4, "lucro_share_pct": -0.1, "carteira_share_pct": 0.5}},
@@ -106,6 +107,7 @@ def test_cso_financial_strength_panel_and_recs():
     cso = executive.build_executive(feed)["cso"]
     fin = [r["entity"] for r in cso["panels"]["financials"]]
     assert fin == ["itau", "xp"]                            # strongest ROE first
+    assert {r["entity"]: r.get("opex_ativo_pct") for r in cso["panels"]["financials"]}["itau"] == 1.9  # Tier-3
     # the profitability leader (by lucro share) → competitive-benchmark rec
     assert any("Referência competitiva" in r["text"] and "Itaú" in r["text"]
                for r in cso["panels"]["recommendations"])
