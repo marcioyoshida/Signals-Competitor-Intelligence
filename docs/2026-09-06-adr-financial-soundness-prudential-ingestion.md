@@ -136,6 +136,30 @@ not a narrative stage — the two are complementary and both are kept:
   source document + as-of quarter, and is presented separately from the reported ratios — a model
   opinion, cited to the text it read, never dressed as a reported fact.
 
+### 4. Cadence-matched scheduling — a separate **monthly** financial pipeline
+
+BCB *Resultados e Balanços* refresh roughly **monthly** (IF.data quarterly), while the main
+pipeline runs **3×/day** (`OncaPipeline`, three EventBridge cron rules → the state machine).
+Folding §1 + §3 into that daily cadence would **reprocess unchanged data every run** and pay the
+SageMaker Batch Transform cost daily for zero new signal. So they get their own schedule.
+
+- **A second state machine, `OncaFinancialsPipeline`**, on its **own monthly EventBridge rule**
+  (`Schedule.cron` on a day-of-month a few days after month-end, so BCB has published):
+  `bcb_soundness` ingest → **FinBERT-PT-BR Batch Transform** → tone-feature merge. Isolated so the
+  long SageMaker step lives **outside the daily latency budget** and a financial-run failure never
+  touches the 3×/day cycle.
+- **Decoupled by the same S3-as-contract pattern the pipeline already uses.** The monthly run only
+  *writes* durable stores (`soundness/index.json`, the per-entity financial-tone feature into
+  `feature_store` / `features/latest.json`); the **daily** pipeline + feed-builder only *read* them.
+  No execution coupling — if a monthly run is late or fails, the daily feed keeps serving the
+  last-known stores, each carrying its **as-of quarter** so staleness is visible, never silent.
+- **Cheap, idempotent re-runs.** The monthly job first checks the latest published base date
+  (reusing `bcb_ifdata.latest_base_date`) against what it already processed and **no-ops** if
+  unchanged — so a retry, a manual trigger, or a mis-timed month-end costs almost nothing.
+- **Same deploy/orchestration idioms** as `OncaPipeline` (Step Functions + EventBridge cron +
+  the ad-hoc "run soon" one-shot Scheduler), so there is no new operational model — just a second,
+  slower cadence for slower-moving data.
+
 ## Consequences
 
 **Pros.**
@@ -149,6 +173,9 @@ not a narrative stage — the two are complementary and both are kept:
 - Adds a **distinctive, cross-entity financial-tone signal** (§3) that enriches every officer
   agent's grounded answers over the *whole* entity universe — a dedicated, calibrated instrument
   the general-LLM path cannot match on consistency or cost-at-scale.
+- **Cadence-matched cost** (§4): the monthly `OncaFinancialsPipeline` runs the heavy SageMaker step
+  ~once a month (matching the data), not ~90×/month — the daily pipeline stays fast and cheap, and
+  the two decouple cleanly through durable S3 stores.
 
 **Cons / risks.**
 - **Entity resolution** is the hard part — thousands of institution names → registry ids; the
@@ -179,14 +206,17 @@ not a narrative stage — the two are complementary and both are kept:
 ## Phasing
 
 1. `bcb_soundness.py` — soundness relatórios off the existing Olinda client → `soundness/index.json`,
-   merged into the financials read + competitor cards (Basileia, inadimplência, ROE, band).
-2. Soundness **belief axis** → SWOT/frameworks + CRO/CPO panels.
-3. **Financial-tone feature** — FinBERT-PT-BR on a SageMaker Batch Transform step → per-entity tone
-   in `feature_store` → soundness axis + agent grounding. Ships **shadow** (flag-gated, computed &
-   stored, not surfaced) until validated against pt-BR results-release language and its per-run cost
-   is measured; then flipped on.
-4. Pilar 3 / risk-report PDF ingest → existing synth + KB (grounded, cited); officer-retrievable.
-5. *(Optional)* COSIF micro-account fallback only if the pre-computed relatórios prove insufficient.
+   merged into the financials read + competitor cards (Basileia, inadimplência, ROE, band). Runs
+   first as a one-shot/manual job; the daily feed already reads the store.
+2. **`OncaFinancialsPipeline` on a monthly EventBridge cron** (§4) wrapping step 1 (and step 3),
+   with the base-date no-op guard; decoupled from `OncaPipeline` via the S3 stores.
+3. Soundness **belief axis** → SWOT/frameworks + CRO/CPO panels (consumed by the daily pipeline).
+4. **Financial-tone feature** — FinBERT-PT-BR as the SageMaker Batch Transform step *inside*
+   `OncaFinancialsPipeline` → per-entity tone in `feature_store` → soundness axis + agent grounding.
+   Ships **shadow** (flag-gated, computed & stored, not surfaced) until validated against pt-BR
+   results-release language and its per-run cost is measured; then flipped on.
+5. Pilar 3 / risk-report PDF ingest → existing synth + KB (grounded, cited); officer-retrievable.
+6. *(Optional)* COSIF micro-account fallback only if the pre-computed relatórios prove insufficient.
 
 ## Revision note
 
