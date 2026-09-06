@@ -58,6 +58,38 @@ real data.
 4. **Cost not yet measured.** Local CPU run only; the SageMaker Batch Transform per-run cost (§3/§4)
    is still to be measured on first cloud run — no figure is asserted.
 
+## Follow-up: extracting Basileia / solvency + probing liquidity
+
+Reproducible via [`scripts/pilot_basileia_solvency.py`](../scripts/pilot_basileia_solvency.py).
+
+**Solvency IS fully extractable** from IF.data **Relatório 5 "Informações de Capital"**
+(`TipoInstituicao=1`): Índice de Basileia, Capital Nível I (Tier 1), Capital Principal (CET1),
+Razão de Alavancagem, Índice de Imobilização, plus the RWA breakdown (crédito/mercado/operacional).
+Values are stored as fractions → ×100 for %. Band from the regulatory floor (8% + 2.5% conservation
+buffer ≈ 10.5% practical min): `<10.5 frágil / <13 atenção / else sólido`.
+
+Real trajectory, 202509→202603 (`Relatório 5`):
+
+| Entity | Basileia % | Tier 1 % | CET1 % | Alav. % | Imob. % | Band | Basileia trajectory (Δpp/yr) |
+|---|--:|--:|--:|--:|--:|---|---|
+| BTG Pactual | 15.91 | 12.44 | 11.36 | 10.16 | 33.6 | sólido | 15.55→15.91 (**+0.36**) |
+| Santander | 15.15 | 12.27 | 11.24 | 6.99 | 15.1 | sólido | 15.21→15.15 (−0.06) |
+| Nubank | 15.10 | 12.77 | 11.27 | — | 5.6 | sólido | 14.59→15.10 (+0.51) |
+| Bradesco | 14.90 | 11.97 | 10.15 | 6.29 | 27.7 | sólido | 15.85→14.90 (−0.95) |
+| Itaú | 14.77 | 13.40 | 11.97 | 6.48 | 20.7 | sólido | 16.40→14.77 (**−1.63**) |
+| XP | **11.93** | 10.01 | **7.17** | 3.67 | **47.0** | **atenção** | 13.94→11.93 (**−2.01**) |
+
+Discriminates on solvency: **XP flags "atenção"** — Basileia 11.93% eroding −2.01pp/yr, CET1 only
+7.17%, imobilização ~47% (near the 50% limit); Itaú is "sólido" but trending down −1.63pp. This is
+the leading-indicator capital signal, on real data.
+
+**Liquidity is NOT in IF.data.** Verified: the Relatório catalog has no liquidity report, and
+Resumo/Capital carry no LCR/NSFR/liquidez column. True liquidity is published by BCB separately and
+lives in the banks' **Pilar 3** reports → it comes from **ADR 022 Phase 6** (Pilar 3 PDFs via the
+Bedrock+KB path) or a dedicated LCR source, *not* this flow. A balance-sheet liquidity **proxy**
+(TVM + disponibilidades vs passivo exigível) is derivable but must be labelled inference, never
+presented as the LCR.
+
 ## Conclusion
 
 The ADR 022 approach is **validated as buildable and useful**: FinBERT-PT-BR runs locally on 3.14/CPU,

@@ -79,11 +79,23 @@ own native cadences** — a quarterly *level* and a monthly *trajectory*:
 
 - **Tier A — quarterly prudential ratios (the level).** The **same Olinda OData service**
   `bcb_ifdata` already calls — the prudential relatórios are just different `Relatorio` codes on
-  that client (Resumo prudencial with Índice de Basileia; carteira-de-crédito relatório with
-  inadimplência). An *extension of an existing integration*, not a new one. Pre-computed indicators
-  (never invented): `basileia_pct`, `inadimplencia_pct` (NPL), `roe_pct`, `roa_pct`, `liquidez`,
-  plus a coarse `soundness_band` (sólido / atenção / frágil) from published regulatory thresholds
-  (e.g. Basileia < 11% → atenção). Quarterly `as-of`.
+  that client. An *extension of an existing integration*, not a new one. **Pilot-confirmed source
+  map** (see [pilot findings](2026-09-06-adr022-pilot-findings.md)): **`Relatório 5 "Informações de
+  Capital"` under `TipoInstituicao=1`** carries `basileia_pct`, `capital_nivel_i_pct` (Tier 1),
+  `capital_principal_pct` (CET1), `razao_alavancagem`, `indice_imobilizacao`, and the RWA breakdown
+  — the full **solvency** set (values are fractions → ×100). `Relatório 1 "Resumo"` also exposes the
+  headline Índice de Basileia for a lighter fetch. A coarse `soundness_band` (sólido / atenção /
+  frágil) from the regulatory floor (8% + 2.5% conservation buffer ≈ 10.5% practical min). Quarterly
+  `as-of`. **NB** the prudential-conglomerate `CodInst` under `TipoInstituicao=1` (capital) DIFFER
+  from the `TipoInstituicao=2` codes the market-share flow uses — resolve against the
+  `'<NAME> - PRUDENCIAL'` cadastro entries.
+- **Liquidity is NOT in IF.data** (pilot-verified: no relatório carries an LCR/NSFR/liquidez
+  column). True liquidity (LCR/NSFR) is published separately and lives in the banks' **Pilar 3**
+  reports → it comes from **Phase 6** (Pilar 3 PDFs via the existing synth + KB path) or a dedicated
+  LCR source, not the OData flow. A balance-sheet liquidity **proxy** is derivable but must be
+  labelled inference, never presented as the reported LCR.
+- **`inadimplencia_pct` (NPL) / `roe_pct`** come from the credit-portfolio + DRE relatórios
+  (Relatórios 4, 7–14) or are derived from two reported lines — labelled inference when derived.
 
 - **Tier B — monthly COSIF balancetes (the trajectory).** BCB publishes **monthly balancetes** per
   institution (COSIF *Balancete Patrimonial Analítico*, documento 4010 — a public "Balancetes e
