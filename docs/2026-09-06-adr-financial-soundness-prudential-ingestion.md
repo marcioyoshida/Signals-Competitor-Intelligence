@@ -317,7 +317,23 @@ their own schedule, matched to the monthly balancete release.
    (fixed by extracting the `python3.14-dev` .deb + `CPLUS_INCLUDE_PATH`, no sudo). And the deploy API
    needs **SageMaker SDK v2** (`pip install "sagemaker<3"` — v3 dropped `image_uris`/`HuggingFaceModel`).
    Role: `OncaSageMakerFinBERT`.
-6. Pilar 3 / risk-report PDF ingest → existing synth + KB (grounded, cited); officer-retrievable.
+6. **Pilar 3 / risk-report PDF ingest — TONE-CORPUS HALF SHIPPED + LIVE (2026-09-06); KB-grounding
+   half remains.** `src/ingest/pilar3.py` discovers Pilar 3 (*Relatório de Gerenciamento de Riscos*)
+   filings via **CVM IPE** (`Assunto` carries "Gerenciamento de Riscos" + "Pilar"; direct
+   rad.cvm.gov.br `Link_Download`; ENET mislabels content-type but the body is a real `%PDF`),
+   extracts cleaned risk-narrative prose → durable `pilar3/index.json`. `financial_tone` now reads
+   this real text per entity (`corpus="pilar3"`) instead of the fact-paraphrases — **the tone is no
+   longer circular.** Live: Itaú tone 0.265 from its real 2T26 filing (via the SageMaker endpoint).
+   **Coverage:** IPE covers Itaú today; other banks file Pilar 3 on IR sites (mziq/own CDN) — separate
+   fetchers, those entities stay `solvency_facts` (labelled). **Remaining:** feed the full Pilar 3
+   text into the Bedrock KB for grounded Q&A (the officer-retrievable half).
+
+**Cross-phase (2026-09-06):** **Phase 4 slope firing** now LIVE — the Tier-B monthly PDD slope feeds
+the CRO axis: a competitor whose provisions rise ≥5% MoM flags `slope_warning` + an immediate
+"Deterioração de crédito" rec (live: XP flags on *both* weak Basileia 11.93% **and** PDD +6.5%/mo).
+**Tone surfaced** (was shadow) — `feed.entities[].financial_tone` + the CRO solvency rows show
+"tom ±N (Pilar 3 | inf.)", labelled inference with its corpus. **ADR 022 Phases 1–6 now materially
+LIVE** (Phase 6 KB-grounding half + multi-bank Pilar 3 coverage the only remainders).
 
 ## Revision note
 
