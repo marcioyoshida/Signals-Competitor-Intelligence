@@ -668,7 +668,8 @@ def build_reference() -> dict[str, Any]:
 
 # --- top level ------------------------------------------------------------------------
 def build_executive(feed: dict[str, Any], *, decisions: list[dict[str, Any]] | None = None,
-                    engagement: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+                    engagement: list[dict[str, Any]] | None = None,
+                    tdr_baseline_hours: float | None = None) -> dict[str, Any]:
     """`feed.executive` — the four enriched officer blocks + shared sectors + the Executive Flow
     (§D trajectories) + the Decision-Trust metrics (§E, from `decisions`) + the Executive
     Engagement rollup (§E, from `engagement`)."""
@@ -685,7 +686,8 @@ def build_executive(feed: dict[str, Any], *, decisions: list[dict[str, Any]] | N
     try:
         from src.synth import decision_metrics, engagement_log
         engagement_roll = engagement_log.aggregate(engagement or [], labels=labels)
-        metrics = decision_metrics.compute_metrics(decisions or [], engagement=engagement_roll)
+        metrics = decision_metrics.compute_metrics(decisions or [], engagement=engagement_roll,
+                                                   tdr_baseline_hours=tdr_baseline_hours)
     except Exception as exc:  # pragma: no cover - metrics best-effort
         print(f"Warning: decision metrics skipped: {exc}")
     return {

@@ -166,6 +166,10 @@
 <script>
 const U = window.OncaUI;
 let DATA = {}, EX = {}, OFFICER = "cso", SECTOR = "__all__", BYID = {};
+// §E TDR: first-surfaced timestamp per item — the "start" of the executive's deliberation
+// (first render → decision = the real time-to-decide, measured client-side).
+const SEEN = {};
+function markSeen(k) { if (k && !SEEN[k]) SEEN[k] = new Date().toISOString(); }
 
 const OFFICERS = {
   cso: { label:"CSO · Estratégia", title:"Estrategista-chefe (CSO)",
@@ -353,6 +357,7 @@ function officerShort(k) { return (OFFICERS[k] ? OFFICERS[k].label.split(" ")[0]
 function flowBand() {
   // CSO (chief-of-staff) sees every trajectory; each officer sees the ones routed to it or handed to it.
   FLOW = (EX.flow || []).filter(t => (OFFICER === "cso" || t.officer === OFFICER || t.handoff === OFFICER) && inSector(t));
+  FLOW.forEach(t => markSeen(t.id));  // first surfaced now (TDR deliberation start)
   if (!FLOW.length) return "";
   const cards = FLOW.map((t, i) => `<div class="traj" data-sev="${U.esc(t.severity)}" data-i="${i}">
     <div class="traj-hd"><span class="traj-t">${U.esc(t.title)}</span>
@@ -370,7 +375,7 @@ async function captureTraj(btn) {
   const industry = SECTOR !== "__all__" ? SECTOR : (t.industries && t.industries[0]) || null;
   const res = await postAct({ intent: "record_decision", officer: t.officer,
     args: { officer: t.officer, recommendation: t.title, verdict, industry, action_ref: t.action_ref,
-            evidence_id: (t.evidence_ids || [])[0], context_id: t.id } });
+            evidence_id: (t.evidence_ids || [])[0], context_id: t.id, started_at: SEEN[t.id] } });
   if (!res || !res.decision_id) { f.insertAdjacentHTML("beforeend", `<span class="done" style="color:var(--t-high)">falha</span>`); return; }
   const card = btn.closest(".traj"); if (card) { card.dataset.did = res.decision_id; card.dataset.off = t.officer; }
   f.insertAdjacentHTML("beforeend", `<span class="done">✓ ${verdict}</span>
@@ -406,7 +411,8 @@ function metricsBand() {
     tile("Influência", c.influence == null ? "—" : c.influence, "com resultado"),
     tile("Engajamento", c.engagement == null ? "—" : c.engagement, `${eng.n_interest || 0} interações`),
     tile("Board", c.board == null ? "—" : c.board, `${mm.n_board_flagged || 0} escalados`)];
-  const note = `<p class="hd-note" style="padding:2px var(--s2) 0;line-height:1.4">${U.esc(m.ets_note || "")} · ${U.esc(m.tdr_note || "")}</p>`;
+  const tdrStr = m.tdr != null ? `<b style="color:var(--primary)">TDR ${m.tdr}%</b> · ` : "";
+  const note = `<p class="hd-note" style="padding:2px var(--s2) 0;line-height:1.4">${tdrStr}${U.esc(m.ets_note || "")}<br>${U.esc(m.tdr_note || "")}</p>`;
   // §E intelligence: which entities/sectors draw executive attention (from the engagement rollup).
   const te = eng.top_entities || [], tsec = eng.top_sectors || [];
   const interestPanel = (te.length || tsec.length)
@@ -676,7 +682,7 @@ function render() {
 const HZ = [["imediato", "Imediato"], ["30d", "30 dias"], ["90d", "90 dias"], ["estrategico", "Estratégico"]];
 let RECS = [];
 function renderRecs(recs) {
-  RECS = recs; const el = document.getElementById("recs");
+  RECS = recs; recs.forEach(r => markSeen("rec:" + r.horizon + ":" + r.text)); const el = document.getElementById("recs");
   if (!recs.length) { el.innerHTML = U.empty("Sem ações recomendadas no escopo.", "", "○"); return; }
   el.innerHTML = `<div class="horizons">` + HZ.map(([key, label]) => {
     const items = recs.map((r, i) => [r, i]).filter(([r]) => r.horizon === key);
@@ -695,7 +701,7 @@ async function capture(btn) {
   cap.querySelectorAll("button").forEach(x => { x.disabled = true; });
   const industry = SECTOR !== "__all__" ? SECTOR : (r.industries && r.industries[0]) || null;
   const res = await postAct({ intent: "record_decision", officer: OFFICER,
-    args: { officer: OFFICER, recommendation: r.text, verdict, industry, action_ref: r.action, evidence_id: r.evidence_id, context_id: r.horizon } });
+    args: { officer: OFFICER, recommendation: r.text, verdict, industry, action_ref: r.action, evidence_id: r.evidence_id, context_id: r.horizon, started_at: SEEN["rec:" + r.horizon + ":" + r.text] } });
   if (!res || !res.decision_id) { cap.innerHTML = `<span class="done" style="color:var(--t-high)">falha ao registrar</span>`; return; }
   const rcard = cap.closest(".rec"); if (rcard) { rcard.dataset.did = res.decision_id; rcard.dataset.off = OFFICER; }
   cap.innerHTML = `<span class="done">✓ ${verdict}</span><span class="hd-note">resultado:</span>

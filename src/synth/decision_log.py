@@ -36,13 +36,15 @@ def record_decision(
     evidence_id: str | None = None,
     context_id: str | None = None,
     rationale: str | None = None,
+    started_at: str | None = None,
     table: Any | None = None,
 ) -> dict[str, Any]:
     """Append a decision. Returns the stored item (incl. the generated ``decision_id``).
 
     ``verdict`` ∈ {aprovado, rejeitado, adiado}. Outcome starts ``pendente`` — set later via
-    :func:`set_outcome` when the result is observed. Raises ValueError on a bad verdict / empty
-    recommendation."""
+    :func:`set_outcome` when the result is observed. ``started_at`` (ISO) is when the executive
+    FIRST engaged the item — with ``created_at`` it gives the real deliberation time (§E TDR).
+    Raises ValueError on a bad verdict / empty recommendation."""
     verdict = (verdict or "").strip().lower()
     if verdict not in _VERDICTS:
         raise ValueError(f"verdict must be one of {sorted(_VERDICTS)}")
@@ -62,6 +64,7 @@ def record_decision(
         "verdict": verdict,
         "rationale": (rationale or "").strip() or None,
         "actor": actor,
+        "started_at": (started_at or "").strip() or None,
         "created_at": _er._now_iso(),
         "outcome": "pendente",
         "outcome_note": None,

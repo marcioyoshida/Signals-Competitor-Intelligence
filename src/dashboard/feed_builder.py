@@ -1347,7 +1347,12 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as exc:  # pragma: no cover - engagement store best-effort
             print(f"Warning: engagement log read skipped: {exc}")
             _engagement = []
-        feed["executive"] = executive.build_executive(feed, decisions=_decisions, engagement=_engagement)
+        try:  # §E TDR: the per-tenant baseline is RECORDED (env), never assumed.
+            _tdr_base = float(os.environ.get("ONCA_TDR_BASELINE_HOURS") or 0) or None
+        except (TypeError, ValueError):
+            _tdr_base = None
+        feed["executive"] = executive.build_executive(feed, decisions=_decisions,
+                                                       engagement=_engagement, tdr_baseline_hours=_tdr_base)
     except Exception as exc:  # pragma: no cover - best-effort, read-only
         print(f"Warning: executive block skipped: {exc}")
         feed["executive"] = {"officers": [], "cso": {}}

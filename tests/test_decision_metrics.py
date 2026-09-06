@@ -47,6 +47,19 @@ def test_engagement_folds_into_ets():
     assert m["ets_full"] is False
 
 
+def test_tdr_honest_three_states():
+    d = {**_d("cso", "aprovado", "favoravel"),
+         "started_at": "2026-09-05T10:00:00+00:00", "created_at": "2026-09-05T14:00:00+00:00"}  # 4h
+    # (1) no baseline → None, honest note
+    assert dm.compute_metrics([d])["tdr"] is None
+    # (2) baseline 16h + measured 4h → 75% (the ADR example)
+    m = dm.compute_metrics([d], tdr_baseline_hours=16)
+    assert m["tdr"] == 75.0 and m["tdr_after_hours"] == 4.0 and m["tdr_baseline_hours"] == 16
+    # (3) baseline but no timed decision → None ("medindo"), never fabricated
+    m2 = dm.compute_metrics([_d("cso", "aprovado", "favoravel")], tdr_baseline_hours=16)
+    assert m2["tdr"] is None and "medindo" in m2["tdr_note"]
+
+
 def test_board_component_completes_the_full_composite():
     d = {**_d("cso", "aprovado", "favoravel"), "board_adopted": True, "board_at": "2026-09-05"}
     m = dm.compute_metrics([d], engagement={"n_interest": 25})

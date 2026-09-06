@@ -46,8 +46,21 @@ def _slice(decisions: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _hours_between(start: str | None, end: str | None) -> float | None:
+    """Elapsed hours between two ISO timestamps, or None if unparseable / non-positive."""
+    import datetime as _dt
+    try:
+        a = _dt.datetime.fromisoformat(str(start).replace("Z", "+00:00"))
+        b = _dt.datetime.fromisoformat(str(end).replace("Z", "+00:00"))
+        h = (b - a).total_seconds() / 3600.0
+        return round(h, 2) if h >= 0 else None
+    except Exception:
+        return None
+
+
 def compute_metrics(decisions: list[dict[str, Any]],
-                    engagement: dict[str, Any] | None = None) -> dict[str, Any]:
+                    engagement: dict[str, Any] | None = None,
+                    tdr_baseline_hours: float | None = None) -> dict[str, Any]:
     """Roll up the decision log into the honest, available Decision-Trust metrics + per-officer /
     per-industry slices, folding the §E **Engagement** component from the engagement rollup.
 
@@ -92,8 +105,28 @@ def compute_metrics(decisions: list[dict[str, Any]],
                      "ETS parcial (0–10) — média ponderada dos componentes medidos (Feedback 0.40 · "
                      "Influência 0.25 · Engajamento 0.20 · Adoção do board 0.15), renormalizada aos "
                      "que já têm sinal."),
-        "tdr": None,
-        "tdr_note": "requer baseline de tempo-para-decisão por tenant (registrado, não assumido).",
+        **_tdr(decisions, tdr_baseline_hours),
         "by_officer": by_officer,
         "by_industry": by_industry,
     }
+
+
+def _tdr(decisions: list[dict[str, Any]], baseline_hours: float | None) -> dict[str, Any]:
+    """Time-to-Decision Reduction = (Before − After)/Before × 100. `After` is the executive's
+    real deliberation time (first-look `started_at` → `created_at`, measured client-side);
+    `Before` is the RECORDED per-tenant baseline (never assumed). None until both exist."""
+    afters = [h for h in (_hours_between(d.get("started_at"), d.get("created_at"))
+                          for d in decisions if d.get("started_at")) if h is not None]
+    after_avg = round(sum(afters) / len(afters), 2) if afters else None
+    if not baseline_hours:
+        return {"tdr": None, "tdr_after_hours": after_avg, "tdr_baseline_hours": None,
+                "tdr_note": "requer baseline de tempo-para-decisão por tenant (registrado, "
+                            "não assumido) — defina ONCA_TDR_BASELINE_HOURS."}
+    if after_avg is None:
+        return {"tdr": None, "tdr_after_hours": None, "tdr_baseline_hours": baseline_hours,
+                "tdr_note": f"baseline {baseline_hours}h registrada; medindo o tempo real de "
+                            "deliberação (nenhuma decisão temporizada ainda)."}
+    tdr = round((baseline_hours - after_avg) / baseline_hours * 100, 1)
+    return {"tdr": tdr, "tdr_after_hours": after_avg, "tdr_baseline_hours": baseline_hours,
+            "tdr_note": f"Before {baseline_hours}h (baseline registrada) → After {after_avg}h "
+                        f"(deliberação medida, n={len(afters)})."}

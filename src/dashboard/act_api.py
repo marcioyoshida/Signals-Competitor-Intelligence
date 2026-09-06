@@ -342,6 +342,7 @@ def _act_record_decision(args: dict[str, Any], actor: str) -> tuple[str, int, di
             evidence_id=(args.get("evidence_id") or None),
             context_id=(args.get("context_id") or None),
             rationale=(args.get("rationale") or None),
+            started_at=(args.get("started_at") or None),
         )
     except ValueError as exc:
         return "blocked", 400, {"error": str(exc)}
