@@ -1,0 +1,115 @@
+"""ADR 022 Phase 5 — FinBERT-PT-BR financial-tone feature (SHADOW).
+
+A deterministic, cross-entity **financial tone** signal derived from the prudential-solvency store
+(`bcb_soundness` Tier A). For each tracked entity we state its real figures as pt-BR sentences and
+score them with **FinBERT-PT-BR** (`lucas-leme/FinBERT-PT-BR`), producing a net tone in [-1, 1] =
+P(POSITIVE) − P(NEGATIVE). Written to a durable **shadow** store `financial_tone/index.json`.
+
+**Shadow-first (the ADR guardrail).** This is computed and stored but NOT surfaced anywhere (no
+feed join, no board) until the model is validated against real pt-BR results-release language and
+its cost is measured. Every value is labelled `is_inference: True`.
+
+**Honesty on the corpus.** The tone inputs here are deterministic *fact-paraphrases of the stored
+numbers* (Basileia level + band), which validates the FinBERT WIRING end-to-end. The production tone
+reads the actual **results-release / Pilar 3 TEXT** (ADR 022 Phase 6); swapping the corpus is a
+change of `sentences_for`, not of this module's shape.
+
+**Compute placement.** `score_fn` is injected so the module is pure/testable. The real FinBERT is
+`finbert_score_fn()` (lazy transformers pipeline). In the cloud it runs scale-to-zero — a SageMaker
+HuggingFace-DLC Batch Transform (or a container Lambda) as a second task on `OncaFinancialsPipeline`;
+that packaging is the remaining infra step (needs docker/SageMaker, not this module).
+"""
+from __future__ import annotations
+
+import json
+from typing import Any, Callable
+
+INDEX_KEY = "financial_tone/index.json"
+MODEL = "lucas-leme/FinBERT-PT-BR"
+
+ScoreFn = Callable[[str], dict[str, float]]
+
+
+def sentences_for(rec: dict[str, Any]) -> list[str]:
+    """Deterministic pt-BR statements of a solvency record's REAL figures (not scraped filings)."""
+    out: list[str] = []
+    bas = rec.get("indice_basileia")
+    band = rec.get("band")
+    cet1 = rec.get("capital_principal")
+    if bas is not None:
+        tail = f", classificado como {band}" if band else ""
+        out.append(f"O Índice de Basileia da instituição é de {bas}%{tail}.")
+    if cet1 is not None:
+        out.append(f"O capital principal (CET1) é de {cet1}%.")
+    return out
+
+
+def _net_tone(sentences: list[str], score_fn: ScoreFn) -> float | None:
+    nets = []
+    for s in sentences:
+        sc = score_fn(s) or {}
+        nets.append(float(sc.get("POSITIVE", 0.0)) - float(sc.get("NEGATIVE", 0.0)))
+    return round(sum(nets) / len(nets), 3) if nets else None
+
+
+def build_tone(soundness_index: dict[str, Any], score_fn: ScoreFn) -> dict[str, Any]:
+    """Roll the solvency store into a per-entity shadow tone store."""
+    records: dict[str, dict[str, Any]] = {}
+    for eid, rec in ((soundness_index or {}).get("records") or {}).items():
+        sents = sentences_for(rec)
+        if not sents:
+            continue
+        records[eid] = {
+            "entity": eid,
+            "financial_tone_net": _net_tone(sents, score_fn),   # [-1, 1]
+            "band": rec.get("band"),
+            "base_date": rec.get("base_date"),
+            "n_sentences": len(sents),
+            "corpus": "solvency_facts",     # Phase 6 swaps this to results-release/pilar3 text
+            "is_inference": True,
+        }
+    return {"as_of": (soundness_index or {}).get("as_of"),
+            "base_date": (soundness_index or {}).get("base_date"),
+            "model": MODEL, "shadow": True, "count": len(records), "records": records}
+
+
+def tone_by_entity(index: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """{entity_id: {financial_tone_net, band, base_date}} — the projection a future (non-shadow)
+    feed join would consume. Unused while shadow."""
+    return {eid: {"financial_tone_net": r.get("financial_tone_net"), "band": r.get("band"),
+                  "base_date": r.get("base_date")}
+            for eid, r in ((index or {}).get("records") or {}).items()
+            if r.get("financial_tone_net") is not None}
+
+
+def finbert_score_fn(model_id: str = MODEL) -> ScoreFn:
+    """Lazy FinBERT-PT-BR scorer (needs transformers+torch). Returns {LABEL: prob}."""
+    from transformers import pipeline
+
+    clf = pipeline("text-classification", model=model_id, top_k=None)
+
+    def _score(text: str) -> dict[str, float]:
+        return {d["label"]: float(d["score"]) for d in clf(text)[0]}
+
+    return _score
+
+
+# --- durable shadow store I/O (mirrors bcb_soundness) ----------------------------------
+def load_index(bucket: str, *, s3: Any | None = None) -> dict[str, Any]:
+    import boto3
+
+    s3 = s3 or boto3.client("s3")
+    try:
+        return json.loads(s3.get_object(Bucket=bucket, Key=INDEX_KEY)["Body"].read())
+    except Exception:  # pragma: no cover - first run
+        return {}
+
+
+def publish(index: dict[str, Any], bucket: str, *, s3: Any | None = None) -> str:
+    import boto3
+
+    s3 = s3 or boto3.client("s3")
+    s3.put_object(Bucket=bucket, Key=INDEX_KEY,
+                  Body=json.dumps(index, ensure_ascii=False, indent=2).encode("utf-8"),
+                  ContentType="application/json")
+    return f"s3://{bucket}/{INDEX_KEY}"
