@@ -659,6 +659,21 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
             print(f"Warning: CVM participantes fetch failed: {exc}")
 
+    # SUSEP supervised-entities registry (#77 E1) — insurance/EAPC/capitalização/resseguro new
+    # entrants. Gated + seed-suppressed. Insurers aren't fintech → surface as review-gated entrant
+    # SIGNALS (entrants lens + Receita enrich), not auto-created, like the CVM-participantes path.
+    if os.environ.get("ONCA_INGEST_SUSEP", "false").lower() in ("1", "true", "yes"):
+        try:
+            from src.ingest import susep_entidades
+
+            with _source_budget("SUSEP entidades", deadline, per_source):
+                susep_rows = susep_entidades.fetch_entities()
+                new_entrants += _new_since_last_run(
+                    "susep_entidades", susep_rows, seed_if_empty=True
+                )
+        except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
+            print(f"Warning: SUSEP entidades fetch failed: {exc}")
+
     # Receita Federal enrichment: resolve the brand + controllers behind each new
     # entrant's (otherwise anonymous) CNPJ. Own budget so a slow lookup can't lose
     # the entrants list; only new entrants (bounded volume) are enriched.

@@ -369,6 +369,9 @@ class OncaPrototypeStack(Stack):
                 # Receita Federal CNPJ (QSA) enrichment of new entrants.
                 "ONCA_RECEITA_ENRICH": "true",
                 "ONCA_RECEITA_MAX": "15",
+                # #77 (E1): SUSEP supervised-entities registry (insurance entrants). Small CSV,
+                # seed-suppressed first run — safe to enable by default.
+                "ONCA_INGEST_SUSEP": "true",
             },
         )
         state_table.grant_read_write_data(func)

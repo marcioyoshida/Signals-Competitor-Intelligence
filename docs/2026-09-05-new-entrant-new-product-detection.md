@@ -95,7 +95,8 @@ new source is a new ingester + a lens mapping, not new machinery.
 | **P4** CVM products (FIDC/CRI/CRA, RCVM 175) | 🟡 method proven | same CKAN method (`fidc-doc-inf_mensal`, `adm_cart-cad` discovered) — each cadastro needs its column set verified, then plugs into `CADASTROS` / a products lens. |
 | **P2/P3** BCB arranjos / consórcio grupos | 🟡 host reachable | BCB OLINDA base is up, but the exact service names (arranjos de pagamento; grupos delta) need verification; reuse `bcb_consorcio`/`bcb_autorizacoes` OLINDA plumbing. |
 | **E4** BCB VASP (crypto) | 🔴 pending publication | the BCB VASP authorization registry is still being implemented (Lei 14.478); monitor. |
-| **E1/P1** SUSEP | 🔴 endpoint discovery | `dadosabertos.susep.gov.br` 404; `www2.susep.gov.br` 302; the `dados.gov.br` CKAN catalog is **401 (the `GOV_DADOS_TOKEN` is dead)** — needs the real SUSEP SES/dados-abertos path (internet-ingestion). |
+| **E1** SUSEP entrants | **✅ SHIPPED + LIVE-VERIFIED** | `src/ingest/susep_entidades.py` — SES `LISTAEMPRESAS.csv` (verified 2026-09-06: HTTP 200, `;`-delimited, latin-1, `CodigoFIP;NomeEntidade;CNPJ`, 233 supervised cos = seguradoras+EAPC+resseguradoras+capitalização, brokers excluded). Gated `ONCA_INGEST_SUSEP`, seed-suppressed, → `new_entrants` → entrants lens + Receita enrich (not auto-created — insurers aren't fintech). |
+| **P1** SUSEP products | 🔴 blocked (token) | "Consulta de Produtos" is dados.gov.br CKAN-only + JS-rendered; the CKAN API needs the **dead `GOV_DADOS_TOKEN`**. Deferred, not built blind — unblocks when the token is regenerated. |
 | **E2** PREVIC | 🔴 endpoint discovery | same `dados.gov.br` 401 block; needs the PREVIC EFPC relação URL. |
 | **E3** SPA/MF betting | 🔴 endpoint discovery | the authorized-operators list needs its machine-readable form located on gov.br/fazenda/spa. |
 
