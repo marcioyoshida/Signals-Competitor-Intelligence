@@ -363,6 +363,35 @@ function rowsFramework(list) {
       `<div class="hd-note" style="margin-top:2px"><b>${U.esc(prettyDim(b.dimension))}</b> — ${U.esc(b.text || "")}</div>`).join("") +
     `</div>`).join("") + `</div>`;
 }
+// SURF-10: compliance change-diff — enumerated article changes + deadline (CCO).
+function rowsChangeDiff(list) {
+  const rows = (list || []).filter(inSector);
+  if (!rows.length) return U.empty("Sem mudanças enumeradas no escopo.", "", "○");
+  return rows.slice(0, 16).map(r => {
+    const arts = (r.changes || []).map(ch => `${U.esc(ch.art || "?")} ${U.esc(ch.verb || "")}`).join(" · ");
+    const dl = r.days_to_deadline != null ? `<span class="badge badge--${r.days_to_deadline <= 30 ? "high" : "med"}">prazo ${r.days_to_deadline}d</span>` : "";
+    return `<div class="exrow" data-id="${U.esc(r.id || "")}" style="padding:var(--s2) var(--s3)">
+      <div style="display:flex;gap:var(--s2);align-items:baseline"><b style="flex:1;min-width:0">${U.esc(r.domain || r.title || "—")}</b>
+        <span class="badge badge--low">${r.n_changes || 0} mudança(s)</span>${dl}</div>
+      <div class="hd-note" style="margin-top:2px">${arts || U.esc((r.title || "").slice(0, 160))}</div></div>`;
+  }).join("");
+}
+// SURF-6/7/11: deep-axis card re-projection (predictive/ecosystem/behavioral/relational).
+function rowsAxis(list) {
+  const rows = (list || []).filter(inSector);
+  if (!rows.length) return U.empty("Sem sinais no escopo.", "", "○");
+  return rows.slice(0, 14).map(r => {
+    const meta = [];
+    if (r.horizon_days != null) meta.push("horizonte " + r.horizon_days + "d");
+    if (r.hub) meta.push("hub " + r.hub + (r.n_dependents != null ? " · " + r.n_dependents + " expostos" : ""));
+    if (r.relation) meta.push(U.esc(r.relation));
+    if (r.pattern) meta.push(U.esc(r.pattern));
+    return `<div class="exrow" data-id="${U.esc(r.id || "")}" style="display:flex;gap:var(--s3);align-items:baseline;padding:var(--s2) var(--s3)">
+      <b style="min-width:110px">${U.esc(r.entity_label)}</b>
+      <span style="flex:1;min-width:0">${U.esc(r.title || "")}</span>
+      <span class="hd-note" style="white-space:nowrap">${meta.join(" · ")}</span></div>`;
+  }).join("");
+}
 function rowsFinancials(list) {
   list = (list || []).filter(inSector);
   if (!list.length) return U.empty("Sem fundamentos financeiros no escopo.", "", "○");
@@ -830,8 +859,15 @@ function render() {
     band("Cinco forças de Porter", "rivalidade·entrantes·substitutos·poder · beliefs vetados",
       panel("Concorrentes por força", null, "dimensão · avaliação", rowsFramework(p.porter))) +
     band("Quatro Cantos (Four Corners)", "motivação·premissas·estratégia·capacidades",
-      panel("Concorrentes por canto", null, "dimensão · avaliação", rowsFramework(p.four_corners)));
+      panel("Concorrentes por canto", null, "dimensão · avaliação", rowsFramework(p.four_corners))) +
+    band("Visão prospectiva", "previsão (horizonte) + ecossistema (hubs) · inferência",
+      panel("Sinais prospectivos", null, "horizonte · hub · expostos", rowsAxis(p.forward_look))) +
+    band("Padrões & relações", "comportamento (drumbeat/multi-frente) + grafo relacional",
+      grid("1fr 1fr", [panel("Padrões comportamentais", null, "cadência de sinal", rowsAxis(p.behavioral)),
+                       panel("Grafo relacional", null, "co-menção · convergência · disputa", rowsAxis(p.relational))]));
   else if (OFFICER === "cco") board +=
+    band("Diff de conformidade", "o que mudou (artigos) + prazo · reg_change/reg_diff",
+      panel("Mudanças enumeradas por norma", null, "artigos alterados · prazo", rowsChangeDiff(p.change_diff))) +
     band("Ambiente PESTLE", "político·econômico·social·tecnológico·legal·ambiental · beliefs vetados",
       panel("Entidades por dimensão", null, "dimensão · avaliação", rowsFramework(p.pestle)));
   else if (OFFICER === "cpo") board +=

@@ -383,3 +383,28 @@ def test_executive_surfaces_silence_sorted_by_tier():
                  "mean_gap_days": 5, "briefing": "very quiet"}]}
     ex = executive.build_executive(feed)
     assert [s["entity"] for s in ex["silence"]] == ["b", "a"]  # highest tier first
+
+
+# --- SURF-6/7/10/11: deep-axis + change-diff routing -----------------------------
+def test_axis_rows_and_change_diff():
+    feed = {"dates": ["2026-09-06"], "industry_options": [], "entity_attrs": {},
+            "feed": [
+                {"id": "p1", "date": "2026-09-06", "entity": "itau", "horizon_days": 30,
+                 "industries": ["banking"], "narrative": "previsão"},
+                {"id": "e1", "date": "2026-09-05", "entity": "b3", "hub": "b3", "n_dependents": 12,
+                 "industries": ["banking"], "narrative": "hub"},
+                {"id": "beh", "date": "2026-09-04", "entity": "xp", "pattern": "drumbeat",
+                 "industries": ["asset-management"], "narrative": "cadência"},
+                {"id": "rel", "date": "2026-09-03", "entity": "itau", "relation": "co_mention",
+                 "industries": ["banking"], "narrative": "co-menção"},
+                {"id": "reg1", "date": "2026-09-06", "kind": "regulatory_lifecycle", "domain": "Crédito",
+                 "n_changes": 2, "changes": [{"art": "1", "verb": "altera"}, {"art": "2", "verb": "revoga"}],
+                 "days_to_deadline": 20, "affected_industries": ["banking"], "narrative": "norma"},
+            ]}
+    ex = executive.build_executive(feed)
+    assert [r["id"] for r in ex["cso"]["panels"]["forward_look"]] == ["p1", "e1"]  # horizon + hub
+    assert ex["cso"]["panels"]["behavioral"][0]["pattern"] == "drumbeat"
+    assert ex["cso"]["panels"]["relational"][0]["relation"] == "co_mention"
+    cd = ex["cco"]["panels"]["change_diff"]
+    assert cd[0]["n_changes"] == 2 and cd[0]["changes"][1]["verb"] == "revoga"
+    assert cd[0]["days_to_deadline"] == 20

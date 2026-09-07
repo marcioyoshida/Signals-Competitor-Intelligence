@@ -86,6 +86,26 @@ def _headline(card: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+_AXIS_EXTRAS = ("hub", "n_dependents", "relation", "pattern", "horizon_days")
+
+
+def _axis_rows(feed: dict[str, Any], *fields: str) -> list[dict[str, Any]]:
+    """Re-project narrative cards that carry a deep-axis field (SURF-6/7/11): behavioral
+    (`pattern`), relational (`relation`), predictive (`horizon_days`), ecosystem (`hub`). The
+    axes already ride on the cards — this just routes them to an officer panel, no new inference."""
+    rows: list[dict[str, Any]] = []
+    for c in _cards(feed):
+        if not any(c.get(f) is not None for f in fields):
+            continue
+        h = _headline(c)
+        for extra in _AXIS_EXTRAS:
+            if c.get(extra) is not None:
+                h[extra] = c.get(extra)
+        rows.append(h)
+    rows.sort(key=lambda r: str(r.get("date") or ""), reverse=True)
+    return rows
+
+
 def _is_move(card: dict[str, Any]) -> bool:
     if set(card.get("topics") or []) & _MOVE_TOPICS or set(card.get("lenses") or []) & _MOVE_LENSES:
         return True
@@ -310,6 +330,12 @@ def build_cso(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         # SURF-2: competitive frameworks (Porter five-forces + Four Corners) routed to the CSO.
         "porter": _framework_rows(feed, "porter")[:20],
         "four_corners": _framework_rows(feed, "four_corners")[:20],
+        # SURF-7: forward-look — predictive (horizon) + ecosystem (infrastructure hubs), inference.
+        "forward_look": _axis_rows(feed, "horizon_days", "hub")[:24],
+        # SURF-11: behavioral patterns (drumbeat / multi-front) — peer-cohort read.
+        "behavioral": _axis_rows(feed, "pattern")[:20],
+        # SURF-6: relational graph (co-mention / convergence / dispute), review-gated upstream.
+        "relational": _axis_rows(feed, "relation")[:20],
         "recommendations": recs,
     }}
 
@@ -328,6 +354,29 @@ def _reg_row(c: dict[str, Any]) -> dict[str, Any]:
             "blast_band": (cr.get("blast_radius") or {}).get("band"),
             "difficulty_band": (cr.get("difficulty") or {}).get("band"),
             "change": cr.get("change"), "impact": cr.get("impact")}
+
+
+def _change_diff_rows(feed: dict[str, Any], reg_cards: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """SURF-10: the compliance change-diff — reg cards with ENUMERATED article-level changes
+    (reg_change/reg_diff) + the obligation deadline, for the CCO. Distinct from the CRO's
+    blast-radius risk framing: this is 'what obligations changed, by when'."""
+    rows = []
+    for c in reg_cards:
+        changes = c.get("changes") or []
+        if not changes and not c.get("n_changes"):
+            continue
+        cr = c.get("change_record") or {}
+        rows.append({
+            "id": c.get("id"), "domain": c.get("domain") or c.get("subject_label"),
+            "title": cr.get("change") or (c.get("narrative") or "")[:200],
+            "n_changes": c.get("n_changes") or len(changes),
+            "changes": [{"art": ch.get("art"), "verb": ch.get("verb")} for ch in changes[:8]],
+            "deadline": c.get("deadline"), "days_to_deadline": c.get("days_to_deadline"),
+            "difficulty_band": (cr.get("difficulty") or {}).get("band"),
+            "industries": c.get("affected_industries") or [],
+        })
+    rows.sort(key=lambda r: (r.get("n_changes") or 0), reverse=True)
+    return rows
 
 
 _WEAK_BANDS = ("frágil", "atenção")
@@ -599,6 +648,8 @@ def build_cco(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         # SURF-3: PESTLE macro/regulatory environment routed to the CCO (7S dropped — internal,
         # no external signal to ground it).
         "pestle": _framework_rows(feed, "pestle")[:20],
+        # SURF-10: compliance change-diff — enumerated article changes + deadlines.
+        "change_diff": _change_diff_rows(feed, ctx["reg_cards"])[:24],
         "recommendations": recs,
     }}
 
