@@ -8,9 +8,16 @@
 
 ## What shipped (grounded in existing registry/feed data)
 
-- **R2 Certifications — SHIPPED.** `derive_certifications` → `entity_attrs.certifications` from
-  registry facts (sector regulator BCB/CVM/SUSEP/PREVIC, B3 listing, ISE membership, parent). Base
-  completeness **0% → 100%** of tracked entities; each certification cites its basis.
+- **R2 Certifications — SHIPPED (grounded) + VERIFIED-source upgrade (#74).** Two tiers now:
+  (a) `derive_certifications` → `entity_attrs.certifications` from registry facts (sector regulator,
+  B3 listing, ISE membership, parent) — an *inference* that gives 100% completeness but can only
+  *assume* authorization from industry; (b) **register-verified** certifications
+  (`bcb_autorizacoes.apply_verified_certifications`, wired into ingest): each tracked entity that
+  resolves by **CNPJ root** to a BCB *in-operation* row is stamped a REAL cert
+  (`BCB · <license_class> · em funcionamento`) at **`structured`** provenance (ADR-018) — wins over
+  the inference, never demotes a curated list. This is the honest answer to "is competitor X
+  *authorized* for segment Y?" (a registry fact, not an industry guess). The inference remains the
+  fallback for entities with no CNPJ join (funds/betting/etc.).
 - **R3 Market structure — SHIPPED (real, where an issuer files).** `market_structure` from the CVM
   `financials` store → `feed.market_structure[sector]` = {size_revenue, leader rev-share, HHI,
   constituents}. Live: banking R$971bi / Itaú 34.5% / HHI 0.267; acquiring, insurance, asset-mgmt,

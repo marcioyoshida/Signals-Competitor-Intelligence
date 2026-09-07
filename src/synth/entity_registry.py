@@ -506,10 +506,15 @@ CERTIFICATIONS: dict[str, list[str]] = {}
 
 
 def set_certifications(
-    entity_id: str, certs: Iterable[str], *, table: Any | None = None
+    entity_id: str, certs: Iterable[str], *, source: str = "curated", table: Any | None = None
 ) -> bool:
-    """Set an entity's curated certification list (non-destructive to other
-    fields). Returns True if changed."""
+    """Set an entity's certification list (non-destructive to other fields). Returns True if
+    changed.
+
+    ADR-018 (#74): ``source`` stamps provenance and gates write-precedence — the register-verified
+    populate (`bcb_autorizacoes` → ``structured``) fills the 0% field but may NOT demote a human
+    ``curated`` certification list. A verified certification is a REAL registry fact, never an
+    industry inference."""
     t = _table(table)
     e = get_entity(entity_id, table=t)
     if not e:
@@ -517,7 +522,15 @@ def set_certifications(
     want = sorted({str(c).strip() for c in certs if str(c).strip()})
     if sorted(e.get("certifications") or []) == want:
         return False
-    update_entity(entity_id, {"certifications": want}, table=t)
+    if not _may_write(e, "certifications", source):  # ADR 018 Phase 2
+        _log(entity_id, "blocked", source,
+             {"field": "certifications", "attempted": want,
+              "held_by": (e.get("_prov") or {}).get("certifications", {}).get("source")})
+        return False
+    e["certifications"] = want
+    _stamp(e, ["certifications"], source)  # ADR 018
+    t.put_item(Item=e)
+    _log(entity_id, "set_certifications", source, {"new": want})
     return True
 
 

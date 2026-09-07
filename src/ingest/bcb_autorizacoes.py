@@ -144,6 +144,52 @@ def _normalize(row: dict[str, Any], resource: str) -> dict[str, Any]:
     }
 
 
+# --- R2 / #74: register-VERIFIED certifications for tracked entities -------------------
+# The in-operation registry is a real authorization fact per institution (CNPJ + SEGMENTO/CLASSE +
+# "em funcionamento"). Joining it to the tracked entities by CNPJ root lifts `certifications` from
+# 0% real to a register-verified value — the honest answer to the CPO decision "is competitor X
+# authorized for segment Y?", which the industry-INFERRED derivation could only assume.
+def certification_label(row: dict[str, Any]) -> str:
+    """A verified certification string from an in-operation registry row:
+    ``BCB · <license_class> · em funcionamento``."""
+    lic = (row.get("license_class") or row.get("entity_type") or "").strip() or "instituição autorizada"
+    return f"BCB · {lic} · em funcionamento"
+
+
+def certifications_by_cnpj(authorized: list[dict[str, Any]]) -> dict[str, set[str]]:
+    """Map CNPJ 8-digit root → the set of verified BCB certification labels. Rows without a CNPJ
+    are skipped (they cannot be joined to a tracked entity)."""
+    out: dict[str, set[str]] = {}
+    for r in authorized:
+        root = "".join(ch for ch in str(r.get("cnpj") or "") if ch.isdigit())[:8]
+        if not root:
+            continue
+        out.setdefault(root, set()).add(certification_label(r))
+    return out
+
+
+def apply_verified_certifications(
+    authorized: list[dict[str, Any]], *, source: str = "structured", table: Any | None = None
+) -> list[str]:
+    """#74/R2: stamp register-verified ``certifications`` onto every tracked entity that resolves to
+    a BCB in-operation row (by CNPJ root). ``structured`` provenance — wins over the industry-
+    inferred derivation but (ADR-018) never demotes a curated list. Returns the entity_ids updated.
+    Best-effort/pure-local (no network): iterates the already-fetched ``authorized`` rows."""
+    from src.synth import entity_registry as er
+
+    changed: list[str] = []
+    seen: set[str] = set()
+    for root, labels in certifications_by_cnpj(authorized).items():
+        eid = er.resolve_by_cnpj(root, table=table)
+        if not eid or eid in seen:
+            continue
+        seen.add(eid)
+        cur = set((er.get_entity(eid, table=table) or {}).get("certifications") or [])
+        if er.set_certifications(eid, cur | labels, source=source, table=table):
+            changed.append(eid)
+    return changed
+
+
 def inspect(resource: str | None = None) -> None:
     """One-shot schema check against a live EntitySet."""
     resource = resource or DEFAULT_RESOURCES[0]

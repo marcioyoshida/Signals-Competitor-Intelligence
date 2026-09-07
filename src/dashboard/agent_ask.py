@@ -509,7 +509,11 @@ def entity_fact_cards(feed: dict[str, Any]) -> list[dict[str, Any]]:
     for eid, a in attrs.items():
         own = a.get("ownership")
         own_pt = _OWNERSHIP_PT.get(own, own or "—")
-        certs = a.get("certifications") or []
+        # certifications may be plain strings (register-verified, #74) or {label,...} dicts
+        # (the industry-inferred derivation) — render both shapes to a label.
+        certs = [c if isinstance(c, str) else (c.get("label") or "")
+                 for c in (a.get("certifications") or [])]
+        certs = [c for c in certs if c]
         parts = [f"{a.get('label', eid)} — natureza de controle: {own_pt} [{_OWNERSHIP_KW.get(own, '')}]."]
         parts.append(
             "Certificações: " + ", ".join(certs) + "."

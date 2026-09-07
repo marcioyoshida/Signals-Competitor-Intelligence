@@ -607,6 +607,14 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             new_entrants = _new_since_last_run(
                 "bcb_autorizacoes", authorized, seed_if_empty=True
             )
+            # #74/R2: register-VERIFIED certifications for tracked entities (CNPJ-joined; structured
+            # provenance, never demotes a curated cert). Pure-local over the already-fetched rows.
+            try:
+                _certd = bcb_autorizacoes.apply_verified_certifications(authorized)
+                if _certd:
+                    print(f"R2 certifications: verified {len(_certd)} tracked entities from BCB register")
+            except Exception as exc:  # pragma: no cover - never blocks the entrant scan
+                print(f"Warning: R2 certification stamp failed: {exc}")
     except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
         print(f"Warning: BCB autorizações fetch failed: {exc}")
 
