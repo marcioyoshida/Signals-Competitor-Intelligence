@@ -372,6 +372,9 @@ class OncaPrototypeStack(Stack):
                 # #77 (E1): SUSEP supervised-entities registry (insurance entrants). Small CSV,
                 # seed-suppressed first run — safe to enable by default.
                 "ONCA_INGEST_SUSEP": "true",
+                # #78 (E3): SPA/MF authorized betting operators (~82 cos). Small XLSX,
+                # seed-suppressed — the authorized list IS the entrant feed. Safe on by default.
+                "ONCA_INGEST_SPA": "true",
             },
         )
         state_table.grant_read_write_data(func)

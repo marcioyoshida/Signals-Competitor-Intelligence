@@ -98,7 +98,7 @@ new source is a new ingester + a lens mapping, not new machinery.
 | **E1** SUSEP entrants | **✅ SHIPPED + LIVE-VERIFIED** | `src/ingest/susep_entidades.py` — SES `LISTAEMPRESAS.csv` (verified 2026-09-06: HTTP 200, `;`-delimited, latin-1, `CodigoFIP;NomeEntidade;CNPJ`, 233 supervised cos = seguradoras+EAPC+resseguradoras+capitalização, brokers excluded). Gated `ONCA_INGEST_SUSEP`, seed-suppressed, → `new_entrants` → entrants lens + Receita enrich (not auto-created — insurers aren't fintech). |
 | **P1** SUSEP products | 🔴 blocked (token) | "Consulta de Produtos" is dados.gov.br CKAN-only + JS-rendered; the CKAN API needs the **dead `GOV_DADOS_TOKEN`**. Deferred, not built blind — unblocks when the token is regenerated. |
 | **E2** PREVIC | 🔴 endpoint discovery | same `dados.gov.br` 401 block; needs the PREVIC EFPC relação URL. |
-| **E3** SPA/MF betting | 🔴 endpoint discovery | the authorized-operators list needs its machine-readable form located on gov.br/fazenda/spa. |
+| **E3** SPA/MF betting | **✅ SHIPPED + LIVE-VERIFIED** | `src/ingest/spa_apostas.py` — the SPA `planilha-de-autorizacoes.xlsx` (verified 2026-09-07: HTTP 200 w/ browser UA, .xlsx; 82 companies / 188 brands; cols PORTARIA·DENOMINAÇÃO·CNPJ·MARCAS·DOMÍNIOS·REQUERIMENTO; multi-brand cos span rows → grouped). One record per authorized COMPANY (brands/domains collected). **XLSX parsed with stdlib** (zipfile+ElementTree) — no openpyxl dep. Gated `ONCA_INGEST_SPA`, seed-suppressed, → `new_entrants` → entrants lens + Receita enrich. For iGaming the authorized list IS the entrant feed. |
 
 **Verified discovery recipe (reuse for every CVM source):** `GET
 https://dados.cvm.gov.br/api/3/action/package_search?q=<term>` → pick the dataset `name` → `GET

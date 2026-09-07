@@ -674,6 +674,20 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
             print(f"Warning: SUSEP entidades fetch failed: {exc}")
 
+    # SPA/MF authorized betting operators (#78 E3) — for iGaming the authorized list IS the entrant
+    # feed (~82 companies / 188 brands). Gated + seed-suppressed → entrants lens + Receita enrich.
+    if os.environ.get("ONCA_INGEST_SPA", "false").lower() in ("1", "true", "yes"):
+        try:
+            from src.ingest import spa_apostas
+
+            with _source_budget("SPA apostas", deadline, per_source):
+                spa_rows = spa_apostas.fetch_authorized()
+                new_entrants += _new_since_last_run(
+                    "spa_apostas", spa_rows, seed_if_empty=True
+                )
+        except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
+            print(f"Warning: SPA apostas fetch failed: {exc}")
+
     # Receita Federal enrichment: resolve the brand + controllers behind each new
     # entrant's (otherwise anonymous) CNPJ. Own budget so a slow lookup can't lose
     # the entrants list; only new entrants (bounded volume) are enriched.
