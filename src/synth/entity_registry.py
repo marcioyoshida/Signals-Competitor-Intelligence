@@ -3,6 +3,8 @@
 Single-table lookup design (O(1) exact resolution, no GSI):
   pk = "ENT#<entity_id>"    -> entity record (display_name, aliases, sector, ...)
   pk = "ALIAS#<norm>"       -> {entity_id}   (accent-folded name index)
+  pk = "NAME#<norm>"        -> {entity_ids[]} (display_name index; #14 — lets
+                              resolve_by_name be O(1) instead of a full scan)
   pk = "CNPJ#<root8>"       -> {entity_id}   (exact join key)
 
 This file grows with the ADR rollout: the table + curated seed and `put_entity`
@@ -368,6 +370,7 @@ def put_entity(
         t.put_item(Item={"pk": f"ALIAS#{na}", "type": "alias", "entity_id": entity_id})
     for r in roots:
         t.put_item(Item={"pk": f"CNPJ#{r}", "type": "cnpj", "entity_id": entity_id})
+    _index_display_name(t, entity_id, display_name)  # #14: keep resolve_by_name O(1)
     _log(entity_id, "put", source,  # ADR 018 Phase 1b
          {"industries": entity.get("industries"), "ticker": entity.get("ticker")})
     return entity
@@ -788,15 +791,42 @@ def resolve_by_cnpj(cnpj_root: str, table: Any | None = None) -> str | None:
     return item.get("entity_id") if item else None
 
 
+def _index_display_name(t: Any, entity_id: str, display_name: str | None) -> None:
+    """Maintain the ``NAME#<norm(display_name)>`` index item (#14).
+
+    A display_name is not necessarily one of the entity's aliases, so the ALIAS#
+    index alone can miss it. The NAME# item holds a *list* of entity_ids (display
+    names can collide across entities) so ``resolve_by_name`` stays a two-get_item
+    lookup instead of a full table scan. Add-only on the write path: a changed
+    display_name leaves a stale reference, which only makes resolution more
+    conservative (an extra candidate → treated as ambiguous, never an auto-hijack).
+    ``reindex_display_names`` rebuilds the index cleanly.
+    """
+    na = normalize_alias(display_name or "")
+    if not na:
+        return
+    item = t.get_item(Key={"pk": f"NAME#{na}"}).get("Item") or {
+        "pk": f"NAME#{na}", "type": "name", "entity_ids": []
+    }
+    ids = list(item.get("entity_ids") or [])
+    if entity_id not in ids:
+        ids.append(entity_id)
+        item["entity_ids"] = ids
+        t.put_item(Item=item)
+
+
 def resolve_by_name(name: str, table: Any | None = None) -> list[str]:
     """Return every entity_id a name resolves to — the normalized ALIAS# index
-    first, then any entity whose display_name normalizes to the same key.
+    plus the NAME# display-name index (both O(1) get_item lookups, #14).
 
-    A discovery/curation helper (not a hot path): it returns a *list* so a caller
-    can distinguish a unique hit (safe to enrich) from an ambiguous one (send to
-    review), and an empty list when the name is unknown. Unlike ``resolve_by_alias``
-    (exact alias index only) this also matches display names, which structured
-    discovery keys on before an entity has accumulated aliases.
+    Returns a *list* so a caller can distinguish a unique hit (safe to enrich)
+    from an ambiguous one (send to review), and an empty list when the name is
+    unknown. Unlike ``resolve_by_alias`` (exact alias index only) this also
+    matches display names, which structured discovery keys on before an entity
+    has accumulated aliases.
+
+    The NAME# index is maintained by ``put_entity``; run ``reindex_display_names``
+    once to backfill a table written before this index existed.
     """
     na = normalize_alias(name)
     if not na:
@@ -806,11 +836,38 @@ def resolve_by_name(name: str, table: Any | None = None) -> list[str]:
     alias = t.get_item(Key={"pk": f"ALIAS#{na}"}).get("Item")
     if alias and alias.get("entity_id"):
         hits.append(alias["entity_id"])
-    for e in _scan_type(t, "entity"):
-        eid = e.get("entity_id")
-        if eid and eid not in hits and normalize_alias(e.get("display_name") or "") == na:
+    name_item = t.get_item(Key={"pk": f"NAME#{na}"}).get("Item")
+    for eid in (name_item.get("entity_ids") if name_item else []) or []:
+        if eid and eid not in hits:
             hits.append(eid)
     return hits
+
+
+def reindex_display_names(table: Any | None = None) -> int:
+    """Rebuild the ``NAME#`` display-name index from scratch (#14 backfill/repair).
+
+    One bounded, paginated scan of the entity records (not per-row): deletes every
+    existing NAME# item, then re-derives the index from current display_names. Safe
+    to run anytime — makes the index authoritative (drops stale references a changed
+    display_name may have left). Returns the number of NAME# index items written.
+    """
+    t = _table(table)
+    for old in _scan_type(t, "name"):
+        pk = old.get("pk")
+        if pk:
+            t.delete_item(Key={"pk": pk})
+    by_name: dict[str, list[str]] = {}
+    for e in _scan_type(t, "entity"):
+        eid = e.get("entity_id")
+        na = normalize_alias(e.get("display_name") or "")
+        if not eid or not na:
+            continue
+        ids = by_name.setdefault(na, [])
+        if eid not in ids:
+            ids.append(eid)
+    for na, ids in by_name.items():
+        t.put_item(Item={"pk": f"NAME#{na}", "type": "name", "entity_ids": ids})
+    return len(by_name)
 
 
 def name_owned_by_other(

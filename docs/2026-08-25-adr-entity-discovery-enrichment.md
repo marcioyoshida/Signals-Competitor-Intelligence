@@ -146,6 +146,20 @@ Fixed and made cross-industry:
   `+test_harvest_generalizes_equity_ticker_and_single_brand`,
   `+test_harvest_keyword_accent_plural_tolerant`.
 
+**`resolve_by_name` made O(1) (2026-09-07, #14).** The first cut backed the display-name
+match with a full `_scan_type("entity")` on every miss — so the news-harvest paths
+(`harvest_keyword`, `harvest_ner._is_known`) ran ~O(distinct-surfaces × entities) scans,
+which the ingest per-source wall-clock budget truncated on a large registry (the same class
+of stall `discover_fiagro` had already worked around with an intra-run local index). Fixed at
+the source: a persistent `NAME#<norm(display_name)>` index item (a list of entity_ids —
+display names can collide), mirroring `ALIAS#`/`CNPJ#`. `put_entity` maintains it (add-only;
+a changed name only makes resolution more conservative), and `reindex_display_names()` /
+`curation_admin.py reindex-names` rebuild it authoritatively (a bounded one-pass scan) — run
+once to backfill a table written before the index existed. `resolve_by_name` is now two
+`get_item`s, no scan; every current and future caller benefits, not just the local workaround.
+Tests: `+test_resolve_by_name_matches_display_not_in_aliases`,
+`+test_resolve_by_name_is_o1_never_scans`, `+test_reindex_display_names_backfills_legacy_table`.
+
 Remaining implementation order: (1) general unresolved-mention harvest across all
 news/DOU (not just FIAGRO keyword); (2) FII sibling of `cvm_fiagro` (see
 `2026-08-20-fii-structured-source-plan.md`); (3) CNPJ/Receita profile composition for

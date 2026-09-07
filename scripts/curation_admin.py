@@ -105,6 +105,14 @@ def cmd_decision_revert_since(args) -> int:
     return 0 if reverted else 1
 
 
+def cmd_reindex_names(args) -> int:
+    from src.synth import entity_registry as er
+
+    n = er.reindex_display_names()
+    print(f"rebuilt NAME# display-name index: {n} key(s)")
+    return 0
+
+
 def cmd_audit(args) -> int:
     import boto3
 
@@ -163,6 +171,9 @@ def build_parser() -> argparse.ArgumentParser:
     drs.add_argument("decision_id")
     drs.add_argument("--since", required=True, help="ISO timestamp")
     drs.set_defaults(func=cmd_decision_revert_since)
+
+    rn = sub.add_parser("reindex-names", help="rebuild the NAME# display-name index (#14)")
+    rn.set_defaults(func=cmd_reindex_names)
 
     a = sub.add_parser("audit", help="run the integrity audit against live registry + feed")
     a.set_defaults(func=cmd_audit)

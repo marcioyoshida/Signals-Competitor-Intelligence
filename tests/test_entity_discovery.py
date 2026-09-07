@@ -25,6 +25,9 @@ class _FakeTable:
     def put_item(self, Item: dict[str, Any]) -> None:
         self.items[Item["pk"]] = dict(Item)
 
+    def delete_item(self, Key: dict[str, Any]) -> None:
+        self.items.pop(Key["pk"], None)
+
     def scan(self, **kwargs: Any) -> dict[str, Any]:
         return {"Items": list(self.items.values())}
 
@@ -427,6 +430,60 @@ def test_resolve_by_name_and_name_owned_by_other():
     assert not entity_registry.name_owned_by_other(
         "StoneCo", exclude_id="stoneco", table=table
     )
+
+
+def test_resolve_by_name_matches_display_not_in_aliases():
+    """#14: a display_name that is NOT one of the aliases must still resolve — the
+    case the old full-scan covered, now served by the NAME# index."""
+    from src.synth import entity_registry
+
+    table = _FakeTable()
+    # display_name "Acme Holdings" is deliberately absent from the alias list.
+    entity_registry.put_entity(
+        "acme", "Acme Holdings", ["ACMEBANK", "Acme Bank"], table=table
+    )
+    assert entity_registry.resolve_by_name("Acme Holdings", table=table) == ["acme"]
+    assert entity_registry.resolve_by_name("acme  holdings", table=table) == ["acme"]  # normalized
+    assert entity_registry.resolve_by_name("Nope", table=table) == []
+
+
+def test_resolve_by_name_is_o1_never_scans():
+    """#14 regression guard: resolution must be index-only (ALIAS#/NAME# get_item),
+    never a full table scan — a scan is what the ingest source-budget truncated."""
+    from src.synth import entity_registry
+
+    table = _FakeTable()
+    entity_registry.put_entity("acme", "Acme Holdings", ["Acme Bank"], table=table)
+
+    def _boom(**kwargs):
+        raise AssertionError("resolve_by_name must not scan the table")
+
+    table.scan = _boom  # type: ignore[assignment]
+    assert entity_registry.resolve_by_name("Acme Holdings", table=table) == ["acme"]
+    assert entity_registry.resolve_by_name("Acme Bank", table=table) == ["acme"]
+    assert entity_registry.resolve_by_name("Unknown", table=table) == []
+
+
+def test_reindex_display_names_backfills_legacy_table():
+    """#14: a table written before the NAME# index existed is repaired by one
+    bounded reindex pass, and collisions keep every colliding id."""
+    from src.synth import entity_registry as er
+
+    table = _FakeTable()
+    # Simulate legacy rows: ENT# records with no NAME# index (bypass put_entity).
+    table.put_item({"pk": "ENT#a", "type": "entity", "entity_id": "a",
+                    "display_name": "Shared Name"})
+    table.put_item({"pk": "ENT#b", "type": "entity", "entity_id": "b",
+                    "display_name": "Shared Name"})
+    assert er.resolve_by_name("Shared Name", table=table) == []  # not yet indexed
+
+    n = er.reindex_display_names(table=table)
+    assert n == 1  # one normalized key ("SHARED NAME")
+    assert sorted(er.resolve_by_name("Shared Name", table=table)) == ["a", "b"]
+
+    # Idempotent + authoritative: a second pass yields the same, no duplicates.
+    assert er.reindex_display_names(table=table) == 1
+    assert sorted(er.resolve_by_name("Shared Name", table=table)) == ["a", "b"]
 
 
 def test_harvest_generalizes_equity_ticker_and_single_brand():
