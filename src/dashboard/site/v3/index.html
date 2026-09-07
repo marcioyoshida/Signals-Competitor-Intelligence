@@ -93,6 +93,16 @@
   .b3q .ch { font-variant-numeric:tabular-nums; font-size:var(--fs-micro); min-width:52px; }
   .b3q .ch.up { color:var(--ok); } .b3q .ch.down { color:var(--t-crit); }
 
+  /* Threat timeline — per-competitor ameaça trajectory (v1 → CSO) */
+  .tl { padding:2px 0; }
+  .tlrow { display:grid; grid-template-columns:150px 1fr 54px; align-items:center; gap:var(--s3);
+    padding:5px var(--s4); border-bottom:1px solid var(--border); }
+  .tlrow:last-child { border-bottom:0; }
+  .tlent { font-weight:600; color:var(--ink); font-size:var(--fs-sm); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .spark { width:100%; height:28px; display:block; }
+  .spark--empty { color:var(--muted); font-size:var(--fs-micro); padding-left:var(--s2); }
+  .tlnow { text-align:right; }
+
   /* coverage */
   .cov { display:flex; gap:var(--s2); align-items:center; padding:7px var(--s4); border-bottom:1px solid var(--border); }
   .cov:last-child { border-bottom:0; }
@@ -405,6 +415,37 @@ function scatterMap(list) {
     `<text class="sc-ax" x="${padL + iw}" y="${H - 10}" text-anchor="end">momentum — recua ← 0 → acelera</text>` +
     `<text class="sc-ax" transform="rotate(-90 14 ${padT + ih / 2})" x="14" y="${padT + ih / 2}" text-anchor="middle">ameaça (0–100)</text>` +
     `</svg></div>`;
+}
+// Threat timeline (v1 → CSO): per-competitor ameaça trajectory across the run's dates,
+// computed client-side from the feed (daily mean threat per entity). Top movers by momentum.
+function sparkline(series) {
+  const W = 200, H = 28, pad = 3, n = series.length;
+  if (series.filter(v => v != null).length < 2) return `<span class="spark--empty">sem histórico</span>`;
+  const x = i => pad + (i / (n - 1)) * (W - 2 * pad);
+  const y = v => pad + (1 - Math.max(0, Math.min(100, v)) / 100) * (H - 2 * pad);
+  let d = "", pen = false, last = -1;
+  series.forEach((v, i) => { if (v == null) { pen = false; return; } d += (pen ? " L" : " M") + x(i).toFixed(1) + " " + y(v).toFixed(1); pen = true; last = i; });
+  const lv = last >= 0 ? series[last] : null;
+  const band = lv >= 65 ? "t-crit" : lv >= 40 ? "t-high" : "ok";
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-hidden="true">` +
+    `<path d="${d.trim()}" fill="none" stroke="var(--${band})" stroke-width="1.6" vector-effect="non-scaling-stroke"/>` +
+    (last >= 0 ? `<circle cx="${x(last).toFixed(1)}" cy="${y(lv).toFixed(1)}" r="2.4" fill="var(--${band})"/>` : "") + `</svg>`;
+}
+function threatTimeline(momentum) {
+  const dates = (DATA.dates || []).slice().sort();
+  const top = (momentum || []).filter(inSector).slice(0, 12);
+  if (dates.length < 2 || !top.length) return U.empty("Histórico insuficiente para trajetória.", "", "○");
+  const byEnt = {};
+  (DATA.feed || []).forEach(c => {
+    if (!c.entity || c.threat_score == null || !c.date) return;
+    ((byEnt[c.entity] = byEnt[c.entity] || {})[c.date] = byEnt[c.entity][c.date] || []).push(c.threat_score);
+  });
+  return `<div class="tl">` + top.map(m => {
+    const days = byEnt[m.entity] || {};
+    const series = dates.map(d => { const v = days[d]; return v && v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; });
+    return `<div class="tlrow"><span class="tlent" title="${U.esc(m.label)}">${U.esc(m.label)}</span>` +
+      `${sparkline(series)}<span class="tlnow">${U.heat(m.recent)}</span></div>`;
+  }).join("") + `</div>`;
 }
 function rowsMomentum(list) {
   list = (list || []).filter(inSector);
@@ -911,6 +952,8 @@ function render() {
       band("Inteligência competitiva", "momentum na janela · inferência",
         grid("1fr 1fr", [panel("Momentum do concorrente", null, "↑ ganha · ↓ recua", rowsMomentum(p.momentum)),
                         panel("Movimentos estratégicos", null, "entrada·oferta·M&A", rowsCard(p.moves))])) +
+      band("Trajetória de ameaça", "linha do tempo · ameaça média diária por concorrente · inferência",
+        `<div class="panel"><div class="panel__bd panel__bd--flush">${threatTimeline(p.momentum)}</div></div>`) +
       band("Postura estratégica", "SWOT + TOWS · beliefs vetados (ADR-006)",
         panel("Concorrentes por postura", null, "S·W·O·T + postura TOWS", rowsPosture(p.posture))) +
       band("Força financeira dos concorrentes", "ROE·ROA·alavancagem·eficiência·share de lucro · IF.data + balancete · inferência",
