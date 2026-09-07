@@ -388,6 +388,15 @@ class OncaPrototypeStack(Stack):
                 "ONCA_INGEST_SPA": "true",
                 # #79 (E2): PREVIC EFPC base-cadastral (~447 EFPCs). Direct XLSX, seed-suppressed.
                 "ONCA_INGEST_PREVIC": "true",
+                # #103: promote NEW non-fintech regulated entrants (insurers/bookmakers/EFPCs/
+                # CVM participants) that classify to a confident industry into the Entity Master
+                # (else signal-only). Bounded (deltas only) → safe on.
+                "ONCA_ENTITIES_AUTOCREATE_REGULATED": "true",
+                # #103: one-time-style roster BACKFILL of the bounded SPA (betting, ~82) + SUSEP
+                # (insurance, ~233) licensed rosters into the Entity Master — budget-capped per
+                # run, idempotent by CNPJ, fills over runs. PREVIC/CVM stay on the signal path.
+                "ONCA_PROMOTE_REGULATED": "true",
+                "ONCA_PROMOTE_MAX_NEW": "40",
             },
         )
         state_table.grant_read_write_data(func)

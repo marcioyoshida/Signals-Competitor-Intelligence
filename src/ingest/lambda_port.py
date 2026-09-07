@@ -627,6 +627,10 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # New entrants — authorized-entities registry (seed suppressed on first run).
     authorized: list[dict[str, Any]] = []
     new_entrants: list[dict[str, Any]] = []
+    # Full rosters kept for the #103 SPA+SUSEP roster BACKFILL (below); the delta lists
+    # above feed the entrant SIGNAL path, these feed Entity-Master promotion.
+    susep_rows: list[dict[str, Any]] = []
+    spa_rows: list[dict[str, Any]] = []
     try:
         with _source_budget("BCB autorizações", deadline, per_source):
             authorized = bcb_autorizacoes.fetch_authorized()
@@ -728,6 +732,11 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         fintech_only = os.environ.get(
             "ONCA_ENTITIES_AUTOCREATE_FINTECH_ONLY", "true"
         ).lower() in ("1", "true", "yes")
+        # #103: promote NEW non-fintech entrants (insurers/bookmakers/EFPCs/CVM participants)
+        # that classify to a confident industry — else they stay signal-only. Off by default.
+        promote_regulated = os.environ.get(
+            "ONCA_ENTITIES_AUTOCREATE_REGULATED", "false"
+        ).lower() in ("1", "true", "yes")
         try:
             with _source_budget("entities auto-create", deadline, per_source):
                 from src.synth import entity_registry
@@ -739,9 +748,19 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 )
                 created = 0
                 for e in new_entrants:
-                    if fintech_only and not e.get("is_fintech"):
-                        continue
-                    eid = entity_registry.auto_create_from_entrant(e)
+                    is_ft = bool(e.get("is_fintech"))
+                    if not is_ft:
+                        _inds, _needs = entity_registry.classify_industries(e)
+                        # fintech_only skips non-fintech UNLESS regulated-promotion is on and
+                        # the entrant classifies confidently; fintech_only=false keeps the old
+                        # "create everything (ambiguous → review)" escape hatch.
+                        if fintech_only and not (promote_regulated and not _needs):
+                            continue
+                    # An official-register non-fintech entrant is structured-provenance
+                    # (radar tier `registry`); a BCB fintech stays `cnpj` as before.
+                    eid = entity_registry.auto_create_from_entrant(
+                        e, confidence="cnpj" if is_ft else "structured"
+                    )
                     if eid:
                         e["registry_entity_id"] = eid
                         created += 1
@@ -773,6 +792,36 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                             print(f"entities: queued {queued} group-merge reviews")
         except Exception as exc:  # pragma: no cover - best-effort, never blocks ingest
             print(f"Warning: entity auto-create skipped: {exc}")
+
+    # #103 roster BACKFILL — the SPA (betting) + SUSEP (insurance) licensed rosters ARE their
+    # competitive sets and are bounded (~82 / ~233), so the WHOLE roster is promoted into the
+    # Entity Master (not just deltas): resolve→enrich / clean-brand auto-create / propose,
+    # budget-capped per run (idempotent by CNPJ, fills over runs). Gated OFF by default.
+    if os.environ.get("ONCA_PROMOTE_REGULATED", "false").lower() in ("1", "true", "yes") \
+            and os.environ.get("ONCA_ENTITIES_TABLE"):
+        try:
+            with _source_budget("regulated roster promote", deadline, per_source):
+                from src.synth import entity_discovery
+
+                _budget = int(os.environ.get("ONCA_PROMOTE_MAX_NEW", "40"))
+                for _label, _rows, _industry, _pfn in (
+                    ("SPA/betting", spa_rows, "betting", entity_discovery._profile_from_spa),
+                    ("SUSEP/insurance", susep_rows, "insurance", entity_discovery._profile_from_susep),
+                ):
+                    if not _rows:
+                        continue
+                    _rep = entity_discovery.promote_roster(
+                        _rows, industry=_industry, profile_fn=_pfn, max_new=_budget)
+                    print(
+                        f"roster promote {_label}: fetched={_rep.get('fetched')} "
+                        f"created={len(_rep.get('created') or [])} "
+                        f"enriched={len(_rep.get('enriched') or [])} "
+                        f"already={_rep.get('already')} "
+                        f"proposed={len(_rep.get('proposed') or [])} "
+                        f"skipped={len(_rep.get('skipped') or [])}"
+                    )
+        except Exception as exc:  # pragma: no cover - best-effort, never blocks ingest
+            print(f"Warning: regulated roster promote skipped: {exc}")
 
     # Entity discovery — structured CVM FIAGRO universe → registry (ADR 011 / #14).
     # High-precision path: every row has a CNPJ. Auto-creates / enriches under

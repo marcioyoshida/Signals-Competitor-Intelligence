@@ -182,6 +182,17 @@ this was **1 fetcher + a small cosmetic generalization of `_profile_from_fiagro`
 industry/source now read from the row with FIAGRO defaults). Discovery only (no PL-move
 narratives — Total_Investido is not a labelled PL). Live: 711 funds ≥100mi, 349 auto-createable.
 
+**Regulated-registry promotion SHIPPED (2026-09-07, #103).** Two paths: (a) DELTA —
+`classify_industries` now confidently tags non-fintech supervised classes (SUSEP insurance,
+SPA betting, PREVIC closed-pension) + an explicit `industry` (CVM), so a NEW such entrant
+auto-creates into the Entity Master (gated `ONCA_ENTITIES_AUTOCREATE_REGULATED`,
+`confidence="structured"` ⇒ radar `registry`), not signal-only. (b) BACKFILL — the bounded SPA
+(~82) + SUSEP (~233) licensed rosters (which ARE their competitor sets) are promoted whole via
+`entity_discovery.promote_roster` (resolve→enrich / clean-brand auto-create / propose,
+budget-capped, idempotent by CNPJ), gated `ONCA_PROMOTE_REGULATED`. Live preview: SPA
+71 create/11 propose; SUSEP 190 create/2 enrich/40 propose (conglomerate arms → review).
+PREVIC/CVM stay signal-only (need prominence data — future work).
+
 Remaining implementation order: (1) ~~general unresolved-mention harvest~~ **DONE (#105)**;
 (2) ~~FII sibling of `cvm_fiagro`~~ **DONE (#102)**; (3) CNPJ/Receita profile composition for
 news-only candidates (#104); (4) ingestion follow-up probe ("added but not surfacing", #106);

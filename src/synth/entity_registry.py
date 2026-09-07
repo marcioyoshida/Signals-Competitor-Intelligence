@@ -888,7 +888,9 @@ def _slug(value: str) -> str:
     return s[:40]
 
 
-def auto_create_from_entrant(entrant: dict[str, Any], *, table: Any | None = None) -> str | None:
+def auto_create_from_entrant(
+    entrant: dict[str, Any], *, confidence: str = "cnpj", table: Any | None = None
+) -> str | None:
     """ADR step 3: CNPJ-keyed auto-create of an entity from a new BCB entrant.
 
     Makes a quietly-registered fintech resolvable for *future* signals (a later
@@ -897,7 +899,8 @@ def auto_create_from_entrant(entrant: dict[str, Any], *, table: Any | None = Non
     ``controllers``). Idempotent by CNPJ root; returns the entity_id when a new
     record is written, else ``None`` (already mapped, or no CNPJ to key on).
 
-    Writes ``confidence="cnpj"`` — the safe, auto-committable case in the ADR.
+    Writes ``confidence`` (default ``"cnpj"`` — the safe, auto-committable case in the
+    ADR; pass ``"structured"`` for an official-register promotion → radar tier ``registry``).
     Grouping this CNPJ under a parent brand (``canonical_id``) stays a
     review-queue decision (step 5), so this never merges into a curated entity.
     """
@@ -935,7 +938,7 @@ def auto_create_from_entrant(entrant: dict[str, Any], *, table: Any | None = Non
         license_class=entrant.get("license_class"),
         sector="fintech" if entrant.get("is_fintech") else None,
         industries=inds or None,
-        confidence="cnpj",
+        confidence=confidence,
         table=t,
     )
     return entity_id
@@ -1351,13 +1354,38 @@ LICENSE_INDUSTRY: dict[str, str] = {
 }
 
 
+# #103: regulated-registry license classes → industry. Non-fintech entrants
+# (SUSEP insurers, SPA bookmakers, PREVIC EFPCs) carry an unambiguous supervised
+# class, so they are a SAFE auto-tag too — no curator round-trip needed.
+REGULATED_LICENSE_INDUSTRY: dict[str, str] = {
+    # SPA / Ministério da Fazenda — authorized betting operators
+    "Casa de apostas (SPA/MF)": "betting",
+    # PREVIC — closed (occupational) pension entities
+    "EFPC (previdência complementar fechada)": "closed-pension",
+    # SUSEP — every supervised class competes in the insurance market (the /seguros vertical)
+    "Seguradora": "insurance",
+    "Seguradora (vida/previdência)": "insurance",
+    "Seguradora (saúde)": "insurance",
+    "Resseguradora": "insurance",
+    "Capitalização": "insurance",
+    "Previdência aberta (EAPC)": "insurance",
+}
+
+
 def classify_industries(entrant: dict[str, Any]) -> tuple[list[str], bool]:
     """Auto-tag the SAFE case only. Returns (industries, needs_review):
-    a clear license → its industry; anything ambiguous → ([], needs_review=True)
-    so a curator assigns it (reuses the step-5 review queue)."""
+    a clear license (or an explicit, valid ``industry`` from a structured registry) →
+    its industry; anything ambiguous → ([], needs_review=True) so a curator assigns it
+    (reuses the step-5 review queue)."""
+    # An explicit industry from a structured source (e.g. CVM cadastro) is authoritative.
+    explicit = str(entrant.get("industry") or "").strip().lower()
+    if explicit and explicit in INDUSTRIES:
+        return [explicit], False
     lic = str(entrant.get("license_class") or "").strip()
     if lic in LICENSE_INDUSTRY:
         return [LICENSE_INDUSTRY[lic]], False
+    if lic in REGULATED_LICENSE_INDUSTRY:  # #103: non-fintech supervised classes
+        return [REGULATED_LICENSE_INDUSTRY[lic]], False
     if entrant.get("is_fintech"):
         return ["fintech"], False
     return [], True  # unknown/ambiguous — propose for review

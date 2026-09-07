@@ -564,21 +564,34 @@ _INST_GARBAGE = {
     "banco", "bank", "brasil", "caixa", "cooperativo", "social", "industrial", "comercial",
     "central", "nacional", "popular", "regional", "credito", "financeira", "",
 }
-def _clean_institution_brand(name: str) -> str | None:
-    """A distinctive brand from a BCB institution legal name — accent-free, generic
-    prefix/suffix stripped. Returns None for a bare-generic name (→ propose, not create)."""
+def _clean_institution_brand(
+    name: str,
+    *,
+    extra_leading: "frozenset[str]" = frozenset(),
+    extra_cut: "frozenset[str]" = frozenset(),
+    extra_garbage: "frozenset[str]" = frozenset(),
+) -> str | None:
+    """A distinctive brand from an institution legal name — accent-free, generic
+    prefix/suffix stripped. Returns None for a bare-generic name (→ propose, not create).
+
+    ``extra_leading``/``extra_cut``/``extra_garbage`` let a non-BCB vertical (#103:
+    insurers, bookmakers) add its own boilerplate (SEGUROS/CIA/APOSTAS/…) without
+    changing the BCB defaults."""
+    leading = _INST_LEADING | extra_leading
+    cut = _INST_CUT | extra_cut
+    garbage = _INST_GARBAGE | extra_garbage
     toks = [t for t in re.split(r"[^a-z0-9]+", _strip_accents(str(name or "")).lower()) if t]
-    while toks and (toks[0] in _INST_LEADING or len(toks[0]) == 1):
+    while toks and (toks[0] in leading or len(toks[0]) == 1):
         toks = toks[1:]                       # drop leading org words + initials ("J SAFRA")
     brand: list[str] = []
     for t in toks:
-        if t in _INST_CUT:
+        if t in cut:
             break
         brand.append(t)
         if len(brand) >= 3:
             break
     b = " ".join(brand)
-    if not b or b in _INST_GARBAGE or len(b) < 2:
+    if not b or b in garbage or len(b) < 2:
         return None
     return b
 
@@ -759,6 +772,185 @@ def discover_bcb_institutions(
                 report["errors"].append({"profile": profile.get("entity_id"), "error": str(exc)})
         else:
             report["skipped"].append(profile.get("entity_id"))
+    return report
+
+
+# ── #103: generalized regulated-registry roster promotion ─────────────────────────
+# The SPA (betting) and SUSEP (insurance) licensed rosters ARE their competitive sets and
+# are bounded (~82 / ~233), so — unlike the delta-only entrant SIGNAL path — the whole
+# roster is promoted into the Entity Master. Same shape as discover_bcb_institutions
+# (resolve→enrich / clean-brand auto-create / propose), vertical-agnostic via a profile_fn.
+
+# Insurer legal-name boilerplate to strip for a clean brand (on top of the BCB set).
+_SUSEP_LEADING = frozenset({"cia", "companhia", "seguradora"})
+# NB "seguro" (singular) is intentionally NOT cut — it is part of real brands ("Porto
+# Seguro"); only the plural/boilerplate forms are stripped.
+_SUSEP_CUT = frozenset({
+    "seguros", "seguradora", "cia", "companhia", "capitalizacao",
+    "previdencia", "resseguros", "resseguradora", "vida", "saude", "gerais",
+})
+
+
+def _profile_from_susep(row: dict[str, Any]) -> dict[str, Any]:
+    """SUSEP supervised-entity → registry profile (industry ``insurance``)."""
+    name = str(row.get("name") or "").strip()
+    root = _root8(row.get("cnpj"))
+    brand = _clean_institution_brand(name, extra_leading=_SUSEP_LEADING, extra_cut=_SUSEP_CUT)
+    display = brand.title() if brand else f"Seguradora {root or 'sem-cnpj'}"
+    forms = [f for f in (name if len(name) >= 4 else None, display) if f]
+    return {
+        "entity_id": _slug(brand) or f"susep-{root or 'unknown'}",
+        "display_name": display,
+        "auto_ok": bool(brand),
+        "aliases": forms,
+        "cnpj_roots": [root] if root else [],
+        "arm_suffix": "seguros",
+        "news_search": False,   # generic insurer brands → structured-only, no fragile news match
+        "source": "susep_entidades",
+        "raw_name": name,
+    }
+
+
+def _profile_from_spa(row: dict[str, Any]) -> dict[str, Any]:
+    """SPA authorized bookmaker → registry profile (industry ``betting``). The recognizable
+    identity is the trade BRAND (Betano, not the holding company), so prefer ``brands``."""
+    name = str(row.get("name") or "").strip()
+    root = _root8(row.get("cnpj"))
+    brands = [str(b).strip() for b in (row.get("brands") or []) if str(b).strip()]
+    domains = [str(d).strip() for d in (row.get("domains") or []) if str(d).strip()]
+    primary = brands[0] if brands else (_clean_institution_brand(name) or "")
+    display = primary or f"Casa de apostas {root or 'sem-cnpj'}"
+    # aliases: the company legal name + every brand + every domain → future news resolves.
+    forms: list[str] = []
+    for v in ([name] if len(name) >= 4 else []) + brands + domains + [display]:
+        if v and v.upper() not in {f.upper() for f in forms}:
+            forms.append(v)
+    return {
+        "entity_id": _slug(primary) or f"spa-{root or 'unknown'}",
+        "display_name": display,
+        "auto_ok": bool(primary),
+        "aliases": forms,
+        "cnpj_roots": [root] if root else [],
+        "arm_suffix": "apostas",
+        "news_search": True,    # bookmaker brands are distinctive → news-searchable
+        "source": "spa_apostas",
+        "raw_name": name,
+    }
+
+
+def promote_roster(
+    rows: list[dict[str, Any]],
+    *,
+    industry: str,
+    profile_fn,
+    max_new: int = 40,
+    auto_create: bool = True,
+    table: Any | None = None,
+) -> dict[str, Any]:
+    """#103 — promote a bounded regulated roster into the Entity Master.
+
+    resolve by CNPJ → enrich (industry + tier-1 parent) / already; miss + clean brand →
+    auto-create (``confidence="structured"`` ⇒ radar tier ``registry``, parent-nested);
+    miss + no clean brand → propose; budget-exhausted auto-createable → skip (a later run
+    creates it — the #102 no-flood rule). Idempotent by CNPJ across runs.
+    """
+    report: dict[str, Any] = {
+        "fetched": len(rows), "created": [], "enriched": [], "already": 0,
+        "proposed": [], "skipped": [], "errors": [],
+    }
+    if not rows:
+        return report
+    entities = list(entity_registry.list_entities(table=table, include_inactive=True))
+    cnpj_idx: dict[str, str] = {}
+    disp_idx: dict[str, list[str]] = {}
+    existing_ids: set[str] = set()
+    for e in entities:
+        eid = e.get("entity_id")
+        if not eid:
+            continue
+        existing_ids.add(eid)
+        for r in e.get("cnpj_roots") or []:
+            cnpj_idx[str(r)[:8]] = eid
+        d = _norm_brand(e.get("display_name") or "")
+        if d:
+            disp_idx.setdefault(d, []).append(eid)
+    parent_idx = _build_parent_brand_idx(entities)
+
+    new_budget = max_new if auto_create else 0
+    for row in rows:
+        try:
+            profile = profile_fn(row)
+        except Exception as exc:  # pragma: no cover
+            report["errors"].append({"row": row.get("cnpj"), "error": str(exc)})
+            continue
+        root = (profile.get("cnpj_roots") or [None])[0]
+        if not root:
+            report["skipped"].append(profile.get("entity_id"))
+            continue
+        parent = _resolve_parent(parent_idx, profile.get("display_name"))
+        eid = cnpj_idx.get(root)
+        if eid:  # already tracked → enrich (industry + parent), never duplicate
+            try:
+                ent = entity_registry.get_entity(eid, table=table) or {}
+                changed = entity_registry.accumulate_aliases(
+                    eid, profile.get("aliases") or [], table=table)
+                if industry not in (ent.get("industries") or []):
+                    entity_registry.set_industries(
+                        eid, list(ent.get("industries") or []) + [industry],
+                        source="enrich", table=table)
+                    changed = True
+                if parent and parent != eid and not ent.get("parent"):
+                    changed = entity_registry.set_parent(eid, parent, source="enrich", table=table) or changed
+                report["enriched"].append(eid) if changed else report.__setitem__("already", report["already"] + 1)
+            except Exception as exc:  # pragma: no cover
+                report["errors"].append({"eid": eid, "error": str(exc)})
+            continue
+        if not profile.get("auto_ok"):  # no clean brand → human names it (budget-free)
+            pid = entity_registry.propose_review(
+                kind="discovery", key=profile["entity_id"], proposed=profile["display_name"],
+                reason="needs_brand_review", hint=f"{profile.get('source')} cnpj={root}",
+                confidence="structured",
+                payload={"profile": profile, "source": profile.get("source"), "cnpj": root},
+                table=table)
+            report["proposed"].append(pid or profile["entity_id"])
+            continue
+        if new_budget <= 0:  # auto-createable but budget spent → a later run creates it
+            report["skipped"].append(profile["entity_id"])
+            continue
+        nb = _norm_brand(profile["display_name"])
+        owners = {x for x in (disp_idx.get(nb) or []) if x != profile["entity_id"]}
+        # #52: never overwrite an EXISTING entity whose id equals this brand-slug but is a
+        # DIFFERENT entity (not resolved by this CNPJ) — e.g. a "Porto Seguro" insurer CNPJ
+        # colliding onto the curated `porto_seguro`. The self-exclusion above hides exactly
+        # that case; surface it so it is proposed (a curator links the CNPJ), never clobbered.
+        if profile["entity_id"] in existing_ids and cnpj_idx.get(root) != profile["entity_id"]:
+            owners.add(profile["entity_id"])
+        if owners:
+            # A conglomerate arm colliding ONLY with its resolved tier-1 parent is the
+            # expected sub-entity — but arms share a brand across many CNPJs (vida/auto/
+            # saúde/capitalização), which a single {parent}-suffix id can't hold without
+            # dropping CNPJs, so it goes to review too. Curator decides merge vs sub-entity.
+            pid = entity_registry.propose_review(
+                kind="discovery", key=profile["entity_id"], proposed=profile["display_name"],
+                reason="name_collision", hint=f"{profile.get('source')} cnpj={root} owner={sorted(owners)[0]}",
+                confidence="structured",
+                payload={"profile": profile, "source": profile.get("source"), "cnpj": root, "parent": parent},
+                table=table)
+            report["proposed"].append(pid or profile["entity_id"])
+            continue
+        try:
+            entity_registry.put_entity(
+                profile["entity_id"], profile["display_name"], profile.get("aliases") or [],
+                cnpj_roots=[root], industries=[industry], confidence="structured",
+                parent=parent, news_search=bool(profile.get("news_search")),
+                source="discovery", table=table)
+            report["created"].append(profile["entity_id"])
+            new_budget -= 1
+            cnpj_idx[root] = profile["entity_id"]
+            if nb:
+                disp_idx.setdefault(nb, []).append(profile["entity_id"])
+        except Exception as exc:  # pragma: no cover
+            report["errors"].append({"profile": profile.get("entity_id"), "error": str(exc)})
     return report
 
 
