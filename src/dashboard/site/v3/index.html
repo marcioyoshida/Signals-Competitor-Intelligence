@@ -85,6 +85,14 @@
   .mchip .md { font-size:var(--fs-micro); font-variant-numeric:tabular-nums; }
   .md--up { color:var(--t-high); } .md--down { color:var(--ok); } .md--flat { color:var(--muted); }
 
+  /* B3 quotes — market pulse aside the CSO board (v1 #43 → CSO) */
+  .b3wrap { padding:var(--s3) var(--s4); display:flex; flex-wrap:wrap; gap:var(--s2) var(--s5); }
+  .b3q { display:inline-flex; align-items:baseline; gap:6px; min-width:148px; }
+  .b3q .sym { font-weight:600; color:var(--ink); font-size:var(--fs-sm); }
+  .b3q .px { font-variant-numeric:tabular-nums; color:var(--ink-2); font-size:var(--fs-sm); }
+  .b3q .ch { font-variant-numeric:tabular-nums; font-size:var(--fs-micro); min-width:52px; }
+  .b3q .ch.up { color:var(--ok); } .b3q .ch.down { color:var(--t-crit); }
+
   /* coverage */
   .cov { display:flex; gap:var(--s2); align-items:center; padding:7px var(--s4); border-bottom:1px solid var(--border); }
   .cov:last-child { border-bottom:0; }
@@ -232,6 +240,7 @@ function boot() {
   BYID = {}; (DATA.feed || []).forEach(c => { BYID[c.id] = c; });
   document.getElementById("asof").textContent = DATA.as_of ? `dados de ${U.fmtDate(DATA.as_of)}` : "";
   document.getElementById("macroStrip").innerHTML = macroStrip(DATA.macro);  // shared header
+  setInterval(() => { if (OFFICER === "cso") loadQuotes(); }, 60000);  // B3 quotes refresh
   const sel = document.getElementById("sectorSel");
   (EX.sectors || []).forEach(s => { const o = document.createElement("option"); o.value = s.slug; o.textContent = s.label; sel.appendChild(o); });
   if (!EX.officers || !EX.officers.length) {
@@ -342,6 +351,25 @@ function macroStrip(m) {
   }));
   if (!chips.length) return "";
   return `<div class="macro-inner"><span class="macro-lbl">Macro · Copom &amp; Focus</span>${chips.join("")}</div>`;
+}
+// B3 quotes (v1 #43 → CSO): market pulse for the scope's listed competitors, from the
+// same-origin /api/quotes Yahoo proxy. Async (not in feed.json); scoped to the active sector.
+async function loadQuotes() {
+  const el = document.getElementById("b3ticker");
+  if (!el) return;
+  try {
+    const ind = SECTOR && SECTOR !== "__all__" ? SECTOR : "";
+    const r = await fetch(`/api/quotes${ind ? "?industry=" + encodeURIComponent(ind) : ""}`, { cache: "no-store" });
+    if (!r.ok) { el.innerHTML = U.empty("Cotações indisponíveis.", "", "○"); return; }
+    const rows = (await r.json()).quotes || [];
+    if (!rows.length) { el.innerHTML = U.empty("Sem cotações no escopo.", "", "○"); return; }
+    el.innerHTML = rows.map(x => {
+      const up = (x.change ?? 0) >= 0, ch = x.change == null ? "" : `${up ? "+" : ""}${Number(x.change).toFixed(2)}%`;
+      return `<span class="b3q"><span class="sym">${U.esc(x.symbol)}</span>` +
+        `<span class="px">${x.price != null ? Number(x.price).toFixed(2) : "—"}</span>` +
+        `<span class="ch ${up ? "up" : "down"}">${ch}</span></span>`;
+    }).join("");
+  } catch (e) { el.innerHTML = U.empty("Cotações indisponíveis.", "", "○"); }
 }
 // Mapa Competitivo (v1 flagship → CSO): each tracked competitor placed by current threat
 // (ameaça, y) × window acceleration (momentum, x). Top-right = high + accelerating (danger).
@@ -887,6 +915,8 @@ function render() {
         panel("Concorrentes por postura", null, "S·W·O·T + postura TOWS", rowsPosture(p.posture))) +
       band("Força financeira dos concorrentes", "ROE·ROA·alavancagem·eficiência·share de lucro · IF.data + balancete · inferência",
         panel("Rentabilidade & eficiência (maior ROE primeiro)", null, "ROE anual · ROA · alav · opex/ativo · headroom · share", rowsFinancials(p.financials))) +
+      band("Mercado · Cotações B3", "concorrentes listados no escopo · Yahoo Finance · ~60s",
+        `<div class="panel"><div class="panel__bd panel__bd--flush"><div id="b3ticker" class="b3wrap">${U.empty("Carregando cotações…", "", "○")}</div></div></div>`) +
       band("Inteligência regulatória (resumo)", "", panel("Mudanças por alcance", null, "domínio·setores·prazo", rowsReg(p.regulatory)));
   } else if (OFFICER === "cro") {
     const [bc, bl] = bandThreat(a.reg_threat || 0, 65, 40);
@@ -997,6 +1027,7 @@ function render() {
       grid("1fr 1fr", [panel("Ansoff", null, "penetração·desenvolvimento·diversificação", rowsFramework(p.ansoff)),
                        panel("BCG", null, "estrela·vaca·interrogação·abacaxi", rowsFramework(p.bcg))]));
   el.innerHTML = flowBand() + board + silenceBand() + outcomesDueBand() + metricsBand() + referenceBand();
+  if (OFFICER === "cso") loadQuotes();  // async B3 market pulse (fills #b3ticker post-render)
   // Click the headline to expand/collapse it inline (doesn't open the drawer); an expand is
   // an attention event (§E engagement telemetry) tagged with the card's entity/sector/threat.
   el.querySelectorAll(".exrow .ttl").forEach(t => t.addEventListener("click", (e) => {
