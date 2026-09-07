@@ -114,6 +114,36 @@
   .cnchip { font-size:var(--fs-micro); color:var(--ink-2); background:var(--surface-2);
     border:1px solid var(--border); border-radius:var(--r-pill); padding:2px 8px; }
 
+  /* Perguntar à Onça — officer-scoped RAG (v1 → /exec, global) + auth */
+  .authbox { display:flex; align-items:center; gap:var(--s2); }
+  .authuser { font-size:var(--fs-micro); color:var(--muted); max-width:170px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .authbtn { background:var(--surface-2); color:var(--ink); border:1px solid var(--border); border-radius:var(--r-sm);
+    padding:4px var(--s3); font:inherit; font-size:var(--fs-micro); cursor:pointer; }
+  .authbtn:hover { border-color:var(--primary); }
+  .ask-band { margin:0 0 var(--s4); }
+  .askwrap { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); box-shadow:var(--shadow-1); padding:var(--s4); }
+  .askhd { display:flex; align-items:baseline; gap:var(--s3); flex-wrap:wrap; margin-bottom:var(--s3); }
+  .askhd h2 { font-size:1rem; margin:0; color:var(--ink); }
+  .askhd .sub { font-size:var(--fs-micro); color:var(--muted); }
+  .askrow { display:flex; gap:var(--s2); }
+  .askrow input { flex:1; background:var(--surface-2); color:var(--ink); border:1px solid var(--border);
+    border-radius:var(--r-sm); padding:8px var(--s3); font:inherit; font-size:var(--fs-sm); }
+  .askrow input:disabled { opacity:.55; }
+  .askbtn { background:var(--primary); color:#fff; border:0; border-radius:var(--r-sm); padding:8px var(--s4);
+    font:inherit; font-weight:600; font-size:var(--fs-sm); cursor:pointer; white-space:nowrap; }
+  .askbtn:disabled { opacity:.5; cursor:default; }
+  .askex { display:flex; flex-wrap:wrap; gap:6px; margin-top:var(--s2); }
+  .askex .chip { font-size:var(--fs-micro); color:var(--ink-2); background:var(--surface-2); border:1px solid var(--border);
+    border-radius:var(--r-pill); padding:2px 8px; cursor:pointer; }
+  .askex .chip:hover { border-color:var(--primary); color:var(--ink); }
+  .askhint { font-size:var(--fs-micro); color:var(--muted); margin-top:var(--s2); }
+  .askans { margin-top:var(--s3); font-size:var(--fs-sm); color:var(--ink); line-height:1.55; white-space:pre-wrap; }
+  .askans.refused { color:var(--muted); }
+  .askans .cites { margin-top:var(--s3); display:flex; flex-wrap:wrap; gap:6px; white-space:normal; }
+  .askans .cite { font-size:var(--fs-micro); color:var(--ink-2); background:var(--surface-2); border:1px solid var(--border); border-radius:var(--r-pill); padding:2px 8px; }
+  .askans .cref { color:var(--primary); font-weight:600; }
+  .thinking { color:var(--muted); }
+
   /* coverage */
   .cov { display:flex; gap:var(--s2); align-items:center; padding:7px var(--s4); border-bottom:1px solid var(--border); }
   .cov:last-child { border-bottom:0; }
@@ -199,12 +229,14 @@
   <span class="selwrap"><label for="sectorSel" class="hd-note">Setor</label>
     <select id="sectorSel"><option value="__all__">Todos os setores</option></select></span>
   <span class="sub" id="asof">—</span>
+  <span class="authbox" id="authBox"></span>
   <button class="icnbtn" id="themeBtn" title="Alternar tema" aria-label="Alternar tema">◐</button>
 </header>
 
 <main class="wrap">
   <div class="pagehead"><h1 id="pgTitle">Sala executiva</h1><p class="lede" id="pgLede"></p></div>
   <div id="macroStrip" class="macro-strip"></div>
+  <section id="askPanel" class="ask-band"></section>
   <div id="board"></div>
   <section class="band">
     <div class="band-hd"><span class="overline">Ações recomendadas</span><span class="rule"></span>
@@ -251,6 +283,124 @@ document.getElementById("officerTabs").innerHTML = Object.entries(OFFICERS)
 document.querySelectorAll("#officerTabs a").forEach(a => a.addEventListener("click", (e) => {
   e.preventDefault(); OFFICER = a.getAttribute("data-officer"); render();
 }));
+
+// --- Perguntar à Onça: officer-scoped grounded Q&A (v1 → /exec) ---------------
+// Same PKCE Hosted-UI flow + same-origin /api/ask (Cognito-JWT HTTP API) as v1; the
+// only /exec-specific bit is passing `officer: OFFICER` so the agent scopes grounding +
+// its own-decision KB precedents to the active officer (agent_ask already supports this).
+const AUTH = {
+  domain: "https://onca-668449743071.auth.us-east-1.amazoncognito.com",
+  clientId: "7qlquhh56o06tp9bo8gp77p385",
+  apiUrl: "",                              // same origin (CloudFront → JWT HTTP API)
+  redirectUri: location.origin + "/exec",  // registered on the Cognito app client
+};
+const TOKEN_KEY = "onca_id_token", VERIFIER_KEY = "onca_pkce_verifier";
+function b64Url(bytes) { let s = ""; bytes.forEach(b => s += String.fromCharCode(b)); return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
+function pkceVerifier() { const a = new Uint8Array(64); crypto.getRandomValues(a); return b64Url(a); }
+async function pkceChallenge(v) { const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(v)); return b64Url(new Uint8Array(d)); }
+function decodeJwt(t) { try { const b = t.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"); return JSON.parse(decodeURIComponent(atob(b).split("").map(c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join(""))); } catch (e) { return null; } }
+function getIdToken() { return sessionStorage.getItem(TOKEN_KEY); }
+function isLoggedIn() { const t = getIdToken(); if (!t) return false; const p = decodeJwt(t); return !!(p && p.exp && p.exp * 1000 > Date.now()); }
+async function login() {
+  const v = pkceVerifier(); sessionStorage.setItem(VERIFIER_KEY, v);
+  const params = new URLSearchParams({ client_id: AUTH.clientId, response_type: "code", scope: "openid email",
+    redirect_uri: AUTH.redirectUri, code_challenge: await pkceChallenge(v), code_challenge_method: "S256" });
+  location.href = `${AUTH.domain}/login?${params}`;
+}
+function logout() { sessionStorage.removeItem(TOKEN_KEY); location.href = `${AUTH.domain}/logout?${new URLSearchParams({ client_id: AUTH.clientId, logout_uri: AUTH.redirectUri })}`; }
+async function exchangeCode(code) {
+  const v = sessionStorage.getItem(VERIFIER_KEY); sessionStorage.removeItem(VERIFIER_KEY);
+  if (!v) return;
+  try {
+    const r = await fetch(`${AUTH.domain}/oauth2/token`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ grant_type: "authorization_code", client_id: AUTH.clientId, code, redirect_uri: AUTH.redirectUri, code_verifier: v }).toString() });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const j = await r.json();
+    if (j.id_token) sessionStorage.setItem(TOKEN_KEY, j.id_token);
+  } catch (e) { console.error("Onça auth:", e); }
+}
+async function handleAuthCallback() {
+  const url = new URL(location.href), code = url.searchParams.get("code");
+  if (!code) return;
+  await exchangeCode(code);
+  url.searchParams.delete("code"); url.searchParams.delete("state");
+  history.replaceState({}, "", url.pathname + (url.search || "") + url.hash);
+}
+function renderAuthUI() {
+  const el = document.getElementById("authBox");
+  if (el) {
+    if (isLoggedIn()) {
+      const p = decodeJwt(getIdToken()) || {};
+      el.innerHTML = `<span class="authuser" title="${U.esc(p.email || "conta")}">${U.esc(p.email || "conta")}</span><button class="authbtn" id="logoutBtn">Sair</button>`;
+      document.getElementById("logoutBtn").onclick = logout;
+    } else {
+      el.innerHTML = `<button class="authbtn" id="loginBtn">Entrar</button>`;
+      document.getElementById("loginBtn").onclick = login;
+    }
+  }
+  renderAskLoginState();
+}
+const ASK_EXAMPLES = ["O que mudou esta semana no meu escopo?", "Quem está em alerta agora?",
+  "Qual mudança regulatória tem maior alcance?", "Onde há maior risco prudencial?"];
+function renderAskPanel() {
+  const el = document.getElementById("askPanel");
+  if (!el) return;
+  el.innerHTML = `<div class="askwrap">
+    <div class="askhd"><h2>Perguntar à Onça</h2>
+      <span class="sub">resposta fundamentada só nos dados · escopo: <b id="askScope">—</b></span></div>
+    <div class="askrow"><input id="askInput" type="text" placeholder="Entre para perguntar à Onça" disabled>
+      <button class="askbtn" id="askBtn" disabled>Perguntar</button></div>
+    <div class="askex" id="askEx"></div>
+    <div class="askhint" id="askAuthHint" style="display:none">Entre com sua conta para perguntar à Onça.</div>
+    <div class="askans" id="askAns" style="display:none"></div></div>`;
+  document.getElementById("askEx").innerHTML = ASK_EXAMPLES.map(q => `<span class="chip">${U.esc(q)}</span>`).join("");
+  document.querySelectorAll("#askEx .chip").forEach(c => c.onclick = () => { document.getElementById("askInput").value = c.textContent; askOnca(); });
+  document.getElementById("askBtn").onclick = askOnca;
+  document.getElementById("askInput").addEventListener("keydown", e => { if (e.key === "Enter") askOnca(); });
+}
+function renderAskLoginState() {
+  const hint = document.getElementById("askAuthHint"), input = document.getElementById("askInput"), btn = document.getElementById("askBtn");
+  if (!hint || !input || !btn) return;
+  const logged = isLoggedIn();
+  hint.style.display = logged ? "none" : "";
+  input.disabled = !logged; btn.disabled = !logged;
+  input.placeholder = logged ? "Ex.: o que mudou no meu setor esta semana?" : "Entre para perguntar à Onça";
+}
+function updateAskScope() { const s = document.getElementById("askScope"); if (s) s.textContent = (OFFICERS[OFFICER] || {}).label || OFFICER; }
+function renderAnswer(res) {
+  const box = document.getElementById("askAns"); if (!box) return;
+  box.style.display = "block";
+  if (res.refused || !res.answer) { box.className = "askans refused"; box.textContent = res.answer || "Não consegui responder."; return; }
+  box.className = "askans";
+  const cites = res.citations || [], byId = {}; cites.forEach((c, i) => byId[c.id] = i + 1);
+  let html = U.esc(res.answer).replace(/\[([A-Za-z0-9:_\-]+)\]/g, (m, id) => byId[id] ? `<sup class="cref" title="${U.esc(id)}">[${byId[id]}]</sup>` : "");
+  html += cites.length
+    ? `<div class="cites">` + cites.map((c, i) => `<span class="cite">[${i + 1}] ${U.esc(c.entity_label || c.entity || (c.kb ? "base de conhecimento" : c.id))}</span>`).join("") + `</div>`
+    : `<div class="cites"><span style="color:var(--muted)">Sem fontes citadas — trate com cautela.</span></div>`;
+  box.innerHTML = html;
+}
+let askBusy = false;
+async function askOnca() {
+  if (askBusy) return;
+  if (!isLoggedIn()) { renderAskLoginState(); return; }
+  const input = document.getElementById("askInput"), q = (input.value || "").trim();
+  if (!q) return;
+  askBusy = true;
+  const btn = document.getElementById("askBtn"), prev = btn.textContent; btn.disabled = true; btn.textContent = "Pensando…";
+  const box = document.getElementById("askAns"); box.style.display = "block"; box.className = "askans"; box.innerHTML = `<span class="thinking">Consultando a base da Onça…</span>`;
+  const scope = {}; if (SECTOR && SECTOR !== "__all__") scope.industry = SECTOR;
+  try {
+    const r = await fetch(`${AUTH.apiUrl}/api/ask`, { method: "POST",
+      headers: { "content-type": "application/json", "authorization": `Bearer ${getIdToken()}` },
+      body: JSON.stringify({ q, scope, officer: OFFICER }) });
+    if (r.status === 401) { sessionStorage.removeItem(TOKEN_KEY); renderAuthUI(); renderAnswer({ refused: true, answer: "Sessão expirada. Entre novamente para perguntar." }); return; }
+    const j = await r.json();
+    renderAnswer(r.ok ? j : { refused: true, answer: "Falha ao consultar. Tente novamente." });
+  } catch { renderAnswer({ refused: true, answer: "Falha de rede ao consultar." }); }
+  finally { btn.disabled = false; btn.textContent = prev; askBusy = false; }
+}
+renderAskPanel();
+handleAuthCallback().then(renderAuthUI);
 
 fetch("/feed.json").then(r => r.json()).then(d => { DATA = d; boot(); })
   .catch(e => { document.getElementById("board").innerHTML =
@@ -973,6 +1123,7 @@ function render() {
   const meta = OFFICERS[OFFICER];
   document.getElementById("pgTitle").textContent = "Sala executiva — " + meta.title;
   document.getElementById("pgLede").textContent = meta.lede;
+  updateAskScope();  // Ask panel follows the active officer
   const p = block().panels || {}, a = agg();
   const el = document.getElementById("board");
   let board = "";

@@ -614,8 +614,16 @@ class OncaPrototypeStack(Stack):
             o_auth=cognito.OAuthSettings(
                 flows=cognito.OAuthFlows(authorization_code_grant=True),
                 scopes=[cognito.OAuthScope.OPENID, cognito.OAuthScope.EMAIL],
-                callback_urls=[f"https://{distribution.distribution_domain_name}/"],
-                logout_urls=[f"https://{distribution.distribution_domain_name}/"],
+                # "/" for the (deprecating) v1 warroom; "/exec" for the officer suite's
+                # own PKCE login so it redirects back to /exec, not root.
+                callback_urls=[
+                    f"https://{distribution.distribution_domain_name}/",
+                    f"https://{distribution.distribution_domain_name}/exec",
+                ],
+                logout_urls=[
+                    f"https://{distribution.distribution_domain_name}/",
+                    f"https://{distribution.distribution_domain_name}/exec",
+                ],
             ),
             prevent_user_existence_errors=True,
         )
