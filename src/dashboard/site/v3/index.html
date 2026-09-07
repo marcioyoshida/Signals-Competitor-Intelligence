@@ -103,6 +103,17 @@
   .spark--empty { color:var(--muted); font-size:var(--fs-micro); padding-left:var(--s2); }
   .tlnow { text-align:right; }
 
+  /* Control network — commonly-controlled competitor clusters (v1 grafo → CSO) */
+  .cnet { padding:2px 0; }
+  .cnrow { padding:var(--s3) var(--s4); border-bottom:1px solid var(--border); }
+  .cnrow:last-child { border-bottom:0; }
+  .cnhd { display:flex; align-items:baseline; gap:var(--s3); flex-wrap:wrap; }
+  .cnhub { font-weight:700; color:var(--ink); font-size:var(--fs-sm); }
+  .cnmeta { font-size:var(--fs-micro); color:var(--muted); text-transform:uppercase; letter-spacing:.4px; }
+  .cnmem { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+  .cnchip { font-size:var(--fs-micro); color:var(--ink-2); background:var(--surface-2);
+    border:1px solid var(--border); border-radius:var(--r-pill); padding:2px 8px; }
+
   /* coverage */
   .cov { display:flex; gap:var(--s2); align-items:center; padding:7px var(--s4); border-bottom:1px solid var(--border); }
   .cov:last-child { border-bottom:0; }
@@ -430,6 +441,38 @@ function sparkline(series) {
   return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-hidden="true">` +
     `<path d="${d.trim()}" fill="none" stroke="var(--${band})" stroke-width="1.6" vector-effect="non-scaling-stroke"/>` +
     (last >= 0 ? `<circle cx="${x(last).toFixed(1)}" cy="${y(lv).toFixed(1)}" r="2.4" fill="var(--${band})"/>` : "") + `</svg>`;
+}
+// Control network (v1 grafo de relações → CSO): commonly-controlled competitor clusters
+// from graph_proposals (kind=common_control ONLY — entity↔entity via a shared controller;
+// the person-mediated operative edges stay out, LGPD/review-gated). Read-only; the accept/
+// reject curation of these proposals stays in /v2/admin. Person names are never shown.
+function controlNetwork(proposals, entities) {
+  const lbl = {}; (entities || []).forEach(e => { lbl[e.entity] = e.label || e.entity; });
+  const edges = (proposals || []).filter(g => g.kind === "common_control" && (g.entities || []).length >= 2);
+  if (!edges.length) return U.empty("Sem vínculos de controle comum.", "", "○");
+  const adj = {}, deg = {};
+  edges.forEach(g => { const es = g.entities;
+    for (let i = 0; i < es.length; i++) for (let j = i + 1; j < es.length; j++) {
+      (adj[es[i]] = adj[es[i]] || new Set()).add(es[j]); (adj[es[j]] = adj[es[j]] || new Set()).add(es[i]);
+      deg[es[i]] = (deg[es[i]] || 0) + 1; deg[es[j]] = (deg[es[j]] || 0) + 1;
+    } });
+  const seen = new Set(), comps = [];
+  Object.keys(adj).forEach(n => { if (seen.has(n)) return; const st = [n], c = [];
+    while (st.length) { const x = st.pop(); if (seen.has(x)) continue; seen.add(x); c.push(x); adj[x].forEach(y => { if (!seen.has(y)) st.push(y); }); }
+    comps.push(c); });
+  comps.sort((a, b) => b.length - a.length);
+  const linksIn = c => { const s = new Set(c); return edges.filter(g => g.entities.every(e => s.has(e))).length; };
+  return `<div class="cnet">` + comps.map(c => {
+    const anchor = c.slice().sort((a, b) => {
+      const ha = a.includes("-") ? 1 : 0, hb = b.includes("-") ? 1 : 0;  // top-level brand (no hyphen) first
+      return ha !== hb ? ha - hb : (deg[b] || 0) - (deg[a] || 0);         // then most-connected
+    })[0];
+    const others = c.filter(x => x !== anchor).sort((a, b) => (lbl[a] || a).localeCompare(lbl[b] || b));
+    const n = linksIn(c);
+    return `<div class="cnrow"><div class="cnhd"><span class="cnhub" title="${U.esc(lbl[anchor] || anchor)}">${U.esc(lbl[anchor] || anchor)}</span>` +
+      `<span class="cnmeta">${c.length} entidades · ${n} vínculo${n !== 1 ? "s" : ""} de controle comum</span></div>` +
+      `<div class="cnmem">` + others.map(x => `<span class="cnchip" title="${U.esc(lbl[x] || x)}">${U.esc(lbl[x] || x)}</span>`).join("") + `</div></div>`;
+  }).join("") + `</div>`;
 }
 function threatTimeline(momentum) {
   const dates = (DATA.dates || []).slice().sort();
@@ -1055,9 +1098,9 @@ function render() {
       panel("Concorrentes por canto", null, "dimensão · avaliação", rowsFramework(p.four_corners))) +
     band("Visão prospectiva", "previsão (horizonte) + ecossistema (hubs) · inferência",
       panel("Sinais prospectivos", null, "horizonte · hub · expostos", rowsAxis(p.forward_look))) +
-    band("Padrões & relações", "comportamento (drumbeat/multi-frente) + grafo relacional",
+    band("Padrões & relações", "comportamento (drumbeat/multi-frente) + rede de controle",
       grid("1fr 1fr", [panel("Padrões comportamentais", null, "cadência de sinal", rowsAxis(p.behavioral)),
-                       panel("Grafo relacional", null, "co-menção · convergência · disputa", rowsAxis(p.relational))]));
+                       panel("Rede de controle", null, "concorrentes sob controle comum · QSA · toda a base", controlNetwork(DATA.graph_proposals, DATA.entities))]));
   else if (OFFICER === "cco") board +=
     band("Diff de conformidade", "o que mudou (artigos) + prazo · reg_change/reg_diff",
       panel("Mudanças enumeradas por norma", null, "artigos alterados · prazo", rowsChangeDiff(p.change_diff))) +
