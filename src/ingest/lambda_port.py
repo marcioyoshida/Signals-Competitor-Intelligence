@@ -33,6 +33,16 @@ class _SourceBudgetExceeded(Exception):
     """A single source ran past its wall-clock budget (or the ingest deadline)."""
 
 
+def _record_health(label: str, *, ok: bool, error: str | None = None) -> None:
+    """#76: best-effort per-source run telemetry into the source-health ledger. Never raises."""
+    try:
+        from src.ingest import source_health
+
+        source_health.record(label, ok=ok, error=error)
+    except Exception:  # pragma: no cover - telemetry must never affect ingestion
+        pass
+
+
 @contextmanager
 def _source_budget(label: str, deadline: float, per_source: int):
     """Bound one source's wall-clock time so a slow endpoint can't eat the run.
@@ -45,13 +55,21 @@ def _source_budget(label: str, deadline: float, per_source: int):
     """
     remaining = deadline - time.monotonic()
     if remaining <= 1:
+        # #76: a source skipped for the deadline is a reliability event, not silence.
+        _record_health(label, ok=False, error="skipped (ingest deadline reached)")
         raise _SourceBudgetExceeded(f"{label} skipped (ingest deadline reached)")
 
     use_alarm = hasattr(signal, "SIGALRM") and (
         threading.current_thread() is threading.main_thread()
     )
     if not use_alarm:
-        yield
+        try:
+            yield
+        except Exception as exc:
+            _record_health(label, ok=False, error=str(exc))
+            raise
+        else:
+            _record_health(label, ok=True)
         return
 
     secs = max(1, int(min(per_source, remaining)))
@@ -62,11 +80,16 @@ def _source_budget(label: str, deadline: float, per_source: int):
     previous = signal.getsignal(signal.SIGALRM)
     signal.signal(signal.SIGALRM, _fire)
     signal.alarm(secs)
+    ok, err = True, None
     try:
         yield
+    except Exception as exc:  # includes _SourceBudgetExceeded (timeout)
+        ok, err = False, str(exc)
+        raise
     finally:
         signal.alarm(0)
         signal.signal(signal.SIGALRM, previous)
+        _record_health(label, ok=ok, error=err)  # #76 per-source run telemetry
 
 
 def _ingest_deadline(context: Any) -> float:
@@ -466,6 +489,9 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     mode = (event or {}).get("mode") or os.environ.get("ONCA_INGEST_MODE", "all")
     if mode == "news":
         return _write_news_digest(_news_slice(context), context)
+
+    from src.ingest import source_health as _source_health
+    _source_health.reset()  # #76: fresh per-run telemetry ledger for the structured path
 
     lookback_days = int(os.environ.get("ONCA_LOOKBACK_DAYS", "7"))
     competitors = _csv_env("ONCA_COMPETITORS")
@@ -1338,5 +1364,9 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             )
         except Exception as exc:  # pragma: no cover - defensive handling for S3 write failures
             print(f"Warning: S3 upload failed: {exc}")
+
+    # #76: fold this run's per-source telemetry into the durable source-health store.
+    if bucket:
+        _source_health.merge_and_publish(bucket)
 
     return {"statusCode": 200, "body": json.dumps(payload, ensure_ascii=False, indent=2)}

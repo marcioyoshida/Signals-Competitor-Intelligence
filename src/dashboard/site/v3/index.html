@@ -739,6 +739,15 @@ function sourceHealthChart(list) {
     <span class="meta" style="flex:1">${s.docs} docs</span>
     <span class="cv">${s.staleness_days == null ? "—" : s.staleness_days + "d"}</span></div>`).join("") + `</div>`;
 }
+function sourceRunsChart(list) {
+  if (!(list || []).length) return U.empty("Sem telemetria de fontes ainda.", "", "○");
+  const bmap = { ok: "ok", warn: "warn", stale: "warn", error: "gap", never_ok: "gap" };
+  const blbl = { ok: "ok", warn: "atenção", stale: "defasada", error: "erro", never_ok: "sem sucesso" };
+  return `<div class="chart">` + list.slice(0, 16).map(s => `<div class="cov" style="padding:5px 0">
+    <span class="dot ${bmap[s.band] || "gap"}"></span><span class="cl" style="min-width:150px" title="${U.esc(s.source)}">${U.esc(s.source)}</span>
+    <span class="meta" style="flex:1" title="${U.esc(s.last_error || "")}">${s.last_error ? U.esc(String(s.last_error).slice(0, 40)) : (blbl[s.band] || s.band)}</span>
+    <span class="cv">${s.staleness_days == null ? "—" : s.staleness_days + "d"}</span></div>`).join("") + `</div>`;
+}
 function pricingBadge(p) {
   if (!p) return "";
   const cls = p.pressure === "alta" ? "high" : p.pressure === "média" ? "warn" : "low";
@@ -830,6 +839,8 @@ function render() {
         band("Estrutura de mercado & saúde das fontes", "receita CVM · frescor por fonte",
           grid("1.1fr 1fr", [panel("Tamanho de mercado por setor", null, "receita dos emissores listados (CVM)", `<div class="panel__bd--flush">${marketSizeChart(p.market_structure, EX.sectors)}</div>`),
             panel("Saúde das fontes", null, "frescor · volume · defasagem", `<div class="panel__bd--flush">${sourceHealthChart(p.source_health)}</div>`)])) +
+        band("Confiabilidade da ingestão", "telemetria real por fonte · erro/defasagem que o proxy de frescor não vê (#76)",
+          panel("Execução das fontes (pior primeiro)", null, "última execução ok · erro · defasagem", `<div class="panel__bd--flush">${sourceRunsChart(p.source_runs)}</div>`)) +
         band("Instrumentação de solidez prudencial", "cobertura de Basileia + tom Pilar 3 por setor · ADR 022",
           panel("Cobertura de solidez (menor primeiro)", null, "% do portfólio com dado prudencial", rowsSoundnessCov(p.soundness_coverage)));
     } else {

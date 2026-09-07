@@ -1473,6 +1473,16 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     except Exception as exc:  # pragma: no cover - best-effort, read-only
         print(f"Warning: silence projection skipped: {exc}")
         feed["silence"] = []
+    # #76/R5: real per-INGESTER run telemetry (reliability) — complements the feed-derived
+    # lens-freshness proxy (feed.source_health) by exposing sources that ERRORED or never ran,
+    # which the proxy cannot see. Read-only load of the durable source-health store.
+    try:
+        from src.ingest import source_health as _sh
+
+        feed["source_runs"] = _sh.as_rows(_sh.load_index(digests_bucket))
+    except Exception as exc:  # pragma: no cover - best-effort, read-only
+        print(f"Warning: source_runs load skipped: {exc}")
+        feed["source_runs"] = []
     # ADR 021 §D/§G: the per-officer executive block (read-track: CSO), industry-scoped.
     # Derived from the feed above — no new data; best-effort so a failure never blocks publish.
     try:

@@ -919,7 +919,8 @@ def build_cpo(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
             (c for c in ctx["cards"] if set(c.get("lenses") or []) & {"ofertas", "produto"}),
             key=lambda c: str(c.get("date") or ""), reverse=True)[:24]],
         "soundness_coverage": soundness_coverage,               # ADR 022 (CPO instrumentation angle)
-        "source_health": feed.get("source_health") or [],       # R5
+        "source_health": feed.get("source_health") or [],       # R5 (lens-freshness proxy)
+        "source_runs": feed.get("source_runs") or [],            # #76 (real per-ingester reliability)
         "market_structure": feed.get("market_structure") or {},  # R3
         "pricing": feed.get("pricing") or {},                    # R4
         "reg_coverage": {"summary": rc.get("summary") or {},
