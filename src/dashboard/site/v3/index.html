@@ -508,6 +508,22 @@ async function setBoard(did, adopted, cb) {
   if (res && res.decision_id) cb.parentElement.classList.toggle("on", adopted);
 }
 
+// --- Cross-officer quiet-alert (SURF-8) — expected-but-absent signals (silence axis) ------
+function silenceBand() {
+  const list = (EX.silence || []).filter(inSector);
+  if (!list.length) return "";
+  const rows = list.slice(0, 14).map(s => {
+    const t = s.silence_tier || 1, tone = t >= 3 ? "high" : t >= 2 ? "warn" : "med";
+    return `<div style="display:flex;gap:var(--s3);align-items:baseline;padding:var(--s2) var(--s3)">
+      <span class="badge badge--${tone}" title="tier de silêncio">T${t}</span>
+      <b style="min-width:120px">${U.esc(s.label || s.entity)}</b>
+      <span class="hd-note" style="flex:1">${U.esc(s.briefing || "")}</span>
+      <span class="hd-note" style="white-space:nowrap">${s.days_since_last}d · ~${s.mean_gap_days}d</span></div>`;
+  }).join("");
+  return band("Silêncios de sinal", "quem ficou quieto · inferência (ausência de sinal), não fato",
+    `<div class="panel"><div class="panel__bd panel__bd--flush">${rows}</div></div>`);
+}
+
 // --- Outcome-review queue (§E, DEC-1) — DRIVES set_outcome, the reward signal ------
 // Decisions still `pendente` and old enough to have an observable result. CSO (chief) sees all;
 // each officer sees its own. Stamping the outcome here is what accrues the favorable-rate signal.
@@ -824,7 +840,7 @@ function render() {
     band("Crescimento (Ansoff) & portfólio (BCG)", "vetores de crescimento · quadrante · beliefs vetados",
       grid("1fr 1fr", [panel("Ansoff", null, "penetração·desenvolvimento·diversificação", rowsFramework(p.ansoff)),
                        panel("BCG", null, "estrela·vaca·interrogação·abacaxi", rowsFramework(p.bcg))]));
-  el.innerHTML = flowBand() + board + outcomesDueBand() + metricsBand() + referenceBand();
+  el.innerHTML = flowBand() + board + silenceBand() + outcomesDueBand() + metricsBand() + referenceBand();
   // Click the headline to expand/collapse it inline (doesn't open the drawer); an expand is
   // an attention event (§E engagement telemetry) tagged with the card's entity/sector/threat.
   el.querySelectorAll(".exrow .ttl").forEach(t => t.addEventListener("click", (e) => {

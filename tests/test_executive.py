@@ -371,3 +371,15 @@ def test_officer_panels_carry_frameworks_and_product_moves():
     assert ex["cco"]["panels"]["pestle"]
     assert ex["cpo"]["panels"]["ansoff"] and ex["cpo"]["panels"]["bcg"]
     assert ex["cpo"]["panels"]["product_moves"][0]["id"] == "c1"  # ofertas-lens card surfaced
+
+
+# --- SURF-8: silence cross-officer quiet-alert -----------------------------------
+def test_executive_surfaces_silence_sorted_by_tier():
+    feed = {"dates": ["2026-09-06"], "industry_options": [], "feed": [],
+            "silence": [
+                {"entity": "a", "label": "A", "silence_tier": 1, "score": 0.3, "days_since_last": 10,
+                 "mean_gap_days": 3, "briefing": "quiet"},
+                {"entity": "b", "label": "B", "silence_tier": 3, "score": 0.6, "days_since_last": 40,
+                 "mean_gap_days": 5, "briefing": "very quiet"}]}
+    ex = executive.build_executive(feed)
+    assert [s["entity"] for s in ex["silence"]] == ["b", "a"]  # highest tier first

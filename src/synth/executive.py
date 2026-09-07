@@ -1043,6 +1043,9 @@ def build_executive(feed: dict[str, Any], *, decisions: list[dict[str, Any]] | N
         "metrics": metrics,
         "engagement": engagement_roll,
         "reference": REFERENCE,
+        # SURF-8: cross-officer quiet-alert — expected-but-absent signals (silence axis), inference.
+        "silence": sorted((feed.get("silence") or []),
+                          key=lambda s: (s.get("silence_tier") or 0, s.get("score") or 0), reverse=True)[:20],
         "cso": build_cso(feed, ctx),
         "cro": build_cro(feed, ctx),
         "cco": build_cco(feed, ctx),

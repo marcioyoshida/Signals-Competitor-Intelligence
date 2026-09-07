@@ -1455,6 +1455,24 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         product_intel.enrich_feed(feed)
     except Exception as exc:  # pragma: no cover - best-effort, read-only
         print(f"Warning: product enrichment skipped: {exc}")
+    # SURF-8: expected-but-absent signals (ADR-003 silence axis) as a cross-officer quiet-alert.
+    # Read-only projection at feed-build — NOT written to narratives/, so it never resets an
+    # entity's freshness (the feedback loop the silence pipeline guards against).
+    try:
+        from src.synth import feature_store, silence
+
+        _ea = feed.get("entity_attrs") or {}
+        _feat = feature_store.load_features(digests_bucket)
+        feed["silence"] = [{
+            "entity": c["entity"], "label": c["label"],
+            "industries": ((_ea.get(c["entity"]) or {}).get("industries") or []),
+            "days_since_last": c["days_since_last"], "mean_gap_days": c["mean_gap_days"],
+            "silence_tier": c["silence_tier"], "score": silence._silence_score(c),
+            "last_seen": c["last_seen"], "briefing": silence.build_narrative(c)["narrative"],
+        } for c in silence.nominate(_feat, recent_narratives=feed.get("feed") or [])]
+    except Exception as exc:  # pragma: no cover - best-effort, read-only
+        print(f"Warning: silence projection skipped: {exc}")
+        feed["silence"] = []
     # ADR 021 §D/§G: the per-officer executive block (read-track: CSO), industry-scoped.
     # Derived from the feed above — no new data; best-effort so a failure never blocks publish.
     try:
