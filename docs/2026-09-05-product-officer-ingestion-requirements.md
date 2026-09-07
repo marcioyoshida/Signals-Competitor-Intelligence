@@ -22,7 +22,12 @@
   `financials` store → `feed.market_structure[sector]` = {size_revenue, leader rev-share, HHI,
   constituents}. Live: banking R$971bi / Itaú 34.5% / HHI 0.267; acquiring, insurance, asset-mgmt,
   IB, wealth, advisory, financial-data. Sectors with no listed issuer report `covered:false` — **no
-  fabricated size.** (BCB IF.data `bcb_ifdata.market_share` merges in when its store is populated.)
+  fabricated size.** (BCB IF.data `bcb_ifdata.market_share` merges in per-entity share.) **#75
+  upgrade:** the CVM size is listed-issuers-only revenue; `bcb_ifdata.system_size` now also exposes
+  the **system-wide** IF.data asset base (Ativo Total = the whole SFN, not just listed) + its
+  leaders as `feed.ifdata_market` — the credit/asset-stock size the requirement names — surfaced as
+  a distinct CPO panel "Base de ativos do SFN (IF.data)". Kept **whole-system-scoped, not attributed
+  to one sector** (a system-wide number split across industries would double-count).
 - **R4 Pricing — SHIPPED (proxy, labelled inference).** `pricing_signals` → `feed.pricing[sector]`
   = price-pressure proxy from the juros/ofertas/pix lenses (volume+recency). Labelled an inference
   until R4's structured rate source lands.

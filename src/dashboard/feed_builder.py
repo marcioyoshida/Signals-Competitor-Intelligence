@@ -1483,6 +1483,15 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     except Exception as exc:  # pragma: no cover - best-effort, read-only
         print(f"Warning: source_runs load skipped: {exc}")
         feed["source_runs"] = []
+    # #75/R3: system-wide IF.data market size (SFN asset base) + leaders — the credit/asset-stock
+    # size the CVM-revenue market_structure (listed issuers only) can't give. Read-only.
+    try:
+        from src.ingest import bcb_ifdata as _ifd
+
+        feed["ifdata_market"] = _ifd.system_size(_ifd.load_index(digests_bucket))
+    except Exception as exc:  # pragma: no cover - best-effort, read-only
+        print(f"Warning: ifdata_market load skipped: {exc}")
+        feed["ifdata_market"] = {}
     # ADR 021 §D/§G: the per-officer executive block (read-track: CSO), industry-scoped.
     # Derived from the feed above — no new data; best-effort so a failure never blocks publish.
     try:

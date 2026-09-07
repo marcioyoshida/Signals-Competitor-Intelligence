@@ -769,6 +769,17 @@ def _sector_profile(feed: dict[str, Any], meta: dict[str, Any], cards_by: dict[s
     }
 
 
+def _ifdata_market_labeled(feed: dict[str, Any]) -> dict[str, Any]:
+    """#75: the IF.data system-wide size block with its top entities resolved to display labels."""
+    m = dict(feed.get("ifdata_market") or {})
+    if not m:
+        return {}
+    ea = feed.get("entity_attrs") or {}
+    m["top"] = [{**t, "label": (ea.get(t.get("entity")) or {}).get("label") or t.get("entity")}
+                for t in (m.get("top") or [])]
+    return m
+
+
 def build_cpo(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     industries = list(feed.get("industries") or [])
     gaps = list(feed.get("coverage_gaps") or [])
@@ -921,7 +932,8 @@ def build_cpo(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         "soundness_coverage": soundness_coverage,               # ADR 022 (CPO instrumentation angle)
         "source_health": feed.get("source_health") or [],       # R5 (lens-freshness proxy)
         "source_runs": feed.get("source_runs") or [],            # #76 (real per-ingester reliability)
-        "market_structure": feed.get("market_structure") or {},  # R3
+        "market_structure": feed.get("market_structure") or {},  # R3 (CVM revenue, listed issuers)
+        "ifdata_market": _ifdata_market_labeled(feed),           # #75 (IF.data system-wide asset base)
         "pricing": feed.get("pricing") or {},                    # R4
         "reg_coverage": {"summary": rc.get("summary") or {},
                          "entity_covered": rc.get("entity_covered") or [],

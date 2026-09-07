@@ -226,6 +226,42 @@ def share_by_entity(index: dict[str, Any]) -> dict[str, float]:
     return out
 
 
+def system_size(index: dict[str, Any]) -> dict[str, Any]:
+    """#75/R3: the SYSTEM-WIDE market size the IF.data metric measures (e.g. Ativo Total = the SFN
+    asset base) + who leads it — the "credit/asset stock" size the requirement names, which the
+    CVM-revenue market_structure (listed issuers only) cannot give.
+
+    The metric total is system-wide (ALL institutions, not only the ones that resolve to a tracked
+    entity): for any stored record, ``total = value / (share_pct/100)``. Returned honestly as the
+    whole-system base with `scope` set — NOT attributed to a single sector (that would double-count
+    a system-wide number across industries). Returns {} if the store lacks value+share."""
+    recs = [r for r in (index.get("records") or {}).values() if isinstance(r, dict)]
+    total = None
+    for r in recs:
+        v, s = r.get("value"), r.get("market_share_pct")
+        try:
+            if v is not None and s:
+                total = float(v) / (float(s) / 100.0)
+                break
+        except (TypeError, ValueError, ZeroDivisionError):
+            continue
+    if total is None:
+        return {}
+    ranked = sorted((r for r in recs if r.get("market_share_pct") is not None),
+                    key=lambda r: r["market_share_pct"], reverse=True)
+    return {
+        "metric": recs[0].get("metric") if recs else "Ativo Total",
+        "size_value": round(total, 2),
+        "currency": "BRL",
+        "base_date": recs[0].get("base_date") if recs else None,
+        "scope": "sistema (todas as instituições IF.data, não apenas emissores listados)",
+        "source": "BCB IF.data",
+        "resolved": len(ranked),
+        "top": [{"entity": r["entity"], "share_pct": r.get("market_share_pct"),
+                 "value": r.get("value")} for r in ranked[:8]],
+    }
+
+
 def update_store(records: list[dict[str, Any]], bucket: str, *,
                  s3: Any | None = None, today: dt.date | None = None) -> dict[str, Any]:
     index = load_index(bucket, s3=s3)

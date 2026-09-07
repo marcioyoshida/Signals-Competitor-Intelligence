@@ -719,6 +719,16 @@ function marketSizeChart(ms, sectors) {
   return hbars(rows.map(x => ({ label: label(x.slug), value: fmtBi(x.m.size_revenue), bar: x.m.size_revenue / max * 100,
     colorTok: "var(--cat-gold)", badge: `<span class="badge badge--ghost">${x.m.issuers} emissor(es)</span>` })));
 }
+// #75 — IF.data system-wide asset base (SFN) + leaders; NOT per-sector (whole-system, honest)
+function ifdataMarketBlock(m) {
+  if (!m || m.size_value == null) return U.empty("Base IF.data ainda não populada.", "", "○");
+  const top = m.top || [];
+  const max = Math.max(1, ...top.map(t => t.share_pct || 0));
+  return `<div class="chart"><div class="crow"><span class="cl" style="color:var(--muted)">${U.esc(m.metric || "Ativo Total")} · ${U.esc(m.scope || "sistema")}</span>
+      <span class="cv">${fmtBi(m.size_value)}</span></div></div>` +
+    hbars(top.map(t => ({ label: t.label || t.entity, value: (t.share_pct == null ? "—" : t.share_pct + "%"),
+      bar: (t.share_pct || 0) / max * 100, colorTok: "var(--cat-teal)" })));
+}
 // R3 — a single sector's constituents by revenue share
 function marketDetail(m) {
   if (!m || !m.covered) return U.empty("Sem emissores listados (CVM) neste setor.", "sem tamanho fabricado", "○");
@@ -836,8 +846,9 @@ function render() {
         band("Pipeline de descoberta & pontos cegos", "",
           grid("1fr 1fr", [panel("Descoberta por setor", null, "novas entidades propostas", `<div class="panel__bd--flush">${discoveryChart(port)}</div>`),
             panel("Pontos cegos", null, "cross-setor · sem tag de indústria", rowsGap(p.blind_spots))])) +
-        band("Estrutura de mercado & saúde das fontes", "receita CVM · frescor por fonte",
-          grid("1.1fr 1fr", [panel("Tamanho de mercado por setor", null, "receita dos emissores listados (CVM)", `<div class="panel__bd--flush">${marketSizeChart(p.market_structure, EX.sectors)}</div>`),
+        band("Estrutura de mercado & saúde das fontes", "receita CVM · base IF.data · frescor por fonte",
+          grid("1fr 1fr 1fr", [panel("Tamanho de mercado por setor", null, "receita dos emissores listados (CVM)", `<div class="panel__bd--flush">${marketSizeChart(p.market_structure, EX.sectors)}</div>`),
+            panel("Base de ativos do SFN (IF.data)", null, "sistema · não só listadas · líderes por participação", `<div class="panel__bd--flush">${ifdataMarketBlock(p.ifdata_market)}</div>`),
             panel("Saúde das fontes", null, "frescor · volume · defasagem", `<div class="panel__bd--flush">${sourceHealthChart(p.source_health)}</div>`)])) +
         band("Confiabilidade da ingestão", "telemetria real por fonte · erro/defasagem que o proxy de frescor não vê (#76)",
           panel("Execução das fontes (pior primeiro)", null, "última execução ok · erro · defasagem", `<div class="panel__bd--flush">${sourceRunsChart(p.source_runs)}</div>`)) +
