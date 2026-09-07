@@ -806,6 +806,36 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as exc:  # pragma: no cover - best-effort, never blocks ingest
             print(f"Warning: entity discovery skipped: {exc}")
 
+        # FII (Fundos Imobiliários) — structured CVM universe → registry (issue #102,
+        # #14 Stage 1). Same master gate + industry-parametric engine as FIAGRO; every row
+        # has a CNPJ (and a B3 ticker for listed funds). Funds nest under their manager as
+        # sub-entities (ADR 017). ONCA_FII_MIN_PL floors on the Total_Investido size proxy.
+        try:
+            with _source_budget("entity discovery FII", deadline, per_source):
+                from src.ingest import cvm_fii
+                from src.synth import entity_discovery
+
+                fii_min = float(os.environ.get("ONCA_FII_MIN_PL", "100000000"))
+                auto = os.environ.get(
+                    "ONCA_ENTITY_DISCOVERY_AUTOCREATE", "true"
+                ).lower() in ("1", "true", "yes")
+                freport = entity_discovery.discover_fiagro(
+                    industry="real-estate-funds",
+                    rows=cvm_fii.fetch_fii(min_pl=fii_min),
+                    auto_create=auto,
+                    max_new=int(os.environ.get("ONCA_FII_MAX_NEW", "40")),
+                )
+                print(
+                    "entity discovery FII: "
+                    f"fetched={freport.get('fetched')} "
+                    f"created={len(freport.get('created') or [])} "
+                    f"enriched={len(freport.get('enriched') or [])} "
+                    f"already={freport.get('already')} "
+                    f"proposed={len(freport.get('proposed') or [])}"
+                )
+        except Exception as exc:  # pragma: no cover - best-effort, never blocks ingest
+            print(f"Warning: entity discovery FII skipped: {exc}")
+
         # Consórcio administradoras — structured BCB universe → registry (issue #46,
         # ADR 017). Same master gate; every row has a CNPJ. Conglomerate arms
         # (Itaú/Bradesco/Santander/Porto Seguro) nest as sub-entities of the tier-1 parent.

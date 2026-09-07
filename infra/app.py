@@ -271,6 +271,10 @@ class OncaPrototypeStack(Stack):
                 "ONCA_ENTITY_DISCOVERY": "true",
                 "ONCA_ENTITY_DISCOVERY_AUTOCREATE": "true",
                 "ONCA_FIAGRO_MIN_PL": "50000000",
+                # FII structured registry sync (#102). Floors on the ativo_passivo
+                # Total_Investido size proxy (100mi keeps the roster to substantial,
+                # mostly listed funds; ~886 funds clear 50mi, fewer at 100mi).
+                "ONCA_FII_MIN_PL": "100000000",
                 # General NER harvest (#14 Stage 3 / #105): propose-only company
                 # candidates from the narrative corpus. Enabled after a live precision
                 # eval (2026-09-07): tightening the trigger to FS-specific sector words

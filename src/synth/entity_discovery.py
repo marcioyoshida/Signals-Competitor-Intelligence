@@ -269,7 +269,16 @@ def _brand_from_name(name: str) -> str | None:
 
 
 def _profile_from_fiagro(row: dict[str, Any]) -> dict[str, Any]:
-    """Compose a registry-ready profile from a CVM FIAGRO informe row."""
+    """Compose a registry-ready profile from a CVM fund informe row.
+
+    Fund-class-agnostic (#102): cosmetic labels come from the row with FIAGRO
+    defaults, so the same mapper serves FIAGRO (agri-funds) and FII
+    (real-estate-funds). The identity write is driven by ``discover_fiagro``'s
+    ``industry`` param, not by ``profile["industries"]``.
+    """
+    fund_class = str(row.get("fund_class") or "FIAGRO").strip() or "FIAGRO"
+    industry = str(row.get("industry") or "agri-funds").strip() or "agri-funds"
+    disc_source = str(row.get("discovery_source") or "cvm_fiagro").strip() or "cvm_fiagro"
     name = str(row.get("fund_name") or "").strip()
     ticker = (row.get("ticker") or "").strip().upper() or None
     cnpj = row.get("cnpj") or ""
@@ -288,8 +297,8 @@ def _profile_from_fiagro(row: dict[str, Any]) -> dict[str, Any]:
     # display. ``auto_ok`` gates auto-create: a fund with neither a ticker nor a
     # distinctive brand has no clean identity → route to review, don't auto-create.
     auto_ok = bool(ticker or brand)
-    display = brand or ticker or f"FIAGRO {root or 'sem-cnpj'}"
-    entity_id = _slug(ticker or brand) or f"fiagro-{root or 'unknown'}"
+    display = brand or ticker or f"{fund_class} {root or 'sem-cnpj'}"
+    entity_id = _slug(ticker or brand) or f"{fund_class.lower()}-{root or 'unknown'}"
     admin = (row.get("admin") or "").strip() or None
     manager = (row.get("manager") or "").strip() or None
     # NB: admin/manager are the fund's SERVICER (administrator/gestor), not its
@@ -311,14 +320,14 @@ def _profile_from_fiagro(row: dict[str, Any]) -> dict[str, Any]:
         "auto_ok": auto_ok,
         "aliases": uniq,
         "cnpj_roots": [root] if root else [],
-        "industries": ["agri-funds"],
+        "industries": [industry],
         "ticker": ticker,
         "isin": (row.get("isin") or None),
         "admin": admin,
         "gestor": manager,
         "manager": manager,
         "pl": row.get("pl"),
-        "source": "cvm_fiagro",
+        "source": disc_source,
         "confidence": "cnpj",
         "raw_name": name,
         "as_of": row.get("as_of"),
@@ -975,9 +984,9 @@ def discover_fiagro(
                         key=profile["entity_id"],
                         proposed=brand,
                         reason="name_collision",
-                        hint=f"cvm_fiagro cnpj={root} ticker={ticker or '-'} owner={sorted(owners)[0]}",
+                        hint=f"{profile.get('source')} cnpj={root} ticker={ticker or '-'} owner={sorted(owners)[0]}",
                         confidence="cnpj",
-                        payload={"profile": profile, "source": "cvm_fiagro", "cnpj": root},
+                        payload={"profile": profile, "source": profile.get("source"), "cnpj": root},
                         table=table,
                     )
                     report["proposed"].append(pid or brand)

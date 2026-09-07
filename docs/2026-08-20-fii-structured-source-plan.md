@@ -1,9 +1,13 @@
 # Plan: CVM FII/FIAGRO structured informe-mensal source (deferred)
 
-Status: **planned, not built.** Deferred at the end of the 2026-08-20 ingestion
-expansion to avoid shipping mis-attributed data. The fund modules already have
-**live news coverage** (see commit `70317a6`), so this is an enhancement, not on
-the critical path.
+Status: **BUILT (2026-09-07, #102).** FIAGRO shipped first (`src/ingest/cvm_fiagro.py`);
+FII now shipped as `src/ingest/cvm_fii.py` + wired into the shared industry-parametric
+`entity_discovery.discover_fiagro(industry="real-estate-funds", rows=…)` engine. Both are
+CNPJ+ISIN-ticker keyed (name matching NOT used — gotcha #2 below). Live-verified: 886 FII
+funds ≥50mi (711 ≥100mi, the shipped floor), 349 new with a derivable B3 ticker →
+auto-createable; the rest → review. **Discovery only** — the ativo_passivo `Total_Investido`
+is used as an internal size floor, never surfaced as PL (gotcha #3). The move-detection /
+narrative half of the original plan was intentionally NOT built for FII.
 
 ## Context — what this completes
 

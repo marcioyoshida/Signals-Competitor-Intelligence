@@ -174,9 +174,16 @@ genuine entrant reads as a clean `Banco X` proposal. Result: **0 false proposals
 un-registered new FS player in-window). Flipped `ONCA_NER_HARVEST=true` in `infra/app.py`.
 Tests: `+test_harvest_ner_keeps_prefix_drops_known_bank_and_out_of_domain`.
 
+**FII sibling SHIPPED (2026-09-07, #102).** `src/ingest/cvm_fii.py` fetches the CVM FII
+informe-mensal (annual zip, latest month per CNPJ; identity from `geral`, size proxy from
+`ativo_passivo.Total_Investido`), derives the B3 ticker from the ISIN, and feeds the shared
+`discover_fiagro(industry="real-estate-funds", rows=…)` — the engine was already parametric, so
+this was **1 fetcher + a small cosmetic generalization of `_profile_from_fiagro`** (fund-class/
+industry/source now read from the row with FIAGRO defaults). Discovery only (no PL-move
+narratives — Total_Investido is not a labelled PL). Live: 711 funds ≥100mi, 349 auto-createable.
+
 Remaining implementation order: (1) ~~general unresolved-mention harvest~~ **DONE (#105)**;
-(2) FII sibling of `cvm_fiagro` (see
-`2026-08-20-fii-structured-source-plan.md`); (3) CNPJ/Receita profile composition for
-news-only candidates; (4) ingestion follow-up probe ("added but not surfacing");
-(5) CVM DFP/ITR → KB (#7); (6) discovery/curation dashboard tab.
+(2) ~~FII sibling of `cvm_fiagro`~~ **DONE (#102)**; (3) CNPJ/Receita profile composition for
+news-only candidates (#104); (4) ingestion follow-up probe ("added but not surfacing", #106);
+(5) CVM DFP/ITR → KB (#7); (6) ~~discovery/curation dashboard tab~~ **DONE** (Descoberta rail).
 Related: `docs/2026-08-16-roadmap.md`, [ADR 010](2026-08-25-adr-agent-chat-ui.md).
