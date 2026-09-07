@@ -24,7 +24,7 @@ INDUSTRY_TICKERS: dict[str, list[str]] = {
     "investment-banking": ["BPAC11"],
     "asset-management": ["BPAC11"],
     "financial-data-analytics": ["B3SA3"],
-    "fintech": ["NUBR33", "INBR32"],
+    "fintech": ["ROXO34", "INBR32"],  # ROXO34 = Nu Holdings BDR (NUBR33 delisted → 404)
     "agri-funds": ["KNCA11", "RURA11", "VGIA11"],
     "real-estate-funds": ["HGLG11", "KNCR11", "VISC11", "XPML11"],
     "crypto": ["HASH11", "QBTC11"],
