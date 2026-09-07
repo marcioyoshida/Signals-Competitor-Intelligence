@@ -60,6 +60,18 @@
   .mom .val { text-align:right; font-variant-numeric:tabular-nums; font-size:var(--fs-sm); font-weight:600; }
   .mom .val.up { color:var(--t-high); } .mom .val.down { color:var(--ok); }
 
+  /* Mapa Competitivo — ameaça × momentum scatter (v1 flagship → CSO) */
+  .scatter { padding:var(--s4); }
+  .scatter svg { width:100%; height:auto; display:block; }
+  .sc-frame { fill:none; stroke:var(--border); }
+  .sc-grid { stroke:var(--border-2); stroke-dasharray:3 3; }
+  .sc-danger { fill:color-mix(in srgb,var(--t-crit) 8%,transparent); }
+  .sc-dot { stroke:var(--surface); stroke-width:1.2; }
+  .sc-dot:hover { stroke:var(--ink); stroke-width:1.6; }
+  .sc-lbl { fill:var(--ink-2); font-size:11px; font-variant-numeric:tabular-nums; }
+  .sc-ax  { fill:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.5px; }
+  .sc-quad { fill:var(--muted); font-size:10px; letter-spacing:.4px; opacity:.7; }
+
   /* coverage */
   .cov { display:flex; gap:var(--s2); align-items:center; padding:7px var(--s4); border-bottom:1px solid var(--border); }
   .cov:last-child { border-bottom:0; }
@@ -287,6 +299,41 @@ function rowsReg(list) {
     ${r.difficulty_band ? sevBadge(r.difficulty_band) : ""}
     ${r.days_to_deadline != null ? `<span class="dt">${r.days_to_deadline}d</span>` : ""}
     ${r.threat_score != null ? U.heat(r.threat_score) : ""}</div>`; }).join("");
+}
+// Mapa Competitivo (v1 flagship → CSO): each tracked competitor placed by current threat
+// (ameaça, y) × window acceleration (momentum, x). Top-right = high + accelerating (danger).
+function scatterMap(list) {
+  list = (list || []).filter(inSector).filter(d => d && d.entity);
+  if (!list.length) return U.empty("Sem dados de posição na janela.", "", "○");
+  const W = 720, H = 380, padL = 46, padR = 18, padT = 18, padB = 40;
+  const iw = W - padL - padR, ih = H - padT - padB;
+  const M = Math.max(5, Math.ceil(Math.max(...list.map(d => Math.abs(d.momentum || 0)))));
+  const x = m => padL + ((m + M) / (2 * M)) * iw;
+  const y = a => padT + (1 - Math.max(0, Math.min(100, a)) / 100) * ih;
+  const band = a => a >= 65 ? "t-crit" : a >= 40 ? "t-high" : "ok";
+  const x0 = x(0), y50 = y(50);
+  const dots = list.map(d => {
+    const cx = x(d.momentum || 0), cy = y(d.recent || 0);
+    return `<circle class="sc-dot" cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="5.5" ` +
+      `fill="var(--${band(d.recent || 0)})" fill-opacity=".85">` +
+      `<title>${U.esc(d.label)} · ameaça ${d.recent} · momentum ${d.momentum > 0 ? "+" : ""}${d.momentum}</title></circle>`;
+  }).join("");
+  const labels = [...list].sort((a, b) => (b.recent || 0) - (a.recent || 0)).slice(0, 10).map(d => {
+    const cx = x(d.momentum || 0), cy = y(d.recent || 0), end = cx > W - 150;
+    return `<text class="sc-lbl" x="${(cx + (end ? -9 : 9)).toFixed(1)}" y="${(cy + 3.5).toFixed(1)}" ` +
+      `text-anchor="${end ? "end" : "start"}">${U.esc((d.label || "").slice(0, 22))}</text>`;
+  }).join("");
+  return `<div class="scatter"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" ` +
+    `aria-label="Mapa competitivo: ameaça por momentum">` +
+    `<rect class="sc-danger" x="${x0}" y="${padT}" width="${padL + iw - x0}" height="${y50 - padT}"/>` +
+    `<line class="sc-grid" x1="${padL}" y1="${y50}" x2="${padL + iw}" y2="${y50}"/>` +
+    `<line class="sc-grid" x1="${x0}" y1="${padT}" x2="${x0}" y2="${padT + ih}"/>` +
+    `<rect class="sc-frame" x="${padL}" y="${padT}" width="${iw}" height="${ih}"/>` +
+    `<text class="sc-quad" x="${padL + iw - 6}" y="${padT + 14}" text-anchor="end">ameaça alta · acelerando</text>` +
+    dots + labels +
+    `<text class="sc-ax" x="${padL + iw}" y="${H - 10}" text-anchor="end">momentum — recua ← 0 → acelera</text>` +
+    `<text class="sc-ax" transform="rotate(-90 14 ${padT + ih / 2})" x="14" y="${padT + ih / 2}" text-anchor="middle">ameaça (0–100)</text>` +
+    `</svg></div>`;
 }
 function rowsMomentum(list) {
   list = (list || []).filter(inSector);
@@ -783,6 +830,8 @@ function render() {
          tile("Ameaça média", a.avg_threat, "0–100"),
          tile("Ameaça regulatória", a.reg_threat, "0–100"),
          tile("Movimentos", a.n_moves, "entrada·oferta·M&A")]) +
+      band("Mapa Competitivo · Ameaça × Momentum", "posição competitiva · ameaça atual × aceleração na janela · inferência",
+        `<div class="panel"><div class="panel__bd panel__bd--flush">${scatterMap(p.momentum)}</div></div>`) +
       band("Situação", "índice de clima · inferência",
         grid("1.4fr .9fr", [panel("Manchetes executivas", null, "maior ameaça · recente", rowsCard(p.headlines)),
                             panel("Sinais emergentes", null, "janela recente", rowsCard(p.emerging))])) +
