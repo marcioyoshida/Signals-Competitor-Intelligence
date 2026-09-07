@@ -271,6 +271,13 @@ class OncaPrototypeStack(Stack):
                 "ONCA_ENTITY_DISCOVERY": "true",
                 "ONCA_ENTITY_DISCOVERY_AUTOCREATE": "true",
                 "ONCA_FIAGRO_MIN_PL": "50000000",
+                # General NER harvest (#14 Stage 3 / #105): propose-only company
+                # candidates from the narrative corpus. Enabled after a live precision
+                # eval (2026-09-07): tightening the trigger to FS-specific sector words
+                # dropped out-of-domain issuer noise, and keeping the "Banco X" prefix in
+                # the surface closed the known-entity leak → 0 false proposals on 30d.
+                # min_mentions defaults to 3 in the handler (conservative).
+                "ONCA_NER_HARVEST": "true",
                 "ONCA_LOOKBACK_DAYS": str(watchlist.get("lookback_days", 7)),
                 "ONCA_COMPETITORS": ",".join(watchlist.get("competitors", [])),
                 # Pix: empty ISPB list = rank all institutions (noisier).

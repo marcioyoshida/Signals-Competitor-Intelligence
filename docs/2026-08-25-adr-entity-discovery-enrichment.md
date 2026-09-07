@@ -160,8 +160,22 @@ once to backfill a table written before the index existed. `resolve_by_name` is 
 Tests: `+test_resolve_by_name_matches_display_not_in_aliases`,
 `+test_resolve_by_name_is_o1_never_scans`, `+test_reindex_display_names_backfills_legacy_table`.
 
-Remaining implementation order: (1) general unresolved-mention harvest across all
-news/DOU (not just FIAGRO keyword); (2) FII sibling of `cvm_fiagro` (see
+**General NER harvest ENABLED (2026-09-07, #105).** `harvest_ner` (industry-agnostic
+company-mention harvest, propose-only) was built but gated off. A live precision eval on the
+30-day corpus (898 narratives) found it low-precision: the generic `S.A./Ltda` suffix trigger
+matched *every* company, so proposals were dominated by non-FS debenture/securitization
+**issuer** names (energy concessionaires, toll roads — underlying assets, not competitors),
+and the sole FS hit ("Master") was a **known-entity leak** — the `Banco` prefix was stripped
+to a bare ambiguous token that no longer resolved back to the registered `banco_master`. Two
+fixes: (a) restrict the suffix trigger to FS-specific sector words (Seguradora/Gestora/
+Pagamentos/… — the Banco/typed cues were already FS-scoped); (b) keep the anchoring type word
+inside the captured surface (`Banco Master`, not `Master`) so knowns resolve and drop, and a
+genuine entrant reads as a clean `Banco X` proposal. Result: **0 false proposals on 30d** (no
+un-registered new FS player in-window). Flipped `ONCA_NER_HARVEST=true` in `infra/app.py`.
+Tests: `+test_harvest_ner_keeps_prefix_drops_known_bank_and_out_of_domain`.
+
+Remaining implementation order: (1) ~~general unresolved-mention harvest~~ **DONE (#105)**;
+(2) FII sibling of `cvm_fiagro` (see
 `2026-08-20-fii-structured-source-plan.md`); (3) CNPJ/Receita profile composition for
 news-only candidates; (4) ingestion follow-up probe ("added but not surfacing");
 (5) CVM DFP/ITR → KB (#7); (6) discovery/curation dashboard tab.

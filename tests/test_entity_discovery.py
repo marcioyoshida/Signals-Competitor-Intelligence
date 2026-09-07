@@ -693,6 +693,35 @@ def test_harvest_ner_extracts_new_companies_drops_known_and_gates_frequency():
     assert not any("levantou" in s or "emitiu" in s or "entrou" in s for s in all1)
 
 
+def test_harvest_ner_keeps_prefix_drops_known_bank_and_out_of_domain():
+    """#105: (a) a KNOWN bank named via 'Banco X' must not leak as a bare 'X' candidate —
+    the prefix stays in the surface so it resolves back; (b) a genuine entrant still
+    surfaces as 'Banco X'; (c) generic-legal-form (S.A.) non-FS names are not harvested."""
+    from src.synth import entity_registry
+    from src.synth.entity_discovery import harvest_ner
+
+    table = _FakeTable()
+    entity_registry.put_entity("banco_master", "Banco Master", ["Banco Master"], table=table)
+    narrs = [
+        {"id": "a", "narrative": "Investigações citam o Banco Master em novo capítulo."},
+        {"id": "b", "narrative": "O Banco Master voltou ao noticiário do mercado."},
+        # a non-FS debenture issuer named only by legal form — must NOT be harvested
+        {"id": "c", "narrative": "A Serra do Facão Energia S.A. emitiu debêntures."},
+        {"id": "d", "narrative": "A Serra do Facão Energia S.A. captou no mercado."},
+    ]
+    surfaces = {c["surface"] for c in harvest_ner(narrs, min_mentions=2, table=table)}
+    assert "Master" not in surfaces and "Banco Master" not in surfaces  # known → dropped
+    assert not any("Energia" in s for s in surfaces)  # non-FS S.A.-only → not a candidate
+
+    # A genuinely-new bank still surfaces, and reads as "Banco X" (not a bare token).
+    narrs2 = narrs + [
+        {"id": "e", "narrative": "O Banco Zignet estreia no varejo digital."},
+        {"id": "f", "narrative": "O Banco Zignet amplia sua base de clientes."},
+    ]
+    s2 = {c["surface"] for c in harvest_ner(narrs2, min_mentions=2, table=table)}
+    assert "Banco Zignet" in s2
+
+
 def test_harvest_ner_skips_generic_and_regulator_heads():
     from src.synth.entity_discovery import harvest_ner
     narrs = [{"id": "x", "narrative": "O Conselho Monetário Nacional e o Banco Central publicaram. "

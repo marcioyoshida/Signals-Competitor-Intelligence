@@ -156,13 +156,25 @@ _BRAND_SINGLE_RE = re.compile(
 # narrative, not just near a seeded keyword.
 _NER_BRAND = (r"[A-Z0-9ÁÉÍÓÚÂÊÔÃÕÇ][\wÁÉÍÓÚÂÊÔÃÕÇáéíóúâêôãõç&]{1,20}"
               r"(?:\s+[A-Z0-9ÁÉÍÓÚÂÊÔÃÕÇ][\wÁÉÍÓÚÂÊÔÃÕÇáéíóúâêôãõç&]{1,20}){0,3}")
-_NER_SECTOR_WORD = (r"S\.?\s?A\.?|Ltda\.?|Seguradora|Seguros|Resseguradora|Securitizadora|"
-                    r"Previd[êe]ncia|Capital|Asset|Gest[ãa]o|Gestora|Administradora|"
-                    r"Pagamentos|Cons[óo]rcio|Financeira|Corretora|Distribuidora|Holding|"
-                    r"Participa[çc][õo]es|Fintech|Cooperativa")
+# FS-SPECIFIC sector words only. The generic legal forms (S.A./Ltda.) were dropped
+# on purpose (#105): they matched *every* company regardless of industry, so the harvest
+# was dominated by non-FS debenture/securitization ISSUER names (energy concessionaires,
+# toll roads) that are underlying assets, not competitors. The Banco/fintech/gestora
+# PREFIX+TYPED cues below are already FS-scoped; a genuine FS entrant reliably carries an
+# FS sector word (or a Banco/typed cue), so precision >> the recall lost on "<name> S.A."-
+# only mentions — the right trade for a human-curated, propose-only review queue.
+_NER_SECTOR_WORD = (r"Seguradora|Seguros|Resseguradora|Securitizadora|"
+                    r"Previd[êe]ncia|Asset|Gest[ãa]o|Gestora|Administradora|"
+                    r"Pagamentos|Cons[óo]rcio|Financeira|Corretora|Distribuidora|"
+                    r"Fintech|Cooperativa\s+de\s+Cr[ée]dito")
 _NER_SUFFIX_RE = re.compile(rf"\b({_NER_BRAND})\s+(?:{_NER_SECTOR_WORD})\b")
+# The anchoring type word (Banco/Gestora/…) stays INSIDE the captured surface (#105):
+# stripping it produced a bare ambiguous token ("Banco Master" → "Master") that no longer
+# resolved back to the registered entity (`banco_master`, whose "Master" is a structured-only
+# ambiguous token) — so a KNOWN bank leaked as a "new" candidate. Keeping the prefix makes the
+# surface resolvable (dropped as known) and, for a genuine entrant, a cleaner "Banco X" proposal.
 _NER_PREFIX_RE = re.compile(
-    rf"\b(?:Banco|Funda[çc][ãa]o|Cooperativa|Seguradora|Securitizadora|Gestora)\s+({_NER_BRAND})")
+    rf"\b((?:Banco|Funda[çc][ãa]o|Cooperativa|Seguradora|Securitizadora|Gestora)\s+{_NER_BRAND})")
 # The article + type word are case-insensitive (scoped `(?i:…)`) but the BRAND capture is
 # case-SENSITIVE, so it stops at the first non-capitalized word ("a fintech Zignet levantou"
 # → "Zignet", not "Zignet levantou uma rodada").
