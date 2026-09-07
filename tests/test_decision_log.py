@@ -114,3 +114,69 @@ def test_link_action_appends_trail(tbl):
     assert stored["actions"][0]["intent"] == "run_integrity_audit"
     assert stored["actions"][0]["outcome"] == "applied"
     assert decision_log.link_action("nope", intent="x", outcome="y", actor="op", table=tbl) is False
+
+
+# --- DEC-5 (#98): decisions under ADR-018 governance (provenance + precedence + rollback) ----
+@pytest.fixture
+def journaled(monkeypatch):
+    """In-memory stand-in for the OncaCurationLog journal, so the decision-governance logic
+    (precedence + rollback reconstruction) is exercised without DynamoDB condition internals."""
+    log: list[dict] = []
+    _n = {"i": 0}
+
+    def _log(entity_id, action, source, detail=None):
+        _n["i"] += 1
+        log.append({"entity_id": str(entity_id), "ts": f"2026-09-06T00:00:{_n['i']:02d}.000",
+                    "action": action, "source": source, "detail": detail or {}})
+
+    def _history(entity_id, *, limit=200):
+        return [dict(h) for h in reversed(log) if h["entity_id"] == str(entity_id)][:limit]
+
+    monkeypatch.setattr(decision_log._er, "_log", _log)
+    monkeypatch.setattr(decision_log._er, "entity_history", _history)
+    return log
+
+
+def test_record_stamps_curated_provenance(tbl, journaled):
+    it = decision_log.record_decision(officer="cso", recommendation="r", verdict="aprovado",
+                                      actor="op", table=tbl)
+    prov = tbl.items[f"DECISION#{it['decision_id']}"]["_prov"]
+    assert prov["outcome"]["source"] == "curated" and prov["board_adopted"]["source"] == "curated"
+
+
+def test_automated_outcome_cannot_demote_curated(tbl, journaled):
+    it = decision_log.record_decision(officer="cso", recommendation="r", verdict="aprovado",
+                                      actor="op", table=tbl)
+    did = it["decision_id"]
+    # human stamps a curated outcome
+    decision_log.set_outcome(did, "favoravel", actor="exec", table=tbl)
+    # an automated (inferred) writer tries to overwrite it → rejected, item unchanged
+    res = decision_log.set_outcome(did, "desfavoravel", actor="bot", source="inferred", table=tbl)
+    assert res["outcome"] == "favoravel"
+    assert any(h["action"] == "blocked" and h["detail"]["field"] == "outcome" for h in journaled)
+
+
+def test_curated_outcome_overwrites_inferred(tbl, journaled):
+    it = decision_log.record_decision(officer="cso", recommendation="r", verdict="aprovado",
+                                      actor="op", source="inferred", table=tbl)
+    did = it["decision_id"]
+    up = decision_log.set_outcome(did, "favoravel", actor="exec", source="curated", table=tbl)
+    assert up["outcome"] == "favoravel" and up["_prov"]["outcome"]["source"] == "curated"
+
+
+def test_rollback_outcome_restores_prior_value(tbl, journaled):
+    it = decision_log.record_decision(officer="cso", recommendation="r", verdict="aprovado",
+                                      actor="op", table=tbl)
+    did = it["decision_id"]
+    decision_log.set_outcome(did, "favoravel", actor="exec", table=tbl)
+    bad = decision_log.set_outcome(did, "desfavoravel", actor="exec", table=tbl)
+    cutoff = [h for h in journaled if h["detail"].get("new") == "desfavoravel"][0]["ts"]
+    assert decision_log.rollback_decision_field(did, "outcome", cutoff, actor="admin", table=tbl) is True
+    assert tbl.items[f"DECISION#{did}"]["outcome"] == "favoravel"
+
+
+def test_rollback_rejects_unsupported_field(tbl, journaled):
+    it = decision_log.record_decision(officer="cso", recommendation="r", verdict="aprovado",
+                                      actor="op", table=tbl)
+    with pytest.raises(ValueError):
+        decision_log.rollback_decision_field(it["decision_id"], "verdict", "2026-01-01", actor="a")

@@ -11,6 +11,10 @@ change, and run the integrity audit. Operates on the live registry + OncaCuratio
     # undo every rollback-supported change an entity got since a timestamp
     python scripts/curation_admin.py revert-since btg --since 2026-08-30T00:00:00 --profile my2027
 
+    # DEC-5 (#98): decision governance — journal + rollback of a reward-signal label
+    python scripts/curation_admin.py decision-history <decision_id> --profile my2027
+    python scripts/curation_admin.py decision-rollback <decision_id> outcome --before <ISO> --profile my2027
+
     # run the continuous integrity audit against the live registry + published feed
     python scripts/curation_admin.py audit --profile my2027
 
@@ -65,6 +69,42 @@ def cmd_revert_since(args) -> int:
     return 0 if reverted else 1
 
 
+def cmd_decision_history(args) -> int:
+    from src.synth import decision_log as dl
+
+    rows = dl.decision_history(args.decision_id, limit=args.limit)
+    if not rows:
+        print(f"(no journal for decision {args.decision_id} — is ONCA_CURATION_LOG_TABLE set?)")
+        return 1
+    for h in rows:  # newest first
+        print(f"  {h.get('ts'):40} {str(h.get('action')):18} {str(h.get('source')):10} "
+              f"{json.dumps(h.get('detail') or {}, ensure_ascii=False)}")
+    return 0
+
+
+def cmd_decision_rollback(args) -> int:
+    from src.synth import decision_log as dl
+
+    try:
+        ok = dl.rollback_decision_field(args.decision_id, args.field, args.before, actor="admin-cli")
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+    if not ok:
+        print(f"no prior value for decision {args.decision_id}.{args.field} before {args.before}")
+        return 1
+    print(f"OK  decision {args.decision_id}.{args.field} rolled back (source=curated)")
+    return 0
+
+
+def cmd_decision_revert_since(args) -> int:
+    from src.synth import decision_log as dl
+
+    reverted = dl.revert_decision_since(args.decision_id, args.since, actor="admin-cli")
+    print(f"reverted fields on decision {args.decision_id}: {reverted or '(none)'}")
+    return 0 if reverted else 1
+
+
 def cmd_audit(args) -> int:
     import boto3
 
@@ -107,6 +147,22 @@ def build_parser() -> argparse.ArgumentParser:
     rs.add_argument("entity_id")
     rs.add_argument("--since", required=True, help="ISO timestamp")
     rs.set_defaults(func=cmd_revert_since)
+
+    dh = sub.add_parser("decision-history", help="print a decision's mutation journal (DEC-5)")
+    dh.add_argument("decision_id")
+    dh.add_argument("--limit", type=int, default=200)
+    dh.set_defaults(func=cmd_decision_history)
+
+    dr = sub.add_parser("decision-rollback", help="restore a decision's outcome/board_adopted before a timestamp")
+    dr.add_argument("decision_id")
+    dr.add_argument("field", choices=("outcome", "board_adopted"))
+    dr.add_argument("--before", required=True, help="ISO timestamp cutoff")
+    dr.set_defaults(func=cmd_decision_rollback)
+
+    drs = sub.add_parser("decision-revert-since", help="undo every governed decision change since a timestamp")
+    drs.add_argument("decision_id")
+    drs.add_argument("--since", required=True, help="ISO timestamp")
+    drs.set_defaults(func=cmd_decision_revert_since)
 
     a = sub.add_parser("audit", help="run the integrity audit against live registry + feed")
     a.set_defaults(func=cmd_audit)
