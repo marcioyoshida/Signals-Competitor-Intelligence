@@ -20,10 +20,21 @@ def test_industry_maps_to_representatives(monkeypatch):
     assert [x["symbol"] for x in body["quotes"]] == q.INDUSTRY_TICKERS["agri-funds"]
 
 
-def test_unknown_industry_falls_back_to_default(monkeypatch):
+def test_named_industry_without_reps_returns_empty_with_note(monkeypatch):
+    # A named sector with no curated B3 reps must NOT fall back to broad-market defaults
+    # (that would misrepresent unrelated names as sector quotes) — empty + explicit note.
     monkeypatch.setattr(q, "_quote", _stub_quote)
     monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
     body = json.loads(q.lambda_handler({"queryStringParameters": {"industry": "consorcio"}}, None)["body"])
+    assert body["quotes"] == []
+    assert body["note"]
+
+
+def test_no_industry_uses_broad_market(monkeypatch):
+    # The no-sector ("all") view has nothing narrower implied, so the broad set is honest.
+    monkeypatch.setattr(q, "_quote", _stub_quote)
+    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    body = json.loads(q.lambda_handler({"queryStringParameters": {}}, None)["body"])
     assert [x["symbol"] for x in body["quotes"]] == q.DEFAULT_TICKERS
 
 

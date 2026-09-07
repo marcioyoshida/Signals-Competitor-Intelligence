@@ -82,6 +82,13 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         if headers.get("x-onca-origin") != secret:
             return _resp(403, {"error": "forbidden"})
     industry = _qs(event, "industry")
+    # A NAMED sector with no listed reps returns empty + an explicit note rather than
+    # broad-market defaults — showing ITUB4/VALE3/PETR4 under "Betting"/"Consórcio" would
+    # misrepresent unrelated names as sector quotes. The broad set is only the honest pulse
+    # for the no-sector ("all") view, where nothing narrower is implied.
+    if industry and industry not in INDUSTRY_TICKERS:
+        return _resp(200, {"industry": industry, "quotes": [],
+                           "note": "Sem representantes listados na B3 neste setor."})
     tickers = INDUSTRY_TICKERS.get(industry) or DEFAULT_TICKERS
     quotes = [q for q in (_quote(t) for t in tickers) if q]
     return _resp(200, {"industry": industry, "quotes": quotes})

@@ -532,8 +532,9 @@ async function loadQuotes() {
     const ind = SECTOR && SECTOR !== "__all__" ? SECTOR : "";
     const r = await fetch(`/api/quotes${ind ? "?industry=" + encodeURIComponent(ind) : ""}`, { cache: "no-store" });
     if (!r.ok) { el.innerHTML = U.empty("Cotações indisponíveis.", "", "○"); return; }
-    const rows = (await r.json()).quotes || [];
-    if (!rows.length) { el.innerHTML = U.empty("Sem cotações no escopo.", "", "○"); return; }
+    const payload = await r.json();
+    const rows = payload.quotes || [];
+    if (!rows.length) { el.innerHTML = U.empty(payload.note || "Sem cotações no escopo.", "", "○"); return; }
     el.innerHTML = rows.map(x => {
       const up = (x.change ?? 0) >= 0, ch = x.change == null ? "" : `${up ? "+" : ""}${Number(x.change).toFixed(2)}%`;
       return `<span class="b3q"><span class="sym">${U.esc(x.symbol)}</span>` +
