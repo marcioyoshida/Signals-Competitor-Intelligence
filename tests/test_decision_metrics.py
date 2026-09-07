@@ -125,3 +125,28 @@ def test_precedent_reranking_favors_recent_favorable():
                   "content": {"text": "recent favorable"}}
     ranked = agent_ask._rank_precedents([stale_close, fresh_good], top=2)
     assert ranked[0] is fresh_good  # recent + favorable beats a closer-but-stale-neutral match
+
+
+# --- DEC-5: read-only decision-store governance audit ----------------------------
+def test_audit_decisions_stale_and_contradictory():
+    now = "2026-09-06T00:00:00+00:00"
+    ds = [
+        {"decision_id": "s", "officer": "cco", "outcome": "pendente", "verdict": "aprovado",
+         "created_at": "2026-07-01T00:00:00+00:00"},                       # ~67d pendente → stale (>14d)
+        {"context_id": "ctx1", "verdict": "aprovado", "outcome": "favoravel"},
+        {"context_id": "ctx1", "verdict": "rejeitado", "outcome": "neutro"},  # contradictory
+        {"decision_id": "ok", "outcome": "pendente", "verdict": "aprovado",
+         "created_at": now},                                               # fresh → not stale
+    ]
+    f = dm.audit_decisions(ds, now=now, review_days=7)
+    kinds = [x["kind"] for x in f]
+    assert f[0]["kind"] == "decision_contradictory"  # high first
+    assert "decision_stale_pending" in kinds
+    assert not any(x.get("decision_id") == "ok" for x in f)  # fresh pending not flagged
+
+
+def test_compute_metrics_carries_decision_integrity():
+    ds = [{"context_id": "c", "verdict": "aprovado", "outcome": "favoravel"},
+          {"context_id": "c", "verdict": "rejeitado", "outcome": "neutro"}]
+    m = dm.compute_metrics(ds)
+    assert any(x["kind"] == "decision_contradictory" for x in m["decision_integrity"])

@@ -93,6 +93,44 @@ def outcomes_due(decisions: list[dict[str, Any]], *, min_age_days: int = 7,
     return out[:cap]
 
 
+def audit_decisions(decisions: list[dict[str, Any]], *, now: str | None = None,
+                    review_days: int = 7) -> list[dict[str, Any]]:
+    """DEC-5 (#98): read-only governance audit over the decision store (the ADR-018 integrity
+    pattern, applied to decisions). Surfaces anomalies that erode decision trust: STALE pending
+    decisions (the favorable-rate reward signal is being starved) and CONTRADICTORY verdicts on
+    the same context. Findings, most-severe first. (The heavier write-precedence + rollback half
+    of ADR-018-for-decisions remains a follow-on on #98.)"""
+    import datetime as _dt
+    try:
+        ref = (_dt.datetime.fromisoformat(str(now).replace("Z", "+00:00")) if now
+               else _dt.datetime.now(_dt.timezone.utc))
+    except Exception:
+        ref = _dt.datetime.now(_dt.timezone.utc)
+    findings: list[dict[str, Any]] = []
+    for d in decisions:
+        if (d.get("outcome") or "pendente") != "pendente":
+            continue
+        age = _hours_between(d.get("created_at"), ref.isoformat())
+        if age is not None and age / 24.0 >= 2 * review_days:
+            findings.append({"kind": "decision_stale_pending", "severity": "med",
+                             "decision_id": d.get("decision_id"), "officer": (d.get("officer") or "").lower() or None,
+                             "summary": f"Decisão pendente há {int(age / 24)}d sem desfecho — "
+                                        "o sinal de recompensa não acumula."})
+    by_ctx: dict[str, set] = {}
+    for d in decisions:
+        ctx = d.get("context_id")
+        if ctx:
+            by_ctx.setdefault(ctx, set()).add(d.get("verdict"))
+    for ctx, verds in by_ctx.items():
+        if {"aprovado", "rejeitado"} <= verds:
+            findings.append({"kind": "decision_contradictory", "severity": "high", "context_id": ctx,
+                             "summary": f"Contexto {ctx} decidido de formas conflitantes "
+                                        "(aprovado e rejeitado)."})
+    order = {"high": 0, "med": 1, "low": 2}
+    findings.sort(key=lambda f: order.get(f["severity"], 3))
+    return findings
+
+
 def compute_metrics(decisions: list[dict[str, Any]],
                     engagement: dict[str, Any] | None = None,
                     tdr_baseline_hours: float | None = None,
@@ -144,6 +182,7 @@ def compute_metrics(decisions: list[dict[str, Any]],
         **_tdr(decisions, tdr_baseline_hours),
         "outcomes_due": outcomes_due(decisions, min_age_days=outcome_review_days),
         "outcome_review_days": outcome_review_days,
+        "decision_integrity": audit_decisions(decisions, review_days=outcome_review_days),
         "by_officer": by_officer,
         "by_industry": by_industry,
     }

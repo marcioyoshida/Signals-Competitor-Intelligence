@@ -596,7 +596,11 @@ function metricsBand() {
     ? `<div style="padding:2px var(--s2) 0"><span class="hd-note">Registrar baseline — tempo médio de decisão ANTES do Onça (h): </span>
         <input id="tdrBase" type="number" min="1" step="1" style="width:76px"> <button id="tdrSet">Registrar</button></div>`
     : "";
-  const note = `<p class="hd-note" style="padding:2px var(--s2) 0;line-height:1.4">${tdrStr}${U.esc(m.ets_note || "")}<br>${U.esc(m.tdr_note || "")}</p>${baseCtl}`;
+  // DEC-5: decision-store governance anomalies (stale-pending / contradictory), read-only audit.
+  const di = (m.decision_integrity || []);
+  const diBlock = di.length ? `<div style="padding:2px var(--s2) var(--s2)">` + di.slice(0, 6).map(f =>
+    `<div class="hd-note"><span class="badge badge--${f.severity === "high" ? "high" : "warn"}">${U.esc(f.kind)}</span> ${U.esc(f.summary)}</div>`).join("") + `</div>` : "";
+  const note = `<p class="hd-note" style="padding:2px var(--s2) 0;line-height:1.4">${tdrStr}${U.esc(m.ets_note || "")}<br>${U.esc(m.tdr_note || "")}</p>${baseCtl}${diBlock}`;
   // §E intelligence: which entities/sectors draw executive attention (from the engagement rollup).
   const te = eng.top_entities || [], tsec = eng.top_sectors || [];
   const interestPanel = (te.length || tsec.length)
