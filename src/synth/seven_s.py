@@ -81,7 +81,8 @@ def _active_swot(belief: dict[str, Any]) -> list[dict[str, Any]]:
             if b.get("status") == "active" and b.get("dimension") in swot_store.DIMENSIONS]
 
 
-def _collect_evidence_ids(narratives: list[dict[str, Any]], *, max_claims: int = 12) -> list[dict[str, Any]]:
+def _collect_evidence_ids(narratives: list[dict[str, Any]], *, max_claims: int | None = None) -> list[dict[str, Any]]:
+    max_claims = framework_common.evidence_cap() if max_claims is None else max_claims
     seen: set[str] = set()
     out: list[dict[str, Any]] = []
     for n in sorted(narratives, key=lambda x: _score(x.get("threat_score")), reverse=True):

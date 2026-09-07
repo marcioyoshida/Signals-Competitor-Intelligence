@@ -36,6 +36,18 @@ def _gate_enabled() -> bool:
     return os.environ.get("ONCA_FRAMEWORK_SIGNAL_GATE", "1") not in ("0", "false", "False")
 
 
+def evidence_cap(default: int = 20) -> int:
+    """SURF-9 (#89): the per-entity evidence budget a framework hands the LLM drafter. Raised from
+    the original 12 to give each assessment more grounding — the first, mechanical lever on the
+    'frameworks read thin' problem (more evidence per bullet ⇒ more nuance). Env-overridable via
+    ``ONCA_FRAMEWORK_EVIDENCE_CAP``. NB the deeper levers (financial-feature prompt injection +
+    multi-pass reasoning) require live LLM eval and are tracked separately on #89."""
+    try:
+        return max(1, int(os.environ.get("ONCA_FRAMEWORK_EVIDENCE_CAP", default)))
+    except (TypeError, ValueError):
+        return default
+
+
 def on_signal(ev: dict[str, Any], signal: Signal) -> bool:
     """True iff evidence ``ev`` matches ``signal`` (its axis in axis_set OR one of its
     lenses in lens_set). An unconstrained signal (both sets empty) always matches."""
