@@ -53,3 +53,58 @@ def test_audit_sorts_by_severity_and_counts():
     rep = integrity.audit({"feed": []}, ents)
     assert rep["total"] == 1 and rep["counts"]["institution_leaf_pollution"] == 1
     assert rep["findings"][0]["severity"] == "high"
+
+
+# --- #106 (#14 Stage 5): ingestion follow-up probe -------------------------------
+def _iso_days_ago(n):
+    import datetime as dt
+    return (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=n)).isoformat(timespec="seconds")
+
+
+def test_surfacing_structural_no_path():
+    """news off + no CNPJ + no filing term ⇒ an entity that can never surface."""
+    ents = [
+        {"entity_id": "ghost", "confidence": "structured", "news_search": False,
+         "cnpj_roots": [], "industries": ["insurance"]},
+        # has a CNPJ path → not structural
+        {"entity_id": "ok", "confidence": "structured", "news_search": False,
+         "cnpj_roots": ["12345678"], "industries": ["insurance"]},
+    ]
+    finds = integrity.audit_surfacing({"feed": [], "entities": []}, ents)
+    kinds = {f["entity_id"]: f["kind"] for f in finds}
+    assert kinds.get("ghost") == "entity_no_surface_path"
+    assert "ok" not in kinds  # a CNPJ join is a viable path
+
+
+def test_surfacing_coverage_gap_cohort_and_fund_exclusion():
+    """A big aged non-fund cohort that never surfaces → ONE industry coverage-gap finding;
+    a quiet fund cohort is not flagged; too-new entities don't count."""
+    ents = [{"entity_id": f"ins{i}", "confidence": "structured", "industries": ["insurance"],
+             "cnpj_roots": [str(i)], "created_at": _iso_days_ago(40)} for i in range(10)]
+    ents += [{"entity_id": f"fii{i}", "confidence": "cnpj", "industries": ["real-estate-funds"],
+              "cnpj_roots": [str(100 + i)], "created_at": _iso_days_ago(40)} for i in range(10)]
+    ents += [{"entity_id": f"new{i}", "confidence": "structured", "industries": ["insurance"],
+              "cnpj_roots": [str(200 + i)], "created_at": _iso_days_ago(3)} for i in range(5)]
+    finds = integrity.audit_surfacing({"feed": [], "entities": []}, ents)
+    gaps = [f for f in finds if f["kind"] == "industry_not_surfacing"]
+    assert len(gaps) == 1 and gaps[0]["entity_id"] == "industry:insurance"
+    assert gaps[0]["severity"] == "med"  # 10/10 quiet
+
+
+def test_surfacing_uses_durable_created_at_over_prov():
+    """created_at (set-once) wins over provenance set_at (which moves on re-put)."""
+    e = {"entity_id": "x", "confidence": "cnpj", "created_at": _iso_days_ago(40),
+         "_prov": {"industries": {"set_at": _iso_days_ago(1)}}}  # freshly re-stamped
+    import datetime as dt
+    got = integrity._created_at(e)
+    assert (dt.datetime.now(dt.timezone.utc) - got).days >= 39
+
+
+def test_surfacing_excludes_surfaced_and_curated():
+    ents = [{"entity_id": f"seen{i}", "confidence": "cnpj", "industries": ["banking"],
+             "cnpj_roots": [str(i)], "created_at": _iso_days_ago(40)} for i in range(10)]
+    ents.append({"entity_id": "curated", "confidence": "curated", "news_search": False,
+                 "cnpj_roots": [], "industries": ["banking"]})  # curated → excluded entirely
+    feed = {"feed": [{"entity": f"seen{i}", "entities": []} for i in range(10)], "entities": []}
+    finds = integrity.audit_surfacing(feed, ents)
+    assert finds == []  # all seen surfaced; curated is not auto-discovered

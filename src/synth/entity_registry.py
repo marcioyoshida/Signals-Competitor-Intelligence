@@ -271,11 +271,11 @@ def put_entity(
     # ("XP" FIAGRO fund colliding onto the curated `xp` institution): identity-clobbering is
     # blocked at the single writer, not just in discover_fiagro. Delegating setters pass an
     # explicit `prov` (assign_ticker) and are exempt — they preserve the protected fields.
+    _prior = get_entity(entity_id, table=t)  # for the protected check + set-once created_at (#106)
     if prov is None and _is_automated(source):
-        _existing = get_entity(entity_id, table=t)
-        if _existing is not None and _is_protected(_existing, "industries"):
+        if _prior is not None and _is_protected(_prior, "industries"):
             _log(entity_id, "blocked", source, {"field": "put", "reason": "protected-entity-overwrite"})
-            return _existing
+            return _prior
     raw = [str(a) for a in (alias_forms if alias_forms is not None else aliases) if str(a).strip()]
     norm = sorted(
         {normalize_alias(a) for a in aliases if str(a).strip() and not str(a).upper().startswith("TICKER:")}
@@ -293,6 +293,9 @@ def put_entity(
         "confidence": confidence,
         "active": True,
         "canonical_id": canonical_id or entity_id,
+        # #106: durable set-once creation time (preserved across re-puts/enrichment) so the
+        # ingestion follow-up probe can age an entity by CREATION, not last modification.
+        "created_at": (_prior or {}).get("created_at") or _now_iso(),
     }
     inds = sorted({str(i).strip().lower() for i in (industries or ()) if str(i).strip()})
     if inds:
@@ -868,6 +871,26 @@ def reindex_display_names(table: Any | None = None) -> int:
     for na, ids in by_name.items():
         t.put_item(Item={"pk": f"NAME#{na}", "type": "name", "entity_ids": ids})
     return len(by_name)
+
+
+def backfill_created_at(table: Any | None = None) -> int:
+    """#106: stamp a durable ``created_at`` on entities written before that field existed,
+    using the earliest per-field provenance ``set_at`` as the best creation estimate (else
+    now). Set-once — a later put_entity preserves it. Returns the number of entities stamped.
+    Run once so the ingestion follow-up probe ages entities correctly instead of resetting
+    them all to 'now' on their next re-put."""
+    t = _table(table)
+    n = 0
+    for e in _scan_type(t, "entity"):
+        if e.get("created_at"):
+            continue
+        stamps = [(v or {}).get("set_at") for v in (e.get("_prov") or {}).values()
+                  if isinstance(v, dict)]
+        stamps = [s for s in stamps if s]
+        e["created_at"] = min(stamps) if stamps else _now_iso()
+        t.put_item(Item=e)
+        n += 1
+    return n
 
 
 def name_owned_by_other(

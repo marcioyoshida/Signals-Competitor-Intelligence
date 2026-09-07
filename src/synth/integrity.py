@@ -7,6 +7,7 @@ that Phase 2 precedence + provenance exist. Read-only — never mutates.
 """
 from __future__ import annotations
 
+import datetime as _dt
 import re
 import unicodedata
 from typing import Any
@@ -103,8 +104,97 @@ def audit_feed(feed: dict[str, Any], entities: list[dict[str, Any]]) -> list[dic
     return out
 
 
+# #106 (#14 Stage 5) — ingestion follow-up probe: an entity that was added but is not
+# surfacing. Two classes: STRUCTURAL (no viable path to ever surface — a config bug) and
+# STALE (has a path but produced nothing in the current feed window after M days). Radar
+# `registry`/`identified` = the auto-discovered entities (confidence structured/cnpj); curated
+# majors are excluded (no provenance stamp / always surface).
+_AUTO_CONF = frozenset({"structured", "cnpj"})
+_COHORT_MIN = 8          # a cohort must have this many aged entities before a gap is meaningful
+_COHORT_QUIET_FRAC = 0.8  # …and this fraction not surfacing to call it a coverage gap
+
+
+def _created_at(e: dict[str, Any]) -> _dt.datetime | None:
+    """Creation time: the durable set-once ``created_at`` (#106), falling back to the
+    earliest provenance ``set_at`` for entities written before that field existed."""
+    raw = e.get("created_at")
+    if not raw:
+        stamps = [(v or {}).get("set_at") for v in (e.get("_prov") or {}).values() if isinstance(v, dict)]
+        stamps = [s for s in stamps if s]
+        raw = min(stamps) if stamps else None
+    if not raw:
+        return None
+    try:
+        return _dt.datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except ValueError:  # pragma: no cover - defensive
+        return None
+
+
+def audit_surfacing(
+    feed: dict[str, Any], entities: list[dict[str, Any]], *,
+    now: _dt.datetime | None = None, min_age_days: int = 21,
+) -> list[dict[str, Any]]:
+    """#106 (#14 Stage 5) — ingestion follow-up probe.
+
+    STRUCTURAL (per-entity): an auto-discovered entity with no viable path to surface
+    (news off + no CNPJ + no filing term) — a config bug, always flagged.
+    COVERAGE GAP (per-industry cohort): when most aged auto-discovered entities of an
+    industry never surface, that is one gap ("roster added, no per-entity signal source"),
+    emitted ONCE per industry rather than as hundreds of per-entity findings.
+    """
+    now = now or _dt.datetime.now(_dt.timezone.utc)
+    surfaced: set[str] = set()
+    for c in (feed.get("feed") or []):
+        if c.get("entity"):
+            surfaced.add(c["entity"])
+        surfaced.update(c.get("entities") or [])
+    for r in (feed.get("entities") or []):
+        if r.get("entity"):
+            surfaced.add(r["entity"])
+
+    out: list[dict[str, Any]] = []
+    # industry → [aged_total, aged_quiet]
+    cohort: dict[str, list[int]] = {}
+    for e in entities:
+        eid = e.get("entity_id")
+        if not eid or str(e.get("confidence") or "") not in _AUTO_CONF:
+            continue  # only auto-discovered entities (curated majors excluded)
+        seen = eid in surfaced
+        # STRUCTURAL — no path to surface at all.
+        if (not seen and e.get("news_search") is False
+                and not (e.get("cnpj_roots") or [])
+                and not e.get("fatos_term")):
+            out.append(_finding(
+                "entity_no_surface_path", "med",
+                f"{eid}: added but has no path to surface (news off, no CNPJ, no filing term)",
+                entity_id=eid, safe_fix=True))
+            continue
+        # COVERAGE-GAP cohorts — count aged non-fund entities by industry (funds excluded:
+        # silence is normal for a fund until a PL/cotista move).
+        inds = set(e.get("industries") or [])
+        if inds and not (inds - _LEAF):
+            continue
+        created = _created_at(e)
+        if created is None or (now - created).days < min_age_days:
+            continue
+        for ind in (inds or {"(unclassified)"}):
+            c = cohort.setdefault(ind, [0, 0])
+            c[0] += 1
+            if not seen:
+                c[1] += 1
+
+    for ind, (total, quiet) in sorted(cohort.items()):
+        if total >= _COHORT_MIN and quiet >= _COHORT_QUIET_FRAC * total:
+            out.append(_finding(
+                "industry_not_surfacing", "med" if quiet == total else "low",
+                f"industry {ind}: {quiet}/{total} registry entities ({min_age_days}d+ old) never "
+                f"surface — likely no per-entity signal source (coverage gap)",
+                entity_id=f"industry:{ind}"))
+    return out
+
+
 def audit(feed: dict[str, Any], entities: list[dict[str, Any]]) -> dict[str, Any]:
-    findings = audit_registry(entities) + audit_feed(feed, entities)
+    findings = audit_registry(entities) + audit_feed(feed, entities) + audit_surfacing(feed, entities)
     order = {"high": 0, "med": 1, "low": 2}
     findings.sort(key=lambda f: order.get(f["severity"], 3))
     counts: dict[str, int] = {}

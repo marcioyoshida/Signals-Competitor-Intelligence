@@ -506,6 +506,26 @@ def test_reindex_display_names_backfills_legacy_table():
     assert sorted(er.resolve_by_name("Shared Name", table=table)) == ["a", "b"]
 
 
+def test_put_entity_created_at_is_set_once_and_backfill():
+    """#106: created_at is stamped on create and preserved across re-puts; the backfill
+    stamps legacy entities from their earliest provenance set_at."""
+    from src.synth import entity_registry as er
+
+    table = _FakeTable()
+    er.put_entity("acme", "Acme", ["ACME"], industries=["banking"], source="discovery", table=table)
+    born = table.items["ENT#acme"]["created_at"]
+    assert born
+    # a later enrich re-put must NOT move created_at
+    er.set_industries("acme", ["banking", "fintech"], source="enrich", table=table)
+    assert table.items["ENT#acme"]["created_at"] == born
+
+    # legacy entity (no created_at) → backfilled from earliest prov set_at
+    table.put_item({"pk": "ENT#leg", "type": "entity", "entity_id": "leg",
+                    "_prov": {"industries": {"set_at": "2026-01-02T00:00:00+00:00"}}})
+    assert er.backfill_created_at(table=table) >= 1
+    assert table.items["ENT#leg"]["created_at"] == "2026-01-02T00:00:00+00:00"
+
+
 def test_harvest_generalizes_equity_ticker_and_single_brand():
     """Non-fund industry: equity ticker (XXXX4) + single-token brand surface."""
     table = _FakeTable()

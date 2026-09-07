@@ -113,6 +113,14 @@ def cmd_reindex_names(args) -> int:
     return 0
 
 
+def cmd_backfill_created_at(args) -> int:
+    from src.synth import entity_registry as er
+
+    n = er.backfill_created_at()
+    print(f"stamped created_at on {n} entity(ies)")
+    return 0
+
+
 def cmd_audit(args) -> int:
     import boto3
 
@@ -174,6 +182,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     rn = sub.add_parser("reindex-names", help="rebuild the NAME# display-name index (#14)")
     rn.set_defaults(func=cmd_reindex_names)
+
+    bc = sub.add_parser("backfill-created-at", help="stamp set-once created_at on entities (#106)")
+    bc.set_defaults(func=cmd_backfill_created_at)
 
     a = sub.add_parser("audit", help="run the integrity audit against live registry + feed")
     a.set_defaults(func=cmd_audit)
