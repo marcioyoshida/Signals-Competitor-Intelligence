@@ -146,6 +146,7 @@ def _draft_prompt(
     industries: list[str],
     swot_bullets: list[dict[str, Any]],
     evidence: list[dict[str, Any]],
+    financial_ctx: str | None = None,
 ) -> str:
     lines = [
         f"Competitor: {label}",
@@ -155,6 +156,10 @@ def _draft_prompt(
     ]
     for i, e in enumerate(evidence):
         lines.append(f"[{i}] ({e['date']}, {e.get('axis','')}) {e['claim']}")
+    if financial_ctx:  # SURF-9 (#89): ground the analysis in real financials
+        lines += ["", financial_ctx,
+                  "Use o contexto financeiro acima para enriquecer as avaliações, "
+                  "mas cada avaliação ainda DEVE citar ao menos um índice de evidência das notícias."]
     lines += [
         "",
         "Classify this competitor's observable strategic moves using the Ansoff Matrix.",
@@ -208,9 +213,10 @@ def _parse_draft(raw: str | None, n_evidence: int) -> list[dict[str, Any]]:
 
 def llm_draft(
     label: str, industries: list[str],
-    swot_bullets: list[dict[str, Any]], evidence: list[dict[str, Any]]
+    swot_bullets: list[dict[str, Any]], evidence: list[dict[str, Any]],
+    financial_ctx: str | None = None,
 ) -> list[dict[str, Any]]:
-    prompt = _draft_prompt(label, industries, swot_bullets, evidence)
+    prompt = _draft_prompt(label, industries, swot_bullets, evidence, financial_ctx=financial_ctx)
     raw = converse(
         prompt,
         model_id=FRAMEWORK_MODEL,
@@ -227,6 +233,7 @@ def classify_moves(
     *,
     run_date: str,
     draft_fn: DraftFn,
+    financial_ctx_by_ent: dict[str, str] | None = None,
     already_proposed: frozenset[str] = frozenset(),
     max_entities: int = MAX_ENTITIES,
     min_conf: float = MIN_CONF,
@@ -252,7 +259,11 @@ def classify_moves(
         evidence = _collect_evidence_ids(by_ent.get(ent, []))
         industries = industries_map.get(ent, [])
 
-        moves = draft_fn(label, industries, swot_bullets, evidence)
+        _fctx = (financial_ctx_by_ent or {}).get(ent)
+
+        moves = (draft_fn(label, industries, swot_bullets, evidence, financial_ctx=_fctx)
+
+              if _fctx else draft_fn(label, industries, swot_bullets, evidence))
         for mv in moves:
             if mv["confidence"] < min_conf:
                 continue
@@ -340,6 +351,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         beliefs, narratives, industries_map,
         run_date=run_date, draft_fn=llm_draft,
         already_proposed=already,
+        financial_ctx_by_ent=framework_common.financial_context_map(digests_bucket, s3=s3),
     )
 
     counts = {"proposals": 0, "proposals_new": 0, "proposals_pending": 0}

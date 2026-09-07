@@ -48,6 +48,61 @@ def evidence_cap(default: int = 20) -> int:
         return default
 
 
+def financial_context_map(bucket: str | None = None, *, s3: Any | None = None) -> dict[str, str]:
+    """SURF-9 (#89): per-entity compact financial context (IF.data / Pilar 3 / FinBERT) to ground
+    the framework drafters — so Porter/BCG/Ansoff/… reason over REAL financials (ROE, Basileia,
+    LCR/NSFR, tone), not only news claims. Best-effort: returns {} if the bucket/stores are
+    unavailable (frameworks then draft exactly as before — non-breaking). This is grounding
+    CONTEXT, labeled inference; the drafter still cites narrative-evidence indices."""
+    import os
+
+    bucket = bucket or os.environ.get("ONCA_DIGESTS_BUCKET")
+    if not bucket:
+        return {}
+    fun: dict = {}
+    snd: dict = {}
+    km: dict = {}
+    tone: dict = {}
+    try:
+        from src.ingest import bcb_fundamentals, bcb_km1, bcb_soundness
+        from src.synth import financial_tone
+    except Exception:  # pragma: no cover - optional deps
+        return {}
+    for load, proj, store in (
+        (lambda: bcb_fundamentals.load_index(bucket, s3=s3), bcb_fundamentals.fundamentals_by_entity, "fun"),
+        (lambda: bcb_soundness.load_index(bucket, s3=s3), bcb_soundness.soundness_by_entity, "snd"),
+        (lambda: bcb_km1.load_index(bucket, s3=s3), bcb_km1.km1_by_entity, "km"),
+        (lambda: financial_tone.load_index(bucket, s3=s3), financial_tone.tone_by_entity, "tone"),
+    ):
+        try:
+            locals()[store].update(proj(load()))
+        except Exception:  # pragma: no cover - each store best-effort
+            pass
+    out: dict[str, str] = {}
+    for e in set(fun) | set(snd) | set(km) | set(tone):
+        parts: list[str] = []
+        f, s, k, t = fun.get(e) or {}, snd.get(e) or {}, km.get(e) or {}, tone.get(e) or {}
+        if f.get("roe_pct") is not None:
+            parts.append(f"ROE {f['roe_pct']}%")
+        if f.get("roa_pct") is not None:
+            parts.append(f"ROA {f['roa_pct']}%")
+        if f.get("leverage") is not None:
+            parts.append(f"alavancagem {f['leverage']}x")
+        if f.get("lucro_share_pct") is not None:
+            parts.append(f"{f['lucro_share_pct']}% do lucro do setor")
+        if s.get("indice_basileia") is not None:
+            parts.append(f"Basileia {s['indice_basileia']}%" + (f" ({s['band']})" if s.get("band") else ""))
+        if k.get("lcr_pct") is not None:
+            parts.append(f"LCR {k['lcr_pct']}%")
+        if k.get("nsfr_pct") is not None:
+            parts.append(f"NSFR {k['nsfr_pct']}%")
+        if t.get("financial_tone_net") is not None:
+            parts.append(f"tom financeiro {t['financial_tone_net']:+.2f}")
+        if parts:
+            out[e] = "Contexto financeiro (IF.data/Pilar 3/FinBERT, inferência): " + ", ".join(parts) + "."
+    return out
+
+
 def on_signal(ev: dict[str, Any], signal: Signal) -> bool:
     """True iff evidence ``ev`` matches ``signal`` (its axis in axis_set OR one of its
     lenses in lens_set). An unconstrained signal (both sets empty) always matches."""
