@@ -48,6 +48,40 @@ def evidence_cap(default: int = 20) -> int:
         return default
 
 
+def multipass_enabled() -> bool:
+    """SURF-9 (#89): whether the frameworks run the self-critique/refine pass. On by default;
+    disable wholesale with ``ONCA_FRAMEWORK_MULTIPASS=0`` (reversibility)."""
+    import os
+
+    return os.environ.get("ONCA_FRAMEWORK_MULTIPASS", "1") not in ("0", "false", "False")
+
+
+_CRITIQUE = (
+    "Revise criticamente o rascunho JSON acima como um analista sênior. Para CADA avaliação: "
+    "remova as que não têm evidência clara ou são genéricas/vagas; refine a redação para ser "
+    "específica, concreta e acionável (evite obviedades); garanta que cada avaliação cite ao menos "
+    "um índice de evidência VÁLIDO da lista acima. Não invente fatos além das evidências/contexto "
+    "dados. Mantenha EXATAMENTE o mesmo formato JSON (mesmas chaves). Retorne APENAS o JSON "
+    "minificado revisado, sem prosa nem markdown."
+)
+
+
+def refine_draft(*, system: str, base_prompt: str, draft: str,
+                 model_id: str | None = None, max_tokens: int = 1000) -> str:
+    """SURF-9 (#89) multi-pass — a self-critique/refine pass over a framework's first draft: the
+    drafter re-reads its own JSON against the evidence + rules and returns a sharper version
+    (drops weak/vague/uncited assessments, tightens wording). Schema-agnostic (it preserves the
+    JSON shape), so it serves all frameworks. Returns the revised raw, or the ORIGINAL draft on any
+    failure/empty — never worse than a single pass."""
+    if not (draft or "").strip():
+        return draft
+    from src.synth.bedrock_llm import converse
+
+    prompt = f"{base_prompt}\n\nSeu rascunho:\n{draft.strip()}\n\n{_CRITIQUE}"
+    revised = converse(prompt, model_id=model_id, system=system, max_tokens=max_tokens)
+    return revised or draft
+
+
 def financial_context_map(bucket: str | None = None, *, s3: Any | None = None) -> dict[str, str]:
     """SURF-9 (#89): per-entity compact financial context (IF.data / Pilar 3 / FinBERT) to ground
     the framework drafters — so Porter/BCG/Ansoff/… reason over REAL financials (ROE, Basileia,

@@ -283,6 +283,9 @@ def llm_draft(
         system=_DRAFT_SYSTEM,
         max_tokens=900,
     )
+    if raw and framework_common.multipass_enabled():  # SURF-9 (#89): self-critique/refine pass
+        raw = framework_common.refine_draft(system=_DRAFT_SYSTEM, base_prompt=prompt,
+                                            draft=raw, model_id=FRAMEWORK_MODEL)
     return _parse_draft(raw, len(evidence))
 
 
