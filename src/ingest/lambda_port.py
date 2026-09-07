@@ -823,6 +823,34 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as exc:  # pragma: no cover - best-effort, never blocks ingest
             print(f"Warning: regulated roster promote skipped: {exc}")
 
+    # #104 (#14 Stage 2) — Receita CNPJ bulk → FS-CNAE candidate proposals. Gated OFF and
+    # only runs when a PRE-STAGED partition is configured (ONCA_RECEITA_BULK_KEY in the
+    # digests bucket, or ONCA_RECEITA_BULK_URL): the full ~60M-row dump is not feasible to
+    # fetch/scan inside this Lambda, so an Athena/Glue step stages a CNAE-filtered CSV first.
+    # Propose-only (ADR 011 §4): CNPJ-only candidates go to review, never auto-create.
+    _rb_key = os.environ.get("ONCA_RECEITA_BULK_KEY")
+    _rb_url = os.environ.get("ONCA_RECEITA_BULK_URL")
+    if os.environ.get("ONCA_INGEST_RECEITA_BULK", "false").lower() in ("1", "true", "yes") \
+            and (_rb_key or _rb_url) and os.environ.get("ONCA_ENTITIES_TABLE"):
+        try:
+            with _source_budget("Receita bulk CNAE", deadline, per_source):
+                from src.ingest import receita_bulk
+
+                if _rb_key:
+                    import boto3
+                    _body = boto3.client("s3").get_object(
+                        Bucket=os.environ["ONCA_DIGESTS_BUCKET"], Key=_rb_key)["Body"].read()
+                    _text = _body.decode("latin-1")
+                else:
+                    _text = requests.get(_rb_url, timeout=120).content.decode("latin-1")
+                _cands = receita_bulk.parse_estabelecimentos(_text)
+                _rep = receita_bulk.propose_candidates(
+                    _cands, max_propose=int(os.environ.get("ONCA_RECEITA_BULK_MAX_PROPOSE", "200")))
+                print(f"Receita bulk CNAE: candidates={len(_cands)} already={_rep['already']} "
+                      f"proposed={len(_rep['proposed'])} no_name={_rep['no_name']}")
+        except Exception as exc:  # pragma: no cover - best-effort, never blocks ingest
+            print(f"Warning: Receita bulk CNAE skipped: {exc}")
+
     # Entity discovery — structured CVM FIAGRO universe → registry (ADR 011 / #14).
     # High-precision path: every row has a CNPJ. Auto-creates / enriches under
     # industry agri-funds. Gated OFF by default until the first live validation
