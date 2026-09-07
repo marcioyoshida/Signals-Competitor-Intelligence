@@ -1025,19 +1025,27 @@ def discover_fiagro(
                 reason = "fiagro_no_cnpj"
             elif not profile.get("auto_ok"):
                 reason = "needs_brand_review"  # strong CNPJ id but no clean brand
+            elif auto_create:
+                # Auto-createable (clean id + CNPJ) but this run's create budget is
+                # spent — a later run WILL create it, so it needs no human decision.
+                # SKIP rather than propose: proposing floods the review queue with
+                # funds that self-resolve on the next run (acute at FII's ~700 scale;
+                # the create budget converts ~40/run). Idempotent across runs.
+                report["skipped"].append(profile["entity_id"])
+                continue
             else:
-                reason = "fiagro_missing"  # auto_create off / budget exhausted
+                reason = "fiagro_missing"  # auto_create disabled → surface for review
             try:
                 pid = entity_registry.propose_review(
                     kind="discovery",
                     key=profile["entity_id"],
                     proposed=profile["display_name"],
                     reason=reason,
-                    hint=f"cvm_fiagro cnpj={root or '-'} ticker={ticker or '-'} pl={profile.get('pl')} raw={str(profile.get('raw_name'))[:60]!r}",
+                    hint=f"{profile.get('source')} cnpj={root or '-'} ticker={ticker or '-'} pl={profile.get('pl')} raw={str(profile.get('raw_name'))[:60]!r}",
                     confidence="cnpj" if root else "fuzzy",
                     payload={
                         "profile": profile,
-                        "source": "cvm_fiagro",
+                        "source": profile.get("source"),
                         "cnpj": root,
                         "ticker": ticker,
                         "pl": profile.get("pl"),

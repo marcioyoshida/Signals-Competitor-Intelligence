@@ -344,6 +344,26 @@ def test_propose_review_sanitizes_floats():
     assert item["payload"]["s"] == "x"
 
 
+def test_budget_exhausted_autocreatable_funds_are_skipped_not_proposed():
+    """#102: auto-createable funds beyond the create budget must be SKIPPED (a later
+    run creates them), not proposed — otherwise the review queue floods at FII scale."""
+    from src.synth.entity_discovery import discover_fiagro
+
+    table = _FakeTable()
+    rows = [
+        {"fund_name": f"BRAND{i} LOG FII", "ticker": f"AB{i:02d}11",
+         "cnpj": f"{20000000 + i:08d}000191", "isin": None, "admin": "ADM", "pl": 2e8,
+         "industry": "real-estate-funds", "fund_class": "FII", "discovery_source": "cvm_fii",
+         "as_of": "2026-02-01", "url": "u"}
+        for i in range(6)
+    ]
+    report = discover_fiagro(industry="real-estate-funds", rows=rows,
+                             min_pl=0, auto_create=True, max_new=2, table=table)
+    assert len(report["created"]) == 2
+    assert len(report["skipped"]) == 4          # the overflow is skipped …
+    assert report["proposed"] == []             # … NOT proposed (no queue flood)
+
+
 def test_discover_fiagro_scans_registry_once():
     """Perf: discovery scans the registry ONCE regardless of row count (no
     per-row full-table scan via resolve_by_name)."""
