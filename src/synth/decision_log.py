@@ -152,6 +152,23 @@ def append_reference(
     return True
 
 
+def link_action(decision_id: str, *, intent: str, outcome: str, actor: str,
+                act_key: str | None = None, table: Any | None = None) -> bool:
+    """DEC-6 (#99): record on a decision the `/api/act` action it authorized — closing the loop
+    from a captured decision to its EXECUTION and effect. Appends to the decision's ``actions``
+    trail (intent + the call's outcome). Best-effort; returns True if stamped."""
+    t = _table(table)
+    it = t.get_item(Key={"pk": f"DECISION#{decision_id}"}).get("Item")
+    if not it:
+        return False
+    acts = list(it.get("actions") or [])
+    acts.append({"intent": intent, "outcome": outcome, "actor": actor,
+                 "act_key": act_key, "at": _er._now_iso()})
+    it["actions"] = acts
+    t.put_item(Item=it)
+    return True
+
+
 def mark_promoted(decision_id: str, table: Any | None = None) -> bool:
     """Seen-set gate for §H decision→KB promotion: stamp a decision as promoted so the next
     pipeline cycle never re-ingests it. Returns True if stamped."""

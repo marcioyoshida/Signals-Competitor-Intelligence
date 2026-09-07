@@ -737,6 +737,36 @@ def _kb_retrieve(q: str, *, max_results: int = 4) -> list[dict[str, Any]]:
     return out
 
 
+# DEC-4 (#97): a good precedent is similar AND recent AND has a known-good outcome. Bedrock ranks
+# by similarity alone; we over-fetch then re-rank by similarity × outcome × recency so the officer
+# grounds on precedents that actually worked, not just the closest vector match.
+_OUTCOME_WEIGHT = {"favoravel": 1.0, "desfavoravel": 0.85, "neutro": 0.75, "pendente": 0.5}
+
+
+def _precedent_rank_score(r: dict[str, Any], now: Any) -> float:
+    import datetime as _dt
+
+    meta = r.get("metadata") or {}
+    sim = float(r.get("score") or 0.0)
+    ow = _OUTCOME_WEIGHT.get(str(meta.get("outcome") or "").lower(), 0.7)
+    rec = 0.6
+    try:
+        d = str(meta.get("date") or "")[:10]
+        if d:
+            days = (now - _dt.date.fromisoformat(d)).days
+            rec = 1.0 / (1.0 + max(days, 0) / 180.0)  # ~half-life 180d
+    except Exception:
+        rec = 0.6
+    return sim * ow * (0.5 + 0.5 * rec)  # similarity dominant, modulated by outcome + recency
+
+
+def _rank_precedents(results: list[dict[str, Any]], *, now: Any = None, top: int = 3) -> list[dict[str, Any]]:
+    import datetime as _dt
+
+    now = now or _dt.date.today()
+    return sorted(results or [], key=lambda r: _precedent_rank_score(r, now), reverse=True)[:top]
+
+
 def _kb_precedents(q: str, officer: str | None, *, max_results: int = 3) -> list[dict[str, Any]]:
     """ADR 021 §F Mechanism 1 — retrieve THIS officer's own decision precedents (decisions +
     outcomes) from the KB for a similar question, so its grounded read learns from what it did
@@ -751,14 +781,17 @@ def _kb_precedents(q: str, officer: str | None, *, max_results: int = 3) -> list
     try:
         import boto3
 
+        # DEC-4: over-fetch, then re-rank by similarity × outcome × recency (below).
+        n_fetch = max(8, max_results * 3)
         resp = boto3.client("bedrock-agent-runtime").retrieve(
             knowledgeBaseId=kb_id, retrievalQuery={"text": q[:1000]},
-            retrievalConfiguration={"vectorSearchConfiguration": {"numberOfResults": max_results,
+            retrievalConfiguration={"vectorSearchConfiguration": {"numberOfResults": n_fetch,
                 "filter": {"andAll": [
                     {"equals": {"key": "doc_type", "value": "decision_precedent"}},
                     {"equals": {"key": "officer", "value": short}}]}}})
+        ranked = _rank_precedents(resp.get("retrievalResults") or [], top=max_results)
         out: list[dict[str, Any]] = []
-        for i, r in enumerate(resp.get("retrievalResults") or []):
+        for i, r in enumerate(ranked):
             t = (r.get("content") or {}).get("text") or ""
             if t:
                 out.append({"id": f"kb:prec:{i}", "subject": "[precedente] " + t[:500]})

@@ -1085,12 +1085,27 @@ def build_executive(feed: dict[str, Any], *, decisions: list[dict[str, Any]] | N
                                                    outcome_review_days=outcome_review_days)
     except Exception as exc:  # pragma: no cover - metrics best-effort
         print(f"Warning: decision metrics skipped: {exc}")
+    # DEC-3: auto-draft — each Executive-Flow trajectory is a pre-filled decision draft. Annotate
+    # it with whether a decision already exists (context_id == trajectory.id) so the officer sees
+    # an explicit pending worklist (undecided) vs the resolved ones, lifting capture.
+    flow = build_flow(feed, ctx)
+    _by_ctx = {d.get("context_id"): d for d in (decisions or []) if d.get("context_id")}
+    n_drafts = 0
+    for t in flow:
+        d = _by_ctx.get(t.get("id"))
+        t["decided"] = bool(d)
+        t["verdict"] = d.get("verdict") if d else None
+        t["decision_id"] = d.get("decision_id") if d else None
+        if not d:
+            n_drafts += 1
+    if isinstance(metrics, dict):
+        metrics["n_drafts"] = n_drafts
     return {
         "officers": list(OFFICERS),
         "generated_at": feed.get("generated_at"),
         "as_of": feed.get("as_of"),
         "sectors": sectors,
-        "flow": build_flow(feed, ctx),
+        "flow": flow,
         "metrics": metrics,
         "engagement": engagement_roll,
         "reference": REFERENCE,

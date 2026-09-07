@@ -467,3 +467,25 @@ def test_run_integrity_audit_reads_only(monkeypatch):
     assert resp["statusCode"] == 200
     b = json.loads(resp["body"])
     assert b["outcome"] == "applied" and b["total"] == 0
+
+
+def test_action_links_back_to_decision(monkeypatch):
+    _no_journal(monkeypatch)
+    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    from src.synth import decision_log
+    linked = {}
+    monkeypatch.setattr(decision_log, "link_action",
+                        lambda did, **k: linked.update(did=did, intent=k.get("intent"), outcome=k.get("outcome")) or True)
+    # resolve_review carrying a decision_id → closes the decision→action loop
+    monkeypatch.setattr(er, "resolve_review", lambda rid, dec, payload=None: {"kind": "discovery", "status": dec})
+    resp = act_api.lambda_handler(_event(
+        {"intent": "resolve_review", "officer": "cpo",
+         "args": {"review_id": "discovery:x", "decision": "approved", "decision_id": "d9"}}), None)
+    assert resp["statusCode"] == 200
+    assert linked == {"did": "d9", "intent": "resolve_review", "outcome": "applied"}
+    # a decision-management intent must NOT self-link
+    linked.clear()
+    monkeypatch.setattr(decision_log, "set_board_adoption", lambda did, adopted, **k: {"board_adopted": adopted})
+    act_api.lambda_handler(_event(
+        {"intent": "set_board_adoption", "officer": "cco", "args": {"decision_id": "d9", "adopted": True}}), None)
+    assert linked == {}  # excluded from self-referential linking

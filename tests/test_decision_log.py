@@ -101,3 +101,16 @@ def test_tdr_baseline_rejects_non_positive(tbl):
     for bad in (0, -3, "x"):
         with pytest.raises(ValueError):
             decision_log.set_tdr_baseline(bad, actor="operator", table=tbl)
+
+
+# --- DEC-6: decision -> action closure ------------------------------------------
+def test_link_action_appends_trail(tbl):
+    it = decision_log.record_decision(officer="cco", recommendation="Auditar", verdict="aprovado",
+                                      actor="op", table=tbl)
+    did = it["decision_id"]
+    assert decision_log.link_action(did, intent="run_integrity_audit", outcome="applied",
+                                    actor="op", table=tbl) is True
+    stored = tbl.items[f"DECISION#{did}"]
+    assert stored["actions"][0]["intent"] == "run_integrity_audit"
+    assert stored["actions"][0]["outcome"] == "applied"
+    assert decision_log.link_action("nope", intent="x", outcome="y", actor="op", table=tbl) is False

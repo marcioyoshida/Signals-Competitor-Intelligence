@@ -502,12 +502,14 @@ function flowBand() {
   if (!FLOW.length) return "";
   const cards = FLOW.map((t, i) => `<div class="traj" data-sev="${U.esc(t.severity)}" data-i="${i}">
     <div class="traj-hd"><span class="traj-t">${U.esc(t.title)}</span>
+      ${t.decided ? `<span class="badge badge--ok" title="decisão registrada">✓ ${U.esc(t.verdict || "decidido")}</span>` : `<span class="badge badge--med" title="decisão pendente">rascunho</span>`}
       <span class="badge badge--ghost">${U.esc(officerShort(t.officer))}${t.handoff ? " → " + officerShort(t.handoff) : ""}</span></div>
     <div class="traj-b">${U.esc(t.briefing)}</div>
     <div class="traj-f">${t.evidence_ids && t.evidence_ids.length ? `<a href="#" data-ev="${U.esc(t.evidence_ids[0])}">evidência</a> · ` : ""}
       <span class="hd-note">${U.esc(t.action || "")}</span><span class="spacer" style="flex:1"></span>
-      <button data-tv="aprovado" data-i="${i}">Aprovar</button><button data-tv="rejeitado" data-i="${i}">Rejeitar</button></div></div>`).join("");
-  return band("Fluxo executivo", "incidente → decisão", `<div class="trajs">${cards}</div>`);
+      ${t.decided ? "" : `<button data-tv="aprovado" data-i="${i}">Aprovar</button><button data-tv="rejeitado" data-i="${i}">Rejeitar</button>`}</div></div>`).join("");
+  const nd = FLOW.filter(t => !t.decided).length;
+  return band("Fluxo executivo", `incidente → decisão · ${nd} rascunho(s) pendente(s)`, `<div class="trajs">${cards}</div>`);
 }
 async function captureTraj(btn) {
   const t = FLOW[Number(btn.getAttribute("data-i"))]; if (!t) return;

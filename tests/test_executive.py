@@ -408,3 +408,18 @@ def test_axis_rows_and_change_diff():
     cd = ex["cco"]["panels"]["change_diff"]
     assert cd[0]["n_changes"] == 2 and cd[0]["changes"][1]["verb"] == "revoga"
     assert cd[0]["days_to_deadline"] == 20
+
+
+# --- DEC-3: auto-draft — flow items annotated with decision status ---------------
+def test_flow_draft_annotation_and_n_drafts():
+    feed = _feed()
+    ex0 = executive.build_executive(feed)
+    flow = ex0["flow"]
+    assert flow and all(t["decided"] is False for t in flow)
+    assert ex0["metrics"]["n_drafts"] == len(flow)
+    fid = flow[0]["id"]
+    ex1 = executive.build_executive(feed, decisions=[
+        {"context_id": fid, "verdict": "aprovado", "decision_id": "d1", "outcome": "pendente"}])
+    dec = [t for t in ex1["flow"] if t["id"] == fid][0]
+    assert dec["decided"] and dec["verdict"] == "aprovado" and dec["decision_id"] == "d1"
+    assert ex1["metrics"]["n_drafts"] == len(flow) - 1

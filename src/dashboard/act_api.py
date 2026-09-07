@@ -434,6 +434,11 @@ def _act_set_tdr_baseline(args: dict[str, Any], actor: str) -> tuple[str, int, d
 # telemetry, not a state mutation).
 _NO_JOURNAL = frozenset({"record_engagement"})
 
+# DEC-6: decision-management intents operate ON a decision — they must NOT be linked back as
+# "actions authorized BY" that decision (would self-reference).
+_DECISION_INTENTS = frozenset({"record_decision", "set_outcome", "set_board_adoption",
+                               "set_tdr_baseline", "append_reference", "record_engagement"})
+
 
 # intent -> (execution class, handler, journal-subject key in args)
 _CATALOG: dict[str, tuple[str, Callable[..., tuple[str, int, dict[str, Any]]], str | None]] = {
@@ -545,6 +550,16 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             "officer": effective_officer, "handoff": handoff,
             "request_id": result["request_id"], "idempotency_key": idem or None,
         })
+    # DEC-6: close the decision→action loop — an action call carrying a `decision_id` stamps that
+    # decision with its execution + effect. Skip the decision-management intents themselves.
+    _did = str(args.get("decision_id") or "").strip()
+    if _did and intent not in _DECISION_INTENTS:
+        try:
+            from src.synth import decision_log
+            decision_log.link_action(_did, intent=intent, outcome=outcome, actor=actor,
+                                     act_key=idem or None)
+        except Exception as exc:  # pragma: no cover - link best-effort
+            print(f"Warning: decision-action link skipped: {exc}")
     if idem:
         _put_act(idem, status, result)
     return _resp(status, result)

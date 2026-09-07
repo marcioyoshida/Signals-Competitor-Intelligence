@@ -112,3 +112,16 @@ def test_compute_metrics_includes_review_queue():
     m = dm.compute_metrics(ds, outcome_review_days=7)
     assert m["outcome_review_days"] == 7
     assert [d["decision_id"] for d in m["outcomes_due"]] == ["a"]
+
+
+# --- DEC-4: precedent re-ranking (similarity × outcome × recency) ----------------
+def test_precedent_reranking_favors_recent_favorable():
+    import datetime as _dt
+    from src.dashboard import agent_ask
+    today = _dt.date.today().isoformat()
+    stale_close = {"score": 0.9, "metadata": {"outcome": "neutro", "date": "2019-01-01"},
+                   "content": {"text": "old neutral but similar"}}
+    fresh_good = {"score": 0.7, "metadata": {"outcome": "favoravel", "date": today},
+                  "content": {"text": "recent favorable"}}
+    ranked = agent_ask._rank_precedents([stale_close, fresh_good], top=2)
+    assert ranked[0] is fresh_good  # recent + favorable beats a closer-but-stale-neutral match
