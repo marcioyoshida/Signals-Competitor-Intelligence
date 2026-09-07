@@ -72,6 +72,19 @@
   .sc-ax  { fill:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.5px; }
   .sc-quad { fill:var(--muted); font-size:10px; letter-spacing:.4px; opacity:.7; }
 
+  /* Macro strip — Copom & Focus, shared across all officers */
+  .macro-strip { margin:0 0 var(--s4); }
+  .macro-inner { display:flex; flex-wrap:wrap; align-items:center; gap:var(--s3);
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg);
+    padding:var(--s2) var(--s4); box-shadow:var(--shadow-1); }
+  .macro-lbl { font-size:var(--fs-micro); text-transform:uppercase; letter-spacing:.9px; color:var(--muted); margin-right:var(--s2); }
+  .mchip { display:inline-flex; align-items:baseline; gap:6px; }
+  .mchip + .mchip { border-left:1px solid var(--border); padding-left:var(--s3); }
+  .mchip .mk { font-size:var(--fs-micro); color:var(--muted); text-transform:uppercase; letter-spacing:.4px; }
+  .mchip .mv { font-size:var(--fs-sm); font-weight:700; color:var(--ink); font-variant-numeric:tabular-nums; }
+  .mchip .md { font-size:var(--fs-micro); font-variant-numeric:tabular-nums; }
+  .md--up { color:var(--t-high); } .md--down { color:var(--ok); } .md--flat { color:var(--muted); }
+
   /* coverage */
   .cov { display:flex; gap:var(--s2); align-items:center; padding:7px var(--s4); border-bottom:1px solid var(--border); }
   .cov:last-child { border-bottom:0; }
@@ -162,6 +175,7 @@
 
 <main class="wrap">
   <div class="pagehead"><h1 id="pgTitle">Sala executiva</h1><p class="lede" id="pgLede"></p></div>
+  <div id="macroStrip" class="macro-strip"></div>
   <div id="board"></div>
   <section class="band">
     <div class="band-hd"><span class="overline">Ações recomendadas</span><span class="rule"></span>
@@ -217,6 +231,7 @@ function boot() {
   EX = DATA.executive || {};
   BYID = {}; (DATA.feed || []).forEach(c => { BYID[c.id] = c; });
   document.getElementById("asof").textContent = DATA.as_of ? `dados de ${U.fmtDate(DATA.as_of)}` : "";
+  document.getElementById("macroStrip").innerHTML = macroStrip(DATA.macro);  // shared header
   const sel = document.getElementById("sectorSel");
   (EX.sectors || []).forEach(s => { const o = document.createElement("option"); o.value = s.slug; o.textContent = s.label; sel.appendChild(o); });
   if (!EX.officers || !EX.officers.length) {
@@ -299,6 +314,34 @@ function rowsReg(list) {
     ${r.difficulty_band ? sevBadge(r.difficulty_band) : ""}
     ${r.days_to_deadline != null ? `<span class="dt">${r.days_to_deadline}d</span>` : ""}
     ${r.threat_score != null ? U.heat(r.threat_score) : ""}</div>`; }).join("");
+}
+// Macro strip (v1 → shared /exec header): Copom Selic + Focus projections, national, so it
+// sits above every officer's board (officer-independent, rendered once at boot).
+function macroChip(label, val, delta, dir, title) {
+  return `<span class="mchip" title="${U.esc(title)}"><span class="mk">${U.esc(label)}</span>` +
+    `<span class="mv">${U.esc(val)}</span>${delta ? `<span class="md md--${dir}">${U.esc(delta)}</span>` : ""}</span>`;
+}
+function macroStrip(m) {
+  if (!m || (!m.selic && !((m.focus || []).length))) return "";
+  const chips = [];
+  if (m.selic && m.selic.current != null) {
+    const ld = m.selic.last_decision || {};
+    const dir = ld.direction === "baixa" ? "down" : ld.direction === "alta" ? "up" : "flat";
+    const arrow = dir === "down" ? "▼" : dir === "up" ? "▲" : "■";
+    const bps = ld.bps != null ? ` ${ld.bps > 0 ? "+" : ""}${ld.bps}bps` : "";
+    chips.push(macroChip("Selic (meta)", m.selic.current.toFixed(2) + "%", arrow + bps, dir, "Copom " + (ld.date || "")));
+  }
+  const focus = m.focus || [];
+  const years = [...new Set(focus.map(f => f.ref_year))].sort().slice(0, 2);
+  ["IPCA", "Selic"].forEach(ind => years.forEach(yr => {
+    const f = focus.find(x => x.indicator === ind && x.ref_year === yr);
+    if (!f || f.median == null) return;
+    const d = f.delta || 0, dir = Math.abs(d) < 0.005 ? "flat" : (d > 0 ? "up" : "down");
+    const arrow = dir === "up" ? "▲" : dir === "down" ? "▼" : "■";
+    chips.push(macroChip(`${ind} ${yr}`, f.median.toFixed(2) + "%", arrow, dir, `Focus ${f.date || ""} · projeção mediana`));
+  }));
+  if (!chips.length) return "";
+  return `<div class="macro-inner"><span class="macro-lbl">Macro · Copom &amp; Focus</span>${chips.join("")}</div>`;
 }
 // Mapa Competitivo (v1 flagship → CSO): each tracked competitor placed by current threat
 // (ameaça, y) × window acceleration (momentum, x). Top-right = high + accelerating (danger).
