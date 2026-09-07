@@ -688,6 +688,20 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
             print(f"Warning: SPA apostas fetch failed: {exc}")
 
+    # PREVIC EFPC base-cadastral (#79 E2) — closed-pension new entrants. Direct XLSX (not the dead
+    # dados.gov.br token). Gated + seed-suppressed → entrants lens + Receita enrich.
+    if os.environ.get("ONCA_INGEST_PREVIC", "false").lower() in ("1", "true", "yes"):
+        try:
+            from src.ingest import previc_efpc
+
+            with _source_budget("PREVIC EFPC", deadline, per_source):
+                previc_rows = previc_efpc.fetch_entities()
+                new_entrants += _new_since_last_run(
+                    "previc_efpc", previc_rows, seed_if_empty=True
+                )
+        except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
+            print(f"Warning: PREVIC EFPC fetch failed: {exc}")
+
     # Receita Federal enrichment: resolve the brand + controllers behind each new
     # entrant's (otherwise anonymous) CNPJ. Own budget so a slow lookup can't lose
     # the entrants list; only new entrants (bounded volume) are enriched.

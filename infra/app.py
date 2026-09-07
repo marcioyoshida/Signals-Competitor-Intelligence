@@ -375,6 +375,8 @@ class OncaPrototypeStack(Stack):
                 # #78 (E3): SPA/MF authorized betting operators (~82 cos). Small XLSX,
                 # seed-suppressed — the authorized list IS the entrant feed. Safe on by default.
                 "ONCA_INGEST_SPA": "true",
+                # #79 (E2): PREVIC EFPC base-cadastral (~447 EFPCs). Direct XLSX, seed-suppressed.
+                "ONCA_INGEST_PREVIC": "true",
             },
         )
         state_table.grant_read_write_data(func)
