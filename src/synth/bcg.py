@@ -31,7 +31,7 @@ from typing import Any, Callable
 import boto3
 
 from src.synth import feature_store, swot_reconcile, swot_store
-from src.synth.bedrock_llm import DEFAULT_SYNTH_MODEL, converse
+from src.synth.bedrock_llm import FRAMEWORK_MODEL, converse
 from src.synth.synthesize import ENTITY_LABELS, run_at_now, run_date_today
 
 BCG_PROPOSALS_KEY = "bcg/proposals.json"
@@ -273,7 +273,7 @@ def llm_draft(
     prompt = _draft_prompt(label, industries, swot_bullets, evidence)
     raw = converse(
         prompt,
-        model_id=DEFAULT_SYNTH_MODEL,
+        model_id=FRAMEWORK_MODEL,
         system=_DRAFT_SYSTEM,
         max_tokens=900,
     )
