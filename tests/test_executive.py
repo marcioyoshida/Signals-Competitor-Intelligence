@@ -86,6 +86,36 @@ def test_cso_industry_scoping():
     assert cso["by_industry"]["banking"]["n_cards"] < cso["by_industry"]["__all__"]["n_cards"]
 
 
+# --- CSO weekly brief (pilot-persona loop) --------------------------------------------
+def test_cso_weekly_metrics_are_week_over_week_deltas():
+    wk = executive.build_executive(_feed())["cso"]["weekly"]
+    assert set(wk["window"]) == {"recent", "prior"}
+    m = wk["by_industry"]["__all__"]["metrics"]
+    for k in ("moves", "entrants", "regulatory", "alerts", "climate", "n_cards"):
+        assert set(m[k]) == {"now", "prior", "delta"} and m[k]["delta"] == m[k]["now"] - m[k]["prior"]
+    assert m["regulatory"]["now"] == 1          # r1 (recent window)
+    assert m["alerts"]["now"] == 2              # n1 + r1 are alerts this week
+
+
+def test_cso_weekly_top_priorities_carry_the_decision_they_invite():
+    wk = executive.build_executive(_feed())["cso"]["weekly"]["by_industry"]["__all__"]
+    top = wk["top_priorities"]
+    assert top and top[0]["entity_label"] == "Itaú" and top[0]["is_alert"]  # highest-threat alert leads
+    assert top[0]["so_what"] == "Alerta ativo"
+    assert top[0]["decision"]["action"] == "open_watch" and top[0]["decision"]["horizon"] == "imediato"
+    reg = [p for p in top if p["so_what"] == "Mudança regulatória"]
+    assert reg and reg[0]["decision"]["horizon"] == "30d"
+    assert isinstance(wk["headline"], str) and "regulatória" in wk["headline"]
+
+
+def test_cso_weekly_is_industry_scoped():
+    wk = executive.build_executive(_feed())["cso"]["weekly"]["by_industry"]
+    # nubank (fintech) is out of the banking scope; itaú (banking) + the market-wide reg card stay
+    banking_labels = {p["entity_label"] for p in wk["banking"]["top_priorities"]}
+    assert "Nubank" not in banking_labels and "Itaú" in banking_labels
+    assert "Nubank" in {p["entity_label"] for p in wk["fintech"]["top_priorities"]}
+
+
 def test_cro_impact_sorts_by_blast_and_surfaces_changes():
     cro = executive.build_executive(_feed())["cro"]
     assert cro["by_industry"]["__all__"]["n_reg"] >= 1

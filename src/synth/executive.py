@@ -164,6 +164,152 @@ def _rec(horizon: str, text: str, action: str, *, officer: str, entity=None,
             "entity": entity, "evidence_id": evidence_id, "industries": industries or []}
 
 
+# --- CSO weekly brief (pilot-persona loop) --------------------------------------------
+# The CSO's job is a WEEKLY ritual about DELTA — "what changed in my competitive landscape
+# and what decision does it invite" — not a live panel scan. `build_cso_weekly` synthesizes
+# exactly that from the fields the feed already carries (dated cards + the recent/prior windows
+# executive already computes): a plain-language headline, week-over-week metric deltas, the
+# week's material bucketed into the CSO's decision categories, and the top-3 priorities each
+# paired with the decision it invites. Pure derivation — no new data, no LLM, no fabrication.
+# A "move" is a pricing/competitive act (rate cut, new offer, M&A) — substantive content that
+# should win over a bare entrant tag. Note freshly-discovered sub-entities (consórcio/corretora)
+# inherit `entrants`/`novos_entrantes` on EVERY card incl. a rate story, so entrant is the
+# lowest-priority classification, used only when nothing more specific fits.
+_MOVE_LENSES_CLS = {"juros", "ofertas", "market", "pricing"}
+_ENTRANT_LENSES = {"entrants"}
+_ENTRANT_TOPICS = {"novos_entrantes"}
+
+
+def _is_entrant(c: dict[str, Any]) -> bool:
+    return bool(set(c.get("lenses") or []) & _ENTRANT_LENSES
+                or set(c.get("topics") or []) & _ENTRANT_TOPICS)
+
+
+def _blast(c: dict[str, Any]) -> int:
+    return len(c.get("affected_industries") or c.get("industries") or [])
+
+
+def _delta(now: int, was: int) -> dict[str, int]:
+    return {"now": now, "prior": was, "delta": now - was}
+
+
+def _priority_class(c: dict[str, Any]) -> str:
+    """Classify a week-priority card by its dominant signal — the SAME order drives both the
+    `so_what` label and the decision it invites, so they never disagree. Substance (reg, then a
+    pricing/M&A move) wins over the entrant tag freshly-discovered sub-entities carry everywhere."""
+    if c.get("kind") in _REG_KINDS:
+        return "regulatory"
+    if set(c.get("lenses") or []) & _MOVE_LENSES_CLS or any(
+            cue in (c.get("narrative") or "").lower() for cue in _MA_CUES):
+        return "move"
+    if _is_entrant(c):
+        return "entrant"
+    if c.get("is_alert"):
+        return "alert"
+    return "move"
+
+
+_CLASS_LABEL = {"regulatory": "Mudança regulatória", "move": "Movimento competitivo",
+                "entrant": "Novo entrante", "alert": "Alerta ativo"}
+
+
+def _priority_decision(c: dict[str, Any]) -> dict[str, Any]:
+    """Map a week-priority card to the decision it invites (reuses the officer action catalog)."""
+    label = c.get("entity_label") or c.get("entity") or "concorrente"
+    cls = _priority_class(c)
+    if cls == "regulatory":
+        na = _blast(c)
+        return _rec("30d", f"Avaliar impacto regulatório — {c.get('domain') or 'regulação'} "
+                    f"(afeta {na} setor{'es' if na != 1 else ''})", "open_watch", officer="cso",
+                    evidence_id=c.get("id"), industries=c.get("affected_industries") or [])
+    if cls == "entrant":
+        return _rec("30d", f"Dimensionar novo entrante: {label}", "curate_belief", officer="cso",
+                    entity=c.get("entity"), evidence_id=c.get("id"), industries=c.get("industries") or [])
+    if cls == "alert":
+        return _rec("imediato", f"Abrir watch estratégico: {label}", "open_watch", officer="cso",
+                    entity=c.get("entity"), evidence_id=c.get("id"), industries=c.get("industries") or [])
+    return _rec("90d", f"Formular tese sobre o movimento de {label}", "curate_belief", officer="cso",
+                entity=c.get("entity"), evidence_id=c.get("id"), industries=c.get("industries") or [])
+
+
+def _story_key(c: dict[str, Any]):
+    """Same-story signature: identical source_ids ⇒ the same underlying event, re-emitted per
+    sub-entity (ADR-017). Falls back to the card id when a card has no source_ids."""
+    sids = tuple(sorted(str(s) for s in (c.get("source_ids") or [])))
+    return sids or ("__id__", c.get("id"))
+
+
+def _dedup_by_story(cards: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Collapse cards that share a source signature, keeping the highest-signal representative
+    (alert, then threat) — so one event counts once in the brief, not once per sub-entity."""
+    best: dict[Any, dict[str, Any]] = {}
+    for c in cards:
+        k = _story_key(c)
+        cur = best.get(k)
+        if cur is None or (bool(c.get("is_alert")), _threat(c)) > (bool(cur.get("is_alert")), _threat(cur)):
+            best[k] = c
+    return list(best.values())
+
+
+def _weekly_headline(m: dict[str, Any], top: list[dict[str, Any]]) -> str:
+    """One deterministic plain-PT sentence the CSO can read in five seconds."""
+    def _d(k: str) -> str:
+        d = m[k]["delta"]
+        return f" ({d:+d} vs. semana anterior)" if d else ""
+    parts = [f"{m['moves']['now']} movimento(s) de concorrentes{_d('moves')}",
+             f"{m['entrants']['now']} novo(s) entrante(s){_d('entrants')}",
+             f"{m['regulatory']['now']} mudança(s) regulatória(s){_d('regulatory')}"]
+    lead = "Semana calma no cenário competitivo." if not top else \
+        f"Prioridade: {top[0]['title'][:120]}"
+    return f"Nesta semana: {', '.join(parts)}. {lead}"
+
+
+def build_cso_weekly(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
+    cards, recent, prior = ctx["cards"], ctx["recent"], ctx["prior"]
+    distress = _trusted_distress(feed)
+
+    def _for(slug: str | None) -> dict[str, Any]:
+        # Dedup by story up front so every count/bucket/priority is EVENT-level, not card-level —
+        # ADR-017 re-emits one event per sub-entity, which would otherwise inflate the brief.
+        rc = _dedup_by_story([c for c in cards if _in_industry(c, slug) and str(c.get("date") or "") in recent])
+        pc = _dedup_by_story([c for c in cards if _in_industry(c, slug) and str(c.get("date") or "") in prior])
+        sdist = [d for d in distress if slug in (ALL, None)
+                 or slug in _industries_of(feed, d.get("entity"))]
+
+        def _cls_of(cs, cl):
+            return [c for c in cs if _priority_class(c) == cl]
+
+        moves, entrants = _cls_of(rc, "move"), _cls_of(rc, "entrant")
+        reg = [c for c in rc if c.get("kind") in _REG_KINDS]
+        openings = [c for c in rc if c.get("kind") not in _REG_KINDS
+                    and (c.get("swot_hint") or {}).get("dimension") in ("O", "T")]
+        metrics = {
+            "moves": _delta(len(moves), len(_cls_of(pc, "move"))),
+            "entrants": _delta(len(entrants), len(_cls_of(pc, "entrant"))),
+            "regulatory": _delta(len(reg), sum(1 for c in pc if c.get("kind") in _REG_KINDS)),
+            "alerts": _delta(sum(1 for c in rc if c.get("is_alert")), sum(1 for c in pc if c.get("is_alert"))),
+            "climate": _delta(_climate_index(rc, len(sdist)), _climate_index(pc, len(sdist))),
+            "n_cards": _delta(len(rc), len(pc)),
+        }
+        # top priorities: the week's material ranked by alert, then threat, then blast radius.
+        ranked = sorted(rc, key=lambda c: (bool(c.get("is_alert")), _threat(c), _blast(c)), reverse=True)
+        top = []
+        for c in ranked[:3]:
+            h = _headline(c)
+            h["so_what"] = _CLASS_LABEL.get(_priority_class(c), "Movimento competitivo")
+            h["decision"] = _priority_decision(c)
+            top.append(h)
+        return {"metrics": metrics, "headline": _weekly_headline(metrics, top),
+                "top_priorities": top,
+                "buckets": {"moves": [_headline(c) for c in moves[:10]],
+                            "entrants": [_headline(c) for c in entrants[:10]],
+                            "regulatory": [_reg_row(c) for c in reg[:10]],
+                            "openings": [_headline(c) for c in openings[:10]]}}
+
+    return {"by_industry": _by_industry(ctx["sectors"], _for),
+            "window": {"recent": sorted(recent), "prior": sorted(prior)}}
+
+
 # --- CSO (strategic) ------------------------------------------------------------------
 def _fundamentals_rows(feed: dict[str, Any]) -> list[dict[str, Any]]:
     """Per-entity financial strength (ADR 022 Tier-1) from feed.entities[].fundamentals — ROE/ROA/
@@ -315,7 +461,10 @@ def build_cso(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
                          f"(alavancagem {w.get('leverage')}x, headroom {w.get('basileia_headroom_pp')}pp)",
                          "curate_belief", officer="cso", entity=w.get("entity"), industries=w.get("industries") or []))
 
-    return {"by_industry": _by_industry(ctx["sectors"], agg), "panels": {
+    return {"by_industry": _by_industry(ctx["sectors"], agg),
+            # pilot-persona loop: the delta-framed weekly brief that turns the CSO board into a
+            # ritual (what changed this week + the decision each invites).
+            "weekly": build_cso_weekly(feed, ctx), "panels": {
         "headlines": [_headline(c) for c in headlines[:30]],
         "emerging": [_headline(c) for c in emerging[:20]],
         "risks": [_headline(c) for c in risks[:30]],
@@ -1082,11 +1231,11 @@ def build_executive(feed: dict[str, Any], *, decisions: list[dict[str, Any]] | N
     Engagement rollup (§E, from `engagement`)."""
     cards = _cards(feed)
     dates = list(feed.get("dates") or [])
-    recent, _prior = _recent_window(dates)
+    recent, prior = _recent_window(dates)
     sectors = [{"slug": o.get("slug"), "label": o.get("display_name") or o.get("label") or o.get("slug")}
                for o in (feed.get("industry_options") or []) if o.get("slug")]
     labels = _labels(feed)
-    ctx = {"cards": cards, "dates": dates, "recent": recent, "labels": labels,
+    ctx = {"cards": cards, "dates": dates, "recent": recent, "prior": prior, "labels": labels,
            "sectors": sectors, "reg_cards": [c for c in cards if c.get("kind") in _REG_KINDS]}
     engagement_roll = {}
     metrics = {}
