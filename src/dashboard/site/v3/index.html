@@ -166,6 +166,8 @@
   .rec .rec-t { font-weight:600; font-size:var(--fs-sm); color:var(--ink); line-height:1.35; }
   .rec .rec-a { font-size:var(--fs-micro); color:var(--muted); margin-top:var(--s1); font-family:var(--f-mono); }
   .rec .cap { margin-top:var(--s2); display:flex; gap:var(--s2); align-items:center; flex-wrap:wrap; }
+  .weekly-headline { font-size:var(--fs-md); font-weight:600; color:var(--ink); line-height:1.4; }
+  .weekly-chips { margin-top:var(--s3); display:flex; flex-wrap:wrap; gap:0; }
   .rec .cap button { font:inherit; font-size:var(--fs-micro); font-weight:600; padding:4px var(--s3); border-radius:var(--r-sm);
     border:1px solid var(--border); background:var(--surface); color:var(--ink-2); cursor:pointer; }
   .rec .cap button:hover { border-color:var(--border-2); color:var(--ink); }
@@ -1137,6 +1139,7 @@ function render() {
          tile("Ameaça média", a.avg_threat, "0–100"),
          tile("Ameaça regulatória", a.reg_threat, "0–100"),
          tile("Movimentos", a.n_moves, "entrada·oferta·M&A")]) +
+      weeklyBand() +
       band("Mapa Competitivo · Ameaça × Momentum", "posição competitiva · ameaça atual × aceleração na janela · inferência",
         `<div class="panel"><div class="panel__bd panel__bd--flush">${scatterMap(p.momentum)}</div></div>`) +
       band("Situação", "índice de clima · inferência",
@@ -1279,6 +1282,10 @@ function render() {
     const u = row.getAttribute("data-url") || row.getAttribute("data-href"); if (u) window.open(u, "_blank", "noopener"); }));
   el.querySelectorAll(".traj-f button[data-tv]").forEach(b => b.addEventListener("click", () => captureTraj(b)));
   el.querySelectorAll(".traj-f a[data-ev]").forEach(a => a.addEventListener("click", (e) => { e.preventDefault(); onEvidence(a); }));
+  // CSO weekly brief: its rows are plain `.rec` divs directly in the board (the horizons recs
+  // band lives in a separate #recs element), so this selector only ever matches weekly rows.
+  el.querySelectorAll(".rec .cap button[data-v]").forEach(b => b.addEventListener("click", () => captureWeekly(b)));
+  el.querySelectorAll(".rec > .rec-a a[data-ev]").forEach(a => a.addEventListener("click", (e) => { e.preventDefault(); onEvidence(a); }));
   // DEC-1: the outcome-review queue — stamp a realized outcome on a decision that has aged out.
   el.querySelectorAll(".due-sel").forEach(sel => sel.addEventListener("change", (e) =>
     setOutcome(e.target.getAttribute("data-did"), e.target.value, e.target)));
@@ -1293,6 +1300,57 @@ function render() {
     else { tdrBtn.textContent = "falha"; }
   });
   renderRecs((p.recommendations || []).filter(inSector));
+}
+
+// --- CSO weekly brief (pilot-persona loop) ----------------------------------
+// feed.executive.cso.weekly: a delta-framed weekly ritual (what changed + the decision it
+// invites) — distinct from the recs band below (own capture array so the two never collide).
+const WEEKLY_METRIC_LABEL = { moves: "Movimentos", entrants: "Entrantes", regulatory: "Regulatório", alerts: "Alertas" };
+const WEEKLY_SOWHAT_CLS = { "Mudança regulatória": "high", "Novo entrante": "med", "Alerta ativo": "crit", "Movimento competitivo": "low" };
+let WEEKLY_TOP = [];
+function weeklyChip(key, m) {
+  const d = m.delta, dir = d > 0 ? "up" : d < 0 ? "down" : "flat", arrow = d > 0 ? "▲" : d < 0 ? "▼" : "■";
+  return `<span class="mchip" title="${U.esc(WEEKLY_METRIC_LABEL[key])}: ${m.prior} → ${m.now} na janela"><span class="mk">${U.esc(WEEKLY_METRIC_LABEL[key])}</span>` +
+    `<span class="mv">${m.now}</span>${d ? `<span class="md md--${dir}">${arrow}${Math.abs(d)}</span>` : ""}</span>`;
+}
+function weeklyBand() {
+  if (OFFICER !== "cso") return "";
+  const wk = ((EX.cso || {}).weekly || {}).by_industry || {};
+  const w = wk[SECTOR] || wk.__all__;
+  if (!w || !w.headline) return "";
+  WEEKLY_TOP = w.top_priorities || [];
+  WEEKLY_TOP.forEach((p, i) => markSeen("weekly:" + i + ":" + (p.id || "")));
+  const chips = Object.keys(WEEKLY_METRIC_LABEL).map(k => weeklyChip(k, w.metrics[k])).join("");
+  const rows = WEEKLY_TOP.length ? WEEKLY_TOP.map((p, i) => {
+    const cls = WEEKLY_SOWHAT_CLS[p.so_what] || "low";
+    return `<div class="rec" data-i="${i}"><div class="rec-t">${bandBadge(cls, p.so_what)} ${U.esc(p.entity_label || "")} — ${U.esc((p.title || "").slice(0, 160))}</div>
+      <div class="rec-a">→ ${U.esc(p.decision.text)}${p.id ? ` · <a href="#" data-ev="${U.esc(p.id)}">evidência</a>` : ""}</div>
+      <div class="cap"><button data-v="aprovado" data-i="${i}">Aprovar</button><button data-v="rejeitado" data-i="${i}">Rejeitar</button></div></div>`;
+  }).join("") : U.empty("Sem prioridades na janela.", "", "○");
+  return band("Briefing semanal do CSO", "semana vs. semana anterior · derivado do feed",
+    `<div class="panel"><div class="panel__bd" style="padding:var(--s4)">
+      <div class="weekly-headline">${U.esc(w.headline)}</div>
+      <div class="weekly-chips">${chips}</div>
+    </div></div>
+    <div class="panel" style="margin-top:var(--s3)"><div class="panel__hd"><h2>Top prioridades da semana</h2></div>
+    <div class="panel__bd" style="padding:var(--s3)">${rows}</div></div>`);
+}
+async function captureWeekly(btn) {
+  const p = WEEKLY_TOP[Number(btn.getAttribute("data-i"))]; if (!p) return;
+  const d = p.decision || {}, verdict = btn.getAttribute("data-v"), cap = btn.closest(".cap");
+  cap.querySelectorAll("button").forEach(x => { x.disabled = true; });
+  const industry = SECTOR !== "__all__" ? SECTOR : (d.industries && d.industries[0]) || null;
+  const res = await postAct({ intent: "record_decision", officer: "cso",
+    args: { officer: "cso", recommendation: d.text, verdict, industry, action_ref: d.action,
+      evidence_id: d.evidence_id || p.id, context_id: "weekly:" + (p.id || d.entity),
+      started_at: SEEN["weekly:" + btn.getAttribute("data-i") + ":" + (p.id || "")] } });
+  if (!res || !res.decision_id) { cap.innerHTML = `<span class="done" style="color:var(--t-high)">falha ao registrar</span>`; return; }
+  const rcard = cap.closest(".rec"); if (rcard) { rcard.dataset.did = res.decision_id; rcard.dataset.off = "cso"; }
+  cap.innerHTML = `<span class="done">✓ ${verdict}</span><span class="hd-note">resultado:</span>
+    <select data-did="${res.decision_id}" class="ocsel"><option value="pendente">pendente</option>
+      <option value="favoravel">favorável</option><option value="desfavoravel">desfavorável</option><option value="neutro">neutro</option></select>${boardHtml()}`;
+  cap.querySelector(".ocsel").addEventListener("change", (e) => setOutcome(res.decision_id, e.target.value, e.target));
+  wireBoard(cap, res.decision_id);
 }
 
 // --- recommendations + capture (ADR-021 Step 1) ----------------------------
