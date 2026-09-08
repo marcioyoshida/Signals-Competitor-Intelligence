@@ -1526,6 +1526,25 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     except Exception as exc:  # pragma: no cover - best-effort, read-only
         print(f"Warning: executive block skipped: {exc}")
         feed["executive"] = {"officers": [], "cso": {}}
+    # Weekly CSO brief PUSH delivery (pilot-persona loop habit lever) — turns the /exec board
+    # into a delivered ritual (Teams/Slack/email) instead of a dashboard you have to visit.
+    # Gated OFF by default; fail-closed per channel (weekly_digest degrades to None when a
+    # channel's webhook/email isn't configured — nothing sent, nothing fabricated). Runs only
+    # on the configured weekday so a once-daily pipeline doesn't re-send every day.
+    if os.environ.get("ONCA_WEEKLY_DIGEST", "false").lower() in ("1", "true", "yes"):
+        try:
+            import datetime as _dt
+
+            from src.dashboard import weekly_digest
+
+            _wd_day = int(os.environ.get("ONCA_DIGEST_WEEKDAY", "0"))  # 0 = Monday
+            _as_of = _dt.date.fromisoformat((feed.get("as_of") or _dt.date.today().isoformat())[:10])
+            if _as_of.weekday() == _wd_day:
+                _report = weekly_digest.send_weekly_digest(
+                    feed, dashboard_url=os.environ.get("ONCA_DASHBOARD_URL"))
+                print(f"Weekly CSO digest ({_as_of}): {_report}")
+        except Exception as exc:  # pragma: no cover - best-effort, never blocks publish
+            print(f"Warning: weekly digest skipped: {exc}")
     # ADR 019 Phase 3b — vertical feed scoping: a sectorial deployment publishes ONLY its
     # own vertical's industries. financial-services (default) spans the whole taxonomy →
     # vertical_industries is None → no scoping, so Onça's feed is unchanged (non-breaking).

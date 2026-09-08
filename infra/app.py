@@ -1443,11 +1443,34 @@ class OncaPrototypeStack(Stack):
                 # Read the entities review queue (ADR step 5) to surface pending
                 # group-merge proposals in the dashboard (read-only).
                 "ONCA_ENTITIES_TABLE": entities_table.table_name,
+                # Weekly CSO brief PUSH delivery (pilot-persona loop). Default OFF — flip once
+                # real Teams/Slack webhook URLs + a verified SES sender/recipient are supplied
+                # (see src/dashboard/weekly_digest.py); each channel independently no-ops
+                # (returns None) if its own config is absent, so partial setup is safe.
+                "ONCA_WEEKLY_DIGEST": "false",
+                "ONCA_DIGEST_WEEKDAY": "0",  # 0 = Monday
+                "ONCA_DASHBOARD_URL": "https://d37aa8gtuqquoe.cloudfront.net/exec",
             },
         )
         digests_bucket.grant_read(feed_fn)
         site_bucket.grant_put(feed_fn)
         entities_table.grant_read_data(feed_fn)
+        # weekly_digest reads Teams/Slack webhook URLs + email addresses from the shared
+        # api-key secret when not set via env (same pattern as GOV_DADOS_TOKEN/ONCA_TAVILY_TOKEN).
+        feed_fn.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["secretsmanager:GetSecretValue"],
+                resources=[
+                    f"arn:aws:secretsmanager:{self.region}:{self.account}"
+                    ":secret:signalscompetitor/onca/api-key-*"
+                ],
+            )
+        )
+        # email digest channel (SES) — scoped to send only, no recipient/identity restriction
+        # here since the actual identities are gated by SES verification itself.
+        feed_fn.add_to_role_policy(
+            iam.PolicyStatement(actions=["ses:SendEmail", "ses:SendRawEmail"], resources=["*"])
+        )
 
         # Review-queue write endpoint (ADR step 5). Fronted by the SAME basic-auth
         # CloudFront Function as the dashboard (see the /api/* behavior below), so
