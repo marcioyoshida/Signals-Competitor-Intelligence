@@ -196,6 +196,10 @@ _NER_STOP = frozenset({
     "financeira", "consorcio", "administradora", "corretora", "distribuidora", "holding",
     # abbreviation of "banco" in registry/ranking legal names + generic person words
     "bco", "pessoas", "pessoa",
+    # central/multilateral banks + well-known non-competitor institutions that recur in
+    # web-search prose (#107) — "Banco Central Europeu"/"Banco Mundial"/"Fundação Getulio
+    # Vargas" etc. are never FS competitors.
+    "europeu", "europe", "mundial", "interamericano", "getulio", "vargas", "sociedade",
 })
 
 

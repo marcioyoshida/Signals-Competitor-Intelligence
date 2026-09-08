@@ -282,6 +282,12 @@ class OncaPrototypeStack(Stack):
                 # the surface closed the known-entity leak → 0 false proposals on 30d.
                 # min_mentions defaults to 3 in the handler (conservative).
                 "ONCA_NER_HARVEST": "true",
+                # #107 web-search expansion (Tavily): extend NER discovery with live search
+                # so it reaches firms the daily ingest never mentions. Propose-only; inert
+                # unless the ONCA_TAVILY_TOKEN secret is set (fail-closed in the client).
+                "ONCA_SEARCH_EXPANSION": "true",
+                "ONCA_SEARCH_PER_QUERY": "8",
+                "ONCA_SEARCH_MIN_MENTIONS": "1",
                 "ONCA_LOOKBACK_DAYS": str(watchlist.get("lookback_days", 7)),
                 "ONCA_COMPETITORS": ",".join(watchlist.get("competitors", [])),
                 # Pix: empty ISPB list = rank all institutions (noisier).

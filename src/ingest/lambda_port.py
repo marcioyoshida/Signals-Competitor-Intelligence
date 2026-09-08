@@ -987,10 +987,36 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                     _narrs = feature_store.load_history(_bucket, _win) if _bucket else []
                     _mm = int(os.environ.get("ONCA_NER_MIN_MENTIONS", "3"))
                     _cands = entity_discovery.harvest_ner(_narrs, min_mentions=_mm)
+                    # #107: optionally extend discovery with live web-search results (Tavily) so
+                    # NER reaches firms the daily ingest never mentions. Harvested in a SEPARATE
+                    # pass at its own (lower) threshold — the curated queries + reputable-domain
+                    # filter make each hit high-precision, so a single authoritative mention is
+                    # enough to propose; the corpus pass keeps #105's min_mentions=3 noise gate.
+                    # Inert (returns []) unless ONCA_SEARCH_EXPANSION=true AND a token is set.
+                    _search = []
+                    if os.environ.get("ONCA_SEARCH_EXPANSION", "false").lower() in ("1", "true", "yes"):
+                        from src.ingest import search_expansion
+                        _q = os.environ.get("ONCA_SEARCH_QUERIES")
+                        _queries = ([q.strip() for q in _q.split("||") if q.strip()] if _q else None)
+                        _dom = os.environ.get("ONCA_SEARCH_DOMAINS")
+                        _domains = (None if _dom is None
+                                    else [d.strip() for d in _dom.split(",") if d.strip()])
+                        _raw = os.environ.get("ONCA_SEARCH_RAW_CONTENT", "text") or None
+                        _search = search_expansion.expand(
+                            _queries, per_query=int(os.environ.get("ONCA_SEARCH_PER_QUERY", "8")),
+                            include_domains=_domains, include_raw_content=_raw)
+                        if _search:
+                            _seen = {c["surface"] for c in _cands}
+                            _smm = int(os.environ.get("ONCA_SEARCH_MIN_MENTIONS", "1"))
+                            for c in entity_discovery.harvest_ner(_search, min_mentions=_smm):
+                                if c["surface"] not in _seen:
+                                    _seen.add(c["surface"])
+                                    c["keyword"] = "web_search"  # provenance in the review queue
+                                    _cands.append(c)
                     _pids = entity_discovery.propose_news_candidates(
                         _cands, max_propose=int(os.environ.get("ONCA_NER_MAX_PROPOSE", "20")))
-                    print(f"NER harvest: narratives={len(_narrs)} candidates={len(_cands)} "
-                          f"proposed={len(_pids)}")
+                    print(f"NER harvest: narratives={len(_narrs)} search={len(_search)} "
+                          f"candidates={len(_cands)} proposed={len(_pids)}")
             except Exception as exc:  # pragma: no cover - best-effort, never blocks ingest
                 print(f"Warning: NER harvest skipped: {exc}")
 
