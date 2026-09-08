@@ -108,6 +108,29 @@ def test_cso_weekly_top_priorities_carry_the_decision_they_invite():
     assert isinstance(wk["headline"], str) and "regulatória" in wk["headline"]
 
 
+def test_cso_weekly_ranking_favors_substance_over_commodity_rate_volume():
+    """A named entrant with modest threat must outrank a pile of high-threat, non-alert
+    juros-only rate blips — the fix for the live-feed finding where commodity BCB juros
+    volume was crowding named strategic moves out of the top-3. Isolated feed (no other
+    competing substantive cards) so the tier effect is unambiguous."""
+    feed = {
+        "dates": ["2026-08-28", "2026-09-04"], "industry_options": [], "entities": [],
+        "entity_attrs": {}, "distress": [], "feed": [
+            {"id": f"rate{i}", "date": "2026-09-04", "entity": f"bank{i}", "entity_label": f"Banco {i}",
+             "kind": "entity_fusion", "industries": ["banking"], "is_alert": False, "threat_score": 0.95,
+             "lenses": ["juros"], "narrative": f"Banco {i} corta juros de cartão de crédito."}
+            for i in range(5)
+        ] + [{"id": "entr1", "date": "2026-09-04", "entity": "novoplayer", "entity_label": "NovoPlayer",
+              "kind": "entity_fusion", "industries": ["banking"], "is_alert": False, "threat_score": 0.3,
+              "lenses": ["entrants"], "topics": ["novos_entrantes"], "narrative": "NovoPlayer entra no mercado."}],
+    }
+    top = executive.build_executive(feed)["cso"]["weekly"]["by_industry"]["__all__"]["top_priorities"]
+    labels = [p["entity_label"] for p in top]
+    # the low-threat (0.3) entrant ranks FIRST, ahead of every 0.95-threat commodity rate blip —
+    # with only 3 slots and 1 substantive card, the tier-0 fallback correctly fills the rest.
+    assert labels[0] == "NovoPlayer"
+
+
 def test_cso_weekly_is_industry_scoped():
     wk = executive.build_executive(_feed())["cso"]["weekly"]["by_industry"]
     # nubank (fintech) is out of the banking scope; itaú (banking) + the market-wide reg card stay

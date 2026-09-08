@@ -212,6 +212,33 @@ def _priority_class(c: dict[str, Any]) -> str:
 _CLASS_LABEL = {"regulatory": "Mudança regulatória", "move": "Movimento competitivo",
                 "entrant": "Novo entrante", "alert": "Alerta ativo"}
 
+# A bare BCB-juros rate-table update is real signal (correctly counted as a "move" for metrics/
+# buckets above) but HIGH VOLUME and routine — on the live feed it was crowding the weekly top-3
+# out with automated rate blips, leaving no room for the low-volume, high-SIGNAL events (M&A,
+# entrants, regulatory, genuine alerts) a CSO actually needs surfaced. This tier is used ONLY to
+# rank the top-3 — it does not change `_priority_class`, so metrics/buckets/so_what/decision stay
+# exactly as before (no scope creep into the honest volume counts).
+_SUBSTANTIVE_LENSES = {"ofertas", "market", "pricing"}
+
+
+def _is_commodity_rate_update(c: dict[str, Any]) -> bool:
+    """A juros card is commodity unless it ALSO carries a genuinely substantive lens, an M&A
+    cue, or is independently alert-worthy. Deliberately ignores the `entrants` lens/topic here:
+    ADR-017 sub-entity discovery stamps `entrants`/`novos_entrantes` on every card for a fresh
+    sub-entity, including its routine rate prints — that tag is known-unreliable noise on a
+    juros card (the same finding that motivated `_priority_class`'s own reg→move precedence),
+    so it must not be allowed to smuggle a rate blip past the commodity check."""
+    lenses = set(c.get("lenses") or [])
+    if "juros" not in lenses or lenses & _SUBSTANTIVE_LENSES:
+        return False
+    if c.get("is_alert"):
+        return False  # a genuinely alert-worthy rate move still competes on its own merits
+    return not any(cue in (c.get("narrative") or "").lower() for cue in _MA_CUES)
+
+
+def _priority_rank_tier(c: dict[str, Any]) -> int:
+    return 0 if _is_commodity_rate_update(c) else 1
+
 
 def _priority_decision(c: dict[str, Any]) -> dict[str, Any]:
     """Map a week-priority card to the decision it invites (reuses the officer action catalog)."""
@@ -291,8 +318,10 @@ def build_cso_weekly(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any
             "climate": _delta(_climate_index(rc, len(sdist)), _climate_index(pc, len(sdist))),
             "n_cards": _delta(len(rc), len(pc)),
         }
-        # top priorities: the week's material ranked by alert, then threat, then blast radius.
-        ranked = sorted(rc, key=lambda c: (bool(c.get("is_alert")), _threat(c), _blast(c)), reverse=True)
+        # top priorities: substance (tier) first, then alert, then threat, then blast radius —
+        # a routine commodity rate update never outranks a named strategic move on raw threat alone.
+        ranked = sorted(rc, key=lambda c: (_priority_rank_tier(c), bool(c.get("is_alert")), _threat(c), _blast(c)),
+                        reverse=True)
         top = []
         for c in ranked[:3]:
             h = _headline(c)
