@@ -139,6 +139,28 @@ def test_cso_weekly_is_industry_scoped():
     assert "Nubank" in {p["entity_label"] for p in wk["fintech"]["top_priorities"]}
 
 
+def test_momentum_carries_asset_size_for_bubble_sizing():
+    # Mapa Competitivo bubble-size feature: momentum rows join in feed.entities[].fundamentals.
+    # ativo_bi (a real, grounded market-size proxy) — None (not 0) when an entity has no
+    # reported fundamentals, so the client never draws "no data" as "zero assets".
+    feed = _feed()
+    feed["entities"].append({"entity": "itau", "label": "Itaú", "fundamentals": {"ativo_bi": 2834.36}})
+    cso = executive.build_executive(feed)["cso"]
+    mom = {m["entity"]: m for m in cso["panels"]["momentum"]}
+    assert mom["itau"]["size_bi"] == 2834.36
+    assert mom["nubank"]["size_bi"] is None  # tracked, momentum computed, but no fundamentals
+
+
+def test_asset_size_index_skips_missing_and_none():
+    idx = executive._asset_size_index({"entities": [
+        {"entity": "a", "fundamentals": {"ativo_bi": 100.0}},
+        {"entity": "b", "fundamentals": {"ativo_bi": None}},
+        {"entity": "c"},
+        {"fundamentals": {"ativo_bi": 50.0}},  # no entity id — skipped
+    ]})
+    assert idx == {"a": 100.0}
+
+
 def test_cro_impact_sorts_by_blast_and_surfaces_changes():
     cro = executive.build_executive(_feed())["cro"]
     assert cro["by_industry"]["__all__"]["n_reg"] >= 1

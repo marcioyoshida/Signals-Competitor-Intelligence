@@ -124,8 +124,22 @@ def _climate_index(cards: list[dict[str, Any]], n_distress: int) -> int:
     return max(0, min(100, round(100 - penalty)))
 
 
+def _asset_size_index(feed: dict[str, Any]) -> dict[str, float]:
+    """entity_id → total assets (R$ bi, IF.data/CVM `fundamentals.ativo_bi`) — a grounded market-
+    size proxy for the Mapa Competitivo bubble size. Independent of `_fundamentals_rows`' ROE
+    gate: an entity can carry a balance-sheet size without a reported ROE. Only ~30% of tracked
+    entities have this (listed/IF.data-covered institutions) — callers must treat a missing key
+    as "no data", never default to 0 (0 would visually claim "no assets", which is false)."""
+    out: dict[str, float] = {}
+    for e in (feed.get("entities") or []):
+        v = (e.get("fundamentals") or {}).get("ativo_bi")
+        if v is not None and e.get("entity"):
+            out[e["entity"]] = float(v)
+    return out
+
+
 def _momentum(cards: list[dict[str, Any]], dates: list[str],
-              labels: dict[str, str]) -> list[dict[str, Any]]:
+              labels: dict[str, str], *, sizes: dict[str, float] | None = None) -> list[dict[str, Any]]:
     """Per-entity competitor momentum = recent-window avg threat − prior-window avg threat."""
     recent, prior = _recent_window(dates)
     acc: dict[str, dict[str, list[float]]] = {}
@@ -148,7 +162,10 @@ def _momentum(cards: list[dict[str, Any]], dates: list[str],
         pri = sum(w["prior"]) / len(w["prior"]) if w["prior"] else rec
         out.append({"entity": e, "label": labels.get(e, e), "recent": round(rec, 1),
                     "prior": round(pri, 1), "momentum": round(rec - pri, 1),
-                    "industries": sorted(inds.get(e, set()))})
+                    "industries": sorted(inds.get(e, set())),
+                    # None (not 0) when unknown — the client must fall back to a default
+                    # bubble size, never render "no data" as "zero assets".
+                    "size_bi": (sizes or {}).get(e)})
     out.sort(key=lambda x: x["momentum"], reverse=True)
     return out
 
@@ -436,7 +453,7 @@ def build_cso(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     opps = [c for c in cards if (c.get("swot_hint") or {}).get("dimension") == "O"
             or (c.get("swot_hint") or {}).get("sign") == "-"]
     moves = [c for c in news if _is_move(c)]
-    momentum = _momentum(cards, dates, labels)
+    momentum = _momentum(cards, dates, labels, sizes=_asset_size_index(feed))
 
     def agg(slug):
         sc = [c for c in cards if _in_industry(c, slug)]

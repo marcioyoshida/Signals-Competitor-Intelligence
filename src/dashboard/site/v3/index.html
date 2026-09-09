@@ -68,9 +68,11 @@
   .sc-danger { fill:color-mix(in srgb,var(--t-crit) 8%,transparent); }
   .sc-dot { stroke:var(--surface); stroke-width:1.2; }
   .sc-dot:hover { stroke:var(--ink); stroke-width:1.6; }
+  .sc-dot--nd { stroke:var(--muted); stroke-width:1; stroke-dasharray:2 1.5; }
   .sc-lbl { fill:var(--ink-2); font-size:11px; font-variant-numeric:tabular-nums; }
   .sc-ax  { fill:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.5px; }
   .sc-quad { fill:var(--muted); font-size:10px; letter-spacing:.4px; opacity:.7; }
+  .sc-legend { margin-top:var(--s2); font-size:var(--fs-micro); color:var(--muted); text-align:right; }
 
   /* Macro strip — Copom & Focus, shared across all officers */
   .macro-strip { margin:0 0 var(--s4); }
@@ -547,6 +549,13 @@ async function loadQuotes() {
 }
 // Mapa Competitivo (v1 flagship → CSO): each tracked competitor placed by current threat
 // (ameaça, y) × window acceleration (momentum, x). Top-right = high + accelerating (danger).
+// Bubble SIZE = market size (feed.entities[].fundamentals.ativo_bi, IF.data/CVM total assets,
+// R$ bi) — area-proportional (sqrt scale, not linear radius) per dataviz convention, so a bank
+// with 4x the assets doesn't look 4x the AREA of a 16x-bigger circle. Only ~30% of tracked
+// entities carry this (listed/IF.data-covered institutions); an entity with no reported
+// fundamentals gets a distinct SMALLER, dashed-outline default dot — it is never drawn at a
+// fabricated size, and its tooltip says so explicitly.
+const SC_R_MIN = 5, SC_R_MAX = 24, SC_R_UNKNOWN = 4;
 function scatterMap(list) {
   list = (list || []).filter(inSector).filter(d => d && d.entity);
   if (!list.length) return U.empty("Sem dados de posição na janela.", "", "○");
@@ -557,11 +566,18 @@ function scatterMap(list) {
   const y = a => padT + (1 - Math.max(0, Math.min(100, a)) / 100) * ih;
   const band = a => a >= 65 ? "t-crit" : a >= 40 ? "t-high" : "ok";
   const x0 = x(0), y50 = y(50);
-  const dots = list.map(d => {
-    const cx = x(d.momentum || 0), cy = y(d.recent || 0);
-    return `<circle class="sc-dot" cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="5.5" ` +
-      `fill="var(--${band(d.recent || 0)})" fill-opacity=".85">` +
-      `<title>${U.esc(d.label)} · ameaça ${d.recent} · momentum ${d.momentum > 0 ? "+" : ""}${d.momentum}</title></circle>`;
+  const maxSize = Math.max(1, ...list.map(d => d.size_bi || 0));
+  const rFor = d => d.size_bi == null ? SC_R_UNKNOWN
+    : SC_R_MIN + Math.sqrt(d.size_bi / maxSize) * (SC_R_MAX - SC_R_MIN);
+  // Paint largest bubbles first (underneath) so small/unknown-size competitors on top stay visible.
+  const painted = [...list].sort((a, b) => (b.size_bi || 0) - (a.size_bi || 0));
+  const dots = painted.map(d => {
+    const cx = x(d.momentum || 0), cy = y(d.recent || 0), r = rFor(d), known = d.size_bi != null;
+    const sizeTxt = known ? `R$ ${d.size_bi.toLocaleString("pt-BR", { maximumFractionDigits: 0 })} bi em ativos`
+      : "sem dado de ativos";
+    return `<circle class="sc-dot${known ? "" : " sc-dot--nd"}" cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(1)}" ` +
+      `fill="var(--${band(d.recent || 0)})" fill-opacity="${known ? ".78" : ".55"}">` +
+      `<title>${U.esc(d.label)} · ameaça ${d.recent} · momentum ${d.momentum > 0 ? "+" : ""}${d.momentum} · ${sizeTxt}</title></circle>`;
   }).join("");
   const labels = [...list].sort((a, b) => (b.recent || 0) - (a.recent || 0)).slice(0, 10).map(d => {
     const cx = x(d.momentum || 0), cy = y(d.recent || 0), end = cx > W - 150;
@@ -569,7 +585,7 @@ function scatterMap(list) {
       `text-anchor="${end ? "end" : "start"}">${U.esc((d.label || "").slice(0, 22))}</text>`;
   }).join("");
   return `<div class="scatter"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" ` +
-    `aria-label="Mapa competitivo: ameaça por momentum">` +
+    `aria-label="Mapa competitivo: ameaça por momentum, tamanho = ativos totais">` +
     `<rect class="sc-danger" x="${x0}" y="${padT}" width="${padL + iw - x0}" height="${y50 - padT}"/>` +
     `<line class="sc-grid" x1="${padL}" y1="${y50}" x2="${padL + iw}" y2="${y50}"/>` +
     `<line class="sc-grid" x1="${x0}" y1="${padT}" x2="${x0}" y2="${padT + ih}"/>` +
@@ -578,7 +594,7 @@ function scatterMap(list) {
     dots + labels +
     `<text class="sc-ax" x="${padL + iw}" y="${H - 10}" text-anchor="end">momentum — recua ← 0 → acelera</text>` +
     `<text class="sc-ax" transform="rotate(-90 14 ${padT + ih / 2})" x="14" y="${padT + ih / 2}" text-anchor="middle">ameaça (0–100)</text>` +
-    `</svg></div>`;
+    `</svg><div class="sc-legend">tamanho da bolha = ativos totais (R$ bi) · IF.data/CVM · pontilhado = sem dado</div></div>`;
 }
 // Threat timeline (v1 → CSO): per-competitor ameaça trajectory across the run's dates,
 // computed client-side from the feed (daily mean threat per entity). Top movers by momentum.
