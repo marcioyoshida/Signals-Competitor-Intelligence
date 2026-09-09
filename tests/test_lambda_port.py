@@ -291,7 +291,7 @@ def test_lambda_handler_continues_when_all_ingesters_raise(monkeypatch):
     assert payload["pix_moves"]["move_count"] == 0
 
 
-def test_lambda_handler_continues_when_s3_upload_fails(monkeypatch):
+def test_lambda_handler_continues_when_s3_upload_fails(monkeypatch, capsys):
     monkeypatch.setattr(lambda_port, "_new_since_last_run", lambda source, docs, seed_if_empty=False, commit=True: docs)
     monkeypatch.setattr(lambda_port, "_moves_since_last_run", lambda *a, **k: [])
     _stub_core_ingesters(monkeypatch)
@@ -308,6 +308,15 @@ def test_lambda_handler_continues_when_s3_upload_fails(monkeypatch):
     assert response["statusCode"] == 200
     payload = json.loads(response["body"])
     assert payload["source"] == "lambda_port"
+    # Regression guard (2026-09-08): a stray local `import boto3` inside a gated block
+    # elsewhere in this giant function once made Python treat `boto3` as LOCAL to the whole
+    # `lambda_handler` (compile-time scoping, independent of whether that block ever ran) —
+    # so the S3 upload failed with an UnboundLocalError that LOOKED identical from the outside
+    # (200 status, unaffected payload) to this test's intended "graceful degradation on a real
+    # S3 error" scenario, silently passing for the wrong reason. Assert the actual failure
+    # reason to close that blind spot — this must be BrokenS3Client's RuntimeError, not a
+    # scoping bug masquerading as one.
+    assert "Warning: S3 upload failed: upload failed" in capsys.readouterr().out
 
 
 def test_lambda_handler_reports_only_new_normativos_across_two_runs(monkeypatch):
@@ -1023,3 +1032,39 @@ def test_lambda_handler_vertical_gates_lens_sections(monkeypatch):
     for agnostic in ("sanctions", "cade", "contracts"):
         assert agnostic in body, f"sector-agnostic section {agnostic} should survive"
     assert "macro" in body and body["source"] == "lambda_port"   # non-lens sections untouched
+
+
+def test_lambda_handler_never_shadows_a_module_level_import_with_a_local_one():
+    """Regression guard (2026-09-08): a nested `import boto3` inside one gated block made
+    Python treat `boto3` as LOCAL to the whole `lambda_handler` (compile-time, function-wide
+    scoping — independent of whether that block ever runs at runtime), silently breaking the
+    unrelated final digest S3 upload in production for days before being caught. Statically
+    scan for the general form of this mistake: any name that is BOTH a module-level import in
+    lambda_port AND a local-import target (`import X` / `from Y import X`) somewhere inside
+    lambda_handler's body is a live landmine, regardless of which branch it sits in."""
+    import ast
+    import inspect
+
+    src = inspect.getsource(lambda_port.lambda_handler)
+    tree = ast.parse("if True:\n" + "".join("    " + l + "\n" for l in src.splitlines()))
+    local_import_names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                local_import_names.add((alias.asname or alias.name).split(".")[0])
+        elif isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                local_import_names.add(alias.asname or alias.name)
+
+    module_level_names = {
+        name for name, val in vars(lambda_port).items()
+        if inspect.ismodule(val) and not name.startswith("_")
+    }
+    shadowed = local_import_names & module_level_names
+    assert not shadowed, (
+        f"{shadowed} are imported at module scope in lambda_port AND re-imported locally "
+        "inside lambda_handler — Python's function-wide scoping will make that name "
+        "UnboundLocalError-prone for every bare reference earlier in the function, "
+        "regardless of whether the local-import branch executes. Use the module-level name "
+        "directly instead of re-importing it locally."
+    )

@@ -68,3 +68,57 @@ def test_propose_respects_budget():
             for i in range(5)]
     rep = rb.propose_candidates(rows, max_propose=2, table=t)
     assert len(rep["proposed"]) == 2 and rep["seen"] == 5
+
+
+# --- live shard fetch (#104 unblock) -----------------------------------------------------
+def test_shard_for_day_rotates_over_shards_1_to_9_excluding_0():
+    seen = {rb.shard_for_day(d) for d in range(0, 30)}
+    assert seen <= set(range(1, 10)) and 0 not in seen
+    assert rb.shard_for_day(0) == rb.shard_for_day(9)  # cycles every 9 days
+
+
+def test_latest_dump_date_parses_index_html_picks_max():
+    html = '<a href="2026-06-06/">..</a><a href="2026-08-09/">..</a><a href="2026-07-01/">..</a>'
+    assert rb.latest_dump_date(fetcher=lambda url: html) == "2026-08-09"
+
+
+def test_latest_dump_date_fail_closed_on_network_error():
+    def _boom(url):
+        raise RuntimeError("mirror unreachable")
+    assert rb.latest_dump_date(fetcher=_boom) is None
+
+
+def test_latest_dump_date_fail_closed_when_no_dates_found():
+    assert rb.latest_dump_date(fetcher=lambda url: "<html>no listing here</html>") is None
+
+
+def _fake_shard_zip(path, rows_text):
+    import zipfile
+    with zipfile.ZipFile(path, "w") as zf:
+        # RFB names the member an opaque code, not the shard's own name — use one to prove
+        # fetch_shard doesn't hardcode a filename.
+        zf.writestr("K3241.K03200Y#.D260809.ESTABELE", rows_text.encode("latin-1"))
+
+
+def test_fetch_shard_downloads_parses_and_cleans_up(tmp_path):
+    rows_text = _row("11111111", "NEOBANK", "02", "1", "6422-1/00") + "\n"
+
+    def _downloader(url, path, *, deadline=None):
+        assert "Estabelecimentos3.zip" in url and "2026-08-09" in url
+        _fake_shard_zip(path, rows_text)
+
+    cands = rb.fetch_shard(3, dump_date="2026-08-09", dest_dir=str(tmp_path), downloader=_downloader)
+    assert len(cands) == 1 and cands[0]["name"] == "NEOBANK" and cands[0]["industry"] == "banking"
+    # the downloaded zip is cleaned up afterward — no leftover multi-hundred-MB files in /tmp
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_fetch_shard_returns_empty_when_no_dump_date_discoverable():
+    assert rb.fetch_shard(3, index_fetcher=lambda url: "<html></html>",
+                          downloader=lambda *a, **k: (_ for _ in ()).throw(AssertionError("should not download"))) == []
+
+
+def test_fetch_shard_best_effort_on_download_failure(tmp_path):
+    def _boom(url, path, *, deadline=None):
+        raise TimeoutError("exceeded budget")
+    assert rb.fetch_shard(3, dump_date="2026-08-09", dest_dir=str(tmp_path), downloader=_boom) == []

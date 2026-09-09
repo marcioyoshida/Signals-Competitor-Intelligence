@@ -823,31 +823,51 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as exc:  # pragma: no cover - best-effort, never blocks ingest
             print(f"Warning: regulated roster promote skipped: {exc}")
 
-    # #104 (#14 Stage 2) — Receita CNPJ bulk → FS-CNAE candidate proposals. Gated OFF and
-    # only runs when a PRE-STAGED partition is configured (ONCA_RECEITA_BULK_KEY in the
-    # digests bucket, or ONCA_RECEITA_BULK_URL): the full ~60M-row dump is not feasible to
-    # fetch/scan inside this Lambda, so an Athena/Glue step stages a CNAE-filtered CSV first.
-    # Propose-only (ADR 011 §4): CNPJ-only candidates go to review, never auto-create.
-    _rb_key = os.environ.get("ONCA_RECEITA_BULK_KEY")
-    _rb_url = os.environ.get("ONCA_RECEITA_BULK_URL")
+    # #104 (#14 Stage 2) — Receita CNPJ bulk → FS-CNAE candidate proposals. Gated OFF by default
+    # (ONCA_INGEST_RECEITA_BULK). Default path (2026-09-08, unblocked): a LIVE shard fetch —
+    # the dump is 10 numbered shards, not one monolith; shards 1-9 fit a single invocation,
+    # rotating by day-of-year. A pre-staged partition (ONCA_RECEITA_BULK_KEY/URL — e.g. a future
+    # Athena/Glue step over the full dataset) overrides the live fetch if configured. This is a
+    # genuinely heavy fetch (a few hundred MB), so it gets its OWN larger source budget rather
+    # than the shared ONCA_SOURCE_TIMEOUT_SEC. Propose-only (ADR 011 §4) throughout.
     if os.environ.get("ONCA_INGEST_RECEITA_BULK", "false").lower() in ("1", "true", "yes") \
-            and (_rb_key or _rb_url) and os.environ.get("ONCA_ENTITIES_TABLE"):
+            and os.environ.get("ONCA_ENTITIES_TABLE"):
         try:
-            with _source_budget("Receita bulk CNAE", deadline, per_source):
+            _rb_budget = int(os.environ.get("ONCA_RECEITA_SOURCE_TIMEOUT_SEC", "240"))
+            with _source_budget("Receita bulk CNAE", deadline, _rb_budget):
                 from src.ingest import receita_bulk
 
+                _rb_key = os.environ.get("ONCA_RECEITA_BULK_KEY")
+                _rb_url = os.environ.get("ONCA_RECEITA_BULK_URL")
                 if _rb_key:
-                    import boto3
+                    # NB: boto3 is already imported at module scope (top of file) — a local
+                    # `import boto3` HERE would make Python treat the name as local to the
+                    # WHOLE `lambda_handler` function (Python's scoping is function-wide, not
+                    # block-wide, and applies at compile time regardless of whether this branch
+                    # ever runs), breaking every unrelated bare `boto3.` reference later in this
+                    # same giant function — this exact bug silently broke the final digest S3
+                    # upload (`Warning: S3 upload failed: cannot access local variable 'boto3'`)
+                    # on every ingest invocation since it was introduced (2026-09-08, live-
+                    # confirmed via CloudWatch). Do not reintroduce a local import of a name
+                    # already imported at module scope inside this function.
                     _body = boto3.client("s3").get_object(
                         Bucket=os.environ["ONCA_DIGESTS_BUCKET"], Key=_rb_key)["Body"].read()
-                    _text = _body.decode("latin-1")
-                else:
+                    _cands = receita_bulk.parse_estabelecimentos(_body.decode("latin-1"))
+                    _src_label = f"staged:{_rb_key}"
+                elif _rb_url:
                     _text = requests.get(_rb_url, timeout=120).content.decode("latin-1")
-                _cands = receita_bulk.parse_estabelecimentos(_text)
+                    _cands = receita_bulk.parse_estabelecimentos(_text)
+                    _src_label = _rb_url
+                else:
+                    import datetime as _dt
+                    _shard = receita_bulk.shard_for_day(_dt.date.today().timetuple().tm_yday)
+                    _cands = receita_bulk.fetch_shard(
+                        _shard, deadline=min(deadline, time.monotonic() + _rb_budget))
+                    _src_label = f"live shard {_shard}"
                 _rep = receita_bulk.propose_candidates(
                     _cands, max_propose=int(os.environ.get("ONCA_RECEITA_BULK_MAX_PROPOSE", "200")))
-                print(f"Receita bulk CNAE: candidates={len(_cands)} already={_rep['already']} "
-                      f"proposed={len(_rep['proposed'])} no_name={_rep['no_name']}")
+                print(f"Receita bulk CNAE ({_src_label}): candidates={len(_cands)} "
+                      f"already={_rep['already']} proposed={len(_rep['proposed'])} no_name={_rep['no_name']}")
         except Exception as exc:  # pragma: no cover - best-effort, never blocks ingest
             print(f"Warning: Receita bulk CNAE skipped: {exc}")
 
@@ -1178,38 +1198,6 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
             print(f"Warning: CVM fatos relevantes fetch failed: {exc}")
 
-    # Entities registry alias accumulation (ADR step 4): a structured CVM signal
-    # (offering issuer / fato relevante company) that carries a CNPJ already
-    # resolving to a known entity contributes its razão social to that entity's
-    # aliases — so a later name-only signal (news, DOU) about it resolves too.
-    # Data-derived + CNPJ-gated is the auto-safe case; best-effort, never blocks.
-    if os.environ.get("ONCA_ENTITIES_TABLE") and os.environ.get(
-        "ONCA_ENTITIES_ACCUMULATE", "true"
-    ).lower() in ("1", "true", "yes"):
-        try:
-            with _source_budget("entities alias accumulation", deadline, per_source):
-                from src.synth import entity_registry
-
-                named = [(o.get("issuer"), o.get("issuer_cnpj")) for o in new_ofertas]
-                named += [(f.get("company"), f.get("cnpj")) for f in new_fatos]
-                acc = 0
-                seen_pairs: set[tuple[str, str]] = set()
-                for name, cnpj in named:
-                    root = "".join(ch for ch in str(cnpj or "") if ch.isdigit())[:8]
-                    if not name or len(root) < 8:
-                        continue
-                    pair = (root, str(name))
-                    if pair in seen_pairs:
-                        continue
-                    seen_pairs.add(pair)
-                    eid = entity_registry.resolve_by_cnpj(root)
-                    if eid and entity_registry.accumulate_aliases(eid, [name]):
-                        acc += 1
-                if acc:
-                    print(f"entities: accumulated aliases for {acc} CVM signals")
-        except Exception as exc:  # pragma: no cover - best-effort, never blocks ingest
-            print(f"Warning: entity alias accumulation skipped: {exc}")
-
     # Diário Oficial (dou) — produced by the registry loop below.
 
     # CADE antitrust (#61) — produced by the registry loop below (fetch resolves the merger
@@ -1364,6 +1352,48 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     cade_records, new_cade = loop_results.get("cade", ([], []))
     sanctions_records, new_sanctions = loop_results.get("sanctions", ([], []))
     contracts_records, new_contracts = loop_results.get("contracts", ([], []))
+
+    # Entities registry alias accumulation (ADR step 4): a structured CVM signal
+    # (offering issuer / fato relevante company) that carries a CNPJ already
+    # resolving to a known entity contributes its razão social to that entity's
+    # aliases — so a later name-only signal (news, DOU) about it resolves too.
+    # Data-derived + CNPJ-gated is the auto-safe case; best-effort, never blocks.
+    # NB relocated here (2026-09-08, live bug fix): `new_ofertas` is only assigned once the
+    # ADR-019 registry-driven loop above completes — this block used to sit BEFORE that loop
+    # (a pre-ADR-019 layout) and referenced `new_ofertas` before its assignment, which Python's
+    # function-wide scoping turns into an `UnboundLocalError` on every run (silently swallowed
+    # by the surrounding try/except as "Warning: entity alias accumulation skipped"). Moving it
+    # here fixes it; the one behavior change is that THIS run's own DOU/CADE resolution (which
+    # happens inside that same loop, above) no longer benefits from aliases accumulated from
+    # THIS run's ofertas/fatos — only from prior runs. Given the block has been fully broken
+    # (never accumulating anything) since whichever change introduced the ordering bug, this is
+    # a strict improvement, not a regression.
+    if os.environ.get("ONCA_ENTITIES_TABLE") and os.environ.get(
+        "ONCA_ENTITIES_ACCUMULATE", "true"
+    ).lower() in ("1", "true", "yes"):
+        try:
+            with _source_budget("entities alias accumulation", deadline, per_source):
+                from src.synth import entity_registry
+
+                named = [(o.get("issuer"), o.get("issuer_cnpj")) for o in new_ofertas]
+                named += [(f.get("company"), f.get("cnpj")) for f in new_fatos]
+                acc = 0
+                seen_pairs: set[tuple[str, str]] = set()
+                for name, cnpj in named:
+                    root = "".join(ch for ch in str(cnpj or "") if ch.isdigit())[:8]
+                    if not name or len(root) < 8:
+                        continue
+                    pair = (root, str(name))
+                    if pair in seen_pairs:
+                        continue
+                    seen_pairs.add(pair)
+                    eid = entity_registry.resolve_by_cnpj(root)
+                    if eid and entity_registry.accumulate_aliases(eid, [name]):
+                        acc += 1
+                if acc:
+                    print(f"entities: accumulated aliases for {acc} CVM signals")
+        except Exception as exc:  # pragma: no cover - best-effort, never blocks ingest
+            print(f"Warning: entity alias accumulation skipped: {exc}")
 
     # Reclame Aqui — consumer-reputation snapshots for retail-facing banks/fintechs
     # (issue #31). Unofficial source, so best-effort + off via env; writes a durable
