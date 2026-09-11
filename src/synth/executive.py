@@ -170,6 +170,41 @@ def _momentum(cards: list[dict[str, Any]], dates: list[str],
     return out
 
 
+def _momentum_for_panel(rows: list[dict[str, Any]], sectors: list[dict[str, str]], *,
+                        per_sector: int = 24, overall: int = 30) -> list[dict[str, Any]]:
+    """Select the momentum rows the CSO panels ship, WITHOUT starving any one sector.
+
+    The panel payload feeds a client that filters per sector, so a blind global `rows[:30]`
+    is wrong twice over:
+      1. It caps ACROSS sectors — one busy sector's rows crowd every other sector's map down
+         to a handful of dots (live 2026-09-09: banking had 17 eligible entities, 4 survived).
+      2. `_momentum` sorts by SIGNED momentum, so a global head-slice deletes the whole
+         declining tail — every incumbent losing threat (Itaú, BB, Bradesco, Santander,
+         Nubank were all cut). The scatter's x-axis is labelled "recua ← 0 → acelera", so
+         truncating one side makes half the chart structurally unreachable.
+
+    Fix: rank by |momentum| (the biggest movers in EITHER direction are the story), then ship
+    the union of the top `overall` globally and the top `per_sector` within each sector. Bounded
+    by activity (only entities with a card in the recent window get a row at all), sector-fair,
+    and sign-symmetric. Ties at 0.0 keep `_momentum`'s signed order underneath for stability.
+    """
+    ranked = sorted(rows, key=lambda x: (abs(x.get("momentum") or 0), x.get("momentum") or 0),
+                    reverse=True)
+    keep: dict[str, dict[str, Any]] = {r["entity"]: r for r in ranked[:overall] if r.get("entity")}
+    for s in sectors or []:
+        slug = s.get("slug")
+        if not slug:
+            continue
+        n = 0
+        for r in ranked:
+            if slug in (r.get("industries") or []):
+                keep.setdefault(r["entity"], r)
+                n += 1
+                if n >= per_sector:
+                    break
+    return [r for r in ranked if r.get("entity") in keep]
+
+
 def _by_industry(sectors: list[dict[str, str]], fn) -> dict[str, Any]:
     """Apply an aggregate builder `fn(slug)` for every sector + __all__."""
     return {slug: fn(slug) for slug in [ALL] + [s["slug"] for s in sectors]}
@@ -516,7 +551,7 @@ def build_cso(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         "risks": [_headline(c) for c in risks[:30]],
         "opportunities": [_headline(c) for c in opps[:20]],
         "moves": [_headline(c) for c in moves[:20]],
-        "momentum": momentum[:30],
+        "momentum": _momentum_for_panel(momentum, ctx["sectors"]),
         "regulatory": [_reg_row(c) for c in reg_sorted[:20]],
         # ADR 022 Tier-1: competitor financial strength (ROE/ROA/leverage/headroom/share), inference.
         "financials": financials[:25],

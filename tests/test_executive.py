@@ -161,6 +161,39 @@ def test_asset_size_index_skips_missing_and_none():
     assert idx == {"a": 100.0}
 
 
+def test_momentum_panel_keeps_decliners_not_just_risers():
+    # The Mapa Competitivo x-axis runs "recua <- 0 -> acelera". A signed-desc head-slice
+    # (the old `momentum[:30]`) deleted the entire declining tail, making half the chart
+    # structurally unreachable. |momentum| ranking keeps the biggest movers BOTH ways.
+    rows = [{"entity": f"r{i}", "momentum": float(i), "industries": ["banking"]} for i in range(1, 31)]
+    rows += [{"entity": "faller", "momentum": -40.0, "industries": ["banking"]}]
+    out = executive._momentum_for_panel(rows, [{"slug": "banking"}], overall=5, per_sector=5)
+    assert "faller" in {r["entity"] for r in out}
+    assert out[0]["entity"] == "faller"          # |-40| is the single biggest move on the board
+
+
+def test_momentum_panel_does_not_starve_a_quiet_sector():
+    # A busy sector must not crowd another sector off its own map: the global cap is a
+    # union with a per-sector floor, not a blind cross-sector head-slice.
+    rows = [{"entity": f"b{i}", "momentum": 50.0 - i, "industries": ["betting"]} for i in range(20)]
+    rows += [{"entity": "quiet-bank", "momentum": 0.4, "industries": ["banking"]}]
+    sectors = [{"slug": "betting"}, {"slug": "banking"}]
+    assert "quiet-bank" not in {r["entity"] for r in sorted(
+        rows, key=lambda x: x["momentum"], reverse=True)[:5]}   # the OLD global cap dropped it
+    out = executive._momentum_for_panel(rows, sectors, overall=5, per_sector=3)
+    assert "quiet-bank" in {r["entity"] for r in out}
+    assert len([r for r in out if "betting" in r["industries"]]) >= 3
+
+
+def test_momentum_panel_is_bounded_and_dedupes_multi_sector_rows():
+    rows = [{"entity": f"e{i}", "momentum": float(i), "industries": ["banking", "fintech"]}
+            for i in range(50)]
+    out = executive._momentum_for_panel(rows, [{"slug": "banking"}, {"slug": "fintech"}],
+                                        overall=10, per_sector=10)
+    assert len({r["entity"] for r in out}) == len(out)   # an entity appears at most once
+    assert len(out) <= 50 and len(out) >= 10
+
+
 def test_cro_impact_sorts_by_blast_and_surfaces_changes():
     cro = executive.build_executive(_feed())["cro"]
     assert cro["by_industry"]["__all__"]["n_reg"] >= 1
