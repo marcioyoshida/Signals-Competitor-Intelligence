@@ -138,16 +138,45 @@ def _asset_size_index(feed: dict[str, Any]) -> dict[str, float]:
     return out
 
 
+def _group_roots(feed: dict[str, Any]) -> dict[str, str]:
+    """{entity -> top of its ADR-017 corporate group}. Cycle-safe and depth-capped: a corrupt
+    parent loop resolves to the entity itself rather than spinning."""
+    attrs = feed.get("entity_attrs") or {}
+    out: dict[str, str] = {}
+    for eid in attrs:
+        cur, seen = eid, {eid}
+        for _ in range(16):
+            nxt = (attrs.get(cur) or {}).get("parent")
+            if not nxt or nxt not in attrs or nxt in seen:
+                break
+            seen.add(nxt)
+            cur = str(nxt)
+        if cur != eid:
+            out[eid] = cur
+    return out
+
+
 def _momentum(cards: list[dict[str, Any]], dates: list[str],
-              labels: dict[str, str], *, sizes: dict[str, float] | None = None) -> list[dict[str, Any]]:
-    """Per-entity competitor momentum = recent-window avg threat − prior-window avg threat."""
+              labels: dict[str, str], *, sizes: dict[str, float] | None = None,
+              rollup: dict[str, str] | None = None) -> list[dict[str, Any]]:
+    """Per-entity competitor momentum = recent-window avg threat − prior-window avg threat.
+
+    With `rollup` ({child -> group root}), a conglomerate's sub-entities aggregate INTO the
+    parent brand so the Mapa Competitivo draws one dot per competitor rather than one per
+    legal entity (live 2026-09-11: BTG drew 8 dots, Itaú 7, XP 5). The rolled row carries the
+    union of its members' industries, so a group shows up on every sector map it actually
+    operates in — through its corretora on investment-banking, its funds on real-estate-funds
+    — which is the honest read of a conglomerate's competitive footprint.
+    """
     recent, prior = _recent_window(dates)
+    roll = rollup or {}
     acc: dict[str, dict[str, list[float]]] = {}
     inds: dict[str, set[str]] = {}
     for c in cards:
         e = c.get("entity")
         if not e:
             continue
+        e = roll.get(e, e)
         d = str(c.get("date") or "")
         bucket = "recent" if d in recent else ("prior" if d in prior else None)
         if bucket is None:
@@ -488,7 +517,8 @@ def build_cso(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     opps = [c for c in cards if (c.get("swot_hint") or {}).get("dimension") == "O"
             or (c.get("swot_hint") or {}).get("sign") == "-"]
     moves = [c for c in news if _is_move(c)]
-    momentum = _momentum(cards, dates, labels, sizes=_asset_size_index(feed))
+    momentum = _momentum(cards, dates, labels, sizes=_asset_size_index(feed),
+                         rollup=_group_roots(feed))
 
     def agg(slug):
         sc = [c for c in cards if _in_industry(c, slug)]

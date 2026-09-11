@@ -531,3 +531,39 @@ def test_flow_draft_annotation_and_n_drafts():
     dec = [t for t in ex1["flow"] if t["id"] == fid][0]
     assert dec["decided"] and dec["verdict"] == "aprovado" and dec["decision_id"] == "d1"
     assert ex1["metrics"]["n_drafts"] == len(flow) - 1
+
+
+def test_group_roots_walks_to_the_top_and_survives_a_cycle():
+    roots = executive._group_roots({"entity_attrs": {
+        "btg": {}, "btg-corretora": {"parent": "btg"},
+        "kinea": {"parent": "itau"}, "itau": {}, "kdol11": {"parent": "kinea"},
+        "orphan": {"parent": "not-in-registry"},   # dangling parent — stays itself
+        "a": {"parent": "b"}, "b": {"parent": "a"},  # corrupt loop — must not spin
+    }})
+    assert roots["btg-corretora"] == "btg"
+    assert roots["kdol11"] == "itau"          # chased two hops to the group top
+    assert "orphan" not in roots and "btg" not in roots and "itau" not in roots
+    assert roots["a"] in {"a", "b"} and roots["b"] in {"a", "b"}
+
+
+def test_momentum_rolls_group_children_into_one_dot_per_brand():
+    # Live 2026-09-11 the map drew BTG as 8 dots, Itaú 7, XP 5 — one per legal entity.
+    # A group is ONE competitor; its sub-entities' cards belong to the parent brand, and
+    # the rolled row inherits every sector its members actually operate in.
+    feed = _feed()
+    feed["entity_attrs"]["btg"] = {"label": "BTG Pactual", "industries": ["banking"]}
+    feed["entity_attrs"]["btg-corretora"] = {"label": "BTG Corretora", "parent": "btg"}
+    feed["entity_attrs"]["btg-asset"] = {"label": "BTG Asset", "parent": "btg-corretora"}
+    feed["entities"].append({"entity": "btg", "label": "BTG", "fundamentals": {"ativo_bi": 500.0}})
+    for i, (ent, ind, thr) in enumerate([("btg", "banking", 0.8),
+                                         ("btg-corretora", "investment-banking", 0.6),
+                                         ("btg-asset", "real-estate-funds", 0.4)]):
+        feed["feed"].append({"id": f"b{i}", "date": "2026-09-04", "entity": ent,
+                             "entity_label": ent, "kind": "entity_fusion", "industries": [ind],
+                             "is_alert": False, "threat_score": thr, "narrative": "x"})
+    mom = executive.build_executive(feed)["cso"]["panels"]["momentum"]
+    rows = [m for m in mom if m["entity"].startswith("btg")]
+    assert [r["entity"] for r in rows] == ["btg"]            # one dot, not three
+    assert rows[0]["label"] == "BTG"                         # named for the group, not a child
+    assert rows[0]["size_bi"] == 500.0                       # group's own reported assets
+    assert set(rows[0]["industries"]) == {"banking", "investment-banking", "real-estate-funds"}
