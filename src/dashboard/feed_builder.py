@@ -393,6 +393,51 @@ def _regulatory_coverage() -> dict[str, Any]:
         return {}
 
 
+def _canonical_map(entity_attrs: dict[str, Any] | None) -> dict[str, str]:
+    """{duplicate_id -> surviving_id} from the registry's `canonical_id` (see
+    `entity_registry.set_canonical_id`). Chains are followed to their end so a merge of a
+    merge still resolves; a cycle (which the setter refuses, but a legacy row could carry)
+    is dropped rather than followed, so a corrupt row can never hang the feed build."""
+    attrs = entity_attrs or {}
+    out: dict[str, str] = {}
+    for eid, a in attrs.items():
+        target = (a or {}).get("canonical_id")
+        if not target or target == eid:
+            continue
+        seen, cur, ok = {eid}, str(target), True
+        while True:
+            if cur in seen:            # loops back on itself — unusable, drop the merge
+                ok = False
+                break
+            seen.add(cur)
+            nxt = (attrs.get(cur) or {}).get("canonical_id")
+            if not nxt or str(nxt) == cur:
+                break                  # cur is the end of the chain: the survivor
+            cur = str(nxt)
+        if ok:
+            out[eid] = cur
+    return out
+
+
+def _canonicalize_item(item: dict[str, Any], canon: dict[str, str]) -> None:
+    """Rewrite a feed item's entity references to their surviving ids, in place."""
+    if not canon:
+        return
+    ent = item.get("entity")
+    if ent and ent in canon:
+        item["entity"] = canon[ent]
+        item["entity_label"] = display_label(canon[ent], item.get("kind"))
+    if item.get("entities"):
+        seen: set[str] = set()
+        merged = []
+        for e in item["entities"]:
+            e2 = canon.get(e, e)
+            if e2 not in seen:
+                seen.add(e2)
+                merged.append(e2)
+        item["entities"] = merged
+
+
 def _build_groups(entity_attrs: dict[str, Any] | None) -> dict[str, list[str]]:
     """ADR 017 corporate groups: {parent_id: sorted[child sub-entity ids]} from the
     entities' `parent` links. Only parents that are themselves tracked are kept."""
@@ -462,6 +507,16 @@ def build_feed(
         if not (t.get("latest_dev_id")
                 and (t["latest_dev_id"], t.get("latest_dev_date")) in present)
     ]
+
+    # Collapse merged duplicates (registry `canonical_id`) BEFORE anything aggregates by
+    # entity. Two ids for one company (`pan`/`banco_pan`, `goldman-sachs`/`goldman_sachs`)
+    # otherwise split that company's signal across two timelines and draw it as two dots on
+    # the Mapa Competitivo — the low-signal twin landing at a momentum of exactly 0.0 and
+    # reading as a real, static competitor. Applied once, before any entity aggregation, so
+    # timelines, momentum, the ADR-017 industry denorm and `groups` all agree.
+    canon = _canonical_map(entity_attrs)
+    for x in items + thread_items:
+        _canonicalize_item(x, canon)
 
     items.sort(key=lambda x: (x["date"], x["threat_score"]), reverse=True)
     dates = sorted({x["date"] for x in items if x["date"]})

@@ -767,6 +767,14 @@ def list_entity_attributes(table: Any | None = None) -> dict[str, dict[str, Any]
             # ADR 017: the tier-1 conglomerate this entity is a sub-entity of, if any —
             # lets the dashboard fold a parent's lower-industry group in on demand.
             "parent": e.get("parent"),
+            # A MERGE target: this id and `canonical_id` are the SAME legal entity recorded
+            # twice (an id-convention twin — `pan` vs `banco_pan`, `goldman-sachs` vs
+            # `goldman_sachs`). Distinct from `parent`, which relates two DIFFERENT legal
+            # entities in one group. Only emitted when it actually points elsewhere, so the
+            # common case stays absent rather than echoing the entity's own id.
+            "canonical_id": (e.get("canonical_id")
+                             if e.get("canonical_id") and e.get("canonical_id") != e["entity_id"]
+                             else None),
             # #14 radar tier: how strong the evidence for this entity is (official
             # registry > structured filing > CNPJ-only > news-only), from its ADR-018
             # provenance. A reliability read, not a threat score.
@@ -1443,6 +1451,27 @@ def set_industries(
     return True
 
 
+def _would_cycle(entity_id: str, parent: str, table: Any | None = None) -> bool:
+    """True if pointing `entity_id` at `parent` would close a parent loop (ADR 017).
+
+    Walks up from the proposed parent; if we come back to `entity_id` the link is a cycle.
+    Bounded by a hop cap so an ALREADY-corrupt graph can't hang the caller.
+    """
+    if parent == entity_id:
+        return True
+    seen = {entity_id}
+    cur = parent
+    for _ in range(32):
+        if cur in seen:   # revisiting ANY node means the chain closes on itself
+            return True
+        seen.add(cur)
+        nxt = (get_entity(cur, table=table) or {}).get("parent")
+        if not nxt:
+            return False
+        cur = str(nxt)
+    return True  # depth cap hit: treat an unresolvable chain as unsafe
+
+
 def set_parent(entity_id: str, parent: str | None, table: Any | None = None,
                *, source: str = "curated") -> bool:
     """Link a sub-entity to its tier-1 conglomerate parent (ADR 017), or clear it with
@@ -1454,6 +1483,16 @@ def set_parent(entity_id: str, parent: str | None, table: Any | None = None,
     if not _may_write(ent, "parent", source):  # ADR 018 Phase 2
         _log(entity_id, "blocked", source, {"field": "parent", "attempted": parent})
         return False
+    if parent and _would_cycle(entity_id, str(parent), table=t):
+        # A parent cycle makes the ADR-017 group a closed loop: every consumer that walks
+        # parent->children (feed `groups`, the v2 industry slice, any rollup) either spins or
+        # silently truncates, and the "tier-1 opt-in" toggle folds a group into itself. The
+        # live registry sits one write away from this — `zurich`->`zurich_seguros` and
+        # `allianz`->`allianz_seguros` already exist, so linking the arm back to the brand
+        # would close the loop. Refuse and journal rather than write a corrupt graph.
+        _log(entity_id, "blocked", source, {"field": "parent", "attempted": parent,
+                                            "reason": "cycle"})
+        return False
     if parent:
         ent["parent"] = str(parent)
     else:
@@ -1461,6 +1500,52 @@ def set_parent(entity_id: str, parent: str | None, table: Any | None = None,
     _stamp(ent, ["parent"], source)  # ADR 018
     t.put_item(Item=ent)
     _log(entity_id, "set_parent", source, {"parent": parent})
+    return True
+
+
+def set_canonical_id(entity_id: str, canonical_id: str | None, table: Any | None = None,
+                     *, source: str = "curated") -> bool:
+    """Record that `entity_id` is a DUPLICATE of `canonical_id` — the same legal entity held
+    twice under two id conventions — or clear it with ``canonical_id=None``.
+
+    Not the same as `set_parent`: a parent relates two different legal entities inside one
+    corporate group (ADR 017), while this says "these two rows are one company". Consumers
+    collapse the duplicate into the canonical id, so the merge has an actual effect on the
+    feed instead of being recorded and ignored.
+
+    Refuses to point an entity at a MISSING target or to close a canonical loop; both would
+    leave a card attributed to an id nothing can resolve.
+    """
+    t = _table(table)
+    ent = get_entity(entity_id, table=t)
+    if not ent:
+        return False
+    if not _may_write(ent, "canonical_id", source):  # ADR 018 Phase 2
+        _log(entity_id, "blocked", source, {"field": "canonical_id", "attempted": canonical_id})
+        return False
+    if canonical_id:
+        target = str(canonical_id)
+        if not get_entity(target, table=t):
+            _log(entity_id, "blocked", source, {"field": "canonical_id", "attempted": target,
+                                                "reason": "missing_target"})
+            return False
+        seen, cur = {entity_id}, target
+        for _ in range(32):
+            if cur in seen:
+                _log(entity_id, "blocked", source, {"field": "canonical_id",
+                                                    "attempted": target, "reason": "cycle"})
+                return False
+            seen.add(cur)
+            nxt = (get_entity(cur, table=t) or {}).get("canonical_id")
+            if not nxt or str(nxt) == cur:
+                break
+            cur = str(nxt)
+        ent["canonical_id"] = target
+    else:
+        ent["canonical_id"] = entity_id   # put_entity's default: its own id = not merged
+    _stamp(ent, ["canonical_id"], source)  # ADR 018
+    t.put_item(Item=ent)
+    _log(entity_id, "set_canonical_id", source, {"canonical_id": canonical_id})
     return True
 
 

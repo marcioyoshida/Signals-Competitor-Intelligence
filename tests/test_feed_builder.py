@@ -577,3 +577,38 @@ def test_instrument_cards_dedup_to_latest_but_entity_timelines_keep_all():
     reg = [c for c in feed["feed"] if c["id"] == "regulatory-res-cmn-5304"]
     assert len(reg) == 1 and reg[0]["date"] == "2026-09-02"
     assert len([c for c in feed["feed"] if c["id"] == "cand-ent-itau"]) == 2
+
+
+def test_canonical_id_merges_a_duplicate_entity_into_one_timeline():
+    # `pan` and `banco_pan` are the SAME bank held twice under two id conventions. Without
+    # the merge each gets its own timeline and its own dot on the Mapa Competitivo, the
+    # low-signal twin sitting at momentum 0.0 and reading as a real, static competitor.
+    narratives = [
+        _narr("n1", "banco_pan", "2026-09-01", 0.6),
+        _narr("n2", "pan", "2026-09-02", 0.7),
+    ]
+    attrs = {"banco_pan": {"industries": ["banking"]},
+             "pan": {"industries": ["banking"], "canonical_id": "banco_pan"}}
+    feed = feed_builder.build_feed(
+        narratives, industry_map={"banco_pan": ["banking"]}, entity_attrs=attrs)
+    ids = {e["entity"] for e in feed["entities"]}
+    assert "pan" not in ids and "banco_pan" in ids
+    pan = next(e for e in feed["entities"] if e["entity"] == "banco_pan")
+    assert pan["total"] == 2                       # both dates land on ONE timeline
+    assert {c["entity"] for c in feed["feed"]} == {"banco_pan"}
+    assert all("pan" not in (c.get("entities") or []) for c in feed["feed"])
+
+
+def test_canonical_map_follows_chains_and_refuses_cycles():
+    attrs = {"a": {"canonical_id": "b"}, "b": {"canonical_id": "c"}, "c": {},
+             "x": {"canonical_id": "y"}, "y": {"canonical_id": "x"},   # corrupt legacy loop
+             "solo": {"canonical_id": "solo"}}                          # own id = not merged
+    m = feed_builder._canonical_map(attrs)
+    assert m == {"a": "c", "b": "c"}   # chain collapses to the end; cycle + self-ref dropped
+
+
+def test_canonicalize_item_dedupes_co_mentions():
+    item = {"entity": "pan", "kind": "entity_fusion", "entities": ["pan", "banco_pan", "itau"]}
+    feed_builder._canonicalize_item(item, {"pan": "banco_pan"})
+    assert item["entity"] == "banco_pan"
+    assert item["entities"] == ["banco_pan", "itau"]   # the duplicate collapses, not appends

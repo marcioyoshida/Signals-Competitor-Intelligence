@@ -600,6 +600,26 @@ def test_parent_link_and_children_of():
     assert er.set_parent("missing", "itau", table=t) is False
 
 
+def test_set_parent_refuses_to_close_a_group_cycle():
+    # ADR 017 groups are walked parent->children by the feed build and the v2 industry
+    # slice; a loop makes a conglomerate its own ancestor. The live registry has real
+    # near-cycles (zurich -> zurich_seguros), so the guard is not hypothetical.
+    t = FakeTable()
+    er.put_entity("zurich-seguros", "Zurich Seguros", ["ZSEG"], industries=["insurance"], table=t)
+    er.put_entity("zurich", "Zurich", ["ZUR"], industries=["insurance"],
+                  parent="zurich-seguros", table=t)
+    # closing the loop the other way is refused...
+    assert er.set_parent("zurich-seguros", "zurich", table=t) is False
+    assert "parent" not in er.get_entity("zurich-seguros", table=t)
+    # ...as is pointing an entity at itself, or at a deeper ancestor of itself.
+    assert er.set_parent("zurich", "zurich", table=t) is False
+    er.put_entity("g", "G", ["G"], industries=["banking"], table=t)
+    er.put_entity("m", "M", ["M"], industries=["banking"], parent="g", table=t)
+    er.put_entity("c", "C", ["C"], industries=["banking"], parent="m", table=t)
+    assert er.set_parent("g", "c", table=t) is False      # g -> c -> m -> g
+    assert er.set_parent("c", "g", table=t) is True       # re-pointing UP the chain is fine
+
+
 def test_entity_industry_map_lists_industries_per_entity():
     t = FakeTable()
     er.put_entity("a", "A", ["ACO"], industries=["banking"], table=t)
