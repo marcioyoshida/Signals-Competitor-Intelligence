@@ -1,6 +1,13 @@
 # ADR 018 — Curation Provenance, Write-Precedence & Continuous Integrity
 
-Status: PROPOSED 2026-08-30. Relates to ADR 005/017 (entities registry), ADR 011
+Status: **FULLY REALIZED (Phases 1-4 SHIPPED + LIVE)** 2026-08-30 (was PROPOSED same day).
+Phase 1 per-field `_prov` (`480a4c6`), Phase 1b curation journal + Phase 2 write-precedence
+(`2b347bc`), Phase 3 continuous integrity detectors -> `feed.integrity` (`7b1ffa2`), Phase 4
+rollback over the journal + `scripts/curation_admin.py` (`c0938bc`). The follow-up cleanup
+(`00cf52f`) GENERALIZED rather than retired the #52/ADR-017 point-guards: precedence only
+fronted `set_industries`/`set_parent`, so `put_entity` (create-overwrite) and
+`accumulate_aliases` (ticker aliases on a protected institution) had to be closed at the
+writer itself. Relates to ADR 005/017 (entities registry), ADR 011
 (discovery/enrichment), ADR 013 (classification attrs), ADR 014 (coverage-gap loop),
 ADR 002 (registry as a commercial API product).
 

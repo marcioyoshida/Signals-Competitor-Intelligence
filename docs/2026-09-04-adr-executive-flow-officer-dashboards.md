@@ -1,6 +1,8 @@
 # ADR 021 — Executive Flow, per-officer sectorial dashboards & the decision→KB expertise flywheel
 
-- Status: **PROPOSED** — 2026-09-04. Owner-requested ("the dashboards are running thin — make
+- Status: **FULLY REALIZED (Steps 1–6 SHIPPED + LIVE at `/exec`)** — 2026-09-04 (was PROPOSED
+  same day); issue #72 CLOSED and verified (reference playbooks ingested into KB CQ5LBZBQTY,
+  officer metadata filter returns the right doc). Owner-requested ("the dashboards are running thin — make
   them sectorial, with CSO/CPO/CRO/CCO collecting decisions and inference into the KB; the
   reference should be CORS-forwarded to collect metrics").
 - **Extends** [ADR 020](2026-09-04-adr-write-agent-api-officers.md) — the write-capable Agent

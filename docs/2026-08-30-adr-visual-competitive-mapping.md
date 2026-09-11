@@ -1,7 +1,9 @@
 # ADR 015 — Visual competitive mapping: Mapa Competitivo (Threat × Momentum) and the warroom visual layer
 
-- Status: **Proposed** (2026-08-30). Design decision; implementation follows the
-  phasing in §6.
+- Status: **ACCEPTED + IMPLEMENTED** (2026-08-30; realization log 2026-09-11). The Mapa
+  Competitivo ships on both surfaces — `/v2/app` (`renderQuadrant`) and the `/exec` CSO
+  panels (`scatterMap`) — fed by `executive.cso.panels.momentum`. See the realization log
+  at the end of this ADR for the three selection/identity rules added after live review.
 - Sourced from an owner request to add a **Gartner-style Magic Quadrant** (Vision ×
   Ability to Execute, market-leader dots) to the warroom, and to explore other
   **high-assertion, high-visual-impact** graphs for the dashboard.
@@ -244,3 +246,40 @@ shape — loaded by `feed_builder.py`, emitted onto `entities[]`:
 **Mapa Competitivo + #4 Ranking de Momentum** (ship together) → **#5 timeline**
 (last, most front-end code). Closes the Magic-Quadrant request as this design
 decision.
+
+
+## Realization log — 2026-09-11 (post-launch-review corrections)
+
+A live comparison of the two surfaces (v2 quadrant for `#banking` = 16 dots vs the v3 CSO
+scatter = 4) exposed three defects that were **selection and identity** problems, not
+rendering problems. All three are now fixed, deployed and verified live; they are recorded
+here because each is a reusable rule, not a one-off patch.
+
+1. **Never cap a shared payload globally before a client filters it per sector** (`2f04025`).
+   `momentum[:30]` capped across all industries, then the client filtered to one sector —
+   starving every sector, and because the slice ran off a *signed* sort it also deleted the
+   entire declining half of an axis that literally reads "recua ← 0 → acelera".
+   `_momentum_for_panel` now ranks by **|momentum|** (the biggest movers in either direction
+   are the story) and ships the union of a global top-N and a per-sector top-N. Banking went
+   4 → 17 dots; it also rescued the bubble-size feature, which had almost nothing sized to draw.
+2. **A duplicate entity must be merged, not just flagged** (`75e5130`, issue #108 class A).
+   `canonical_id` existed on the registry but was dormant — never surfaced by
+   `list_entity_attributes`, never applied by the feed builder — so ten known duplicates drew
+   two dots each. `canonical_id` is now emitted and applied (`_canonical_map` /
+   `_canonicalize_item`, chain-following, cycle-refusing), and `set_canonical_id` is an
+   ADR-018-governed setter. `canonical_id` = **the same legal entity recorded twice**;
+   `parent` = **two different legal entities in one group** — never interchange them.
+3. **A corporate group is one competitor on a positioning map** (`1503262`, issue #108 class B).
+   Sub-entities each drew their own dot (BTG 8, Itaú 7, XP 5), reading as a fragmented sector
+   rather than a concentrated one. `_group_roots` resolves each entity to the top of its
+   ADR-017 parent chain and `_momentum` aggregates children into it; the rolled row carries
+   the **union** of its members' industries, so a group still appears on every sector it
+   actually operates in. Live: 89 → 62 rows, zero child dots.
+   `build_flow` is deliberately **not** rolled up — a trajectory should name the specific unit
+   that moved, not the holding company.
+
+Cross-cutting rule adopted from all three: **every parent/canonical walk is cycle-safe and
+depth-capped.** Applying the class-C parent links surfaced two candidate edits that would have
+closed a cycle (`allianz_seguros`, `zurich_seguros`); a loop makes a conglomerate its own
+ancestor and hangs or silently truncates every graph walker. `set_parent` now refuses a cycle
+and journals the rejection.

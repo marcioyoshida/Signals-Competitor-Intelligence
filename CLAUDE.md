@@ -99,7 +99,7 @@ licensed aggregator (People Data Labs / Explorium), never scraped.
   per-source budgets + corpus cap (`src/ingest/lambda_port.py`). Ingest
   ~45–57s, pipeline ~90s green. See
   `docs/2026-08-14-phase2-pipeline-and-hardening.md`.
-- **Phase 3 (CURRENT)** — warroom dashboard (done 2026-08-16) + alerts (next).
+- **Phase 3 (done)** — warroom dashboard (done 2026-08-16) + alerts.
   Dashboard: static S3 + CloudFront (OAC) site with edge basic-auth
   (CloudFront Function), fed by `feed.json` aggregated by
   `src/dashboard/feed_builder.py` and wired as a 3rd pipeline step
@@ -108,8 +108,9 @@ licensed aggregator (People Data Labs / Explorium), never scraped.
   timelines, source drill-down). Deployed + validated end-to-end; URL is
   the `DashboardUrl` stack output. Design:
   `docs/2026-08-14-phase3-dashboard-plan.md`. Threat scoring is a bounded,
-  env-configurable blend (legacy saturated 1.0s recomputed on read 2026-08-22);
-  remaining Phase 3: SNS/email alerts.
+  env-configurable blend (legacy saturated 1.0s recomputed on read 2026-08-22).
+  Push delivery shipped as the weekly CSO brief (`src/dashboard/weekly_digest.py`,
+  Teams/Slack/SES) — SES production access is a Phase 4 launch blocker.
 - **Pipeline & CI/CD (2026-08-25)** — the Step Functions pipeline is now
   **parallelized** (two-phase: BeliefAxes → Detectors incl. the SWOT+frameworks
   fan-out; ~340s→273s; ingest/news is the remaining bottleneck) and CI/CD moved
@@ -169,7 +170,19 @@ licensed aggregator (People Data Labs / Explorium), never scraped.
   - Living backlog: `docs/2026-08-16-roadmap.md`. Source lenses added
     2026-08-16: CVM/B3 material facts (`fatos`), DOU (SUSEP/CADE/PREVIC),
     trade press/news RSS.
-- **Phase 4** — design partners, then Marketplace SaaS listing
+- **Phase 4 (CURRENT, from 2026-09-11)** — **commercial launch**, sequenced per
+  delivery plane by **ADR 024** (`docs/2026-09-11-adr-launch-readiness.md`) with
+  dated milestones in `docs/2026-09-11-launch-roadmap.md`. The analytical product
+  is ahead of the commercial one; GA is now defined **per plane** (Entry =
+  self-serve, SaaS = design-partner, Sovereign/Marketplace = last).
+  **Five hard blockers before any paying tenant** (issues #109–#113): freshness SLO
+  + pipeline alarms, registry PITR + restore drill, SES production access for the
+  weekly brief, a buyer trust pack (sources/licensing, data stored, LGPD, auth),
+  and published prices. Then 2–3 SaaS design partners (#114 onboarding runbook),
+  then Entry self-serve, then Marketplace (#49).
+  Everything else open (SURF-*, DEC-*, #14 ingestion stages) is **depth, not
+  launch-gating** — and per ADR 024, blocked issues and PROPOSED-only ADRs
+  (022 prudential/FinBERT, 023 Basel/BCBS) are roadmap, never demo.
 
 ## Conventions
 
