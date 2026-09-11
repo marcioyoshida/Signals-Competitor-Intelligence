@@ -15,9 +15,13 @@ phases:
       - pip install -r requirements.txt -r requirements-dev.txt -r infra/requirements.txt
   build:
     commands:
-      # Deterministic unit tests gate the deploy. A few suites hit live upstreams
-      # (BCB/CVM/news); excluded here for reliability (follow-up: a `network` marker).
-      - pytest -q --ignore=tests/test_lambda_port.py
+      # The FULL deterministic suite gates the deploy (issue #29). `-m "not network"`
+      # deselects live-upstream tests by marker instead of blanket-ignoring a whole
+      # file — `tests/test_lambda_port.py` is stubbed by an autouse fixture and is
+      # hermetic, so ignoring it was skipping 34 real tests for no reason. The
+      # autouse socket guard in conftest.py fails (rather than hangs) any unmarked
+      # test that reaches for the network, so this contract is enforced, not trusted.
+      - pytest tests -q -m "not network"
       # Stage the Lambda asset: runtime deps + src (boto3 is provided by Lambda).
       - rm -rf build/lambda && mkdir -p build/lambda
       - pip install -r requirements.txt -t build/lambda
