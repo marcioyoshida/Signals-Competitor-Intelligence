@@ -41,9 +41,20 @@ Nothing here is research; it is a fixed list. No paying tenant before all five a
   Written as a checklist someone else could run.
 - **P2 (#116) — Sector readiness pass per partner** (2–3 d each): before a demo, run the ADR-018
   integrity audit + coverage check on *that buyer's* sector and fix what it finds. This is the
-  moat; it does not generalize and should not be skipped.
-- **P3 — 2–3 SaaS design partners signed** (calendar-bound): banking / fintech / seguros are
-  the deepest sectors today and should be pitched first.
+  moat; it does not generalize and should not be skipped. First pass (2026-09-12) is the
+  coverage-gated GA sector list in ADR 024 — **GA-ready: banking, fintech, investment-banking.
+  Not ready at any officer: closed-pension, securitization, private-markets.** Everything else
+  is adequate for a CSO/CRO-led pitch but currently thin for a CCO-led one (#118).
+- **P2a (#117) — Encode the tier list as the sales/demo gate** (1 d): so "which sectors can we
+  pitch" is read from `feed.industries`/config, not re-derived from memory each time.
+- **P2b (#118) — CCO officer data starvation** (open-ended, source-dependent): integrity findings
+  are 0 in 16/17 sectors and reputation coverage is banking/fintech-only. Decide: expand sourcing
+  or make the CCO panel say "insufficient compliance signal" per sector instead of showing zero.
+- **P2c (#119) — Bottom-tier sectors: invest or exclude** (decision, not code): closed-pension /
+  securitization / private-markets are thin across every officer. Formally scope them out of the
+  sellable sector list until ingestion is invested, rather than letting them surface by accident.
+- **P3 — 2–3 SaaS design partners signed** (calendar-bound): banking / fintech / investment-banking
+  are the GA-ready sectors today and should be pitched first.
 - **P4 — Feedback loop** (continuous): every partner question that the agent cannot ground is
   already auto-captured by the ADR-014 coverage-gap loop. Triage that queue weekly — it is the
   highest-signal roadmap input we will ever get, and it is free.
