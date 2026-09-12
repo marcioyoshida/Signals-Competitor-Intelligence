@@ -9,7 +9,8 @@ journal entry for every call.
 
 Design (ADR 020 §1):
   * **Authorization** — fronted by CloudFront like the other operator endpoints (basic-
-    auth edge + shared origin secret; the Function URL itself is AuthType NONE). Writes
+    auth edge + shared origin secret; the Function URL itself is AuthType AWS_IAM,
+    reachable only via CloudFront's SigV4-signed OAC origin request). Writes
     require an *elevated* capability and are **fail-closed**. The origin-secret operator
     (no JWT) is the elevated legacy actor — consistent with `review_action`/`run_trigger`;
     a JWT identity must carry an elevated tier/group.
@@ -471,11 +472,12 @@ def catalog() -> dict[str, str]:
 
 
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
-    # Origin secret: present only when the request came through CloudFront (the edge
-    # basic-auth already ran). Absent on direct callers → blocked.
-    secret = os.environ.get("ONCA_ORIGIN_SECRET")
-    headers = {str(k).lower(): v for k, v in (event.get("headers") or {}).items()}
-    if secret and headers.get("x-onca-origin") != secret:
+    # Two gates, both fail closed. CloudFront OAC signs the origin request with
+    # SigV4 (the function URL is AuthType AWS_IAM, so an unsigned direct call never
+    # reaches here); the origin secret CloudFront injects is the backstop.
+    from src.dashboard.auth import origin_secret_ok
+
+    if not origin_secret_ok(event):
         return _resp(403, {"error": "forbidden"})
 
     # GET → advertise the catalog + officer roster (helps clients discover intents/officers).

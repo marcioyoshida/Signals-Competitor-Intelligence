@@ -418,16 +418,27 @@ def test_handler_forbids_without_origin_secret(monkeypatch):
     assert r["statusCode"] == 403
 
 
-def test_handler_requires_question(monkeypatch):
+def test_handler_denies_when_origin_secret_is_unset(monkeypatch):
+    """Fail-closed regression (WAF Phase 0): an unset ONCA_ORIGIN_SECRET must DENY.
+
+    It used to make `origin_ok` True for every caller, so losing the env var
+    silently published the endpoint."""
     monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
-    r = aa.lambda_handler({"body": json.dumps({})}, None)
+    r = aa.lambda_handler({"headers": {}, "body": json.dumps({"q": "Itaú"})}, None)
+    assert r["statusCode"] == 403
+
+
+def test_handler_requires_question(monkeypatch):
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", "sekret")
+    r = aa.lambda_handler({"headers": {"x-onca-origin": "sekret"}, "body": json.dumps({})}, None)
     assert r["statusCode"] == 400
 
 
 def test_handler_needs_bucket(monkeypatch):
-    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", "sekret")
     monkeypatch.delenv("ONCA_SITE_BUCKET", raising=False)
-    r = aa.lambda_handler({"body": json.dumps({"q": "o que o Itaú fez?"})}, None)
+    r = aa.lambda_handler({"headers": {"x-onca-origin": "sekret"},
+                           "body": json.dumps({"q": "o que o Itaú fez?"})}, None)
     assert r["statusCode"] == 500
 
 

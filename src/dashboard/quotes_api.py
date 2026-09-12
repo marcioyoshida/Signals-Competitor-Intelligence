@@ -10,7 +10,6 @@ Returns ``{"industry": slug, "quotes": [{symbol, price, change, currency}]}``.
 from __future__ import annotations
 
 import json
-import os
 import time
 import urllib.request
 from typing import Any
@@ -74,13 +73,13 @@ def _qs(event: dict[str, Any], key: str) -> str:
 
 
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
-    # Reached same-origin via CloudFront, which injects the shared origin secret; a direct
-    # function-URL call without it is rejected (keeps the Yahoo proxy from being open).
-    secret = os.environ.get("ONCA_ORIGIN_SECRET")
-    if secret:
-        headers = {str(k).lower(): v for k, v in (event.get("headers") or {}).items()}
-        if headers.get("x-onca-origin") != secret:
-            return _resp(403, {"error": "forbidden"})
+    # Reached same-origin via CloudFront, which signs the origin request (OAC/SigV4)
+    # and injects the shared origin secret. Both gates fail closed, so the Yahoo
+    # proxy is never open — an unset secret denies rather than disables the check.
+    from src.dashboard.auth import origin_secret_ok
+
+    if not origin_secret_ok(event):
+        return _resp(403, {"error": "forbidden"})
     industry = _qs(event, "industry")
     # A NAMED sector with no listed reps returns empty + an explicit note rather than
     # broad-market defaults — showing ITUB4/VALE3/PETR4 under "Betting"/"Consórcio" would

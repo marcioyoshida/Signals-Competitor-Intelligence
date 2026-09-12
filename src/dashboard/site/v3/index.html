@@ -534,7 +534,7 @@ async function loadQuotes() {
   if (!el) return;
   try {
     const ind = SECTOR && SECTOR !== "__all__" ? SECTOR : "";
-    const r = await fetch(`/api/quotes${ind ? "?industry=" + encodeURIComponent(ind) : ""}`, { cache: "no-store" });
+    const r = await U.oacFetch(`/api/quotes${ind ? "?industry=" + encodeURIComponent(ind) : ""}`, { cache: "no-store" });
     if (!r.ok) { el.innerHTML = U.empty("Cotações indisponíveis.", "", "○"); return; }
     const payload = await r.json();
     const rows = payload.quotes || [];
@@ -1001,9 +1001,12 @@ function referenceBand() {
 function beacon(did, url, officer) {
   if (!did || !url) return;
   const body = JSON.stringify({ intent: "append_reference", officer, args: { decision_id: did, url, officer } });
+  // navigator.sendBeacon cannot set headers, so it cannot carry the SigV4 payload
+  // hash the AWS_IAM function URL now requires (WAF Phase 0). fetch(keepalive) keeps
+  // the survive-unload guarantee for a body this small and does allow headers.
   try {
-    if (navigator.sendBeacon) navigator.sendBeacon("/api/act", new Blob([body], { type: "application/json" }));
-    else fetch("/api/act", { method: "POST", credentials: "include", keepalive: true, headers: { "content-type": "application/json" }, body });
+    U.oacFetch("/api/act", { method: "POST", credentials: "include", keepalive: true,
+      headers: { "content-type": "application/json" }, body }).catch(() => {});
   } catch (e) { /* best-effort — never blocks navigation */ }
 }
 // §E engagement telemetry — an attention event (headline expand/open), tagged for intelligence.
@@ -1013,9 +1016,10 @@ function engage(kind, action, cardId) {
     kind, action, officer: OFFICER, sector: SECTOR, card_id: cardId,
     entity: c && c.entity, threat_score: c && c.threat_score,
     industries: (c && c.industries) || [], topics: (c && c.topics) || [] } });
+  // See beacon() above: sendBeacon cannot sign, fetch(keepalive) can.
   try {
-    if (navigator.sendBeacon) navigator.sendBeacon("/api/act", new Blob([body], { type: "application/json" }));
-    else fetch("/api/act", { method: "POST", credentials: "include", keepalive: true, headers: { "content-type": "application/json" }, body });
+    U.oacFetch("/api/act", { method: "POST", credentials: "include", keepalive: true,
+      headers: { "content-type": "application/json" }, body }).catch(() => {});
   } catch (e) { /* best-effort */ }
 }
 function evUrl(evId) { const c = BYID[evId]; return (c && (c.citations || [])[0] && c.citations[0].url) || ("card:" + evId); }
@@ -1406,7 +1410,7 @@ async function setOutcome(did, outcome, sel) {
   sel.disabled = false; if (res && res.decision_outcome) sel.title = "resultado registrado";
 }
 async function postAct(body) {
-  try { const r = await fetch("/api/act", { method: "POST", credentials: "include",
+  try { const r = await U.oacFetch("/api/act", { method: "POST", credentials: "include",
     headers: { "content-type": "application/json" }, body: JSON.stringify(body) }); return await r.json(); }
   catch (e) { console.error("act failed", e); return null; }
 }

@@ -26,7 +26,6 @@ from __future__ import annotations
 
 import base64
 import json
-import os
 from typing import Any
 
 
@@ -74,10 +73,12 @@ def _truthy(event: dict[str, Any], key: str) -> bool:
 
 
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
-    # Origin secret: present only when the request came through CloudFront.
-    secret = os.environ.get("ONCA_ORIGIN_SECRET")
-    headers = {str(k).lower(): v for k, v in (event.get("headers") or {}).items()}
-    if secret and headers.get("x-onca-origin") != secret:
+    # Two gates, both fail closed. CloudFront OAC signs the origin request with
+    # SigV4 (the function URL is AuthType AWS_IAM, so an unsigned direct call never
+    # reaches here); the origin secret CloudFront injects is the backstop.
+    from src.dashboard.auth import origin_secret_ok
+
+    if not origin_secret_ok(event):
         return _resp(403, {"error": "forbidden"})
 
     from src.synth import entity_registry as reg

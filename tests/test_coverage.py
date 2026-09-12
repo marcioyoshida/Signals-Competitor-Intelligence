@@ -165,9 +165,18 @@ def test_gaps_api_forbids_without_origin_secret(monkeypatch):
 
 def test_gaps_api_remediate_requires_id(monkeypatch):
     from src.dashboard import gaps_api
-    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    # WAF Phase 0: the origin gate fails closed, so the call carries the header
+    # CloudFront injects rather than unsetting the secret to slip past it.
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", "sekret")
     monkeypatch.setenv("ONCA_DIGESTS_BUCKET", "b")
     r = gaps_api.lambda_handler(
         {"rawPath": "/api/gaps/remediate", "requestContext": {"http": {"method": "POST"}},
-         "body": json.dumps({})}, None)
+         "headers": {"x-onca-origin": "sekret"}, "body": json.dumps({})}, None)
     assert r["statusCode"] == 400
+
+    # ...and an unset secret DENIES rather than disabling the gate.
+    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    r = gaps_api.lambda_handler(
+        {"rawPath": "/api/gaps/remediate", "requestContext": {"http": {"method": "POST"}},
+         "headers": {}, "body": json.dumps({})}, None)
+    assert r["statusCode"] == 403
