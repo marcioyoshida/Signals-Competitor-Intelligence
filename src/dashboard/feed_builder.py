@@ -1629,6 +1629,17 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 CacheControl="no-cache",
             )
             published = f"s3://{site_bucket}/{FEED_KEY}"
+            # Issue #109: a heartbeat metric so a CloudWatch alarm can catch feed staleness —
+            # a case the pipeline's OWN failure alarms can't see, since a run can succeed end
+            # to end and still publish nothing new (e.g. every source returns empty). Missing
+            # data is what the alarm treats as breaching, not this metric's absence of a value.
+            try:
+                boto3.client("cloudwatch").put_metric_data(
+                    Namespace="Onca",
+                    MetricData=[{"MetricName": "FeedPublished", "Value": 1, "Unit": "Count"}],
+                )
+            except Exception as exc:  # pragma: no cover - metric emission is best-effort
+                print(f"Warning: FeedPublished metric skipped: {exc}")
         except Exception as exc:  # pragma: no cover - publish is best-effort
             print(f"Warning: feed publish failed: {exc}")
         try:

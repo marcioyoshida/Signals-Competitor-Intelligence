@@ -19,6 +19,7 @@ from aws_cdk import aws_cloudfront as cloudfront
 from aws_cdk import aws_cognito as cognito
 from aws_cdk import aws_cloudfront_origins as cf_origins
 from aws_cdk import aws_cloudwatch as cloudwatch
+from aws_cdk import aws_cloudwatch_actions as cw_actions
 from aws_cdk import custom_resources as cr
 from aws_cdk import aws_dynamodb as dynamodb
 from aws_cdk import aws_events as events
@@ -28,6 +29,8 @@ from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_s3 as s3
 from aws_cdk import aws_s3_deployment as s3deploy
 from aws_cdk import aws_s3vectors as s3vectors
+from aws_cdk import aws_sns as sns
+from aws_cdk import aws_sns_subscriptions as sns_subs
 from aws_cdk import aws_stepfunctions as sfn
 from aws_cdk import aws_stepfunctions_tasks as sfn_tasks
 
@@ -1485,6 +1488,11 @@ class OncaPrototypeStack(Stack):
         feed_fn.add_to_role_policy(
             iam.PolicyStatement(actions=["ses:SendEmail", "ses:SendRawEmail"], resources=["*"])
         )
+        # Issue #109: the feed-staleness heartbeat metric. PutMetricData has no
+        # resource-level ARN to scope to (CloudWatch metrics aren't IAM resources).
+        feed_fn.add_to_role_policy(
+            iam.PolicyStatement(actions=["cloudwatch:PutMetricData"], resources=["*"])
+        )
 
         # Review-queue write endpoint (ADR step 5). Fronted by the SAME basic-auth
         # CloudFront Function as the dashboard (see the /api/* behavior below), so
@@ -2454,6 +2462,84 @@ class OncaPrototypeStack(Stack):
                 enabled=True,
             )
             rule.add_target(targets.SfnStateMachine(pipeline))
+
+        # --- Issue #109: operational alerting (pipeline failure + feed staleness) -----------
+        # One SNS topic, one notifier Lambda, delivered on the SAME Teams/Slack/email channels
+        # as the weekly digest (src/dashboard/weekly_digest.py) — one delivery config, not two.
+        # Before this, a broken pipeline or a silently-stale feed.json was invisible until
+        # someone opened the dashboard; there was no "Phase 3 push" for OPERATIONAL health,
+        # only for the CSO content brief.
+        alerts_topic = sns.Topic(self, "OncaAlertsTopic")
+        alert_fn = lambda_.Function(
+            self,
+            "OncaAlertNotifier",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.dashboard.alert_notifier.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.seconds(30),
+            memory_size=256,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_DASHBOARD_URL": "https://d37aa8gtuqquoe.cloudfront.net/exec",
+            },
+        )
+        # Same channel-config lookup as feed_fn's weekly digest (env, falling back to the
+        # shared api-key secret) and the same SES send-only scope.
+        alert_fn.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["secretsmanager:GetSecretValue"],
+                resources=[
+                    f"arn:aws:secretsmanager:{self.region}:{self.account}"
+                    ":secret:signalscompetitor/onca/api-key-*"
+                ],
+            )
+        )
+        alert_fn.add_to_role_policy(
+            iam.PolicyStatement(actions=["ses:SendEmail", "ses:SendRawEmail"], resources=["*"])
+        )
+        alerts_topic.add_subscription(sns_subs.LambdaSubscription(alert_fn))
+
+        # Pipeline health: CDK's built-in State Machine metrics. `evaluation_periods=1` over a
+        # 1-day period means ANY failed/timed-out execution in a day fires once — this is a
+        # daily pipeline, so there is no "flapping" risk to smooth out with a longer window.
+        cloudwatch.Alarm(
+            self,
+            "OncaPipelineFailedAlarm",
+            metric=pipeline.metric_failed(period=Duration.days(1), statistic="Sum"),
+            threshold=1,
+            evaluation_periods=1,
+            comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+            treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
+        ).add_alarm_action(cw_actions.SnsAction(alerts_topic))
+        cloudwatch.Alarm(
+            self,
+            "OncaPipelineTimedOutAlarm",
+            metric=pipeline.metric_timed_out(period=Duration.days(1), statistic="Sum"),
+            threshold=1,
+            evaluation_periods=1,
+            comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+            treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
+        ).add_alarm_action(cw_actions.SnsAction(alerts_topic))
+
+        # Feed staleness: feed_builder emits `Onca/FeedPublished` on every successful publish
+        # (3x/day; the largest scheduled gap is ~13h15m overnight). 16 missing hourly datapoints
+        # in a row means no successful publish in 16h — comfortably past that gap without being
+        # so loose it'd miss a full missed day. `BREACHING` on missing data is deliberate: a
+        # successful run that publishes NOTHING is indistinguishable from "the metric never
+        # fired", and both should page.
+        cloudwatch.Alarm(
+            self,
+            "OncaFeedStaleAlarm",
+            metric=cloudwatch.Metric(
+                namespace="Onca", metric_name="FeedPublished",
+                period=Duration.hours(1), statistic="Sum",
+            ),
+            threshold=1,
+            evaluation_periods=16,
+            datapoints_to_alarm=16,
+            comparison_operator=cloudwatch.ComparisonOperator.LESS_THAN_THRESHOLD,
+            treat_missing_data=cloudwatch.TreatMissingData.BREACHING,
+        ).add_alarm_action(cw_actions.SnsAction(alerts_topic))
 
         # --- ADR 022 Phase 3: OncaFinancialsPipeline (monthly, decoupled) --------------------
         # Financial-soundness data (Basileia et al.; later the monthly balancete trajectory + the

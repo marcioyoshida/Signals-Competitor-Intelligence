@@ -227,3 +227,18 @@ def send_weekly_digest(feed: dict[str, Any], *, sector: str = "__all__",
         "slack": send_slack(w, dashboard_url=dashboard_url, poster=slack_poster),
         "email": send_email(w, dashboard_url=dashboard_url, sender_fn=email_sender),
     }
+
+
+def send_alert(headline: str, *, dashboard_url: str | None = None,
+              teams_poster: Poster | None = None, slack_poster: Poster | None = None,
+              email_sender: EmailSender | None = None) -> dict[str, bool | None]:
+    """Push a one-line OPERATIONAL alert (pipeline failure, stale feed) to the same three
+    channels as the weekly digest. Deliberately reuses `format_teams`/`format_slack`/
+    `format_email` with a bare `{"headline": ...}` — those already render gracefully with
+    empty metrics/priorities, so this needed no new formatting code, just a new caller."""
+    w = {"headline": headline}
+    return {
+        "teams": send_teams(w, dashboard_url=dashboard_url, poster=teams_poster),
+        "slack": send_slack(w, dashboard_url=dashboard_url, poster=slack_poster),
+        "email": send_email(w, dashboard_url=dashboard_url, sender_fn=email_sender),
+    }
