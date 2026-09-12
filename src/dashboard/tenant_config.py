@@ -26,6 +26,13 @@ def allowed_industries_for_tier(tier: str) -> frozenset[str] | None:
     return frozenset(ENTRY_INDUSTRIES) if tier == "entry" else None
 
 
+# #119 (ADR 024 readiness pass, 2026-09-12): sectors thin across EVERY officer — not a display
+# artifact, a genuine "don't sell this yet" signal (see docs/2026-09-11-adr-launch-readiness.md,
+# "Coverage-gated GA sector list"). Recorded as excluded-until-revisited rather than left to
+# surface by accident in a provisioning call. Revisit only with a named buyer + an ingestion plan.
+NOT_READY_INDUSTRIES = ("closed-pension", "securitization", "private-markets")
+
+
 def _table(table: Any | None = None) -> Any:
     if table is not None:
         return table
@@ -69,7 +76,7 @@ def _default_plane(tier: str) -> str:
 
 def put_tenant_config(
     tenant_id: str, tier: str, modules: list[str], *, plane: str | None = None,
-    table: Any | None = None,
+    table: Any | None = None, force_not_ready: bool = False,
 ) -> dict[str, Any]:
     """Provision/update a tenant's entitlement. Idempotent upsert."""
     tier = str(tier)
@@ -90,6 +97,17 @@ def put_tenant_config(
             raise ValueError(
                 f"tier {tier!r} may only license entry-tier industries "
                 f"{sorted(allowed)}; got disallowed {bad}"
+            )
+    # #119: not-ready sectors are excluded from EVERY tier by default, not just Entry — an
+    # operator provisioning a SaaS design partner is exactly the scenario this guards against,
+    # since SaaS/Sovereign have no allow-list otherwise. `force_not_ready=True` is the deliberate
+    # escape hatch for a named buyer with an explicit ingestion plan (see NOT_READY_INDUSTRIES).
+    if not force_not_ready:
+        not_ready = [m for m in mods if m in NOT_READY_INDUSTRIES]
+        if not_ready:
+            raise ValueError(
+                f"{sorted(not_ready)} are not launch-ready (issue #119) — pass "
+                "force_not_ready=True to override for a named buyer with an ingestion plan"
             )
     _table(table).put_item(
         Item={"tenant_id": str(tenant_id), "tier": tier, "modules": mods, "plane": plane})

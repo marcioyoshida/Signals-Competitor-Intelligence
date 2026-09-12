@@ -679,7 +679,9 @@ function rowsRisk(list) {
 }
 function rowsIntegrity(list) {
   list = (list || []).filter(inSector);
-  if (!list.length) return U.empty("Registro íntegro no escopo.", "", "○");
+  // #118: an empty list here is almost always "no compliance signal was ingested for this
+  // sector", not "audited and found clean" — those must never read the same to a buyer.
+  if (!list.length) return U.empty("Sem achados de integridade no escopo.", "não confundir com \"auditado e limpo\"", "○");
   return list.map(r => `<div class="exrow" ${r.card_id ? `data-id="${U.esc(r.card_id)}"` : ""}>${sevBadge(r.severity)}
     <span class="ent" style="min-width:148px" title="${U.esc(r.kind)}">${U.esc(r.kind)}</span>
     <span class="ttl" title="${U.esc(r.summary || "")}">${U.esc(r.summary || "")}</span></div>`).join("");
@@ -1192,11 +1194,20 @@ function render() {
       band("Calendário de conformidade", "", panel("Prazos", null, "dias até o prazo", rowsReg(p.deadlines)));
   } else if (OFFICER === "cco") {
     const risk = (a.n_high || 0), rc = risk > 3 ? ["crit", "Crítico"] : risk > 0 ? ["high", "Atenção"] : ["ok", "Controlado"];
+    // #118: a zero integrity/reputation count reads as "controlado" (green) unless we know the
+    // sector actually HAS enough compliance signal to earn that reading — otherwise it's "no
+    // signal", not "clean", and must not be colored the same as a real clean audit.
+    const sigOk = a.signal_state !== "insufficient";
     board =
       readout(heroCount("Achados graves", a.n_high, bandBadge(rc[0], rc[1]), "severidade alta na auditoria"),
-        [tile("Achados de integridade", a.n_integrity, "registro", a.n_integrity > 0 ? "warn" : "ok"),
+        [tile("Achados de integridade", a.n_integrity, "registro", a.n_integrity > 0 ? "warn" : (sigOk ? "ok" : null)),
          tile("Distress (confirmado)", a.n_distress, "insolvência", a.n_distress > 0 ? "crit" : "ok"),
          tile("Reputação", a.n_rep, "rankings BCB")]) +
+      (SECTOR !== "__all__" && !sigOk ? band("Sinal de compliance", "insuficiente",
+        `<div class="panel"><div class="panel__bd" style="padding:var(--s4);color:var(--muted);font-size:var(--fs-meta)">` +
+        `Cobertura de integridade/reputação para este setor é insuficiente para uma leitura de compliance — ` +
+        `os zeros acima significam "sem sinal ingerido", não "auditado e limpo". Hoje o sinal robusto está ` +
+        `concentrado em banking e fintech (índice de reclamações consumidor.gov.br).</div></div>`) : "") +
       band("Registro de risco", "", panel("Distress · reputação · integridade", null, "prioridade", rowsRisk(p.risk_register))) +
       band("Integridade & reputação", "",
         grid("1fr 1fr", [panel("Auditoria de integridade", null, "achados do registro", rowsIntegrity(p.integrity)),

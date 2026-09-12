@@ -49,7 +49,8 @@ def cmd_put(args) -> int:
     modules = _split_modules(args.modules)
     try:
         cfg = tc.put_tenant_config(
-            args.tenant_id, args.tier, modules, plane=args.plane, table=table)
+            args.tenant_id, args.tier, modules, plane=args.plane, table=table,
+            force_not_ready=args.force_not_ready)
     except ValueError as exc:
         print(f"REJECTED: {exc}", file=sys.stderr)
         return 2
@@ -99,6 +100,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("modules", nargs="*", help="industry slugs (space or comma separated)")
     sp.add_argument("--plane", choices=tc.VALID_PLANES, default=None,
                     help="delivery plane (portal|saas|marketplace); defaults from tier")
+    sp.add_argument("--force-not-ready", action="store_true",
+                    help=f"override the #119 exclusion of {list(tc.NOT_READY_INDUSTRIES)} "
+                         "(only for a named buyer with an explicit ingestion plan)")
     sp.set_defaults(func=cmd_put)
 
     sg = sub.add_parser("get", help="show one tenant")

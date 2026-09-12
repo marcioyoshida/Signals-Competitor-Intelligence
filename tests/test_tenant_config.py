@@ -30,6 +30,21 @@ def test_put_get_tenant_config_roundtrip():
     assert tc.get_tenant_config("nobody", table=t) is None  # unprovisioned ⇒ None
 
 
+def test_not_ready_industries_rejected_on_any_tier_without_force():
+    # issue #119: a not-ready sector must not slip into a SaaS/Sovereign entitlement either —
+    # those tiers have no allow-list otherwise, so this is the only guard they get.
+    t = _FakeTable()
+    with pytest.raises(ValueError, match="not launch-ready"):
+        tc.put_tenant_config("dp1", "saas", ["banking", "securitization"], table=t)
+    assert tc.get_tenant_config("dp1", table=t) is None  # rejected, not partially provisioned
+
+
+def test_not_ready_industries_allowed_with_explicit_force():
+    t = _FakeTable()
+    cfg = tc.put_tenant_config("dp2", "saas", ["private-markets"], table=t, force_not_ready=True)
+    assert cfg["modules"] == ["private-markets"]
+
+
 def test_put_rejects_bad_tier():
     with pytest.raises(ValueError):
         tc.put_tenant_config("x", "premium", ["banking"], table=_FakeTable())
