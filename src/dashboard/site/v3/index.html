@@ -471,6 +471,13 @@ function bandThreat(v, hi, mid) { return v >= hi ? ["crit", "Elevada"] : v >= mi
 const SEV = { high: "high", med: "med", low: "low", market: "crit", broad: "high", sector: "high",
   regional: "med", local: "low", medium: "med" };
 function sevBadge(x) { return x ? `<span class="badge badge--${SEV[x] || "low"}">${U.esc(x)}</span>` : ""; }
+// threat_score is already 0–100 — U.heat() is a 0..1 CONFIDENCE formatter that multiplies by
+// 100, so feeding it a raw threat score produced nonsense 4-digit "percentages" (e.g. 65 -> 6500%).
+function threatChip(score) {
+  const s = Math.round(Number(score) || 0);
+  const [cls] = bandThreat(s, 65, 40);
+  return `<span class="badge badge--${cls}" title="ameaça ${s}/100">${s}</span>`;
+}
 
 // --- row renderers ---------------------------------------------------------
 function rowsCard(list) {
@@ -480,7 +487,7 @@ function rowsCard(list) {
     <span class="dt">${r.date ? U.fmtDate(r.date) : ""}</span>
     <span class="ent" title="${U.esc(r.entity_label || r.label || "—")}">${U.esc(r.entity_label || r.label || "—")}</span>
     <span class="ttl" title="${U.esc(r.title || "")}">${U.esc(r.title || "")}</span>
-    ${r.threat_score != null ? U.heat(r.threat_score) : ""}</div>`).join("");
+    ${r.threat_score != null ? threatChip(r.threat_score) : ""}</div>`).join("");
 }
 function rowsReg(list) {
   list = (list || []).filter(inSector);
@@ -492,7 +499,7 @@ function rowsReg(list) {
     ${r.blast_band ? sevBadge(r.blast_band) : (r.blast ? `<span class="meta">${r.blast} setor(es)</span>` : "")}
     ${r.difficulty_band ? sevBadge(r.difficulty_band) : ""}
     ${r.days_to_deadline != null ? `<span class="dt">${r.days_to_deadline}d</span>` : ""}
-    ${r.threat_score != null ? U.heat(r.threat_score) : ""}</div>`; }).join("");
+    ${r.threat_score != null ? threatChip(r.threat_score) : ""}</div>`; }).join("");
 }
 // Macro strip (v1 → shared /exec header): Copom Selic + Focus projections, national, so it
 // sits above every officer's board (officer-independent, rendered once at boot).
@@ -651,7 +658,7 @@ function threatTimeline(momentum) {
     const days = byEnt[m.entity] || {};
     const series = dates.map(d => { const v = days[d]; return v && v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; });
     return `<div class="tlrow"><span class="tlent" title="${U.esc(m.label)}">${U.esc(m.label)}</span>` +
-      `${sparkline(series)}<span class="tlnow">${U.heat(m.recent)}</span></div>`;
+      `${sparkline(series)}<span class="tlnow">${threatChip(m.recent)}</span></div>`;
   }).join("") + `</div>`;
 }
 function rowsMomentum(list) {
