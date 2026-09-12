@@ -130,3 +130,75 @@ def test_unknown_route_and_method(monkeypatch):
     assert code == 404
     code, _ = _call(monkeypatch, "DELETE", "/api/registry/entities")
     assert code == 405
+
+
+# ---- auth cutover 2026-09-11: JWT + elevated claim replaces the shared basic-auth edge ----
+
+def _jwt_ev(method, path, *, groups=None, tier=None, email=None, body=None):
+    """An event as the Cognito JWT authorizer delivers it — claims already VERIFIED
+    upstream (this handler must never decode a raw bearer token itself)."""
+    claims = {"sub": "u-1"}
+    if groups is not None:
+        claims["cognito:groups"] = groups
+    if tier is not None:
+        claims["custom:tier"] = tier
+    if email is not None:
+        claims["email"] = email
+    e = {
+        "requestContext": {"http": {"method": method}, "authorizer": {"jwt": {"claims": claims}}},
+        "rawPath": path,
+        "headers": {},
+    }
+    if body is not None:
+        e["body"] = json.dumps(body)
+    return e
+
+
+def test_elevated_jwt_is_authorized_without_any_shared_secret(monkeypatch):
+    _setup(monkeypatch)
+    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    r = api.lambda_handler(_jwt_ev("GET", "/api/registry/entities", groups=["operator"]), None)
+    assert r["statusCode"] == 200
+
+
+def test_authenticated_but_unelevated_identity_is_refused(monkeypatch):
+    # A tenant's own token must not enumerate the curated registry — that IS the asset.
+    _setup(monkeypatch)
+    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    r = api.lambda_handler(_jwt_ev("GET", "/api/registry/entities", tier="saas"), None)
+    assert r["statusCode"] == 403
+    assert "elevated" in json.loads(r["body"])["error"]
+
+
+def test_no_identity_and_no_secret_is_fail_closed(monkeypatch):
+    _setup(monkeypatch)
+    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    r = api.lambda_handler({"requestContext": {"http": {"method": "GET"}},
+                            "rawPath": "/api/registry/entities", "headers": {}}, None)
+    assert r["statusCode"] == 403
+
+
+def test_a_configured_break_glass_secret_cannot_downgrade_a_real_identity(monkeypatch):
+    # Precedence matters: if the secret were checked first, an unelevated tenant token
+    # arriving through a path that also carried the secret would be waved through as
+    # "operator" and journaled as such.
+    _setup(monkeypatch)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", "s")
+    ev = _jwt_ev("GET", "/api/registry/entities", tier="saas")
+    ev["headers"]["x-onca-origin"] = "s"
+    assert api.lambda_handler(ev, None)["statusCode"] == 403
+
+
+def test_writes_are_journaled_under_the_authenticated_operator(monkeypatch):
+    # The point of the cutover: "who changed this" is answerable. ADR 018's journal
+    # records a precedence class (`source`), which never identified a person.
+    _setup(monkeypatch)
+    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.delenv("ONCA_CURATION_ACTOR", raising=False)
+    ev = _jwt_ev("POST", "/api/registry/entities", groups=["admin"],
+                 email="ana@onca.example",
+                 body={"entity_id": "novo-banco", "display_name": "Novo Banco",
+                       "aliases": ["NOVO BANCO"]})
+    assert api.lambda_handler(ev, None)["statusCode"] == 201
+    import os
+    assert os.environ["ONCA_CURATION_ACTOR"] == "ana@onca.example"

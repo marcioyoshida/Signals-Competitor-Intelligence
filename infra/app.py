@@ -1519,11 +1519,15 @@ class OncaPrototypeStack(Stack):
         )
 
         # Registry CRUD API (operator control plane): full curation over the ENT#
-        # records. Same auth model as the review endpoint (basic-auth edge +
-        # origin secret). CloudFront matches cache behaviors by INSERTION ORDER,
-        # not specificity — so the more-specific /api/registry/* MUST be added
-        # BEFORE the /api/* catch-all below, or registry calls fall through to the
-        # review action. (This ordering is load-bearing; do not reorder.)
+        # records — i.e. read/write access to the commercial asset itself.
+        #
+        # AUTH CUTOVER 2026-09-11: this used to sit behind the shared basic-auth edge
+        # + an origin secret, the same credential every warroom viewer holds. It is now
+        # routed through the Cognito-JWT HTTP API (see `auth_api` below) and requires an
+        # elevated claim, so a mutation attributes to a person and can be revoked for
+        # one operator. Hence: NO function URL (nothing publicly reachable), NO origin
+        # secret env (the break-glass in registry_api.py stays inert), and NO basic-auth
+        # behavior. The CloudFront behavior lives with the other JWT paths further down.
         registry_fn = lambda_.Function(
             self,
             "OncaRegistryApi",
@@ -1535,31 +1539,12 @@ class OncaPrototypeStack(Stack):
             environment={
                 "PYTHONPATH": "/var/task",
                 "ONCA_ENTITIES_TABLE": entities_table.table_name,
-                "ONCA_ORIGIN_SECRET": origin_secret,
             },
         )
         entities_table.grant_read_write_data(registry_fn)
         curation_log_table.grant_write_data(registry_fn)  # ADR 018 Phase 1b
         registry_fn.add_environment("ONCA_CURATION_LOG_TABLE", curation_log_table.table_name)
-        registry_url = registry_fn.add_function_url(
-            auth_type=lambda_.FunctionUrlAuthType.NONE
-        )
-        distribution.add_behavior(
-            "/api/registry/*",
-            cf_origins.FunctionUrlOrigin(
-                registry_url, custom_headers={"X-Onca-Origin": origin_secret}
-            ),
-            viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-            allowed_methods=cloudfront.AllowedMethods.ALLOW_ALL,
-            cache_policy=cloudfront.CachePolicy.CACHING_DISABLED,
-            origin_request_policy=cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
-            function_associations=[
-                cloudfront.FunctionAssociation(
-                    function=auth_fn,
-                    event_type=cloudfront.FunctionEventType.VIEWER_REQUEST,
-                )
-            ],
-        )
+
         # B3 live-quote proxy (issue #43): GET /api/quotes?industry=<slug> returns the
         # industry's representative listed names from Yahoo Finance (free, no token),
         # fetched server-side (Yahoo has no browser CORS) + cached. Same origin-secret +
@@ -1846,6 +1831,19 @@ class OncaPrototypeStack(Stack):
             integration=apigwv2_int.HttpLambdaIntegration("FeedInteg", feed_api_fn),
             authorizer=jwt_authorizer,
         )
+        # /api/registry/* — the operator control plane over the registry, cut over from
+        # shared basic-auth to a verified JWT (2026-09-11). The authorizer only proves
+        # WHO is calling; registry_api.py separately requires an ELEVATED claim, so an
+        # ordinary tenant token authenticates but does not authorize.
+        _registry_integ = apigwv2_int.HttpLambdaIntegration("RegistryInteg", registry_fn)
+        for _rpath in ("/api/registry", "/api/registry/{proxy+}"):
+            auth_api.add_routes(
+                path=_rpath,
+                methods=[apigwv2.HttpMethod.ANY],
+                integration=_registry_integ,
+                authorizer=jwt_authorizer,
+            )
+
         CfnOutput(self, "AuthApiUrl", value=auth_api.api_endpoint)
 
         # Cut over /api/ask to the JWT-verified HTTP API, SAME ORIGIN via CloudFront.
@@ -1864,7 +1862,10 @@ class OncaPrototypeStack(Stack):
         _auth_api_id = os.environ.get("ONCA_AUTH_API_ID", "azml8kx82k")
         api_domain = f"{_auth_api_id}.execute-api.{self.region}.amazonaws.com"
         _api_origin = cf_origins.HttpOrigin(api_domain)
-        for _pat in ("/api/ask*", "/api/gaps*", "/api/feed*"):  # #45/#48: JWT API paths
+        # NB `/api/registry*` must stay ahead of the `/api/*` catch-all registered
+        # below — CloudFront matches behaviors by INSERTION ORDER, not specificity, so
+        # losing this position would silently route curation calls to the review action.
+        for _pat in ("/api/ask*", "/api/gaps*", "/api/feed*", "/api/registry*"):
             distribution.add_behavior(
                 _pat,
                 _api_origin,

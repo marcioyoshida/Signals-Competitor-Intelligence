@@ -6,10 +6,22 @@ This is the REST surface over the `ENT#` records so curation is managed as an
 API-served product, no code deploy. It is an INTERNAL/operator API — the registry
 is never shipped to tenants; tenants consume the derived feed, not the registry.
 
-Auth mirrors the review endpoint: fronted by CloudFront under `/api/registry/*`,
-gated by the same basic-auth CloudFront Function, and the Function URL (AuthType
-NONE) is protected by a shared origin secret CloudFront injects — so the edge
-can't be bypassed. Read verbs are safe; writes mutate the table.
+**Auth (cut over 2026-09-11).** This endpoint reads AND writes the registry — the
+asset ADR 002 calls the commercial product — so it is no longer gated by the shared
+basic-auth edge. A *shared static password* cannot attribute an action to a person,
+cannot be revoked for one operator, and is the same credential every viewer of the
+warroom already has. The gate is now a **verified Cognito JWT carrying an elevated
+claim** (`operator`/`admin`/`sovereign` group, or an `operator`/`sovereign` tier),
+verified by the API Gateway authorizer before this handler runs — the same model as
+`/api/act` (ADR 020). Every mutation is journaled to `OncaCurationLog` (ADR 018),
+which is only meaningful now that the actor is a real identity rather than "whoever
+had the password".
+
+`ONCA_ORIGIN_SECRET` remains an **inert break-glass**: unset in the deployed stack,
+so there is no shared-secret path unless one is deliberately configured. Fail-closed
+— no verified elevated identity and no configured secret means 403, never a default
+allow. Reads are gated too: enumerating the curated registry IS the exfiltration
+risk, so there is no "safe" read verb here.
 
 Routes (under /api/registry):
   GET    /entities                 list curation records (?include_inactive=1)
@@ -28,6 +40,13 @@ import base64
 import json
 import os
 from typing import Any
+
+from src.dashboard import auth
+
+# Same elevated claims as the write-agent API (ADR 020) — one definition of
+# "operator" across every control-plane surface.
+_ELEVATED_TIERS = {"operator", "sovereign"}
+_ELEVATED_GROUPS = {"operator", "admin", "sovereign"}
 
 
 def _resp(status: int, body: Any) -> dict[str, Any]:
@@ -73,12 +92,38 @@ def _truthy(event: dict[str, Any], key: str) -> bool:
     return f"{key}=1" in str(event.get("rawQueryString") or "").lower()
 
 
-def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
-    # Origin secret: present only when the request came through CloudFront.
+def _authorize(event: dict[str, Any]) -> tuple[str | None, str | None]:
+    """Return (actor, error). `actor` is the identity to journal writes under.
+
+    Precedence is deliberate: a verified JWT wins, and the shared secret is only
+    consulted when no identity is attached. That way configuring a break-glass
+    secret can never *downgrade* an authenticated request to an anonymous one."""
+    identity = auth.identity_from_event(event)
+    if identity is not None:
+        elevated = (identity.tier in _ELEVATED_TIERS) or bool(
+            _ELEVATED_GROUPS.intersection(identity.groups)
+        )
+        if not elevated:
+            # Authenticated but not an operator: say so plainly. A tenant reaching
+            # this endpoint is a misconfiguration, not an attack, and a 403 that
+            # names the missing capability is debuggable.
+            return None, "registry access requires an elevated (operator) capability"
+        return (identity.email or identity.sub or "unknown"), None
+
     secret = os.environ.get("ONCA_ORIGIN_SECRET")
     headers = {str(k).lower(): v for k, v in (event.get("headers") or {}).items()}
-    if secret and headers.get("x-onca-origin") != secret:
-        return _resp(403, {"error": "forbidden"})
+    if secret and headers.get("x-onca-origin") == secret:
+        return "operator:break-glass", None
+    return None, "forbidden"
+
+
+def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
+    actor, err = _authorize(event)
+    if err:
+        return _resp(403, {"error": err})
+    # Journaled writes attribute to the authenticated operator (ADR 018), not to a
+    # shared credential. Read by entity_registry via the ambient actor env var.
+    os.environ["ONCA_CURATION_ACTOR"] = str(actor)
 
     from src.synth import entity_registry as reg
 
