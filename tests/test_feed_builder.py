@@ -192,6 +192,49 @@ def test_build_feed_tolerates_bad_scores_and_junk():
     assert scores["y"] == 0.8
 
 
+def test_apply_sales_tiers_matches_the_2026_09_12_manual_readiness_pass():
+    # issue #117: exact numbers pulled from live feed.json for the three cases the manual
+    # pass called out — a GA-ready sector, an adequate-but-CCO-thin one, and the tricky
+    # not-ready case where maturity (46) alone would have said "adequate".
+    feed = {
+        "industries": [
+            {"slug": "banking", "narratives": 142},
+            {"slug": "real-estate-funds", "narratives": 23},
+            {"slug": "private-markets", "narratives": 5},
+        ],
+        "executive": {
+            "cpo": {"by_industry": {
+                "banking": {"maturity": 84, "narratives": 142},
+                "real-estate-funds": {"maturity": 52, "narratives": 23},
+                "private-markets": {"maturity": 46, "narratives": 5},
+            }},
+            "cco": {"by_industry": {
+                "banking": {"n_integrity": 0, "n_rep": 13},
+                "real-estate-funds": {"n_integrity": 4, "n_rep": 0},
+                "private-markets": {"n_integrity": 0, "n_rep": 0},
+            }},
+        },
+    }
+    feed_builder._apply_sales_tiers(feed)
+    by_slug = {r["slug"]: r for r in feed["industries"]}
+    assert by_slug["banking"]["sales_tier"] == "ga_ready"
+    assert by_slug["banking"]["sales_tier_cco_thin"] is False  # 13 reputation rows
+    assert by_slug["real-estate-funds"]["sales_tier"] == "adequate"
+    assert by_slug["real-estate-funds"]["sales_tier_cco_thin"] is False  # has integrity findings
+    # moderate maturity (46) but too few narratives (5) — must be not_ready, not adequate.
+    assert by_slug["private-markets"]["sales_tier"] == "not_ready"
+    assert by_slug["private-markets"]["sales_tier_cco_thin"] is True
+
+
+def test_apply_sales_tiers_defaults_missing_executive_block_to_not_ready():
+    feed = {"industries": [{"slug": "closed-pension", "narratives": 0}], "executive": {}}
+    feed_builder._apply_sales_tiers(feed)
+    row = feed["industries"][0]
+    assert row["sales_tier"] == "not_ready"
+    assert row["sales_tier_maturity"] == 0
+    assert row["sales_tier_cco_thin"] is True
+
+
 class _FakeS3:
     """Minimal S3 stub: paginator over list_objects_v2 + get_object."""
 

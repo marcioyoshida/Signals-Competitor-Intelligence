@@ -227,6 +227,46 @@ def build_industry_volume(
     return out
 
 
+# #117: sales-tier thresholds that reproduce the 2026-09-12 manual readiness pass
+# (docs/2026-09-11-adr-launch-readiness.md, "Coverage-gated GA sector list") exactly —
+# maturity>=70 caught banking/fintech/investment-banking and nothing else; narratives<10
+# caught closed-pension/securitization/private-markets (private-markets scores a moderate
+# 46 on maturity but has only 5 narratives, so maturity alone would have missed it).
+_SALES_TIER_GA_MATURITY = 70
+_SALES_TIER_NOT_READY_NARRATIVES = 10
+# CCO reads as "insufficient signal" below this — banking/fintech (13 reputation rows each)
+# are the only sectors meaningfully above it; everything else sits at 0-4.
+_SALES_TIER_CCO_MIN_REPUTATION = 5
+
+
+def _apply_sales_tiers(feed: dict[str, Any]) -> None:
+    """Tag each `feed["industries"]` row with `sales_tier` (ga_ready/adequate/not_ready) and a
+    `sales_tier_cco_thin` flag, derived from the officer-block numbers `executive.build_executive`
+    already computed above (`cpo.by_industry[].maturity`/`narratives`, `cco.by_industry[].
+    n_integrity`/`n_rep`) — so the tier list is READ, not re-derived from memory or a stale doc
+    snapshot every time someone needs to know which sectors can be pitched today (issue #117)."""
+    cpo_by = (((feed.get("executive") or {}).get("cpo") or {}).get("by_industry") or {})
+    cco_by = (((feed.get("executive") or {}).get("cco") or {}).get("by_industry") or {})
+    for row in feed.get("industries") or []:
+        slug = row.get("slug")
+        cpo = cpo_by.get(slug) or {}
+        cco = cco_by.get(slug) or {}
+        maturity = cpo.get("maturity") or 0
+        narratives = cpo.get("narratives", row.get("narratives", 0))
+        if maturity >= _SALES_TIER_GA_MATURITY:
+            tier = "ga_ready"
+        elif narratives < _SALES_TIER_NOT_READY_NARRATIVES:
+            tier = "not_ready"
+        else:
+            tier = "adequate"
+        row["sales_tier"] = tier
+        row["sales_tier_maturity"] = maturity
+        row["sales_tier_cco_thin"] = (
+            int(cco.get("n_integrity") or 0) == 0
+            and int(cco.get("n_rep") or 0) < _SALES_TIER_CCO_MIN_REPUTATION
+        )
+
+
 _FOCUS_LABELS = {"IPCA": "IPCA", "Selic": "Selic", "PIB Total": "PIB", "Câmbio": "Câmbio (R$/US$)"}
 
 
@@ -1581,6 +1621,10 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     except Exception as exc:  # pragma: no cover - best-effort, read-only
         print(f"Warning: executive block skipped: {exc}")
         feed["executive"] = {"officers": [], "cso": {}}
+    try:
+        _apply_sales_tiers(feed)
+    except Exception as exc:  # pragma: no cover - best-effort, read-only
+        print(f"Warning: sales tier tagging skipped: {exc}")
     # Weekly CSO brief PUSH delivery (pilot-persona loop habit lever) — turns the /exec board
     # into a delivered ritual (Teams/Slack/email) instead of a dashboard you have to visit.
     # Gated OFF by default; fail-closed per channel (weekly_digest degrades to None when a
