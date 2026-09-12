@@ -280,6 +280,31 @@ def test_load_recent_narratives_filters_by_window(monkeypatch):
     assert ids == {"fresh"}  # old is outside the 14-day window; .txt skipped
 
 
+def test_scope_feed_to_modules_rescopes_the_executive_block():
+    # 2026-09-12: feed.executive is DERIVED from the sections scope_feed_to_modules already
+    # filters, but it was never itself re-scoped — a tenant licensed to ONE industry got a
+    # correctly-filtered feed PLUS the full unscoped officer dashboard (every sector's
+    # by_industry, cross-corpus __all__ aggregates). This must never leak an unlicensed slug.
+    from src.synth import executive
+
+    narratives = [
+        _narr("bk", "itau", "2026-08-20", 0.7),
+        _narr("ag", "agroca", "2026-08-20", 0.5),
+    ]
+    imap = {"itau": ["banking"], "agroca": ["agri-funds"]}
+    imeta = {"banking": {"display_name": "Banking"}, "agri-funds": {"display_name": "Agri Funds"}}
+    attrs = {"itau": {"industries": ["banking"]}, "agroca": {"industries": ["agri-funds"]}}
+    feed = feed_builder.build_feed(narratives, industry_map=imap, industry_meta=imeta, entity_attrs=attrs)
+    feed["executive"] = executive.build_executive(feed)
+    assert {s["slug"] for s in feed["executive"]["sectors"]} == {"banking", "agri-funds"}
+
+    scoped = feed_builder.scope_feed_to_modules(feed, ["banking"])
+    assert {s["slug"] for s in scoped["executive"]["sectors"]} == {"banking"}
+    for officer in ("cso", "cro", "cco", "cpo"):
+        assert "agri-funds" not in scoped["executive"][officer]["by_industry"]
+        assert "banking" in scoped["executive"][officer]["by_industry"]
+
+
 def test_scope_feed_to_modules_saas_boundary_and_group_optin():
     # issue #48: per-tenant scoped feed keeps depth + groups, folds in an in-scope
     # parent's group children (ADR-017 opt-in), fail-closed on empty modules.
@@ -378,6 +403,27 @@ def test_derive_entry_feed_scopes_to_entry_industries_only():
     # KPIs recomputed for the slice.
     assert entry["kpis"]["narratives_total"] == 3
     assert entry["kpis"]["entities_tracked"] == 3
+
+
+def test_derive_entry_feed_rescopes_the_executive_block():
+    # entry.json is served STATICALLY with NO auth (docs/2026-08-30-adr-distribution-three-
+    # tier.md) — leaking the full unscoped executive block here is worse than the SaaS #48
+    # leak: anyone can fetch it, no login required.
+    from src.synth import executive
+
+    narratives = [
+        _narr("bk", "itau", "2026-08-20", 0.7),
+        _narr("ag", "agroca", "2026-08-20", 0.5),
+    ]
+    imap = {"itau": ["banking"], "agroca": ["agri-funds"]}
+    meta = {"banking": {"display_name": "Banking"}, "agri-funds": {"display_name": "Agri Funds"}}
+    attrs = {"itau": {"industries": ["banking"]}, "agroca": {"industries": ["agri-funds"]}}
+    feed = feed_builder.build_feed(narratives, industry_map=imap, industry_meta=meta, entity_attrs=attrs)
+    feed["executive"] = executive.build_executive(feed)
+
+    entry = feed_builder.derive_entry_feed(feed, industries=["agri-funds"])
+    assert {s["slug"] for s in entry["executive"]["sectors"]} == {"agri-funds"}
+    assert "banking" not in entry["executive"]["cso"]["by_industry"]
 
 
 def test_display_label_falls_back_to_kind_when_entity_less():

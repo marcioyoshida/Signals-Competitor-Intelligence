@@ -257,6 +257,7 @@
 </aside>
 
 <script src="/v2/app.js"></script>
+<script src="/v2/context.js"></script>
 <script>
 const U = window.OncaUI;
 let DATA = {}, EX = {}, OFFICER = "cso", SECTOR = "__all__", BYID = {};
@@ -292,57 +293,13 @@ document.querySelectorAll("#officerTabs a").forEach(a => a.addEventListener("cli
 // Same PKCE Hosted-UI flow + same-origin /api/ask (Cognito-JWT HTTP API) as v1; the
 // only /exec-specific bit is passing `officer: OFFICER` so the agent scopes grounding +
 // its own-decision KB precedents to the active officer (agent_ask already supports this).
-const AUTH = {
-  domain: "https://onca-668449743071.auth.us-east-1.amazoncognito.com",
-  clientId: "7qlquhh56o06tp9bo8gp77p385",
-  apiUrl: "",                              // same origin (CloudFront → JWT HTTP API)
-  redirectUri: location.origin + "/exec",  // registered on the Cognito app client
-};
-const TOKEN_KEY = "onca_id_token", VERIFIER_KEY = "onca_pkce_verifier";
-function b64Url(bytes) { let s = ""; bytes.forEach(b => s += String.fromCharCode(b)); return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
-function pkceVerifier() { const a = new Uint8Array(64); crypto.getRandomValues(a); return b64Url(a); }
-async function pkceChallenge(v) { const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(v)); return b64Url(new Uint8Array(d)); }
-function decodeJwt(t) { try { const b = t.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"); return JSON.parse(decodeURIComponent(atob(b).split("").map(c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join(""))); } catch (e) { return null; } }
-function getIdToken() { return sessionStorage.getItem(TOKEN_KEY); }
-function isLoggedIn() { const t = getIdToken(); if (!t) return false; const p = decodeJwt(t); return !!(p && p.exp && p.exp * 1000 > Date.now()); }
-async function login() {
-  const v = pkceVerifier(); sessionStorage.setItem(VERIFIER_KEY, v);
-  const params = new URLSearchParams({ client_id: AUTH.clientId, response_type: "code", scope: "openid email",
-    redirect_uri: AUTH.redirectUri, code_challenge: await pkceChallenge(v), code_challenge_method: "S256" });
-  location.href = `${AUTH.domain}/login?${params}`;
-}
-function logout() { sessionStorage.removeItem(TOKEN_KEY); location.href = `${AUTH.domain}/logout?${new URLSearchParams({ client_id: AUTH.clientId, logout_uri: AUTH.redirectUri })}`; }
-async function exchangeCode(code) {
-  const v = sessionStorage.getItem(VERIFIER_KEY); sessionStorage.removeItem(VERIFIER_KEY);
-  if (!v) return;
-  try {
-    const r = await fetch(`${AUTH.domain}/oauth2/token`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ grant_type: "authorization_code", client_id: AUTH.clientId, code, redirect_uri: AUTH.redirectUri, code_verifier: v }).toString() });
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    const j = await r.json();
-    if (j.id_token) sessionStorage.setItem(TOKEN_KEY, j.id_token);
-  } catch (e) { console.error("Onça auth:", e); }
-}
-async function handleAuthCallback() {
-  const url = new URL(location.href), code = url.searchParams.get("code");
-  if (!code) return;
-  await exchangeCode(code);
-  url.searchParams.delete("code"); url.searchParams.delete("state");
-  history.replaceState({}, "", url.pathname + (url.search || "") + url.hash);
-}
+// Auth + scoped-feed loading is /v2/context.js's OncaCtx (Ctx) — the SAME implementation
+// `/app` and the SaaS context screens use, not a second parallel one (issue: /exec used to
+// duplicate this and fetch the raw unscoped /feed.json regardless of login — see the
+// 2026-09-12 sector-scoped-sessions plan).
+const Ctx = window.OncaCtx;
 function renderAuthUI() {
-  const el = document.getElementById("authBox");
-  if (el) {
-    if (isLoggedIn()) {
-      const p = decodeJwt(getIdToken()) || {};
-      el.innerHTML = `<span class="authuser" title="${U.esc(p.email || "conta")}">${U.esc(p.email || "conta")}</span><button class="authbtn" id="logoutBtn">Sair</button>`;
-      document.getElementById("logoutBtn").onclick = logout;
-    } else {
-      el.innerHTML = `<button class="authbtn" id="loginBtn">Entrar</button>`;
-      document.getElementById("loginBtn").onclick = login;
-    }
-  }
-  renderAskLoginState();
+  Ctx.renderAuthBox("authBox", () => renderAskLoginState());
 }
 const ASK_EXAMPLES = ["O que mudou esta semana no meu escopo?", "Quem está em alerta agora?",
   "Qual mudança regulatória tem maior alcance?", "Onde há maior risco prudencial?"];
@@ -365,7 +322,7 @@ function renderAskPanel() {
 function renderAskLoginState() {
   const hint = document.getElementById("askAuthHint"), input = document.getElementById("askInput"), btn = document.getElementById("askBtn");
   if (!hint || !input || !btn) return;
-  const logged = isLoggedIn();
+  const logged = Ctx.isLoggedIn();
   hint.style.display = logged ? "none" : "";
   input.disabled = !logged; btn.disabled = !logged;
   input.placeholder = logged ? "Ex.: o que mudou no meu setor esta semana?" : "Entre para perguntar à Onça";
@@ -386,7 +343,7 @@ function renderAnswer(res) {
 let askBusy = false;
 async function askOnca() {
   if (askBusy) return;
-  if (!isLoggedIn()) { renderAskLoginState(); return; }
+  if (!Ctx.isLoggedIn()) { renderAskLoginState(); return; }
   const input = document.getElementById("askInput"), q = (input.value || "").trim();
   if (!q) return;
   askBusy = true;
@@ -394,21 +351,56 @@ async function askOnca() {
   const box = document.getElementById("askAns"); box.style.display = "block"; box.className = "askans"; box.innerHTML = `<span class="thinking">Consultando a base da Onça…</span>`;
   const scope = {}; if (SECTOR && SECTOR !== "__all__") scope.industry = SECTOR;
   try {
-    const r = await fetch(`${AUTH.apiUrl}/api/ask`, { method: "POST",
-      headers: { "content-type": "application/json", "authorization": `Bearer ${getIdToken()}` },
+    const r = await fetch("/api/ask", { method: "POST",
+      headers: { "content-type": "application/json", "authorization": `Bearer ${Ctx.getIdToken()}` },
       body: JSON.stringify({ q, scope, officer: OFFICER }) });
-    if (r.status === 401) { sessionStorage.removeItem(TOKEN_KEY); renderAuthUI(); renderAnswer({ refused: true, answer: "Sessão expirada. Entre novamente para perguntar." }); return; }
+    if (r.status === 401) {
+      try { sessionStorage.removeItem("onca_id_token"); } catch (e) {}
+      renderAuthUI(); renderAnswer({ refused: true, answer: "Sessão expirada. Entre novamente para perguntar." }); return;
+    }
     const j = await r.json();
     renderAnswer(r.ok ? j : { refused: true, answer: "Falha ao consultar. Tente novamente." });
   } catch { renderAnswer({ refused: true, answer: "Falha de rede ao consultar." }); }
   finally { btn.disabled = false; btn.textContent = prev; askBusy = false; }
 }
 renderAskPanel();
-handleAuthCallback().then(renderAuthUI);
+Ctx.handleAuthCallback().then(renderAuthUI).then(loadFeed);
 
-fetch("/feed.json").then(r => r.json()).then(d => { DATA = d; boot(); })
-  .catch(e => { document.getElementById("board").innerHTML =
-    U.empty("Feed indisponível", "Não foi possível carregar feed.json.", "!"); console.error(e); });
+// The tenant's licensed industry slugs, from the SERVER-SCOPED feed's `scoped_modules`
+// (never derived from a superset) — same rule as /v2/industries.js `licensedIndustries`,
+// duplicated here (not imported) because industries.js's renderDashboard/PANEL machinery
+// is v2's own renderer and would collide with /exec's own board renderer.
+let LICENSED = [];
+function licensedIndustries(D) {
+  const mods = (D && D.scoped_modules) || [];
+  if (mods.length) return mods.map(m => String(m).toLowerCase());
+  return ((D && D.industries) || []).map(i => String(i.slug || i).toLowerCase());
+}
+
+async function loadFeed() {
+  const admin = new URLSearchParams(location.search).get("admin") === "1";
+  if (admin) {
+    // Operator/curator preview (SAME bypass convention as /app?admin=1): every industry,
+    // from the full feed — still behind the shared basic-auth edge, not a new hole.
+    try {
+      DATA = await fetch("/feed.json", { cache: "no-store" }).then(r => r.json());
+      LICENSED = (DATA.industries || []).map(i => String(i.slug || i).toLowerCase());
+      boot();
+    } catch (e) {
+      document.getElementById("board").innerHTML = U.empty("Feed indisponível", "Não foi possível carregar feed.json.", "!");
+      console.error(e);
+    }
+    return;
+  }
+  const res = await Ctx.loadScopedFeed({});
+  if (res.needAuth || res.noAccess || res.error) {
+    Ctx.mountGate(document.getElementById("board"), res.error || (res.needAuth ? "needAuth" : "noAccess"), "seu painel executivo");
+    return;
+  }
+  DATA = res.data;
+  LICENSED = licensedIndustries(DATA);
+  boot();
+}
 
 function boot() {
   EX = DATA.executive || {};
@@ -417,7 +409,10 @@ function boot() {
   document.getElementById("macroStrip").innerHTML = macroStrip(DATA.macro);  // shared header
   setInterval(() => { if (OFFICER === "cso") loadQuotes(); }, 60000);  // B3 quotes refresh
   const sel = document.getElementById("sectorSel");
-  (EX.sectors || []).forEach(s => { const o = document.createElement("option"); o.value = s.slug; o.textContent = s.label; sel.appendChild(o); });
+  // feed.executive is already server-scoped to LICENSED (feed_builder._rescope_executive);
+  // filtering here too is a client-side belt-and-suspenders, not the trust boundary itself.
+  (EX.sectors || []).filter(s => !LICENSED.length || LICENSED.includes(s.slug))
+    .forEach(s => { const o = document.createElement("option"); o.value = s.slug; o.textContent = s.label; sel.appendChild(o); });
   if (!EX.officers || !EX.officers.length) {
     document.getElementById("board").innerHTML =
       U.empty("Bloco executivo ausente", "feed.executive ainda não foi publicado.", "○"); return;

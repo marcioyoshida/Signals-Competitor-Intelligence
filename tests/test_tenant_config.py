@@ -93,6 +93,55 @@ def test_entitled_helper():
     assert tc.entitled({"modules": []}, ["banking"]) is False  # fail closed
 
 
+class _FakeCognitoExceptions:
+    class UserNotFoundException(Exception):
+        pass
+
+
+class _FakeCognito:
+    """Mirrors _FakeTable's DI pattern — no moto/localstack needed for cognito_upsert_user."""
+
+    def __init__(self) -> None:
+        self.users: dict[str, dict[str, str]] = {}
+        self.exceptions = _FakeCognitoExceptions
+
+    def admin_get_user(self, UserPoolId, Username):
+        if Username not in self.users:
+            raise self.exceptions.UserNotFoundException(Username)
+        attrs = self.users[Username]
+        return {"UserAttributes": [{"Name": k, "Value": v} for k, v in attrs.items()]}
+
+    def admin_create_user(self, UserPoolId, Username, UserAttributes, DesiredDeliveryMediums=None):
+        self.users[Username] = {a["Name"]: a["Value"] for a in UserAttributes}
+
+    def admin_update_user_attributes(self, UserPoolId, Username, UserAttributes):
+        self.users[Username].update({a["Name"]: a["Value"] for a in UserAttributes})
+
+
+def test_cognito_upsert_user_creates_new_user():
+    c = _FakeCognito()
+    outcome = tc.cognito_upsert_user("pool1", "dp@example.com", "acme", "saas", client=c)
+    assert outcome == "created"
+    assert c.users["dp@example.com"]["custom:tenant"] == "acme"
+    assert c.users["dp@example.com"]["custom:tier"] == "saas"
+
+
+def test_cognito_upsert_user_updates_tier_for_same_tenant():
+    c = _FakeCognito()
+    tc.cognito_upsert_user("pool1", "dp@example.com", "acme", "entry", client=c)
+    outcome = tc.cognito_upsert_user("pool1", "dp@example.com", "acme", "saas", client=c)
+    assert outcome == "updated"
+    assert c.users["dp@example.com"]["custom:tier"] == "saas"
+    assert c.users["dp@example.com"]["custom:tenant"] == "acme"  # unchanged (immutable)
+
+
+def test_cognito_upsert_user_rejects_tenant_mismatch():
+    c = _FakeCognito()
+    tc.cognito_upsert_user("pool1", "dp@example.com", "acme", "saas", client=c)
+    with pytest.raises(ValueError, match="already linked"):
+        tc.cognito_upsert_user("pool1", "dp@example.com", "other-tenant", "saas", client=c)
+
+
 def test_scope_cards_to_modules_read_boundary():
     feed = {"entity_attrs": {
         "itau": {"industries": ["banking"]},

@@ -114,6 +114,52 @@ def put_tenant_config(
     return {"tenant_id": str(tenant_id), "tier": tier, "modules": mods, "plane": plane}
 
 
+def cognito_upsert_user(
+    pool_id: str, email: str, tenant_id: str, tier: str, *, client: Any | None = None,
+) -> str:
+    """Create/update the Cognito user that carries `custom:tenant`/`custom:tier` for a real
+    tenant — closing the gap where only 4 hardcoded demo tenants get a Cognito user
+    (infra/app.py's deploy-time seed); a real design partner had no scripted path at all.
+
+    `custom:tenant` is IMMUTABLE (infra/app.py's UserPool definition), so this refuses to
+    silently relink an existing email to a different tenant — that would either fail at the
+    API call or, worse, look like it worked while attaching the wrong identity. Returns
+    "created" or "updated" (tier only, the one mutable field — e.g. an entry→saas upgrade)."""
+    if client is None:
+        import boto3
+
+        client = boto3.client("cognito-idp")
+    try:
+        existing = client.admin_get_user(UserPoolId=pool_id, Username=email)
+    except client.exceptions.UserNotFoundException:
+        client.admin_create_user(
+            UserPoolId=pool_id,
+            Username=email,
+            UserAttributes=[
+                {"Name": "email", "Value": email},
+                {"Name": "email_verified", "Value": "true"},
+                {"Name": "custom:tenant", "Value": str(tenant_id)},
+                {"Name": "custom:tier", "Value": str(tier)},
+            ],
+            DesiredDeliveryMediums=["EMAIL"],
+        )
+        return "created"
+    cur_tenant = next(
+        (a["Value"] for a in existing.get("UserAttributes", []) if a["Name"] == "custom:tenant"),
+        None,
+    )
+    if cur_tenant and cur_tenant != str(tenant_id):
+        raise ValueError(
+            f"{email!r} is already linked to tenant {cur_tenant!r}, not {tenant_id!r} — "
+            "custom:tenant is immutable, use a different email or a new user"
+        )
+    client.admin_update_user_attributes(
+        UserPoolId=pool_id, Username=email,
+        UserAttributes=[{"Name": "custom:tier", "Value": str(tier)}],
+    )
+    return "updated"
+
+
 def entitled(config: dict[str, Any] | None, industries: Any) -> bool:
     """True iff any of `industries` is in the tenant's modules. Empty modules ⇒ False."""
     mods = set((config or {}).get("modules") or [])

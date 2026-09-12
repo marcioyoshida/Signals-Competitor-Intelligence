@@ -876,6 +876,7 @@ def scope_feed_to_modules(feed: dict[str, Any], modules: Any) -> dict[str, Any]:
             "regulatory_coverage": {},                                # operator-only (#2)
         }
     )
+    out["executive"] = _rescope_executive(out)
     return out
 
 
@@ -988,7 +989,25 @@ def derive_entry_feed(
             "regulatory_coverage": {},                                # operator-only (#2)
         }
     )
+    out["executive"] = _rescope_executive(out)
     return out
+
+
+def _rescope_executive(scoped_feed: dict[str, Any]) -> dict[str, Any]:
+    """`feed.executive` is DERIVED from the sections above (cards/distress/reputation/...),
+    but it was never itself re-scoped by either projection above — `GET /api/feed` and the
+    public, no-auth `feed.entry.json` both carried the FULL unscoped officer dashboard (CSO/
+    CRO/CCO/CPO `by_industry` for every sector, `__all__` aggregates over the whole corpus)
+    alongside a correctly-filtered feed (2026-09-12, industry-sector scoped sessions).
+    Rebuilding it from the already-scoped projection reuses build_executive's own aggregation
+    semantics exactly — no separate per-field re-filtering logic to keep in sync or get wrong."""
+    try:
+        from src.synth import executive
+
+        return executive.build_executive(scoped_feed)
+    except Exception as exc:  # pragma: no cover - fail closed, never leak the unscoped block
+        print(f"Warning: scoped executive rebuild failed: {exc}")
+        return {"officers": [], "cso": {}}
 
 
 def _recent_dates(window_days: int) -> set[str]:
