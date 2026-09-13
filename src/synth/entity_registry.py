@@ -142,9 +142,15 @@ def _log(entity_id: str, action: str, source: str, detail: dict[str, Any] | None
         import uuid
 
         ts = _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="milliseconds")
+        # WHO, not just what: `source` is the write-precedence class (enrich/discovery/
+        # curated), which says nothing about which human or job made the change. The
+        # actor is set by the authenticated caller (registry_api sets it from the
+        # verified JWT); "system" when the writer is an unattended pipeline task.
         t.put_item(Item=_ddb_safe({
             "entity_id": str(entity_id), "ts": f"{ts}#{uuid.uuid4().hex[:8]}",
-            "action": str(action), "source": str(source), "detail": detail or {},
+            "action": str(action), "source": str(source),
+            "actor": os.environ.get("ONCA_CURATION_ACTOR") or "system",
+            "detail": detail or {},
         }))
     except Exception as exc:  # pragma: no cover - best-effort, never blocks a write
         print(f"Warning: curation-log write failed for {entity_id}: {exc}")

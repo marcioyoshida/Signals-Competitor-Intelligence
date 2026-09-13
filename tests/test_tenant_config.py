@@ -30,6 +30,21 @@ def test_put_get_tenant_config_roundtrip():
     assert tc.get_tenant_config("nobody", table=t) is None  # unprovisioned ⇒ None
 
 
+def test_not_ready_industries_rejected_on_any_tier_without_force():
+    # issue #119: a not-ready sector must not slip into a SaaS/Sovereign entitlement either —
+    # those tiers have no allow-list otherwise, so this is the only guard they get.
+    t = _FakeTable()
+    with pytest.raises(ValueError, match="not launch-ready"):
+        tc.put_tenant_config("dp1", "saas", ["banking", "securitization"], table=t)
+    assert tc.get_tenant_config("dp1", table=t) is None  # rejected, not partially provisioned
+
+
+def test_not_ready_industries_allowed_with_explicit_force():
+    t = _FakeTable()
+    cfg = tc.put_tenant_config("dp2", "saas", ["private-markets"], table=t, force_not_ready=True)
+    assert cfg["modules"] == ["private-markets"]
+
+
 def test_put_rejects_bad_tier():
     with pytest.raises(ValueError):
         tc.put_tenant_config("x", "premium", ["banking"], table=_FakeTable())
@@ -76,6 +91,55 @@ def test_entitled_helper():
     assert tc.entitled(cfg, ["banking"]) is True
     assert tc.entitled(cfg, ["insurance"]) is False
     assert tc.entitled({"modules": []}, ["banking"]) is False  # fail closed
+
+
+class _FakeCognitoExceptions:
+    class UserNotFoundException(Exception):
+        pass
+
+
+class _FakeCognito:
+    """Mirrors _FakeTable's DI pattern — no moto/localstack needed for cognito_upsert_user."""
+
+    def __init__(self) -> None:
+        self.users: dict[str, dict[str, str]] = {}
+        self.exceptions = _FakeCognitoExceptions
+
+    def admin_get_user(self, UserPoolId, Username):
+        if Username not in self.users:
+            raise self.exceptions.UserNotFoundException(Username)
+        attrs = self.users[Username]
+        return {"UserAttributes": [{"Name": k, "Value": v} for k, v in attrs.items()]}
+
+    def admin_create_user(self, UserPoolId, Username, UserAttributes, DesiredDeliveryMediums=None):
+        self.users[Username] = {a["Name"]: a["Value"] for a in UserAttributes}
+
+    def admin_update_user_attributes(self, UserPoolId, Username, UserAttributes):
+        self.users[Username].update({a["Name"]: a["Value"] for a in UserAttributes})
+
+
+def test_cognito_upsert_user_creates_new_user():
+    c = _FakeCognito()
+    outcome = tc.cognito_upsert_user("pool1", "dp@example.com", "acme", "saas", client=c)
+    assert outcome == "created"
+    assert c.users["dp@example.com"]["custom:tenant"] == "acme"
+    assert c.users["dp@example.com"]["custom:tier"] == "saas"
+
+
+def test_cognito_upsert_user_updates_tier_for_same_tenant():
+    c = _FakeCognito()
+    tc.cognito_upsert_user("pool1", "dp@example.com", "acme", "entry", client=c)
+    outcome = tc.cognito_upsert_user("pool1", "dp@example.com", "acme", "saas", client=c)
+    assert outcome == "updated"
+    assert c.users["dp@example.com"]["custom:tier"] == "saas"
+    assert c.users["dp@example.com"]["custom:tenant"] == "acme"  # unchanged (immutable)
+
+
+def test_cognito_upsert_user_rejects_tenant_mismatch():
+    c = _FakeCognito()
+    tc.cognito_upsert_user("pool1", "dp@example.com", "acme", "saas", client=c)
+    with pytest.raises(ValueError, match="already linked"):
+        tc.cognito_upsert_user("pool1", "dp@example.com", "other-tenant", "saas", client=c)
 
 
 def test_scope_cards_to_modules_read_boundary():

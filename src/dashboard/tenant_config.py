@@ -26,6 +26,13 @@ def allowed_industries_for_tier(tier: str) -> frozenset[str] | None:
     return frozenset(ENTRY_INDUSTRIES) if tier == "entry" else None
 
 
+# #119 (ADR 024 readiness pass, 2026-09-12): sectors thin across EVERY officer — not a display
+# artifact, a genuine "don't sell this yet" signal (see docs/2026-09-11-adr-launch-readiness.md,
+# "Coverage-gated GA sector list"). Recorded as excluded-until-revisited rather than left to
+# surface by accident in a provisioning call. Revisit only with a named buyer + an ingestion plan.
+NOT_READY_INDUSTRIES = ("closed-pension", "securitization", "private-markets")
+
+
 def _table(table: Any | None = None) -> Any:
     if table is not None:
         return table
@@ -69,7 +76,7 @@ def _default_plane(tier: str) -> str:
 
 def put_tenant_config(
     tenant_id: str, tier: str, modules: list[str], *, plane: str | None = None,
-    table: Any | None = None,
+    table: Any | None = None, force_not_ready: bool = False,
 ) -> dict[str, Any]:
     """Provision/update a tenant's entitlement. Idempotent upsert."""
     tier = str(tier)
@@ -91,9 +98,66 @@ def put_tenant_config(
                 f"tier {tier!r} may only license entry-tier industries "
                 f"{sorted(allowed)}; got disallowed {bad}"
             )
+    # #119: not-ready sectors are excluded from EVERY tier by default, not just Entry — an
+    # operator provisioning a SaaS design partner is exactly the scenario this guards against,
+    # since SaaS/Sovereign have no allow-list otherwise. `force_not_ready=True` is the deliberate
+    # escape hatch for a named buyer with an explicit ingestion plan (see NOT_READY_INDUSTRIES).
+    if not force_not_ready:
+        not_ready = [m for m in mods if m in NOT_READY_INDUSTRIES]
+        if not_ready:
+            raise ValueError(
+                f"{sorted(not_ready)} are not launch-ready (issue #119) — pass "
+                "force_not_ready=True to override for a named buyer with an ingestion plan"
+            )
     _table(table).put_item(
         Item={"tenant_id": str(tenant_id), "tier": tier, "modules": mods, "plane": plane})
     return {"tenant_id": str(tenant_id), "tier": tier, "modules": mods, "plane": plane}
+
+
+def cognito_upsert_user(
+    pool_id: str, email: str, tenant_id: str, tier: str, *, client: Any | None = None,
+) -> str:
+    """Create/update the Cognito user that carries `custom:tenant`/`custom:tier` for a real
+    tenant — closing the gap where only 4 hardcoded demo tenants get a Cognito user
+    (infra/app.py's deploy-time seed); a real design partner had no scripted path at all.
+
+    `custom:tenant` is IMMUTABLE (infra/app.py's UserPool definition), so this refuses to
+    silently relink an existing email to a different tenant — that would either fail at the
+    API call or, worse, look like it worked while attaching the wrong identity. Returns
+    "created" or "updated" (tier only, the one mutable field — e.g. an entry→saas upgrade)."""
+    if client is None:
+        import boto3
+
+        client = boto3.client("cognito-idp")
+    try:
+        existing = client.admin_get_user(UserPoolId=pool_id, Username=email)
+    except client.exceptions.UserNotFoundException:
+        client.admin_create_user(
+            UserPoolId=pool_id,
+            Username=email,
+            UserAttributes=[
+                {"Name": "email", "Value": email},
+                {"Name": "email_verified", "Value": "true"},
+                {"Name": "custom:tenant", "Value": str(tenant_id)},
+                {"Name": "custom:tier", "Value": str(tier)},
+            ],
+            DesiredDeliveryMediums=["EMAIL"],
+        )
+        return "created"
+    cur_tenant = next(
+        (a["Value"] for a in existing.get("UserAttributes", []) if a["Name"] == "custom:tenant"),
+        None,
+    )
+    if cur_tenant and cur_tenant != str(tenant_id):
+        raise ValueError(
+            f"{email!r} is already linked to tenant {cur_tenant!r}, not {tenant_id!r} — "
+            "custom:tenant is immutable, use a different email or a new user"
+        )
+    client.admin_update_user_attributes(
+        UserPoolId=pool_id, Username=email,
+        UserAttributes=[{"Name": "custom:tier", "Value": str(tier)}],
+    )
+    return "updated"
 
 
 def entitled(config: dict[str, Any] | None, industries: Any) -> bool:

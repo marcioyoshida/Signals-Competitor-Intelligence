@@ -28,20 +28,24 @@ Phase 1 is the cheap part.**
 ### 1. Every function URL is now `AWS_IAM` behind CloudFront OAC
 
 `infra/app.py`. One shared `FunctionUrlOriginAccessControl` (`furl_oac`,
-`Signing.SIGV4_ALWAYS`) serves all five origins. CDK emits an
+`Signing.SIGV4_ALWAYS`) serves all four remaining origins. CDK emits an
 `AWS::Lambda::Permission` per function granting `lambda:InvokeFunctionUrl` to
 `cloudfront.amazonaws.com`, scoped by `SourceArn` to this distribution alone.
 
 | Behavior | Lambda | Was | Now |
 |---|---|---|---|
 | `/api/*` (catch-all) | `OncaReviewAction` | NONE | AWS_IAM + OAC |
-| `/api/registry/*` | `OncaRegistryApi` | NONE | AWS_IAM + OAC |
+| `/api/registry/*` | `OncaRegistryApi` | NONE | *no function URL* â€” cut over to the JWT HTTP API on `main` |
 | `/api/quotes*` | `OncaQuotesApi` | NONE | AWS_IAM + OAC |
 | `/api/run/*` | `OncaRunTrigger` | NONE | AWS_IAM + OAC |
 | `/api/act*` | `OncaActApi` | NONE | AWS_IAM + OAC |
 
 `/api/ask`, `/api/gaps` and `/api/feed` were already cut over to the Cognito-JWT HTTP
-API and have no function URL.
+API and have no function URL. `/api/registry/*` joined them on `main` (commit
+`489a20f`) while this branch was open; removing the origin outright is strictly
+better than signing it, so that cutover was taken as-is on merge. Its break-glass
+secret leg now calls the same `origin_secret_ok` helper for the constant-time,
+fail-closed compare.
 
 `SIGV4_ALWAYS` is load-bearing, not a default worth leaving implicit. CloudFront must
 **overwrite** the `Authorization` header on the origin request: the dashboard sends
@@ -89,11 +93,11 @@ path either, so there is nothing to sign for.
 
 ## Verification performed
 
-- Full suite green: **1114 passed** (1110 before, plus 4 fail-closed regression tests
+- Full suite green: **1114 passed** (pre-merge count; see below for the post-merge run) (1110 before, plus 4 fail-closed regression tests
   and the `origin_secret_ok` unit tests in `tests/test_auth.py`).
-- `cdk synth` succeeds, and the template asserts: 5/5 `AWS::Lambda::Url` at
-  `AWS_IAM`; one lambda-type OAC with `SigningBehavior: always`; 5
-  `lambda:InvokeFunctionUrl` permissions all scoped to the distribution ARN; 5/5
+- `cdk synth` succeeds, and the template asserts: 4/4 `AWS::Lambda::Url` at
+  `AWS_IAM`; one lambda-type OAC with `SigningBehavior: always`; 4
+  `lambda:InvokeFunctionUrl` permissions all scoped to the distribution ARN; 4/4
   function-URL origins carrying both the OAC and the origin-secret header.
 - The `sha256Hex` logic was executed against Node's `crypto` and matches
   `createHash("sha256")` for empty, ASCII and accented pt-BR bodies.
@@ -107,7 +111,7 @@ The signing path cannot be exercised without a real distribution. Do all of it â
 Bluefin roadmap recorded its WAF as "verified" on the one path that was already
 protected, and missed exactly this.
 
-1. **Origin unreachable.** For each of the five functions, read `FunctionUrl` from the
+1. **Origin unreachable.** For each of the four functions, read `FunctionUrl` from the
    Lambda console and `curl` it directly. Expect **403** (`AccessDeniedException`).
    This is the whole point of the phase; test it per function, not once.
 2. **Edge still works.** Through the distribution: `GET /api/quotes`, `GET /api/run/`.

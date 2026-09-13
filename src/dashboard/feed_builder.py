@@ -227,6 +227,46 @@ def build_industry_volume(
     return out
 
 
+# #117: sales-tier thresholds that reproduce the 2026-09-12 manual readiness pass
+# (docs/2026-09-11-adr-launch-readiness.md, "Coverage-gated GA sector list") exactly —
+# maturity>=70 caught banking/fintech/investment-banking and nothing else; narratives<10
+# caught closed-pension/securitization/private-markets (private-markets scores a moderate
+# 46 on maturity but has only 5 narratives, so maturity alone would have missed it).
+_SALES_TIER_GA_MATURITY = 70
+_SALES_TIER_NOT_READY_NARRATIVES = 10
+# CCO reads as "insufficient signal" below this — banking/fintech (13 reputation rows each)
+# are the only sectors meaningfully above it; everything else sits at 0-4.
+_SALES_TIER_CCO_MIN_REPUTATION = 5
+
+
+def _apply_sales_tiers(feed: dict[str, Any]) -> None:
+    """Tag each `feed["industries"]` row with `sales_tier` (ga_ready/adequate/not_ready) and a
+    `sales_tier_cco_thin` flag, derived from the officer-block numbers `executive.build_executive`
+    already computed above (`cpo.by_industry[].maturity`/`narratives`, `cco.by_industry[].
+    n_integrity`/`n_rep`) — so the tier list is READ, not re-derived from memory or a stale doc
+    snapshot every time someone needs to know which sectors can be pitched today (issue #117)."""
+    cpo_by = (((feed.get("executive") or {}).get("cpo") or {}).get("by_industry") or {})
+    cco_by = (((feed.get("executive") or {}).get("cco") or {}).get("by_industry") or {})
+    for row in feed.get("industries") or []:
+        slug = row.get("slug")
+        cpo = cpo_by.get(slug) or {}
+        cco = cco_by.get(slug) or {}
+        maturity = cpo.get("maturity") or 0
+        narratives = cpo.get("narratives", row.get("narratives", 0))
+        if maturity >= _SALES_TIER_GA_MATURITY:
+            tier = "ga_ready"
+        elif narratives < _SALES_TIER_NOT_READY_NARRATIVES:
+            tier = "not_ready"
+        else:
+            tier = "adequate"
+        row["sales_tier"] = tier
+        row["sales_tier_maturity"] = maturity
+        row["sales_tier_cco_thin"] = (
+            int(cco.get("n_integrity") or 0) == 0
+            and int(cco.get("n_rep") or 0) < _SALES_TIER_CCO_MIN_REPUTATION
+        )
+
+
 _FOCUS_LABELS = {"IPCA": "IPCA", "Selic": "Selic", "PIB Total": "PIB", "Câmbio": "Câmbio (R$/US$)"}
 
 
@@ -836,6 +876,7 @@ def scope_feed_to_modules(feed: dict[str, Any], modules: Any) -> dict[str, Any]:
             "regulatory_coverage": {},                                # operator-only (#2)
         }
     )
+    out["executive"] = _rescope_executive(out)
     return out
 
 
@@ -948,7 +989,25 @@ def derive_entry_feed(
             "regulatory_coverage": {},                                # operator-only (#2)
         }
     )
+    out["executive"] = _rescope_executive(out)
     return out
+
+
+def _rescope_executive(scoped_feed: dict[str, Any]) -> dict[str, Any]:
+    """`feed.executive` is DERIVED from the sections above (cards/distress/reputation/...),
+    but it was never itself re-scoped by either projection above — `GET /api/feed` and the
+    public, no-auth `feed.entry.json` both carried the FULL unscoped officer dashboard (CSO/
+    CRO/CCO/CPO `by_industry` for every sector, `__all__` aggregates over the whole corpus)
+    alongside a correctly-filtered feed (2026-09-12, industry-sector scoped sessions).
+    Rebuilding it from the already-scoped projection reuses build_executive's own aggregation
+    semantics exactly — no separate per-field re-filtering logic to keep in sync or get wrong."""
+    try:
+        from src.synth import executive
+
+        return executive.build_executive(scoped_feed)
+    except Exception as exc:  # pragma: no cover - fail closed, never leak the unscoped block
+        print(f"Warning: scoped executive rebuild failed: {exc}")
+        return {"officers": [], "cso": {}}
 
 
 def _recent_dates(window_days: int) -> set[str]:
@@ -1581,6 +1640,10 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     except Exception as exc:  # pragma: no cover - best-effort, read-only
         print(f"Warning: executive block skipped: {exc}")
         feed["executive"] = {"officers": [], "cso": {}}
+    try:
+        _apply_sales_tiers(feed)
+    except Exception as exc:  # pragma: no cover - best-effort, read-only
+        print(f"Warning: sales tier tagging skipped: {exc}")
     # Weekly CSO brief PUSH delivery (pilot-persona loop habit lever) — turns the /exec board
     # into a delivered ritual (Teams/Slack/email) instead of a dashboard you have to visit.
     # Gated OFF by default; fail-closed per channel (weekly_digest degrades to None when a
@@ -1629,6 +1692,17 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 CacheControl="no-cache",
             )
             published = f"s3://{site_bucket}/{FEED_KEY}"
+            # Issue #109: a heartbeat metric so a CloudWatch alarm can catch feed staleness —
+            # a case the pipeline's OWN failure alarms can't see, since a run can succeed end
+            # to end and still publish nothing new (e.g. every source returns empty). Missing
+            # data is what the alarm treats as breaching, not this metric's absence of a value.
+            try:
+                boto3.client("cloudwatch").put_metric_data(
+                    Namespace="Onca",
+                    MetricData=[{"MetricName": "FeedPublished", "Value": 1, "Unit": "Count"}],
+                )
+            except Exception as exc:  # pragma: no cover - metric emission is best-effort
+                print(f"Warning: FeedPublished metric skipped: {exc}")
         except Exception as exc:  # pragma: no cover - publish is best-effort
             print(f"Warning: feed publish failed: {exc}")
         try:

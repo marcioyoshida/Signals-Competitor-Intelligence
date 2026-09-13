@@ -19,6 +19,7 @@ from aws_cdk import aws_cloudfront as cloudfront
 from aws_cdk import aws_cognito as cognito
 from aws_cdk import aws_cloudfront_origins as cf_origins
 from aws_cdk import aws_cloudwatch as cloudwatch
+from aws_cdk import aws_cloudwatch_actions as cw_actions
 from aws_cdk import custom_resources as cr
 from aws_cdk import aws_dynamodb as dynamodb
 from aws_cdk import aws_events as events
@@ -28,6 +29,8 @@ from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_s3 as s3
 from aws_cdk import aws_s3_deployment as s3deploy
 from aws_cdk import aws_s3vectors as s3vectors
+from aws_cdk import aws_sns as sns
+from aws_cdk import aws_sns_subscriptions as sns_subs
 from aws_cdk import aws_stepfunctions as sfn
 from aws_cdk import aws_stepfunctions_tasks as sfn_tasks
 
@@ -100,12 +103,18 @@ class OncaPrototypeStack(Stack):
 
         # Entities registry (ADR 2026-08-17): single-table lookup by typed pk
         # (ENT#/ALIAS#/CNPJ#). Seeded from ENTITY_ALIASES; self-expands later.
+        # This is THE commercial asset (ADR 002) — PITR + deletion_protection (#110/G2)
+        # because ADR 018's journal rollback only recovers a field, not a lost table.
         entities_table = dynamodb.Table(
             self,
             "OncaEntitiesTable",
             partition_key=dynamodb.Attribute(name="pk", type=dynamodb.AttributeType.STRING),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
             removal_policy=None,
+            deletion_protection=True,
+            point_in_time_recovery_specification=dynamodb.PointInTimeRecoverySpecification(
+                point_in_time_recovery_enabled=True
+            ),
         )
 
         # Phase D — per-tenant entitlement source of truth (ADR 002 Phase D + ADR 016).
@@ -120,6 +129,10 @@ class OncaPrototypeStack(Stack):
             ),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
             removal_policy=RemovalPolicy.RETAIN,
+            deletion_protection=True,  # #110/G2 — losing entitlement rows locks out every tenant
+            point_in_time_recovery_specification=dynamodb.PointInTimeRecoverySpecification(
+                point_in_time_recovery_enabled=True
+            ),
         )
         CfnOutput(self, "TenantConfigTable", value=tenant_config_table.table_name)
 
@@ -133,6 +146,10 @@ class OncaPrototypeStack(Stack):
             sort_key=dynamodb.Attribute(name="ts", type=dynamodb.AttributeType.STRING),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
             removal_policy=RemovalPolicy.RETAIN,
+            deletion_protection=True,  # #110/G2 — the audit/rollback trail itself
+            point_in_time_recovery_specification=dynamodb.PointInTimeRecoverySpecification(
+                point_in_time_recovery_enabled=True
+            ),
         )
         CfnOutput(self, "CurationLogTable", value=curation_log_table.table_name)
 
@@ -1485,6 +1502,11 @@ class OncaPrototypeStack(Stack):
         feed_fn.add_to_role_policy(
             iam.PolicyStatement(actions=["ses:SendEmail", "ses:SendRawEmail"], resources=["*"])
         )
+        # Issue #109: the feed-staleness heartbeat metric. PutMetricData has no
+        # resource-level ARN to scope to (CloudWatch metrics aren't IAM resources).
+        feed_fn.add_to_role_policy(
+            iam.PolicyStatement(actions=["cloudwatch:PutMetricData"], resources=["*"])
+        )
 
         # Review-queue write endpoint (ADR step 5). Fronted by the SAME basic-auth
         # CloudFront Function as the dashboard (see the /api/* behavior below), so
@@ -1548,11 +1570,15 @@ class OncaPrototypeStack(Stack):
         )
 
         # Registry CRUD API (operator control plane): full curation over the ENT#
-        # records. Same auth model as the review endpoint (basic-auth edge +
-        # origin secret). CloudFront matches cache behaviors by INSERTION ORDER,
-        # not specificity — so the more-specific /api/registry/* MUST be added
-        # BEFORE the /api/* catch-all below, or registry calls fall through to the
-        # review action. (This ordering is load-bearing; do not reorder.)
+        # records — i.e. read/write access to the commercial asset itself.
+        #
+        # AUTH CUTOVER 2026-09-11: this used to sit behind the shared basic-auth edge
+        # + an origin secret, the same credential every warroom viewer holds. It is now
+        # routed through the Cognito-JWT HTTP API (see `auth_api` below) and requires an
+        # elevated claim, so a mutation attributes to a person and can be revoked for
+        # one operator. Hence: NO function URL (nothing publicly reachable), NO origin
+        # secret env (the break-glass in registry_api.py stays inert), and NO basic-auth
+        # behavior. The CloudFront behavior lives with the other JWT paths further down.
         registry_fn = lambda_.Function(
             self,
             "OncaRegistryApi",
@@ -1564,33 +1590,12 @@ class OncaPrototypeStack(Stack):
             environment={
                 "PYTHONPATH": "/var/task",
                 "ONCA_ENTITIES_TABLE": entities_table.table_name,
-                "ONCA_ORIGIN_SECRET": origin_secret,
             },
         )
         entities_table.grant_read_write_data(registry_fn)
         curation_log_table.grant_write_data(registry_fn)  # ADR 018 Phase 1b
         registry_fn.add_environment("ONCA_CURATION_LOG_TABLE", curation_log_table.table_name)
-        registry_url = registry_fn.add_function_url(
-            auth_type=lambda_.FunctionUrlAuthType.AWS_IAM
-        )
-        distribution.add_behavior(
-            "/api/registry/*",
-            cf_origins.FunctionUrlOrigin.with_origin_access_control(
-                registry_url,
-                origin_access_control=furl_oac,
-                custom_headers={"X-Onca-Origin": origin_secret},
-            ),
-            viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-            allowed_methods=cloudfront.AllowedMethods.ALLOW_ALL,
-            cache_policy=cloudfront.CachePolicy.CACHING_DISABLED,
-            origin_request_policy=cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
-            function_associations=[
-                cloudfront.FunctionAssociation(
-                    function=auth_fn,
-                    event_type=cloudfront.FunctionEventType.VIEWER_REQUEST,
-                )
-            ],
-        )
+
         # B3 live-quote proxy (issue #43): GET /api/quotes?industry=<slug> returns the
         # industry's representative listed names from Yahoo Finance (free, no token),
         # fetched server-side (Yahoo has no browser CORS) + cached. Same origin-secret +
@@ -1883,6 +1888,19 @@ class OncaPrototypeStack(Stack):
             integration=apigwv2_int.HttpLambdaIntegration("FeedInteg", feed_api_fn),
             authorizer=jwt_authorizer,
         )
+        # /api/registry/* — the operator control plane over the registry, cut over from
+        # shared basic-auth to a verified JWT (2026-09-11). The authorizer only proves
+        # WHO is calling; registry_api.py separately requires an ELEVATED claim, so an
+        # ordinary tenant token authenticates but does not authorize.
+        _registry_integ = apigwv2_int.HttpLambdaIntegration("RegistryInteg", registry_fn)
+        for _rpath in ("/api/registry", "/api/registry/{proxy+}"):
+            auth_api.add_routes(
+                path=_rpath,
+                methods=[apigwv2.HttpMethod.ANY],
+                integration=_registry_integ,
+                authorizer=jwt_authorizer,
+            )
+
         CfnOutput(self, "AuthApiUrl", value=auth_api.api_endpoint)
 
         # Cut over /api/ask to the JWT-verified HTTP API, SAME ORIGIN via CloudFront.
@@ -1901,7 +1919,10 @@ class OncaPrototypeStack(Stack):
         _auth_api_id = os.environ.get("ONCA_AUTH_API_ID", "azml8kx82k")
         api_domain = f"{_auth_api_id}.execute-api.{self.region}.amazonaws.com"
         _api_origin = cf_origins.HttpOrigin(api_domain)
-        for _pat in ("/api/ask*", "/api/gaps*", "/api/feed*"):  # #45/#48: JWT API paths
+        # NB `/api/registry*` must stay ahead of the `/api/*` catch-all registered
+        # below — CloudFront matches behaviors by INSERTION ORDER, not specificity, so
+        # losing this position would silently route curation calls to the review action.
+        for _pat in ("/api/ask*", "/api/gaps*", "/api/feed*", "/api/registry*"):
             distribution.add_behavior(
                 _pat,
                 _api_origin,
@@ -2492,6 +2513,84 @@ class OncaPrototypeStack(Stack):
                 enabled=True,
             )
             rule.add_target(targets.SfnStateMachine(pipeline))
+
+        # --- Issue #109: operational alerting (pipeline failure + feed staleness) -----------
+        # One SNS topic, one notifier Lambda, delivered on the SAME Teams/Slack/email channels
+        # as the weekly digest (src/dashboard/weekly_digest.py) — one delivery config, not two.
+        # Before this, a broken pipeline or a silently-stale feed.json was invisible until
+        # someone opened the dashboard; there was no "Phase 3 push" for OPERATIONAL health,
+        # only for the CSO content brief.
+        alerts_topic = sns.Topic(self, "OncaAlertsTopic")
+        alert_fn = lambda_.Function(
+            self,
+            "OncaAlertNotifier",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.dashboard.alert_notifier.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.seconds(30),
+            memory_size=256,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_DASHBOARD_URL": "https://d37aa8gtuqquoe.cloudfront.net/exec",
+            },
+        )
+        # Same channel-config lookup as feed_fn's weekly digest (env, falling back to the
+        # shared api-key secret) and the same SES send-only scope.
+        alert_fn.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["secretsmanager:GetSecretValue"],
+                resources=[
+                    f"arn:aws:secretsmanager:{self.region}:{self.account}"
+                    ":secret:signalscompetitor/onca/api-key-*"
+                ],
+            )
+        )
+        alert_fn.add_to_role_policy(
+            iam.PolicyStatement(actions=["ses:SendEmail", "ses:SendRawEmail"], resources=["*"])
+        )
+        alerts_topic.add_subscription(sns_subs.LambdaSubscription(alert_fn))
+
+        # Pipeline health: CDK's built-in State Machine metrics. `evaluation_periods=1` over a
+        # 1-day period means ANY failed/timed-out execution in a day fires once — this is a
+        # daily pipeline, so there is no "flapping" risk to smooth out with a longer window.
+        cloudwatch.Alarm(
+            self,
+            "OncaPipelineFailedAlarm",
+            metric=pipeline.metric_failed(period=Duration.days(1), statistic="Sum"),
+            threshold=1,
+            evaluation_periods=1,
+            comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+            treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
+        ).add_alarm_action(cw_actions.SnsAction(alerts_topic))
+        cloudwatch.Alarm(
+            self,
+            "OncaPipelineTimedOutAlarm",
+            metric=pipeline.metric_timed_out(period=Duration.days(1), statistic="Sum"),
+            threshold=1,
+            evaluation_periods=1,
+            comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+            treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
+        ).add_alarm_action(cw_actions.SnsAction(alerts_topic))
+
+        # Feed staleness: feed_builder emits `Onca/FeedPublished` on every successful publish
+        # (3x/day; the largest scheduled gap is ~13h15m overnight). 16 missing hourly datapoints
+        # in a row means no successful publish in 16h — comfortably past that gap without being
+        # so loose it'd miss a full missed day. `BREACHING` on missing data is deliberate: a
+        # successful run that publishes NOTHING is indistinguishable from "the metric never
+        # fired", and both should page.
+        cloudwatch.Alarm(
+            self,
+            "OncaFeedStaleAlarm",
+            metric=cloudwatch.Metric(
+                namespace="Onca", metric_name="FeedPublished",
+                period=Duration.hours(1), statistic="Sum",
+            ),
+            threshold=1,
+            evaluation_periods=16,
+            datapoints_to_alarm=16,
+            comparison_operator=cloudwatch.ComparisonOperator.LESS_THAN_THRESHOLD,
+            treat_missing_data=cloudwatch.TreatMissingData.BREACHING,
+        ).add_alarm_action(cw_actions.SnsAction(alerts_topic))
 
         # --- ADR 022 Phase 3: OncaFinancialsPipeline (monthly, decoupled) --------------------
         # Financial-soundness data (Basileia et al.; later the monthly balancete trajectory + the

@@ -857,6 +857,11 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
 
 
 # --- CCO (compliance) -----------------------------------------------------------------
+# #118: same threshold as feed_builder._SALES_TIER_CCO_MIN_REPUTATION — banking/fintech (13
+# reputation rows each) are the only sectors meaningfully above it; the rest sit at 0-4.
+_CCO_MIN_REPUTATION_SIGNAL = 5
+
+
 def build_cco(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     labels = ctx["labels"]
     findings = list((feed.get("integrity") or {}).get("findings") or [])
@@ -890,9 +895,15 @@ def build_cco(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         si = [i for i in integrity_rows if _in_industry(i, slug)]
         sd = [d for d in distress if slug in (ALL, None) or slug in _industries_of(feed, d.get("entity"))]
         sr = [r for r in rep_rows if _in_industry(r, slug)]
+        # #118: an integrity/reputation count of ~0 for a sector is almost always "this sector
+        # has no compliance signal ingested" (consumidor.gov.br's reputation index only
+        # meaningfully covers retail-facing regulated institutions), not "this sector was
+        # audited and found clean" — those two states must never look the same to a buyer.
+        insufficient = len(si) == 0 and len(sr) < _CCO_MIN_REPUTATION_SIGNAL
         return {"n_integrity": len(si), "n_distress": len(sd), "n_rep": len(sr),
                 "n_high": sum(1 for i in si if i.get("severity") == "high"),
-                "worst_rank": min([r["rank"] for r in sr if r.get("rank")], default=None)}
+                "worst_rank": min([r["rank"] for r in sr if r.get("rank")], default=None),
+                "signal_state": "insufficient" if insufficient else "sufficient"}
 
     recs = [_rec("imediato", "Rodar auditoria de integridade do registro", "run_integrity_audit",
                  officer="cco")]

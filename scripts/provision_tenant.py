@@ -9,6 +9,10 @@ crypto, real-estate-funds); anything else is rejected.
     python scripts/provision_tenant.py put acme-consorcio entry consorcio betting \
         --table onca-tenant-config --profile my2027
 
+    # also link a Cognito login (custom:tenant/custom:tier) for that tenant
+    python scripts/provision_tenant.py put acme-consorcio entry consorcio betting \
+        --email ops@acme.example --user-pool-id us-east-1_XXXXXXXXX --profile my2027
+
     python scripts/provision_tenant.py list --profile my2027
     python scripts/provision_tenant.py get acme-consorcio
     python scripts/provision_tenant.py delete demo-banking
@@ -49,12 +53,28 @@ def cmd_put(args) -> int:
     modules = _split_modules(args.modules)
     try:
         cfg = tc.put_tenant_config(
-            args.tenant_id, args.tier, modules, plane=args.plane, table=table)
+            args.tenant_id, args.tier, modules, plane=args.plane, table=table,
+            force_not_ready=args.force_not_ready)
     except ValueError as exc:
         print(f"REJECTED: {exc}", file=sys.stderr)
         return 2
     print(f"OK  {table_name}  {cfg['tenant_id']}  tier={cfg['tier']}  "
           f"plane={cfg['plane']}  modules={cfg['modules']}")
+    # A tenant_config row alone isn't enough to log in — this links a Cognito user to it via
+    # custom:tenant/custom:tier, closing the gap where only demo tenants had a scripted user
+    # (see infra/app.py's deploy-time seed). Optional: omit --email to keep today's behavior.
+    if args.email:
+        pool_id = args.user_pool_id or os.environ.get("ONCA_USER_POOL_ID")
+        if not pool_id:
+            print("REJECTED: --email given but no --user-pool-id / $ONCA_USER_POOL_ID",
+                  file=sys.stderr)
+            return 2
+        try:
+            outcome = tc.cognito_upsert_user(pool_id, args.email, cfg["tenant_id"], cfg["tier"])
+        except ValueError as exc:
+            print(f"REJECTED (cognito): {exc}", file=sys.stderr)
+            return 2
+        print(f"OK  cognito  {args.email}  {outcome}  tenant={cfg['tenant_id']}  tier={cfg['tier']}")
     return 0
 
 
@@ -99,6 +119,14 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("modules", nargs="*", help="industry slugs (space or comma separated)")
     sp.add_argument("--plane", choices=tc.VALID_PLANES, default=None,
                     help="delivery plane (portal|saas|marketplace); defaults from tier")
+    sp.add_argument("--force-not-ready", action="store_true",
+                    help=f"override the #119 exclusion of {list(tc.NOT_READY_INDUSTRIES)} "
+                         "(only for a named buyer with an explicit ingestion plan)")
+    sp.add_argument("--email", default=None,
+                    help="also create/update a Cognito user linked to this tenant "
+                         "(custom:tenant/custom:tier); omit to write only the entitlement row")
+    sp.add_argument("--user-pool-id", default=None,
+                    help="Cognito User Pool id (default $ONCA_USER_POOL_ID); required with --email")
     sp.set_defaults(func=cmd_put)
 
     sg = sub.add_parser("get", help="show one tenant")

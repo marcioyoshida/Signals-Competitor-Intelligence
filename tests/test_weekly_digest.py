@@ -112,6 +112,36 @@ def test_send_weekly_digest_sends_nothing_when_weekly_absent():
     assert report == {"teams": None, "slack": None, "email": None}
 
 
+def test_send_alert_reuses_the_three_channel_senders_with_a_bare_headline(monkeypatch):
+    monkeypatch.setenv("ONCA_TEAMS_WEBHOOK_URL", "https://teams.example/hook")
+    monkeypatch.setenv("ONCA_SLACK_WEBHOOK_URL", "https://slack.example/hook")
+    monkeypatch.setenv("ONCA_ALERT_EMAIL_FROM", "from@onca.example")
+    monkeypatch.setenv("ONCA_ALERT_EMAIL_TO", "cso@bank.example")
+    wd._TOKEN_CACHE.clear()
+    calls = {"teams": [], "slack": [], "email": []}
+    report = wd.send_alert(
+        "🚨 OncaPipelineFailedAlarm — ALARM: 1 datapoint breached", dashboard_url="https://x/exec",
+        teams_poster=lambda u, p: calls["teams"].append(p),
+        slack_poster=lambda u, p: calls["slack"].append(p),
+        email_sender=lambda *a: calls["email"].append(a))
+    assert report == {"teams": True, "slack": True, "email": True}
+    teams_texts = " ".join(b.get("text", "") for b in calls["teams"][0]["attachments"][0]["content"]["body"]
+                           if b.get("type") == "TextBlock")
+    assert "OncaPipelineFailedAlarm" in teams_texts
+    slack_text = " ".join(b["text"]["text"] for b in calls["slack"][0]["blocks"] if b.get("type") == "section")
+    assert "OncaPipelineFailedAlarm" in slack_text
+    assert "OncaPipelineFailedAlarm" in calls["email"][0][3]  # text body
+
+
+def test_send_alert_skips_unconfigured_channels(monkeypatch):
+    monkeypatch.delenv("ONCA_TEAMS_WEBHOOK_URL", raising=False)
+    monkeypatch.delenv("ONCA_SLACK_WEBHOOK_URL", raising=False)
+    monkeypatch.delenv("ONCA_ALERT_EMAIL_FROM", raising=False)
+    monkeypatch.delenv("ONCA_ALERT_EMAIL_TO", raising=False)
+    wd._TOKEN_CACHE.clear()
+    assert wd.send_alert("test") == {"teams": None, "slack": None, "email": None}
+
+
 def test_metric_line_and_priority_lines_are_grounded_in_input():
     line = wd._metric_line(_wk()["metrics"])
     assert "Movimentos: 5" in line and "▲2" in line

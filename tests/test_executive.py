@@ -347,6 +347,15 @@ def test_cco_risk_register_and_reputation():
     assert cco["panels"]["recommendations"][0]["action"] == "run_integrity_audit"
 
 
+def test_cco_signal_state_flags_insufficient_compliance_signal():
+    # issue #118: a sector with no integrity findings AND too few reputation rows must be
+    # tagged "insufficient" so the dashboard never reads an absence of signal as a clean audit.
+    cco = executive.build_executive(_feed())["cco"]["by_industry"]
+    assert cco["__all__"]["signal_state"] == "sufficient"  # has 2 integrity findings
+    assert cco["banking"]["signal_state"] == "insufficient"  # 0 integrity, 1 reputation row
+    assert cco["fintech"]["signal_state"] == "insufficient"  # 0 integrity, 0 reputation
+
+
 def test_cpo_portfolio_profiles_and_field_completeness():
     cpo = executive.build_executive(_feed())["cpo"]
     a = cpo["by_industry"]["__all__"]
