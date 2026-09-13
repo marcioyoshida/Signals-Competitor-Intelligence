@@ -1,7 +1,7 @@
 """Phase C identity extraction (Cognito) — ADR 002 Decision 7."""
 from __future__ import annotations
 
-from src.dashboard.auth import Identity, identity_from_event, origin_secret_ok
+from src.dashboard.auth import Identity, identity_from_event, industry_groups, origin_secret_ok
 
 
 def _http_api_event(claims):
@@ -34,6 +34,25 @@ def test_no_verified_identity_returns_none():
     assert identity_from_event({}) is None
     assert identity_from_event({"requestContext": {}}) is None
     assert identity_from_event(_http_api_event({"email": "x@y.com"})) is None  # no sub
+
+
+# --- industry groups (no-tenant-config-row entitlement) ------------------------------
+def test_industry_groups_filters_to_the_canonical_taxonomy():
+    i = Identity(sub="u-1", groups=["banking", "fintech", "not-a-real-industry"])
+    assert industry_groups(i) == ["banking", "fintech"]
+
+
+def test_industry_groups_excludes_role_groups_and_is_case_insensitive():
+    # "operator"/"admin"/"sovereign" are elevated-role groups (act_api/registry_api),
+    # never industries — must never leak through as a bogus module.
+    i = Identity(sub="u-2", groups=["Operator", "Admin", "BANKING"])
+    assert industry_groups(i) == ["banking"]
+
+
+def test_industry_groups_empty_when_no_groups_or_no_identity():
+    assert industry_groups(None) == []
+    assert industry_groups(Identity(sub="u-3", groups=[])) == []
+    assert industry_groups(Identity(sub="u-4", groups=["strategy"])) == []
 
 
 # --- origin gate (WAF Phase 0) -------------------------------------------------------

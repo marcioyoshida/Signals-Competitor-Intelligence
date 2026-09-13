@@ -687,10 +687,22 @@ class OncaPrototypeStack(Stack):
                 callback_urls=[
                     f"https://{distribution.distribution_domain_name}/",
                     f"https://{distribution.distribution_domain_name}/exec",
+                    # onssa.org is an alternate domain name on the SAME distribution
+                    # (added 2026-09-13) — Cognito validates redirect_uri literally,
+                    # so the branded domain needs its own entries or Hosted UI login
+                    # started from onssa.org/exec fails on the callback.
+                    "https://onssa.org/",
+                    "https://onssa.org/exec",
+                    "https://www.onssa.org/",
+                    "https://www.onssa.org/exec",
                 ],
                 logout_urls=[
                     f"https://{distribution.distribution_domain_name}/",
                     f"https://{distribution.distribution_domain_name}/exec",
+                    "https://onssa.org/",
+                    "https://onssa.org/exec",
+                    "https://www.onssa.org/",
+                    "https://www.onssa.org/exec",
                 ],
             ),
             prevent_user_existence_errors=True,
@@ -701,6 +713,32 @@ class OncaPrototypeStack(Stack):
         )
         CfnOutput(self, "UserPoolId", value=user_pool.user_pool_id)
         CfnOutput(self, "UserPoolClientId", value=user_pool_client.user_pool_client_id)
+
+        # Industry Cognito Groups — the lightweight, no-tenant-config-row entitlement
+        # path (auth.industry_groups / tenant_config.cognito_grant_industry_group):
+        # add a user to the "banking" group and they see exactly banking's dashboard,
+        # no DynamoDB row needed. One group per canonical industry slug (kept as a
+        # literal tuple, not imported from src.synth.entity_registry.INDUSTRIES,
+        # since infra/app.py's synth-time execution isn't on the same sys.path as
+        # the application source — same duplication convention feed_builder.py
+        # already uses for ENTRY_INDUSTRIES). Coarse for now — one group per
+        # industry, not yet per officer-within-industry (e.g. a future
+        # "banking-cso" group); that finer split is a later increment.
+        _INDUSTRY_GROUPS = (
+            "banking", "investment-banking", "insurance", "asset-management",
+            "wealth-management", "private-markets", "fintech",
+            "financial-data-analytics", "advisory", "crypto", "consorcio",
+            "betting", "real-estate-funds", "agri-funds", "acquiring",
+            "closed-pension", "securitization",
+        )
+        for _ind in _INDUSTRY_GROUPS:
+            cognito.CfnUserPoolGroup(
+                self,
+                f"OncaGroup{_ind.title().replace('-', '')}",
+                user_pool_id=user_pool.user_pool_id,
+                group_name=_ind,
+                description=f"Single-industry dashboard access: {_ind}",
+            )
         CfnOutput(
             self,
             "UserPoolHostedUi",

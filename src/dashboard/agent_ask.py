@@ -865,6 +865,9 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # Phase D read boundary: a verified tenant is scoped to its licensed modules.
     # Provisioned-but-empty ⇒ [] ⇒ fail closed; no identity (legacy operator) ⇒ None
     # ⇒ unscoped (full access), so the current dashboard is unchanged until cutover.
+    # A verified identity with NO tenant but an industry Cognito group (no
+    # tenant_config row — see auth.industry_groups) is narrowed to that group's
+    # module(s), same as a tenant, rather than falling into the unscoped branch.
     modules = None
     cfg = None
     if identity is not None and identity.tenant:
@@ -872,6 +875,12 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
         cfg = get_tenant_config(identity.tenant)
         modules = list((cfg or {}).get("modules") or [])
+    elif identity is not None:
+        from src.dashboard.auth import industry_groups
+
+        groups = industry_groups(identity)
+        if groups:
+            modules = groups
     # ADR 019 — cross-industry Ask is a TOP-TIER (sovereign) capability. A non-top-tier tenant
     # asking from an industry tab is narrowed to that industry (which must be one it licenses —
     # the client hint can only NARROW, never widen; the verified JWT tier is the trust boundary).

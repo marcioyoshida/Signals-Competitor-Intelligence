@@ -160,6 +160,48 @@ def cognito_upsert_user(
     return "updated"
 
 
+def cognito_grant_industry_group(
+    pool_id: str, email: str, industry: str, *, client: Any | None = None,
+) -> str:
+    """Add `email` to the Cognito group named `industry` — the lightweight, no-
+    tenant-config-row entitlement path (see auth.industry_groups): a single Cognito
+    group membership scopes that person to exactly that industry's dashboard/feed/
+    ask, no `custom:tenant`/`custom:tier` attributes or DynamoDB row required.
+
+    Creates the Cognito user first (sending Cognito's own invite email) if they don't
+    already exist — WITHOUT `custom:tenant`/`custom:tier`, since group membership
+    alone is the entitlement here. Validates `industry` against the canonical
+    taxonomy so a typo can't silently create a group nothing ever matches (the group
+    itself must already exist — see infra/app.py's per-industry CfnUserPoolGroup —
+    admin_add_user_to_group raises on an unknown group name).
+    Returns "created" (new user) or "granted" (existing user, group added)."""
+    from src.synth.entity_registry import INDUSTRIES
+
+    industry = industry.strip().lower()
+    if industry not in INDUSTRIES:
+        raise ValueError(f"{industry!r} is not a known industry slug: {sorted(INDUSTRIES)}")
+    if client is None:
+        import boto3
+
+        client = boto3.client("cognito-idp")
+    outcome = "granted"
+    try:
+        client.admin_get_user(UserPoolId=pool_id, Username=email)
+    except client.exceptions.UserNotFoundException:
+        client.admin_create_user(
+            UserPoolId=pool_id,
+            Username=email,
+            UserAttributes=[
+                {"Name": "email", "Value": email},
+                {"Name": "email_verified", "Value": "true"},
+            ],
+            DesiredDeliveryMediums=["EMAIL"],
+        )
+        outcome = "created"
+    client.admin_add_user_to_group(UserPoolId=pool_id, Username=email, GroupName=industry)
+    return outcome
+
+
 def entitled(config: dict[str, Any] | None, industries: Any) -> bool:
     """True iff any of `industries` is in the tenant's modules. Empty modules ⇒ False."""
     mods = set((config or {}).get("modules") or [])

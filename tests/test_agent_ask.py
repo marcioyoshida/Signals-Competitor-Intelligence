@@ -469,6 +469,41 @@ def test_ask_top_tier_keeps_cross_industry(monkeypatch):
     assert set(_ask_modules(monkeypatch, "sovereign", ["acquiring", "banking"], "acquiring")) == {"acquiring", "banking"}
 
 
+# --- industry Cognito group (no tenant_config row) fallback ---------------------------
+def test_ask_narrows_to_industry_group_when_no_tenant(monkeypatch):
+    """A verified identity with NO custom:tenant but an industry Cognito group must be
+    narrowed to that group, not fall into the legacy "no tenant ⇒ unscoped" branch —
+    otherwise a single-industry group member would get full cross-industry Ask."""
+    import json as _json
+    captured = {}
+    monkeypatch.setattr(aa, "_load_feed", lambda b: {"feed": []})
+    monkeypatch.setattr(aa, "answer",
+                        lambda q, **kw: captured.update(modules=kw.get("modules")) or {"answer": "x", "grounded": True})
+    monkeypatch.setenv("ONCA_SITE_BUCKET", "b")
+    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    ev = {"requestContext": {"authorizer": {"jwt": {"claims": {
+              "sub": "u", "cognito:groups": ["banking"]}}}},
+          "headers": {}, "body": _json.dumps({"q": "como está o mercado?"})}
+    aa.lambda_handler(ev, None)
+    assert captured.get("modules") == ["banking"]
+
+
+def test_ask_unscoped_when_no_tenant_and_no_industry_group(monkeypatch):
+    """Preserves the pre-existing legacy behavior for an identity with neither a
+    tenant nor an industry group (modules stays None ⇒ unscoped)."""
+    import json as _json
+    captured = {}
+    monkeypatch.setattr(aa, "_load_feed", lambda b: {"feed": []})
+    monkeypatch.setattr(aa, "answer",
+                        lambda q, **kw: captured.update(modules=kw.get("modules")) or {"answer": "x", "grounded": True})
+    monkeypatch.setenv("ONCA_SITE_BUCKET", "b")
+    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    ev = {"requestContext": {"authorizer": {"jwt": {"claims": {"sub": "u"}}}},
+          "headers": {}, "body": _json.dumps({"q": "como está o mercado?"})}
+    aa.lambda_handler(ev, None)
+    assert captured.get("modules") is None
+
+
 def test_ask_client_industry_hint_cannot_widen_beyond_license(monkeypatch):
     # a hint for an UNlicensed industry is ignored (never widens the entitlement)
     assert _ask_modules(monkeypatch, "saas", ["acquiring"], "wealth-management") == ["acquiring"]

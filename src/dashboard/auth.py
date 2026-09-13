@@ -79,6 +79,24 @@ def identity_from_event(event: dict[str, Any]) -> Identity | None:
     )
 
 
+def industry_groups(identity: Identity | None) -> list[str]:
+    """Cognito groups on this identity that name a real industry vertical.
+
+    Lets an operator hand out a single-industry dashboard link by adding someone to
+    a plain Cognito group (e.g. "banking") — no tenant_config row, no per-tenant
+    provisioning. Validated against the canonical industry taxonomy
+    (src.synth.entity_registry.INDUSTRIES) so a role group (operator/admin/sovereign)
+    or a typo never leaks through as a bogus module; a caller in multiple industry
+    groups gets all of them (a small multi-sector preview), same shape as a
+    multi-module SaaS tenant today.
+    """
+    if identity is None or not identity.groups:
+        return []
+    from src.synth.entity_registry import INDUSTRIES
+
+    return sorted({g.strip().lower() for g in identity.groups if g.strip().lower() in INDUSTRIES})
+
+
 def origin_secret_ok(event: dict[str, Any]) -> bool:
     """True when the request carries the CloudFront-injected origin secret.
 

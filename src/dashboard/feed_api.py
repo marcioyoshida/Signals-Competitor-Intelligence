@@ -26,18 +26,29 @@ def _resp(status: int, body: Any) -> dict[str, Any]:
 
 
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
-    from src.dashboard.auth import identity_from_event
+    from src.dashboard.auth import identity_from_event, industry_groups
 
     identity = identity_from_event(event)
     # This endpoint is tenant-only (no legacy operator fallback): a verified identity
-    # with a tenant is required.
-    if identity is None or not identity.tenant:
+    # is required, and it must be entitled to at least one module — either a
+    # provisioned tenant (below), or a plain industry Cognito group (no tenant_config
+    # row needed; see auth.industry_groups).
+    if identity is None:
         return _resp(403, {"error": "forbidden"})
 
     from src.dashboard.tenant_config import get_tenant_config
 
-    cfg = get_tenant_config(identity.tenant)
-    modules = list((cfg or {}).get("modules") or [])
+    tenant_id = identity.tenant
+    tier = None
+    modules: list[str] = []
+    if tenant_id:
+        cfg = get_tenant_config(tenant_id)
+        modules = list((cfg or {}).get("modules") or [])
+        tier = (cfg or {}).get("tier")
+    if not modules:
+        groups = industry_groups(identity)
+        if groups:
+            modules, tenant_id, tier = groups, None, "group"
     if not modules:  # fail closed — unprovisioned / no entitlement ⇒ nothing
         return _resp(403, {"error": "no entitlement", "tenant": identity.tenant})
 
@@ -51,8 +62,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
         raw = boto3.client("s3").get_object(Bucket=bucket, Key="feed.json")["Body"].read()
         scoped = scope_feed_to_modules(json.loads(raw), modules)
-        scoped["tenant"] = identity.tenant
-        scoped["tier"] = cfg.get("tier")
+        scoped["tenant"] = tenant_id
+        scoped["tier"] = tier
         return _resp(200, scoped)
     except Exception as exc:  # pragma: no cover - read-only, best-effort
         print(f"feed_api error: {exc}")

@@ -281,7 +281,21 @@ U.initTheme();
 document.getElementById("themeBtn").addEventListener("click", () => { U.toggleTheme(); render(); });
 document.getElementById("drClose").addEventListener("click", closeDrawer);
 document.getElementById("scrim").addEventListener("click", closeDrawer);
-document.getElementById("sectorSel").addEventListener("change", (e) => { SECTOR = e.target.value; render(); });
+// Sector choice persists in location.hash (same pattern as /app's activeSlug) so a
+// reload — or a bookmarked/shared link — lands back on the same sector instead of
+// resetting to "todos". hashchange (not just the <select> handler) covers back/forward.
+function activeSector() {
+  const h = (location.hash || "").replace(/^#/, "").toLowerCase();
+  if (h === "__all__" || (h && LICENSED.indexOf(h) !== -1)) return h;
+  return "__all__";
+}
+document.getElementById("sectorSel").addEventListener("change", (e) => { location.hash = e.target.value; });
+window.addEventListener("hashchange", () => {
+  SECTOR = activeSector();
+  const sel = document.getElementById("sectorSel");
+  if (sel.value !== SECTOR) sel.value = SECTOR;
+  render();
+});
 
 document.getElementById("officerTabs").innerHTML = Object.entries(OFFICERS)
   .map(([k, o]) => `<a href="#${k}" data-officer="${k}">${o.label}</a>`).join("");
@@ -413,6 +427,8 @@ function boot() {
   // filtering here too is a client-side belt-and-suspenders, not the trust boundary itself.
   (EX.sectors || []).filter(s => !LICENSED.length || LICENSED.includes(s.slug))
     .forEach(s => { const o = document.createElement("option"); o.value = s.slug; o.textContent = s.label; sel.appendChild(o); });
+  SECTOR = activeSector();
+  sel.value = SECTOR;
   if (!EX.officers || !EX.officers.length) {
     document.getElementById("board").innerHTML =
       U.empty("Bloco executivo ausente", "feed.executive ainda não foi publicado.", "○"); return;

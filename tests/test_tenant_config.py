@@ -103,6 +103,7 @@ class _FakeCognito:
 
     def __init__(self) -> None:
         self.users: dict[str, dict[str, str]] = {}
+        self.groups: dict[str, set[str]] = {}
         self.exceptions = _FakeCognitoExceptions
 
     def admin_get_user(self, UserPoolId, Username):
@@ -116,6 +117,15 @@ class _FakeCognito:
 
     def admin_update_user_attributes(self, UserPoolId, Username, UserAttributes):
         self.users[Username].update({a["Name"]: a["Value"] for a in UserAttributes})
+
+    def admin_add_user_to_group(self, UserPoolId, Username, GroupName):
+        self.groups.setdefault(Username, set()).add(GroupName)
+
+    def admin_remove_user_from_group(self, UserPoolId, Username, GroupName):
+        self.groups.get(Username, set()).discard(GroupName)
+
+    def admin_list_groups_for_user(self, UserPoolId, Username):
+        return {"Groups": [{"GroupName": g} for g in sorted(self.groups.get(Username, set()))]}
 
 
 def test_cognito_upsert_user_creates_new_user():
@@ -140,6 +150,29 @@ def test_cognito_upsert_user_rejects_tenant_mismatch():
     tc.cognito_upsert_user("pool1", "dp@example.com", "acme", "saas", client=c)
     with pytest.raises(ValueError, match="already linked"):
         tc.cognito_upsert_user("pool1", "dp@example.com", "other-tenant", "saas", client=c)
+
+
+def test_cognito_grant_industry_group_creates_user_without_tenant_attrs():
+    c = _FakeCognito()
+    outcome = tc.cognito_grant_industry_group("pool1", "analyst@buyer.example", "banking", client=c)
+    assert outcome == "created"
+    assert "banking" in c.groups["analyst@buyer.example"]
+    # group is the entitlement — no tenant_config row / custom:tenant needed at all
+    assert "custom:tenant" not in c.users["analyst@buyer.example"]
+
+
+def test_cognito_grant_industry_group_grants_existing_user():
+    c = _FakeCognito()
+    tc.cognito_grant_industry_group("pool1", "analyst@buyer.example", "banking", client=c)
+    outcome = tc.cognito_grant_industry_group("pool1", "analyst@buyer.example", "fintech", client=c)
+    assert outcome == "granted"
+    assert c.groups["analyst@buyer.example"] == {"banking", "fintech"}
+
+
+def test_cognito_grant_industry_group_rejects_unknown_industry():
+    c = _FakeCognito()
+    with pytest.raises(ValueError, match="not a known industry"):
+        tc.cognito_grant_industry_group("pool1", "analyst@buyer.example", "not-a-real-industry", client=c)
 
 
 def test_scope_cards_to_modules_read_boundary():
