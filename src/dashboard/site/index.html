@@ -799,6 +799,35 @@ function applyFeed(initial) {
   if (initial) populateFilters();   // populateFilters appends options — run once
   renderIndustryMonitor(); renderLower(); render();
 }
+// --- CloudFront OAC / SigV4 payload hash (WAF Phase 0) -------------------------
+// The /api/review, /api/run/, /api/quotes, /api/registry and /api/act behaviors are
+// Lambda function URLs whose AuthType is now AWS_IAM: CloudFront signs each origin
+// request with SigV4 through Origin Access Control, and a direct call to the
+// *.lambda-url.*.on.aws hostname is refused. Lambda function URLs do NOT accept
+// UNSIGNED-PAYLOAD, and CloudFront does not hash the body for us, so the VIEWER has
+// to send the SHA-256 of the request body in `x-amz-content-sha256`; CloudFront folds
+// that header into the signature it computes. Omit it and every POST comes back
+// InvalidSignatureException. The origin request policy is ALL_VIEWER_EXCEPT_HOST_HEADER,
+// so the header reaches the signer unmodified.
+//
+// The JWT-backed paths (/api/ask, /api/gaps, /api/feed) go to the API Gateway HTTP API,
+// not a function URL — they are signed by nothing and must NOT use this.
+const EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+async function sha256Hex(body) {
+  if (!body) return EMPTY_SHA256;                    // GET / bodiless POST
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(body));
+  return Array.from(new Uint8Array(buf), b => b.toString(16).padStart(2, "0")).join("");
+}
+// fetch() for a function-URL-backed path. Falls back to a plain fetch when
+// crypto.subtle is unavailable (a non-secure context, e.g. opening the file
+// locally) — there is no CloudFront in that case either, so nothing to sign for.
+async function oacFetch(path, opts) {
+  const o = Object.assign({}, opts || {});
+  if (!(self.crypto && crypto.subtle)) return fetch(path, o);
+  o.headers = Object.assign({}, o.headers,
+    { "x-amz-content-sha256": await sha256Hex(o.body) });
+  return fetch(path, o);
+}
 // Re-fetch feed.json (used at boot AND when a followed run completes) without dropping
 // the user's current filters. Only the first load surfaces the empty-state message.
 async function loadFeed(initial) {
@@ -835,7 +864,7 @@ async function loadTicker() {
   if (!el) return;
   try {
     const ind = state.industry || "";
-    const r = await fetch(`/api/quotes${ind ? "?industry=" + encodeURIComponent(ind) : ""}`,
+    const r = await oacFetch(`/api/quotes${ind ? "?industry=" + encodeURIComponent(ind) : ""}`,
       { cache: "no-store" });
     if (!r.ok) { el.style.display = "none"; return; }
     const rows = (await r.json()).quotes || [];
@@ -1801,7 +1830,7 @@ async function decideReview(reviewId, decision, btn) {
   }
   box.innerHTML = "Enviando…";
   try {
-    const r = await fetch("api/review", {
+    const r = await oacFetch("api/review", {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     });
@@ -1828,7 +1857,7 @@ async function decideProposal(pid, queue, decision, btn) {
   const box = btn.closest(".pactions");
   box.innerHTML = "Enviando…";
   try {
-    const r = await fetch("api/review", {
+    const r = await oacFetch("api/review", {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ proposal_id: pid, queue, decision }),
     });
@@ -2509,7 +2538,7 @@ function runProgress(step) {
 async function pollRunStatus() {
   let next = 30000;
   try {
-    const r = await fetch("/api/run/", { cache: "no-store" });
+    const r = await oacFetch("/api/run/", { cache: "no-store" });
     const j = r.ok ? await r.json() : {};
     const ex = j.execution || {};
     const chip = runStatusEl();
@@ -2557,7 +2586,7 @@ document.getElementById("runBtn").onclick = async (e) => {
   const btn = e.target, prev = btn.textContent;
   btn.disabled = true; btn.textContent = "Agendando…";
   try {
-    const r = await fetch("/api/run/", { method: "POST" });
+    const r = await oacFetch("/api/run/", { method: "POST" });
     const j = await r.json();
     if (r.ok && j.status === "scheduled") {
       const hh = (j.at || "").slice(11, 16);

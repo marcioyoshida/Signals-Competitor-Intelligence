@@ -2,7 +2,8 @@
 hour, debounced so repeated clicks never stack runs.
 
 Fronted by CloudFront like the other operator endpoints (basic-auth edge + a
-shared origin secret; the Function URL itself is AuthType NONE). The debounce is
+shared origin secret; the Function URL itself is AuthType AWS_IAM, reachable only
+via CloudFront's SigV4-signed OAC origin request). The debounce is
 structural: a single fixed-name EventBridge Scheduler one-shot is created-or-
 updated, so N clicks converge on exactly one schedule → one run. The schedule
 targets the OncaPipeline state machine and self-deletes after firing
@@ -92,9 +93,12 @@ def _latest_execution(sfn: Any, pipeline_arn: str) -> dict[str, Any] | None:
 
 
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
-    secret = os.environ.get("ONCA_ORIGIN_SECRET")
-    headers = {str(k).lower(): v for k, v in (event.get("headers") or {}).items()}
-    if secret and headers.get("x-onca-origin") != secret:
+    # Two gates, both fail closed. CloudFront OAC signs the origin request with
+    # SigV4 (the function URL is AuthType AWS_IAM, so an unsigned direct call never
+    # reaches here); the origin secret CloudFront injects is the backstop.
+    from src.dashboard.auth import origin_secret_ok
+
+    if not origin_secret_ok(event):
         return _resp(403, {"error": "forbidden"})
 
     name = os.environ.get("ONCA_SCHEDULE_NAME", "onca-adhoc-run")

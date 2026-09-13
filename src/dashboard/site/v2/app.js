@@ -163,6 +163,36 @@
     return next;
   }
 
+  /* ---- CloudFront OAC / SigV4 payload hash (WAF Phase 0) ---------------
+     The /api/review, /api/run/, /api/quotes, /api/registry and /api/act paths are
+     Lambda function URLs whose AuthType is AWS_IAM: CloudFront signs each origin
+     request with SigV4 through Origin Access Control, and the underlying
+     *.lambda-url.*.on.aws hostname refuses anything unsigned. Lambda function URLs
+     do NOT accept UNSIGNED-PAYLOAD and CloudFront will not hash the body for us, so
+     the VIEWER must send the SHA-256 of the request body in `x-amz-content-sha256`;
+     CloudFront folds that header into the signature. Omit it and every POST returns
+     InvalidSignatureException. The origin request policy is
+     ALL_VIEWER_EXCEPT_HOST_HEADER, so the header reaches the signer untouched.
+
+     The JWT paths (/api/ask, /api/gaps, /api/feed) hit the API Gateway HTTP API
+     instead of a function URL and must use a plain fetch. ---------------------- */
+  const EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+  async function sha256Hex(body) {
+    if (!body) return EMPTY_SHA256;                  // GET / bodiless POST
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(body));
+    return Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, "0")).join("");
+  }
+  // fetch() for a function-URL-backed path. Falls back to a plain fetch where
+  // crypto.subtle is missing (a non-secure context, e.g. the file opened locally) —
+  // there is no CloudFront on that path either, so there is nothing to sign for.
+  async function oacFetch(path, opts) {
+    const o = Object.assign({}, opts || {});
+    if (!(global.crypto && global.crypto.subtle)) return fetch(path, o);
+    o.headers = Object.assign({}, o.headers,
+      { "x-amz-content-sha256": await sha256Hex(o.body) });
+    return fetch(path, o);
+  }
+
   /* ---- honest empty state --------------------------------------------- */
   function empty(title, detail, ico) {
     return `<div class="empty"><div class="em-ico" aria-hidden="true">${ico || "○"}</div>
@@ -172,6 +202,6 @@
   global.OncaUI = {
     esc, fmtDate, TIERS, tierOf, tierBadge, heat,
     hostOf, sourceLabel, citationModel, linkifyNarrative, citationFooter,
-    sparkline, initTheme, toggleTheme, empty,
+    sparkline, initTheme, toggleTheme, empty, oacFetch,
   };
 })(window);

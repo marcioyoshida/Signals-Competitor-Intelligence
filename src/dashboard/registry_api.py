@@ -110,9 +110,10 @@ def _authorize(event: dict[str, Any]) -> tuple[str | None, str | None]:
             return None, "registry access requires an elevated (operator) capability"
         return (identity.email or identity.sub or "unknown"), None
 
-    secret = os.environ.get("ONCA_ORIGIN_SECRET")
-    headers = {str(k).lower(): v for k, v in (event.get("headers") or {}).items()}
-    if secret and headers.get("x-onca-origin") == secret:
+    # `origin_secret_ok` is the shared fail-closed gate: an unset or empty
+    # ONCA_ORIGIN_SECRET denies (the break-glass stays inert unless deliberately
+    # configured), and the compare is constant-time.
+    if auth.origin_secret_ok(event):
         return "operator:break-glass", None
     return None, "forbidden"
 

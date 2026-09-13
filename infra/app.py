@@ -1526,11 +1526,40 @@ class OncaPrototypeStack(Stack):
 
         # Review-queue write endpoint (ADR step 5). Fronted by the SAME basic-auth
         # CloudFront Function as the dashboard (see the /api/* behavior below), so
-        # the browser's existing credentials authorize approve/reject. The Function
-        # URL is AuthType NONE; a shared origin secret (CloudFront injects it as a
-        # custom header) blocks calling the URL directly. Override via env for a
-        # real secret; the default is defense-in-depth behind basic-auth.
+        # the browser's existing credentials authorize approve/reject.
+        #
+        # WAF Phase 0 — closing the origins. Every function URL below is AuthType
+        # AWS_IAM and reachable ONLY through CloudFront, which signs each origin
+        # request with SigV4 via Origin Access Control. The previous AuthType NONE
+        # left each `*.lambda-url.us-east-1.on.aws` hostname publicly addressable,
+        # so the edge basic-auth, the CloudFront Function rewrites and any future
+        # web ACL on the distribution were all bypassable by calling the origin
+        # directly. AWS WAF cannot attach to a function URL at all, so making the
+        # origin unreachable is the ONLY way a distribution-scoped web ACL can be
+        # an actual control rather than a decoration.
+        #
+        # The origin secret stays as a defense-in-depth backstop (CloudFront still
+        # injects it as a custom header) and is now enforced FAIL-CLOSED in the
+        # handlers — see src/dashboard/auth.py:origin_secret_ok. Override via env
+        # for a real secret.
         origin_secret = os.environ.get("ONCA_ORIGIN_SECRET", "onca-review-origin-v1")
+
+        # One shared OAC for every function-URL origin on this distribution. AWS
+        # allows many origins to reference the same OAC, and the signing config is
+        # identical for all of them, so a single control keeps the template small.
+        #
+        # SIGV4_ALWAYS (the CDK default, pinned here because the behavior is load-
+        # bearing) makes CloudFront OVERWRITE the Authorization header on the origin
+        # request. That is required: the dashboard sends `Authorization: Basic ...`
+        # for the edge basic-auth Function, the origin request policy
+        # ALL_VIEWER_EXCEPT_HOST_HEADER forwards it, and SIGV4_NO_OVERRIDE would
+        # leave that Basic header in place and every request would fail SigV4.
+        furl_oac = cloudfront.FunctionUrlOriginAccessControl(
+            self,
+            "OncaFunctionUrlOac",
+            description="SigV4-signs CloudFront origin requests to the Onca function URLs",
+            signing=cloudfront.Signing.SIGV4_ALWAYS,
+        )
         review_fn = lambda_.Function(
             self,
             "OncaReviewAction",
@@ -1553,7 +1582,7 @@ class OncaPrototypeStack(Stack):
         digests_bucket.grant_read_write(review_fn)  # Phase C: vet SWOT/graph proposal stores
         feed_fn.grant_invoke(review_fn)
         review_url = review_fn.add_function_url(
-            auth_type=lambda_.FunctionUrlAuthType.NONE
+            auth_type=lambda_.FunctionUrlAuthType.AWS_IAM
         )
 
         # Registry CRUD API (operator control plane): full curation over the ENT#
@@ -1597,11 +1626,13 @@ class OncaPrototypeStack(Stack):
             memory_size=256,
             environment={"PYTHONPATH": "/var/task", "ONCA_ORIGIN_SECRET": origin_secret},
         )
-        quotes_url = quotes_fn.add_function_url(auth_type=lambda_.FunctionUrlAuthType.NONE)
+        quotes_url = quotes_fn.add_function_url(auth_type=lambda_.FunctionUrlAuthType.AWS_IAM)
         distribution.add_behavior(
             "/api/quotes*",
-            cf_origins.FunctionUrlOrigin(
-                quotes_url, custom_headers={"X-Onca-Origin": origin_secret}
+            cf_origins.FunctionUrlOrigin.with_origin_access_control(
+                quotes_url,
+                origin_access_control=furl_oac,
+                custom_headers={"X-Onca-Origin": origin_secret},
             ),
             viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
             allowed_methods=cloudfront.AllowedMethods.ALLOW_ALL,
@@ -1634,12 +1665,14 @@ class OncaPrototypeStack(Stack):
             },
         )
         run_url = run_fn.add_function_url(
-            auth_type=lambda_.FunctionUrlAuthType.NONE
+            auth_type=lambda_.FunctionUrlAuthType.AWS_IAM
         )
         distribution.add_behavior(
             "/api/run/*",
-            cf_origins.FunctionUrlOrigin(
-                run_url, custom_headers={"X-Onca-Origin": origin_secret}
+            cf_origins.FunctionUrlOrigin.with_origin_access_control(
+                run_url,
+                origin_access_control=furl_oac,
+                custom_headers={"X-Onca-Origin": origin_secret},
             ),
             viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
             allowed_methods=cloudfront.AllowedMethods.ALLOW_ALL,
@@ -1678,11 +1711,13 @@ class OncaPrototypeStack(Stack):
         entities_table.grant_read_write_data(act_fn)  # resolve_review / rollback / idempotency
         curation_log_table.grant_read_write_data(act_fn)  # ADR 018 audit + rollback-over-journal
         site_bucket.grant_read(act_fn)  # ADR-020 Phase 2: run_integrity_audit reads feed.json
-        act_url = act_fn.add_function_url(auth_type=lambda_.FunctionUrlAuthType.NONE)
+        act_url = act_fn.add_function_url(auth_type=lambda_.FunctionUrlAuthType.AWS_IAM)
         distribution.add_behavior(
             "/api/act*",
-            cf_origins.FunctionUrlOrigin(
-                act_url, custom_headers={"X-Onca-Origin": origin_secret}
+            cf_origins.FunctionUrlOrigin.with_origin_access_control(
+                act_url,
+                origin_access_control=furl_oac,
+                custom_headers={"X-Onca-Origin": origin_secret},
             ),
             viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
             allowed_methods=cloudfront.AllowedMethods.ALLOW_ALL,
@@ -1917,8 +1952,10 @@ class OncaPrototypeStack(Stack):
         # /api/run/* so the specific patterns win; everything else under /api/ lands here.
         distribution.add_behavior(
             "/api/*",
-            cf_origins.FunctionUrlOrigin(
-                review_url, custom_headers={"X-Onca-Origin": origin_secret}
+            cf_origins.FunctionUrlOrigin.with_origin_access_control(
+                review_url,
+                origin_access_control=furl_oac,
+                custom_headers={"X-Onca-Origin": origin_secret},
             ),
             viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
             allowed_methods=cloudfront.AllowedMethods.ALLOW_ALL,
