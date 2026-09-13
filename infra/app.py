@@ -13,6 +13,7 @@ import yaml
 from aws_cdk import App, CfnOutput, Duration, RemovalPolicy, Size, Stack, Tags
 from aws_cdk import aws_bedrock as bedrock
 from aws_cdk import aws_apigatewayv2 as apigwv2
+from aws_cdk import aws_certificatemanager as acm
 from aws_cdk import aws_apigatewayv2_authorizers as apigwv2_auth
 from aws_cdk import aws_apigatewayv2_integrations as apigwv2_int
 from aws_cdk import aws_cloudfront as cloudfront
@@ -614,10 +615,24 @@ class OncaPrototypeStack(Stack):
             ),
         )
 
+        # Custom domain (onssa.org, registered/hosted in Cloudflare). The ACM cert
+        # MUST live in us-east-1 regardless of the stack's own region — that's a
+        # hard CloudFront requirement, not a stack default. DNS (the Cloudflare
+        # CNAMEs for both the ACM validation records and the production apex/www
+        # records pointing at this distribution's domain name) is managed
+        # out-of-band via the Cloudflare API, not by CDK, since the zone lives
+        # outside this AWS account.
+        onssa_certificate = acm.Certificate.from_certificate_arn(
+            self,
+            "OnssaCertificate",
+            "arn:aws:acm:us-east-1:668449743071:certificate/2960f6a1-139b-460d-be20-018726f1e146",
+        )
         distribution = cloudfront.Distribution(
             self,
             "OncaDashboardCdn",
             default_root_object="index.html",
+            domain_names=["onssa.org", "www.onssa.org"],
+            certificate=onssa_certificate,
             default_behavior=cloudfront.BehaviorOptions(
                 origin=cf_origins.S3BucketOrigin.with_origin_access_control(site_bucket),
                 viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
