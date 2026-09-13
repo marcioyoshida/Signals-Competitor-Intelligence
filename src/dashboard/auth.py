@@ -14,6 +14,8 @@ the legacy operator (origin-secret) mode.
 """
 from __future__ import annotations
 
+import hmac
+import os
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -75,3 +77,27 @@ def identity_from_event(event: dict[str, Any]) -> Identity | None:
         email=(claims.get("email") or None),
         groups=_groups(claims.get("cognito:groups")),
     )
+
+
+def origin_secret_ok(event: dict[str, Any]) -> bool:
+    """True when the request carries the CloudFront-injected origin secret.
+
+    **Fail closed.** An unset or empty `ONCA_ORIGIN_SECRET` denies every request.
+    The previous form — `if secret and headers.get(...) != secret` — inverted that:
+    dropping the environment variable silently disabled the gate and published the
+    endpoint, which is the failure mode you least want to be the default. A missing
+    secret is a misconfiguration, and a misconfigured gate must not be an open one.
+
+    The comparison is constant-time so a caller cannot recover the secret byte by
+    byte from response timings.
+
+    This is the SECOND of two gates. The first is CloudFront Origin Access Control:
+    every function URL is AuthType AWS_IAM, so an unsigned request never reaches the
+    handler at all (see infra/app.py, the `furl_oac` block). Requests arriving with a
+    verified Cognito identity take their own path and do not consult this gate.
+    """
+    secret = os.environ.get("ONCA_ORIGIN_SECRET") or ""
+    if not secret:
+        return False
+    headers = {str(k).lower(): v for k, v in ((event or {}).get("headers") or {}).items()}
+    return hmac.compare_digest(str(headers.get("x-onca-origin") or ""), secret)

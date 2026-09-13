@@ -322,7 +322,7 @@ function decideQueue(id, decision, row) {
   // Fire-and-forget to the vetting endpoint; optimistic either way (server
   // rebuilds feed.json in the background). In this synthetic harness it 404s.
   try {
-    fetch("/api/review", { method: "POST", headers: { "content-type": "application/json" },
+    U.oacFetch("/api/review", { method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ id, decision }) }).catch(() => {});
   } catch (e) {}
   DATA.reviews = (DATA.reviews || []).filter(x => x.review_id !== id);

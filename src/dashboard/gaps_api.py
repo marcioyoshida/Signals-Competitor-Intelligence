@@ -74,13 +74,14 @@ def _verifier(site_bucket: str | None):
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # Auth (Phase C increment 2): a verified Cognito identity (API Gateway JWT
     # authorizer) OR the legacy CloudFront origin secret.
-    from src.dashboard.auth import identity_from_event
+    from src.dashboard.auth import identity_from_event, origin_secret_ok
 
     identity = identity_from_event(event)
-    secret = os.environ.get("ONCA_ORIGIN_SECRET")
-    headers = {str(k).lower(): v for k, v in (event.get("headers") or {}).items()}
-    origin_ok = (not secret) or headers.get("x-onca-origin") == secret
-    if identity is None and not origin_ok:
+    # Fail closed on the legacy leg: an unset ONCA_ORIGIN_SECRET used to make
+    # `origin_ok` True for everyone, which turned a missing env var into an
+    # unauthenticated endpoint. Now only a verified identity or a matching
+    # secret gets through.
+    if identity is None and not origin_secret_ok(event):
         return _resp(403, {"error": "forbidden"})
 
     bucket = os.environ.get("ONCA_DIGESTS_BUCKET")

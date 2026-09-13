@@ -13,10 +13,16 @@ from src.dashboard import act_api
 from src.synth import entity_registry as er
 
 
+SECRET = "s3cr3t"
+
+
+# WAF Phase 0: the origin gate is FAIL-CLOSED, so an unset ONCA_ORIGIN_SECRET
+# now denies instead of disabling the check. Tests therefore set the secret and
+# send the header CloudFront injects, rather than unsetting it to slip past.
 def _event(body, headers=None, b64=False, method="POST", claims=None):
     ev = {
         "body": body if isinstance(body, str) else json.dumps(body),
-        "headers": headers or {},
+        "headers": {"x-onca-origin": SECRET} if headers is None else headers,
         "isBase64Encoded": b64,
         "requestContext": {"http": {"method": method}},
     }
@@ -34,13 +40,20 @@ def _no_journal(monkeypatch):
 
 # ---- edge / authorization ----------------------------------------------------------
 def test_rejects_direct_call_without_origin_secret(monkeypatch):
-    monkeypatch.setenv("ONCA_ORIGIN_SECRET", "s3cr3t")
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
+    resp = act_api.lambda_handler(_event({"intent": "trigger_run"}, headers={}), None)
+    assert resp["statusCode"] == 403
+
+
+def test_unset_origin_secret_denies_rather_than_disabling_the_gate(monkeypatch):
+    """Fail-closed regression: dropping the env var must NOT publish the endpoint."""
+    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
     resp = act_api.lambda_handler(_event({"intent": "trigger_run"}), None)
     assert resp["statusCode"] == 403
 
 
 def test_get_advertises_catalog(monkeypatch):
-    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
     resp = act_api.lambda_handler(_event("{}", method="GET"), None)
     assert resp["statusCode"] == 200
     cat = json.loads(resp["body"])["catalog"]
@@ -50,7 +63,7 @@ def test_get_advertises_catalog(monkeypatch):
 
 def test_operator_no_jwt_is_elevated(monkeypatch):
     _no_journal(monkeypatch)
-    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
     monkeypatch.setattr(er, "resolve_review", lambda rid, dec, payload=None: None)
     resp = act_api.lambda_handler(_event({"intent": "resolve_review",
                                           "args": {"review_id": "x", "decision": "approved"}}), None)
@@ -60,7 +73,7 @@ def test_operator_no_jwt_is_elevated(monkeypatch):
 
 def test_non_elevated_jwt_is_forbidden(monkeypatch):
     _no_journal(monkeypatch)
-    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
     resp = act_api.lambda_handler(_event(
         {"intent": "trigger_run"},
         claims={"sub": "u1", "custom:tenant": "acme", "custom:tier": "entry"}), None)
@@ -69,7 +82,7 @@ def test_non_elevated_jwt_is_forbidden(monkeypatch):
 
 def test_elevated_jwt_is_authorized(monkeypatch):
     _no_journal(monkeypatch)
-    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
     monkeypatch.setattr(er, "revert_entity_since", lambda eid, ts, **k: ["industries"])
     resp = act_api.lambda_handler(_event(
         {"intent": "revert_entity", "args": {"entity_id": "btg", "since_ts": "2026-01-01"}},
@@ -81,20 +94,20 @@ def test_elevated_jwt_is_authorized(monkeypatch):
 # ---- catalog / dispatch ------------------------------------------------------------
 def test_unknown_intent_400(monkeypatch):
     _no_journal(monkeypatch)
-    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
     resp = act_api.lambda_handler(_event({"intent": "delete_everything"}), None)
     assert resp["statusCode"] == 400
     assert "catalog" in json.loads(resp["body"])
 
 
 def test_invalid_json_400(monkeypatch):
-    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
     assert act_api.lambda_handler(_event("not json"), None)["statusCode"] == 400
 
 
 def test_trigger_run_applies(monkeypatch):
     _no_journal(monkeypatch)
-    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
     monkeypatch.setenv("ONCA_PIPELINE_ARN", "arn:sfn:pipeline")
     monkeypatch.setenv("ONCA_SCHEDULER_ROLE_ARN", "arn:iam:role")
 
@@ -115,7 +128,7 @@ def test_trigger_run_applies(monkeypatch):
 
 def test_trigger_run_unconfigured_blocked(monkeypatch):
     _no_journal(monkeypatch)
-    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
     monkeypatch.delenv("ONCA_PIPELINE_ARN", raising=False)
     monkeypatch.delenv("ONCA_SCHEDULER_ROLE_ARN", raising=False)
     resp = act_api.lambda_handler(_event({"intent": "trigger_run"}), None)
@@ -125,7 +138,7 @@ def test_trigger_run_unconfigured_blocked(monkeypatch):
 
 def test_resolve_review_applies(monkeypatch):
     _no_journal(monkeypatch)
-    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
     seen = {}
     monkeypatch.setattr(er, "resolve_review",
                         lambda rid, dec, payload=None: seen.update(rid=rid, dec=dec, p=payload)
@@ -141,7 +154,7 @@ def test_resolve_review_applies(monkeypatch):
 
 def test_resolve_review_bad_args_400(monkeypatch):
     _no_journal(monkeypatch)
-    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
     resp = act_api.lambda_handler(_event({"intent": "resolve_review",
                                           "args": {"review_id": "x", "decision": "maybe"}}), None)
     assert resp["statusCode"] == 400
@@ -149,7 +162,7 @@ def test_resolve_review_bad_args_400(monkeypatch):
 
 def test_rollback_field_applies(monkeypatch):
     _no_journal(monkeypatch)
-    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
     monkeypatch.setattr(er, "rollback_field", lambda eid, f, ts, **k: True)
     resp = act_api.lambda_handler(_event(
         {"intent": "rollback_field",
@@ -160,7 +173,7 @@ def test_rollback_field_applies(monkeypatch):
 
 def test_rollback_unsupported_field_400(monkeypatch):
     _no_journal(monkeypatch)
-    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
 
     def _raise(eid, f, ts, **k):
         raise ValueError("rollback unsupported for 'aliases'")
@@ -174,7 +187,7 @@ def test_rollback_unsupported_field_400(monkeypatch):
 
 def test_propose_registry_change_is_proposed_not_applied(monkeypatch):
     _no_journal(monkeypatch)
-    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
     calls = {}
     monkeypatch.setattr(er, "propose_review",
                         lambda **kw: calls.update(kw) or "REVIEW#act_registry:btg:industries")
@@ -190,7 +203,7 @@ def test_propose_registry_change_is_proposed_not_applied(monkeypatch):
 
 # ---- idempotency + journaling ------------------------------------------------------
 def test_idempotent_replay_returns_stored_result(monkeypatch):
-    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
     monkeypatch.setattr(er, "_log", lambda *a, **k: None)
     store: dict[str, dict] = {}
     monkeypatch.setattr(act_api, "_get_act", lambda k, table=None: store.get(k))
@@ -214,7 +227,7 @@ def test_idempotent_replay_returns_stored_result(monkeypatch):
 
 
 def test_journals_every_call(monkeypatch):
-    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
     monkeypatch.setattr(act_api, "_get_act", lambda *a, **k: None)
     monkeypatch.setattr(act_api, "_put_act", lambda *a, **k: None)
     logged = []
@@ -230,7 +243,7 @@ def test_journals_every_call(monkeypatch):
 
 def test_base64_body(monkeypatch):
     _no_journal(monkeypatch)
-    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
     monkeypatch.setattr(er, "rollback_field", lambda eid, f, ts, **k: True)
     raw = base64.b64encode(json.dumps(
         {"intent": "rollback_field",
@@ -241,7 +254,7 @@ def test_base64_body(monkeypatch):
 
 # ---- ADR 020 Phases 2–3: officers, scoping, hand-off, new actions ------------------
 def test_get_advertises_officer_roster(monkeypatch):
-    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
     resp = act_api.lambda_handler(_event("{}", method="GET"), None)
     roles = {o["role"] for o in json.loads(resp["body"])["officers"]}
     assert roles == {"strategic", "regulator", "compliance", "product"}
@@ -249,7 +262,7 @@ def test_get_advertises_officer_roster(monkeypatch):
 
 def test_officer_may_emit_its_own_action(monkeypatch):
     _no_journal(monkeypatch)
-    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
     monkeypatch.setattr(er, "propose_review", lambda **kw: "REVIEW#belief_bullet:btg")
     resp = act_api.lambda_handler(_event(
         {"intent": "curate_belief", "officer": "strategic",
@@ -265,7 +278,7 @@ def test_officer_out_of_catalog_shared_action_is_rejected(monkeypatch):
     # NOT handed off to strategic (that IS a hand-off — tested below); here we assert the
     # regulator emitting a compliance-only action hands off, but its OWN non-owned reject.
     _no_journal(monkeypatch)
-    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
     # trigger_run is shared (strategic+regulator) but NOT in compliance's catalog and has
     # no single owner → compliance emitting it is rejected (no owner to hand off to).
     resp = act_api.lambda_handler(_event(
@@ -277,7 +290,7 @@ def test_officer_out_of_catalog_shared_action_is_rejected(monkeypatch):
 def test_hand_off_routes_to_the_owning_officer(monkeypatch):
     # The Regulator asks to roll back — an exclusively-Compliance action → handed off.
     _no_journal(monkeypatch)
-    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
     monkeypatch.setattr(er, "rollback_field", lambda eid, f, ts, **k: True)
     resp = act_api.lambda_handler(_event(
         {"intent": "rollback_field", "officer": "regulator",
@@ -290,7 +303,7 @@ def test_hand_off_routes_to_the_owning_officer(monkeypatch):
 
 def test_auto_route_picks_owner_when_no_officer(monkeypatch):
     _no_journal(monkeypatch)
-    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
     monkeypatch.setattr(er, "propose_review", lambda **kw: "REVIEW#vertical_proposal:x")
     resp = act_api.lambda_handler(_event(
         {"intent": "propose_vertical", "args": {"name": "Câmbio", "rationale": "demanda"}}), None)
@@ -300,7 +313,7 @@ def test_auto_route_picks_owner_when_no_officer(monkeypatch):
 
 def test_unknown_officer_400(monkeypatch):
     _no_journal(monkeypatch)
-    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
     resp = act_api.lambda_handler(_event(
         {"intent": "trigger_run", "officer": "nobody"}), None)
     assert resp["statusCode"] == 400
@@ -309,7 +322,7 @@ def test_unknown_officer_400(monkeypatch):
 
 def test_flag_entity_proposes(monkeypatch):
     _no_journal(monkeypatch)
-    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
     calls = {}
     monkeypatch.setattr(er, "propose_review", lambda **kw: calls.update(kw) or "REVIEW#compliance_flag:x")
     resp = act_api.lambda_handler(_event(
@@ -321,7 +334,7 @@ def test_flag_entity_proposes(monkeypatch):
 
 def test_open_watch_applies(monkeypatch):
     _no_journal(monkeypatch)
-    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
     puts = []
 
     class _T:
@@ -339,7 +352,7 @@ def test_open_watch_applies(monkeypatch):
 
 def test_record_decision_applies_for_any_officer(monkeypatch):
     _no_journal(monkeypatch)
-    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
     from src.synth import decision_log
     monkeypatch.setattr(decision_log, "record_decision",
                         lambda **kw: {"decision_id": "d1", "verdict": kw["verdict"],
@@ -355,7 +368,7 @@ def test_record_decision_applies_for_any_officer(monkeypatch):
 
 def test_record_decision_bad_verdict_400(monkeypatch):
     _no_journal(monkeypatch)
-    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
     resp = act_api.lambda_handler(_event(
         {"intent": "record_decision",
          "args": {"officer": "cso", "recommendation": "x", "verdict": "talvez"}}), None)
@@ -364,7 +377,7 @@ def test_record_decision_bad_verdict_400(monkeypatch):
 
 def test_set_outcome_applies(monkeypatch):
     _no_journal(monkeypatch)
-    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
     from src.synth import decision_log
     monkeypatch.setattr(decision_log, "set_outcome",
                         lambda did, outcome, **k: {"outcome": outcome} if did == "d1" else None)
@@ -378,7 +391,7 @@ def test_set_outcome_applies(monkeypatch):
 
 
 def test_record_engagement_applies_and_is_not_journaled(monkeypatch):
-    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
     monkeypatch.setattr(act_api, "_get_act", lambda *a, **k: None)
     monkeypatch.setattr(act_api, "_put_act", lambda *a, **k: None)
     logged = []
@@ -398,7 +411,7 @@ def test_record_engagement_applies_and_is_not_journaled(monkeypatch):
 
 def test_set_board_adoption_applies(monkeypatch):
     _no_journal(monkeypatch)
-    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
     from src.synth import decision_log
     monkeypatch.setattr(decision_log, "set_board_adoption",
                         lambda did, adopted, **k: {"board_adopted": adopted} if did == "d1" else None)
@@ -412,7 +425,7 @@ def test_set_board_adoption_applies(monkeypatch):
 
 def test_set_tdr_baseline_applies_and_validates(monkeypatch):
     _no_journal(monkeypatch)
-    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
     from src.synth import decision_log
     monkeypatch.setattr(decision_log, "set_tdr_baseline",
                         lambda hours, **k: {"baseline_hours": float(hours), "set_at": "2026-09-06T00:00:00+00:00"})
@@ -431,7 +444,7 @@ def test_set_tdr_baseline_applies_and_validates(monkeypatch):
 
 def test_append_reference_applies(monkeypatch):
     _no_journal(monkeypatch)
-    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
     from src.synth import decision_log
     seen = {}
     monkeypatch.setattr(decision_log, "append_reference",
@@ -446,7 +459,7 @@ def test_append_reference_applies(monkeypatch):
 
 def test_append_reference_missing_decision_404(monkeypatch):
     _no_journal(monkeypatch)
-    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
     from src.synth import decision_log
     monkeypatch.setattr(decision_log, "append_reference", lambda *a, **k: False)
     resp = act_api.lambda_handler(_event(
@@ -456,7 +469,7 @@ def test_append_reference_missing_decision_404(monkeypatch):
 
 def test_run_integrity_audit_reads_only(monkeypatch):
     _no_journal(monkeypatch)
-    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
     monkeypatch.delenv("ONCA_SITE_BUCKET", raising=False)
     monkeypatch.setattr(er, "list_entities", lambda *a, **k: [])
     from src.synth import integrity
@@ -471,7 +484,7 @@ def test_run_integrity_audit_reads_only(monkeypatch):
 
 def test_action_links_back_to_decision(monkeypatch):
     _no_journal(monkeypatch)
-    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
     from src.synth import decision_log
     linked = {}
     monkeypatch.setattr(decision_log, "link_action",
