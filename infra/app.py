@@ -379,7 +379,23 @@ class OncaPrototypeStack(Stack):
                 # silently never queried. Budget raised to fit ~1.1s/term within
                 # the 900s Lambda timeout (news runs as its own branch).
                 "ONCA_NEWS_MAX_TERMS": str(watchlist.get("news_max_terms", 200)),
-                "ONCA_SOURCE_TIMEOUT_SEC": str(watchlist.get("source_timeout_sec", 300)),
+                # Per-source wall-clock cap (SIGALRM). Cut 300 -> 180 after the
+                # 2026-09-08..12 structured-ingest 900s timeouts: 300s x a few slow
+                # sources exhausts the whole Lambda budget, and the slowest LEGITIMATE
+                # source observed live is ~143s (BCB autorizações). The budget also
+                # re-arms now (lambda_port._source_budget), so it can no longer be
+                # swallowed by a best-effort `except Exception` inside a source.
+                "ONCA_SOURCE_TIMEOUT_SEC": str(watchlist.get("source_timeout_sec", 180)),
+                # Headroom between the last source and the 900s ceiling for the digest
+                # write + entity persistence tail.
+                "ONCA_INGEST_RESERVE_SEC": "45",
+                # IF.data returns ~1,422 institutions and resolve_entities costs
+                # ~200-600ms per name (CPU-bound pass over the whole alias map), i.e.
+                # ~320-840s uncapped — the source that ate the entire 900s ingest
+                # budget. IF.data is QUARTERLY, so the walk is now incremental: this
+                # many names per run (rows sorted by share DESC), cursor persisted in
+                # bcb_ifdata/index.json, then the source no-ops until the next quarter.
+                "ONCA_IFDATA_MAX_RESOLVE": "150",
                 "ONCA_NEWS_WATCHLIST": ",".join(
                     str(x) for x in (watchlist.get("news_watchlist") or [])
                 ),
@@ -1937,6 +1953,18 @@ class OncaPrototypeStack(Stack):
             payload=sfn.TaskInput.from_object({"mode": "structured"}),
             result_path=sfn.JsonPath.DISCARD,
         )
+        # FAIL FAST on a Lambda sandbox timeout. Retrying a 900s timeout is never
+        # useful (the work is deterministic, not transient) and it MASKS the failure:
+        # on 2026-09-08..12 two full 900s timeouts plus a third attempt in flight
+        # consumed the state machine's entire 45-min execution timeout, so the run
+        # died as ExecutionTimedOut at 45 min instead of surfacing a clean
+        # ExecutionFailed at ~15 min. MaxAttempts=0 = never retry; this retrier is
+        # matched BEFORE the States.ALL one below (first match wins).
+        _no_retry_on_timeout = dict(
+            errors=["Sandbox.Timedout", "States.Timeout", "Lambda.Unknown"],
+            max_attempts=0,
+        )
+        structured_ingest.add_retry(**_no_retry_on_timeout)
         structured_ingest.add_retry(
             errors=["States.ALL"],
             max_attempts=2,
@@ -1950,6 +1978,7 @@ class OncaPrototypeStack(Stack):
             payload=sfn.TaskInput.from_object({"mode": "news"}),
             result_path=sfn.JsonPath.DISCARD,
         )
+        news_ingest.add_retry(**_no_retry_on_timeout)
         news_ingest.add_retry(
             errors=["States.ALL"],
             max_attempts=2,
@@ -2389,7 +2418,10 @@ class OncaPrototypeStack(Stack):
                 .next(detectors)
                 .next(feed_task)
             ),
-            # Budget for a 15-min ingest (plus a retry), then synth, then feed.
+            # Budget for a 15-min ingest, then synth, then the detector fan-out, then
+            # feed. NOT sized to absorb retried ingest timeouts any more — a sandbox
+            # timeout now fails the execution immediately (see _no_retry_on_timeout),
+            # so this ceiling is a backstop rather than the thing that surfaces a stall.
             timeout=Duration.minutes(45),
         )
 

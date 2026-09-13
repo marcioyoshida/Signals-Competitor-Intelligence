@@ -58,6 +58,16 @@ Chain: `Ingest → feature → synth → BeliefAxes → Detectors → feed`. Cri
 `swot → reconcile → seed → maintenance → Frameworks → autoapprove` branch (not the sum
 of ~24 steps). State-machine timeout **45 min**.
 
+### Ingest retry policy — FAIL FAST on a sandbox timeout (2026-09-13)
+Both ingest branches carry, in order: CDK's default transient-Lambda retrier, then
+`{"ErrorEquals":["Sandbox.Timedout","States.Timeout","Lambda.Unknown"],"MaxAttempts":0}`,
+then `States.ALL` (2 attempts / 30s / x2). First match wins, so a **900s Lambda timeout
+never retries**. Before this, a stalled ingest burned 2 full 900s attempts plus a third
+in flight and the run died as `ExecutionTimedOut` at the 45-min ceiling — the failure was
+absorbed for 45 min instead of surfacing. It now fails clean at ~15 min and raises the
+pipeline-failure alarm/SNS. The 45-min state-machine timeout is a backstop, **not** the
+thing that surfaces a stalled ingest.
+
 ## Ordering invariants (breaking these silently corrupts the run)
 1. **Ingest before feature/synth.** `structured` writes the base digest
    `lambda-digests/<id>.json` (+ owns the raw corpus); `news` writes
@@ -75,7 +85,10 @@ of ~24 steps). State-machine timeout **45 min**.
    qsa→operatives, predictive, ecosystem) run concurrently with the SWOT+frameworks branch.
 
 ## S3 / state contracts
-- **Digests bucket** `onca-digests-668449743071`: `lambda-digests/<id>.json` (base),
+- **Digests bucket** `onca-digests-668449743071`: `bcb_ifdata/index.json` (market-share
+  store **+ the quarterly resolve cursor** — ingest reads it at the top of the IF.data block
+  and writes it back; feed_builder reads `share_by_entity`/`system_size` from it),
+  `lambda-digests/<id>.json` (base),
   `lambda-digests/news/<id>.json` (news slice), `narratives/{date}/cand-*.json`,
   `features/latest.json`, `coverage_gaps/index.json`, `distress/index.json`,
   swot/framework stores.
@@ -87,6 +100,11 @@ of ~24 steps). State-machine timeout **45 min**.
 | Task (SM) | Lambda | mem MB | timeout |
 |---|---|---|---|
 | Ingest (structured ∥ news) | OncaLambdaPrototype (`ingest.lambda_port`) | 1024 | 15 min |
+
+Measured 2026-09-13 (live, same Lambda, `mode` payload): **news ~127s**, **structured 577s**
+during the IF.data quarterly catch-up (IF.data window = 118s of it), expected ~460s once the
+quarter is walked. Before the fix, structured hit the 900s ceiling on ~60% of runs
+(09-08 → 09-12), which is what produced the `TIMED_OUT` executions.
 | synth | OncaSynthesisLambda | **1536** | 5 min |
 | feature | OncaFeatureStore | 512 | 5 min |
 | silence / longitudinal / comparative / thematic / cohort | Onca{…} | 512 | 5 min |
@@ -106,8 +124,23 @@ OncaAgent (`/api/ask/`, 512/60s), OncaGapsApi (512/90s), OncaRegistryApi, OncaRe
 - **Lambda CPU scales with memory** (512MB ≈ 0.36 vCPU). CPU-bound steps (synth: candidate
   extraction / resolve_entities over the growing registry) need memory headroom — synth is
   at 1536MB for this reason. Right-size here, not by raising timeouts.
-- **Per-source budget** `ONCA_SOURCE_TIMEOUT_SEC=90` (SIGALRM) bounds each ingest source so
+- **Per-source budget** `ONCA_SOURCE_TIMEOUT_SEC=180` (SIGALRM) bounds each ingest source so
   a slow endpoint can't eat the 15-min ingest; a source hitting it is skipped, not fatal.
+  The overall stop-starting-new-work deadline is `remaining − ONCA_INGEST_RESERVE_SEC(45)`.
+  **The budget re-arms** (`ONCA_SOURCE_BUDGET_REARM_SEC=5`): SIGALRM is one-shot, and the
+  kill exception was being swallowed by best-effort `except Exception` loops inside sources
+  (and re-wrapped by botocore as a retryable `HTTPClientError`), after which the source ran
+  completely unbounded to the 900s ceiling. A source with such a loop must also re-raise
+  `src.ingest.budget.SourceBudgetExceeded` explicitly (see `bcb_ifdata.map_to_entities`).
+- **Quarterly/monthly sources must not redo their work 3x/day.** IF.data is the worked
+  example (`bcb_ifdata` + the `IF.data market` block in `lambda_port`): it downloaded a
+  58MB/153k-row report **twice** (`latest_base_date()` probed with FULL fetches) and ran
+  ~1,422 `resolve_entities` calls at ~200-600ms each — ~320-840s, i.e. the whole ingest
+  budget in the FIRST source, producing a byte-identical store on ~270 runs/quarter. Now:
+  `$top=1` date probe, an incremental resolve window (`ONCA_IFDATA_MAX_RESOLVE=150`/run)
+  with the cursor persisted in `bcb_ifdata/index.json` (`base_date`/`cursor`/`universe`/
+  `top`), and a full no-op once the quarter is walked. Apply the same pattern before adding
+  any other slow, low-cadence source.
 - **Bedrock** model quotas/throttling (synth + framework drafters call Converse); healthy
   ≈ 1–3 s/call. Watch for throttle storms when many framework branches fire concurrently.
 - **Cost ceiling ~$100/mo, no idle floor** (S3 Vectors KB, not OpenSearch). New always-on

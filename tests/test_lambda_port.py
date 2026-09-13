@@ -940,6 +940,29 @@ def test_source_budget_caps_a_slow_call():
     assert _t.monotonic() - started < 3
 
 
+def test_source_budget_rearms_when_the_kill_is_swallowed(monkeypatch):
+    """SIGALRM is one-shot: a source whose inner loop swallows the budget exception
+    (a best-effort ``except Exception``, or botocore re-wrapping it as a retryable
+    HTTPClientError) used to run completely unbounded to the 900s Lambda ceiling.
+    The alarm must RE-ARM so the next fire kills it anyway."""
+    import time as _t
+
+    monkeypatch.setenv("ONCA_SOURCE_BUDGET_REARM_SEC", "1")
+    swallowed = 0
+    started = _t.monotonic()
+    with pytest.raises(lambda_port._SourceBudgetExceeded):
+        with lambda_port._source_budget("greedy", deadline=_t.monotonic() + 60, per_source=1):
+            for _ in range(40):
+                try:
+                    _t.sleep(0.5)
+                except lambda_port._SourceBudgetExceeded:
+                    swallowed += 1
+                    if swallowed >= 2:
+                        raise  # stop swallowing; prove it kept firing
+    assert swallowed >= 2
+    assert _t.monotonic() - started < 10  # nowhere near the 20s of sleeps
+
+
 def test_handler_degrades_when_a_source_exceeds_its_budget(monkeypatch):
     import time as _t
 

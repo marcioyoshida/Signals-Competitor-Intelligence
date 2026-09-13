@@ -16,11 +16,14 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import time
 from typing import Any, Callable, Iterable
 
 import requests
 
-BASE = "https://olinda.bcb.gov.br/olinda/servico/IFDATA/versao/v1/odata"
+from src.ingest.budget import SourceBudgetExceeded as _BUDGET_ABORT
+
+BASE ="https://olinda.bcb.gov.br/olinda/servico/IFDATA/versao/v1/odata"
 INDEX_KEY = "bcb_ifdata/index.json"
 PUBLIC_URL = "https://www3.bcb.gov.br/ifdata/"
 
@@ -30,17 +33,68 @@ TIPO_INSTITUICAO = 2
 RELATORIO = "T"
 
 
+def _candidate_base_dates(today: dt.date | None = None, back: int = 6) -> list[int]:
+    """Recent quarter-end base dates (YYYYMM), newest first.
+
+    IF.data publishes quarterly (03/06/09/12) with a ~3-month lag, so probing the
+    last ~6 quarters always covers the newest published one without a hardcoded
+    list that silently goes stale.
+    """
+    today = today or dt.date.today()
+    q_month = ((today.month - 1) // 3) * 3 or 12
+    year = today.year if ((today.month - 1) // 3) else today.year - 1
+    out: list[int] = []
+    for _ in range(back):
+        out.append(year * 100 + q_month)
+        q_month -= 3
+        if q_month <= 0:
+            q_month += 12
+            year -= 1
+    return out
+
+
+CANDIDATE_BASE_DATES = _candidate_base_dates()
+
+
+def _valores_url(base_date: int, *, top: int | None = None) -> str:
+    url = (
+        f"{BASE}/IfDataValores("
+        f"AnoMes=@AnoMes,TipoInstituicao=@TipoInstituicao,Relatorio=@Relatorio)"
+        f"?@AnoMes={base_date}"
+        f"&@TipoInstituicao={TIPO_INSTITUICAO}"
+        f"&@Relatorio='{RELATORIO}'"
+        f"&$format=json"
+    )
+    if top:
+        url += f"&$top={top}"
+    return url
+
+
 def latest_base_date() -> int:
-    """Return the most recent published base date as YYYYMM (e.g. 202603)."""
-    # The legacy ListaDeDatas endpoint is unavailable; the working service
-    # accepts a direct AnoMes filter, so we prefer the most recent known-good
-    # quarterly value from the current quarter.
-    for base_date in [202603, 202602, 202601, 202512, 202511]:
+    """Return the most recent published base date as YYYYMM (e.g. 202603).
+
+    The legacy ListaDeDatas endpoint is unavailable; the working service accepts a
+    direct AnoMes filter, so we probe the most recent known-good quarterly values.
+
+    The probe uses ``$top=1`` (a ~120-byte response). It used to call the FULL
+    ``fetch_institutions`` per candidate, i.e. it downloaded the whole 58MB /
+    153k-row report just to decide the date and then downloaded it a SECOND time
+    to actually use it — the single biggest contributor to the structured-ingest
+    900s Lambda timeouts observed 2026-09-08..12.
+    """
+    for base_date in _candidate_base_dates():
         try:
-            rows = fetch_institutions(base_date=base_date)
-            if rows:
+            resp = requests.get(
+                _valores_url(base_date, top=1),
+                timeout=(10, 30),
+                headers={"User-Agent": "Mozilla/5.0"},
+            )
+            resp.raise_for_status()
+            if resp.json().get("value"):
                 return base_date
         except requests.RequestException:
+            continue
+        except ValueError:  # non-JSON body from an upstream error page
             continue
     raise requests.RequestException("Could not determine an IF.data base date")
 
@@ -50,17 +104,17 @@ def fetch_institutions(base_date: int | None = None) -> list[dict[str, Any]]:
 
     Rows are keyed by CodInst only — this report has no institution name
     field. Resolve display names separately via fetch_institution_names.
+
+    ~58MB / 153k rows. The read timeout is per-socket-read, so a trickling server
+    can still stretch this out; the caller's per-source wall-clock budget
+    (``ONCA_SOURCE_TIMEOUT_SEC``) is the real bound.
     """
     base_date = base_date or latest_base_date()
-    url = (
-        f"{BASE}/IfDataValores("
-        f"AnoMes=@AnoMes,TipoInstituicao=@TipoInstituicao,Relatorio=@Relatorio)"
-        f"?@AnoMes={base_date}"
-        f"&@TipoInstituicao={TIPO_INSTITUICAO}"
-        f"&@Relatorio='{RELATORIO}'"
-        f"&$format=json"
+    resp = requests.get(
+        _valores_url(base_date),
+        timeout=(10, 60),
+        headers={"User-Agent": "Mozilla/5.0"},
     )
-    resp = requests.get(url, timeout=120, headers={"User-Agent": "Mozilla/5.0"})
     resp.raise_for_status()
     return resp.json().get("value", [])
 
@@ -117,20 +171,45 @@ def map_to_entities(
     metric: str = "Ativo Total",
     base_date: int | None = None,
     today: dt.date | None = None,
+    start: int = 0,
+    limit: int | None = None,
+    deadline: float | None = None,
+    stats: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Normalise `market_share()` rows that resolve to a tracked entity into store
     records carrying `market_share_pct`. One record per entity — the largest share
     if an entity resolves from more than one institution row (e.g. a conglomerate).
+
+    ``start``/``limit`` window which institution names are put through the resolver.
+    IF.data returns ~1,422 institutions and `resolve_entities` costs ~200-600ms per
+    call (a CPU-bound pass over the whole alias map), so the uncapped loop measured
+    ~320-840s — on its own it consumed the ingest's entire 900s Lambda budget and was
+    the direct cause of the 2026-09-08..12 structured-ingest timeouts. The caller
+    walks the list a window at a time across runs (`resolve_progress`), which keeps
+    full coverage without a per-run stall; `shares` is sorted by share DESC so the
+    materially-sized institutions are resolved first.
     """
     today = today or dt.date.today()
     best: dict[str, dict[str, Any]] = {}
-    for row in shares or []:
+    rows = list(shares or [])[start:]
+    if limit is not None and limit > 0:
+        rows = rows[:limit]
+    processed = 0
+    for row in rows:
+        # A soft deadline stops the window cleanly (records kept, cursor advanced by
+        # what we actually did) instead of letting the caller's SIGALRM budget kill
+        # the whole source and lose the window — which would livelock the walk.
+        if deadline is not None and time.monotonic() >= deadline:
+            break
+        processed += 1
         name = row.get("institution")
         share = row.get("share_pct")
         if not name or share is None:
             continue
         try:
             ents = resolver({"source": "News", "title": name, "institution": name}) or []
+        except _BUDGET_ABORT:  # a wall-clock budget kill must NOT be swallowed here
+            raise
         except Exception:  # pragma: no cover - resolver best-effort
             ents = []
         if not ents:
@@ -149,6 +228,8 @@ def map_to_entities(
             prev = best.get(eid)
             if prev is None or share > (prev.get("market_share_pct") or 0.0):
                 best[eid] = {"id": f"bcb-ifdata:{eid}", "entity": eid, **rec_base}
+    if stats is not None:
+        stats["processed"] = processed
     return list(best.values())
 
 
@@ -174,6 +255,7 @@ def merge(
     records: list[dict[str, Any]],
     *,
     today: dt.date | None = None,
+    progress: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     today = today or dt.date.today()
     idx = dict(existing or {})
@@ -182,7 +264,31 @@ def merge(
         eid = r.get("entity")
         if eid:
             store[eid] = r
-    return {"as_of": today.isoformat(), "count": len(store), "records": store}
+    out = {"as_of": today.isoformat(), "count": len(store), "records": store}
+    # Carry the resolve cursor forward so the next run resumes instead of redoing
+    # the whole 1,422-name pass (see resolve_progress).
+    for key in ("base_date", "cursor", "universe", "top"):
+        if progress and key in progress:
+            out[key] = progress[key]
+        elif key in idx:
+            out[key] = idx[key]
+    return out
+
+
+def resolve_progress(index: dict[str, Any] | None, base_date: int) -> tuple[int, bool]:
+    """(next cursor, already-complete) for ``base_date`` against a stored index.
+
+    IF.data is QUARTERLY, but the pipeline runs 3x/day — ~270 runs per quarter that
+    used to redo the identical 58MB download + 1,422-name resolve and produce a
+    byte-identical store. Once the whole institution list has been walked for a base
+    date, the source is a no-op until BCB publishes the next quarter.
+    """
+    idx = index or {}
+    if idx.get("base_date") != base_date:
+        return 0, False  # new quarter -> restart the walk
+    cursor = int(idx.get("cursor") or 0)
+    universe = int(idx.get("universe") or 0)
+    return cursor, bool(universe and cursor >= universe)
 
 
 def load_index(bucket: str, *, s3: Any | None = None) -> dict[str, Any]:
@@ -263,9 +369,11 @@ def system_size(index: dict[str, Any]) -> dict[str, Any]:
 
 
 def update_store(records: list[dict[str, Any]], bucket: str, *,
-                 s3: Any | None = None, today: dt.date | None = None) -> dict[str, Any]:
-    index = load_index(bucket, s3=s3)
-    merged = merge(index, records, today=today)
+                 s3: Any | None = None, today: dt.date | None = None,
+                 progress: dict[str, Any] | None = None,
+                 index: dict[str, Any] | None = None) -> dict[str, Any]:
+    index = load_index(bucket, s3=s3) if index is None else index
+    merged = merge(index, records, today=today, progress=progress)
     publish(merged, bucket, s3=s3)
     return {"updated": len(records), "records": merged.get("count", 0)}
 

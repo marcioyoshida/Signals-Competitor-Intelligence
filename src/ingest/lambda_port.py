@@ -29,8 +29,7 @@ import boto3
 from src.diff.engine import DynamoDbState, DynamoDbValueState, detect_moves, detect_new
 
 
-class _SourceBudgetExceeded(Exception):
-    """A single source ran past its wall-clock budget (or the ingest deadline)."""
+from src.ingest.budget import SourceBudgetExceeded as _SourceBudgetExceeded  # noqa: E402
 
 
 def _record_health(label: str, *, ok: bool, error: str | None = None) -> None:
@@ -73,8 +72,18 @@ def _source_budget(label: str, deadline: float, per_source: int):
         return
 
     secs = max(1, int(min(per_source, remaining)))
+    # SIGALRM is ONE-SHOT, and a budget exception raised inside a per-item
+    # ``except Exception`` (e.g. bcb_ifdata.map_to_entities' best-effort resolver
+    # loop) or inside botocore (which re-wraps it as a retryable HTTPClientError)
+    # is SWALLOWED — after which the source runs completely unbounded and eats the
+    # whole 900s Lambda budget. Observed live 2026-09-08..12: structured ingest
+    # timed out at 900s with zero log output. So RE-ARM the alarm on every fire:
+    # whoever swallows it gets hit again a few seconds later, until the with-block
+    # exits and the ``finally`` below disarms it for good.
+    retry_every = max(1, int(os.environ.get("ONCA_SOURCE_BUDGET_REARM_SEC", "5")))
 
     def _fire(signum, frame):
+        signal.alarm(retry_every)
         raise _SourceBudgetExceeded(f"{label} exceeded {secs}s budget")
 
     previous = signal.getsignal(signal.SIGALRM)
@@ -577,25 +586,69 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # loop below (ADR 019 — the FETCHERS registry), together with ofertas/dou/cade/sanctions/
     # contracts. Their outputs are extracted from `loop_results` right before the digest.
 
+    # IF.data is QUARTERLY data on a 3x/day pipeline. Until 2026-09-13 this block
+    # re-did the identical work every single run: a 58MB/153k-row download TWICE
+    # (latest_base_date() probed with full fetches) plus ~1,422 resolve_entities
+    # calls at ~200-600ms each. Measured live: ~320-840s — the single source that
+    # consumed the whole 900s Lambda budget and produced the ExecutionTimedOut runs.
+    # Now: cheap $top=1 date probe, skip entirely once the quarter is fully walked,
+    # and otherwise resolve one bounded window per run (cursor in the store).
     try:
         with _source_budget("IF.data market", deadline, per_source):
-            base_date = bcb_ifdata.latest_base_date()
-            rows = bcb_ifdata.fetch_institutions(base_date=base_date)
-            names = bcb_ifdata.fetch_institution_names(base_date)
-            shares = bcb_ifdata.market_share(rows, institution_names=names)
-            market = shares[:10]
-            # ADR 015 §3: resolve institution names -> entity_id and persist a durable
-            # bcb_ifdata/index.json store so feed_builder can emit entities[].market_
-            # share_pct. Best-effort, mirrors the bcb_reclamacoes store below.
             bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
-            if bucket:
-                from src.synth.entities import resolve_entities
-
-                recs = bcb_ifdata.map_to_entities(
-                    shares, resolver=resolve_entities, base_date=base_date
+            index = bcb_ifdata.load_index(bucket) if bucket else {}
+            base_date = bcb_ifdata.latest_base_date()
+            cursor, complete = bcb_ifdata.resolve_progress(index, base_date)
+            if complete and index.get("top"):
+                market = index.get("top") or []
+                print(
+                    f"IF.data market: base_date {base_date} already fully resolved "
+                    f"({index.get('count', 0)} entities) — reusing cached top{len(market)}"
                 )
-                if recs:
-                    bcb_ifdata.update_store(recs, bucket)
+            else:
+                rows = bcb_ifdata.fetch_institutions(base_date=base_date)
+                names = bcb_ifdata.fetch_institution_names(base_date)
+                shares = bcb_ifdata.market_share(rows, institution_names=names)
+                market = shares[:10]
+                del rows  # ~58MB / 153k rows — free it before the resolver pass
+                # ADR 015 §3: resolve institution names -> entity_id and persist a durable
+                # bcb_ifdata/index.json store so feed_builder can emit entities[].market_
+                # share_pct. Best-effort, mirrors the bcb_reclamacoes store below.
+                if bucket:
+                    from src.synth.entities import resolve_entities
+
+                    window = max(1, int(os.environ.get("ONCA_IFDATA_MAX_RESOLVE", "150")))
+                    stats: dict[str, Any] = {}
+                    recs = bcb_ifdata.map_to_entities(
+                        shares,
+                        resolver=resolve_entities,
+                        base_date=base_date,
+                        start=cursor,
+                        limit=window,
+                        # Stop cleanly a little before the SIGALRM budget would kill
+                        # the source, so the window's work is persisted and the cursor
+                        # advances (a hard kill here would livelock the walk).
+                        deadline=min(
+                            deadline, time.monotonic() + max(10, int(per_source * 0.7))
+                        ),
+                        stats=stats,
+                    )
+                    nxt = min(cursor + int(stats.get("processed") or window), len(shares))
+                    bcb_ifdata.update_store(
+                        recs,
+                        bucket,
+                        index=index,
+                        progress={
+                            "base_date": base_date,
+                            "cursor": nxt,
+                            "universe": len(shares),
+                            "top": market,
+                        },
+                    )
+                    print(
+                        f"IF.data market: base_date {base_date} resolved "
+                        f"{cursor}-{nxt}/{len(shares)} (+{len(recs)} entities)"
+                    )
     except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
         market = []
         print(f"Warning: IF.data market fetch failed: {exc}")

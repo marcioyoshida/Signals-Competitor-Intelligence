@@ -101,3 +101,124 @@ def test_store_roundtrip_and_share_by_entity():
     assert [r["entity"] for r in bcb_ifdata.list_records(index)] == ["itau", "bb"]
     # the projection feed_builder joins on
     assert bcb_ifdata.share_by_entity(index) == {"itau": 70.0, "bb": 30.0}
+
+
+# --- 900s-timeout regression guards (structured ingest stalls 2026-09-08..12) ---
+
+
+def test_latest_base_date_probes_cheaply_and_does_not_download_full_report(monkeypatch):
+    """The probe must use $top=1, not a full 58MB / 153k-row fetch per candidate.
+
+    The old implementation called fetch_institutions() for EVERY candidate date and
+    then the caller fetched the winner AGAIN — two+ full 58MB downloads per run.
+    """
+    seen: list[str] = []
+
+    class _Resp:
+        def __init__(self, url):
+            self.url = url
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"value": [{"CodInst": "1"}] if "202603" in self.url else []}
+
+    def _fake_get(url, **kwargs):
+        seen.append(url)
+        return _Resp(url)
+
+    monkeypatch.setattr(bcb_ifdata.requests, "get", _fake_get)
+    monkeypatch.setattr(
+        bcb_ifdata, "_candidate_base_dates", lambda *a, **k: [202606, 202603]
+    )
+    monkeypatch.setattr(
+        bcb_ifdata,
+        "fetch_institutions",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("full fetch during probe")),
+    )
+
+    assert bcb_ifdata.latest_base_date() == 202603
+    assert len(seen) == 2
+    assert all("$top=1" in u for u in seen)
+
+
+def test_candidate_base_dates_are_derived_from_today_not_hardcoded():
+    got = bcb_ifdata._candidate_base_dates(dt.date(2026, 9, 13), back=3)
+    assert got == [202606, 202603, 202512]
+    # rolls the year correctly
+    assert bcb_ifdata._candidate_base_dates(dt.date(2026, 2, 1), back=2) == [202512, 202509]
+
+
+def test_map_to_entities_limit_caps_resolver_calls():
+    """IF.data returns ~1,422 institutions; resolve_entities is a CPU-bound pass over
+    the whole alias map, so an uncapped loop burned hundreds of seconds of the ingest
+    budget on a sub-0.01%-share tail."""
+    calls: list[str] = []
+
+    def _counting(item):
+        calls.append(item["institution"])
+        return []
+
+    bcb_ifdata.map_to_entities(_SHARES, resolver=_counting, limit=2)
+
+    assert calls == ["ITAU UNIBANCO", "BANCO DO BRASIL"]
+
+
+def test_map_to_entities_resumes_from_a_cursor_and_reports_progress():
+    calls: list[str] = []
+    stats: dict = {}
+
+    def _counting(item):
+        calls.append(item["institution"])
+        return []
+
+    bcb_ifdata.map_to_entities(_SHARES, resolver=_counting, start=1, limit=5, stats=stats)
+
+    assert calls == ["BANCO DO BRASIL", "SOME UNTRACKED BANK"]
+    assert stats["processed"] == 2
+
+
+def test_map_to_entities_stops_at_a_soft_deadline_and_keeps_partial_work():
+    """A hard SIGALRM kill mid-window would lose the window AND leave the cursor
+    unmoved -> the incremental walk would livelock on the same slice forever."""
+    import time as _t
+
+    stats: dict = {}
+    recs = bcb_ifdata.map_to_entities(
+        _SHARES, resolver=_resolver, deadline=_t.monotonic() - 1, stats=stats
+    )
+    assert stats["processed"] == 0 and recs == []
+
+
+def test_resolve_progress_tracks_the_quarter():
+    # no store yet -> start at 0, not complete
+    assert bcb_ifdata.resolve_progress({}, 202606) == (0, False)
+    # mid-walk
+    idx = {"base_date": 202606, "cursor": 150, "universe": 1422}
+    assert bcb_ifdata.resolve_progress(idx, 202606) == (150, False)
+    # walked out -> the source no-ops for the rest of the quarter
+    assert bcb_ifdata.resolve_progress({**idx, "cursor": 1422}, 202606) == (1422, True)
+    # BCB published a new quarter -> restart
+    assert bcb_ifdata.resolve_progress({**idx, "cursor": 1422}, 202609) == (0, False)
+
+
+def test_merge_carries_progress_forward():
+    idx = {"records": {}, "base_date": 202606, "cursor": 150, "universe": 1422}
+    out = bcb_ifdata.merge(idx, [], progress={"cursor": 300, "base_date": 202606})
+    assert out["cursor"] == 300 and out["universe"] == 1422
+
+
+def test_map_to_entities_does_not_swallow_the_wall_clock_budget_kill():
+    """The per-source SIGALRM budget raises from an arbitrary line; the best-effort
+    ``except Exception`` around the resolver must NOT eat it, or the source runs
+    unbounded to the 900s Lambda ceiling (observed live)."""
+    from src.ingest.budget import SourceBudgetExceeded
+
+    def _killed(item):
+        raise SourceBudgetExceeded("IF.data market exceeded 180s budget")
+
+    import pytest
+
+    with pytest.raises(SourceBudgetExceeded):
+        bcb_ifdata.map_to_entities(_SHARES, resolver=_killed)
