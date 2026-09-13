@@ -103,12 +103,18 @@ class OncaPrototypeStack(Stack):
 
         # Entities registry (ADR 2026-08-17): single-table lookup by typed pk
         # (ENT#/ALIAS#/CNPJ#). Seeded from ENTITY_ALIASES; self-expands later.
+        # This is THE commercial asset (ADR 002) — PITR + deletion_protection (#110/G2)
+        # because ADR 018's journal rollback only recovers a field, not a lost table.
         entities_table = dynamodb.Table(
             self,
             "OncaEntitiesTable",
             partition_key=dynamodb.Attribute(name="pk", type=dynamodb.AttributeType.STRING),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
             removal_policy=None,
+            deletion_protection=True,
+            point_in_time_recovery_specification=dynamodb.PointInTimeRecoverySpecification(
+                point_in_time_recovery_enabled=True
+            ),
         )
 
         # Phase D — per-tenant entitlement source of truth (ADR 002 Phase D + ADR 016).
@@ -123,6 +129,10 @@ class OncaPrototypeStack(Stack):
             ),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
             removal_policy=RemovalPolicy.RETAIN,
+            deletion_protection=True,  # #110/G2 — losing entitlement rows locks out every tenant
+            point_in_time_recovery_specification=dynamodb.PointInTimeRecoverySpecification(
+                point_in_time_recovery_enabled=True
+            ),
         )
         CfnOutput(self, "TenantConfigTable", value=tenant_config_table.table_name)
 
@@ -136,6 +146,10 @@ class OncaPrototypeStack(Stack):
             sort_key=dynamodb.Attribute(name="ts", type=dynamodb.AttributeType.STRING),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
             removal_policy=RemovalPolicy.RETAIN,
+            deletion_protection=True,  # #110/G2 — the audit/rollback trail itself
+            point_in_time_recovery_specification=dynamodb.PointInTimeRecoverySpecification(
+                point_in_time_recovery_enabled=True
+            ),
         )
         CfnOutput(self, "CurationLogTable", value=curation_log_table.table_name)
 
