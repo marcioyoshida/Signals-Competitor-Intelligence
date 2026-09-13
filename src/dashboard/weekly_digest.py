@@ -20,13 +20,20 @@ Config: each channel reads from its env var, falling back to the shared
                                      request). Sent via SES `send_email` (boto3), region from
                                      AWS_REGION/us-east-1.
 
-HONESTY NOTE on the Teams payload shape: Microsoft has been retiring the classic Office 365
-Connector (legacy `MessageCard` JSON) in favor of Workflows (Power Automate) webhooks that expect
-an Adaptive Card wrapped in a `message` attachment. This module targets that CURRENT shape — but
-it has NOT been verified against a real webhook (none was available to test against, unlike the
-Tavily REST contract which WAS verified live). Treat the Teams path as unverified until a real
-webhook URL is supplied and a live send is confirmed; Slack (stable, well-documented Block Kit)
-and SES (standard boto3 API) are lower-risk.
+HONESTY NOTE / DECISION (2026-09-13, #111) on the Teams payload shape: Microsoft has been
+retiring the classic Office 365 Connector (legacy `MessageCard` JSON) in favor of Workflows
+(Power Automate) webhooks that expect an Adaptive Card wrapped in a `message` attachment. This
+module targets that CURRENT shape, but no real Teams webhook has ever been available to test
+against — unlike SES (verified live, #111) and the Tavily REST contract (verified live
+elsewhere). Rather than leave this an open question indefinitely: **Teams is explicitly marked
+UNSUPPORTED until a real webhook is supplied and a live send is confirmed against it.**
+`send_teams`/`format_teams` stay in the codebase (fail-closed: no configured webhook URL = a
+silent no-op, same as any other unconfigured channel) so wiring one up later is a config change,
+not new code — but do not represent the Teams channel as working in any customer-facing
+material. **Slack (Block Kit) is the supported chat fallback** — its contract is stable and
+well-documented, and this module's `format_slack` follows it exactly, but it likewise has not
+been verified against a real webhook and should be smoke-tested before being offered to a
+design partner.
 """
 from __future__ import annotations
 
