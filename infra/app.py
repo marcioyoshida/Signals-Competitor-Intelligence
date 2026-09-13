@@ -1560,6 +1560,28 @@ class OncaPrototypeStack(Stack):
             description="SigV4-signs CloudFront origin requests to the Onca function URLs",
             signing=cloudfront.Signing.SIGV4_ALWAYS,
         )
+        _cf_distribution_arn = (
+            f"arn:aws:cloudfront::{self.account}:distribution/{distribution.distribution_id}"
+        )
+
+        def _grant_cloudfront_invoke(fn: lambda_.Function, label: str) -> None:
+            # `FunctionUrlOrigin.with_origin_access_control` only grants
+            # lambda:InvokeFunctionUrl. Since October 2025 AWS also requires
+            # lambda:InvokeFunction on the SAME principal for an OAC-signed
+            # (or any non-NONE-auth) function URL invocation to succeed — without
+            # it CloudFront's correctly-SigV4-signed request is rejected with a
+            # bare 403 at the Lambda Function URL auth layer, before the request
+            # ever reaches the function's own code. Confirmed live 2026-09-13:
+            # this exact gap took the dashboard's write endpoints down after the
+            # WAF Phase 0 deploy despite every other piece of the OAC wiring
+            # (resource policy SourceArn, signing behavior, origin config) being
+            # correct.
+            fn.add_permission(
+                f"InvokeFromCloudFront{label}",
+                principal=iam.ServicePrincipal("cloudfront.amazonaws.com"),
+                action="lambda:InvokeFunction",
+                source_arn=_cf_distribution_arn,
+            )
         review_fn = lambda_.Function(
             self,
             "OncaReviewAction",
@@ -1584,6 +1606,7 @@ class OncaPrototypeStack(Stack):
         review_url = review_fn.add_function_url(
             auth_type=lambda_.FunctionUrlAuthType.AWS_IAM
         )
+        _grant_cloudfront_invoke(review_fn, "Review")
 
         # Registry CRUD API (operator control plane): full curation over the ENT#
         # records — i.e. read/write access to the commercial asset itself.
@@ -1627,6 +1650,7 @@ class OncaPrototypeStack(Stack):
             environment={"PYTHONPATH": "/var/task", "ONCA_ORIGIN_SECRET": origin_secret},
         )
         quotes_url = quotes_fn.add_function_url(auth_type=lambda_.FunctionUrlAuthType.AWS_IAM)
+        _grant_cloudfront_invoke(quotes_fn, "Quotes")
         distribution.add_behavior(
             "/api/quotes*",
             cf_origins.FunctionUrlOrigin.with_origin_access_control(
@@ -1667,6 +1691,7 @@ class OncaPrototypeStack(Stack):
         run_url = run_fn.add_function_url(
             auth_type=lambda_.FunctionUrlAuthType.AWS_IAM
         )
+        _grant_cloudfront_invoke(run_fn, "Run")
         distribution.add_behavior(
             "/api/run/*",
             cf_origins.FunctionUrlOrigin.with_origin_access_control(
@@ -1712,6 +1737,7 @@ class OncaPrototypeStack(Stack):
         curation_log_table.grant_read_write_data(act_fn)  # ADR 018 audit + rollback-over-journal
         site_bucket.grant_read(act_fn)  # ADR-020 Phase 2: run_integrity_audit reads feed.json
         act_url = act_fn.add_function_url(auth_type=lambda_.FunctionUrlAuthType.AWS_IAM)
+        _grant_cloudfront_invoke(act_fn, "Act")
         distribution.add_behavior(
             "/api/act*",
             cf_origins.FunctionUrlOrigin.with_origin_access_control(
