@@ -5,7 +5,7 @@ Parameters are inputs, not project-specific constants:
 
     python scripts/daily_cost_tracker.py \\
         --service bedrock \\
-        --tag tr:project-name \\
+        --tag project \\
         --profile my2027
 
 `--service bedrock` expands to every Cost Explorer SERVICE whose name
@@ -481,8 +481,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--tag",
-        default="tr:project-name",
-        help="Cost-allocation tag key to group by (default: tr:project-name).",
+        default="project",
+        help="Cost-allocation tag key to group by (default: project).",
     )
     p.add_argument(
         "--tag-value",

@@ -250,7 +250,7 @@ def test_render_table_and_json_include_inputs():
 
 def test_cli_parser_defaults_match_requested_inputs():
     args = t.build_parser().parse_args([])
-    assert args.tag == "tr:project-name"
+    assert args.tag == "project"
     assert args.services is None  # main() fills bedrock
     args2 = t.build_parser().parse_args(
         ["--service", "bedrock", "--tag", "tr:project-name", "--tag-value", "onca"]

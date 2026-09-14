@@ -112,13 +112,9 @@ def operator_secret() -> str:
 class OncaPrototypeStack(Stack):
     def __init__(self, scope: object, id: str, **kwargs):
         super().__init__(scope, id, **kwargs)
-        # Cost Explorer groups Bedrock + other spend by this allocation tag
-        # (scripts/daily_cost_tracker.py --tag tr:project-name). Override the
-        # value per deploy with ONCA_PROJECT_NAME; activate the key in CE after
-        # the first tagged resource appears (~24h).
-        Tags.of(self).add(
-            "tr:project-name", os.environ.get("ONCA_PROJECT_NAME", "onca")
-        )
+        # Cost-allocation tagging consolidated onto the single account-wide "project" key
+        # (Tags.of(app).add("project", ...) below) — the separate "tr:project-name" tag this
+        # stack used to carry was retired 2026-09-14 so every fork rolls up under one key.
 
         state_table = dynamodb.Table(
             self,
@@ -3027,8 +3023,8 @@ OncaPrototypeStack(app, "OncaPrototypeStack")
 from cicd import OncaCicdStack  # noqa: E402  (local module, after app-stack def)
 
 OncaCicdStack(app, "OncaCicdStack")
-# App-wide identification tag across every resource in both stacks (distinct from
-# OncaPrototypeStack's own "tr:project-name" Cost-Explorer allocation tag above,
-# which is deliberately ASCII-only for the cost-tracking script's own parsing).
+# App-wide identification + Cost Explorer allocation tag across every resource in both
+# stacks (the standalone "tr:project-name" tag OncaPrototypeStack used to carry alongside
+# this one was retired 2026-09-14 — every fork now rolls up under this single "project" key).
 Tags.of(app).add("project", os.environ.get("ONCA_PROJECT_TAG", "onssa"))
 app.synth()
