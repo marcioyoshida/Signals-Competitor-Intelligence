@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 
 import yaml
-from aws_cdk import App, CfnOutput, Duration, RemovalPolicy, Size, Stack, Tags
+from aws_cdk import App, CfnOutput, Duration, RemovalPolicy, SecretValue, Size, Stack, Tags
 from aws_cdk import aws_bedrock as bedrock
 from aws_cdk import aws_apigatewayv2 as apigwv2
 from aws_cdk import aws_certificatemanager as acm
@@ -759,8 +759,35 @@ class OncaPrototypeStack(Stack):
             account_recovery=cognito.AccountRecovery.EMAIL_ONLY,
             removal_policy=RemovalPolicy.RETAIN,  # never destroy identities on stack update
         )
-        user_pool_client = user_pool.add_client(
-            "OncaWarroomClient",
+        # Google sign-in (ported from Signals-Creator-Radar/Bluefin's ADR 0017 pattern — see
+        # docs/google-oauth-runbook.md). Gated on `-c google_client_id=...` (persisted in
+        # infra/cdk.json, not sensitive) — the callback URLs above are already literal strings
+        # (onssa.org / the distribution's own domain), never a construct reference, so adding a
+        # federated provider here does not risk the CFN circular dependency Bluefin's runbook
+        # warns about. Unlike Bluefin, this never auto-provisions a tenant — see
+        # lambda_pretoken.py and tenant_config.map_federated_email.
+        _google_client_id = self.node.try_get_context("google_client_id") or ""
+        google_idp = None
+        if _google_client_id:
+            _google_secret = SecretValue.secrets_manager(
+                "signalscompetitor/onca/google-oauth", json_field="client_secret"
+            )
+            google_idp = cognito.UserPoolIdentityProviderGoogle(
+                self, "OncaGoogleIdp",
+                user_pool=user_pool,
+                client_id=_google_client_id,
+                client_secret_value=_google_secret,
+                scopes=["openid", "email", "profile"],
+                attribute_mapping=cognito.AttributeMapping(
+                    email=cognito.ProviderAttribute.GOOGLE_EMAIL,
+                    # Without this, Cognito defaults email_verified to false for every
+                    # federated user regardless of what Google actually asserts — the exact
+                    # gotcha Bluefin's runbook documents hitting live.
+                    email_verified=cognito.ProviderAttribute.GOOGLE_EMAIL_VERIFIED,
+                ),
+            )
+
+        _client_kwargs = dict(
             auth_flows=cognito.AuthFlow(user_srp=True),
             o_auth=cognito.OAuthSettings(
                 flows=cognito.OAuthFlows(authorization_code_grant=True),
@@ -790,12 +817,66 @@ class OncaPrototypeStack(Stack):
             ),
             prevent_user_existence_errors=True,
         )
+        if google_idp:
+            _client_kwargs["supported_identity_providers"] = [
+                cognito.UserPoolClientIdentityProvider.COGNITO,
+                cognito.UserPoolClientIdentityProvider.GOOGLE,
+            ]
+        user_pool_client = user_pool.add_client("OncaWarroomClient", **_client_kwargs)
+        if google_idp:
+            # The client's supported IDP must exist before the client does.
+            user_pool_client.node.add_dependency(google_idp)
         user_pool_domain = user_pool.add_domain(
             "OncaHostedUi",
             cognito_domain=cognito.CognitoDomainOptions(domain_prefix=f"onca-{_acct}"),
         )
         CfnOutput(self, "UserPoolId", value=user_pool.user_pool_id)
         CfnOutput(self, "UserPoolClientId", value=user_pool_client.user_pool_client_id)
+        if google_idp:
+            # This is the redirect URI to register in the Google Cloud Console OAuth client —
+            # Cognito's own federated-IDP callback path, not any URL in this app.
+            CfnOutput(
+                self, "GoogleOAuthRedirectUri",
+                value=(
+                    f"https://{user_pool_domain.domain_name}.auth.{self.region}"
+                    ".amazoncognito.com/oauth2/idpresponse"
+                ),
+            )
+
+        # Pre Token Generation trigger: resolves custom:tenant/custom:tier for a Google login
+        # via a pre-registered email->tenant mapping (tenant_config.map_federated_email). Fires
+        # on every token issuance, password logins included (fast no-op — they already have a
+        # real custom:tenant from AdminCreateUser); only exists when Google login is wired, since
+        # a password-only pool has no path that could ever reach a user with no tenant claim. See
+        # lambda_pretoken.py for the full "why" (custom:tenant is immutable and Cognito creates a
+        # federated user's record with no attribute list this app controls).
+        if google_idp:
+            federated_map_table = dynamodb.Table(
+                self, "OncaFederatedTenantMapTable",
+                partition_key=dynamodb.Attribute(
+                    name="email", type=dynamodb.AttributeType.STRING),
+                billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+                removal_policy=RemovalPolicy.RETAIN,
+                point_in_time_recovery_specification=dynamodb.PointInTimeRecoverySpecification(
+                    point_in_time_recovery_enabled=True
+                ),
+            )
+            pretoken_fn = lambda_.Function(
+                self, "OncaPreTokenGenFn",
+                runtime=lambda_.Runtime.PYTHON_3_13,
+                handler="src.dashboard.lambda_pretoken.lambda_handler",
+                code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+                timeout=Duration.seconds(10),
+                memory_size=128,
+                environment={"ONCA_FEDERATED_MAP_TABLE": federated_map_table.table_name},
+            )
+            federated_map_table.grant_read_data(pretoken_fn)
+            # Do NOT reference user_pool.user_pool_id/user_pool_arn anywhere on this function
+            # (env or IAM policy) — add_trigger makes the POOL depend on the FUNCTION, so doing
+            # so would create the function depending back on the pool right back (a two-node
+            # circular dependency documented in docs/google-oauth-runbook.md). Cognito trigger
+            # events always carry userPoolId in the payload if it's ever needed.
+            user_pool.add_trigger(cognito.UserPoolOperation.PRE_TOKEN_GENERATION, pretoken_fn)
 
         # Industry Cognito Groups — the lightweight, no-tenant-config-row entitlement
         # path (auth.industry_groups / tenant_config.cognito_grant_industry_group):

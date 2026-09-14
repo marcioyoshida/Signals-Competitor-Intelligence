@@ -160,6 +160,48 @@ def cognito_upsert_user(
     return "updated"
 
 
+def _federated_table(table: Any | None = None) -> Any:
+    if table is not None:
+        return table
+    import boto3
+
+    return boto3.resource("dynamodb").Table(
+        os.environ.get("ONCA_FEDERATED_MAP_TABLE", "onca-federated-tenant-map")
+    )
+
+
+def map_federated_email(
+    email: str, tenant_id: str, tier: str, *, table: Any | None = None,
+) -> dict[str, Any]:
+    """Register the tenant a Google login for `email` should resolve to (Google OAuth,
+    ported from Bluefin's ADR 0017 pattern — see docs/google-oauth-runbook.md).
+
+    Onça never auto-provisions from a federated login the way Bluefin does: Cognito
+    creates a Google-authenticated user internally with no `custom:tenant` attribute,
+    and that attribute is `mutable=False` — confirmed live in the Bluefin fork,
+    `AdminUpdateUserAttributes` raises even when the attribute was never set at all, so
+    there is no API call that can ever write it after the fact. The tenant therefore
+    lives here instead, keyed by email (known to the operator BEFORE the person's first
+    Google login, unlike a Google `sub`), and is injected into every token via
+    `claimsOverrideDetails` by `lambda_pretoken.py` — read identically to a real
+    attribute by every downstream JWT-authorized API.
+
+    An email with no row here is not an error at login time — the pre-token trigger
+    just issues a token with no `custom:tenant` claim, and the existing per-tenant read
+    boundary (feed_api.py) already 403s on that. This call is what PREVENTS that outcome
+    for an invited design partner, run once per person when they're onboarded (alongside
+    `cognito_upsert_user` for their password-login option, if any)."""
+    if tier not in VALID_TIERS:
+        raise ValueError(f"unknown tier {tier!r}, expected one of {VALID_TIERS}")
+    email = email.strip().lower()
+    if not email:
+        raise ValueError("email is required")
+    _federated_table(table).put_item(
+        Item={"email": email, "tenant_id": str(tenant_id), "tier": tier}
+    )
+    return {"email": email, "tenant_id": str(tenant_id), "tier": tier}
+
+
 def cognito_grant_industry_group(
     pool_id: str, email: str, industry: str, *, client: Any | None = None,
 ) -> str:

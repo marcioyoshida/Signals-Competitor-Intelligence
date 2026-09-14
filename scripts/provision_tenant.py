@@ -13,6 +13,11 @@ crypto, real-estate-funds); anything else is rejected.
     python scripts/provision_tenant.py put acme-consorcio entry consorcio betting \
         --email ops@acme.example --user-pool-id us-east-1_XXXXXXXXX --profile my2027
 
+    # also let that person log in with "Continue with Google" instead of a password
+    # (requires Google OAuth to be wired — see docs/google-oauth-runbook.md)
+    python scripts/provision_tenant.py put acme-consorcio entry consorcio betting \
+        --google-email ops@acme.example --profile my2027
+
     python scripts/provision_tenant.py list --profile my2027
     python scripts/provision_tenant.py get acme-consorcio
     python scripts/provision_tenant.py delete demo-banking
@@ -75,6 +80,18 @@ def cmd_put(args) -> int:
             print(f"REJECTED (cognito): {exc}", file=sys.stderr)
             return 2
         print(f"OK  cognito  {args.email}  {outcome}  tenant={cfg['tenant_id']}  tier={cfg['tier']}")
+    # Google OAuth ("Continue with Google", see docs/google-oauth-runbook.md): a federated
+    # login can never get a real custom:tenant attribute (it's immutable and Cognito creates
+    # that user internally with no attribute list this app controls), so it's resolved instead
+    # from this email->tenant mapping by lambda_pretoken.py. Independent of --email above — a
+    # person may have a password login, a Google login, both, or (if this is omitted) neither.
+    if args.google_email:
+        try:
+            tc.map_federated_email(args.google_email, cfg["tenant_id"], cfg["tier"])
+        except ValueError as exc:
+            print(f"REJECTED (google): {exc}", file=sys.stderr)
+            return 2
+        print(f"OK  google  {args.google_email}  mapped  tenant={cfg['tenant_id']}  tier={cfg['tier']}")
     return 0
 
 
@@ -127,6 +144,10 @@ def build_parser() -> argparse.ArgumentParser:
                          "(custom:tenant/custom:tier); omit to write only the entitlement row")
     sp.add_argument("--user-pool-id", default=None,
                     help="Cognito User Pool id (default $ONCA_USER_POOL_ID); required with --email")
+    sp.add_argument("--google-email", default=None,
+                    help="also let this email log in with \"Continue with Google\" for this "
+                         "tenant (writes the email->tenant mapping lambda_pretoken.py reads; "
+                         "independent of --email)")
     sp.set_defaults(func=cmd_put)
 
     sg = sub.add_parser("get", help="show one tenant")

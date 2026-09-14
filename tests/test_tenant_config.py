@@ -175,6 +175,39 @@ def test_cognito_grant_industry_group_rejects_unknown_industry():
         tc.cognito_grant_industry_group("pool1", "analyst@buyer.example", "not-a-real-industry", client=c)
 
 
+class _FakeFederatedTable:
+    """Mirrors _FakeTable's DI pattern, keyed by email (Google OAuth email->tenant map)."""
+
+    def __init__(self) -> None:
+        self.items: dict[str, dict[str, Any]] = {}
+
+    def get_item(self, Key):
+        it = self.items.get(Key["email"])
+        return {"Item": it} if it else {}
+
+    def put_item(self, Item):
+        self.items[Item["email"]] = dict(Item)
+
+
+def test_map_federated_email_roundtrip_and_normalizes_case():
+    t = _FakeFederatedTable()
+    row = tc.map_federated_email("Ops@Acme.Example", "acme", "saas", table=t)
+    assert row == {"email": "ops@acme.example", "tenant_id": "acme", "tier": "saas"}
+    assert t.items["ops@acme.example"] == row
+
+
+def test_map_federated_email_rejects_unknown_tier():
+    t = _FakeFederatedTable()
+    with pytest.raises(ValueError, match="unknown tier"):
+        tc.map_federated_email("ops@acme.example", "acme", "bogus", table=t)
+
+
+def test_map_federated_email_rejects_blank_email():
+    t = _FakeFederatedTable()
+    with pytest.raises(ValueError, match="email is required"):
+        tc.map_federated_email("   ", "acme", "saas", table=t)
+
+
 def test_scope_cards_to_modules_read_boundary():
     feed = {"entity_attrs": {
         "itau": {"industries": ["banking"]},
