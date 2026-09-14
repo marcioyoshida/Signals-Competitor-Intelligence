@@ -2853,4 +2853,8 @@ OncaPrototypeStack(app, "OncaPrototypeStack")
 from cicd import OncaCicdStack  # noqa: E402  (local module, after app-stack def)
 
 OncaCicdStack(app, "OncaCicdStack")
+# App-wide identification tag across every resource in both stacks (distinct from
+# OncaPrototypeStack's own "tr:project-name" Cost-Explorer allocation tag above,
+# which is deliberately ASCII-only for the cost-tracking script's own parsing).
+Tags.of(app).add("project", os.environ.get("ONCA_PROJECT_TAG", "onssa"))
 app.synth()
