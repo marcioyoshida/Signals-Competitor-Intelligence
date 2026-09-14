@@ -627,6 +627,7 @@ class OncaPrototypeStack(Stack):
             "OnssaCertificate",
             "arn:aws:acm:us-east-1:668449743071:certificate/2960f6a1-139b-460d-be20-018726f1e146",
         )
+        site_origin = cf_origins.S3BucketOrigin.with_origin_access_control(site_bucket)
         distribution = cloudfront.Distribution(
             self,
             "OncaDashboardCdn",
@@ -634,7 +635,7 @@ class OncaPrototypeStack(Stack):
             domain_names=["onssa.org", "www.onssa.org"],
             certificate=onssa_certificate,
             default_behavior=cloudfront.BehaviorOptions(
-                origin=cf_origins.S3BucketOrigin.with_origin_access_control(site_bucket),
+                origin=site_origin,
                 viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
                 function_associations=[
                     cloudfront.FunctionAssociation(
@@ -648,6 +649,16 @@ class OncaPrototypeStack(Stack):
             # S3 bucket (per-request detail — IP, URI, status, referer).
             enable_logging=True,
             log_file_prefix="cf-access/",
+        )
+
+        # G5 (#113): the ONE genuinely public path on this distribution — no basic-auth
+        # function association, unlike every other behavior here. "A prospect can see a
+        # price without asking" (the issue's own done-when) requires a page reachable
+        # without credentials; nothing else on this site is.
+        distribution.add_behavior(
+            "/pricing.html",
+            site_origin,
+            viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
         )
 
         # --- Phase C: identity (Cognito) — ADR 002 Decision 7 "7 gates 6" --------
@@ -867,6 +878,7 @@ class OncaPrototypeStack(Stack):
             distribution_paths=[
                 "/index.html",
                 "/entry/index.html",
+                "/pricing.html",  # G5 (#113): the one public, unauthenticated page
                 # v2 multi-context dashboards (six clean routes + shared assets).
                 "/v2/admin/index.html",
                 "/v2/newentry/index.html",
