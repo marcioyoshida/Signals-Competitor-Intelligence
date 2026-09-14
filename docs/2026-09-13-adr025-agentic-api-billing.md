@@ -35,5 +35,28 @@ per-module; API access, where purchased, is metered.
   module with API access included (per the Storefront ADR's pricing shape) —
   Entry-tier tenants get no API access, consistent with ADR 024/015's
   near-zero-marginal-cost design point for that plane.
-- Not started: no code yet. This ADR records the design; implementation is a
-  separate pass.
+**SHIPPED + LIVE-VERIFIED 2026-09-14.** `src/dashboard/api_keys.py` (hashed
+key store, `onca-api-keys` + `tenant-index` GSI), `api_usage.py`
+(`onca-api-usage`, atomic per-cycle token counters), `agent_api.py`
+(`POST /api/v1/agent/ask`, API-key auth, reuses `agent_ask.answer`),
+`api_keys_api.py` (self-service `GET/POST /api/keys` +
+`POST /api/keys/revoke`, JWT-gated, tenant from the verified identity only).
+New panel in `site/v2/app/index.html` (list/create/revoke, usage-this-cycle,
+secret shown once). `bedrock_llm.converse()` gained an optional `usage_out`
+param. Deployed via `OncaPrototypeStack`. Live end-to-end proof: created a
+real key, called `/api/v1/agent/ask` through CloudFront and got a grounded
+answer with citations, confirmed `onca-api-usage` recorded 10,152 tokens and
+the key's `last_used_at` updated, revoked the key and confirmed the next
+call 401s. 22 new tests, 1183 total green.
+
+Deploy gotcha hit and fixed: this repo's Lambda asset is staged separately
+(`build/lambda/`, populated by `rsync -a --delete src/ build/lambda/src/`
+per `buildspec.yml`) — a `cdk deploy` alone does NOT pick up new `src/`
+files; the first deploy attempt 500'd with `ImportModuleError` until the
+staging step ran. Reusable lesson for any future direct (non-CI) deploy of
+this stack.
+
+Not yet built (follow-ups, not blocking the pilot): Storefront's Stripe
+metered line items + usage-reporting job (the ADR's still-open sub-decision
+on shared-table vs. poll-endpoint), and replicating this pattern to the
+other five forks.
