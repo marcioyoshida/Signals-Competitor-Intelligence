@@ -5,7 +5,8 @@ re-litigated from scratch, and so the two follow-on tickets have a shared ration
 point at.
 Relates to ADR 011 (entity discovery/enrichment — this is Stage 2 of that pipeline),
 ADR 018 (curation provenance — the fetch only ever proposes, never auto-creates), and
-issue #104 (#14 Stage 2).
+issue #104 (#14 Stage 2). Follow-on tickets: #123 (Empresas razão-social join), #124
+(Glue execution environment).
 
 ## Context
 
@@ -100,7 +101,7 @@ Why Glue Python Shell over the alternatives:
    so the existing Lambda consumer needs no change.
 
 Tracked as two issues (build here first, results feed the wider #14 discovery pipeline):
-the Empresas-join gap, and the Glue execution environment (steps 2-4 above).
+#123 (the Empresas-join gap) and #124 (the Glue execution environment, steps 2-4 above).
 
 ## Consequences & risks
 
