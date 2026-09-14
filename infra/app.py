@@ -788,7 +788,15 @@ class OncaPrototypeStack(Stack):
             )
 
         _client_kwargs = dict(
-            auth_flows=cognito.AuthFlow(user_srp=True),
+            # user_srp: the browser/dashboard login flow (PKCE Hosted UI + SRP).
+            # admin_user_password: ADDITIVE — enables AdminInitiateAuth with
+            # ADMIN_USER_PASSWORD_AUTH so a trusted server-side caller (e.g. the
+            # fleet-monitor health-check Lambda in a different AWS account/repo) can
+            # do a full username+password login round-trip without implementing SRP.
+            # Deliberately NOT user_password=True (the non-admin, broader flow) —
+            # AdminInitiateAuth already requires IAM credentials with
+            # cognito-idp:AdminInitiateAuth on this pool, so this stays admin-scoped.
+            auth_flows=cognito.AuthFlow(user_srp=True, admin_user_password=True),
             o_auth=cognito.OAuthSettings(
                 flows=cognito.OAuthFlows(authorization_code_grant=True),
                 scopes=[cognito.OAuthScope.OPENID, cognito.OAuthScope.EMAIL],
@@ -983,6 +991,39 @@ class OncaPrototypeStack(Stack):
                         name="custom:tier", value="saas"),
                 ],
             )
+
+        # One dedicated, low-privilege synthetic-monitoring user for the (separate,
+        # unrelated repo) fleet-monitor Lambda to exercise a full Cognito login
+        # round-trip on a schedule — proof the auth stack works end-to-end, not just
+        # that the pool exists. Entitled identically to the "acquiring" demo tenant
+        # (same tenant/tier shape) purely so a JWT-gated GET (e.g. /api/gaps) returns
+        # 200 instead of 403; it is never meant for real dashboard use. Same
+        # SUPPRESS/FORCE_CHANGE_PASSWORD pattern as the demo users above — a human
+        # with AWS console/CLI access sets a permanent password out-of-band via
+        # `aws cognito-idp admin-set-user-password ... --permanent` afterward. This
+        # stack must NEVER set or contain that password.
+        # NB the pool's sign_in_aliases=SignInAliases(email=True) with no `username=True`
+        # makes Cognito treat email as the USERNAME ATTRIBUTE (not just an alias), so
+        # Username must itself be a valid email string — the same reason every demo
+        # user above uses its email address as its username. Kept as
+        # "fleet-health-check@onca.example" rather than the bare slug for that reason.
+        cognito.CfnUserPoolUser(
+            self,
+            "OncaFleetHealthCheckUser",
+            user_pool_id=user_pool.user_pool_id,
+            username="fleet-health-check@onca.example",
+            message_action="SUPPRESS",
+            user_attributes=[
+                cognito.CfnUserPoolUser.AttributeTypeProperty(
+                    name="email", value="fleet-health-check@onca.example"),
+                cognito.CfnUserPoolUser.AttributeTypeProperty(
+                    name="email_verified", value="true"),
+                cognito.CfnUserPoolUser.AttributeTypeProperty(
+                    name="custom:tenant", value="acquiring"),
+                cognito.CfnUserPoolUser.AttributeTypeProperty(
+                    name="custom:tier", value="saas"),
+            ],
+        )
 
         # And a CloudWatch dashboard to watch pilot traffic at a glance.
         def _cf_metric(name: str, statistic: str) -> cloudwatch.Metric:
