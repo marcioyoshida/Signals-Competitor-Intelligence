@@ -7,6 +7,10 @@ the ingestion/synthesis code itself, not as a downstream filter.
 
 ## The person-graph guardrails
 
+This is live, not hypothetical: as of 2026-08-23, the person-graph has resolved 297
+officer/sócio nodes across 25 tracked entities (37 queued for analyst review), with
+zero full CPFs anywhere in the store.
+
 - **No full CPF, ever.** Only a **masked** CPF (`***XXXXXX**`) is read from source
   registries (e.g. Receita/QSA shareholder data), and the ingestion code
   (`operatives.py`) **re-masks defensively** on every read — a full CPF cannot be
@@ -23,6 +27,8 @@ the ingestion/synthesis code itself, not as a downstream filter.
   person — this lets Onça surface common-control clusters without ever
   reconstructing or storing the full CPF that would make the match "clean" in a
   privacy-invasive way.
+- **Nothing is auto-published.** Every person node and every common-control edge is
+  written with a `pending` status — a human vets it before it is asserted as fact.
 
 ## Defamation / accuracy discipline for sensitive claims
 
@@ -58,4 +64,15 @@ LGPD data-subject-request categories (correction, portability, erasure of person
 data) do not apply to the corpus in the way they would to a consumer product. Where
 a named individual's public-role information is wrong (e.g. a stale directorship),
 the correction path is the same as any other registry correction: through
-`OncaCurationLog`'s governed, provenance-tracked curation flow (ADR 018).
+`OncaCurationLog`'s governed, provenance-tracked curation flow (ADR 018). There is
+no dedicated DSAR (data-subject-request) intake form today — this is a designed
+gap, not a hidden one.
+
+## Verify this yourself
+
+- `grep -n "CPF" src/ingest/watchlist_qsa.py src/synth/operatives.py` — every
+  CPF-handling code path masks or drops, never stores full.
+- `grep -n "attribution_role\|NON_DISTRESS_SUBJECTS" src/synth/entity_registry.py src/synth/distress.py`
+  — the observer/subject-binding guardrails (issue #33).
+- `docs/2026-08-23-story-operatives-ingestion.md` — the live person-graph numbers
+  above.
