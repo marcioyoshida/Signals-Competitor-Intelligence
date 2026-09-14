@@ -27,8 +27,15 @@ def converse(
     model_id: str | None = None,
     system: str | None = None,
     max_tokens: int = 800,
+    usage_out: dict[str, int] | None = None,
 ) -> str | None:
-    """Return assistant text or None if Bedrock is unavailable/denied."""
+    """Return assistant text or None if Bedrock is unavailable/denied.
+
+    ``usage_out``, if given, is filled in-place with ``input_tokens``/
+    ``output_tokens`` from the Converse response — the Agentic API billing
+    metering path (ADR, storefront/docs/adr-agentic-api-billing.md) reads
+    this to record per-call token usage without changing the return
+    contract every other caller relies on (text-only)."""
     model_id = model_id or DEFAULT_SYNTH_MODEL
     try:
         client = boto3.client("bedrock-runtime")
@@ -45,6 +52,10 @@ def converse(
         if system:
             kwargs["system"] = [{"text": system}]
         resp = client.converse(**kwargs)
+        if usage_out is not None:
+            usage = resp.get("usage") or {}
+            usage_out["input_tokens"] = int(usage.get("inputTokens") or 0)
+            usage_out["output_tokens"] = int(usage.get("outputTokens") or 0)
         parts = resp.get("output", {}).get("message", {}).get("content") or []
         texts = [p.get("text") for p in parts if p.get("text")]
         return "\n".join(texts).strip() or None

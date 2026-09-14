@@ -462,6 +462,12 @@ details.fold.chg > summary { padding: var(--s2) var(--s3); font-size: var(--fs-m
 .kv dt { color: var(--muted); }
 .kv dd { margin: 0; overflow-wrap: anywhere; }
 .callout { border: 1px solid var(--border); border-radius: var(--r-md); padding: var(--s3); font-size: var(--fs-sm); line-height: 1.5; background: var(--surface-2); }
+
+/* Simple data table (API keys panel, ADR: storefront/docs/adr-agentic-api-billing.md). */
+.tbl { border-collapse: collapse; font-size: var(--fs-sm); }
+.tbl th, .tbl td { text-align: left; padding: 6px var(--s2); border-bottom: 1px solid var(--border); }
+.tbl th { color: var(--muted); font-weight: 500; font-size: var(--fs-micro); text-transform: uppercase; letter-spacing: .02em; }
+.tbl tr:last-child td { border-bottom: 0; }
 .callout--warn { border-color: color-mix(in srgb, var(--t-high) 45%, transparent); background: var(--t-high-fill); }
 
 /* ============================ responsive =============================== */

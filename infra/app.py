@@ -164,6 +164,41 @@ class OncaPrototypeStack(Stack):
         )
         CfnOutput(self, "TenantConfigTable", value=tenant_config_table.table_name)
 
+        # Agentic API keys (ADR: storefront/docs/adr-agentic-api-billing.md, pilot
+        # docs/2026-09-13-adr025-adr025-agentic-api-billing.md). PK is the sha256 of the
+        # raw secret — the secret itself is never stored. GSI lets the tenant's own
+        # admin panel list/revoke its keys without a table scan.
+        api_keys_table = dynamodb.Table(
+            self,
+            "OncaApiKeysTable",
+            table_name="onca-api-keys",
+            partition_key=dynamodb.Attribute(name="key_hash", type=dynamodb.AttributeType.STRING),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.RETAIN,
+            point_in_time_recovery_specification=dynamodb.PointInTimeRecoverySpecification(
+                point_in_time_recovery_enabled=True
+            ),
+        )
+        api_keys_table.add_global_secondary_index(
+            index_name="tenant-index",
+            partition_key=dynamodb.Attribute(name="tenant_id", type=dynamodb.AttributeType.STRING),
+            sort_key=dynamodb.Attribute(name="key_id", type=dynamodb.AttributeType.STRING),
+        )
+        CfnOutput(self, "ApiKeysTable", value=api_keys_table.table_name)
+
+        # Agentic API per-tenant, per-billing-cycle token usage — the metering input
+        # Storefront's Stripe usage-reporting job reads (ADR, same doc as above).
+        api_usage_table = dynamodb.Table(
+            self,
+            "OncaApiUsageTable",
+            table_name="onca-api-usage",
+            partition_key=dynamodb.Attribute(name="tenant_id", type=dynamodb.AttributeType.STRING),
+            sort_key=dynamodb.Attribute(name="period", type=dynamodb.AttributeType.STRING),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.RETAIN,
+        )
+        CfnOutput(self, "ApiUsageTable", value=api_usage_table.table_name)
+
         # ADR 018 Phase 1b — append-only curation mutation journal (audit + rollback).
         # Separate table so it never bloats the entity scans; the registry writers below
         # get ONCA_CURATION_LOG_TABLE + write access.
@@ -1908,6 +1943,67 @@ class OncaPrototypeStack(Stack):
         # no longer needs a public function URL. Its ONCA_ORIGIN_SECRET env stays as a
         # fail-closed backstop (nothing injects X-Onca-Origin on this path, so the
         # dual-gate requires a verified identity).
+
+        # Agentic API (ADR: storefront/docs/adr-agentic-api-billing.md) — a paying
+        # tenant's own bots/agents call THIS Lambda with a per-tenant API key
+        # (Authorization: Bearer sk_onca_...), never a Cognito JWT. Auth is entirely
+        # in-code (api_keys.lookup_key) — no HTTP API authorizer on its route below,
+        # since the credential isn't a JWT. Reuses agent_ask.answer, so it needs the
+        # same feed/KB/Bedrock access as OncaAgent, plus the two new key/usage tables.
+        agent_api_fn = lambda_.Function(
+            self,
+            "OncaAgentApi",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.dashboard.agent_api.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.seconds(60),
+            memory_size=512,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_SITE_BUCKET": site_bucket.bucket_name,
+                "ONCA_KB_ID": knowledge_base.attr_knowledge_base_id,
+                "ONCA_SYNTH_MODEL_ID": os.environ.get("ONCA_SYNTH_MODEL_ID", "amazon.nova-lite-v1:0"),
+                "ONCA_TENANT_CONFIG_TABLE": tenant_config_table.table_name,
+                "ONCA_API_KEYS_TABLE": api_keys_table.table_name,
+                "ONCA_API_USAGE_TABLE": api_usage_table.table_name,
+            },
+        )
+        site_bucket.grant_read(agent_api_fn)
+        tenant_config_table.grant_read_data(agent_api_fn)
+        api_keys_table.grant_read_write_data(agent_api_fn)  # lookup (read) + touch_last_used (write)
+        api_usage_table.grant_write_data(agent_api_fn)  # record_usage (ADD)
+        agent_api_fn.add_to_role_policy(
+            iam.PolicyStatement(actions=["bedrock:Retrieve"], resources=[knowledge_base.attr_knowledge_base_arn])
+        )
+        agent_api_fn.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["bedrock:InvokeModel", "bedrock:Converse"],
+                resources=[
+                    f"arn:aws:bedrock:{self.region}::foundation-model/*",
+                    f"arn:aws:bedrock:{self.region}:{self.account}:inference-profile/*",
+                ],
+            )
+        )
+
+        # Agentic API key admin (self-service): a tenant's own logged-in user manages
+        # ONLY its own tenant's keys — gated by the SAME Cognito-JWT authorizer as
+        # /api/ask, tenant resolved from the verified identity, never the request.
+        api_keys_admin_fn = lambda_.Function(
+            self,
+            "OncaApiKeysAdmin",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.dashboard.api_keys_api.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.seconds(30),
+            memory_size=256,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_API_KEYS_TABLE": api_keys_table.table_name,
+                "ONCA_API_USAGE_TABLE": api_usage_table.table_name,
+            },
+        )
+        api_keys_table.grant_read_write_data(api_keys_admin_fn)  # list/create/revoke
+        api_usage_table.grant_read_data(api_keys_admin_fn)  # usage-this-cycle display
         # Coverage-gap API (ADR-014): the "Pontos Cegos" dashboard surface + the
         # Remediar button (single-gap remediation: triage → safe backfill → re-ask
         # the agent → resolve). Needs the union of the agent's + registry's access
@@ -2049,6 +2145,30 @@ class OncaPrototypeStack(Stack):
                 authorizer=jwt_authorizer,
             )
 
+        # /api/v1/agent/ask — the Agentic API. Deliberately NO `authorizer=` here: the
+        # credential is a per-tenant API key checked in-code (agent_api.py), not a
+        # Cognito JWT, so the HttpJwtAuthorizer would reject every legitimate caller.
+        auth_api.add_routes(
+            path="/api/v1/agent/ask",
+            methods=[apigwv2.HttpMethod.POST],
+            integration=apigwv2_int.HttpLambdaIntegration("AgentApiInteg", agent_api_fn),
+        )
+        # /api/keys[/revoke] — tenant self-service key management, JWT-gated same as
+        # /api/ask (registry_api's elevated-operator check does NOT apply here).
+        _keys_integ = apigwv2_int.HttpLambdaIntegration("ApiKeysInteg", api_keys_admin_fn)
+        auth_api.add_routes(
+            path="/api/keys",
+            methods=[apigwv2.HttpMethod.GET, apigwv2.HttpMethod.POST],
+            integration=_keys_integ,
+            authorizer=jwt_authorizer,
+        )
+        auth_api.add_routes(
+            path="/api/keys/revoke",
+            methods=[apigwv2.HttpMethod.POST],
+            integration=_keys_integ,
+            authorizer=jwt_authorizer,
+        )
+
         CfnOutput(self, "AuthApiUrl", value=auth_api.api_endpoint)
 
         # Cut over /api/ask to the JWT-verified HTTP API, SAME ORIGIN via CloudFront.
@@ -2070,7 +2190,8 @@ class OncaPrototypeStack(Stack):
         # NB `/api/registry*` must stay ahead of the `/api/*` catch-all registered
         # below — CloudFront matches behaviors by INSERTION ORDER, not specificity, so
         # losing this position would silently route curation calls to the review action.
-        for _pat in ("/api/ask*", "/api/gaps*", "/api/feed*", "/api/registry*"):
+        for _pat in ("/api/ask*", "/api/gaps*", "/api/feed*", "/api/registry*",
+                     "/api/v1/agent*", "/api/keys*"):
             distribution.add_behavior(
                 _pat,
                 _api_origin,

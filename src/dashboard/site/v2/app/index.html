@@ -42,6 +42,20 @@
 
   <!-- The profile-selected industry dashboard renders here. -->
   <div id="dash"></div>
+
+  <!-- Agentic API key management (ADR: storefront/docs/adr-agentic-api-billing.md,
+       pilot docs/2026-09-13-adr025-agentic-api-billing.md). Self-service: a logged-in
+       tenant manages ONLY its own keys. Hidden entirely in curator preview (?admin=1),
+       which has no real tenant to hold keys for. -->
+  <section class="band" id="apiBand" style="display:none">
+    <div class="band-hd"><span class="overline">API para agentes</span><span class="rule"></span>
+      <span class="badge badge--ghost">chaves de acesso programático</span></div>
+    <div class="panel panel--lead">
+      <div class="panel__hd"><h2>Chaves de API</h2><span class="spacer"></span>
+        <span class="hd-note" id="apiUsageNote">—</span></div>
+      <div class="panel__bd" id="apiKeysBody"></div>
+    </div>
+  </section>
 </main>
 
 <div class="scrim" id="scrim"></div>
@@ -117,6 +131,86 @@
     window.DATA = res.data; Ctx.setData(window.DATA); Ctx.setAsOf(window.DATA);
     LICENSED = Ind.licensedIndustries(window.DATA);
     renderActive();
+    loadApiKeys();
+  }
+
+  // ===================== Agentic API key panel =====================
+  // Self-service only for a real logged-in tenant — never shown in curator
+  // preview (?admin=1 has no tenant of its own to hold keys for).
+  function fmtDateTime(iso) {
+    if (!iso) return "nunca";
+    try { return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }); }
+    catch (e) { return iso; }
+  }
+
+  function renderApiKeys(data) {
+    const body = document.getElementById("apiKeysBody");
+    const usage = data.usage || {};
+    document.getElementById("apiUsageNote").textContent =
+      `${(usage.tokens_used || 0).toLocaleString("pt-BR")} tokens · ${usage.calls || 0} chamadas · ciclo ${usage.period || "—"}`;
+    const rows = (data.keys || []).map((k) => `
+      <tr>
+        <td>${U.esc(k.label)}</td>
+        <td class="sub">${U.esc(k.prefix)}…</td>
+        <td>${(k.scopes || []).map(U.esc).join(", ")}</td>
+        <td class="sub">${k.status === "active" ? "ativa" : "revogada"}</td>
+        <td class="sub">${fmtDateTime(k.last_used_at)}</td>
+        <td>${k.status === "active"
+          ? `<button class="btn btn--sm btn--reject" data-revoke="${U.esc(k.key_id)}">Revogar</button>` : ""}</td>
+      </tr>`).join("");
+    body.innerHTML = `
+      <table class="tbl" style="width:100%;margin-bottom:var(--s4)">
+        <thead><tr><th>Nome</th><th>Prefixo</th><th>Escopos</th><th>Status</th><th>Último uso</th><th></th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="6" class="sub">Nenhuma chave criada ainda.</td></tr>'}</tbody>
+      </table>
+      <div id="apiKeyNewSecret"></div>
+      <form id="apiKeyForm" style="display:flex;gap:var(--s2);align-items:center;flex-wrap:wrap">
+        <input class="field" id="apiKeyLabel" placeholder="Nome da chave (ex: agente de produção)" style="flex:1;min-width:220px" required>
+        <button class="btn btn--primary btn--sm" type="submit">Nova chave</button>
+      </form>`;
+    document.getElementById("apiKeyForm").addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const label = document.getElementById("apiKeyLabel").value.trim();
+      if (!label) return;
+      try {
+        const r = await fetch("/api/keys", { method: "POST",
+          headers: { "content-type": "application/json", authorization: `Bearer ${Ctx.getIdToken()}` },
+          body: JSON.stringify({ label, scopes: ["ask"] }) });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error || ("HTTP " + r.status));
+        document.getElementById("apiKeyNewSecret").innerHTML =
+          `<div class="empty" style="text-align:left"><div class="em-t">Chave criada — copie agora, ela não será exibida novamente</div>
+            <div class="em-d"><code style="user-select:all">${U.esc(j.secret)}</code></div></div>`;
+        loadApiKeys();
+      } catch (e) {
+        document.getElementById("apiKeyNewSecret").innerHTML =
+          `<div class="empty"><div class="em-t">Falha ao criar chave</div><div class="em-d">${U.esc(e.message)}</div></div>`;
+      }
+    });
+    body.querySelectorAll("[data-revoke]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        if (!confirm("Revogar esta chave? Qualquer agente usando-a perderá acesso imediatamente.")) return;
+        await fetch("/api/keys/revoke", { method: "POST",
+          headers: { "content-type": "application/json", authorization: `Bearer ${Ctx.getIdToken()}` },
+          body: JSON.stringify({ key_id: btn.dataset.revoke }) });
+        loadApiKeys();
+      });
+    });
+  }
+
+  async function loadApiKeys() {
+    const band = document.getElementById("apiBand");
+    if (ADMIN || !Ctx.isLoggedIn()) { band.style.display = "none"; return; }
+    band.style.display = "";
+    try {
+      const r = await fetch("/api/keys", { cache: "no-store",
+        headers: { authorization: `Bearer ${Ctx.getIdToken()}` } });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      renderApiKeys(await r.json());
+    } catch (e) {
+      document.getElementById("apiKeysBody").innerHTML =
+        `<div class="empty"><div class="em-t">Não foi possível carregar as chaves de API</div></div>`;
+    }
   }
 
   async function boot() {
