@@ -96,11 +96,14 @@
       // Operator (basic-auth) preview: the FULL feed; the nav lists EVERY industry and each
       // tab renders that industry's tenant-scoped slice.
       document.getElementById("authBox").innerHTML = '<span class="sub">curadoria</span>';
+      // #122: the shared basic-auth password alone must not unlock the full, every-
+      // tenant feed — a second operator secret is required (?opkey= on this URL).
+      const opkey = new URLSearchParams(location.search).get("opkey") || "";
       try {
-        const r = await fetch("/feed.json", { cache: "no-store" });
+        const r = await fetch(`/feed.json?opkey=${encodeURIComponent(opkey)}`, { cache: "no-store" });
         if (!r.ok) throw new Error("HTTP " + r.status);
         window.DATA = await r.json();
-      } catch (e) { Ctx.mountGate(dash, "feed.json indisponível", "curadoria"); return; }
+      } catch (e) { Ctx.mountGate(dash, "feed.json indisponível (verifique ?opkey=)", "curadoria"); return; }
       Ctx.setData(window.DATA); Ctx.setAsOf(window.DATA);
       LICENSED = (window.DATA.industries || []).map((i) => String(i.slug || i).toLowerCase());
       renderActive();

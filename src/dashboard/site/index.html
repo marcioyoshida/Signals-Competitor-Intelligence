@@ -834,17 +834,24 @@ async function loadFeed(initial) {
   try {
     let loaded = null;
     // Per-tenant scoped feed (issue #48): a logged-in provisioned tenant gets ONLY its
-    // licensed modules (server-authoritative). 403 = operator/unprovisioned -> full feed.
+    // licensed modules (server-authoritative).
     const token = getIdToken();
     if (token) {
       try {
         const rs = await fetch("/api/feed", { cache: "no-store",
           headers: { authorization: `Bearer ${token}` } });
         if (rs.ok) loaded = await rs.json();
-      } catch (_) { /* fall back to the static feed */ }
+      } catch (_) { /* fall back below */ }
     }
+    // #122: the raw feed.json is the FULL, unscoped, every-tenant corpus — it must
+    // never be reachable by anyone who merely knows the shared basic-auth password
+    // (that includes every tenant). It requires a second, operator-only secret
+    // (?opkey=, set by whoever bookmarks the operator URL); without one, an
+    // unprovisioned/logged-out visitor gets an honest empty state, not the full feed.
     if (!loaded) {
-      const r = await fetch("feed.json", { cache: "no-store" });
+      const opkey = new URLSearchParams(location.search).get("opkey");
+      if (!opkey) throw new Error("sem acesso — faça login ou use o link de operador");
+      const r = await fetch(`feed.json?opkey=${encodeURIComponent(opkey)}`, { cache: "no-store" });
       if (!r.ok) throw new Error(r.status);
       loaded = await r.json();
     }

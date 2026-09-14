@@ -49,6 +49,7 @@ WATCHLIST_CONFIG = REPO_ROOT / "config" / "watchlist.yaml"
 # no ONCA_DASH_* env vars silently resets the password to the default.
 DASH_USER_PARAM = "/onca/dashboard/basic-auth-user"
 DASH_PASS_PARAM = "/onca/dashboard/basic-auth-pass"
+OPERATOR_SECRET_PARAM = "/onca/dashboard/operator-secret"
 
 
 def dashboard_credentials() -> tuple[str, str]:
@@ -80,6 +81,32 @@ def dashboard_credentials() -> tuple[str, str]:
         pw = "warroom"  # prototype default — set the SSM param before real use
         print("WARNING: dashboard password not in env or SSM; using default 'warroom'")
     return user, pw
+
+
+def operator_secret() -> str:
+    """Resolve the operator-only secret at synth time (baked into the CloudFront
+    Function literal, same pattern as dashboard_credentials()).
+
+    #122: the shared tenant basic-auth password is not an operator credential — every
+    SaaS tenant needs it just to reach the Cognito login screen, so it must never be
+    sufficient on its own to read the full, unscoped feed.json. This is a SECOND,
+    narrower secret known only to the operator, required in addition to basic-auth for
+    the one raw-feed path curation tooling (?admin=1) still needs.
+    """
+    secret = os.environ.get("ONCA_OPERATOR_SECRET")
+    if not secret:
+        try:
+            import boto3
+
+            secret = boto3.client("ssm").get_parameter(
+                Name=OPERATOR_SECRET_PARAM, WithDecryption=True
+            )["Parameter"]["Value"]
+        except Exception as exc:  # pragma: no cover - param missing / no creds
+            print(f"WARNING: operator secret not read from SSM ({OPERATOR_SECRET_PARAM}): {exc}")
+    if not secret:
+        secret = "onca-operator-v1"  # prototype default — set the SSM param before real use
+        print("WARNING: operator secret not in env or SSM; using an insecure default")
+    return secret
 
 
 class OncaPrototypeStack(Stack):
@@ -609,6 +636,20 @@ class OncaPrototypeStack(Stack):
                 "  if (!h.authorization || h.authorization.value !== expected) {\n"
                 "    return { statusCode: 401, statusDescription: 'Unauthorized',\n"
                 "      headers: { 'www-authenticate': { value: 'Basic realm=\"Onca Warroom\"' } } };\n"
+                "  }\n"
+                "  // #122: the shared tenant basic-auth password above is NOT an operator\n"
+                "  // credential — every SaaS tenant needs it just to reach the Cognito login\n"
+                "  // screen, so it must never be sufficient on its own to read the full,\n"
+                "  // unscoped feed.json (every tenant's data, not just the caller's own). A\n"
+                "  // second, narrower secret is required for this one path; curation tooling\n"
+                "  // (?admin=1) passes it as ?opkey=. feed.entry.json is NOT gated here — it is\n"
+                "  // the deliberately shared, entry-tier-only slice the Entry Portal design\n"
+                "  // already intends to be public within basic-auth (ADR 016).\n"
+                '  if (key === "/feed.json") {\n'
+                "    var q = r.querystring || {};\n"
+                f'    if (!q.opkey || q.opkey.value !== "{operator_secret()}") {{\n'
+                "      return { statusCode: 403, statusDescription: 'Forbidden' };\n"
+                "    }\n"
                 "  }\n"
                 "  return r;\n"
                 "}\n"

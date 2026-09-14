@@ -395,13 +395,15 @@ async function loadFeed() {
   const admin = new URLSearchParams(location.search).get("admin") === "1";
   if (admin) {
     // Operator/curator preview (SAME bypass convention as /app?admin=1): every industry,
-    // from the full feed — still behind the shared basic-auth edge, not a new hole.
+    // from the full feed. #122: the shared basic-auth password is NOT an operator
+    // credential (every tenant has it too) — a second secret is required (?opkey=).
+    const opkey = new URLSearchParams(location.search).get("opkey") || "";
     try {
-      DATA = await fetch("/feed.json", { cache: "no-store" }).then(r => r.json());
+      DATA = await fetch(`/feed.json?opkey=${encodeURIComponent(opkey)}`, { cache: "no-store" }).then(r => r.json());
       LICENSED = (DATA.industries || []).map(i => String(i.slug || i).toLowerCase());
       boot();
     } catch (e) {
-      document.getElementById("board").innerHTML = U.empty("Feed indisponível", "Não foi possível carregar feed.json.", "!");
+      document.getElementById("board").innerHTML = U.empty("Feed indisponível", "Não foi possível carregar feed.json (verifique ?opkey=).", "!");
       console.error(e);
     }
     return;

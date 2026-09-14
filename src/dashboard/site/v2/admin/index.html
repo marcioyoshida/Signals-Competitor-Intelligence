@@ -180,9 +180,13 @@ OncaAsk.mount(document.getElementById("askBody"), {
   },
 });
 
-fetch("/feed.json").then(r => r.json()).then(d => { DATA = d; boot(); })
+// #122: feed.json is the full, unscoped, every-tenant corpus — curation needs it,
+// but the shared tenant basic-auth password alone must not unlock it. Bookmark this
+// page with ?opkey=<operator secret>.
+const opkey = new URLSearchParams(location.search).get("opkey") || "";
+fetch(`/feed.json?opkey=${encodeURIComponent(opkey)}`).then(r => r.json()).then(d => { DATA = d; boot(); })
   .catch(e => { document.getElementById("queue").innerHTML =
-    U.empty("Feed indisponível", "Não foi possível carregar feed.json.", "!"); console.error(e); });
+    U.empty("Feed indisponível", "Não foi possível carregar feed.json (verifique ?opkey=).", "!"); console.error(e); });
 
 function boot() {
   const asof = DATA.as_of ? `dados de ${U.fmtDate(DATA.as_of)}` : "";
