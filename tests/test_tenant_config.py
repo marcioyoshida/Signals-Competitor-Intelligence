@@ -208,6 +208,32 @@ def test_map_federated_email_rejects_blank_email():
         tc.map_federated_email("   ", "acme", "saas", table=t)
 
 
+def test_self_register_entry_tenant_creates_scoped_tenant_and_federated_mapping():
+    t, ft = _FakeTable(), _FakeFederatedTable()
+    cfg = tc.self_register_entry_tenant(
+        "New.User@Example.com", ["Crypto", "betting", "not-a-real-industry"],
+        table=t, federated_table=ft)
+    assert cfg["tier"] == "entry"
+    assert cfg["modules"] == ["betting", "crypto"]  # unknown industry silently dropped
+    assert cfg["tenant_id"].startswith("entry-new-user-")
+    assert t.items[cfg["tenant_id"]] == cfg
+    assert ft.items["new.user@example.com"] == {
+        "email": "new.user@example.com", "tenant_id": cfg["tenant_id"], "tier": "entry"}
+
+
+def test_self_register_entry_tenant_rejects_no_valid_industries():
+    t, ft = _FakeTable(), _FakeFederatedTable()
+    with pytest.raises(ValueError, match="pick at least one"):
+        tc.self_register_entry_tenant("a@b.com", ["banking"], table=t, federated_table=ft)
+    with pytest.raises(ValueError, match="pick at least one"):
+        tc.self_register_entry_tenant("a@b.com", [], table=t, federated_table=ft)
+
+
+def test_self_register_entry_tenant_rejects_blank_email():
+    with pytest.raises(ValueError, match="email is required"):
+        tc.self_register_entry_tenant("  ", ["crypto"], table=_FakeTable(), federated_table=_FakeFederatedTable())
+
+
 def test_scope_cards_to_modules_read_boundary():
     feed = {"entity_attrs": {
         "itau": {"industries": ["banking"]},

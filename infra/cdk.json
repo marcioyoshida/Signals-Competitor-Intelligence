@@ -5,6 +5,7 @@
     "exclude": ["README.md", "cdk*.json", "**/__pycache__", "**/*.pyc"]
   },
   "context": {
-    "@aws-cdk/core:bootstrapQualifier": "hnb659fds"
+    "@aws-cdk/core:bootstrapQualifier": "hnb659fds",
+    "google_client_id": "1053992821922-8j5rtck0ttjfn1s3g7cp09a6964ktpbp.apps.googleusercontent.com"
   }
 }

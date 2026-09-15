@@ -2250,6 +2250,36 @@ class OncaPrototypeStack(Stack):
             integration=apigwv2_int.HttpLambdaIntegration("FeedInteg", feed_api_fn),
             authorizer=jwt_authorizer,
         )
+        # POST /api/register — lazy Entry-tier self-registration for a first-time
+        # Google login (see docs/google-oauth-runbook.md, src.dashboard.self_register).
+        # Only exists once Google is wired: a password-only pool has no self-sign-up
+        # (self_sign_up_enabled=False), so there's no path to an authenticated-but-
+        # unprovisioned identity without it, and this Lambda needs federated_map_table,
+        # which itself only exists inside the `if google_idp:` block above.
+        if google_idp:
+            self_register_fn = lambda_.Function(
+                self,
+                "OncaSelfRegisterFn",
+                runtime=lambda_.Runtime.PYTHON_3_11,
+                handler="src.dashboard.self_register.lambda_handler",
+                code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+                timeout=Duration.seconds(10),
+                memory_size=256,
+                environment={
+                    "PYTHONPATH": "/var/task",
+                    "ONCA_TENANT_CONFIG_TABLE": tenant_config_table.table_name,
+                    "ONCA_FEDERATED_MAP_TABLE": federated_map_table.table_name,
+                },
+            )
+            tenant_config_table.grant_read_write_data(self_register_fn)
+            federated_map_table.grant_write_data(self_register_fn)
+            auth_api.add_routes(
+                path="/api/register",
+                methods=[apigwv2.HttpMethod.POST],
+                integration=apigwv2_int.HttpLambdaIntegration(
+                    "SelfRegisterInteg", self_register_fn),
+                authorizer=jwt_authorizer,
+            )
         # /api/registry/* — the operator control plane over the registry, cut over from
         # shared basic-auth to a verified JWT (2026-09-11). The authorizer only proves
         # WHO is calling; registry_api.py separately requires an ELEVATED claim, so an
@@ -2308,8 +2338,11 @@ class OncaPrototypeStack(Stack):
         # NB `/api/registry*` must stay ahead of the `/api/*` catch-all registered
         # below — CloudFront matches behaviors by INSERTION ORDER, not specificity, so
         # losing this position would silently route curation calls to the review action.
-        for _pat in ("/api/ask*", "/api/gaps*", "/api/feed*", "/api/registry*",
-                     "/api/v1/agent*", "/api/keys*"):
+        _api_patterns = ["/api/ask*", "/api/gaps*", "/api/feed*", "/api/registry*",
+                          "/api/v1/agent*", "/api/keys*"]
+        if google_idp:
+            _api_patterns.append("/api/register*")
+        for _pat in _api_patterns:
             distribution.add_behavior(
                 _pat,
                 _api_origin,

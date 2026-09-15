@@ -9,13 +9,25 @@ identical in this codebase (same Cognito user pool shape: `custom:tenant` immuta
 ## The one real difference from Bluefin
 
 Bluefin is a self-serve consumer product — a first Google login auto-provisions a Free
-tenant. **Onça does not do this.** Tenants are operator-provisioned; a Google login only
-works for an email the operator has already mapped to a tenant via
-`tenant_config.map_federated_email` (wired into `scripts/provision_tenant.py --google-email`).
-An unmapped email is not rejected at login — the trigger just issues a token with no
-`custom:tenant` claim, and the existing per-tenant read boundary (`feed_api.py`) 403s on that
-exactly the way it already does for an unprovisioned password user. Google login here is pure
-SSO convenience for an already-invited person, never a signup path.
+tenant. **Onça mostly does not do this** — with one deliberate, narrow exception added
+2026-09-15. Most tenants are operator-provisioned; a Google login for an email the operator
+has already mapped via `tenant_config.map_federated_email`
+(`scripts/provision_tenant.py --google-email`) resolves to that tenant's real tier
+(entry/saas/sovereign) and modules. An unmapped email is not rejected at login — the trigger
+just issues a token with no `custom:tenant` claim, and the existing per-tenant read boundary
+(`feed_api.py`) 403s on that, rendering a gate instead of the dashboard.
+
+**The exception**: that gate, for a federated (Google) login specifically, offers lazy
+Entry-tier self-registration — `POST /api/register` (`src/dashboard/self_register.py`,
+`tenant_config.self_register_entry_tenant`). The person picks which entry-tier industries
+they want (agri-funds/betting/consorcio/crypto/real-estate-funds — the same
+`ENTRY_INDUSTRIES` allow-list ADR 016's Entry Portal already enforces), and the endpoint
+creates a brand-new `entry`-tier tenant scoped to EXACTLY that pick, then maps their email to
+it. This is still not Bluefin's model: it can never grant anything above the entry tier
+(server-side allow-list, not client-trusted), the tenant_id is always freshly allocated
+(never caller-supplied, so it can't attach to or overwrite an existing tenant), and a
+password-login user gets no such option (`self_sign_up_enabled=False` still holds — only a
+Google login can even reach the authenticated-but-unprovisioned state this depends on).
 
 ## What's live (once wired)
 
@@ -89,6 +101,27 @@ wherever the frontend builds its authorize-URL scope string — Bluefin found li
 OAuth-flow token is scope-restricted to exactly what's requested at `/oauth2/authorize`, unlike
 a native `InitiateAuth` password-login token, which isn't gated the same way.
 
+### 4. `-c google_client_id=...` MUST be persisted in `infra/cdk.json`, not passed ad hoc
+
+Confirmed live 2026-09-15, the hard way: the first deploy that wired Google passed
+`google_client_id` only as a one-off `-c` CLI flag, never committed anywhere. ~40 minutes
+later, an unrelated `cdk deploy` from a different session (no special knowledge of Google
+needed — any ordinary deploy of this stack does it) ran WITHOUT that flag. Because
+`google_idp` is a plain `if self.node.try_get_context("google_client_id"):` gate, that
+deploy's synthesized template simply didn't have the Google branch — and CloudFormation,
+seeing a template that no longer asks for `OncaGoogleIdp`/`OncaPreTokenGenFn`/the trigger/the
+client's `Google` entry in `SupportedIdentityProviders`, correctly DELETED all of them. Login
+kept working for password users throughout; "Continue with Google" silently vanished with no
+error anywhere, for however long until the flag was passed again.
+
+**The fix, already applied**: `google_client_id` is a real value (a Google OAuth client ID,
+not a secret — the secret half lives only in Secrets Manager) committed in
+`infra/cdk.json`'s `context` block. Every `cdk deploy`/`cdk diff`/`cdk synth` against this
+stack — from ANY session, with or without an explicit `-c` flag — now picks it up
+automatically, so an ordinary deploy of an unrelated change can no longer silently un-wire
+Google login. If this client ID is ever rotated, update it in `infra/cdk.json`, not just on
+the command line, or this will happen again.
+
 ### Two-node circular dependency: a Cognito-trigger Lambda referencing its own pool's ID
 
 Specific to any future Cognito trigger, not just this one: `user_pool.add_trigger(...)` makes
@@ -129,6 +162,11 @@ human with access to it:
    ```
 
 ## Known gaps (not bugs, just not done)
+
+- **No operator notification on self-registration.** `POST /api/register` creates a real
+  `entry`-tier tenant with no alert to anyone — the only way to see who self-registered today
+  is `provision_tenant.py list` / scanning `onca-tenant-config` for `entry-<local>-<hex>`
+  tenant_ids. A future increment could post to Slack/email on each self-registration.
 
 - **No cross-login-method joining.** A person with both a password account and a Google-mapped
   email for the same tenant gets two separate Cognito users (a real limitation Cognito itself

@@ -66,7 +66,23 @@
     const t = getIdToken(); if (!t) return false;
     const p = decodeJwt(t); return !!(p && p.exp && p.exp * 1000 > Date.now());
   }
-  async function login() {
+  // A federated (Google) login carries an `identities` claim on the ID token; a
+  // native Cognito password login never does. Used to decide whether an
+  // authenticated-but-unprovisioned identity gets the self-registration form
+  // (Google) or the "talk to us" gate (password — never self-serve, ADR 016).
+  function isFederated() {
+    if (!isLoggedIn()) return false;
+    const p = decodeJwt(getIdToken()) || {};
+    return !!p.identities;
+  }
+  // `idp`, when a string (e.g. "Google"), skips Cognito's own hosted chooser page
+  // and goes straight to that identity provider (`identity_provider=` on
+  // /oauth2/authorize) — used after self-registration to silently re-auth through
+  // Google (session cookie already live) rather than showing the chooser again.
+  // Guarded with typeof because this function is also wired directly as an
+  // onclick handler, which would otherwise pass the click MouseEvent as `idp`.
+  async function login(idp) {
+    const useIdp = typeof idp === "string" ? idp : null;
     const verifier = randomPkceVerifier();
     sessionStorage.setItem(VERIFIER_KEY, verifier);
     const challenge = await pkceChallenge(verifier);
@@ -74,7 +90,9 @@
       client_id: AUTH.clientId, response_type: "code", scope: "openid email",
       redirect_uri: AUTH.redirectUri, code_challenge: challenge, code_challenge_method: "S256",
     });
-    location.href = `${AUTH.domain}/login?${params.toString()}`;
+    if (useIdp) params.set("identity_provider", useIdp);
+    const path = useIdp ? "oauth2/authorize" : "login";
+    location.href = `${AUTH.domain}/${path}?${params.toString()}`;
   }
   function logout() {
     try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) {}
@@ -163,6 +181,31 @@
     } catch (e) { return { error: "falha de rede ao carregar o feed" }; }
   }
 
+  // Mirrors tenant_config.ENTRY_INDUSTRIES (Python is the source of truth; the
+  // server rejects anything outside this set regardless of what's picked here —
+  // same duplication convention infra/app.py's _INDUSTRY_GROUPS already uses).
+  const ENTRY_INDUSTRIES = ["agri-funds", "betting", "consorcio", "crypto", "real-estate-funds"];
+
+  // Lazy Entry-tier self-registration (see docs/google-oauth-runbook.md): the one
+  // user-initiated write that turns an authenticated-but-unprovisioned Google
+  // login into a real (entry-tier) tenant. After it succeeds the CURRENT id token
+  // still has no custom:tenant claim (lambda_pretoken.py only resolves it at the
+  // NEXT token issuance) — silently re-auth straight through Google (no chooser
+  // page) to pick up a fresh token that carries it.
+  async function completeRegistration(industries) {
+    const r = await fetch("/api/register", {
+      method: "POST",
+      headers: { authorization: `Bearer ${getIdToken()}`, "content-type": "application/json" },
+      body: JSON.stringify({ industries }),
+    });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      throw new Error(j.error || ("HTTP " + r.status));
+    }
+    try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) {}
+    await login("Google");
+  }
+
   // A full-panel login/no-access gate (honest, never a silent empty grid).
   function gateHTML(kind, ctxLabel) {
     if (kind === "needAuth") {
@@ -172,6 +215,18 @@
         <div style="margin-top:var(--s3)"><button class="btn btn--primary" id="__gateLogin">Entrar</button></div></div>`;
     }
     if (kind === "noAccess") {
+      if (isFederated()) {
+        return `<div class="empty"><div class="em-ico" aria-hidden="true">◐</div>
+          <div class="em-t">Complete seu cadastro</div>
+          <div class="em-d">Sua conta Google ainda não está vinculada a um plano. Escolha os
+            setores que quer acompanhar (tier de entrada) para liberar o acesso — sem custo.</div>
+          <form id="__regForm" style="margin-top:var(--s3);text-align:left;max-width:340px;margin-inline:auto">
+            ${ENTRY_INDUSTRIES.map((s) => `<label class="cvsub" style="display:block;margin:6px 0">
+              <input type="checkbox" name="ind" value="${esc(s)}"> ${esc(indLabel(s))}</label>`).join("")}
+            <div id="__regErr" class="badge badge--crit" style="display:none;margin-top:var(--s2)"></div>
+            <button type="submit" class="btn btn--primary" style="margin-top:var(--s3)">Ativar acesso</button>
+          </form></div>`;
+      }
       return `<div class="empty"><div class="em-ico" aria-hidden="true">⦸</div>
         <div class="em-t">Sua conta não licencia este contexto</div>
         <div class="em-d">Este painel só renderiza o feed que o servidor entrega para a sua licença.
@@ -183,6 +238,20 @@
     el.innerHTML = gateHTML(kind, ctxLabel);
     const b = el.querySelector("#__gateLogin");
     if (b) b.onclick = login;
+    const f = el.querySelector("#__regForm");
+    if (f) f.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const picked = Array.from(f.querySelectorAll('input[name="ind"]:checked')).map((i) => i.value);
+      const err = f.querySelector("#__regErr");
+      const btn = f.querySelector('button[type="submit"]');
+      if (!picked.length) { err.textContent = "Escolha ao menos um setor."; err.style.display = ""; return; }
+      err.style.display = "none"; btn.disabled = true; btn.textContent = "Ativando…";
+      try { await completeRegistration(picked); }
+      catch (ex) {
+        err.textContent = ex.message || "Falha ao registrar.";
+        err.style.display = ""; btn.disabled = false; btn.textContent = "Ativar acesso";
+      }
+    });
   }
 
   /* ======================================================================

@@ -202,6 +202,47 @@ def map_federated_email(
     return {"email": email, "tenant_id": str(tenant_id), "tier": tier}
 
 
+def _allocate_entry_tenant_id(email: str, *, table: Any | None = None) -> str:
+    import re
+    import secrets
+
+    local = re.sub(r"[^a-z0-9]+", "-", email.split("@")[0].lower()).strip("-") or "user"
+    for _ in range(6):
+        candidate = f"entry-{local}-{secrets.token_hex(2)}"
+        if get_tenant_config(candidate, table=table) is None:
+            return candidate
+    raise RuntimeError("could not allocate a unique entry tenant id")  # pragma: no cover
+
+
+def self_register_entry_tenant(
+    email: str, industries: list[str], *, table: Any | None = None,
+    federated_table: Any | None = None,
+) -> dict[str, Any]:
+    """Lazy self-registration for a first-time Google login: the ONE write path
+    where an UNPROVISIONED identity creates its own tenant, scoped to entry-tier
+    industries it explicitly picks. Everything else in this Google OAuth port
+    (`lambda_pretoken.py`, `map_federated_email`) only ever RESOLVES a mapping an
+    operator already created — this is deliberately the one exception, and it
+    still cannot escalate past the entry tier: `put_tenant_config`'s own
+    `allowed_industries_for_tier` allow-list rejects anything outside
+    `ENTRY_INDUSTRIES` server-side regardless of what the caller sends, and the
+    tenant_id is freshly allocated here, never caller-supplied, so this can't be
+    used to attach to (or overwrite) an existing tenant."""
+    email = (email or "").strip().lower()
+    if not email:
+        raise ValueError("email is required")
+    picked = sorted({
+        str(i).strip().lower() for i in (industries or [])
+        if str(i).strip().lower() in ENTRY_INDUSTRIES
+    })
+    if not picked:
+        raise ValueError(f"pick at least one entry-tier industry: {sorted(ENTRY_INDUSTRIES)}")
+    tenant_id = _allocate_entry_tenant_id(email, table=table)
+    cfg = put_tenant_config(tenant_id, "entry", picked, table=table)
+    map_federated_email(email, tenant_id, "entry", table=federated_table)
+    return cfg
+
+
 def cognito_grant_industry_group(
     pool_id: str, email: str, industry: str, *, client: Any | None = None,
 ) -> str:
