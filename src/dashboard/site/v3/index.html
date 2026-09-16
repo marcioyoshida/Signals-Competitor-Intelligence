@@ -77,10 +77,6 @@
   .sc-quad { fill:var(--muted); font-size:10px; letter-spacing:.4px; opacity:.7; }
   .sc-legend { margin-top:var(--s2); display:flex; flex-wrap:wrap; align-items:center;
     justify-content:flex-end; gap:var(--s3); font-size:var(--fs-micro); color:var(--muted); }
-  .sc-cbar { display:inline-flex; align-items:center; gap:6px; }
-  .sc-cbar i { width:64px; height:7px; border-radius:var(--r-pill);
-    background:linear-gradient(90deg, var(--ok) 0%, var(--t-high) 40%, var(--t-crit) 65%,
-      color-mix(in srgb, black 30%, var(--t-crit)) 100%); }
 
   /* Macro strip — Copom & Focus, shared across all officers */
   .macro-strip { margin:0 0 var(--s4); }
@@ -584,23 +580,28 @@ async function loadQuotes() {
 // fundamentals gets a distinct SMALLER, dashed-outline default dot — it is never drawn at a
 // fabricated size, and its tooltip says so explicitly.
 const SC_R_MIN = 5, SC_R_MAX = 24, SC_R_UNKNOWN = 4;
-// Sequential severity fill: ameaça is a continuous 0–100 score, so a 3-bucket flat fill hides
-// real differences between e.g. two "t-high" competitors 15 points apart (the actual complaint
-// live 2026-09-15: a cluster of mid-threat competitors all painted the identical swatch, reading
-// as monotone). This blends the SAME three status tokens the rest of the app already uses for
-// ameaça (var(--ok)/--t-high/--t-crit — see tierBadge) continuously by value instead of snapping
-// to one of three fills, so color still means exactly what it means everywhere else in Onça, but
-// now visibly varies dot-to-dot. `--{a}` below is a per-dot custom property (the numeric score)
-// consumed by three overlapping color-mix stops in CSS — cheaper and more theme-consistent
-// (light/dark tokens swap automatically) than resolving hex values in JS.
-function threatFill(a) {
-  a = Math.max(0, Math.min(100, Number(a) || 0));
-  const lowMix = Math.max(0, 100 - Math.round((a / 40) * 100));      // 100% ok at a=0 -> 0% at a=40
-  const highMix = Math.max(0, Math.round(((a - 40) / 25) * 100));    // 0% at a=40 -> 100% at a=65
-  const critMix = Math.max(0, Math.round(((a - 65) / 35) * 45));     // 0% at a=65 -> 45% (darker) at a=100
-  return `color-mix(in srgb, black ${Math.min(45, critMix)}%, ` +
-    `color-mix(in srgb, var(--t-crit) ${Math.min(100, highMix)}%, ` +
-    `color-mix(in srgb, var(--t-high) ${Math.min(100, Math.max(0, 100 - lowMix))}%, var(--ok))))`;
+// Per-competitor identity fill (2026-09-16, replaces a severity-value fill after an explicit
+// scope call: color now tells entities apart at a glance instead of encoding ameaça — the Y
+// axis already carries that precisely, unchanged). A 12-hue OKLCH wheel (fixed L=0.60/C=0.15,
+// hue-stepped 30° from a real red's OKLCH hue ~29°), validated with the dataviz skill's
+// validator (`node scripts/validate_palette.js … --mode light|dark`) against BOTH surfaces at
+// once (0.60 sits inside both the light 0.43–0.77 and dark 0.48–0.67 OKLCH lightness bands, so
+// one hex list serves both themes) — chroma floor and contrast all pass. It does NOT clear the
+// strict all-pairs CVD check a scatter/bubble chart calls for (one adjacent pair, the
+// orange/amber #BF6500↔#A47900, sits at ΔE 0.3 protan/deutan and 6.6 normal-vision, both below
+// the floor) — flagged rather than hidden: the skill's own validated 8-hue default can't pass
+// all-pairs beyond 3 slots for this chart TYPE either (any two bubbles can sit side by side), so
+// this is the realistic ceiling, not a shortcut. Labels/tooltips remain the authoritative
+// identity channel; this fill is an at-a-glance aid on top of them, not a replacement for them.
+const ENTITY_PALETTE = ["#CA5749", "#BF6500", "#A47900", "#778B00", "#2A984B", "#009C82",
+  "#0096B0", "#0089CF", "#5C79D9", "#8D68CC", "#B05BAC", "#C4547E"];
+// Stable per-entity hash (not render-order index) — the same competitor keeps the same color
+// across reloads and as the roster changes week to week, which matters once color is identity.
+function entityColor(id) {
+  let h = 0;
+  const s = String(id || "");
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return ENTITY_PALETTE[h % ENTITY_PALETTE.length];
 }
 // Label declutter: greedy vertical stacking. A busy cluster (several competitors within a
 // handful of ameaça/momentum points of each other — the exact live case that prompted this,
@@ -665,7 +666,7 @@ function scatterMap(list) {
       : "sem dado de ativos";
     const deltaTxt = d.prior != null ? ` · ${d.recent > d.prior ? "subiu" : d.recent < d.prior ? "caiu" : "estável"} vs semana anterior (${d.prior})` : "";
     return `<circle class="sc-dot${known ? "" : " sc-dot--nd"}" cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(1)}" ` +
-      `fill="${threatFill(d.recent || 0)}" fill-opacity="${known ? ".85" : ".6"}">` +
+      `fill="${entityColor(d.entity)}" fill-opacity="${known ? ".85" : ".6"}">` +
       `<title>${U.esc(d.label)} · ameaça ${d.recent} · momentum ${d.momentum > 0 ? "+" : ""}${d.momentum}${deltaTxt} · ${sizeTxt}</title></circle>`;
   }).join("");
   const labelCands = [...list].sort((a, b) => (b.recent || 0) - (a.recent || 0)).slice(0, 10).map(d => {
@@ -693,7 +694,7 @@ function scatterMap(list) {
     `<text class="sc-ax" x="${padL + iw}" y="${H - 10}" text-anchor="end">momentum — recua ← 0 → acelera</text>` +
     `<text class="sc-ax" transform="rotate(-90 14 ${padT + ih / 2})" x="14" y="${padT + ih / 2}" text-anchor="middle">ameaça (0–100)</text>` +
     `</svg><div class="sc-legend">` +
-    `<span class="sc-cbar"><i></i>ameaça: baixa → alta</span>` +
+    `<span>cor = concorrente (posição vertical é a ameaça — eixo Y)</span>` +
     `<span>traço = variação vs semana anterior</span>` +
     `<span>tamanho da bolha = ativos totais (R$ bi) · IF.data/CVM · pontilhado = sem dado</span>` +
     `</div></div>`;
