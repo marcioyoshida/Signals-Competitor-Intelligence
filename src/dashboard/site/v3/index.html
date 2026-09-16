@@ -191,7 +191,7 @@
   .hz-empty { color:var(--muted); font-size:var(--fs-micro); padding:var(--s2) 0; }
 
   /* Executive Flow — incident → decision trajectory cards */
-  .trajs { display:grid; grid-template-columns:repeat(auto-fill,minmax(330px,1fr)); gap:var(--s3); padding:var(--s3); }
+  .trajs { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(330px,100%),1fr)); gap:var(--s3); padding:var(--s3); }
   .traj { background:var(--surface-2); border:1px solid var(--border); border-left:3px solid var(--border-2);
     border-radius:var(--r-md); padding:var(--s3); }
   .traj[data-sev="crit"] { border-left-color:var(--t-crit); }
@@ -227,6 +227,30 @@
     margin:0 0 var(--s2); padding-bottom:var(--s1); border-bottom:1px solid var(--border); }
   .ref-col ul { margin:0; padding-left:var(--s4); }
   .ref-col li { font-size:var(--fs-meta); color:var(--ink-2); line-height:1.6; }
+
+  /* ============================ responsive (#125) ========================
+     /exec's every panel band is a hardcoded multi-column CSS grid (the grid()
+     helper below emits an inline grid-template-columns, so overriding it needs
+     !important) plus several fixed-px label columns (.mom/.tlrow/.crow) that
+     don't fit a phone. Two tiers: tablet collapses side-by-side panels to one
+     column; phone additionally stacks each row's label above its value. */
+  @media (max-width: 860px) {
+    .wrap .grid { grid-template-columns: 1fr !important; }
+    .readout { grid-template-columns: 1fr; }
+    .horizons { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 480px) {
+    .horizons { grid-template-columns: 1fr; }
+    /* .mom/.tlrow/.crow are all "label | middle | value" 3-column grids — put
+       the label (always the first child) on its own full-width row, then let
+       the middle content and value share a second, narrower-value row. */
+    .mom, .tlrow, .crow { grid-template-columns: 1fr 56px; row-gap: 4px; }
+    .mom > :first-child, .tlrow > :first-child, .crow > :first-child {
+      grid-column: 1 / -1; white-space: normal; }
+    .exrow .ent { min-width: 76px; }
+    .officer-tabs a { padding: 10px var(--s3); }
+    .selwrap select, .authbtn { padding: 9px var(--s2); min-height: 40px; }
+  }
 </style>
 </head>
 <body>

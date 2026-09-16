@@ -474,3 +474,15 @@ details.fold.chg > summary { padding: var(--s2) var(--s3); font-size: var(--fs-m
 @media (max-width: 1040px) {
   .lead-3 { grid-template-columns: 1fr !important; }
 }
+@media (max-width: 780px) {
+  /* Shared app shell header: brand/nav/sector-select/auth/theme wrap onto extra
+     rows instead of overflowing — every dashboard (v2, v3/exec, entry) inherits
+     this from the one .appbar rule, so fixing it here fixes it everywhere. */
+  .appbar { flex-wrap: wrap; row-gap: var(--s2); }
+}
+@media (max-width: 480px) {
+  /* 44px is the standard minimum touch target; the desktop sizes below are
+     mouse-tuned and too small to reliably tap. */
+  .icnbtn { width: 44px; height: 44px; }
+  .ctxnav a { padding: 10px 12px; }
+}
