@@ -33,6 +33,8 @@ not-yet-done follow-up, see qa_pipeline/README.md):
 from __future__ import annotations
 
 from aws_cdk import Duration, RemovalPolicy, Size, Stack
+from aws_cdk import aws_cloudwatch as cloudwatch
+from aws_cdk import aws_cloudwatch_actions as cw_actions
 from aws_cdk import aws_codebuild as codebuild
 from aws_cdk import aws_ecr as ecr
 from aws_cdk import aws_events as events
@@ -40,6 +42,8 @@ from aws_cdk import aws_events_targets as targets
 from aws_cdk import aws_iam as iam
 from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_s3 as s3
+from aws_cdk import aws_sns as sns
+from aws_cdk import aws_sns_subscriptions as sns_subs
 from aws_cdk import aws_stepfunctions as sfn
 from aws_cdk import aws_stepfunctions_tasks as sfn_tasks
 from constructs import Construct
@@ -301,3 +305,37 @@ class OncaQaPipelineStack(Stack):
             schedule=events.Schedule.cron(minute="0", hour="6"),
             targets=[targets.SfnStateMachine(state_machine)],
         )
+
+        # Failure notification. Own SNS topic — deliberately NOT the main stack's
+        # OncaAlertsTopic/alert_fn (SES-based, formatted for the CSO digest channel):
+        # OncaQaPipelineStack must stay its own failure domain (ADR 027), and a plain SNS
+        # email subscription is the whole notification need here, no Lambda in between.
+        # `alertEmail` follows the SAME durable-context pattern as `google_client_id`/
+        # `qa_pipeline_image_tag` — a bare `-c` flag with nothing wired into cdk.json would
+        # be exactly the kind of un-persisted context an unrelated deploy could silently
+        # drop (see docs/google-oauth-runbook.md gotcha #4).
+        alerts_topic = sns.Topic(self, "QaAlertsTopic", topic_name="onca-qa-pipeline-alerts")
+        alert_email = self.node.try_get_context("alertEmail")
+        if alert_email:
+            alerts_topic.add_subscription(sns_subs.EmailSubscription(alert_email))
+        # Mirrors OncaPrototypeStack's OncaPipelineFailedAlarm/OncaPipelineTimedOutAlarm
+        # shape exactly (infra/app.py) — nightly cadence, `evaluation_periods=1` over a
+        # 1-day period means ANY failed/timed-out execution in a day fires once, no
+        # flapping risk to smooth out. A hard-gate failure reaches this metric via
+        # QaReportTask's deliberate raise (see checks/report.py's module docstring) —
+        # every branch upstream is .add_catch()'d specifically so the report still runs,
+        # which would otherwise leave the execution showing SUCCEEDED.
+        cloudwatch.Alarm(
+            self, "QaPipelineFailedAlarm",
+            metric=state_machine.metric_failed(period=Duration.days(1), statistic="Sum"),
+            threshold=1, evaluation_periods=1,
+            comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+            treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
+        ).add_alarm_action(cw_actions.SnsAction(alerts_topic))
+        cloudwatch.Alarm(
+            self, "QaPipelineTimedOutAlarm",
+            metric=state_machine.metric_timed_out(period=Duration.days(1), statistic="Sum"),
+            threshold=1, evaluation_periods=1,
+            comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+            treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
+        ).add_alarm_action(cw_actions.SnsAction(alerts_topic))

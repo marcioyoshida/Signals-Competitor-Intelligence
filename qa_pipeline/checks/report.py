@@ -18,10 +18,18 @@ See qa_pipeline/README.md for the full recipe and the rationale for not standing
 public CloudFront distribution just for this (these screenshots contain real, if QA-tenant-
 scoped, dashboard content — the product itself gates that behind basic-auth + Cognito on
 purpose, so a public status page a la Fleet Monitor's uptime page is the wrong model here).
+
+This is also, deliberately, the ONE place in this pipeline that raises when `hard_gates_ok`
+is False — every hard-gate branch upstream gets `.add_catch()`'d (infra/qa_pipeline.py)
+specifically so a real failure doesn't abort the Parallel state before this report can run,
+which means the Step Functions EXECUTION would otherwise show SUCCEEDED even when a hard
+gate failed. Raising here, AFTER the report is fully built and uploaded, is what makes
+`state_machine.metric_failed()` (the CloudWatch alarm -> SNS -> email notification) fire.
 """
 from __future__ import annotations
 
 import html
+import json
 import time
 
 import boto3
@@ -148,4 +156,19 @@ def run(event: dict) -> dict:
     upload_artifact(ARTIFACTS_BUCKET, "latest/report/index.html", body=report_html.encode())
 
     report_url = _presign(ARTIFACTS_BUCKET, report_key)
-    return {"ok": True, "run_id": run_id, "hard_gates_ok": hard_gates_ok, "report_url": report_url}
+    result = {"ok": hard_gates_ok, "run_id": run_id, "hard_gates_ok": hard_gates_ok, "report_url": report_url}
+    upload_artifact(ARTIFACTS_BUCKET, f"{run_id}/report-result.json", body=json.dumps(result).encode())
+
+    if not hard_gates_ok:
+        # The report is fully built and uploaded ABOVE this line regardless — raising here
+        # only affects what happens AFTER: every hard-gate branch's failure got
+        # `.add_catch()`'d (infra/qa_pipeline.py) specifically so a real failure doesn't
+        # abort QaBranches before the report can run. But that means the Step Functions
+        # EXECUTION itself would otherwise show SUCCEEDED even when a hard gate failed —
+        # this task is the one place left where a genuine failure needs to surface as an
+        # execution failure, so state_machine.metric_failed() (the CloudWatch alarm ->
+        # SNS -> email notification) actually fires. The report_url is still recoverable
+        # from the run_id even though it won't be in this failed execution's own output —
+        # see qa_pipeline/README.md's presign recipe.
+        raise AssertionError(f"hard gate(s) failed — see {report_url or report_key}")
+    return result

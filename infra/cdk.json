@@ -7,6 +7,7 @@
   "context": {
     "@aws-cdk/core:bootstrapQualifier": "hnb659fds",
     "google_client_id": "1053992821922-8j5rtck0ttjfn1s3g7cp09a6964ktpbp.apps.googleusercontent.com",
-    "qa_pipeline_image_tag": "latest"
+    "qa_pipeline_image_tag": "latest",
+    "alertEmail": "marcioyoshida@gmail.com"
   }
 }
