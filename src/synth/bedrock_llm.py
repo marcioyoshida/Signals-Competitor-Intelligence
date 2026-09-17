@@ -28,6 +28,7 @@ def converse(
     system: str | None = None,
     max_tokens: int = 800,
     usage_out: dict[str, int] | None = None,
+    images: list[bytes] | None = None,
 ) -> str | None:
     """Return assistant text or None if Bedrock is unavailable/denied.
 
@@ -35,16 +36,24 @@ def converse(
     ``output_tokens`` from the Converse response — the Agentic API billing
     metering path (ADR, storefront/docs/adr-agentic-api-billing.md) reads
     this to record per-call token usage without changing the return
-    contract every other caller relies on (text-only)."""
+    contract every other caller relies on (text-only).
+
+    ``images``, if given, is a list of raw PNG bytes appended as image content
+    blocks alongside ``prompt`` — ADR 027 #132's Bedrock-vision QA check
+    (``qa_pipeline/checks/vision.py``) is the first caller; every existing
+    text-only caller is unaffected (defaults to no images)."""
     model_id = model_id or DEFAULT_SYNTH_MODEL
     try:
         client = boto3.client("bedrock-runtime")
+        content: list[dict[str, Any]] = [{"text": prompt}]
+        for img in images or []:
+            content.append({"image": {"format": "png", "source": {"bytes": img}}})
         kwargs: dict[str, Any] = {
             "modelId": model_id,
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"text": prompt}],
+                    "content": content,
                 }
             ],
             "inferenceConfig": {"maxTokens": max_tokens, "temperature": 0.2},

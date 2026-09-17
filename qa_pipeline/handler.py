@@ -16,6 +16,11 @@ Dispatches on `event["mode"]`:
     See qa_pipeline/checks/routing.py.
   - "resilience" — #131: broken-link scan (hard gate) + network interception (offline/slow/
     aborted API calls). See qa_pipeline/checks/resilience.py.
+  - "vision" — #132: Bedrock (Nova Pro) image-inference visual QA on a curated set of
+    chart panels. Advisory only — never fails. See qa_pipeline/checks/vision.py.
+  - "report" — #133: consolidates every branch's output (passed in as `event["branches"]`
+    by the state machine) into one static HTML summary, uploaded to S3. See
+    qa_pipeline/checks/report.py.
 """
 from __future__ import annotations
 
@@ -24,7 +29,7 @@ import time
 
 from playwright.sync_api import sync_playwright
 
-from qa_pipeline.checks import resilience, routing, smoke
+from qa_pipeline.checks import report, resilience, routing, smoke, vision
 from qa_pipeline.lib import auth, config
 from qa_pipeline.lib.browser import (
     ARTIFACTS_BUCKET,
@@ -49,7 +54,13 @@ def _run_login(event: dict) -> dict:
         page = ctx.new_page()
         storage = auth.login_with_password(page, url, creds["username"], creds["password"])
         browser.close()
-    return {"persona": persona, "tenant_id": creds["tenant_id"], "session_storage": storage}
+    return {
+        "persona": persona, "tenant_id": creds["tenant_id"], "session_storage": storage,
+        # `payload_response_only=True` on QaLoginTask replaces the state's output with
+        # exactly this dict — echo run_id back so it survives into the Map (#133 needs
+        # every branch sharing one run_id; see infra/qa_pipeline.py's RUN_ID note).
+        "run_id": event.get("run_id"),
+    }
 
 
 def _run_matrix(event: dict) -> dict:
@@ -131,6 +142,8 @@ _DISPATCH = {
     "smoke": smoke.run,
     "routing": routing.run,
     "resilience": resilience.run,
+    "vision": vision.run,
+    "report": report.run,
 }
 
 

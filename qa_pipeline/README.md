@@ -88,12 +88,19 @@ No source-control auto-trigger is wired yet (a documented follow-up, not this is
 scope) — build/push/roll out manually:
 
 ```bash
-zip -r /tmp/qa-image-source.zip qa_pipeline -x '*__pycache__*'
+zip -r /tmp/qa-image-source.zip qa_pipeline src/__init__.py src/synth/__init__.py \
+  src/synth/bedrock_llm.py -x '*__pycache__*'
 aws s3 cp /tmp/qa-image-source.zip s3://onca-qa-artifacts-<account>/_source/qa-image-source.zip
 aws codebuild start-build --project-name onca-qa-image-build   # wait for SUCCEEDED
 aws lambda update-function-code --function-name onca-qa-runner \
   --image-uri <account>.dkr.ecr.us-east-1.amazonaws.com/onca-qa-runner:latest
 ```
+
+(The `src/synth/*` files are #132's Bedrock-vision dependency — `checks/vision.py` reuses
+`src/synth/bedrock_llm.py`'s Converse wrapper rather than a second Bedrock client. If you
+only touched `qa_pipeline/` and not `src/synth/bedrock_llm.py`, the shorter
+`zip -r /tmp/qa-image-source.zip qa_pipeline -x '*__pycache__*'` still works — the Dockerfile
+only fails if those `src/` files are referenced by its `COPY` but missing from the zip.)
 
 (A full `cdk deploy OncaQaPipelineStack` also works but is not needed for a code-only
 change — same fast-path convention as this repo's other Lambdas.)
@@ -230,3 +237,74 @@ isn't covered — same documented Google-self-registration automation gap as #12
     asset references, not a discovered link graph. If a genuine cross-page `<a href>` nav is
     ever added, extend the scan to discover it rather than assuming the fixed list still
     covers everything.
+
+### Bedrock visual QA (#132) + the report (#133)
+
+`checks/vision.py` adds a fifth parallel branch (`QaVisionTask`, advisory — never fails the
+run). `qa_pipeline/lib/vision.py` holds the checklist prompts + a strict-JSON verdict parser;
+`src/synth/bedrock_llm.py`'s `converse()` gained an `images: list[bytes]` param (ADR 027's
+first caller) rather than a second Bedrock client. Model: `amazon.nova-pro-v1:0` — the same
+family already in production for framework synthesis, multimodal (Nova Micro/Lite are not),
+no new model-access request.
+
+`checks/report.py` (a sixth, final state — not a parallel branch) consolidates every
+branch's raw output into one static HTML page: a pass/fail table per hard-gate check plus
+every vision finding with its screenshot inlined. Uploaded to the same private
+`onca-qa-artifacts` bucket; the Lambda returns a **presigned GET URL** (not a new public
+CloudFront distribution — see the module docstring for why: these screenshots carry real,
+if QA-tenant-scoped, dashboard content, and the product itself gates that behind basic-auth
++ Cognito on purpose, unlike Fleet Monitor's genuinely-public uptime status page). That
+presigned URL is signed with the Lambda's own temporary STS credentials, so it's only
+reliably valid for about as long as those last (well under 24h) — good for "go check the run
+that just finished," not a stable long-lived link. For an older run:
+
+```bash
+aws s3 presign s3://onca-qa-artifacts-<account>/<run_id>/report/index.html --expires-in 3600
+# or, for the latest run without knowing its run_id:
+aws s3 presign s3://onca-qa-artifacts-<account>/latest/report/index.html --expires-in 3600
+```
+
+Every task in the state machine now shares ONE `run_id` — the execution's own name
+(`$$.Execution.Name`), injected into every branch's payload — so one run's matrix/smoke/
+routing/resilience/vision artifacts land under one shared S3 prefix instead of each Lambda
+invocation minting its own timestamp (confirmed this was actually happening before the fix:
+a single execution's shards had 3 different `run_id` prefixes).
+
+**A hard-gate failure must not make the report disappear.** Every hard-gate branch (matrix
+shard task, smoke, routing, resilience) got `.add_catch(..., result_path="$.error")` so a
+real failure produces an error-shaped branch output instead of aborting the whole
+`QaBranches` Parallel state — `QaReportTask` always runs, always renders SOMETHING, even
+when the state machine's overall execution would otherwise show as FAILED. Each check
+module already uploads its full result JSON to S3 *before* raising (see e.g.
+`checks/smoke.py`), so a human debugging a real failure still has the complete checklist
+detail in S3 even though the report's summary line for that branch is sparse (no
+`.add_catch()` recovers the granular checks from inside a crashed invocation — this was
+logically traced through, not live fault-injection tested, since deliberately breaking a
+check just to prove the catch path felt like the wrong trade against the time it'd cost).
+
+12. **A real, useful finding vs. a real false positive — both confirmed by eye, not just
+    trusted from the model's own confidence score.** The Mapa Competitivo panel: the model
+    correctly flagged "Kinea" and "Fidc" labels touching, and an arrow "not visibly
+    extending out" of the Btag11/Btal11 bubble cluster — both genuinely visible in the
+    screenshot, real label-crowding the declutter algorithm doesn't fully solve at this
+    data density (a legitimate UX follow-up, not fixed as part of shipping this check — see
+    ADR 027's own "advisory, not a hard gate" scoping). The quotes panel: the model claimed
+    "there is a placeholder glyph present" — the actual screenshot shows a clean, fully
+    rendered ticker row with no broken-image icon anywhere. A clear hallucination. This
+    exact mix (real finding + confident false positive, both at 0.9 "confidence") is why
+    ADR 027 scoped this layer as advisory from day one rather than a hard gate — the
+    burn-in period this needs before anyone should trust a "fail" without independently
+    looking at the screenshot is not hypothetical, it showed up in the FIRST live run.
+13. **`max_tokens` truncation silently produces invalid JSON, not an error.** The first live
+    run's `max_tokens=500` cut two of three panel responses off mid-JSON (missing the final
+    closing brace) — a genuinely incomplete object, not the trailing-garbage case
+    `parse_verdict`'s `raw_decode()` already tolerates (see gotcha below). `json.loads`/
+    `raw_decode` both correctly report this as malformed rather than silently returning
+    partial data, which is why `parse_verdict` treats it as `available: False` instead of
+    crashing — but the FIX is giving the model enough budget (900, not 500) for a 3-item
+    checklist with notes, not trying to parse around a truncation after the fact.
+14. **Nova Pro occasionally appends stray trailing characters after an otherwise well-formed
+    JSON object** (confirmed live: a trailing `;` after `...}]}`) — `json.loads` rejects
+    that outright as "Extra data" even though the JSON itself parses fine.
+    `json.JSONDecoder().raw_decode()` stops at the first complete value and ignores
+    whatever comes after, which is the correct fix (a regex trim would be more fragile).

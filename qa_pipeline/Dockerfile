@@ -17,6 +17,13 @@ COPY qa_pipeline/requirements-lambda.txt .
 RUN pip install --no-cache-dir -r requirements-lambda.txt
 
 COPY qa_pipeline/ ./qa_pipeline/
+# #132: checks/vision.py reuses src/synth/bedrock_llm.py (the Converse wrapper, extended for
+# image input) rather than reimplementing a second Bedrock client — just this one module +
+# the two __init__.py files needed to import it as `src.synth.bedrock_llm`, not the whole
+# synth package (which pulls in dependencies this image has no other reason to carry).
+COPY src/__init__.py ./src/__init__.py
+COPY src/synth/__init__.py ./src/synth/__init__.py
+COPY src/synth/bedrock_llm.py ./src/synth/bedrock_llm.py
 
 ENTRYPOINT ["python3", "-m", "awslambdaric"]
 CMD ["qa_pipeline.handler.lambda_handler"]

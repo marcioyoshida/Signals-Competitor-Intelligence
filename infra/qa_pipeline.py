@@ -119,6 +119,15 @@ class OncaQaPipelineStack(Stack):
                 f"arn:aws:ssm:{self.region}:{self.account}:parameter/onca/dashboard/operator-secret",
             ],
         ))
+        # #132: Bedrock (Nova Pro) vision calls — same action pair + resource-scoping
+        # pattern already used elsewhere in this account (infra/app.py), not a new pattern.
+        fn_role.add_to_policy(iam.PolicyStatement(
+            actions=["bedrock:InvokeModel", "bedrock:Converse"],
+            resources=[
+                f"arn:aws:bedrock:{self.region}::foundation-model/*",
+                f"arn:aws:bedrock:{self.region}:{self.account}:inference-profile/*",
+            ],
+        ))
 
         runner_fn = lambda_.DockerImageFunction(
             self, "QaRunnerFn",
@@ -143,15 +152,29 @@ class OncaQaPipelineStack(Stack):
             },
         )
 
+        # #133: every task carries the SAME run_id (the state machine execution's own name)
+        # so every branch's artifacts land under one shared S3 prefix the report (#133) can
+        # correlate — before this, each Lambda invocation minted its OWN timestamp, so one
+        # execution's matrix/smoke/routing/resilience/vision artifacts were scattered across
+        # several different run_id prefixes.
+        RUN_ID = {"run_id.$": "$$.Execution.Name"}
+
         # #128: log in ONCE (the entry QA persona), then fan the resulting sessionStorage
         # out to every {browser, viewport} shard via the Map's item_selector — the state-
         # machine equivalent of Playwright's storageState reuse (ADR 027 "State
         # management"), so 6 shards don't each pay for their own Hosted UI round-trip.
         login_task = sfn_tasks.LambdaInvoke(
             self, "QaLoginTask", lambda_function=runner_fn,
-            payload=sfn.TaskInput.from_object({"mode": "login", "persona": "entry"}),
+            payload=sfn.TaskInput.from_object({"mode": "login", "persona": "entry", **RUN_ID}),
             payload_response_only=True,
         )
+        # #133: a hard-gate failure must not make the WHOLE run invisible to the report —
+        # catch it into $.error so this branch's chain still completes (with an
+        # error-shaped output instead of a crash), letting QaReportTask always run. Each
+        # check module already uploads its full result JSON to S3 before raising
+        # (see e.g. checks/smoke.py), so the report can still recover full detail on a
+        # failure via its S3 fallback read, not just this summary error.
+        login_task.add_catch(sfn.Pass(self, "QaLoginFailed"), result_path="$.error")
 
         # WebKit is deliberately NOT in this matrix yet: it crashes on `new_page()` inside
         # the Lambda execution environment with no diagnostic stderr at all (unlike
@@ -182,6 +205,7 @@ class OncaQaPipelineStack(Stack):
                 "browser.$": "$$.Map.Item.Value.browser",
                 "viewport.$": "$$.Map.Item.Value.viewport",
                 "session_storage.$": "$.session_storage",
+                "run_id.$": "$.run_id",
             },
             # Cost/quota containment (ADR 027 "Cross-browser & responsive") — bounded
             # parallelism, not unbounded fan-out.
@@ -194,9 +218,15 @@ class OncaQaPipelineStack(Stack):
                 "browser.$": "$.browser",
                 "viewport.$": "$.viewport",
                 "session_storage.$": "$.session_storage",
+                "run_id.$": "$.run_id",
             }),
             payload_response_only=True,
         )
+        # #133: one bad shard must not blank out the other 5 — catch into an error-shaped
+        # item instead of failing the whole Map (Step Functions' default Map behavior is to
+        # abort entirely on any iteration's failure).
+        matrix_task.add_catch(
+            sfn.Pass(self, "QaMatrixShardFailed"), result_path="$.error")
         matrix_map.item_processor(matrix_task)
 
         # #129/#130: smoke & routing each do their OWN login(s) internally (checks/smoke.py,
@@ -205,31 +235,63 @@ class OncaQaPipelineStack(Stack):
         # sequentially after it.
         smoke_task = sfn_tasks.LambdaInvoke(
             self, "QaSmokeTask", lambda_function=runner_fn,
-            payload=sfn.TaskInput.from_object({"mode": "smoke", "persona": "entry"}),
+            payload=sfn.TaskInput.from_object({"mode": "smoke", "persona": "entry", **RUN_ID}),
             payload_response_only=True,
         )
+        smoke_task.add_catch(sfn.Pass(self, "QaSmokeFailed"), result_path="$.error")
+
         routing_task = sfn_tasks.LambdaInvoke(
             self, "QaRoutingTask", lambda_function=runner_fn,
-            payload=sfn.TaskInput.from_object({"mode": "routing", "persona": "entry"}),
+            payload=sfn.TaskInput.from_object({"mode": "routing", "persona": "entry", **RUN_ID}),
             payload_response_only=True,
         )
+        routing_task.add_catch(sfn.Pass(self, "QaRoutingFailed"), result_path="$.error")
+
         # #131: broken-link scan (hard gate) + network interception. Same independent-
         # branch reasoning as smoke/routing — does its own login, no shared state needed.
         resilience_task = sfn_tasks.LambdaInvoke(
             self, "QaResilienceTask", lambda_function=runner_fn,
-            payload=sfn.TaskInput.from_object({"mode": "resilience", "persona": "entry"}),
+            payload=sfn.TaskInput.from_object({"mode": "resilience", "persona": "entry", **RUN_ID}),
             payload_response_only=True,
         )
+        resilience_task.add_catch(sfn.Pass(self, "QaResilienceFailed"), result_path="$.error")
+
+        # #132: Bedrock (Nova Pro) visual QA — advisory, checks/vision.py never raises on
+        # its own, but this catch is cheap insurance against a truly unexpected crash (e.g.
+        # an import error) still letting the report run.
+        vision_task = sfn_tasks.LambdaInvoke(
+            self, "QaVisionTask", lambda_function=runner_fn,
+            payload=sfn.TaskInput.from_object({"mode": "vision", "persona": "entry", **RUN_ID}),
+            payload_response_only=True,
+        )
+        vision_task.add_catch(sfn.Pass(self, "QaVisionFailed"), result_path="$.error")
 
         pipeline = sfn.Parallel(self, "QaBranches")
         pipeline.branch(login_task.next(inject_matrix).next(matrix_map))
         pipeline.branch(smoke_task)
         pipeline.branch(routing_task)
         pipeline.branch(resilience_task)
+        pipeline.branch(vision_task)
+
+        # #133: consolidate every branch's output into one static HTML report. A Pass
+        # reshapes the Parallel's raw array output (branch order = declaration order above)
+        # into the {mode, run_id, branches} shape checks/report.py expects.
+        inject_report_input = sfn.Pass(
+            self, "QaReportInput",
+            parameters={"mode": "report", "run_id.$": "$$.Execution.Name", "branches.$": "$"},
+        )
+        report_task = sfn_tasks.LambdaInvoke(
+            self, "QaReportTask", lambda_function=runner_fn,
+            payload=sfn.TaskInput.from_object({
+                "mode": "report", "run_id.$": "$.run_id", "branches.$": "$.branches",
+            }),
+            payload_response_only=True,
+        )
 
         state_machine = sfn.StateMachine(
             self, "QaPipeline", state_machine_name="OncaQaPipeline",
-            definition_body=sfn.DefinitionBody.from_chainable(pipeline),
+            definition_body=sfn.DefinitionBody.from_chainable(
+                pipeline.next(inject_report_input).next(report_task)),
             timeout=Duration.minutes(14),
         )
         # Nightly only, not per-PR — cost containment (ADR 027 "Consequences") until real
