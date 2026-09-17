@@ -14,6 +14,8 @@ Dispatches on `event["mode"]`:
     theme/drawer interactions, /entry + /v2/admin reachability). See qa_pipeline/checks/smoke.py.
   - "routing" — #130: deep-linking, dynamic routing (?admin=1&opkey=...), browser history.
     See qa_pipeline/checks/routing.py.
+  - "resilience" — #131: broken-link scan (hard gate) + network interception (offline/slow/
+    aborted API calls). See qa_pipeline/checks/resilience.py.
 """
 from __future__ import annotations
 
@@ -22,7 +24,7 @@ import time
 
 from playwright.sync_api import sync_playwright
 
-from qa_pipeline.checks import routing, smoke
+from qa_pipeline.checks import resilience, routing, smoke
 from qa_pipeline.lib import auth, config
 from qa_pipeline.lib.browser import (
     ARTIFACTS_BUCKET,
@@ -128,6 +130,7 @@ _DISPATCH = {
     "matrix": _run_matrix,
     "smoke": smoke.run,
     "routing": routing.run,
+    "resilience": resilience.run,
 }
 
 

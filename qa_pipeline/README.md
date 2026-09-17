@@ -203,3 +203,30 @@ aws lambda invoke --function-name onca-qa-runner --cli-read-timeout 90 \
    reason; `checks/routing.py`'s `_fresh_page()` context manager relaunches a whole browser
    per check. The relaunch cost (a few seconds each) is the honest price of isolation in
    this environment, not overhead to optimize away.
+
+### Resiliency: broken-link scan + network interception (#131)
+
+`checks/resilience.py` adds a fourth parallel branch (`QaResilienceTask`), one continuous
+Chromium journey (single page/context — same constraint as #9 above): a real login, then a
+broken-link scan across every friendly route (`/exec`, `/entry/`, `/app`, `/admin`,
+`/newentry`, `/adquirencia`, `/fintech`, `/seguros`, `/wealth` — `infra/app.py`'s
+CloudFront `routes` map), then three `page.route()`-simulated network conditions against
+`/api/feed` and `/api/ask`. 13 checks, all passing live. `/api/register`'s network behavior
+isn't covered — same documented Google-self-registration automation gap as #129/#130.
+
+10. **The broken-link scan's naive form has a false-positive trap**: these dashboards call
+    `/feed.json?opkey=...` as part of their OWN normal (correctly access-controlled, #122)
+    boot sequence — visiting `/admin` bare (no `?opkey=`) correctly 403s on that fetch, same
+    as the "wrong opkey" contract already tested in `checks/routing.py`. A blanket "any
+    same-origin 4xx = broken link" rule flags that as a failure, which is wrong — it's the
+    gate working as designed, not a dead link. Scoped the scan to the navigation response
+    itself plus `script`/`stylesheet` resource types only (via
+    `response.request.resource_type`), which is what "broken link" actually means here —
+    dead routes and missing assets, not an intentionally-gated data fetch.
+11. There is no large `<a href="/...">` link graph on these dashboards to crawl in the first
+    place (confirmed by inspection — `/exec`'s nav is JS-driven buttons with `data-officer`
+    attributes, `/app`'s nav is in-page `#hash` links, not real page loads); the "internal
+    link" surface worth scanning is the fixed friendly-route list plus each page's static
+    asset references, not a discovered link graph. If a genuine cross-page `<a href>` nav is
+    ever added, extend the scan to discover it rather than assuming the fixed list still
+    covers everything.

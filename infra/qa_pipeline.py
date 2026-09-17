@@ -213,11 +213,19 @@ class OncaQaPipelineStack(Stack):
             payload=sfn.TaskInput.from_object({"mode": "routing", "persona": "entry"}),
             payload_response_only=True,
         )
+        # #131: broken-link scan (hard gate) + network interception. Same independent-
+        # branch reasoning as smoke/routing — does its own login, no shared state needed.
+        resilience_task = sfn_tasks.LambdaInvoke(
+            self, "QaResilienceTask", lambda_function=runner_fn,
+            payload=sfn.TaskInput.from_object({"mode": "resilience", "persona": "entry"}),
+            payload_response_only=True,
+        )
 
         pipeline = sfn.Parallel(self, "QaBranches")
         pipeline.branch(login_task.next(inject_matrix).next(matrix_map))
         pipeline.branch(smoke_task)
         pipeline.branch(routing_task)
+        pipeline.branch(resilience_task)
 
         state_machine = sfn.StateMachine(
             self, "QaPipeline", state_machine_name="OncaQaPipeline",
