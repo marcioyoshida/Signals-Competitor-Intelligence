@@ -61,5 +61,56 @@ the QA personas. See the module's docstring for the full account.
 - `lib/config.py` — pulls QA credentials (Secrets Manager) + basic-auth (SSM) at runtime.
 - `tasks/login_smoke.py` — CLI entry point; also the login task `OncaQaPipeline` (#127)
   runs once per persona per run.
-- Lambda container image, CDK infra (#127) and the rest of the test pillars (#128–#133)
-  are not built yet.
+- `Dockerfile` / `requirements-lambda.txt` / `handler.py` / `buildspec-image.yml` — the
+  `OncaQaPipeline` Lambda container image (#127) and its CodeBuild image-build project.
+- The rest of the test pillars (#128–#133) are not built yet — `handler.py` today is only
+  the skeleton proof: opens `/exec`, asserts the title, uploads a screenshot + result JSON.
+
+## `OncaQaPipeline` infra (#127)
+
+Deployed as its own stack, `OncaQaPipelineStack` (`infra/qa_pipeline.py`) — separate from
+`OncaPrototypeStack`, own IAM role, own failure domain. Two-phase because no box that runs
+`cdk deploy` for this repo has a usable local Docker daemon (WSL without the Docker Desktop
+integration active) — the image can only be built by CodeBuild (privileged mode,
+docker-in-docker):
+
+- **Phase A** (always deployed): ECR repo `onca-qa-runner`, S3 bucket
+  `onca-qa-artifacts-<account>` (30-day lifecycle), CodeBuild project
+  `onca-qa-image-build` that builds/pushes the image.
+- **Phase B** (gated on `qa_pipeline_image_tag`, persisted in `infra/cdk.json` — same
+  durable-context pattern as Google OAuth's `google_client_id`): the container Lambda
+  `onca-qa-runner`, the `OncaQaPipeline` state machine, and a nightly EventBridge trigger
+  (06:00 UTC).
+
+### Rebuilding and rolling out a new image
+
+No source-control auto-trigger is wired yet (a documented follow-up, not this issue's
+scope) — build/push/roll out manually:
+
+```bash
+zip -r /tmp/qa-image-source.zip qa_pipeline -x '*__pycache__*'
+aws s3 cp /tmp/qa-image-source.zip s3://onca-qa-artifacts-<account>/_source/qa-image-source.zip
+aws codebuild start-build --project-name onca-qa-image-build   # wait for SUCCEEDED
+aws lambda update-function-code --function-name onca-qa-runner \
+  --image-uri <account>.dkr.ecr.us-east-1.amazonaws.com/onca-qa-runner:latest
+```
+
+(A full `cdk deploy OncaQaPipelineStack` also works but is not needed for a code-only
+change — same fast-path convention as this repo's other Lambdas.)
+
+### Two real gotchas found getting the skeleton task to run in Lambda
+
+Both confirmed live 2026-09-16, in order encountered:
+
+1. **The Playwright Python *pip package* is not pre-installed in Microsoft's official
+   `mcr.microsoft.com/playwright/python` image** — only the OS deps and browser binaries
+   are. `requirements-lambda.txt` must pin `playwright==<same version as the image tag>`
+   explicitly, or the Lambda fails at import (`No module named 'playwright'`).
+2. **Headless Chromium needs Lambda-specific launch flags or it crashes**, in two stages:
+   first `browser.launch()` succeeds but `context.new_page()` fails with "Connection closed
+   while reading from the driver" (Chromium's sandbox can't init — no seccomp/user-namespace
+   privileges in the Lambda execution environment; fixed with `--no-sandbox
+   --disable-dev-shm-usage`), then a SECOND failure, "Target crashed" (Chromium's normal
+   multi-process model needs process-fork privileges Lambda doesn't grant either; fixed with
+   `--single-process --no-zygote`). All four flags are required together — see
+   `handler.py`'s `chromium.launch()` call.

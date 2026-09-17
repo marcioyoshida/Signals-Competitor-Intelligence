@@ -3208,6 +3208,11 @@ OncaPrototypeStack(app, "OncaPrototypeStack")
 from cicd import OncaCicdStack  # noqa: E402  (local module, after app-stack def)
 
 OncaCicdStack(app, "OncaCicdStack")
+# ADR 027 (#127) — the Playwright/Bedrock navigation+visual QA pipeline, its own stack
+# (own IAM role/failure domain, never coupled to the data pipeline or the app deploy).
+from qa_pipeline import OncaQaPipelineStack  # noqa: E402  (local module, after app-stack def)
+
+OncaQaPipelineStack(app, "OncaQaPipelineStack")
 # App-wide identification + Cost Explorer allocation tag across every resource in both
 # stacks (the standalone "tr:project-name" tag OncaPrototypeStack used to carry alongside
 # this one was retired 2026-09-14 — every fork now rolls up under this single "project" key).

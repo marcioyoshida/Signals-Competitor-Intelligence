@@ -1,0 +1,19 @@
+version: 0.2
+
+# Builds + pushes the OncaQaPipeline Lambda container image (#127). Runs on CodeBuild
+# (privileged mode, docker-in-docker) because no box that runs this repo's Claude Code
+# sessions has a usable local Docker daemon — this is the ONLY place in the account that can
+# build this image. Source is an S3 zip of the repo root (uploaded + triggered manually today;
+# wiring this to auto-trigger on `qa_pipeline/**` pushes is a documented follow-up, not done
+# yet). $ECR_REPO_URI is provided by the CodeBuild project's environment variables (CDK).
+
+phases:
+  pre_build:
+    commands:
+      - aws ecr get-login-password --region "$AWS_DEFAULT_REGION" | docker login --username AWS --password-stdin "$ECR_REPO_URI"
+  build:
+    commands:
+      - docker build -t "$ECR_REPO_URI:latest" -f qa_pipeline/Dockerfile .
+  post_build:
+    commands:
+      - docker push "$ECR_REPO_URI:latest"

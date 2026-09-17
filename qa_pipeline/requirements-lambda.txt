@@ -1,0 +1,9 @@
+# Runtime deps for the OncaQaPipeline container image (#127). NOT runtime-provided by this
+# base image (it's Playwright's own, not an AWS Lambda base) — boto3 and the Lambda Runtime
+# Interface Client both have to be bundled explicitly. The base image bakes in the BROWSER
+# binaries + OS deps only, NOT the `playwright` pip package itself (confirmed live: a first
+# build without this line failed at import) — pin it to the exact version matching the
+# image tag (see Dockerfile) or the driver/browser protocol version can mismatch.
+playwright==1.62.0
+awslambdaric==2.*
+boto3==1.*
