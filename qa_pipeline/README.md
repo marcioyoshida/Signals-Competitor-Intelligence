@@ -169,3 +169,37 @@ aws lambda invoke --function-name onca-qa-runner --cli-read-timeout 90 \
    translateX(100%)` closed state does NOT inflate `scrollWidth` — `visibility: hidden` was
    added to it anyway for a11y correctness, since `aria-hidden="true"` was already set, but
    it was not the cause of the overflow.)
+
+### Smoke & routing checks (#129/#130)
+
+`checks/smoke.py` and `checks/routing.py` add two more `handler.py` modes (`"smoke"`,
+`"routing"`). Two more real bugs found live, plus one hard infra constraint:
+
+7. **A real product bug**: `/exec`'s `openDrawer()`/`closeDrawer()` (`site/v3/index.html`)
+   toggled a `.on` class that no CSS rule anywhere defines (the shared `v2/app.css` only
+   styles `.drawer.open`/`.scrim.open`) — clicking a card correctly flipped `aria-hidden`
+   and populated the drawer's content, but the slide-in `transform` never fired, so the
+   drawer was functionally "open" yet stayed fully off-screen. Confirmed via
+   `getComputedStyle(...).transform` before/after, not just eyeballing a screenshot. Fixed
+   by using `"open"` (the class the shared component vocabulary already styles) instead of
+   inventing new CSS for `.on`.
+8. **A test-URL bug, not a product bug, but worth recording**: `/entry` (no trailing slash)
+   and `/v2/admin` (ditto) both 404/render blank — the CloudFront viewer-request function
+   only appends `index.html` to a URI that already ends in `/`. The correct URLs are
+   `/entry/` and the short alias `/admin` (which the SAME function rewrites to
+   `/v2/admin/index.html` directly). Same class of gotcha as the `/exec` → `/v3/index.html`
+   cache-key rewrite already documented in the `onca-live-resources-deploy` memory — always
+   check `infra/app.py`'s `auth_fn` rewrite table before assuming a friendly path.
+9. **Hard constraint: this Lambda's Chromium cannot survive a second browser context in one
+   launch.** `--single-process` (required for Chromium to survive Lambda's process-fork
+   restrictions at all — see gotcha #2 above) means the WHOLE browser process crashes the
+   instant a second `BrowserContext` is created, whether or not the first was closed first
+   (confirmed by direct repro: two sequential `browser.new_context()` calls on one
+   `browser.launch()`, second one's `new_page()` throws `TargetClosedError`, even with zero
+   navigation in between). Every isolated test scenario — a fresh sessionStorage seed, a
+   deliberately session-less context, a different query string — needs its OWN full
+   `sync_playwright()` + `launch()` + `close()` cycle. `checks/smoke.py`'s one continuous
+   journey reuses a single page throughout (never opens a second context) for exactly this
+   reason; `checks/routing.py`'s `_fresh_page()` context manager relaunches a whole browser
+   per check. The relaunch cost (a few seconds each) is the honest price of isolation in
+   this environment, not overhead to optimize away.

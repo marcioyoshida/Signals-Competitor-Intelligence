@@ -10,63 +10,29 @@ Dispatches on `event["mode"]`:
     seeded with a previously captured sessionStorage, asserts no responsive-layout overflow
     (the #125 mobile-responsive contract's actual, checkable signature) and the expected
     title, uploads a screenshot + result JSON per {browser, viewport} shard.
+  - "smoke" — #129: smoke & critical-path navigation (auth flows, core action, officer/
+    theme/drawer interactions, /entry + /v2/admin reachability). See qa_pipeline/checks/smoke.py.
+  - "routing" — #130: deep-linking, dynamic routing (?admin=1&opkey=...), browser history.
+    See qa_pipeline/checks/routing.py.
 """
 from __future__ import annotations
 
 import json
-import os
 import time
 
-import boto3
 from playwright.sync_api import sync_playwright
 
+from qa_pipeline.checks import routing, smoke
 from qa_pipeline.lib import auth, config
-
-ARTIFACTS_BUCKET = os.environ.get("ONCA_QA_ARTIFACTS_BUCKET", "")
-EXPECTED_TITLE = "Onça · Sala Executiva"
-
-# Confirmed live (#127): without these, Chromium fails in two distinct ways inside the
-# Lambda execution environment — sandbox init fails outright (no seccomp/user-namespace
-# privileges: --no-sandbox --disable-dev-shm-usage fixes it), then the renderer target
-# still crashes on new_page() because Chromium's normal multi-process model needs
-# process-fork privileges Lambda doesn't grant either (--single-process --no-zygote fixes
-# that). Chromium-specific flags — Firefox/WebKit take neither the same flags nor, so far,
-# needed any workaround of their own (see qa_pipeline/README.md for what was tested).
-CHROMIUM_LAUNCH_ARGS = [
-    "--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu",
-    "--single-process", "--no-zygote",
-]
-
-# The two breakpoints /exec's mobile-responsive pass (#125) actually targets
-# (`@media (max-width: 860px)` / `(max-width: 480px)`, src/dashboard/site/v3/index.html),
-# not arbitrary device names, plus one desktop baseline.
-VIEWPORTS = {
-    "desktop": {"width": 1920, "height": 1080},
-    "tablet": {"width": 860, "height": 1024},
-    "phone": {"width": 480, "height": 900},
-}
-
-ENGINES = ("chromium", "firefox", "webkit")
-
-
-def _engine(p, browser: str):
-    if browser not in ENGINES:
-        raise ValueError(f"unknown browser {browser!r}, expected one of {ENGINES}")
-    return getattr(p, browser)
-
-
-def _launch_args(browser: str) -> list[str]:
-    return CHROMIUM_LAUNCH_ARGS if browser == "chromium" else []
-
-
-def _upload_artifact(bucket: str, key: str, *, path: str | None = None, body: bytes | None = None) -> None:
-    if not bucket:
-        return
-    s3 = boto3.client("s3")
-    if path is not None:
-        s3.upload_file(path, bucket, key)
-    else:
-        s3.put_object(Bucket=bucket, Key=key, Body=body, ContentType="application/json")
+from qa_pipeline.lib.browser import (
+    ARTIFACTS_BUCKET,
+    CHROMIUM_LAUNCH_ARGS,
+    EXPECTED_TITLE,
+    VIEWPORTS,
+    engine,
+    launch_args,
+    upload_artifact,
+)
 
 
 def _run_login(event: dict) -> dict:
@@ -95,8 +61,8 @@ def _run_matrix(event: dict) -> dict:
     screenshot_path = "/tmp/matrix.png"
 
     with sync_playwright() as p:
-        engine = _engine(p, browser_name)
-        browser = engine.launch(headless=True, args=_launch_args(browser_name))
+        eng = engine(p, browser_name)
+        browser = eng.launch(headless=True, args=launch_args(browser_name))
         ctx = browser.new_context(
             http_credentials={"username": user, "password": pw}, viewport=viewport,
         )
@@ -121,8 +87,8 @@ def _run_matrix(event: dict) -> dict:
         "scroll_width": scroll_width, "client_width": client_width, "run_id": run_id,
     }
     key_prefix = f"{run_id}/matrix/{browser_name}-{viewport_key}"
-    _upload_artifact(ARTIFACTS_BUCKET, f"{key_prefix}.png", path=screenshot_path)
-    _upload_artifact(ARTIFACTS_BUCKET, f"{key_prefix}.json", body=json.dumps(result).encode())
+    upload_artifact(ARTIFACTS_BUCKET, f"{key_prefix}.png", path=screenshot_path)
+    upload_artifact(ARTIFACTS_BUCKET, f"{key_prefix}.json", body=json.dumps(result).encode())
 
     if not ok:
         raise AssertionError(
@@ -149,19 +115,23 @@ def _run_skeleton(event: dict) -> dict:
 
     ok = title == EXPECTED_TITLE
     result = {"ok": ok, "title": title, "url": url, "run_id": run_id}
-    _upload_artifact(ARTIFACTS_BUCKET, f"{run_id}/skeleton.png", path=screenshot_path)
-    _upload_artifact(ARTIFACTS_BUCKET, f"{run_id}/skeleton-result.json", body=json.dumps(result).encode())
+    upload_artifact(ARTIFACTS_BUCKET, f"{run_id}/skeleton.png", path=screenshot_path)
+    upload_artifact(ARTIFACTS_BUCKET, f"{run_id}/skeleton-result.json", body=json.dumps(result).encode())
 
     if not ok:
         raise AssertionError(f"unexpected /exec title: {title!r}")
     return result
 
 
+_DISPATCH = {
+    "login": _run_login,
+    "matrix": _run_matrix,
+    "smoke": smoke.run,
+    "routing": routing.run,
+}
+
+
 def lambda_handler(event, context):
     event = event or {}
     mode = event.get("mode", "skeleton")
-    if mode == "login":
-        return _run_login(event)
-    if mode == "matrix":
-        return _run_matrix(event)
-    return _run_skeleton(event)
+    return _DISPATCH.get(mode, _run_skeleton)(event)

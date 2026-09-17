@@ -12,6 +12,7 @@ from typing import Any
 QA_SECRET_NAME = "signalscompetitor/onca/qa-test-credentials"
 BASIC_AUTH_USER_PARAM = "/onca/dashboard/basic-auth-user"
 BASIC_AUTH_PASS_PARAM = "/onca/dashboard/basic-auth-pass"
+OPERATOR_SECRET_PARAM = "/onca/dashboard/operator-secret"
 SITE_URL = os.environ.get("ONCA_QA_SITE_URL", "https://onssa.org")
 
 
@@ -34,3 +35,13 @@ def basic_auth() -> tuple[str, str]:
         Name=BASIC_AUTH_PASS_PARAM, WithDecryption=True
     )["Parameter"]["Value"]
     return user, pw
+
+
+@lru_cache
+def operator_secret() -> str:
+    """The `?opkey=` value #122 requires on top of the shared basic-auth password to read
+    the raw, unscoped `/feed.json` (`?admin=1&opkey=...`) — never the tenant credential."""
+    import boto3
+
+    ssm = boto3.client("ssm")
+    return ssm.get_parameter(Name=OPERATOR_SECRET_PARAM, WithDecryption=True)["Parameter"]["Value"]

@@ -1562,10 +1562,15 @@ function inspect(id) {
     : U.empty("Sem cartão citável", `id: ${id || "—"}`, "○");
   openDrawer();
 }
+// ADR 027 #129 caught this live: these used to toggle a ".on" class that no CSS rule
+// anywhere defines (the shared v2/app.css only has `.drawer.open`/`.scrim.open`) — so
+// aria-hidden and the drawer's content flipped correctly but the slide-in transform
+// never fired; the drawer was functionally open yet stayed fully off-screen. "open" is
+// the class the shared component vocabulary actually styles.
 function openDrawer() { document.getElementById("drawer").setAttribute("aria-hidden", "false");
-  document.getElementById("scrim").classList.add("on"); document.getElementById("drawer").classList.add("on"); }
+  document.getElementById("scrim").classList.add("open"); document.getElementById("drawer").classList.add("open"); }
 function closeDrawer() { document.getElementById("drawer").setAttribute("aria-hidden", "true");
-  document.getElementById("scrim").classList.remove("on"); document.getElementById("drawer").classList.remove("on"); }
+  document.getElementById("scrim").classList.remove("open"); document.getElementById("drawer").classList.remove("open"); }
 </script>
 </body>
 </html>

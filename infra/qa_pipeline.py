@@ -114,6 +114,9 @@ class OncaQaPipelineStack(Stack):
             resources=[
                 f"arn:aws:ssm:{self.region}:{self.account}:parameter/onca/dashboard/basic-auth-user",
                 f"arn:aws:ssm:{self.region}:{self.account}:parameter/onca/dashboard/basic-auth-pass",
+                # #130: the routing checks exercise the ?admin=1&opkey=... operator bypass
+                # (#122), which needs this second, narrower secret on top of basic auth.
+                f"arn:aws:ssm:{self.region}:{self.account}:parameter/onca/dashboard/operator-secret",
             ],
         ))
 
@@ -196,10 +199,29 @@ class OncaQaPipelineStack(Stack):
         )
         matrix_map.item_processor(matrix_task)
 
+        # #129/#130: smoke & routing each do their OWN login(s) internally (checks/smoke.py,
+        # checks/routing.py) — they don't need the shared login_task's sessionStorage, so
+        # they run as independent Parallel branches alongside the matrix branch rather than
+        # sequentially after it.
+        smoke_task = sfn_tasks.LambdaInvoke(
+            self, "QaSmokeTask", lambda_function=runner_fn,
+            payload=sfn.TaskInput.from_object({"mode": "smoke", "persona": "entry"}),
+            payload_response_only=True,
+        )
+        routing_task = sfn_tasks.LambdaInvoke(
+            self, "QaRoutingTask", lambda_function=runner_fn,
+            payload=sfn.TaskInput.from_object({"mode": "routing", "persona": "entry"}),
+            payload_response_only=True,
+        )
+
+        pipeline = sfn.Parallel(self, "QaBranches")
+        pipeline.branch(login_task.next(inject_matrix).next(matrix_map))
+        pipeline.branch(smoke_task)
+        pipeline.branch(routing_task)
+
         state_machine = sfn.StateMachine(
             self, "QaPipeline", state_machine_name="OncaQaPipeline",
-            definition_body=sfn.DefinitionBody.from_chainable(
-                login_task.next(inject_matrix).next(matrix_map)),
+            definition_body=sfn.DefinitionBody.from_chainable(pipeline),
             timeout=Duration.minutes(14),
         )
         # Nightly only, not per-PR — cost containment (ADR 027 "Consequences") until real
