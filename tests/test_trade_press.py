@@ -97,6 +97,38 @@ def test_outlet_matching_covers_terms_beyond_google_cap():
     assert news[0]["publisher"] == "Livecoins"
 
 
+def test_iso_accepts_both_rfc822_and_iso8601_pubdates():
+    # RSS nominally mandates RFC-822, but Exame emits ISO-8601. Both must
+    # normalize to the same YYYY-MM-DD; anything unparseable stays "".
+    assert trade_press._iso("Wed, 16 Sep 2026 20:36:44 GMT") == "2026-09-16"
+    assert trade_press._iso("2026-09-16T20:36:44") == "2026-09-16"
+    assert trade_press._iso("2026-09-16T20:36:44+00:00") == "2026-09-16"
+    assert trade_press._iso("") == ""
+    assert trade_press._iso(None) == ""
+    assert trade_press._iso("not a date") == ""
+
+
+def test_outlet_feed_with_iso8601_dates_is_not_silently_dropped():
+    # Regression: an ISO-8601 pubDate used to fail parsedate_to_datetime, yield
+    # date="" from _iso, and get dropped by the cutoff check in fetch_news — so
+    # adding Exame's feed would have looked wired while contributing nothing.
+    items = [
+        ("Nubank amplia lucro no trimestre", "https://exame.com/invest/1", "2026-08-14T09:30:00", ""),
+        ("Nubank inaugura mostra de arte", "https://exame.com/pop/2", "2026-08-14T09:30:00", ""),  # no finance context
+    ]
+    news = trade_press.fetch_news(
+        ["Nubank"], lookback_days=30, today=dt.date(2026, 8, 16),
+        fetcher=lambda t: b"<rss><channel></channel></rss>",  # no Google News results
+        include_outlets=True, outlet_feeds=[("Exame", "http://feed")],
+        outlet_fetcher=lambda url: _rss(items), pause_sec=0,
+    )
+    assert len(news) == 1
+    n = news[0]
+    assert n["publisher"] == "Exame"
+    assert n["date"] == "2026-08-14"                       # parsed, not ""
+    assert n["url"] == "https://exame.com/invest/1"        # direct publisher link
+
+
 def test_finance_context_word_start_not_mid_word():
     # deeper-fix regression: "ação" (share) must not match inside "celebração"
     from src.ingest.trade_press import _has_finance_context

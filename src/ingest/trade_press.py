@@ -42,6 +42,13 @@ OUTLET_FEEDS: list[tuple[str, str]] = [
     ("Valor Econômico", "https://pox.globo.com/rss/valor/empresas/"),
     ("Money Times", "https://www.moneytimes.com.br/feed/"),
     ("Money Times", "https://www.moneytimes.com.br/tag/mercados/feed/"),
+    # Mainstream financial press — previously reachable only through the Google
+    # News aggregate, which yields redirect URLs instead of publisher links and
+    # caps recall at the top 10 per query term. Exame's *section* feed is used
+    # deliberately: its site-wide feed is general interest (entertainment, sport).
+    # NB Exame emits ISO-8601 in <pubDate> — see `_iso`. Verified live 2026-09-16.
+    ("Exame", "https://exame.com/invest/feed/"),
+    ("InfoMoney", "https://www.infomoney.com.br/feed/"),
     # Insurance trade press — the domain's real signal lives in specialist outlets,
     # so the news-dependent insurers (not separately B3-listed: SulAmérica,
     # Bradesco Seguros, Icatu) get corroborating distinct publishers here. Canonical
@@ -296,9 +303,24 @@ def _parse(content: bytes, term: str) -> list[dict[str, Any]]:
 
 
 def _iso(pubdate: Any) -> str:
+    """Normalize a feed's pubDate to ISO ``YYYY-MM-DD``.
+
+    RSS nominally mandates RFC-822 and 16 of the 17 outlet feeds comply, but Exame
+    emits ISO-8601 in ``<pubDate>``. ``parsedate_to_datetime`` rejects that, and an
+    empty return here is indistinguishable from "no date" downstream — the item is
+    dropped by the cutoff check in ``fetch_news`` with no error. Falling back keeps
+    a whole publisher from vanishing silently.
+    """
+    s = str(pubdate or "").strip()
+    if not s:
+        return ""
     try:
-        return parsedate_to_datetime(str(pubdate)).date().isoformat()
+        return parsedate_to_datetime(s).date().isoformat()
     except Exception:
+        pass
+    try:
+        return dt.datetime.fromisoformat(s).date().isoformat()
+    except ValueError:
         return ""
 
 
