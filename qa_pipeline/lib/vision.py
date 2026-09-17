@@ -55,6 +55,45 @@ def build_prompt(panel_key: str) -> str:
     return PROMPT_TEMPLATE.format(items=numbered)
 
 
+def _close_truncated_json(s: str) -> str | None:
+    """If `s` looks like a JSON value cut off mid-stream (an unclosed string and/or one or
+    more unclosed `{`/`[`), return it with the missing closers appended so it parses.
+    Returns None if `s` isn't a simple truncation (e.g. more closes than opens — genuinely
+    malformed, not just cut short). String-literal-aware (tracks `"..."` and `\\`-escapes)
+    so a brace mentioned inside a "note" string is never mistaken for real structure.
+
+    Confirmed live (#132): even a raised max_tokens doesn't guarantee headroom — Nova Pro's
+    response length varies with how much it has to say, and a response truncated by as
+    little as ONE missing closing brace still fails json.loads/raw_decode outright. Retrying
+    with more tokens is not a fix (there is no ceiling that's provably always enough);
+    repairing the truncation is."""
+    stack: list[str] = []
+    in_string = False
+    escape = False
+    for ch in s:
+        if in_string:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch in "{[":
+            stack.append(ch)
+        elif ch in "}]":
+            if not stack:
+                return None
+            stack.pop()
+    if not stack and not in_string:
+        return None
+    closer = '"' if in_string else ""
+    closer += "".join("}" if ch == "{" else "]" for ch in reversed(stack))
+    return s + closer
+
+
 def parse_verdict(raw: str | None) -> dict[str, Any]:
     """Best-effort strict-JSON parse of a Bedrock vision response. Never raises — a
     malformed/empty response becomes an honest 'unavailable' result, not a crash, since this
@@ -63,15 +102,22 @@ def parse_verdict(raw: str | None) -> dict[str, Any]:
     if not raw:
         return {"available": False, "checklist": [], "raw": raw}
     cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip())
-    try:
-        # Nova Pro occasionally appends stray trailing characters after a well-formed JSON
-        # object (confirmed live: a trailing ";" after "...}]}") — json.loads rejects that
-        # outright as "Extra data" even though the JSON itself parses fine. raw_decode()
-        # stops at the first complete value and ignores whatever comes after it.
-        parsed, _ = json.JSONDecoder().raw_decode(cleaned)
-        checklist = parsed.get("checklist")
-        if not isinstance(checklist, list):
-            raise ValueError("no 'checklist' array in response")
-        return {"available": True, "checklist": checklist, "raw": raw}
-    except Exception as exc:  # noqa: BLE001 - advisory layer, never crash the pipeline
-        return {"available": False, "checklist": [], "raw": raw, "parse_error": str(exc)}
+    candidates = [cleaned]
+    repaired = _close_truncated_json(cleaned)
+    if repaired is not None:
+        candidates.append(repaired)
+    last_exc: Exception | None = None
+    for candidate in candidates:
+        try:
+            # Nova Pro occasionally appends stray trailing characters after a well-formed
+            # JSON object (confirmed live: a trailing ";" after "...}]}") — json.loads
+            # rejects that outright as "Extra data" even though the JSON itself parses
+            # fine. raw_decode() stops at the first complete value and ignores the rest.
+            parsed, _ = json.JSONDecoder().raw_decode(candidate)
+            checklist = parsed.get("checklist")
+            if not isinstance(checklist, list):
+                raise ValueError("no 'checklist' array in response")
+            return {"available": True, "checklist": checklist, "raw": raw}
+        except Exception as exc:  # noqa: BLE001 - advisory layer, never crash the pipeline
+            last_exc = exc
+    return {"available": False, "checklist": [], "raw": raw, "parse_error": str(last_exc)}
