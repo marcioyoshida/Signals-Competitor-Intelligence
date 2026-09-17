@@ -126,16 +126,80 @@ class OncaQaPipelineStack(Stack):
             memory_size=2048,
             timeout=Duration.minutes(10),
             ephemeral_storage_size=Size.mebibytes(2048),
-            environment={"ONCA_QA_ARTIFACTS_BUCKET": artifacts.bucket_name},
+            environment={
+                "ONCA_QA_ARTIFACTS_BUCKET": artifacts.bucket_name,
+                # Confirmed live (#128): Firefox hangs for its full 180s launch timeout
+                # trying to write its profile/cache under $HOME, which Lambda's execution
+                # environment leaves read-only ("unable to create directory
+                # '/home/sbx_user.../.cache/dconf': Read-only file system"). Chromium
+                # tolerates this; Firefox (and, empirically, WebKit) do not. /tmp is the
+                # one writable path in a Lambda container.
+                "HOME": "/tmp",
+                "XDG_CACHE_HOME": "/tmp/.cache",
+                "XDG_CONFIG_HOME": "/tmp/.config",
+            },
         )
 
-        skeleton_task = sfn_tasks.LambdaInvoke(
-            self, "QaSkeletonTask", lambda_function=runner_fn,
-            payload=sfn.TaskInput.from_object({}),
+        # #128: log in ONCE (the entry QA persona), then fan the resulting sessionStorage
+        # out to every {browser, viewport} shard via the Map's item_selector — the state-
+        # machine equivalent of Playwright's storageState reuse (ADR 027 "State
+        # management"), so 6 shards don't each pay for their own Hosted UI round-trip.
+        login_task = sfn_tasks.LambdaInvoke(
+            self, "QaLoginTask", lambda_function=runner_fn,
+            payload=sfn.TaskInput.from_object({"mode": "login", "persona": "entry"}),
+            payload_response_only=True,
         )
+
+        # WebKit is deliberately NOT in this matrix yet: it crashes on `new_page()` inside
+        # the Lambda execution environment with no diagnostic stderr at all (unlike
+        # Chromium/Firefox, both of which crashed loudly and were fixed — see
+        # CHROMIUM_LAUNCH_ARGS in handler.py and the HOME/XDG env vars above). Tried and
+        # ruled out: WEBKIT_DISABLE_COMPOSITING_MODE=1 (a documented WebKit-in-Docker
+        # fix elsewhere) made no difference. Documented as a known gap rather than an
+        # open-ended debugging spiral — see qa_pipeline/README.md.
+        MATRIX = [
+            {"browser": browser, "viewport": viewport}
+            for browser in ("chromium", "firefox")
+            for viewport in ("desktop", "tablet", "phone")
+        ]
+        # `sfn.Map`'s inline `items=` prop is JSONata-only; this state machine (like the
+        # rest of this repo's Step Functions definitions) uses classic JSONPath, so the
+        # fixed matrix has to be injected into the state's JSON via a Pass first, then
+        # referenced by `items_path`.
+        inject_matrix = sfn.Pass(
+            self, "QaMatrixSpec",
+            # Result.from_object requires a Mapping (jsii type-checked), hence the extra
+            # {"list": [...]} nesting rather than injecting the array directly.
+            result=sfn.Result.from_object({"list": MATRIX}), result_path="$.matrix",
+        )
+        matrix_map = sfn.Map(
+            self, "QaMatrix",
+            items_path="$.matrix.list",
+            item_selector={
+                "browser.$": "$$.Map.Item.Value.browser",
+                "viewport.$": "$$.Map.Item.Value.viewport",
+                "session_storage.$": "$.session_storage",
+            },
+            # Cost/quota containment (ADR 027 "Cross-browser & responsive") — bounded
+            # parallelism, not unbounded fan-out.
+            max_concurrency=3,
+        )
+        matrix_task = sfn_tasks.LambdaInvoke(
+            self, "QaMatrixShard", lambda_function=runner_fn,
+            payload=sfn.TaskInput.from_object({
+                "mode": "matrix",
+                "browser.$": "$.browser",
+                "viewport.$": "$.viewport",
+                "session_storage.$": "$.session_storage",
+            }),
+            payload_response_only=True,
+        )
+        matrix_map.item_processor(matrix_task)
+
         state_machine = sfn.StateMachine(
             self, "QaPipeline", state_machine_name="OncaQaPipeline",
-            definition_body=sfn.DefinitionBody.from_chainable(skeleton_task),
+            definition_body=sfn.DefinitionBody.from_chainable(
+                login_task.next(inject_matrix).next(matrix_map)),
             timeout=Duration.minutes(14),
         )
         # Nightly only, not per-PR — cost containment (ADR 027 "Consequences") until real

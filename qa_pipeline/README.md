@@ -98,9 +98,34 @@ aws lambda update-function-code --function-name onca-qa-runner \
 (A full `cdk deploy OncaQaPipelineStack` also works but is not needed for a code-only
 change — same fast-path convention as this repo's other Lambdas.)
 
-### Two real gotchas found getting the skeleton task to run in Lambda
+### Cross-browser + viewport matrix (#128)
 
-Both confirmed live 2026-09-16, in order encountered:
+`OncaQaPipeline` now runs: `QaLoginTask` (one Hosted UI login as the `entry` QA persona) →
+`QaMatrixSpec` (a `Pass` injecting the fixed browser×viewport list) → `QaMatrix` (a `Map`,
+`max_concurrency=3`) → `QaMatrixShard` (one Lambda invoke per item, `mode: "matrix"`). Each
+shard seeds the login's captured sessionStorage (`auth.seed_session_storage`, no
+re-authentication per shard), navigates `/exec` at the given viewport, and asserts both the
+expected title AND `document.documentElement.scrollWidth <= clientWidth` — the actual,
+checkable signature of the #125 mobile-responsive contract, not just "the page loaded."
+
+Matrix today: **Chromium + Firefox** × desktop (1920×1080) / tablet (860px) / phone (480px)
+— `/exec`'s actual breakpoints, not arbitrary device names. **WebKit is deliberately not
+included** (see gotcha below).
+
+Manually invoke a single shard directly, without the state machine, while iterating:
+
+```bash
+aws lambda invoke --function-name onca-qa-runner --cli-read-timeout 90 \
+  --payload '{"mode":"login","persona":"entry"}' --cli-binary-format raw-in-base64-out \
+  /tmp/login.json
+python3 -c "import json; d=json.load(open('/tmp/login.json')); \
+  json.dump({'mode':'matrix','browser':'chromium','viewport':'phone', \
+  'session_storage':d['session_storage']}, open('/tmp/shard.json','w'))"
+aws lambda invoke --function-name onca-qa-runner --cli-read-timeout 90 \
+  --payload file:///tmp/shard.json --cli-binary-format raw-in-base64-out /tmp/out.json
+```
+
+### Real gotchas found building this (all confirmed live)
 
 1. **The Playwright Python *pip package* is not pre-installed in Microsoft's official
    `mcr.microsoft.com/playwright/python` image** — only the OS deps and browser binaries
@@ -112,5 +137,35 @@ Both confirmed live 2026-09-16, in order encountered:
    privileges in the Lambda execution environment; fixed with `--no-sandbox
    --disable-dev-shm-usage`), then a SECOND failure, "Target crashed" (Chromium's normal
    multi-process model needs process-fork privileges Lambda doesn't grant either; fixed with
-   `--single-process --no-zygote`). All four flags are required together — see
-   `handler.py`'s `chromium.launch()` call.
+   `--single-process --no-zygote`).
+3. **Firefox hangs for its full 180s launch timeout** trying to write its profile/cache
+   under `$HOME`, which Lambda's execution environment leaves read-only (`unable to create
+   directory '/home/sbx_user.../.cache/dconf': Read-only file system`). Fixed by setting
+   `HOME=/tmp`, `XDG_CACHE_HOME=/tmp/.cache`, `XDG_CONFIG_HOME=/tmp/.config` as Lambda
+   environment variables — `/tmp` is the one writable path in the container.
+4. **WebKit crashes on `new_page()` with no diagnostic output at all** (`TargetClosedError`,
+   no stderr from the browser process, unlike Chromium/Firefox which both failed loudly).
+   Tried and ruled out: the HOME/XDG fix above (no effect), `WEBKIT_DISABLE_COMPOSITING_MODE=1`
+   (a documented WebKit-in-Docker fix elsewhere, no effect here either). Left as a known,
+   undiagnosed gap rather than an open-ended debugging spiral — the matrix ships with
+   Chromium + Firefox; WebKit is a fast-follow once there's a way to get real crash
+   diagnostics out of it (worth trying: `xvfb-run`, since WebKit's Linux headless mode is
+   less mature than Chromium's/Firefox's and sometimes needs a real, if virtual, display).
+5. **`sfn.Map`'s inline `items=` CDK prop is JSONata-only** — this repo's state machines use
+   classic JSONPath (`OncaPipeline`'s own convention), so the fixed matrix array has to be
+   injected via a preceding `sfn.Pass` (`result_path="$.matrix"`) and referenced by
+   `items_path`, not passed directly as `sfn.ProvideItems.json_array(...)`.
+6. **A real product bug, not a pipeline bug**: the very first live matrix run correctly
+   failed at 480px/860px — `document.documentElement.scrollWidth` was 299-721px wider than
+   the viewport on `/exec`, despite #125's grid-collapse pass. Root cause (confirmed via a
+   live DOM scan, not guessed): `.badge--infer` (the long descriptive captions on inference
+   badges, e.g. "ROE·ROA·alavancagem·eficiência·share de lucro · IF.data + balancete ·
+   inferência") inherits `.badge`'s shared `white-space: nowrap`, which is correct for SHORT
+   status badges but forces 300-600px-wide unbroken lines for these longer captions at any
+   viewport width. Fixed in `src/dashboard/site/v2/app.css`'s `max-width: 780px` block
+   (`.badge--infer { white-space: normal; text-align: left; }`), scoped to the one modifier
+   class so short status badges elsewhere keep their one-line guarantee. (A red herring
+   ruled out along the way: the inspection drawer's `position:fixed` + `transform:
+   translateX(100%)` closed state does NOT inflate `scrollWidth` — `visibility: hidden` was
+   added to it anyway for a11y correctness, since `aria-hidden="true"` was already set, but
+   it was not the cause of the overflow.)

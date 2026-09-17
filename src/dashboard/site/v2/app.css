@@ -451,8 +451,15 @@ details.fold.chg > summary { padding: var(--s2) var(--s3); font-size: var(--fs-m
   background: var(--surface); border-left: 1px solid var(--border);
   box-shadow: var(--shadow-2); transform: translateX(100%); transition: transform .22s ease;
   overflow-y: auto;
+  /* A fixed-position box still counts toward the document's scrollable overflow even
+     when transformed fully off-screen (confirmed live, ADR 027 #128: closed drawer forced
+     horizontal scroll on every narrow viewport — 721px scrollWidth in a 480px viewport).
+     visibility:hidden removes it from that calculation (and from the a11y tree/tab order,
+     which pairs correctly with the aria-hidden already set on it) without breaking the
+     transform transition, since the slide itself is driven by transform, not visibility. */
+  visibility: hidden;
 }
-.drawer.open { transform: translateX(0); }
+.drawer.open { transform: translateX(0); visibility: visible; }
 .drawer__hd { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); padding: var(--s4); border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--surface); }
 .drawer__hd h3 { margin: 0; font-size: var(--fs-md); }
 .drawer__bd { padding: var(--s4); }
@@ -479,6 +486,15 @@ details.fold.chg > summary { padding: var(--s2) var(--s3); font-size: var(--fs-m
      rows instead of overflowing — every dashboard (v2, v3/exec, entry) inherits
      this from the one .appbar rule, so fixing it here fixes it everywhere. */
   .appbar { flex-wrap: wrap; row-gap: var(--s2); }
+  /* .badge's shared `white-space: nowrap` (line 230) is correct for short status
+     badges ("crítico", "alto"...) but .badge--infer carries full descriptive
+     captions ("ROE·ROA·alavancagem·eficiência·share de lucro · IF.data +
+     balancete · inferência") that were forcing 300-600px-wide unbroken lines,
+     overflowing every narrow viewport regardless of the #125 grid-collapse pass
+     — confirmed live (ADR 027 #128's cross-viewport matrix test, the actual bug
+     that test exists to catch). Scoped to this one modifier, not the shared base
+     rule, so short status badges elsewhere keep their one-line guarantee. */
+  .badge--infer { white-space: normal; text-align: left; }
 }
 @media (max-width: 480px) {
   /* 44px is the standard minimum touch target; the desktop sizes below are
