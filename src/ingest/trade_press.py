@@ -44,10 +44,19 @@ OUTLET_FEEDS: list[tuple[str, str]] = [
     ("Money Times", "https://www.moneytimes.com.br/tag/mercados/feed/"),
     # Mainstream financial press — previously reachable only through the Google
     # News aggregate, which yields redirect URLs instead of publisher links and
-    # caps recall at the top 10 per query term. Exame's *section* feed is used
-    # deliberately: its site-wide feed is general interest (entertainment, sport).
-    # NB Exame emits ISO-8601 in <pubDate> — see `_iso`. Verified live 2026-09-16.
+    # caps recall at the top 10 per query term. Verified live 2026-09-16.
+    #
+    # Exame: the *section* feed, deliberately — the site-wide one is general
+    # interest (today's top item was an Oscars story). 25 items deep. NB it emits
+    # ISO-8601 in <pubDate>, which is why `_iso` carries an ISO fallback.
     ("Exame", "https://exame.com/invest/feed/"),
+    # InfoMoney: site-wide feed only. Its section feeds (/mercados/, /negocios/,
+    # /economia/, /onde-investir/) all return HTTP 200 with ZERO items — empty
+    # shells, re-probed 2026-09-16, don't retry them. So this one is low-yield:
+    # 10 items deep and mostly general interest (lottery results, football), and
+    # at 3 pipeline runs/day most of InfoMoney's output never lands inside that
+    # window. Google News stays the primary route for this publisher; the direct
+    # feed only upgrades citation quality on the subset it happens to catch.
     ("InfoMoney", "https://www.infomoney.com.br/feed/"),
     # Insurance trade press — the domain's real signal lives in specialist outlets,
     # so the news-dependent insurers (not separately B3-listed: SulAmérica,
