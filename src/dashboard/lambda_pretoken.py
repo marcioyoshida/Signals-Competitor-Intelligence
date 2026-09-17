@@ -29,9 +29,17 @@ surfaced to the browser (confirmed as Bluefin's actual failure mode the first ti
 class of bug) — letting the login "succeed" into an already-fail-closed API is strictly safer
 than trying to reject it here.
 
-Also fires on every native password login (a fast no-op: those users already carry a real
-`custom:tenant` attribute set at `AdminCreateUser` time), since a Pre Token Generation trigger
-attaches to the whole pool, not to a specific identity provider.
+Also fires on every native password login, since a Pre Token Generation trigger attaches to
+the whole pool, not to a specific identity provider. Those users already carry a real
+`custom:tenant`/`custom:tier` attribute set at `AdminCreateUser` time — but it must still be
+explicitly re-asserted via `claimsOverrideDetails` here, NOT left as a no-op: confirmed live
+(ADR 027 #126) that Cognito's Hosted UI OAuth Authorization Code flow (this pool's
+`PreTokenGenerationConfig.LambdaVersion = V1_0`) omits custom attributes from the ID token
+unless a trigger explicitly re-asserts them, even though the SAME user's `AdminInitiateAuth`
+token includes them fine. Before this was discovered, EVERY password-login tenant's ID token
+was silently missing `custom:tenant`, which would 403 at the `/api/feed` read boundary — this
+class of bug had gone unnoticed because Google logins (which always go through the federated
+`claimsOverrideDetails` branch below) were the only OAuth-flow logins tested end-to-end.
 """
 from __future__ import annotations
 
@@ -43,7 +51,21 @@ FEDERATED_TABLE = os.environ.get("ONCA_FEDERATED_MAP_TABLE", "")
 def lambda_handler(event, context):
     attrs = event.get("request", {}).get("userAttributes", {}) or {}
     if attrs.get("custom:tenant"):
-        return event  # password user — real attribute already set at creation, nothing to do
+        # Password user — the attribute is real, set at AdminCreateUser time. It shows up
+        # fine in a native InitiateAuth/AdminInitiateAuth token, but Cognito's Hosted UI
+        # OAuth Authorization Code flow (V1_0 Pre Token Generation) omits custom attributes
+        # from the ID token unless a trigger explicitly re-asserts them via
+        # claimsOverrideDetails — confirmed live (ADR 027 #126 QA persona round-trip):
+        # AdminInitiateAuth returned custom:tenant/custom:tier, the Hosted UI code-grant
+        # token for the SAME user did not. Re-assert explicitly rather than no-op.
+        event.setdefault("response", {})
+        event["response"]["claimsOverrideDetails"] = {
+            "claimsToAddOrOverride": {
+                "custom:tenant": attrs["custom:tenant"],
+                "custom:tier": attrs.get("custom:tier", "saas"),
+            }
+        }
+        return event
 
     email = (attrs.get("email") or "").strip().lower()
     if not email or not FEDERATED_TABLE:

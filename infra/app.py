@@ -1025,6 +1025,36 @@ class OncaPrototypeStack(Stack):
             ],
         )
 
+        # ADR 027 (#126): two dedicated QA personas for the automated Playwright
+        # navigation/visual pipeline — never a real design partner's tenant. One entry
+        # persona (exercises the licensed-industry scoping/deep-linking contract from
+        # the 2026-09-12 sector-scoping fix) and one sovereign/admin persona (exercises
+        # the multi-industry, higher-tier surface). Their `onca-tenant-config` rows are
+        # created separately via `provision_tenant.py` (not CDK — matches how every
+        # real tenant is provisioned); this stack only creates the Cognito identities.
+        # Same SUPPRESS/FORCE_CHANGE_PASSWORD-then-admin-set pattern as the fleet
+        # health-check user above — this stack never contains the password itself.
+        for _qa_username, _qa_tenant, _qa_tier in (
+            ("qa-test-entry@onca.example", "qa-internal-test", "entry"),
+            ("qa-test-admin@onca.example", "qa-internal-admin", "sovereign"),
+        ):
+            cognito.CfnUserPoolUser(
+                self, f"OncaQaUser{_qa_tier.capitalize()}",
+                user_pool_id=user_pool.user_pool_id,
+                username=_qa_username,
+                message_action="SUPPRESS",
+                user_attributes=[
+                    cognito.CfnUserPoolUser.AttributeTypeProperty(
+                        name="email", value=_qa_username),
+                    cognito.CfnUserPoolUser.AttributeTypeProperty(
+                        name="email_verified", value="true"),
+                    cognito.CfnUserPoolUser.AttributeTypeProperty(
+                        name="custom:tenant", value=_qa_tenant),
+                    cognito.CfnUserPoolUser.AttributeTypeProperty(
+                        name="custom:tier", value=_qa_tier),
+                ],
+            )
+
         # And a CloudWatch dashboard to watch pilot traffic at a glance.
         def _cf_metric(name: str, statistic: str) -> cloudwatch.Metric:
             return cloudwatch.Metric(

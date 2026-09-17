@@ -2,8 +2,10 @@
 login via a pre-registered email->tenant mapping. custom:tenant is mutable=False and Cognito
 rejects AdminUpdateUserAttributes on it even when it was never set (confirmed live in the
 Bluefin fork this pattern is ported from) — a federated user's tenant is injected into the
-token via claimsOverrideDetails instead, and must be a fast no-op for a password login (which
-already has a real custom:tenant attribute)."""
+token via claimsOverrideDetails instead. A password login's custom:tenant is a REAL attribute,
+but must still be explicitly re-asserted via claimsOverrideDetails, not left as a no-op — see
+lambda_pretoken.py's module docstring for the live-confirmed Hosted UI OAuth gotcha (ADR 027
+#126) this test guards against regressing."""
 from __future__ import annotations
 
 from unittest import mock
@@ -15,13 +17,26 @@ def _event(attrs):
     return {"request": {"userAttributes": attrs}, "response": {}}
 
 
-def test_password_login_is_a_pure_noop():
+def test_password_login_reasserts_its_own_tenant_and_tier_claims():
+    """Not a no-op: Cognito's Hosted UI OAuth code-grant flow omits custom attributes from the
+    ID token unless the trigger explicitly re-adds them, even though the same user's
+    AdminInitiateAuth token includes them fine (confirmed live 2026-09-16) — no DynamoDB lookup
+    needed since the values are already on the incoming password-login attributes."""
+    ev = _event({"email": "a@b.com", "custom:tenant": "t-existing", "custom:tier": "saas"})
+    with mock.patch("boto3.client") as bc:
+        out = lambda_pretoken.lambda_handler(ev, None)
+    bc.assert_not_called()
+    override = out["response"]["claimsOverrideDetails"]["claimsToAddOrOverride"]
+    assert override == {"custom:tenant": "t-existing", "custom:tier": "saas"}
+
+
+def test_password_login_defaults_tier_to_saas_if_somehow_missing():
     ev = _event({"email": "a@b.com", "custom:tenant": "t-existing"})
     with mock.patch("boto3.client") as bc:
         out = lambda_pretoken.lambda_handler(ev, None)
     bc.assert_not_called()
-    assert out is ev
-    assert "claimsOverrideDetails" not in out["response"]
+    override = out["response"]["claimsOverrideDetails"]["claimsToAddOrOverride"]
+    assert override == {"custom:tenant": "t-existing", "custom:tier": "saas"}
 
 
 def test_mapped_google_email_injects_tenant_and_tier_claims():
