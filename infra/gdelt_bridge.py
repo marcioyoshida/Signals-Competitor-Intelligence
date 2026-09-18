@@ -26,16 +26,29 @@ see ``gdelt_bridge_requirements.txt`` for why this can't share the main asset):
 
     rm -rf build/lambda-gdelt-bridge && mkdir -p build/lambda-gdelt-bridge
     pip install -r infra/gdelt_bridge_requirements.txt -t build/lambda-gdelt-bridge
-    cp src/ingest/gdelt_bridge.py build/lambda-gdelt-bridge/
+    cp src/ingest/gdelt_bridge.py src/ingest/gdelt_macro.py src/ingest/gdelt_macro_handler.py \
+      build/lambda-gdelt-bridge/
     # Phase B only: cp <path-to-generated-cred-config>.json build/lambda-gdelt-bridge/gcp_cred_config.json
+
+O2 (#137) adds a second Lambda (``GdeltMacroFn``) in this SAME stack, sharing the SAME
+IAM role — not a new role — because the GCP-side workload identity provider trusts one
+exact role name (``OncaGdeltBridgeRole``); giving O2 its own role would mean redoing the
+whole GCP trust setup for no benefit, since both functions have the identical "reach
+BigQuery, nothing else" job. The role picks up one incremental permission: S3 PutObject
+scoped to the ``lambda-digests/gdelt_macro/*`` prefix of the existing shared digests
+bucket (imported by name, not created — same account-level bucket ``lambda_port.py``
+already writes ``lambda-digests/news/*`` into).
 """
 from __future__ import annotations
 
 from pathlib import Path
 
 from aws_cdk import Duration, Stack
+from aws_cdk import aws_events as events
+from aws_cdk import aws_events_targets as targets
 from aws_cdk import aws_iam as iam
 from aws_cdk import aws_lambda as lambda_
+from aws_cdk import aws_s3 as s3
 from constructs import Construct
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -43,6 +56,7 @@ GDELT_BRIDGE_ASSET = REPO_ROOT / "build" / "lambda-gdelt-bridge"
 
 ROLE_NAME = "OncaGdeltBridgeRole"
 FN_NAME = "OncaGdeltBridgeFn"
+MACRO_FN_NAME = "OncaGdeltMacroFn"
 
 
 class OncaGdeltBridgeStack(Stack):
@@ -87,3 +101,40 @@ class OncaGdeltBridgeStack(Stack):
             memory_size=256,
             environment=env,
         )
+
+        # O2 (#137) — imported, not created: the same account-level digests bucket
+        # `lambda_port.py` already writes `lambda-digests/news/*` into.
+        digests_bucket = s3.Bucket.from_bucket_name(
+            self, "GdeltMacroDigestsBucket", f"onca-digests-{self.account}"
+        )
+        digests_bucket.grant_put(role, "lambda-digests/gdelt_macro/*")
+
+        macro_env = dict(env)
+        macro_env["ONCA_DIGESTS_BUCKET"] = digests_bucket.bucket_name
+
+        macro_fn = lambda_.Function(
+            self,
+            "GdeltMacroFn",
+            function_name=MACRO_FN_NAME,
+            runtime=lambda_.Runtime.PYTHON_3_12,
+            handler="gdelt_macro_handler.handler",
+            code=lambda_.Code.from_asset(str(GDELT_BRIDGE_ASSET)),
+            role=role,
+            timeout=Duration.minutes(2),
+            memory_size=256,
+            environment=macro_env,
+        )
+
+        if gcp_ready:
+            # Daily, well after GKG's own data for "yesterday" is complete (GKG updates
+            # every 15 min but this Lambda always targets `today - 1` — see
+            # gdelt_macro_handler.py — so any time after midnight UTC is safe; picked
+            # 07:00 UTC to land alongside the existing nightly QA pipeline cadence
+            # rather than clustering everything at 00:00).
+            events.Rule(
+                self,
+                "GdeltMacroDailyTrigger",
+                schedule=events.Schedule.cron(minute="0", hour="7"),
+                targets=[targets.LambdaFunction(macro_fn)],
+                description="O2 (#137): daily GDELT macro-theme sweep, ~$0.002/run.",
+            )
