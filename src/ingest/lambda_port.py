@@ -422,6 +422,17 @@ def _news_slice(context: Any) -> dict[str, Any]:
         except Exception as exc:  # pragma: no cover - best-effort, config still works
             print(f"Warning: registry news terms unavailable, using config: {exc}")
 
+    def _news_excludes() -> dict[str, list[str]] | None:
+        if not os.environ.get("ONCA_ENTITIES_TABLE"):
+            return None
+        try:
+            from src.synth import entity_registry
+
+            return entity_registry.news_excludes()
+        except Exception as exc:  # pragma: no cover - best-effort, the veto is optional
+            print(f"Warning: registry news excludes unavailable: {exc}")
+            return None
+
     deadline = _ingest_deadline(context)
     per_source = int(os.environ.get("ONCA_SOURCE_TIMEOUT_SEC", "90"))
     news_items: list[dict[str, Any]] = []
@@ -433,6 +444,10 @@ def _news_slice(context: Any) -> dict[str, Any]:
                     news_terms,
                     lookback_days=news_lookback,
                     max_terms=int(os.environ.get("ONCA_NEWS_MAX_TERMS", "80")),
+                    # #135 mode 2: curated per-entity disqualifying phrases for
+                    # true homonyms. Best-effort — a registry hiccup must not
+                    # take the whole news lens down, it only loses the veto.
+                    excludes=_news_excludes(),
                 )
                 # Deferred commit (issue #23): compute the fresh set but do NOT
                 # mark anything seen here. Synth commits ``fetched_ids`` only

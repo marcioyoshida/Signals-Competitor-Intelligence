@@ -254,6 +254,7 @@ def put_entity(
     canonical_id: str | None = None,
     news_term: str | None = None,
     ambiguous_tokens: Iterable[str] | None = None,
+    news_exclude: Iterable[str] | None = None,
     fatos_term: str | None = None,
     news_search: bool = True,
     ownership: str | None = None,
@@ -332,6 +333,14 @@ def put_entity(
         entity["fatos_term"] = str(fatos_term)
     if not news_search:
         entity["news_search"] = False
+    #  - news_exclude: phrases that DISQUALIFY a headline match for this entity —
+    #    the curated answer to #135 mode 2 (true homonyms, where two real things
+    #    share a brand and no string rule can separate them). Measured live case:
+    #    "NEON 2026" is an innovation event in Alagoas, not Neon the bank.
+    if news_exclude:
+        entity["news_exclude"] = sorted(
+            {str(x).strip() for x in news_exclude if str(x).strip()}
+        )
     if ambiguous_tokens is not None:
         toks = sorted(
             {
@@ -1662,6 +1671,37 @@ def news_terms(table: Any | None = None, *, trusted_only: bool = True) -> list[s
     return sorted(out)
 
 
+def news_excludes(table: Any | None = None) -> dict[str, list[str]]:
+    """``{news_term_lower: [disqualifying phrase, ...]}`` for headline matching.
+
+    #135 mode 2: word-boundary matching fixes a short name swallowing a longer word,
+    but it cannot separate two real things that share a whole-word brand. That needs
+    curation, not a string rule — so the disqualifying phrases are registry data
+    (API-editable, same as ``news_term``/``ambiguous_tokens``), keyed by the search
+    term the ingester actually matches on rather than by entity_id.
+
+    Keyed on the term (not the id) because several entities can share one term
+    (``neon`` and ``neon-corretora`` both search "Neon"); their exclusions merge, which
+    is the safe direction — an exclusion suppresses a mis-attribution, so over-applying
+    it costs a little recall, while under-applying it ships a wrong attribution.
+    """
+    out: dict[str, list[str]] = {}
+    for e in _scan_type(_table(table), "entity"):
+        if not e.get("active", True):
+            continue
+        excl = [str(x).strip() for x in (e.get("news_exclude") or []) if str(x).strip()]
+        if not excl:
+            continue
+        term = news_query_term(
+            e.get("entity_id"), e.get("display_name"), stored=e.get("news_term")
+        )
+        if not term:
+            continue
+        merged = set(out.get(term.lower()) or []) | set(excl)
+        out[term.lower()] = sorted(merged)
+    return out
+
+
 def fatos_terms(table: Any | None = None, *, trusted_only: bool = True) -> list[str]:
     """Derive CVM material-fact (Fato Relevante) issuer-name phrases from the
     registry — the STRUCTURED lens for B3-listed entities.
@@ -1956,6 +1996,14 @@ def update_entity(
             )
             ent["ambiguous_tokens"] = toks
             ent["ambiguous"] = bool(toks)
+        elif key == "news_exclude":
+            # #135 mode 2 (homonyms): phrases that DISQUALIFY a headline match for
+            # this entity. Multi-word allowed (unlike ambiguous_tokens) — a homonym
+            # is usually distinguished by a phrase ("NEON 2026", the innovation
+            # event, vs. Neon the bank), not a bare token.
+            ent["news_exclude"] = sorted(
+                {str(x).strip() for x in (val or []) if str(x).strip()}
+            )
         elif key == "industries":
             ent["industries"] = sorted(
                 {str(i).strip().lower() for i in (val or []) if str(i).strip()}

@@ -172,6 +172,7 @@ def _entities(method: str, rest: list[str], event: dict[str, Any], reg: Any) -> 
                 confidence=str(body.get("confidence") or "curated"),
                 news_term=body.get("news_term"),
                 ambiguous_tokens=body.get("ambiguous_tokens"),
+                news_exclude=body.get("news_exclude"),
                 fatos_term=body.get("fatos_term"),
                 news_search=news_search,
                 controllers=body.get("controllers"),

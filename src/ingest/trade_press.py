@@ -98,7 +98,22 @@ FINANCE_TERMS = frozenset({
     "emprést", "lucro", "prejuíz", "prejuiz", "resultado", "receita", "ação",
     "ações", "acoes", "bolsa", "b3", "aquisi", "fusão", "fusao", "ipo", "oferta",
     "cvm", "juros", "cartão", "cartao", "investiment", "seguro", "balanço",
-    "balanco", "dividend", "capital", "valuation", "preço-alvo", "preco-alvo",
+    "balanco", "dividend", "valuation", "preço-alvo", "preco-alvo",
+    # Verb/agent forms of investir. "investiment" (the noun) alone dropped real
+    # funding signals ("Nomad investe R$ 100M..."). Deliberately NOT the bare stem
+    # "investi" — that is also a prefix of "investigação/investigar", the same
+    # word-sense collision #135 is about. These five forms cover investe/investem/
+    # investir/investiram/investiu/investindo/investidor(es) and none of them is a
+    # prefix of an investiga* form.
+    "investe", "investir", "investiu", "investind", "investidor",
+    # NOT bare "capital" (#135): it fires on the CAPITAL CITY sense, which is
+    # routine in BR press — "Maceió vira capital nordestina da inovação" was the
+    # one false positive found when measuring the live watchlist, attributing a
+    # tech-event headline to the bank Neon. The financial senses are collocations,
+    # and they keep the real hits ("R$ 100 bi em capital segurado").
+    "capital de giro", "capital social", "capital segurado", "capital semente",
+    "capital próprio", "capital proprio", "capital estrangeiro", "capital aberto",
+    "abertura de capital", "aumento de capital", "mercado de capitais",
     "fraude", "golpe", "aporte", "rodada", "funding", "ceo", "cfo", "expansã",
     "expansao", "digital", "unicórnio", "unicornio", "financeir", "títulos",
     "titulos", "debênture", "debenture", "fundo", "susep", "cade", "bacen",
@@ -165,6 +180,30 @@ def _phrase_match(term_folded: str, title_folded: str) -> bool:
         start = idx + 1
 
 
+def _excluded(term: str, title_folded: str, excludes: dict[str, list[str]] | None) -> bool:
+    """True if a curated disqualifying phrase for ``term`` appears in the headline.
+
+    #135 mode 2 (homonyms): word boundaries can't separate two real things sharing a
+    whole-word brand, so the registry curates the phrases that mean "not this entity"
+    (e.g. "NEON 2026", an innovation event, vs. Neon the bank). Substring (not
+    word-bounded) on purpose — an exclusion is a deliberate, curated veto, so the
+    broader reading is the safe one here.
+    """
+    if not excludes:
+        return False
+    key = (term or "").lower()
+    phrases = excludes.get(key)
+    if phrases is None:  # tolerate un-normalized keys: a silently-skipped veto ships
+        phrases = next(  # a wrong attribution, which is the failure this guards against
+            (v for k, v in excludes.items() if str(k).lower() == key), None
+        )
+    for phrase in phrases or []:
+        pf = _fold(phrase)
+        if pf and pf in title_folded:
+            return True
+    return False
+
+
 def fetch_news(
     terms: Iterable[str],
     lookback_days: int = DEFAULT_LOOKBACK_DAYS,
@@ -172,6 +211,7 @@ def fetch_news(
     max_per_term: int = 10,
     require_finance_context: bool = True,
     include_outlets: bool = True,
+    excludes: dict[str, list[str]] | None = None,
     outlet_feeds: list[tuple[str, str]] | None = None,
     today: dt.date | None = None,
     fetcher: Callable[[str], bytes] | None = None,
@@ -203,7 +243,10 @@ def fetch_news(
             # precision: the competitor must appear in the headline as a phrase
             # (full brand, accent-folded, word-bounded) — not just a shared
             # generic token, and not as a prefix swallowed by a longer word.
-            if term_f and not _phrase_match(term_f, _fold(title)):
+            title_f = _fold(title)
+            if term_f and not _phrase_match(term_f, title_f):
+                continue
+            if _excluded(term, title_f, excludes):
                 continue
             # and it must be business news (drops band/stadium/culture noise)
             if require_finance_context and not _has_finance_context(title):
@@ -224,7 +267,13 @@ def fetch_news(
             for rec in _parse_feed(ofetch(feed_url), publisher):
                 title_f = _fold(rec.get("title") or "")
                 matched = next(
-                    (t for t, tf in term_folded.items() if tf and _phrase_match(tf, title_f)),
+                    (
+                        t
+                        for t, tf in term_folded.items()
+                        if tf
+                        and _phrase_match(tf, title_f)
+                        and not _excluded(t, title_f, excludes)
+                    ),
                     None,
                 )
                 if not matched:

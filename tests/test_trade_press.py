@@ -228,3 +228,85 @@ def test_finance_context_acquiring_sector():
     assert _has_finance_context("Rede reduz MDR para pequenos comerciantes")              # mdr
     assert _has_finance_context("Credenciadora eleva TPV no trimestre")                   # credenciad/tpv
     assert not _has_finance_context("rede de apoio comunitário abre inscrições")
+
+
+def test_finance_context_capital_city_sense_does_not_pass():
+    # #135 mode-1 class, found INSIDE the finance gate while measuring the live
+    # watchlist: bare "capital" fired on the CAPITAL CITY sense, which is routine
+    # in BR press. "Maceió vira capital nordestina..." was the single false
+    # positive in the whole measured sample — it attributed a tech-event headline
+    # to the bank Neon. The financial senses are collocations, so they still pass.
+    from src.ingest.trade_press import _has_finance_context
+    assert not _has_finance_context("Maceió vira capital nordestina da inovação com o NEON 2026")
+    assert not _has_finance_context("Capital paulista recebe evento de inovação com a Stone")
+    # the real hits that DID depend on "capital" must survive
+    assert _has_finance_context("Azos rompe barreira dos R$ 100 bi em capital segurado")
+    assert _has_finance_context("Empresa busca capital de giro para expandir operação")
+    assert _has_finance_context("Stone anuncia abertura de capital na Nasdaq")
+    assert _has_finance_context("Assembleia aprova aumento de capital social")
+    assert _has_finance_context("Fundo de capital semente investe em startups")
+
+
+def test_finance_context_covers_investir_verbs_but_not_investigar():
+    # Measured recall gap: "investiment" (the noun) alone dropped real funding
+    # signals like "Nomad investe mais de R$ 100M...". The verb/agent forms are
+    # added WITHOUT the bare stem "investi", which would also match
+    # "investigação/investigar" — the very word-sense collision #135 is about.
+    from src.ingest.trade_press import _has_finance_context
+    assert _has_finance_context("Nomad investe mais de R$ 100M para trazer o Time Out Market")
+    assert _has_finance_context("Munich Re investe na Azos")
+    assert _has_finance_context("Fundo investiu R$ 50 milhões na fintech")
+    assert _has_finance_context("Grupo vai investir R$ 2 bilhões em novas lojas")
+    assert _has_finance_context("Investidores acompanham a decisão do Copom")
+    # investiga* must NOT satisfy the finance gate on its own
+    assert not _has_finance_context("Polícia investiga suposto esquema na empresa")
+    assert not _has_finance_context("Investigação aponta irregularidades na obra")
+
+
+def test_news_exclude_vetoes_a_homonym_on_the_google_news_path():
+    # #135 mode 2: "NEON 2026" is an innovation event in Alagoas, not Neon the bank.
+    # Measured live — it passes the word-boundary AND finance gates ("investimentos"),
+    # so only curated per-entity knowledge can separate it from the real brand.
+    items = [
+        ("NEON 2026 gera R$ 20 milhões em negócios e investimentos",
+         "http://x/1", "Thu, 13 Aug 2026 10:00:00 GMT", "X"),
+        ("Neon capta R$ 300 milhões em nova rodada",
+         "http://x/2", "Thu, 13 Aug 2026 10:00:00 GMT", "X"),
+    ]
+    common = dict(lookback_days=30, today=dt.date(2026, 8, 16),
+                  fetcher=lambda t: _rss(items), include_outlets=False, pause_sec=0)
+    both = trade_press.fetch_news(["Neon"], **common)
+    assert len(both) == 2  # without the veto the event leaks in
+
+    vetoed = trade_press.fetch_news(["Neon"], excludes={"neon": ["NEON 2026"]}, **common)
+    assert [r["title"] for r in vetoed] == ["Neon capta R$ 300 milhões em nova rodada"]
+
+
+def test_news_exclude_vetoes_a_homonym_on_the_outlet_path_too():
+    # The outlet path is where #135 was first observed, so the veto must apply there
+    # as well — and must not suppress a DIFFERENT entity that matches the same title.
+    items = [
+        ("NEON 2026 movimenta o ecossistema de investimentos de Alagoas",
+         "https://valor.globo.com/n/1", "Thu, 14 Aug 2026 10:00:00 GMT", ""),
+    ]
+    news = trade_press.fetch_news(
+        ["Neon"], lookback_days=30, today=dt.date(2026, 8, 16),
+        excludes={"neon": ["NEON 2026"]},
+        fetcher=lambda t: _rss([]), outlet_fetcher=lambda u: _rss(items),
+        outlet_feeds=[("Valor", "https://valor.globo.com/feed")], pause_sec=0,
+    )
+    assert news == []
+
+
+def test_news_exclude_is_accent_and_case_insensitive_and_optional():
+    from src.ingest.trade_press import _excluded, _fold
+    assert _excluded("Neon", _fold("NEON 2026 abre inscrições"), {"neon": ["neon 2026"]})
+    # an un-normalized map key still vetoes — a silently-skipped veto would ship the
+    # wrong attribution, the exact failure this guards against
+    assert _excluded("Neon", _fold("cobertura do NEON 2026"), {"NEON": ["NEON 2026"]})
+    # accents folded on both sides
+    assert _excluded("Pao", _fold("Pão de Açúcar vende ativos"), {"pao": ["pão de açúcar"]})
+    # absent / empty config is a no-op, never a crash
+    assert not _excluded("Neon", _fold("Neon capta R$ 300 mi"), None)
+    assert not _excluded("Neon", _fold("Neon capta R$ 300 mi"), {})
+    assert not _excluded("Neon", _fold("Neon capta R$ 300 mi"), {"outra": ["x"]})

@@ -731,3 +731,32 @@ def test_add_cnpj_roots_preserves_other_fields():
     ent = er.get_entity("inter", table=t)
     assert ent["cnpj_roots"] == ["00416968"]
     assert ent["news_safe"] is True and ent["news_term"] == "Banco Inter"  # not clobbered
+
+
+def test_news_excludes_keyed_by_search_term_and_merged_across_entities():
+    # #135 mode 2: the disqualifying phrases for a homonym are curation DATA, keyed
+    # by the term the ingester matches on. Two entities can share one term ("Neon"),
+    # so their exclusions merge — over-applying a veto costs a little recall, while
+    # under-applying it ships a wrong attribution.
+    t = FakeTable()
+    er.put_entity("neon", "Neon", ["NEON"], confidence="curated",
+                  news_exclude=["NEON 2026"], table=t)
+    er.put_entity("neon-corretora", "Neon", ["NEON CORRETORA"], confidence="curated",
+                  news_exclude=["Neon Cunha"], table=t)
+    er.put_entity("stone", "Stone", ["STONE"], confidence="curated", table=t)
+    ex = er.news_excludes(table=t)
+    assert ex["neon"] == ["NEON 2026", "Neon Cunha"]   # merged + sorted
+    assert "stone" not in ex                            # no curation -> absent, not empty
+
+
+def test_news_excludes_skips_inactive_and_survives_a_patch():
+    t = FakeTable()
+    er.put_entity("neon", "Neon", ["NEON"], confidence="curated",
+                  news_exclude=["NEON 2026"], table=t)
+    assert er.news_excludes(table=t)["neon"] == ["NEON 2026"]
+    # API-editable like news_term / ambiguous_tokens
+    er.update_entity("neon", {"news_exclude": ["NEON 2026", " Rolling Neon "]}, table=t)
+    assert er.news_excludes(table=t)["neon"] == ["NEON 2026", "Rolling Neon"]  # trimmed
+    # deactivated entities drop out of the veto map with everything else
+    er.deactivate_entity("neon", table=t)
+    assert er.news_excludes(table=t) == {}
