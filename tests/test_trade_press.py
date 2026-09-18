@@ -97,6 +97,57 @@ def test_outlet_matching_covers_terms_beyond_google_cap():
     assert news[0]["publisher"] == "Livecoins"
 
 
+def test_outlet_matching_does_not_let_a_short_name_swallow_a_longer_word():
+    # #135 mode 1: "Invest" is a prefix of "investimentos", a routine word in
+    # Brazilian financial press — plain substring containment mis-attributed any
+    # such headline to the small FX broker "Invest". Word-boundary matching fixes
+    # this without touching the legitimate full-phrase match below it.
+    items = [
+        ("O que muda nos investimentos no Brasil com a 1ª alta de juros",
+         "https://valor.globo.com/n/1", "Thu, 14 Aug 2026 10:00:00 GMT", ""),
+        ("Invest amplia base de clientes e lucro no trimestre",
+         "https://valor.globo.com/n/2", "Thu, 14 Aug 2026 10:00:00 GMT", ""),
+    ]
+    news = trade_press.fetch_news(
+        ["Invest"], lookback_days=30, today=dt.date(2026, 8, 16),
+        fetcher=lambda t: b"<rss><channel></channel></rss>",
+        include_outlets=True, outlet_feeds=[("Valor Econômico", "http://feed")],
+        outlet_fetcher=lambda url: _rss(items), pause_sec=0,
+    )
+    assert [n["title"] for n in news] == ["Invest amplia base de clientes e lucro no trimestre"]
+
+
+def test_google_news_matching_does_not_let_a_short_name_swallow_a_longer_word():
+    # Same #135 mode-1 fix applied to the per-term Google News path, not just outlets.
+    items = [
+        ("O que muda nos investimentos no Brasil com a 1ª alta de juros",
+         "http://g1/1", "Thu, 13 Aug 2026 10:00:00 GMT", "G1"),
+    ]
+    news = trade_press.fetch_news(
+        ["Invest"], lookback_days=30, today=dt.date(2026, 8, 16),
+        fetcher=lambda t: _rss(items), include_outlets=False, pause_sec=0,
+    )
+    assert news == []
+
+
+def test_outlet_matching_homonym_is_a_known_unresolved_limitation():
+    # #135 mode 2: two distinct real companies can share a brand ("Centauro" the
+    # insurer vs. the sporting-goods retailer). Word-boundary matching does NOT
+    # (and can't, by itself) disambiguate this — deliberately left as-is here;
+    # the homonym strategy is tracked separately in #135, not silently assumed fixed.
+    items = [
+        ("Split Payment pode reduzir lucro de Magalu, Pague Menos e Centauro",
+         "https://valor.globo.com/n/1", "Thu, 14 Aug 2026 10:00:00 GMT", ""),
+    ]
+    news = trade_press.fetch_news(
+        ["Centauro"], lookback_days=30, today=dt.date(2026, 8, 16),
+        fetcher=lambda t: b"<rss><channel></channel></rss>",
+        include_outlets=True, outlet_feeds=[("Valor Econômico", "http://feed")],
+        outlet_fetcher=lambda url: _rss(items), pause_sec=0,
+    )
+    assert len(news) == 1  # still matches — homonym disambiguation is future work
+
+
 def test_iso_accepts_both_rfc822_and_iso8601_pubdates():
     # RSS nominally mandates RFC-822, but Exame emits ISO-8601. Both must
     # normalize to the same YYYY-MM-DD; anything unparseable stays "".

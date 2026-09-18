@@ -139,6 +139,32 @@ def _has_finance_context(text: str) -> bool:
     return bool(_FINANCE_RE.search((text or "").lower()))
 
 
+def _phrase_match(term_folded: str, title_folded: str) -> bool:
+    """Whole-phrase match: `term_folded` must occur in `title_folded` with a
+    non-alphanumeric (or string-edge) boundary on both sides.
+
+    Plain substring containment lets a short name swallow a longer word it's a
+    prefix of — e.g. the entity "Invest" matching inside "INVESTIMENTOS", a
+    routine word in Brazilian financial press. `_fold()` already strips accents
+    to plain ASCII, so a simple `.isalnum()` boundary check (no regex needed)
+    is exact here, unlike `_FINANCE_RE`'s accent-aware character class.
+    """
+    if not term_folded:
+        return False
+    start = 0
+    n = len(term_folded)
+    while True:
+        idx = title_folded.find(term_folded, start)
+        if idx == -1:
+            return False
+        before_ok = idx == 0 or not title_folded[idx - 1].isalnum()
+        after = idx + n
+        after_ok = after == len(title_folded) or not title_folded[after].isalnum()
+        if before_ok and after_ok:
+            return True
+        start = idx + 1
+
+
 def fetch_news(
     terms: Iterable[str],
     lookback_days: int = DEFAULT_LOOKBACK_DAYS,
@@ -175,8 +201,9 @@ def fetch_news(
                 continue
             title = rec.get("title") or ""
             # precision: the competitor must appear in the headline as a phrase
-            # (full brand, accent-folded) — not just a shared generic token.
-            if term_f and term_f not in _fold(title):
+            # (full brand, accent-folded, word-bounded) — not just a shared
+            # generic token, and not as a prefix swallowed by a longer word.
+            if term_f and not _phrase_match(term_f, _fold(title)):
                 continue
             # and it must be business news (drops band/stadium/culture noise)
             if require_finance_context and not _has_finance_context(title):
@@ -197,7 +224,8 @@ def fetch_news(
             for rec in _parse_feed(ofetch(feed_url), publisher):
                 title_f = _fold(rec.get("title") or "")
                 matched = next(
-                    (t for t, tf in term_folded.items() if tf and tf in title_f), None
+                    (t for t, tf in term_folded.items() if tf and _phrase_match(tf, title_f)),
+                    None,
                 )
                 if not matched:
                     continue
