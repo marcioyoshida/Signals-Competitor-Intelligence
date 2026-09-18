@@ -690,7 +690,7 @@ def test_regulatory_coverage_scan_present_in_full_feed_but_stripped_when_scoped(
 
 
 def test_source_runs_present_in_full_feed_but_stripped_when_scoped():
-    # #137: raw per-source ingestion telemetry (source names, last_error text) is an operator
+    # #139: raw per-source ingestion telemetry (source names, last_error text) is an operator
     # artifact — never leaks into a tenant or entry feed. The reduced coverage_confidence score
     # is client-safe and survives scoping unchanged.
     from src.ingest import source_health as sh

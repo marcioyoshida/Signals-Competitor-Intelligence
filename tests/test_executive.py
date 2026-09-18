@@ -378,7 +378,7 @@ def test_cpo_portfolio_profiles_and_field_completeness():
 
 
 def test_cpo_coverage_confidence_reaches_portfolio_agg_but_not_per_sector():
-    # #137: the client-safe ingestion-confidence score belongs on the __all__ aggregate (source
+    # #139: the client-safe ingestion-confidence score belongs on the __all__ aggregate (source
     # health isn't a per-sector concept) — raw source_runs stays a separate operator-only panel.
     feed = _feed()
     feed["source_runs"] = [{"source": "BCB Pix", "band": "error", "last_error": "HTTP 500 boom"}]

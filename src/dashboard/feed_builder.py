@@ -905,7 +905,7 @@ def scope_feed_to_modules(feed: dict[str, Any], modules: Any) -> dict[str, Any]:
             "financials": [r for r in (feed.get("financials") or []) if row_ok(r)],
             "integrity": {"findings": [], "counts": {}, "total": 0},  # operator-only
             "regulatory_coverage": {},                                # operator-only (#2)
-            "source_runs": [],  # operator-only (#137) — raw per-source telemetry incl. error
+            "source_runs": [],  # operator-only (#139) — raw per-source telemetry incl. error
                                 # text; clients get only the reduced "coverage_confidence" score,
                                 # which `dict(feed)` already carried over unchanged.
         }
@@ -1021,7 +1021,7 @@ def derive_entry_feed(
             "financials": [r for r in (feed.get("financials") or []) if row_ok(r)],
             "integrity": {"findings": [], "counts": {}, "total": 0},  # operator-only
             "regulatory_coverage": {},                                # operator-only (#2)
-            "source_runs": [],  # operator-only (#137) — see scope_feed_to_modules
+            "source_runs": [],  # operator-only (#139) — see scope_feed_to_modules
         }
     )
     out["executive"] = _rescope_executive(out)

@@ -110,7 +110,7 @@ _CONFIDENCE_WEIGHT = {"ok": 100, "warn": 70, "stale": 40, "error": 10, "never_ok
 
 
 def coverage_confidence(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    """Reduce `as_rows()` into a single client-safe score (#137) — no source names or
+    """Reduce `as_rows()` into a single client-safe score (#139) — no source names or
     `last_error` text, those stay operator-only (see `scope_feed_to_modules`). Weighted by
     reliability band so one erroring source among many doesn't read as "everything's fine"."""
     if not rows:

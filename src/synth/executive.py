@@ -1162,7 +1162,7 @@ def build_cpo(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
                     "maturity": round(sum(p["maturity"] for p in portfolio) / len(portfolio)) if portfolio else 0,
                     "provenance_score": _provenance_score(_provenance_mix(all_attrs)),
                     "soundness_coverage_pct": round(100 * hav / tot) if tot else None,
-                    # #137: client-safe reduction of raw source_runs (no source names/errors —
+                    # #139: client-safe reduction of raw source_runs (no source names/errors —
                     # those stay operator-only, see scope_feed_to_modules). Portfolio-wide only,
                     # source health isn't a per-sector concept.
                     "coverage_confidence": feed.get("coverage_confidence") or {}}
@@ -1222,7 +1222,7 @@ def build_cpo(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         "soundness_coverage": soundness_coverage,               # ADR 022 (CPO instrumentation angle)
         "source_health": feed.get("source_health") or [],       # R5 (lens-freshness proxy)
         "source_runs": feed.get("source_runs") or [],            # #76 (real per-ingester reliability, operator-only)
-        "coverage_confidence": feed.get("coverage_confidence") or {},  # #137 (client-safe reduction)
+        "coverage_confidence": feed.get("coverage_confidence") or {},  # #139 (client-safe reduction)
         "market_structure": feed.get("market_structure") or {},  # R3 (CVM revenue, listed issuers)
         "ifdata_market": _ifdata_market_labeled(feed),           # #75 (IF.data system-wide asset base)
         "pricing": feed.get("pricing") or {},                    # R4

@@ -296,7 +296,7 @@
 <script>
 const U = window.OncaUI;
 let DATA = {}, EX = {}, OFFICER = "cso", SECTOR = "__all__", BYID = {};
-// Operator view (?admin=1&opkey=…, #122) — gates the raw per-source ingestion band (#137):
+// Operator view (?admin=1&opkey=…, #122) — gates the raw per-source ingestion band (#139):
 // clients get the coverage-confidence TILE only, never per-source names/errors.
 let ADMIN = false;
 // §E TDR: first-surfaced timestamp per item — the "start" of the executive's deliberation
@@ -1401,7 +1401,7 @@ function render() {
       const nDisc = (p.discovery || []).length;
       const thin = Object.entries(p.field_completeness || {}).sort((a, b) => a[1] - b[1])[0] || ["—", 0];
       const [bc, bl] = bandGood(avgMat, 70, 50);
-      // #137: coverage-confidence is the CLIENT-safe reduction of raw per-source ingestion
+      // #139: coverage-confidence is the CLIENT-safe reduction of raw per-source ingestion
       // telemetry (source_runs) — a single score, no source names/errors. Those stay operator-only.
       const cc = a.coverage_confidence || {};
       const ccSub = cc.n_sources ? `${cc.n_attention || 0}/${cc.n_sources} fontes em atenção` : "ingestão";
