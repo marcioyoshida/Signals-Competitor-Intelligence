@@ -90,6 +90,10 @@
   .mchip .mv { font-size:var(--fs-sm); font-weight:700; color:var(--ink); font-variant-numeric:tabular-nums; }
   .mchip .md { font-size:var(--fs-micro); font-variant-numeric:tabular-nums; }
   .md--up { color:var(--t-high); } .md--down { color:var(--ok); } .md--flat { color:var(--muted); }
+  .macro-headline { font-size:var(--fs-sm); color:var(--muted); border-left:1px solid var(--border);
+    padding-left:var(--s3); text-decoration:none; max-width:420px; overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap; }
+  .macro-headline:hover { color:var(--ink); text-decoration:underline; }
 
   /* B3 quotes — market pulse aside the CSO board (v1 #43 → CSO) */
   .b3wrap { padding:var(--s3) var(--s4); display:flex; flex-wrap:wrap; gap:var(--s2) var(--s5); }
@@ -554,7 +558,8 @@ function macroChip(label, val, delta, dir, title) {
     `<span class="mv">${U.esc(val)}</span>${delta ? `<span class="md md--${dir}">${U.esc(delta)}</span>` : ""}</span>`;
 }
 function macroStrip(m) {
-  if (!m || (!m.selic && !((m.focus || []).length))) return "";
+  const gdeltMacro = (m && m.gdelt_macro) || [];
+  if (!m || (!m.selic && !((m.focus || []).length) && !gdeltMacro.length)) return "";
   const chips = [];
   if (m.selic && m.selic.current != null) {
     const ld = m.selic.last_decision || {};
@@ -572,8 +577,18 @@ function macroStrip(m) {
     const arrow = dir === "up" ? "▲" : dir === "down" ? "▼" : "■";
     chips.push(macroChip(`${ind} ${yr}`, f.median.toFixed(2) + "%", arrow, dir, `Focus ${f.date || ""} · projeção mediana`));
   }));
-  if (!chips.length) return "";
-  return `<div class="macro-inner"><span class="macro-lbl">Macro · Copom &amp; Focus</span>${chips.join("")}</div>`;
+  // O3 (#138): one macro-theme headline (Fed/rates/forex/funds), linked to its real
+  // source — global backdrop, not a claim about any tracked entity, so it's a plain
+  // link, never a threat/alert chip. Shares this strip rather than getting its own
+  // panel (product-strategy call: every officer already has this above their board,
+  // and Fed headlines are the most commoditized content there is — this earns a
+  // line, not a page).
+  const headline = gdeltMacro[0];
+  const headlineHtml = headline
+    ? `<a class="macro-headline" href="${U.esc(headline.url)}" target="_blank" rel="noopener" title="${U.esc(headline.publisher || "")}">${U.esc(headline.title)}</a>`
+    : "";
+  if (!chips.length && !headlineHtml) return "";
+  return `<div class="macro-inner"><span class="macro-lbl">Macro · Copom &amp; Focus</span>${chips.join("")}${headlineHtml}</div>`;
 }
 // B3 quotes (v1 #43 → CSO): market pulse for the scope's listed competitors, from the
 // same-origin /api/quotes Yahoo proxy. Async (not in feed.json); scoped to the active sector.

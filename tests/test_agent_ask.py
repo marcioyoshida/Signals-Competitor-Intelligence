@@ -187,6 +187,24 @@ def test_validate_dedups():
     assert len(got) == 1
 
 
+def test_build_messages_includes_gdelt_macro_as_ungrounded_context():
+    # O3 (#138): macro headlines are context, never a citable [id] card — the
+    # id-citation contract in the system prompt doesn't apply to entity-less items.
+    macro = {"selic": {"value": "10.75"}, "gdelt_macro": [
+        {"title": "Fed holds rates steady", "url": "https://x/1", "publisher": "reuters.com"},
+        {"title": "Dollar ticks up on rate bets", "url": "https://x/2", "publisher": "cnbc.com"},
+    ]}
+    _system, user = aa.build_messages("como está o mercado?", [], macro=macro)
+    assert "Fed holds rates steady" in user
+    assert "Dollar ticks up on rate bets" in user
+    assert "[gdelt" not in user  # not framed as a citable card id
+
+
+def test_build_messages_safe_without_gdelt_macro():
+    _system, user = aa.build_messages("q", [], macro={"selic": {"value": "10.75"}})
+    assert "MACRO CONTEXTO" not in user
+
+
 # --- orchestrator ---------------------------------------------------------
 def test_answer_refuses_off_domain_without_model():
     calls = []

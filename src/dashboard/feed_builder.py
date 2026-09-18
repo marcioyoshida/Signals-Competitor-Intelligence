@@ -277,10 +277,22 @@ def _is_recent(iso_date: str | None, *, days: int) -> bool:
         return False
 
 
-def build_macro(macro: dict[str, Any] | None) -> dict[str, Any]:
+def build_macro(
+    macro: dict[str, Any] | None, gdelt_macro: list[dict[str, Any]] | None = None
+) -> dict[str, Any]:
     """Turn the digest's macro slice into the standalone Macro-panel payload:
     current Selic + last Copom decision, and the Focus medians with WoW shifts.
-    A recent Copom decision or a notable Focus shift becomes an alert card."""
+    A recent Copom decision or a notable Focus shift becomes an alert card.
+
+    ``gdelt_macro`` (O3, #138) is GDELT's macro-theme headlines (Fed/rates/forex/
+    funds) — entity-less by design, so it does NOT become a narrative/card like
+    everything else in the feed. Product-strategy call: this is global backdrop
+    context, never a standalone reading surface (every buyer already has a
+    Bloomberg terminal for Fed headlines) — it only earns its place as a thin
+    modifier on the ONE panel every officer already shares. Capped to 5 and
+    trimmed to just what a header strip needs; the full daily set lives in
+    ``lambda-digests/gdelt_macro/{date}.json`` for anything that wants more.
+    """
     macro = macro or {}
     selic = macro.get("selic") or None
     focus = [f for f in (macro.get("focus") or []) if f.get("median") is not None]
@@ -325,7 +337,12 @@ def build_macro(macro: dict[str, Any] | None) -> dict[str, Any]:
             "as_of": f.get("date"),
         })
 
-    return {"selic": selic, "focus": focus, "cards": cards}
+    headlines = [
+        {"title": h.get("title"), "url": h.get("url"), "publisher": h.get("publisher"), "date": h.get("date")}
+        for h in (gdelt_macro or [])
+        if isinstance(h, dict) and h.get("title") and h.get("url")
+    ][:5]
+    return {"selic": selic, "focus": focus, "cards": cards, "gdelt_macro": headlines}
 
 
 def _project_item(n: dict[str, Any]) -> dict[str, Any]:
@@ -498,6 +515,7 @@ def build_feed(
     industry_map: dict[str, list[str]] | None = None,
     industry_meta: dict[str, dict[str, Any]] | None = None,
     macro: dict[str, Any] | None = None,
+    gdelt_macro: list[dict[str, Any]] | None = None,
     swot: dict[str, Any] | None = None,
     tows_curated: dict[str, list[dict[str, Any]]] | None = None,
     porter_curated: dict[str, list[dict[str, Any]]] | None = None,
@@ -734,8 +752,12 @@ def build_feed(
 
         # Pending entity-registry review proposals (ADR step 5), read-only surface.
         "reviews": reviews or [],
-        # Standalone Macro panel: Copom/Selic + Focus (market-wide context).
-        "macro": build_macro(macro),
+        # Standalone Macro panel: Copom/Selic + Focus (market-wide context), now
+        # joined by O3's GDELT macro-theme headlines (Fed/rates/forex/funds) — see
+        # build_macro's docstring for why these are folded into the SAME panel
+        # rather than a new one (product-strategy call: never a standalone reading
+        # surface, only backdrop on an existing one).
+        "macro": build_macro(macro, gdelt_macro),
         # ADR 004 step 2: per-entity SWOT belief store (compact index) — the war
         # room renders a S/W/O/T panel for the selected entity. {} when absent.
         "swot": (swot or {}).get("entities", {}) if swot else {},
@@ -1128,6 +1150,21 @@ def _load_macro() -> dict[str, Any] | None:
     except Exception as exc:  # pragma: no cover - best-effort, read-only
         print(f"Warning: load macro slice failed: {exc}")
         return None
+
+
+def _load_gdelt_macro() -> list[dict[str, Any]]:
+    """O3 (#138): the GDELT macro-theme headlines (Fed/rates/forex/funds),
+    entity-less by design. Best-effort — a Lambda that never ran yet (or the
+    daily sweep failing) must not affect the rest of the feed build."""
+    try:
+        from src.synth import digest_io
+
+        digest = digest_io.load_latest_digest_from_s3()
+        items = (digest or {}).get("gdelt_macro")
+        return items if isinstance(items, list) else []
+    except Exception as exc:  # pragma: no cover - best-effort, read-only
+        print(f"Warning: load gdelt_macro slice failed: {exc}")
+        return []
 
 
 def _load_threads(digests_bucket: str) -> list[dict[str, Any]]:
@@ -1526,6 +1563,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         industry_map=industry_map,
         industry_meta=industry_meta,
         macro=_load_macro(),
+        gdelt_macro=_load_gdelt_macro(),
         swot=_load_swot(digests_bucket),
         tows_curated=_load_tows_curated(digests_bucket),
         porter_curated=_load_porter_curated(digests_bucket),

@@ -551,7 +551,32 @@ def test_legacy_scores_recomputed_new_scores_kept():
 def test_build_macro_empty_is_safe():
     from src.dashboard.feed_builder import build_macro
     out = build_macro(None)
-    assert out == {"selic": None, "focus": [], "cards": []}
+    assert out == {"selic": None, "focus": [], "cards": [], "gdelt_macro": []}
+
+
+def test_build_macro_folds_in_gdelt_macro_headlines():
+    # O3 (#138): entity-less GDELT macro headlines join the SAME panel as Selic/Focus
+    # (product-strategy call — never a standalone page), capped to 5, trimmed to just
+    # what a header strip needs.
+    from src.dashboard.feed_builder import build_macro
+    gdelt_macro = [
+        {"id": f"gdelt:{i}", "title": f"Fed headline {i}", "url": f"https://x/{i}",
+         "publisher": "reuters.com", "date": "2026-09-15", "company": None, "name": None}
+        for i in range(7)
+    ]
+    out = build_macro(None, gdelt_macro)
+    assert len(out["gdelt_macro"]) == 5
+    assert out["gdelt_macro"][0] == {
+        "title": "Fed headline 0", "url": "https://x/0", "publisher": "reuters.com", "date": "2026-09-15",
+    }
+    # No entity/company leakage into the trimmed shape — only display fields survive.
+    assert "company" not in out["gdelt_macro"][0]
+
+
+def test_build_macro_gdelt_macro_drops_items_missing_title_or_url():
+    from src.dashboard.feed_builder import build_macro
+    out = build_macro(None, [{"title": "No URL"}, {"url": "https://x/1"}, None])
+    assert out["gdelt_macro"] == []
 
 
 def _thread(incident_id, entity, date, *, latest_dev_id, score=0.6):

@@ -161,6 +161,14 @@ def parse_rows(rows: list[dict[str, Any]], *, target_date: dt.date) -> list[dict
                 "subject": title,
                 "company": None,
                 "name": None,
+                # Explicit, not incidental: product-strategy's hard rule is that this
+                # NEVER attributes to a tracked entity. `company=None` alone relies on
+                # resolve_entities() finding nothing in the headline text, which is
+                # usually true but not guaranteed (a Fed-week story could mention a
+                # BR bank in passing). Pre-stamping `_entities` is the same bypass
+                # structured/CNPJ-anchored sources use (see candidates.py's
+                # `_entities_of` docstring) — here to force empty, not a real binding.
+                "_entities": [],
                 "date": target_date.isoformat(),
                 "url": url,
             }

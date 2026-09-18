@@ -50,7 +50,7 @@ def test_fetch_macro_news_parses_rows_into_onca_item_shape():
     n = news[0]
     assert n["kind"] == "macro"
     assert n["company"] is None and n["name"] is None
-    assert n["company"] is None
+    assert n["_entities"] == []
     assert n["source"] == "News"
     assert n["title"] == "Fed rate hike chances firm as dollar ticks up"
     assert n["url"] == "https://reuters.com/x"

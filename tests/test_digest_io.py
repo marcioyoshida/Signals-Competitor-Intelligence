@@ -92,3 +92,33 @@ def test_load_latest_picks_newest_base_and_ignores_news_only(monkeypatch):
     monkeypatch.setattr(digest_io.boto3, "client", lambda name: _MergeS3(objs))
     digest = digest_io.load_latest_digest_from_s3(bucket="b")
     assert digest["regulatory"]["count"] == 2          # newest base; no news slice -> base kept
+
+
+def test_load_latest_overlays_gdelt_macro_slice_as_a_third_disjoint_branch(monkeypatch):
+    # O3 (#138): gdelt_macro is a THIRD branch, disjoint from both the structured base
+    # and the news slice — must not collide with either, and its list shape (not the
+    # news slice's dict shape) must land under its own digest key.
+    t = _dt.datetime(2026, 9, 18, 7, 0, 0)
+    objs = {
+        "lambda-digests/aaa.json": (t, {"regulatory": {"count": 5}, "source": "lambda_port"}),
+        "lambda-digests/news/bbb.json": (
+            t + _dt.timedelta(seconds=5), {"news": {"count": 1, "items": []}, "source": "news_ingest"},
+        ),
+        "lambda-digests/gdelt_macro/2026-09-18.json": (
+            t + _dt.timedelta(seconds=10),
+            {"news": [{"id": "gdelt:1", "title": "Fed holds rates"}], "source": "gdelt_macro", "count": 1},
+        ),
+    }
+    monkeypatch.setattr(digest_io.boto3, "client", lambda name: _MergeS3(objs))
+    digest = digest_io.load_latest_digest_from_s3(bucket="b")
+    assert digest["regulatory"]["count"] == 5
+    assert digest["gdelt_macro"] == [{"id": "gdelt:1", "title": "Fed holds rates"}]
+    assert digest["news"]["count"] == 1                 # unaffected by the gdelt_macro branch
+
+
+def test_load_latest_is_safe_with_no_gdelt_macro_slice(monkeypatch):
+    t = _dt.datetime(2026, 9, 18, 7, 0, 0)
+    objs = {"lambda-digests/aaa.json": (t, {"regulatory": {"count": 5}, "source": "lambda_port"})}
+    monkeypatch.setattr(digest_io.boto3, "client", lambda name: _MergeS3(objs))
+    digest = digest_io.load_latest_digest_from_s3(bucket="b")
+    assert "gdelt_macro" not in digest

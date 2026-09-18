@@ -359,6 +359,18 @@ def build_messages(
         selic = (macro.get("selic") or {}).get("value") if isinstance(macro.get("selic"), dict) else None
         if selic is not None:
             lines.append(f"MACRO: Selic={selic}")
+        # O3 (#138): GDELT macro-theme headlines (Fed/rates/forex/funds). Ungrounded
+        # context, same tier as the Selic line above — deliberately NOT a citable
+        # [card_id] (these are entity-less, so the id-citation contract in the system
+        # prompt above doesn't apply to them). Gives the agent real-world backdrop to
+        # explain a trajectory against ("Itaú repriced during a Fed hike week") without
+        # ever letting it attribute a macro headline to a tracked entity as fact.
+        headlines = [h for h in (macro.get("gdelt_macro") or []) if h.get("title")][:3]
+        if headlines:
+            lines.append(
+                "MACRO CONTEXTO (não citável, apenas pano de fundo): "
+                + " | ".join(h["title"] for h in headlines)
+            )
     lines += ["", "Responda usando apenas os cards acima, citando os ids."]
     return system, "\n".join(lines)
 

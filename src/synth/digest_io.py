@@ -48,8 +48,17 @@ def load_latest_digest_from_s3(
     # slice at ``lambda-digests/news/<id>.json``. Load the latest base and overlay
     # the latest news slice so synth sees a single merged digest.
     news_prefix = prefix + "news/"
-    base = [o for o in contents if not o["Key"].startswith(news_prefix)]
+    # O2/O3 (#137/#138): GDELT macro-theme sweep, a THIRD disjoint branch — its own
+    # Lambda (gdelt_macro_handler.py), own daily cadence, own S3 prefix. Same overlay
+    # pattern as news, onto its own digest key (not "news" — these items are
+    # entity-less by design, never merged with entity-attributed news).
+    gdelt_macro_prefix = prefix + "gdelt_macro/"
+    base = [
+        o for o in contents
+        if not o["Key"].startswith(news_prefix) and not o["Key"].startswith(gdelt_macro_prefix)
+    ]
     news = [o for o in contents if o["Key"].startswith(news_prefix)]
+    gdelt_macro = [o for o in contents if o["Key"].startswith(gdelt_macro_prefix)]
     if not base:
         return None
 
@@ -68,6 +77,10 @@ def load_latest_digest_from_s3(
         news_obj = _read(max(news, key=lambda o: o["LastModified"])["Key"]) or {}
         if isinstance(news_obj.get("news"), dict):
             digest["news"] = news_obj["news"]
+    if gdelt_macro:
+        macro_obj = _read(max(gdelt_macro, key=lambda o: o["LastModified"])["Key"]) or {}
+        if isinstance(macro_obj.get("news"), list):
+            digest["gdelt_macro"] = macro_obj["news"]
     return digest
 
 
