@@ -1,0 +1,8 @@
+# O1 (#136): deps for the cross-cloud GCP smoke-test Lambda ONLY. Deliberately its own
+# requirements file / isolated build/lambda-gdelt-bridge asset, NOT merged into the
+# shared requirements.txt (build/lambda) — google-cloud-bigquery pulls in grpcio,
+# protobuf, google-api-core and friends, easily 10x the size of the requests/pyyaml
+# footprint every one of the other ~80 Onça Lambdas currently ships. Bloating every
+# Lambda's package for one smoke-test function would be a real regression, not a detail.
+google-auth>=2.35,<3
+google-cloud-bigquery>=3.26,<4

@@ -8,6 +8,8 @@
     "@aws-cdk/core:bootstrapQualifier": "hnb659fds",
     "google_client_id": "1053992821922-8j5rtck0ttjfn1s3g7cp09a6964ktpbp.apps.googleusercontent.com",
     "qa_pipeline_image_tag": "latest",
-    "alertEmail": "marcioyoshida@gmail.com"
+    "alertEmail": "marcioyoshida@gmail.com",
+    "gdelt_bridge_ready": "1",
+    "gcp_project": "onssa-508623"
   }
 }

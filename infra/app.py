@@ -3213,6 +3213,11 @@ OncaCicdStack(app, "OncaCicdStack")
 from qa_pipeline import OncaQaPipelineStack  # noqa: E402  (local module, after app-stack def)
 
 OncaQaPipelineStack(app, "OncaQaPipelineStack")
+# O1 (#136) — cross-cloud AWS->GCP credential bridge for the GDELT macro-theme spike,
+# its own stack for the same isolation reason as the QA pipeline above.
+from gdelt_bridge import OncaGdeltBridgeStack  # noqa: E402  (local module, after app-stack def)
+
+OncaGdeltBridgeStack(app, "OncaGdeltBridgeStack")
 # App-wide identification + Cost Explorer allocation tag across every resource in both
 # stacks (the standalone "tr:project-name" tag OncaPrototypeStack used to carry alongside
 # this one was retired 2026-09-14 — every fork now rolls up under this single "project" key).
