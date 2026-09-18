@@ -377,6 +377,19 @@ def test_cpo_portfolio_profiles_and_field_completeness():
     assert "banking" in cpo["panels"]["top_entities"]
 
 
+def test_cpo_coverage_confidence_reaches_portfolio_agg_but_not_per_sector():
+    # #137: the client-safe ingestion-confidence score belongs on the __all__ aggregate (source
+    # health isn't a per-sector concept) — raw source_runs stays a separate operator-only panel.
+    feed = _feed()
+    feed["source_runs"] = [{"source": "BCB Pix", "band": "error", "last_error": "HTTP 500 boom"}]
+    feed["coverage_confidence"] = {"score": 55, "n_sources": 1, "n_healthy": 0, "n_attention": 1}
+    cpo = executive.build_executive(feed)["cpo"]
+    a = cpo["by_industry"]["__all__"]
+    assert a["coverage_confidence"] == {"score": 55, "n_sources": 1, "n_healthy": 0, "n_attention": 1}
+    assert "coverage_confidence" not in cpo["by_industry"]["banking"]
+    assert cpo["panels"]["source_runs"] == feed["source_runs"]  # raw stays for the operator band
+
+
 def test_discovery_industries_derived_from_hint_source_for_scoping():
     # §G CPO scoping: discovery proposals get an industry from their hint SOURCE so the
     # dashboard can filter them by sector (fiagro→agri-funds, bcb class→its industry).
@@ -576,3 +589,28 @@ def test_momentum_rolls_group_children_into_one_dot_per_brand():
     assert rows[0]["label"] == "BTG"                         # named for the group, not a child
     assert rows[0]["size_bi"] == 500.0                       # group's own reported assets
     assert set(rows[0]["industries"]) == {"banking", "investment-banking", "real-estate-funds"}
+
+
+def test_macro_note_reaches_cso_but_never_cpo_or_other_officers():
+    # #138 follow-on: a deterministic macro-correlation note (macro_correlate.py)
+    # rides on a card through to CSO's panels — but must NEVER leak to CRO/CCO/CPO,
+    # whose mandates (regulatory timeline, compliance audit, Onça's own data coverage)
+    # have no macro-economic dimension. _headline_cso() is CSO-only by construction;
+    # this locks that boundary in so a future refactor can't quietly widen it.
+    feed = _feed()
+    feed["feed"][0]["macro_note"] = {
+        "kind": "selic", "text": "inferência: coincide no tempo (0 dia(s)) com decisão do Copom em 2026-09-04.",
+    }
+    # also give CPO's product_moves a matching lens so the SAME card is eligible there
+    feed["feed"][0]["lenses"] = ["ofertas"]
+    ex = executive.build_executive(feed)
+
+    cso_headlines = ex["cso"]["panels"]["headlines"]
+    assert any(h.get("id") == "n1" and h.get("macro_note") for h in cso_headlines)
+
+    for officer in ("cro", "cco", "cpo"):
+        for panel_name, panel in ex[officer]["panels"].items():
+            if isinstance(panel, list):
+                for row in panel:
+                    if isinstance(row, dict):
+                        assert "macro_note" not in row, f"{officer}.{panel_name} leaked macro_note"

@@ -205,6 +205,25 @@ def test_build_messages_safe_without_gdelt_macro():
     assert "MACRO CONTEXTO" not in user
 
 
+def test_build_messages_rides_macro_note_alongside_its_own_card():
+    # CSO dimension 3 (#138 follow-on): a card's macro_note rides along in the SAME
+    # card's context block, not as a separate citable [id] — see _compact_card.
+    cards = [{
+        "id": "n1", "date": "2026-09-16", "entity": "itau", "entity_label": "Itaú",
+        "narrative": "Itaú repricing.",
+        "macro_note": {"kind": "selic", "text": "inferência: coincide no tempo (1 dia(s) depois) com decisão do Copom em 2026-09-15."},
+    }]
+    _system, user = aa.build_messages("q", cards)
+    assert "inferência: coincide no tempo" in user
+    assert "[macro" not in user  # not framed as its own citable card
+
+
+def test_compact_card_preserves_macro_note():
+    card = {"id": "n1", "macro_note": {"kind": "selic", "text": "inferência: x"}}
+    out = aa._compact_card(card)
+    assert out["macro_note"] == {"kind": "selic", "text": "inferência: x"}
+
+
 # --- orchestrator ---------------------------------------------------------
 def test_answer_refuses_off_domain_without_model():
     calls = []

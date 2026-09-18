@@ -94,6 +94,8 @@
     padding-left:var(--s3); text-decoration:none; max-width:420px; overflow:hidden;
     text-overflow:ellipsis; white-space:nowrap; }
   .macro-headline:hover { color:var(--ink); text-decoration:underline; }
+  .macro-note-dot { color:var(--muted); font-size:var(--fs-sm); cursor:help; opacity:.7; }
+  .macro-note-dot:hover { opacity:1; color:var(--ink); }
 
   /* B3 quotes — market pulse aside the CSO board (v1 #43 → CSO) */
   .b3wrap { padding:var(--s3) var(--s4); display:flex; flex-wrap:wrap; gap:var(--s2) var(--s5); }
@@ -111,6 +113,7 @@
   .tlent { font-weight:600; color:var(--ink); font-size:var(--fs-sm); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .spark { width:100%; height:28px; display:block; }
   .spark--empty { color:var(--muted); font-size:var(--fs-micro); padding-left:var(--s2); }
+  .spark-macro { stroke:var(--muted); stroke-width:1; stroke-dasharray:2,2; opacity:.55; }
   .tlnow { text-align:right; }
 
   /* Control network — commonly-controlled competitor clusters (v1 grafo → CSO) */
@@ -293,6 +296,9 @@
 <script>
 const U = window.OncaUI;
 let DATA = {}, EX = {}, OFFICER = "cso", SECTOR = "__all__", BYID = {};
+// Operator view (?admin=1&opkey=…, #122) — gates the raw per-source ingestion band (#137):
+// clients get the coverage-confidence TILE only, never per-source names/errors.
+let ADMIN = false;
 // §E TDR: first-surfaced timestamp per item — the "start" of the executive's deliberation
 // (first render → decision = the real time-to-decide, measured client-side).
 const SEEN = {};
@@ -425,6 +431,7 @@ function licensedIndustries(D) {
 
 async function loadFeed() {
   const admin = new URLSearchParams(location.search).get("admin") === "1";
+  ADMIN = admin;
   if (admin) {
     // Operator/curator preview (SAME bypass convention as /app?admin=1): every industry,
     // from the full feed. #122: the shared basic-auth password is NOT an operator
@@ -537,6 +544,7 @@ function rowsCard(list) {
     <span class="dt">${r.date ? U.fmtDate(r.date) : ""}</span>
     <span class="ent" title="${U.esc(r.entity_label || r.label || "—")}">${U.esc(r.entity_label || r.label || "—")}</span>
     <span class="ttl" title="${U.esc(r.title || "")}">${U.esc(r.title || "")}</span>
+    ${r.macro_note && r.macro_note.text ? `<span class="macro-note-dot" title="${U.esc(r.macro_note.text)}">◐</span>` : ""}
     ${r.threat_score != null ? threatChip(r.threat_score) : ""}</div>`).join("");
 }
 function rowsReg(list) {
@@ -740,7 +748,7 @@ function scatterMap(list) {
 }
 // Threat timeline (v1 → CSO): per-competitor ameaça trajectory across the run's dates,
 // computed client-side from the feed (daily mean threat per entity). Top movers by momentum.
-function sparkline(series) {
+function sparkline(series, macroIdx) {
   const W = 200, H = 28, pad = 3, n = series.length;
   if (series.filter(v => v != null).length < 2) return `<span class="spark--empty">sem histórico</span>`;
   const x = i => pad + (i / (n - 1)) * (W - 2 * pad);
@@ -749,7 +757,17 @@ function sparkline(series) {
   series.forEach((v, i) => { if (v == null) { pen = false; return; } d += (pen ? " L" : " M") + x(i).toFixed(1) + " " + y(v).toFixed(1); pen = true; last = i; });
   const lv = last >= 0 ? series[last] : null;
   const band = lv >= 65 ? "t-crit" : lv >= 40 ? "t-high" : "ok";
+  // Macro-event ticks (CSO dimension 1): a co-occurring Selic decision or macro-news day,
+  // NOT a claim this competitor's move was caused by it — the marker just puts two
+  // independently-true facts on the same axis and lets the officer draw the inference.
+  // Same viewBox/x() as the threat line itself, so alignment is exact by construction
+  // rather than a second coordinate system that could drift out of sync.
+  const ticks = (macroIdx || []).map(i =>
+    `<line class="spark-macro" x1="${x(i).toFixed(1)}" y1="0" x2="${x(i).toFixed(1)}" y2="${H}" vector-effect="non-scaling-stroke">` +
+    `<title>Evento macro (Copom/Selic ou notícia macro global) nesta data</title></line>`
+  ).join("");
   return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-hidden="true">` +
+    ticks +
     `<path d="${d.trim()}" fill="none" stroke="var(--${band})" stroke-width="1.6" vector-effect="non-scaling-stroke"/>` +
     (last >= 0 ? `<circle cx="${x(last).toFixed(1)}" cy="${y(lv).toFixed(1)}" r="2.4" fill="var(--${band})"/>` : "") + `</svg>`;
 }
@@ -785,6 +803,19 @@ function controlNetwork(proposals, entities) {
       `<div class="cnmem">` + others.map(x => `<span class="cnchip" title="${U.esc(lbl[x] || x)}">${U.esc(lbl[x] || x)}</span>`).join("") + `</div></div>`;
   }).join("") + `</div>`;
 }
+function macroEventDates(macro) {
+  // Selic decisions only — deliberately NOT gdelt_macro dates (fixed 2026-09-18).
+  // gdelt_macro is a daily-refreshed snapshot; its "date" is structurally always
+  // "today", so using it as a correlation anchor flagged ~90% of the live feed on
+  // the first real run (see macro_correlate.py's module docstring for the full
+  // writeup). Selic decisions are genuinely rare (~every 45 days), so they stay a
+  // meaningful marker. Mirrors macro_correlate.py's macro_event_dates() in Python
+  // — keep both in sync, or the chart tick and the narrative note would disagree.
+  const dates = new Set();
+  const selicDate = macro && macro.selic && macro.selic.last_decision && macro.selic.last_decision.date;
+  if (selicDate) dates.add(selicDate);
+  return dates;
+}
 function threatTimeline(momentum) {
   const dates = (DATA.dates || []).slice().sort();
   const top = (momentum || []).filter(inSector).slice(0, 12);
@@ -794,11 +825,13 @@ function threatTimeline(momentum) {
     if (!c.entity || c.threat_score == null || !c.date) return;
     ((byEnt[c.entity] = byEnt[c.entity] || {})[c.date] = byEnt[c.entity][c.date] || []).push(c.threat_score);
   });
+  const macroDates = macroEventDates(DATA.macro);
+  const macroIdx = dates.map((d, i) => macroDates.has(d) ? i : -1).filter(i => i >= 0);
   return `<div class="tl">` + top.map(m => {
     const days = byEnt[m.entity] || {};
     const series = dates.map(d => { const v = days[d]; return v && v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; });
     return `<div class="tlrow"><span class="tlent" title="${U.esc(m.label)}">${U.esc(m.label)}</span>` +
-      `${sparkline(series)}<span class="tlnow">${threatChip(m.recent)}</span></div>`;
+      `${sparkline(series, macroIdx)}<span class="tlnow">${threatChip(m.recent)}</span></div>`;
   }).join("") + `</div>`;
 }
 function rowsMomentum(list) {
@@ -1368,11 +1401,17 @@ function render() {
       const nDisc = (p.discovery || []).length;
       const thin = Object.entries(p.field_completeness || {}).sort((a, b) => a[1] - b[1])[0] || ["—", 0];
       const [bc, bl] = bandGood(avgMat, 70, 50);
+      // #137: coverage-confidence is the CLIENT-safe reduction of raw per-source ingestion
+      // telemetry (source_runs) — a single score, no source names/errors. Those stay operator-only.
+      const cc = a.coverage_confidence || {};
+      const ccSub = cc.n_sources ? `${cc.n_attention || 0}/${cc.n_sources} fontes em atenção` : "ingestão";
+      const ccCls = cc.score == null ? null : cc.score < 60 ? "high" : cc.score < 85 ? "warn" : "ok";
       board =
         readout(heroGauge("Maturidade da cobertura", avgMat, bandBadge(bc, bl), "--" + (bc === "crit" ? "t-crit" : bc === "warn" ? "warn" : "ok"), avgMat),
           [tile("Setores cobertos", `${covered}/${total}`, "roster"),
            tile("Propostas", nDisc, "pipeline de descoberta"),
            tile("Metadado + fraco", `${FIELD_LABEL[thin[0]] || thin[0]} ${thin[1]}%`, "cobertura da base", thin[1] < 20 ? "crit" : "warn"),
+           tile("Confiança de cobertura", cc.score == null ? "—" : cc.score, ccSub, ccCls),
            tile("Pontos cegos", nGaps, "perguntas · geral", nGaps > 0 ? "high" : "ok")]) +
         band("Maturidade da cobertura por setor", "breadth×depth×frescor×proveniência · inferência",
           `<div class="panel"><div class="panel__bd panel__bd--flush">${maturityChart(port)}</div></div>`) +
@@ -1386,8 +1425,8 @@ function render() {
           grid("1fr 1fr 1fr", [panel("Tamanho de mercado por setor", null, "receita dos emissores listados (CVM)", `<div class="panel__bd--flush">${marketSizeChart(p.market_structure, EX.sectors)}</div>`),
             panel("Base de ativos do SFN (IF.data)", null, "sistema · não só listadas · líderes por participação", `<div class="panel__bd--flush">${ifdataMarketBlock(p.ifdata_market)}</div>`),
             panel("Saúde das fontes", null, "frescor · volume · defasagem", `<div class="panel__bd--flush">${sourceHealthChart(p.source_health)}</div>`)])) +
-        band("Confiabilidade da ingestão", "telemetria real por fonte · erro/defasagem que o proxy de frescor não vê (#76)",
-          panel("Execução das fontes (pior primeiro)", null, "última execução ok · erro · defasagem", `<div class="panel__bd--flush">${sourceRunsChart(p.source_runs)}</div>`)) +
+        (ADMIN ? band("Confiabilidade da ingestão (operador)", "telemetria BRUTA por fonte · erro/defasagem que o proxy de frescor não vê (#76) · só operador, ver tile \"Confiança de cobertura\" na visão do cliente",
+          panel("Execução das fontes (pior primeiro)", null, "última execução ok · erro · defasagem", `<div class="panel__bd--flush">${sourceRunsChart(p.source_runs)}</div>`)) : "") +
         band("Instrumentação de solidez prudencial", "cobertura de Basileia + tom Pilar 3 por setor · ADR 022",
           panel("Cobertura de solidez (menor primeiro)", null, "% do portfólio com dado prudencial", rowsSoundnessCov(p.soundness_coverage)));
     } else {

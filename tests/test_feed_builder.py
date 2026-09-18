@@ -579,6 +579,25 @@ def test_build_macro_gdelt_macro_drops_items_missing_title_or_url():
     assert out["gdelt_macro"] == []
 
 
+def test_build_feed_wires_macro_correlate_onto_feed_items():
+    # CSO dimension 3 (#138 follow-on): build_feed() end-to-end attaches macro_note
+    # to a narrative landing near the Selic decision date, via macro_correlate.py.
+    narratives = [_narr("a", "itau", "2026-09-16", 0.7)]
+    macro = {"selic": {"current": 13.75, "last_decision": {"date": "2026-09-15"}}}
+    feed = feed_builder.build_feed(narratives, macro=macro)
+    by_id = {f["id"]: f for f in feed["feed"]}
+    assert by_id["a"]["date"] == "2026-09-16"
+    assert by_id["a"]["macro_note"]["kind"] == "selic"
+    assert "inferência:" in by_id["a"]["macro_note"]["text"]
+
+
+def test_build_feed_no_macro_note_when_no_macro_event_nearby():
+    narratives = [_narr("a", "itau", "2026-01-01", 0.7)]
+    macro = {"selic": {"current": 13.75, "last_decision": {"date": "2026-09-15"}}}
+    feed = feed_builder.build_feed(narratives, macro=macro)
+    assert "macro_note" not in feed["feed"][0]
+
+
 def _thread(incident_id, entity, date, *, latest_dev_id, score=0.6):
     return {
         "id": f"threaded-{incident_id}", "kind": "threaded", "axis": "threaded",
@@ -668,6 +687,25 @@ def test_regulatory_coverage_scan_present_in_full_feed_but_stripped_when_scoped(
     assert rc["summary"]["by_regulator"].get("BCB") and rc["summary"]["by_regulator"].get("CVM")
     assert not feed_builder.scope_feed_to_modules(feed, ["banking"]).get("regulatory_coverage")
     assert not feed_builder.derive_entry_feed(feed).get("regulatory_coverage")
+
+
+def test_source_runs_present_in_full_feed_but_stripped_when_scoped():
+    # #137: raw per-source ingestion telemetry (source names, last_error text) is an operator
+    # artifact — never leaks into a tenant or entry feed. The reduced coverage_confidence score
+    # is client-safe and survives scoping unchanged.
+    from src.ingest import source_health as sh
+    narratives = [_narr("n1", "itau", "2026-09-02", 0.6)]
+    feed = feed_builder.build_feed(
+        narratives, industry_map={"itau": ["banking"]},
+        entity_attrs={"itau": {"industries": ["banking"]}})
+    feed["source_runs"] = [{"source": "BCB Pix", "band": "error", "last_error": "HTTP 500 boom"}]
+    feed["coverage_confidence"] = sh.coverage_confidence(feed["source_runs"])
+    assert feed["source_runs"]
+    scoped = feed_builder.scope_feed_to_modules(feed, ["banking"])
+    assert scoped["source_runs"] == []
+    assert scoped["coverage_confidence"] == feed["coverage_confidence"]
+    entry = feed_builder.derive_entry_feed(feed)
+    assert entry["source_runs"] == []
 
 
 def test_instrument_cards_dedup_to_latest_but_entity_timelines_keep_all():

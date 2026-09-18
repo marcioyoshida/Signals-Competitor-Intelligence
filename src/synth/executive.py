@@ -86,6 +86,21 @@ def _headline(card: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _headline_cso(card: dict[str, Any]) -> dict[str, Any]:
+    """CSO-only headline projection: `_headline()` plus `macro_note` (#138 follow-on).
+
+    Deliberately NOT added to `_headline()` itself — that function also feeds CRO/
+    CCO/CPO panels (product_moves, deep-axis rows) where a Fed/Selic correlation note
+    has no business appearing. CSO is the one officer whose mandate (competitive
+    momentum, ameaça×expansão) this context actually serves.
+    """
+    h = _headline(card)
+    note = card.get("macro_note")
+    if note:
+        h["macro_note"] = note
+    return h
+
+
 _AXIS_EXTRAS = ("hub", "n_dependents", "relation", "pattern", "horizon_days")
 
 
@@ -576,11 +591,11 @@ def build_cso(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
             # pilot-persona loop: the delta-framed weekly brief that turns the CSO board into a
             # ritual (what changed this week + the decision each invites).
             "weekly": build_cso_weekly(feed, ctx), "panels": {
-        "headlines": [_headline(c) for c in headlines[:30]],
-        "emerging": [_headline(c) for c in emerging[:20]],
-        "risks": [_headline(c) for c in risks[:30]],
-        "opportunities": [_headline(c) for c in opps[:20]],
-        "moves": [_headline(c) for c in moves[:20]],
+        "headlines": [_headline_cso(c) for c in headlines[:30]],
+        "emerging": [_headline_cso(c) for c in emerging[:20]],
+        "risks": [_headline_cso(c) for c in risks[:30]],
+        "opportunities": [_headline_cso(c) for c in opps[:20]],
+        "moves": [_headline_cso(c) for c in moves[:20]],
         "momentum": _momentum_for_panel(momentum, ctx["sectors"]),
         "regulatory": [_reg_row(c) for c in reg_sorted[:20]],
         # ADR 022 Tier-1: competitor financial strength (ROE/ROA/leverage/headroom/share), inference.
@@ -1146,7 +1161,11 @@ def build_cpo(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
                     "n_gaps": sum(1 for g in blind_rows if g["status"] == "open"),
                     "maturity": round(sum(p["maturity"] for p in portfolio) / len(portfolio)) if portfolio else 0,
                     "provenance_score": _provenance_score(_provenance_mix(all_attrs)),
-                    "soundness_coverage_pct": round(100 * hav / tot) if tot else None}
+                    "soundness_coverage_pct": round(100 * hav / tot) if tot else None,
+                    # #137: client-safe reduction of raw source_runs (no source names/errors —
+                    # those stay operator-only, see scope_feed_to_modules). Portfolio-wide only,
+                    # source health isn't a per-sector concept.
+                    "coverage_confidence": feed.get("coverage_confidence") or {}}
         p = by_slug.get(slug) or {}
         return {"n_covered": 1 if p.get("covered") else 0,
                 "n_coverage_gap": 1 if p.get("coverage_gap") else 0,
@@ -1202,7 +1221,8 @@ def build_cpo(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
             key=lambda c: str(c.get("date") or ""), reverse=True)[:24]],
         "soundness_coverage": soundness_coverage,               # ADR 022 (CPO instrumentation angle)
         "source_health": feed.get("source_health") or [],       # R5 (lens-freshness proxy)
-        "source_runs": feed.get("source_runs") or [],            # #76 (real per-ingester reliability)
+        "source_runs": feed.get("source_runs") or [],            # #76 (real per-ingester reliability, operator-only)
+        "coverage_confidence": feed.get("coverage_confidence") or {},  # #137 (client-safe reduction)
         "market_structure": feed.get("market_structure") or {},  # R3 (CVM revenue, listed issuers)
         "ifdata_market": _ifdata_market_labeled(feed),           # #75 (IF.data system-wide asset base)
         "pricing": feed.get("pricing") or {},                    # R4

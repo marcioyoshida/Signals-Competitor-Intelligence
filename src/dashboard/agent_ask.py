@@ -192,6 +192,10 @@ def _compact_card(card: dict[str, Any]) -> dict[str, Any]:
         "threat_score": card.get("threat_score"),
         "narrative": card.get("narrative"),
         "citations": card.get("citations") or [],
+        # CSO dimension 3 (#138 follow-on): deterministic date-proximity note, if any
+        # (macro_correlate.py). Rides along with the card it's attached to — not a
+        # new citable id, since it isn't evidence, just context on this card's date.
+        "macro_note": card.get("macro_note"),
     }
 
 
@@ -349,9 +353,11 @@ def build_messages(
         ent = c.get("entity_label") or c.get("entity") or "—"
         lens = ", ".join(c.get("lenses") or [])
         alert = " [ALERTA]" if c.get("is_alert") else ""
+        note = c.get("macro_note")
+        note_line = f"\n({note['text']})" if isinstance(note, dict) and note.get("text") else ""
         lines.append(
             f"[{c.get('id')}] {c.get('date')} · {ent} · {lens}"
-            f" · score={c.get('threat_score')}{alert}\n{c.get('narrative')}"
+            f" · score={c.get('threat_score')}{alert}\n{c.get('narrative')}{note_line}"
         )
     for s in (kb_snippets or []):
         lines.append(f"[{s.get('id')}] (KB) {s.get('subject')}")

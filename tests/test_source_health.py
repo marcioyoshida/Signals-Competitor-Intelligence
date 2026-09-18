@@ -51,3 +51,30 @@ def test_as_rows_bands_and_orders_worst_first():
     assert bands[0] in ("error", "never_ok")  # worst first
     assert {r["source"]: r["band"] for r in rows} == {
         "fresh": "ok", "stale": "stale", "broken": "error", "never": "never_ok"}
+
+
+def test_coverage_confidence_empty_is_safe():
+    assert sh.coverage_confidence([]) == {"score": None, "n_sources": 0, "n_healthy": 0, "n_attention": 0}
+
+
+def test_coverage_confidence_all_ok_scores_100():
+    rows = [{"band": "ok"}, {"band": "ok"}]
+    out = sh.coverage_confidence(rows)
+    assert out == {"score": 100, "n_sources": 2, "n_healthy": 2, "n_attention": 0}
+
+
+def test_coverage_confidence_weights_bands_and_counts_attention():
+    # #137: one erroring source among many must pull the score down, not vanish.
+    rows = [{"band": "ok"}, {"band": "ok"}, {"band": "ok"}, {"band": "error"}]
+    out = sh.coverage_confidence(rows)
+    assert out["score"] == round((100 * 3 + 10) / 4)
+    assert out["n_sources"] == 4 and out["n_healthy"] == 3 and out["n_attention"] == 1
+
+
+def test_coverage_confidence_never_leaks_source_names():
+    # This is the whole point of #137 — the aggregate must never carry per-source identifiers
+    # or last_error text, those stay operator-only.
+    rows = [{"source": "BCB Pix", "band": "error", "last_error": "HTTP 500 boom"}]
+    out = sh.coverage_confidence(rows)
+    assert "source" not in out and "last_error" not in out
+    assert set(out.keys()) == {"score", "n_sources", "n_healthy", "n_attention"}

@@ -18,6 +18,7 @@ from urllib.parse import urlparse
 import boto3
 
 from src.dashboard.topics import topic_options, topics_of
+from src.synth import macro_correlate
 
 
 def _json_default(o: Any) -> Any:
@@ -718,6 +719,14 @@ def build_feed(
         key=lambda x: (x["date"], x["threat_score"]), reverse=True,
     )
 
+    # CSO dimension 3 (O3 follow-on, #138): a deterministic, template-generated
+    # macro-correlation note on narratives that land near a known macro event —
+    # see macro_correlate.py's docstring for why this doesn't need the propose->vet
+    # review gate PESTLE/SWOT proposals go through (no LLM call, nothing to hallucinate).
+    # Needs the SAME built macro object the "macro" key below uses, so build it once here.
+    built_macro = build_macro(macro, gdelt_macro)
+    feed_items = macro_correlate.annotate_feed_items(feed_items, built_macro)
+
     return {
         "generated_at": generated_at
         or dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
@@ -757,7 +766,7 @@ def build_feed(
         # build_macro's docstring for why these are folded into the SAME panel
         # rather than a new one (product-strategy call: never a standalone reading
         # surface, only backdrop on an existing one).
-        "macro": build_macro(macro, gdelt_macro),
+        "macro": built_macro,
         # ADR 004 step 2: per-entity SWOT belief store (compact index) — the war
         # room renders a S/W/O/T panel for the selected entity. {} when absent.
         "swot": (swot or {}).get("entities", {}) if swot else {},
@@ -896,6 +905,9 @@ def scope_feed_to_modules(feed: dict[str, Any], modules: Any) -> dict[str, Any]:
             "financials": [r for r in (feed.get("financials") or []) if row_ok(r)],
             "integrity": {"findings": [], "counts": {}, "total": 0},  # operator-only
             "regulatory_coverage": {},                                # operator-only (#2)
+            "source_runs": [],  # operator-only (#137) — raw per-source telemetry incl. error
+                                # text; clients get only the reduced "coverage_confidence" score,
+                                # which `dict(feed)` already carried over unchanged.
         }
     )
     out["executive"] = _rescope_executive(out)
@@ -1009,6 +1021,7 @@ def derive_entry_feed(
             "financials": [r for r in (feed.get("financials") or []) if row_ok(r)],
             "integrity": {"findings": [], "counts": {}, "total": 0},  # operator-only
             "regulatory_coverage": {},                                # operator-only (#2)
+            "source_runs": [],  # operator-only (#137) — see scope_feed_to_modules
         }
     )
     out["executive"] = _rescope_executive(out)
@@ -1632,9 +1645,11 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         from src.ingest import source_health as _sh
 
         feed["source_runs"] = _sh.as_rows(_sh.load_index(digests_bucket))
+        feed["coverage_confidence"] = _sh.coverage_confidence(feed["source_runs"])
     except Exception as exc:  # pragma: no cover - best-effort, read-only
         print(f"Warning: source_runs load skipped: {exc}")
         feed["source_runs"] = []
+        feed["coverage_confidence"] = {"score": None, "n_sources": 0, "n_healthy": 0, "n_attention": 0}
     # #75/R3: system-wide IF.data market size (SFN asset base) + leaders — the credit/asset-stock
     # size the CVM-revenue market_structure (listed issuers only) can't give. Read-only.
     try:

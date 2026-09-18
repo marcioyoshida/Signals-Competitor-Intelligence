@@ -106,6 +106,21 @@ def as_rows(index: dict[str, Any], *, now: _dt.datetime | None = None) -> list[d
     return rows
 
 
+_CONFIDENCE_WEIGHT = {"ok": 100, "warn": 70, "stale": 40, "error": 10, "never_ok": 0}
+
+
+def coverage_confidence(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Reduce `as_rows()` into a single client-safe score (#137) — no source names or
+    `last_error` text, those stay operator-only (see `scope_feed_to_modules`). Weighted by
+    reliability band so one erroring source among many doesn't read as "everything's fine"."""
+    if not rows:
+        return {"score": None, "n_sources": 0, "n_healthy": 0, "n_attention": 0}
+    score = round(sum(_CONFIDENCE_WEIGHT.get(r.get("band"), 0) for r in rows) / len(rows))
+    n_healthy = sum(1 for r in rows if r.get("band") == "ok")
+    n_attention = sum(1 for r in rows if r.get("band") in ("error", "never_ok"))
+    return {"score": score, "n_sources": len(rows), "n_healthy": n_healthy, "n_attention": n_attention}
+
+
 def load_index(bucket: str, *, s3: Any | None = None) -> dict[str, Any]:
     import boto3
 
