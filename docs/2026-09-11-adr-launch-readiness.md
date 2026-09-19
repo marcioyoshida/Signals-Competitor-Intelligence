@@ -127,9 +127,12 @@ Findings that change what "per-sector readiness" means:
    can be a single number, not a per-officer matrix.
 2. **CCO is starved almost everywhere, structurally — not a data-quality bug.** Integrity
    findings are 0 in 16/17 sectors (only `real-estate-funds` has any); reputation rows only
-   populate meaningfully in banking/fintech, because the consumidor.gov.br index only covers
-   retail-facing regulated institutions. A CCO-persona pitch outside banking/fintech is
-   currently pitching an empty panel.
+   populate meaningfully in banking/fintech, because the reputation store is the **BCB**
+   complaints ranking, which by construction only covers BCB-supervised institutions. A
+   CCO-persona pitch outside banking/fintech is currently pitching an empty panel.
+   *(Corrected 2026-09-19: this said "consumidor.gov.br index". That ingester has never fed
+   the store — default-off, and its source host is now dead; see #63. The fill for this gap
+   is ANS IGR, #140.)*
 3. **CRO's prudential column (Basileia/NPL) is correctly scoped, not a gap.** `✅` tracks BCB/
    COSIF-reporting institutions; `❌` (betting, real-estate-funds, private-markets,
    securitization, closed-pension) reflects that those sectors have no such regulatory filing to
