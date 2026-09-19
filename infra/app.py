@@ -1702,7 +1702,11 @@ class OncaPrototypeStack(Stack):
             },
         )
         digests_bucket.grant_read_write(qsa_fn)
-        entities_table.grant_read_data(qsa_fn)
+        # WRITE, not read: #143 persists each refreshed entity's capital_social (which
+        # arrives in the same BrasilAPI payload as the QSA) back onto the registry entity,
+        # so a change in registered capital becomes observable. Read-only here meant the
+        # persist silently degraded to a logged warning on every run.
+        entities_table.grant_read_write_data(qsa_fn)
 
         operatives_fn = lambda_.Function(
             self,
