@@ -911,9 +911,11 @@ def build_cco(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         sd = [d for d in distress if slug in (ALL, None) or slug in _industries_of(feed, d.get("entity"))]
         sr = [r for r in rep_rows if _in_industry(r, slug)]
         # #118: an integrity/reputation count of ~0 for a sector is almost always "this sector
-        # has no compliance signal ingested" (consumidor.gov.br's reputation index only
-        # meaningfully covers retail-facing regulated institutions), not "this sector was
-        # audited and found clean" — those two states must never look the same to a buyer.
+        # has no compliance signal ingested" (the reputation store is the BCB complaints
+        # ranking, which by construction only covers BCB-supervised institutions), not "this
+        # sector was audited and found clean" — those two states must never look the same to
+        # a buyer. NB this said "consumidor.gov.br" until 2026-09-18; that ingester (#63) has
+        # never fed this store — it is default-off and its source host is now dead.
         insufficient = len(si) == 0 and len(sr) < _CCO_MIN_REPUTATION_SIGNAL
         return {"n_integrity": len(si), "n_distress": len(sd), "n_rep": len(sr),
                 "n_high": sum(1 for i in si if i.get("severity") == "high"),
