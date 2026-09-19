@@ -614,3 +614,37 @@ def test_macro_note_reaches_cso_but_never_cpo_or_other_officers():
                 for row in panel:
                     if isinstance(row, dict):
                         assert "macro_note" not in row, f"{officer}.{panel_name} leaked macro_note"
+
+
+def test_cco_reputation_panel_interleaves_both_sources_and_keeps_provenance():
+    # #140: BCB publishes a positional rank (1 = worst), ANS an IGR rate (higher = worse).
+    # A single sort key buried ANS at 999 and the [:30] cap dropped all of it. Each source
+    # must be ordered by its OWN severity and interleaved, and every row must say which
+    # source it came from — a rate must never read as a rank.
+    feed = _feed()
+    feed["reputation"] = (
+        [{"id": f"bcb:{i}", "entity": "itau", "source": "BCB", "rank": i,
+          "index": 10.0 + i, "category": "Top 15", "period": "2026-T2"} for i in range(1, 32)]
+        + [{"id": "ans:bradesco-saude", "entity": "bradesco", "source": "ANS",
+            "index": 83.07, "cobertura": "Assistência médica", "period": "2026-08"},
+           {"id": "ans:tiny", "entity": "porto_seguro", "source": "ANS", "index": None,
+            "index_withheld": "base_too_small", "cobertura": "Odonto", "period": "2026-08"}]
+    )
+    rows = executive.build_executive(feed)["cco"]["panels"]["reputation"]
+    srcs = [r.get("source") for r in rows]
+    assert "ANS" in srcs, "ANS rows must survive the 30-row cap"
+    assert "BCB" in srcs
+    assert srcs[0] == "BCB" and srcs[1] == "ANS"      # interleaved, worst-of-each first
+    ans = next(r for r in rows if r["source"] == "ANS" and r["index"] is not None)
+    assert ans["category"] == "Assistência médica"    # cobertura fills the BCB-only field
+    assert ans["rank"] is None                        # ANS has no rank, and must not fake one
+    # A row whose index was withheld cannot be RANKED, so it sorts after every scored row
+    # and is legitimately cut by the 30-row cap when the panel is full. With room, it is
+    # carried through with its flag intact so the UI can explain the gap rather than show
+    # a bare dash.
+    small = dict(feed)
+    small["reputation"] = [feed["reputation"][0], feed["reputation"][-1]]
+    small_rows = executive.build_executive(small)["cco"]["panels"]["reputation"]
+    assert [r.get("source") for r in small_rows] == ["BCB", "ANS"]   # scored first
+    assert small_rows[-1]["index_withheld"] == "base_too_small"
+    assert small_rows[-1]["index"] is None

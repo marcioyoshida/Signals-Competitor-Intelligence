@@ -14,6 +14,7 @@ distress carries the #33 counterparty mis-attribution risk and stays off the boa
 """
 from __future__ import annotations
 
+from itertools import zip_longest
 from typing import Any
 
 ALL = "__all__"
@@ -881,8 +882,19 @@ def build_cco(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     labels = ctx["labels"]
     findings = list((feed.get("integrity") or {}).get("findings") or [])
     distress = _trusted_distress(feed)
-    reputation = sorted((feed.get("reputation") or []),
-                        key=lambda r: (r.get("rank") if r.get("rank") is not None else 999))
+    # #140: the store now holds two scales that do NOT compare — BCB publishes a positional
+    # rank (1 = worst), ANS an IGR rate (higher = worse, and withheld on a small book). A
+    # single sort key would bury one source: ranking ANS rows at 999 pushed all 9 past the
+    # 30-row cap, so none ever rendered. Order each source by its OWN severity and
+    # interleave, so the worst of each surfaces regardless of the other's volume.
+    _rep_all = feed.get("reputation") or []
+    _ranked = sorted([r for r in _rep_all if r.get("rank") is not None],
+                     key=lambda r: r["rank"])
+    _rated = sorted([r for r in _rep_all if r.get("rank") is None and r.get("index") is not None],
+                    key=lambda r: -(r.get("index") or 0))
+    _unscored = [r for r in _rep_all if r.get("rank") is None and r.get("index") is None]
+    reputation = [r for pair in zip_longest(_ranked, _rated) for r in pair if r is not None]
+    reputation += _unscored
 
     def f_inds(f):
         return _industries_of(feed, f.get("entity_id"))
@@ -891,7 +903,15 @@ def build_cco(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
                        "summary": f.get("summary"), "entity_id": f.get("entity_id"),
                        "card_id": f.get("card_id"), "industries": f_inds(f)} for f in findings]
     rep_rows = [{"id": r.get("id"), "entity": r.get("entity"), "label": r.get("company") or r.get("entity"),
-                 "index": r.get("index"), "rank": r.get("rank"), "category": r.get("category"),
+                 "index": r.get("index"), "rank": r.get("rank"),
+                 # ANS rows carry no `category` (that is a BCB field) — their nearest
+                 # equivalent is the cobertura. Without this the row renders with an empty
+                 # middle column and looks like a broken BCB row.
+                 "category": r.get("category") or r.get("cobertura"),
+                 # Provenance travels with the row: two sources on two scales now share
+                 # this panel, and a rate from ANS must not read as a BCB rank.
+                 "source": r.get("source"),
+                 "index_withheld": r.get("index_withheld"),
                  "period": r.get("period"), "url": r.get("url"),
                  "industries": _industries_of(feed, r.get("entity"))} for r in reputation]
     # Risk register = confirmed distress + worst-reputation + high-severity integrity.

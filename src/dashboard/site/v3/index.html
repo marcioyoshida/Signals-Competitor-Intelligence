@@ -867,7 +867,10 @@ function rowsRep(list) {
   return list.map(r => `<div class="exrow" ${r.url ? `data-url="${U.esc(r.url)}"` : ""}>
     <span class="ent" style="min-width:148px" title="${U.esc(r.label)}">${U.esc(r.label)}</span>
     <span class="ttl">${U.esc(r.category || "")} · ${U.esc(r.period || "")}</span>
-    <span class="meta">#${r.rank != null ? r.rank : "—"} · índice ${r.index != null ? r.index : "—"}</span></div>`).join("");
+    <span class="meta">${r.source ? `<span class="badge badge--ghost">${U.esc(r.source)}</span> ` : ""}${
+      r.rank != null ? "#" + r.rank + " · " : ""}índice ${
+      r.index != null ? r.index : (r.index_withheld ? "—" : "—")}${
+      r.index_withheld ? ` <span title="base de beneficiários pequena demais para um índice estável">(base pequena)</span>` : ""}</span></div>`).join("");
 }
 function rowsGap(list) {
   if (!(list || []).length) return U.empty("Sem pontos cegos.", "", "○");
