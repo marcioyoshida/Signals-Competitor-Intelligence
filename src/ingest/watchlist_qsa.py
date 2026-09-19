@@ -188,8 +188,25 @@ def _stale(fetched_at: str | None, now: dt.datetime, ttl_days: int) -> bool:
 
 
 # --- registry + S3 plumbing -------------------------------------------------
+# A fund (FII/FIAGRO) is a vehicle, not an operating company: it has no quadro de sócios
+# and Receita registers its capital social as 0. Measured on the live registry 2026-09-19:
+# 793 of the 1,664 CNPJ-bearing entities are funds, and only 299 entities have any QSA at
+# all. Spending the bounded per-run lookup budget on them yields nothing for EITHER
+# consumer, so they sort last — see `_watchlist_entities`.
+_VEHICLE_INDUSTRIES = frozenset({"real-estate-funds", "agri-funds"})
+
+
 def _watchlist_entities() -> list[dict[str, Any]]:
-    """Tracked entities that carry a CNPJ root in the registry: [{entity, cnpj}]."""
+    """Tracked entities that carry a CNPJ root in the registry: [{entity, cnpj}].
+
+    Operating companies first, fund vehicles last. The refresh is bounded (10/run) and
+    TTL-gated at 30 days, so ORDER decides what actually gets covered: at 1,664 entities
+    a full pass needs ~166 runs (~55 days at 3×/day) and can never finish inside the TTL.
+    Front-loading the ~870 operating companies brings them inside one TTL window, so the
+    QSA and capital reads land on the entities where those fields exist at all. Funds are
+    deprioritized rather than dropped — nothing is silently lost if a vehicle ever does
+    carry a QSA.
+    """
     try:
         from src.synth import entity_registry
 
@@ -197,7 +214,10 @@ def _watchlist_entities() -> list[dict[str, Any]]:
         for e in entity_registry.list_entities():
             roots = e.get("cnpj_roots") or []
             if roots and e.get("entity_id"):
-                out.append({"entity": e["entity_id"], "cnpj": roots[0]})
+                is_vehicle = bool(_VEHICLE_INDUSTRIES & set(e.get("industries") or []))
+                out.append({"entity": e["entity_id"], "cnpj": roots[0],
+                            "priority": 1 if is_vehicle else 0})
+        out.sort(key=lambda r: r["priority"])  # stable: preserves scan order within a tier
         return out
     except Exception as exc:  # pragma: no cover - registry best-effort
         print(f"Warning: watchlist QSA registry load failed: {exc}")

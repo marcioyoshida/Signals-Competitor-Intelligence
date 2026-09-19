@@ -180,3 +180,20 @@ def test_persist_capital_reports_only_material_moves(monkeypatch):
     slice_ = {"refreshed_entities": ["a"], "entities": {"a": {"capital_social": 1.01e8}}}
     writes, moves = wq._persist_capital(slice_)
     assert writes == 1 and moves == []   # persisted, but not a signal
+
+
+def test_watchlist_puts_operating_companies_ahead_of_fund_vehicles(monkeypatch):
+    # The refresh is bounded per run and TTL-gated, so ORDER decides coverage. Funds have
+    # no QSA and capital social 0 — letting them consume the budget makes both reads inert.
+    from src.synth import entity_registry
+    monkeypatch.setattr(entity_registry, "list_entities", lambda **k: [
+        {"entity_id": "fii_a", "cnpj_roots": ["11111111"], "industries": ["real-estate-funds"]},
+        {"entity_id": "banco", "cnpj_roots": ["22222222"], "industries": ["banking"]},
+        {"entity_id": "fiagro", "cnpj_roots": ["33333333"], "industries": ["agri-funds"]},
+        {"entity_id": "fintech", "cnpj_roots": ["44444444"], "industries": ["fintech"]},
+        {"entity_id": "sem_root", "cnpj_roots": [], "industries": ["banking"]},
+    ])
+    out = wq._watchlist_entities()
+    assert [e["entity"] for e in out] == ["banco", "fintech", "fii_a", "fiagro"]
+    # deprioritized, never dropped — a vehicle that does carry a QSA is still reachable
+    assert {e["entity"] for e in out} >= {"fii_a", "fiagro"}
