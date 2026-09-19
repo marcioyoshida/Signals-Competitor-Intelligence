@@ -1232,8 +1232,13 @@ def _load_distress(digests_bucket: str) -> list[dict[str, Any]]:
 
 
 def _load_reputation(digests_bucket: str) -> list[dict[str, Any]]:
-    """Read the consumer-reputation stores (#31): BCB complaints ranking (official)
-    + Reclame Aqui (when an authorized feed is configured). Best-effort."""
+    """Read the consumer-reputation stores: BCB complaints ranking (#31, the only one
+    populated today) + ANS IGR for saúde suplementar (#140, default-off until the
+    health-plan sub-entities are registered) + Reclame Aqui (built but parked, needs an
+    authorized feed). Best-effort — each store is optional and absent stores are skipped.
+
+    Records carry their own ``source``; downstream must read it rather than assume a
+    provider (see agent_ask.reputation_cards)."""
     out: list[dict[str, Any]] = []
     try:
         from src.ingest import bcb_reclamacoes
@@ -1247,6 +1252,12 @@ def _load_reputation(digests_bucket: str) -> list[dict[str, Any]]:
         out += reclame_aqui.list_records(reclame_aqui.load_index(digests_bucket))
     except Exception as exc:  # pragma: no cover - best-effort, read-only
         print(f"Warning: load Reclame Aqui store failed: {exc}")
+    try:
+        from src.ingest import ans_igr
+
+        out += ans_igr.list_records(ans_igr.load_index(digests_bucket))
+    except Exception as exc:  # pragma: no cover - best-effort, read-only
+        print(f"Warning: load ANS IGR store failed: {exc}")
     return out
 
 

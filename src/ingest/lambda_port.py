@@ -128,6 +128,7 @@ from src.ingest import (
     cvm_inf_diario,
     cvm_ipe,
     cvm_ofertas,
+    ans_igr,
     bcb_reclamacoes,
     cade,
     ceis_cnep,
@@ -1325,6 +1326,20 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as exc:  # pragma: no cover - defensive; upstream best-effort
             print(f"Warning: BCB reclamações fetch failed: {exc}")
 
+    # ANS IGR (#140) — the same reputation shape for saúde suplementar, extending the
+    # signal past BCB-supervised banks. Resolution is CNPJ-only via the ANS cadop bridge;
+    # there is deliberately no name fallback (see ans_igr's docstring). DEFAULT-OFF until
+    # the health-plan sub-entities (ADR-017) are registered, since until then almost
+    # nothing resolves and the store would just be empty.
+    ans_igr_summary: dict[str, Any] | None = None
+    if os.environ.get("ONCA_ANS_IGR", "false").lower() in ("1", "true", "yes"):
+        bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
+        try:
+            with _source_budget("ANS IGR", deadline, per_source):
+                ans_igr_summary = ans_igr.run(bucket)
+        except Exception as exc:  # pragma: no cover - defensive; upstream best-effort
+            print(f"Warning: ANS IGR fetch failed: {exc}")
+
     # consumidor.gov.br complaints (#63) — cross-industry consumer reputation, the general
     # form of bcb_reclamacoes. DEFAULT-OFF + token-gated: the source is resolved via the
     # dados.gov.br catalog ([[gov_dados]]), whose GOV_DADOS_TOKEN is currently rejected, so
@@ -1591,6 +1606,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         # Consumer reputation (#31) — entity-tied; stores are authoritative.
         "reputation": reputation_summary,
         "bcb_reclamacoes": bcb_reclamacoes_summary,
+        "ans_igr": ans_igr_summary,
         "consumidor_gov": consumidor_gov_summary,  # #63 (default-off, token-gated)
         "inf_diario_moves": {
             "funds_tracked": len(inf_diario_rows),
