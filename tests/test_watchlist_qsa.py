@@ -112,3 +112,71 @@ def test_refresh_bounded_per_run():
     ents = [{"entity": f"e{i}", "cnpj": f"{i:08d}"} for i in range(20)]
     out = wq.refresh(ents, {}, fetch=_fetch_ok, now=NOW, max_lookups=5)
     assert out["refreshed"] == 5                              # spreads across runs
+
+
+# --- #143 capital social rides the QSA fetch --------------------------------
+def test_refresh_reads_capital_social_from_the_payload_it_already_fetched():
+    def fetch(c):
+        return {"qsa": [_socio("MARIA SILVA", "Diretor", "***265018**")],
+                "capital_social": "45.000.000,00"}
+    out = wq.refresh([{"entity": "itau", "cnpj": "60701190"}], {}, fetch=fetch, now=NOW)
+    assert out["entities"]["itau"]["capital_social"] == 45_000_000.0
+    assert out["entities"]["itau"]["socios"]           # QSA unaffected
+
+
+def test_refresh_reports_which_entities_were_refetched():
+    # The caller persists capital only for these — walking the whole watchlist would
+    # mean a registry read per entity, the cost that timed out resolve_by_cnpj.
+    ents = [{"entity": f"e{i}", "cnpj": f"{i:08d}"} for i in range(20)]
+    out = wq.refresh(ents, {}, fetch=_fetch_ok, now=NOW, max_lookups=3)
+    assert out["refreshed_entities"] == ["e0", "e1", "e2"]
+    assert len(out["refreshed_entities"]) == out["refreshed"]
+
+
+def test_refresh_tolerates_a_payload_with_no_capital():
+    out = wq.refresh([{"entity": "itau", "cnpj": "60701190"}], {}, fetch=_fetch_ok, now=NOW)
+    assert out["entities"]["itau"]["capital_social"] is None
+
+
+def test_persist_capital_only_touches_entities_refetched_this_run(monkeypatch):
+    # NB patch the function on the real module, not sys.modules: `from src.synth import
+    # entity_registry` resolves via the already-imported package attribute, so a
+    # sys.modules stub is bypassed whenever another test imported src.synth first.
+    from src.synth import entity_registry
+    seen = []
+
+    def _rec(ent, value, source="enrich"):
+        seen.append((ent, value))
+        return {"entity": ent, "value": value, "previous": 1_000_000.0}
+
+    monkeypatch.setattr(entity_registry, "record_capital_social", _rec)
+    slice_ = {"refreshed_entities": ["a"],
+              "entities": {"a": {"capital_social": 50_000_000.0},
+                           "b": {"capital_social": 99_000_000.0}}}  # cached, not refetched
+    writes, moves = wq._persist_capital(slice_)
+    assert seen == [("a", 50_000_000.0)]
+    assert writes == 1 and [m["entity"] for m in moves] == ["a"]
+
+
+def test_persist_capital_never_breaks_the_qsa_run(monkeypatch):
+    from src.synth import entity_registry
+
+    def _boom(ent, value, source="enrich"):
+        raise RuntimeError("registry down")
+
+    monkeypatch.setattr(entity_registry, "record_capital_social", _boom)
+    slice_ = {"refreshed_entities": ["a"], "entities": {"a": {"capital_social": 5e7}}}
+    assert wq._persist_capital(slice_) == (0, [])
+
+
+def test_persist_capital_reports_only_material_moves(monkeypatch):
+    from src.synth import entity_registry
+
+    def _rec(ent, value, source="enrich"):
+        # a real write, but a trivial one: 1% on a large base
+        return {"entity": ent, "value": 101_000_000.0, "previous": 100_000_000.0}
+
+    monkeypatch.setattr(entity_registry, "record_capital_social", _rec)
+    slice_ = {"refreshed_entities": ["a"], "entities": {"a": {"capital_social": 1.01e8}}}
+    writes, moves = wq._persist_capital(slice_)
+    assert writes == 1 and moves == []   # persisted, but not a signal

@@ -18,6 +18,7 @@ from urllib.parse import urlparse
 import boto3
 
 from src.dashboard.topics import topic_options, topics_of
+from src.ingest import capital_social
 from src.synth import macro_correlate
 
 
@@ -794,6 +795,11 @@ def build_feed(
         # Option A (2026-08-25): entity-tagged corporate distress (RJ/falência) mined
         # from news + persisted. Read-only list, most-recent first. [] when absent.
         "distress": distress or [],
+        # #143: material moves in registered capital (Receita), derived from the entity
+        # attributes ABOVE rather than a store of its own — the registry holds the value
+        # and the one it replaced, so there is nothing to keep in sync. A capital move is
+        # the visible shadow of a junta act we cannot read directly (#26).
+        "capital_moves": capital_social.moves_from_attrs(entity_attrs),
         # Curated per-entity classification attributes (ownership nature, compliance
         # certifications, ticker, industries) — queryable entity facts for the agent
         # + dashboard. Keyed by entity_id. Covers the WHOLE registry, not just
@@ -900,6 +906,7 @@ def scope_feed_to_modules(feed: dict[str, Any], modules: Any) -> dict[str, Any]:
             "swot_proposals": [r for r in (feed.get("swot_proposals") or []) if row_ok(r)],
             "graph_proposals": [r for r in (feed.get("graph_proposals") or []) if row_ok(r)],
             "distress": [r for r in (feed.get("distress") or []) if row_ok(r)],
+            "capital_moves": [r for r in (feed.get("capital_moves") or []) if row_ok(r)],
             "reputation": [r for r in (feed.get("reputation") or []) if row_ok(r)],
             "coverage_gaps": [r for r in (feed.get("coverage_gaps") or []) if row_ok(r)],
             "financials": [r for r in (feed.get("financials") or []) if row_ok(r)],
@@ -1016,6 +1023,7 @@ def derive_entry_feed(
             "swot_proposals": [r for r in (feed.get("swot_proposals") or []) if row_ok(r)],
             "graph_proposals": [r for r in (feed.get("graph_proposals") or []) if row_ok(r)],
             "distress": [r for r in (feed.get("distress") or []) if row_ok(r)],
+            "capital_moves": [r for r in (feed.get("capital_moves") or []) if row_ok(r)],
             "reputation": [r for r in (feed.get("reputation") or []) if row_ok(r)],
             "coverage_gaps": [r for r in (feed.get("coverage_gaps") or []) if row_ok(r)],
             "financials": [r for r in (feed.get("financials") or []) if row_ok(r)],

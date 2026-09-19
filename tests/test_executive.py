@@ -648,3 +648,53 @@ def test_cco_reputation_panel_interleaves_both_sources_and_keeps_provenance():
     assert [r.get("source") for r in small_rows] == ["BCB", "ANS"]   # scored first
     assert small_rows[-1]["index_withheld"] == "base_too_small"
     assert small_rows[-1]["index"] is None
+
+
+# --- #143 capital social ------------------------------------------------------------
+def _capital_feed():
+    feed = _feed()
+    feed["capital_moves"] = [
+        {"entity": "itau", "label": "Itaú", "kind": "capital_social_move",
+         "source": "Receita Federal (via BrasilAPI)", "capital": 30_000_000.0,
+         "previous_capital": 10_000_000.0, "delta": 20_000_000.0, "delta_pct": 200.0,
+         "direction": "aumento", "date": "2026-09-02"},
+        {"entity": "bradesco", "label": "Bradesco", "kind": "capital_social_move",
+         "source": "Receita Federal (via BrasilAPI)", "capital": 4_000_000.0,
+         "previous_capital": 9_000_000.0, "delta": -5_000_000.0, "delta_pct": -55.56,
+         "direction": "reducao", "date": "2026-09-01"},
+    ]
+    return feed
+
+
+def test_cso_capital_panel_states_both_figures_and_the_act_it_implies():
+    cso = executive.build_executive(_capital_feed())["cso"]
+    rows = cso["panels"]["capital_moves"]
+    assert [r["entity"] for r in rows] == ["itau", "bradesco"]
+    # Both figures in the copy — a bare delta cannot be told apart from a data correction.
+    assert "R$ 10,0 mi" in rows[0]["title"] and "R$ 30,0 mi" in rows[0]["title"]
+    assert "aumentou" in rows[0]["title"] and "+200.0%" in rows[0]["title"]
+    assert "reduziu" in rows[1]["title"]
+    # Industry-scoped so the panel can be filtered like every other CSO surface.
+    assert rows[0]["industries"] == ["banking"]
+
+
+def test_cso_capital_metric_is_industry_scoped():
+    cso = executive.build_executive(_capital_feed())["cso"]
+    assert cso["by_industry"]["__all__"]["n_capital_moves"] == 2
+    assert cso["by_industry"]["banking"]["n_capital_moves"] == 2
+    assert cso["by_industry"]["fintech"]["n_capital_moves"] == 0
+
+
+def test_cso_recommends_investigating_the_largest_increase_only():
+    recs = executive.build_executive(_capital_feed())["cso"]["panels"]["recommendations"]
+    cap = [r for r in recs if "aporte" in (r.get("text") or "")]
+    assert len(cap) == 1 and cap[0]["entity"] == "itau"
+    # A capital REDUCTION is a retrenchment read, not an expansion thesis — it must not
+    # generate a "investigate the aporte" recommendation.
+    assert "bradesco" not in str(cap[0])
+
+
+def test_cso_capital_panel_is_empty_without_the_section():
+    cso = executive.build_executive(_feed())["cso"]
+    assert cso["panels"]["capital_moves"] == []
+    assert cso["by_industry"]["__all__"]["n_capital_moves"] == 0

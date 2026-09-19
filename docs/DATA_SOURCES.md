@@ -345,7 +345,8 @@ Entity-less by design: the macro slice is a **backdrop** lens, never an entity a
 
 | Source | Module | Invoked by | Notes |
 |---|---|---|---|
-| Watchlist QSA | `watchlist_qsa.py` | own Lambda + `synth/operatives` | person-graph / control network |
+| Watchlist QSA | `watchlist_qsa.py` | own Lambda + `synth/operatives` | person-graph / control network; also persists `capital_social` (#143) |
+| Capital social | `capital_social.py` | `watchlist_qsa`, `feed_builder` | diff + materiality over the registry's capital field; no fetch of its own (#143) |
 | BCB consórcio | `bcb_consorcio.py` | `reg_coverage`, `entity_discovery`, `executive` | 93 entities (#46) |
 | ESG / ISE B3 | `esg_ise_b3.py` | `entity_registry`, `product_intel` | ESG attrs (#30) |
 | Reg coverage map | `reg_coverage.py` | `feed_builder`, `entity_discovery`, `executive` | CVM/BCB segment roster (#2) |

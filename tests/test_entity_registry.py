@@ -760,3 +760,81 @@ def test_news_excludes_skips_inactive_and_survives_a_patch():
     # deactivated entities drop out of the veto map with everything else
     er.deactivate_entity("neon", table=t)
     assert er.news_excludes(table=t) == {}
+
+
+# --- #143 capital social -----------------------------------------------------------
+def test_record_capital_social_cold_observation_is_a_write_but_not_a_change():
+    t = FakeTable()
+    er.put_entity("banco_x", "Banco X", ["BANCO X"], table=t)
+    out = er.record_capital_social("banco_x", 10_000_000.0, table=t)
+    assert out is not None and out["previous"] is None   # nothing to compare against
+    cap = er.get_entity("banco_x", table=t)["capital"]
+    assert float(cap["value"]) == 10_000_000.0
+    assert "previous" not in cap and "changed_at" not in cap
+    assert cap["first_seen"]
+
+
+def test_record_capital_social_keeps_the_value_it_replaced():
+    t = FakeTable()
+    er.put_entity("banco_x", "Banco X", ["BANCO X"], table=t)
+    import datetime as _dt
+    t0 = _dt.datetime(2026, 8, 1, tzinfo=_dt.timezone.utc)
+    t1 = _dt.datetime(2026, 9, 15, tzinfo=_dt.timezone.utc)
+    er.record_capital_social("banco_x", 10_000_000.0, table=t, now=t0)
+    out = er.record_capital_social("banco_x", 30_000_000.0, table=t, now=t1)
+    assert out["previous"] == 10_000_000.0 and out["value"] == 30_000_000.0
+    cap = er.get_entity("banco_x", table=t)["capital"]
+    assert float(cap["previous"]) == 10_000_000.0 and float(cap["value"]) == 30_000_000.0
+    # changed_at dates the MOVE; first_seen stays pinned to the first observation, so a
+    # long-tracked entity's move is not misread as a brand-new one.
+    assert cap["changed_at"].startswith("2026-09-15")
+    assert cap["first_seen"].startswith("2026-08-01")
+    # ADR-018: the field is stamped, so a weaker writer cannot later demote it.
+    assert er.entity_provenance("banco_x", table=t)["capital"]["source"] == "enrich"
+
+
+def test_record_capital_social_is_idempotent_across_the_monthly_refresh():
+    t = FakeTable()
+    er.put_entity("banco_x", "Banco X", ["BANCO X"], table=t)
+    er.record_capital_social("banco_x", 10_000_000.0, table=t)
+    # The refresh re-reads the same number every month; that must not manufacture a move.
+    assert er.record_capital_social("banco_x", 10_000_000.0, table=t) is None
+    assert "previous" not in er.get_entity("banco_x", table=t)["capital"]
+
+
+def test_record_capital_social_respects_adr018_write_precedence():
+    t = FakeTable()
+    er.put_entity("banco_x", "Banco X", ["BANCO X"], table=t)
+    er.record_capital_social("banco_x", 10_000_000.0, source="curated", table=t)
+    # An automated `enrich` write may not overwrite a curated figure.
+    assert er.record_capital_social("banco_x", 99_000_000.0, source="enrich", table=t) is None
+    assert float(er.get_entity("banco_x", table=t)["capital"]["value"]) == 10_000_000.0
+
+
+def test_record_capital_social_no_ops_on_unknown_entity_or_missing_value():
+    t = FakeTable()
+    er.put_entity("banco_x", "Banco X", ["BANCO X"], table=t)
+    assert er.record_capital_social("nao_existe", 1_000_000.0, table=t) is None
+    assert er.record_capital_social("banco_x", None, table=t) is None
+
+
+def test_update_entity_persists_the_provenance_stamp():
+    # Regression: `_prov` was not in update_entity's patch whitelist, so every stamp
+    # passed to it (set_esg's included) was silently dropped, leaving the field open to
+    # demotion by any later automated write.
+    t = FakeTable()
+    er.put_entity("banco_x", "Banco X", ["BANCO X"], table=t)
+    er.update_entity("banco_x", {"_prov": {"esg": {"source": "curated", "set_at": "2026-09-19"}}}, table=t)
+    assert er.entity_provenance("banco_x", table=t)["esg"]["source"] == "curated"
+
+
+def test_list_entity_attributes_exposes_capital_as_json_safe_floats():
+    t = FakeTable()
+    er.put_entity("banco_x", "Banco X", ["BANCO X"], table=t)
+    er.record_capital_social("banco_x", 10_000_000.0, table=t)
+    er.record_capital_social("banco_x", 30_000_000.0, table=t)
+    cap = er.list_entity_attributes(table=t)["banco_x"]["capital"]
+    # Decimal would blow up json.dumps when the feed is written.
+    assert isinstance(cap["value"], float) and isinstance(cap["previous"], float)
+    import json
+    json.dumps(cap)

@@ -19,6 +19,15 @@ defensively, so even a source that leaked an unmasked CPF could not persist one 
 Only PF sócios (`identificador_de_socio == 2`) and public professional roles are kept;
 companies (PJ) are dropped — they are entities, not people.
 
+**#143 — capital social rides the same fetch.** BrasilAPI returns `capital_social` in the
+very payload fetched above, so this Lambda also persists it onto the registry entity
+(`entity_registry.record_capital_social`) and thereby makes its *changes* observable. It
+is the same "established entities never get re-enriched" gap as the QSA — and the only
+credential-free read we have on junta comercial acts, which #26 found gated on every
+route. A second ingester would have doubled the load on a free public API for bytes
+already in hand. The diff/materiality logic lives in `ingest/capital_social.py`; only
+the entities actually re-fetched this run are written, so the registry cost stays bounded.
+
 The QSA is slow-changing, so refreshes are TTL-gated per entity and bounded per run
 (`max_lookups`), so a cold start spreads gently across a few runs rather than hammering
 the public API. The core (`extract_socios`, `refresh`) is pure — fetch/clock injected —
@@ -34,7 +43,7 @@ from typing import Any, Callable
 
 import boto3
 
-from src.ingest import receita_cnpj
+from src.ingest import capital_social, receita_cnpj
 
 WATCHLIST_QSA_KEY = "graph/watchlist_qsa.json"
 
@@ -123,6 +132,7 @@ def refresh(
     """
     prev_ents = (prev or {}).get("entities", {})
     out: dict[str, Any] = dict(prev_ents)  # keep fresh cache entries as-is
+    refreshed: list[str] = []
     done = 0
     for e in entities:
         ent = e.get("entity")
@@ -148,10 +158,19 @@ def refresh(
             "url": f"https://brasilapi.com.br/api/cnpj/v1/{full}" if full else None,
             "fetched_at": now.isoformat(timespec="seconds"),
             "socios": socios,
+            # #143 — the SAME payload already carries capital_social, so reading it here
+            # costs nothing. Persisting it is the caller's job (see lambda_handler): this
+            # function stays pure so tests need neither network nor a registry.
+            "capital_social": capital_social.parse_capital(data.get("capital_social")),
         }
+        refreshed.append(ent)
     return {
         "generated_at": now.isoformat(timespec="seconds"),
         "refreshed": done,
+        # Which entities were actually re-fetched this run. The caller persists capital
+        # only for these — walking all ~145 tracked entities would mean a registry read
+        # each, the same sequential-get cost that timed out resolve_by_cnpj.
+        "refreshed_entities": refreshed,
         "entities": out,
     }
 
@@ -211,6 +230,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                      now=dt.datetime.now(dt.timezone.utc), ttl_days=ttl,
                      max_lookups=max_lookups, max_persons=max_persons)
 
+    capital_writes, capital_moves = _persist_capital(slice_)
+
     published = None
     try:
         s3.put_object(
@@ -231,6 +252,46 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             "entities_with_qsa": covered,
             "socios_total": persons,
             "refreshed_this_run": slice_["refreshed"],
+            "capital_persisted": capital_writes,
+            "capital_moves": capital_moves,
             "published": published,
         }),
     }
+
+
+def _persist_capital(slice_: dict[str, Any]) -> tuple[int, list[dict[str, Any]]]:
+    """#143 — write this run's capital readings onto the registry entities.
+
+    Only the entities actually re-fetched this run are touched (see `refresh`), so the
+    registry cost stays bounded at `max_lookups` reads regardless of watchlist size.
+    Best-effort throughout: the QSA slice is the primary product of this Lambda and must
+    still publish if the registry is unavailable.
+
+    Returns (writes, material_moves) — `material_moves` is the subset that cleared both
+    materiality floors, reported for run visibility; the feed derives its own list from
+    the registry rather than from this return value.
+    """
+    entities = slice_.get("entities") or {}
+    writes = 0
+    moves: list[dict[str, Any]] = []
+    try:
+        from src.synth import entity_registry
+    except Exception as exc:  # pragma: no cover - registry optional in local runs
+        print(f"Warning: capital persist skipped (registry import failed): {exc}")
+        return 0, []
+    for ent in slice_.get("refreshed_entities") or []:
+        value = (entities.get(ent) or {}).get("capital_social")
+        if value is None:
+            continue
+        try:
+            change = entity_registry.record_capital_social(ent, value, source="enrich")
+        except Exception as exc:  # pragma: no cover - per-entity best-effort
+            print(f"Warning: capital persist failed for {ent}: {exc}")
+            continue
+        if not change:
+            continue
+        writes += 1
+        if capital_social.is_material(change.get("previous"), change.get("value")):
+            moves.append(change)
+            print(f"#143 capital move: {ent} {change.get('previous')} -> {change.get('value')}")
+    return writes, moves

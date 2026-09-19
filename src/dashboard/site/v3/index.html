@@ -872,6 +872,19 @@ function rowsRep(list) {
       r.index != null ? r.index : (r.index_withheld ? "—" : "—")}${
       r.index_withheld ? ` <span title="base de beneficiários pequena demais para um índice estável">(base pequena)</span>` : ""}</span></div>`).join("");
 }
+// #143 capital social. Shows BOTH figures, never a bare delta: the Receita snapshot is
+// republished periodically, so a reader needs the before/after to tell a real corporate
+// act from an upstream correction.
+function rowsCapital(list) {
+  list = (list || []).filter(inSector);
+  if (!list.length) return U.empty("Sem movimentos de capital social no escopo.", "", "○");
+  return list.map(r => `<div class="exrow">
+    <span class="ent" style="min-width:148px" title="${U.esc(r.label || r.entity)}">${U.esc(r.label || r.entity)}</span>
+    <span class="ttl" title="${U.esc(r.title || "")}">${U.esc(r.title || "")}</span>
+    <span class="meta">${r.delta_pct != null
+      ? `<span class="badge badge--${r.direction === "reducao" ? "high" : "low"}">${
+          (r.delta_pct > 0 ? "+" : "") + r.delta_pct}%</span> ` : ""}${U.esc(r.date || "")}</span></div>`).join("");
+}
 function rowsGap(list) {
   if (!(list || []).length) return U.empty("Sem pontos cegos.", "", "○");
   return list.map(r => `<div class="exrow" ${r.issue_url ? `data-href="${U.esc(r.issue_url)}"` : ""}>
@@ -1350,6 +1363,8 @@ function render() {
       band("Inteligência competitiva", "momentum na janela · inferência",
         grid("1fr 1fr", [panel("Momentum do concorrente", null, "↑ ganha · ↓ recua", rowsMomentum(p.momentum)),
                         panel("Movimentos estratégicos", null, "entrada·oferta·M&A", rowsCard(p.moves))])) +
+      band("Capital social", "ato societário registrado em junta comercial · Receita Federal · o ato em si não é público (#26)",
+        panel("Movimentos de capital social", null, "valor anterior → atual", rowsCapital(p.capital_moves))) +
       band("Trajetória de ameaça", "linha do tempo · ameaça média diária por concorrente · inferência",
         `<div class="panel"><div class="panel__bd panel__bd--flush">${threatTimeline(p.momentum)}</div></div>`) +
       band("Postura estratégica", "SWOT + TOWS · beliefs vetados (ADR-006)",

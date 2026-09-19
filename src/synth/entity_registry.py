@@ -610,6 +610,57 @@ def set_esg(entity_id: str, esg: dict[str, Any] | None, *, source: str = "struct
     return True
 
 
+def record_capital_social(
+    entity_id: str,
+    value: float | None,
+    *,
+    source: str = "enrich",
+    table: Any | None = None,
+    now: Any | None = None,
+) -> dict[str, Any] | None:
+    """#143 — persist an entity's registered capital, keeping the value it replaced.
+
+    The registry is the single source of truth for capital (there is deliberately no
+    parallel index that could drift from it), so the *prior* value must live here too —
+    otherwise a change is unobservable the moment it is written. The stored shape is
+    ``capital = {value, previous, changed_at, first_seen}``: one nested map rather than
+    three loose top-level fields, matching the `esg` precedent.
+
+    Returns None when nothing was written (unknown entity, no value, an unchanged value,
+    or a write the field's ADR-018 provenance outranks). Otherwise returns what changed:
+    ``{entity, value, previous, changed_at}`` with ``previous=None`` on a cold first
+    observation — which is a write but NOT a signal, since there is nothing to compare.
+
+    `value` is taken pre-parsed (see `ingest.capital_social.parse_capital`) so the
+    registry keeps no knowledge of the upstream payload format.
+    """
+    import datetime as _dt
+
+    t = _table(table)
+    e = get_entity(entity_id, table=t)
+    if not e or value is None:
+        return None
+    if not _may_write(e, "capital", source):  # ADR 018 Phase 2 write-precedence
+        return None
+    new_value = _ddb_safe(float(value))
+    cur = e.get("capital") or {}
+    prev_value = cur.get("value")
+    if prev_value is not None and prev_value == new_value:
+        return None  # idempotent: the monthly refresh re-reads the same number
+    stamp = (now or _dt.datetime.now(_dt.timezone.utc)).isoformat(timespec="seconds")
+    record: dict[str, Any] = {"value": new_value, "first_seen": cur.get("first_seen") or stamp}
+    if prev_value is not None:
+        record["previous"] = prev_value
+        record["changed_at"] = stamp
+    prov = {**(e.get("_prov") or {}), "capital": _prov_entry(source)}
+    update_entity(entity_id, {"capital": record, "_prov": prov}, table=t)
+    _log(entity_id, "record_capital_social", source,
+         {"value": str(new_value), "previous": str(prev_value) if prev_value is not None else None})
+    return {"entity": entity_id, "value": float(new_value),
+            "previous": float(prev_value) if prev_value is not None else None,
+            "changed_at": record.get("changed_at")}
+
+
 def backfill_esg_ise_b3(
     portfolio: dict[str, Any], *, table: Any | None = None
 ) -> list[tuple[str, dict[str, Any]]]:
@@ -794,8 +845,29 @@ def list_entity_attributes(table: Any | None = None) -> dict[str, dict[str, Any]
             # registry > structured filing > CNPJ-only > news-only), from its ADR-018
             # provenance. A reliability read, not a threat score.
             "radar": _entity_radar_tier(e),
+            # #143 registered capital {value, previous, changed_at, first_seen}. Carried
+            # here so the feed build derives capital moves from the scan it ALREADY does,
+            # instead of a second store that could fall out of step with the registry.
+            # Public Receita data, so it is client-safe.
+            "capital": _json_safe(e.get("capital") or {}),
         }
     return out
+
+
+def _json_safe(obj: Any) -> Any:
+    """Decimal -> float for the feed payload (json.dumps cannot encode Decimal).
+
+    The inverse of `_ddb_safe`: DynamoDB hands numbers back as Decimal, and every other
+    attribute in this map happens to be a string/bool/list, so `capital` is the first
+    numeric one to cross into the feed.
+    """
+    if isinstance(obj, Decimal):
+        return float(obj)
+    if isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_json_safe(v) for v in obj]
+    return obj
 
 
 def _entity_radar_tier(entity: dict[str, Any]) -> dict[str, Any]:
@@ -2017,6 +2089,16 @@ def update_entity(
             )
         elif key == "esg":
             ent["esg"] = _ddb_safe(dict(val)) if val else {}
+        elif key == "capital":
+            # #143 capital social {value, previous, changed_at, first_seen}.
+            ent["capital"] = _ddb_safe(dict(val)) if val else {}
+        elif key == "_prov":
+            # ADR 018. Callers pass the WHOLE merged map ({**existing, field: entry}),
+            # never a fragment, so this replaces rather than patches. Without this branch
+            # a provenance stamp passed to update_entity was silently dropped as an
+            # unknown key — set_esg has been writing `esg` with no `_prov["esg"]`, which
+            # left the field open to demotion by any later automated write.
+            ent["_prov"] = _ddb_safe(dict(val)) if val else {}
         # else: unknown/protected key — ignored
     t.put_item(Item=ent)
     return ent

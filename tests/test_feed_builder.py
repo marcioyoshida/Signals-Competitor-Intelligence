@@ -764,3 +764,35 @@ def test_canonicalize_item_dedupes_co_mentions():
     feed_builder._canonicalize_item(item, {"pan": "banco_pan"})
     assert item["entity"] == "banco_pan"
     assert item["entities"] == ["banco_pan", "itau"]   # the duplicate collapses, not appends
+
+
+def test_capital_moves_are_derived_from_entity_attrs_not_a_second_store():
+    import datetime as _dt
+
+    # #143: the registry holds the value AND the one it replaced, so the feed projects
+    # moves from the attrs it already loaded — nothing to keep in sync.
+    attrs = {
+        "banco_x": {"label": "Banco X", "industries": ["banking"],
+                    "capital": {"value": 30_000_000.0, "previous": 10_000_000.0,
+                                "changed_at": _dt.date.today().isoformat()}},
+        "banco_y": {"label": "Banco Y", "industries": ["banking"],
+                    "capital": {"value": 90_000_000.0}},   # known, never moved
+    }
+    feed = feed_builder.build_feed([], entity_attrs=attrs)
+    assert [m["entity"] for m in feed["capital_moves"]] == ["banco_x"]
+    assert feed["capital_moves"][0]["previous_capital"] == 10_000_000.0
+
+
+def test_capital_moves_are_scoped_out_for_a_tenant_without_that_entity():
+    import datetime as _dt
+
+    # The #139 lesson: a new feed section must be filtered in BOTH scoping paths.
+    attrs = {"banco_x": {"label": "Banco X", "industries": ["banking"],
+                         "capital": {"value": 30_000_000.0, "previous": 10_000_000.0,
+                                     "changed_at": _dt.date.today().isoformat()}}}
+    feed = feed_builder.build_feed([], entity_attrs=attrs)
+    assert feed["capital_moves"]
+    scoped = feed_builder.scope_feed_to_modules(feed, ["insurance"])
+    assert scoped["capital_moves"] == []
+    entry = feed_builder.derive_entry_feed(feed, industries=["insurance"])
+    assert entry["capital_moves"] == []

@@ -75,6 +75,45 @@ def _industries_of(feed: dict[str, Any], entity: str | None) -> list[str]:
     return list(((feed.get("entity_attrs") or {}).get(entity) or {}).get("industries") or [])
 
 
+def _brl(value: float | None) -> str:
+    """Compact BRL for a headline — 'R$ 1,2 bi'. Exact figures stay in the row's fields."""
+    if value is None:
+        return "—"
+    v = float(value)
+    for scale, suffix in ((1e9, " bi"), (1e6, " mi"), (1e3, " mil")):
+        if abs(v) >= scale:
+            return f"R$ {v / scale:,.1f}".replace(".", ",") + suffix
+    return f"R$ {v:,.0f}".replace(",", ".")
+
+
+def _capital_rows(feed: dict[str, Any], labels: dict[str, str]) -> list[dict[str, Any]]:
+    """#143 — registered-capital moves as CSO expansion rows.
+
+    The claim is deliberately narrow: a move in capital social means a corporate act was
+    registered at a junta comercial, which is the closest credential-free read we have on
+    acts themselves (#26 found every act route gated). It is NOT a funding round, a
+    valuation or revenue, so the copy says only what moved, from what, to what — both
+    figures, never a bare delta, since the source snapshot can also carry corrections.
+    """
+    out: list[dict[str, Any]] = []
+    for m in feed.get("capital_moves") or []:
+        e = m.get("entity")
+        label = labels.get(e) or m.get("label") or e
+        verb = "reduziu" if m.get("direction") == "reducao" else "aumentou"
+        pct = m.get("delta_pct")
+        title = (f"{label} {verb} o capital social de {_brl(m.get('previous_capital'))} "
+                 f"para {_brl(m.get('capital'))}")
+        if pct is not None:
+            title += f" ({pct:+.1f}%)"
+        out.append({
+            "entity": e, "label": label, "title": title, "date": m.get("date"),
+            "capital": m.get("capital"), "previous_capital": m.get("previous_capital"),
+            "delta": m.get("delta"), "delta_pct": pct, "direction": m.get("direction"),
+            "source": m.get("source"), "industries": _industries_of(feed, e),
+        })
+    return out
+
+
 def _headline(card: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": card.get("id"),
@@ -533,6 +572,7 @@ def build_cso(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     opps = [c for c in cards if (c.get("swot_hint") or {}).get("dimension") == "O"
             or (c.get("swot_hint") or {}).get("sign") == "-"]
     moves = [c for c in news if _is_move(c)]
+    capital_rows = _capital_rows(feed, labels)
     momentum = _momentum(cards, dates, labels, sizes=_asset_size_index(feed),
                          rollup=_group_roots(feed))
 
@@ -550,6 +590,9 @@ def build_cso(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
                 "avg_threat": round(sum(_threat(c) for c in sc) / n, 1) if n else 0.0,
                 "reg_threat": round(sum(_threat(c) for c in sreg) / len(sreg), 1) if sreg else 0.0,
                 "n_moves": len(smoves), "distress": len(sdist),
+                # #143: how many tracked competitors registered a capital act in the window.
+                "n_capital_moves": sum(1 for r in capital_rows
+                                       if slug in (ALL, None) or slug in (r.get("industries") or [])),
                 # ADR 022 Tier-1: financial strength of the sector's tracked competitors.
                 "avg_roe": round(sum(roes) / len(roes), 1) if roes else None,
                 "n_negative_roe": sum(1 for r in sfin if (r.get("roe_pct") or 0) < 0)}
@@ -569,6 +612,17 @@ def build_cso(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         recs.append(_rec("30d", f"Avaliar mudança regulatória — {r.get('domain') or 'regulação'} "
                          f"(afeta {na} setor{'es' if na != 1 else ''})", "open_watch",
                          officer="cso", evidence_id=r.get("id"), industries=r.get("affected_industries") or []))
+    # #143: the biggest capital increase is a registered corporate act — worth a thesis, not
+    # an alert. Increases only: a REDUCTION is a retrenchment read that belongs to the CRO's
+    # risk register rather than the CSO's expansion watch.
+    capital_up = sorted((r for r in capital_rows if r.get("direction") == "aumento"),
+                        key=lambda r: r.get("delta") or 0.0, reverse=True)[:1]
+    if capital_up:
+        w = capital_up[0]
+        recs.append(_rec("90d", f"Investigar o aporte em {w['label']} — capital social "
+                         f"{_brl(w.get('previous_capital'))} → {_brl(w.get('capital'))}",
+                         "curate_belief", officer="cso", entity=w.get("entity"),
+                         industries=w.get("industries") or []))
     rising = [m for m in momentum if m["momentum"] > 0][:1]
     if rising:
         m = rising[0]
@@ -597,6 +651,8 @@ def build_cso(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         "risks": [_headline_cso(c) for c in risks[:30]],
         "opportunities": [_headline_cso(c) for c in opps[:20]],
         "moves": [_headline_cso(c) for c in moves[:20]],
+        # #143: capital-social moves — the expansion read that sits next to entrants/ofertas.
+        "capital_moves": capital_rows[:20],
         "momentum": _momentum_for_panel(momentum, ctx["sectors"]),
         "regulatory": [_reg_row(c) for c in reg_sorted[:20]],
         # ADR 022 Tier-1: competitor financial strength (ROE/ROA/leverage/headroom/share), inference.
