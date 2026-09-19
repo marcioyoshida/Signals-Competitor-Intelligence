@@ -17,6 +17,13 @@ to "no active vector DB"), ADR 013 (`entity_attrs.*` classification store), #7 (
 ingestion arc (#74/#75) that this extends. **Supersedes the "ADR 01" single-Lambda sketch**
 (2026-09-05) — see *Rejected alternatives*.
 
+> **Extended by [ADR 028](2026-09-19-adr028-competitor-financial-statements-acquisition.md)
+> (2026-09-19).** This ADR covers *soundness*; ADR 028 covers the *statements* themselves —
+> and finds that the `cvm_financials.py` path cited below as covering "~13 listed issuers"
+> is not running in the deployed stack at all, and that the monthly COSIF file this ADR's
+> Tier B already downloads contains result accounts (groups 7/8, doc 4010) that are being
+> discarded. It also assesses and rejects GDELT and Google Search as statement sources.
+
 ## Context
 
 A sketch ("ADR 01") proposed monitoring banks/fintechs/corretoras by folding ingestion,

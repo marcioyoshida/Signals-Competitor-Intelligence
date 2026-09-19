@@ -289,7 +289,7 @@ no rows; do not describe it as a live source in the product or in docs.
 | CVM FIAGRO | `cvm_fiagro.py` | on | agri-funds vertical |
 | CVM FII | `cvm_fii.py` | on | real-estate funds |
 | CVM IPE / fatos relevantes | `cvm_ipe.py` | on | structured identity for listed issuers |
-| CVM financials (DFP/ITR) | `cvm_financials.py` | on | #7 |
+| CVM financials (DFP only) | `cvm_financials.py` | **off** | `ONCA_FINANCIALS` is absent from the deployed ingest Lambda, so #7's store is a frozen 2026-08-30 artifact (13 issuers, all FY2024). ITR is never fetched — the call site hardcodes `doc="DFP"`. See ADR 028 / #145 |
 | CVM participantes | `cvm_participantes.py` | **off** | `ONCA_INGEST_CVM_PARTICIPANTES` default-off |
 | SEC EDGAR | `sec_filings.py` | on | US-listed BR fintechs; `detect_new` (seeded) |
 | DOU (Diário Oficial) | `dou.py` | on | prose body; free-text entity resolution |
@@ -324,6 +324,11 @@ Word-boundary matching and per-entity `news_exclude` vetoes apply here (#135).
 | BCB inadimplência | `bcb_inadimplencia.py` | via `bcb_soundness` | NPL |
 | BCB KM1 | `bcb_km1.py` | via `bcb_soundness` | LCR/NSFR from Pilar 3 KM1 |
 | BCB resultados | `bcb_resultados.py` | via `bcb_balancete` | results releases |
+
+The monthly COSIF file both modules read carries **doc 4010 and 4016**, and only 4010 has
+the result accounts (groups 7 receitas / 8 despesas) — they are downloaded and currently
+discarded. It also carries 169 institutions against 69 resolved. See ADR 028, #146, #149.
+
 | Pilar 3 | `pilar3.py` | via `financial_tone` | risk-report text corpus |
 
 `src/synth/financial_tone.py` (`OncaFinancialTone`) scores that corpus with
