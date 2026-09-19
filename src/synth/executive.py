@@ -1340,7 +1340,10 @@ REFERENCE: dict[str, Any] = {
     "cco": {"title": "Playbook de compliance", "sections": [
         {"h": "Taxonomia de risco", "items": [
             "Distress societário (recuperação judicial / falência)", "Sanções — CEIS / CNEP",
-            "Antitruste — CADE", "Reputação-como-risco — reclamações (BCB / Reclame Aqui)",
+            # Reclame Aqui is BUILT but parked (ONCA_RECLAME_AQUI default-off, no authorized
+            # feed — see docs/CONTEXT.md "Deferred"), so naming it here promised a source the
+            # panel has never been fed. BCB is the only reputation store actually loaded.
+            "Antitruste — CADE", "Reputação-como-risco — ranking de reclamações do BCB",
             "Integridade do registro (anomalias / atribuição)"]},
         {"h": "Modelo de governança (ADR-018)", "items": [
             "Proveniência por campo (inferido < enrich < descoberta < estruturado < curado < fixture)",

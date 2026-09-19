@@ -548,3 +548,19 @@ def test_ask_client_industry_hint_cannot_widen_beyond_license(monkeypatch):
 
 def test_ask_no_industry_hint_keeps_full_entitlement(monkeypatch):
     assert set(_ask_modules(monkeypatch, "saas", ["acquiring", "banking"], None)) == {"acquiring", "banking"}
+
+
+def test_reputation_cards_never_credit_a_provider_the_record_did_not_name():
+    # Provenance sweep 2026-09-19: the source label used to default to "ReclameAqui",
+    # so any record arriving without a `source` would have been CITED to a provider
+    # that has never fed this store (the adapter is built but parked). These become
+    # citable cards, so a wrong label here is a wrong citation.
+    feed = {"entities": [{"entity": "itau", "label": "Itaú"}], "reputation": [
+        {"entity": "itau", "score": 7.1, "complaints": 12, "period": "2026-08"},   # no source
+        {"entity": "itau", "source": "BCB", "rank": 3, "index": 1.4, "period": "2026-T2"},
+        {"entity": "itau", "source": "Reclame Aqui", "score": 6.2},
+    ]}
+    texts = " || ".join(str(c.get("narrative") or c) for c in aa.reputation_cards(feed))
+    assert "reclamações de consumidores" in texts      # unattributed -> generic
+    assert "Banco Central" in texts                     # BCB -> named correctly
+    assert texts.count("Reclame Aqui") == 1             # ONLY the record that said so

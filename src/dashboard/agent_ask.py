@@ -578,8 +578,14 @@ def entity_fact_cards(feed: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def reputation_cards(feed: dict[str, Any]) -> list[dict[str, Any]]:
-    """Project feed.json.reputation (Reclame Aqui, #31) into citable cards so the
-    agent can ground reputation/complaint questions on the store."""
+    """Project feed.json.reputation (#31) into citable cards so the agent can ground
+    reputation/complaint questions on the store.
+
+    In practice the store is the BCB complaints ranking — the Reclame Aqui adapter is
+    built but parked (no authorized feed), so it contributes no rows today. Provenance
+    therefore comes from each record's own ``source``; a record that doesn't declare one
+    is described generically rather than credited to a named provider, because these
+    become CITED cards and a wrong attribution here is a wrong citation."""
     labels: dict[str, str] = {}
     for e in (feed.get("entities") or []):
         if e.get("entity"):
@@ -588,7 +594,7 @@ def reputation_cards(feed: dict[str, Any]) -> list[dict[str, Any]]:
     for r in (feed.get("reputation") or []):
         ent = r.get("entity")
         label = labels.get(ent, r.get("company") or ent)
-        src = r.get("source") or "ReclameAqui"
+        src = r.get("source") or ""
         if src == "BCB":
             bits = [f"{label} — ranking de reclamações do Banco Central ({r.get('period','')})"]
             if r.get("rank") is not None:
@@ -596,7 +602,7 @@ def reputation_cards(feed: dict[str, Any]) -> list[dict[str, Any]]:
             if r.get("index") is not None:
                 bits.append(f"índice {r['index']} (reclamações por cliente)")
         else:
-            bits = [f"{label} — Reclame Aqui"]
+            bits = [f"{label} — {src}" if src else f"{label} — reclamações de consumidores"]
             if r.get("score") is not None:
                 bits.append(f"nota {r['score']}")
             if r.get("status"):
