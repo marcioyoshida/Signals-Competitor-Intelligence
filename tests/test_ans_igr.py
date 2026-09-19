@@ -9,7 +9,7 @@ from src.ingest import ans_igr
 
 
 def _csv(header: str, rows: list[str]) -> bytes:
-    return ("\n".join([header, *rows])).encode("latin-1")
+    return ("\n".join([header, *rows])).encode("utf-8")
 
 
 IGR = _csv(
@@ -33,14 +33,14 @@ IGR = _csv(
 CADOP = _csv(
     "REGISTRO_OPERADORA;CNPJ;RAZAO_SOCIAL;NOME_FANTASIA;MODALIDADE",
     [
-        '"000582";"61198164000160";"PORTO SEGURO - SEGURO SAÚDE S/A";"PORTO SEGURO";"Seguradora"',
+        '"000582";"04540010000101";"PORTO SEGURO - SEGURO SAÚDE S/A";"PORTO SEGURO";"Seguradora"',
         '"999999";"11111111000199";"OPERADORA DESCONHECIDA LTDA";"";"Medicina de Grupo"',
     ],
 )
 
 
 def _resolver(root: str) -> str | None:
-    return "porto_seguro" if root == "61198164" else None
+    return "porto_seguro" if root == "04540010" else None
 
 
 def test_to_float_ans_decimal_comma():
@@ -61,7 +61,7 @@ def test_parse_igr_takes_only_the_newest_competencia():
 
 def test_parse_cadop_builds_the_cnpj_bridge():
     cadop = ans_igr.parse_cadop(CADOP)
-    assert cadop["000582"]["cnpj_root"] == "61198164"
+    assert cadop["000582"]["cnpj_root"] == "04540010"
     assert cadop["000582"]["modalidade"] == "Seguradora"
 
 
@@ -142,3 +142,49 @@ def test_run_end_to_end_without_a_bucket():
     assert out["status"] == "ok"
     assert out["operadoras"] == 2 and out["resolved"] == 1
     assert out["worst"][0]["entity"] == "porto_seguro"
+
+
+def test_igr_rate_is_withheld_when_the_beneficiary_base_is_too_small():
+    # Measured on the live file: Porto Seguro Odonto = 1 complaint / 4 beneficiaries ->
+    # IGR 25,000, which would outrank Bradesco Saúde's 2,802 complaints in the CCO panel.
+    # IGR is complaints per 100k beneficiaries, so a tiny book makes the RATE meaningless
+    # while the counts stay true — withhold the rate, keep the counts.
+    igr = _csv(
+        "REGISTRO_OPERADORA;RAZAO_SOCIAL;COBERTURA;IGR;QTD_RECLAMACOES;QTD_BENEFICIARIOS;"
+        "PORTE_OPERADORA;COMPETENCIA;COMPETENCIA_BENEFICIARIO;DT_ATUALIZACAO",
+        ['"000582";"X";"Exclusivamente odontológica";25000,00;1;4;'
+         '"Pequeno";"2026-08";"2026-07";"2026-09-08"'],
+    )
+    rec = ans_igr.map_to_entities(
+        ans_igr.parse_igr(igr), ans_igr.parse_cadop(CADOP), resolver=_resolver)[0]
+    assert rec["index"] is None                      # the unstable rate is not published
+    assert rec["index_withheld"] == "base_too_small"
+    assert rec["complaints"] == 1 and rec["beneficiaries"] == 4   # counts preserved
+    # and a withheld index can never rank as "worst"
+    assert ans_igr.summarize([rec])["worst"] == []
+
+
+def test_a_zero_complaint_tiny_book_is_not_reported_as_best_in_class():
+    # #118's lesson in this dataset: Itauseg Saúde is 0 complaints over 6,838 lives.
+    # Publishing IGR 0.0 would read as a clean record rather than "too small to tell".
+    igr = _csv(
+        "REGISTRO_OPERADORA;RAZAO_SOCIAL;COBERTURA;IGR;QTD_RECLAMACOES;QTD_BENEFICIARIOS;"
+        "PORTE_OPERADORA;COMPETENCIA;COMPETENCIA_BENEFICIARIO;DT_ATUALIZACAO",
+        ['"000582";"X";"Assistência médica";0,00;0;6838;'
+         '"Pequeno";"2026-08";"2026-07";"2026-09-08"'],
+    )
+    rec = ans_igr.map_to_entities(
+        ans_igr.parse_igr(igr), ans_igr.parse_cadop(CADOP), resolver=_resolver)[0]
+    assert rec["index"] is None and rec["index_withheld"] == "base_too_small"
+
+
+def test_a_real_book_keeps_its_index():
+    igr = _csv(
+        "REGISTRO_OPERADORA;RAZAO_SOCIAL;COBERTURA;IGR;QTD_RECLAMACOES;QTD_BENEFICIARIOS;"
+        "PORTE_OPERADORA;COMPETENCIA;COMPETENCIA_BENEFICIARIO;DT_ATUALIZACAO",
+        ['"000582";"X";"Assistência médica";83,07;2802;3373042;'
+         '"Grande";"2026-08";"2026-07";"2026-09-08"'],
+    )
+    rec = ans_igr.map_to_entities(
+        ans_igr.parse_igr(igr), ans_igr.parse_cadop(CADOP), resolver=_resolver)[0]
+    assert rec["index"] == 83.07 and "index_withheld" not in rec

@@ -25,7 +25,7 @@ ADR-017 sub-entities (``parent``) for the join to land; that registry work is tr
 Source (verified live 2026-09-19):
   IGR    https://dadosabertos.ans.gov.br/FTP/PDA/IGR/IGR_versao_2023/pda-023-igr.csv
   cadop  https://dadosabertos.ans.gov.br/FTP/PDA/operadoras_de_plano_de_saude_ativas/Relatorio_cadop.csv
-Both latin-1, ``;``-delimited, decimal comma. No token, no robots restriction.
+Both UTF-8, ``;``-delimited, decimal comma. No token, no robots restriction.
 """
 from __future__ import annotations
 
@@ -45,8 +45,15 @@ CADOP_URL = (
 INDEX_KEY = "ans_igr/index.json"
 PUBLIC_URL = "https://www.gov.br/ans/pt-br/acesso-a-informacao/perfil-do-setor/dados-e-indicadores-do-setor"
 
-# The IGR file carries every competência since 2023; only the newest is a current signal.
-_ENCODING = "latin-1"
+# Both ANS files are UTF-8, verified by byte census (830 `c3 9a` sequences in the IGR file,
+# zero bare `da`). Worth stating because most BR government bulk CSVs — CVM's especially —
+# ARE latin-1, so "assume latin-1" is the local habit and it silently yields "SAÃDE" here.
+# The fallback is kept because this is an external boundary we don't control.
+def _decode(blob: bytes) -> str:
+    try:
+        return blob.decode("utf-8")
+    except UnicodeDecodeError:  # pragma: no cover - defensive, ANS is UTF-8 today
+        return blob.decode("latin-1", errors="replace")
 
 
 def _download(url: str) -> bytes | None:  # pragma: no cover - network
@@ -58,7 +65,7 @@ def _download(url: str) -> bytes | None:  # pragma: no cover - network
 
 
 def _rows(blob: bytes) -> list[dict[str, Any]]:
-    text = blob.decode(_ENCODING, errors="replace")
+    text = _decode(blob)
     return list(csv.DictReader(io.StringIO(text), delimiter=";"))
 
 
@@ -194,7 +201,26 @@ def map_to_entities(
             cur["cobertura"] = row.get("cobertura")
     for rec in by_entity.values():
         rec.pop("_top_complaints", None)
+        _stabilize(rec)
     return list(by_entity.values())
+
+
+# IGR is complaints per 100k beneficiaries, so a tiny book makes the RATE meaningless while
+# the underlying counts stay true. Measured on the live file: "Porto Seguro Odonto" carries
+# 1 complaint against 4 beneficiaries -> IGR 25,000, which would outrank Bradesco Saúde's
+# 2,802 complaints; population-wide the 21-100 complaint band tops out at IGR 2,700,000.
+# Below this floor a single complaint moves the index by >=10 points, against a ~72 median
+# for the majors, so the index is withheld (set to None) while the counts are kept. Same
+# principle as #118: a tiny-book 0.0 is "no signal", not "best in class".
+MIN_BENEFICIARIES_FOR_INDEX = 10_000
+
+
+def _stabilize(rec: dict[str, Any]) -> dict[str, Any]:
+    """Withhold the IGR rate when the beneficiary base is too small to support it."""
+    if (rec.get("beneficiaries") or 0) < MIN_BENEFICIARIES_FOR_INDEX:
+        rec["index"] = None
+        rec["index_withheld"] = "base_too_small"
+    return rec
 
 
 def summarize(records: list[dict[str, Any]]) -> dict[str, Any]:
