@@ -355,11 +355,15 @@ These are **not** ingest-Lambda sources; they are libraries the synth/feed-build
 They appear in `src/ingest/` for historical reasons, which is why a naive module count
 overstates how many sources the daily pipeline actually pulls.
 
-### Not wired
+### Removed
 
-| Module | Status |
-|---|---|
-| `bcb_spi.py` | **CLI only — nothing imports it.** Has an `inspect`/`detect` `__main__` block and no tests. The live SPI path is `bcb_pix.fetch_spi`. Either wire it or delete it; right now it reads as a source and is not one. |
+`bcb_spi.py` was deleted 2026-09-19 (#141). It was imported by nothing, had no tests, and
+was built against `MovimentacoesContaPI` — an EntitySet the SPI OData service does not
+have (`HTTP 400: Cannot find EntitySet ... with name 'MovimentacoesContaPI'`). Its
+`by_institution()` / `watchlist_ispb` premise described a per-ISPB breakdown BCB has never
+published, so it could not have been wired up. The live SPI path is `bcb_pix.fetch_spi`
+(aggregate, CLI/inspect only), and the Tier A note above — "aggregate settlement; **not
+per-ISPB**" — was correct all along.
 
 ### Local `run.py`
 
