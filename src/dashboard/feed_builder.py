@@ -957,6 +957,9 @@ def scope_feed_to_modules(feed: dict[str, Any], modules: Any) -> dict[str, Any]:
             "source_runs": [],  # operator-only (#139) — raw per-source telemetry incl. error
                                 # text; clients get only the reduced "coverage_confidence" score,
                                 # which `dict(feed)` already carried over unchanged.
+            # operator-only: the roadmap names rejected routes and their reasons, which is
+            # internal strategy, not a tenant's view of its own market.
+            "source_coverage": {},
         }
     )
     out["executive"] = _rescope_executive(out)
@@ -1072,6 +1075,7 @@ def derive_entry_feed(
             "integrity": {"findings": [], "counts": {}, "total": 0},  # operator-only
             "regulatory_coverage": {},                                # operator-only (#2)
             "source_runs": [],  # operator-only (#139) — see scope_feed_to_modules
+            "source_coverage": {},  # operator-only — see scope_feed_to_modules
         }
     )
     out["executive"] = _rescope_executive(out)
@@ -1669,9 +1673,11 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     try:
         from src.synth import entity_registry, integrity
 
-        feed["integrity"] = integrity.audit(feed, entity_registry.list_entities())
+        ents = entity_registry.list_entities()
+        feed["integrity"] = integrity.audit(feed, ents)
     except Exception as exc:  # pragma: no cover - best-effort, read-only
         print(f"Warning: integrity audit skipped: {exc}")
+        ents = []
         feed["integrity"] = {"findings": [], "counts": {}, "total": 0}
     # Product ingestion enrichment (R1–R6): certifications/firmographics per entity + source-health
     # / market-structure / pricing — grounded in registry+feed data. Best-effort, before executive.
@@ -1711,6 +1717,17 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         print(f"Warning: source_runs load skipped: {exc}")
         feed["source_runs"] = []
         feed["coverage_confidence"] = {"score": None, "n_sources": 0, "n_healthy": 0, "n_attention": 0}
+    # Source-coverage roadmap ("Fontes" rail tab): every acquisition route, live or
+    # rejected, with its number measured off this feed rather than asserted.
+    # MUST run after source_health/source_runs are attached above — it joins to both,
+    # and running it earlier silently yields a roadmap with no numbers on it.
+    try:
+        from src.synth import source_coverage
+
+        feed["source_coverage"] = source_coverage.build(feed, n_entities=len(ents) or None)
+    except Exception as exc:  # pragma: no cover - best-effort, read-only
+        print(f"Warning: source coverage skipped: {exc}")
+        feed["source_coverage"] = {}
     # #75/R3: system-wide IF.data market size (SFN asset base) + leaders — the credit/asset-stock
     # size the CVM-revenue market_structure (listed issuers only) can't give. Read-only.
     try:

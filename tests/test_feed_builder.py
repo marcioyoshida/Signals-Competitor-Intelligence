@@ -858,3 +858,18 @@ def test_survivors_own_row_beats_one_inherited_from_a_duplicate():
         entity_attrs=attrs, market_share={"abc": 1.5, "abc_brasil": 9.9})
     card = next(e for e in feed["entities"] if e["entity"] == "abc_brasil")
     assert card["market_share_pct"] == 9.9
+
+
+def test_source_coverage_is_operator_only_in_scoped_feeds():
+    """The roadmap names rejected routes and internal reasoning — that is Onça's own
+    strategy, not a tenant's view of its market. Same boundary as source_runs (#139)."""
+    narratives = [_narr("n1", "bb", "2026-08-20", 0.6)]
+    feed = feed_builder.build_feed(
+        narratives, industry_map={"bb": ["banking"]}, industry_meta={},
+        entity_attrs={"bb": {"industries": ["banking"]}})
+    feed["source_coverage"] = {"rows": [{"id": "gdelt", "status": "rejected"}],
+                               "n_total": 1, "n_live": 0}
+    entry = feed_builder.derive_entry_feed(feed)
+    assert entry.get("source_coverage") == {}
+    scoped = feed_builder.scope_feed_to_modules(feed, ["banking"])
+    assert scoped.get("source_coverage") == {}

@@ -379,6 +379,30 @@
   .indbody { display: none; }
   .indgroup.open .indbody { display: block; padding-bottom: 4px; }
   .indempty { padding: 8px 16px 10px; color: var(--muted); font-size: 12px; }
+
+  /* Source roadmap ("Fontes" drawer) — one row per acquisition route. The status
+     colours are deliberately NOT a green/red pass-fail: "avaliada e recusada" is a
+     RESULT, not a failure, so it reads neutral-informative rather than alarming.
+     Only `silent` (declared live but reaching nobody) is red — that is a real defect,
+     the shape #145 and #150 both hid behind a healthy-looking deploy. */
+  .srcgrp { padding: 12px 16px 2px; font-size: 11px; font-weight: 700; letter-spacing: .04em;
+            text-transform: uppercase; color: var(--muted); }
+  .srcrow { padding: 7px 16px; border-bottom: 1px solid var(--border); }
+  .srcrow__h { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; }
+  .srcrow__l { font-weight: 600; font-size: 13px; }
+  .srcrow__m { color: var(--muted); font-size: 11px; margin-top: 3px; line-height: 1.45; }
+  .srcrow__n { font-variant-numeric: tabular-nums; font-size: 11px; color: var(--fg);
+               background: var(--chip, rgba(121,129,140,.12)); padding: 1px 6px;
+               border-radius: 4px; }
+  .sst { font-size: 10px; padding: 1px 7px; border-radius: 999px; font-weight: 700;
+         text-transform: uppercase; letter-spacing: .03em; }
+  .sst--live     { background: rgba(22,163,74,.13);  color: #16a34a; }
+  .sst--silent   { background: rgba(220,38,38,.15);  color: #dc2626; }
+  .sst--gated    { background: rgba(217,119,6,.15);  color: #d97706; }
+  .sst--planned  { background: rgba(37,99,235,.13);  color: #2563eb; }
+  .sst--rejected { background: rgba(121,129,140,.15); color: var(--muted); }
+  .srcsum { padding: 10px 16px; border-bottom: 1px solid var(--border);
+            display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
   table.tv { width: 100%; border-collapse: collapse; font-size: 13px; }
   table.tv th, table.tv td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); }
   table.tv th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; }
@@ -632,6 +656,9 @@
   <button class="railtab" id="gapsTab" style="display:none" title="Perguntas que a base ainda não responde">
     <span class="rtlabel">Pontos Cegos</span><span class="rtbadge" id="gapsCount"></span>
   </button>
+  <button class="railtab" id="srcTab" style="display:none" title="Roteiro de fontes: o que está no ar, desligado, planejado e o que foi avaliado e recusado">
+    <span class="rtlabel">Fontes</span><span class="rtbadge" id="srcCount"></span>
+  </button>
   <button class="railtab" id="integTab" style="display:none" title="Auditoria de integridade do registro (ADR 018)">
     <span class="rtlabel">Integridade</span><span class="rtbadge" id="integCount"></span>
   </button>
@@ -662,6 +689,15 @@
   </div>
   <div class="hint" style="padding:0 16px">Contexto macro do mercado (BCB): decisão do Copom / Selic e as expectativas do Relatório Focus. Sinais amplos de mercado — não são de um concorrente específico.</div>
   <div id="macro"></div>
+</aside>
+
+<aside class="drawer" id="srcDrawer" aria-hidden="true">
+  <div class="drhead">
+    <h2>Fontes &amp; Roteiro</h2>
+    <button class="drclose" data-close="srcDrawer" aria-label="Fechar">✕</button>
+  </div>
+  <div class="hint" style="padding:0 16px">Toda rota de aquisição, com o número medido <b>neste feed</b> — não declarado. Inclui as rotas <b>avaliadas e recusadas</b>: a medição que as matou fica ao lado delas, para não serem repropostas.</div>
+  <div id="srcCov"></div>
 </aside>
 
 <aside class="drawer" id="integDrawer" aria-hidden="true">
@@ -1021,7 +1057,7 @@ function renderLower() {
     const h = low.querySelector("h2");
     if (h) h.textContent = `Revisão de entidades (${DATA.reviews.length})`;
   }
-  renderMacro(); renderReviews(); renderGaps(); renderRadarPanels(); renderCrencaPanels(); renderRegPanels(); renderIntegrity();
+  renderMacro(); renderReviews(); renderGaps(); renderRadarPanels(); renderCrencaPanels(); renderRegPanels(); renderIntegrity(); renderSourceCoverage();
   renderMapa(); renderComparar();
 }
 
@@ -1041,6 +1077,66 @@ function renderIntegrity() {
         <b>${esc(f.kind)}</b>${f.safe_fix ? ' <span class="flag ok">corrigível</span>' : ""}</div>
       <div class="pmeta" style="margin-top:3px">${esc(f.summary)}</div>
     </div>`).join("");
+}
+
+// Source-coverage roadmap: every acquisition route grouped by stage of life, with the
+// number measured off THIS feed. The rejected rows carry the measurement that killed
+// them (GDELT 7.4%, MZiQ 6-of-20) — that is the point of showing them at all.
+function renderSourceCoverage() {
+  const cov = DATA.source_coverage || {};
+  const rows = cov.rows || [];
+  const tab = document.getElementById("srcTab"), badge = document.getElementById("srcCount");
+  if (tab) tab.style.display = rows.length ? "" : "none";
+  // The badge counts what needs attention (declared live, reaching nobody), not the
+  // total — a rail badge showing "36" would read as 36 problems.
+  if (badge) badge.textContent = cov.n_attention ? String(cov.n_attention) : "";
+  const el = document.getElementById("srcCov");
+  if (!el) return;
+  if (!rows.length) { el.innerHTML = `<div class="indempty">Roteiro de fontes indisponível.</div>`; return; }
+
+  const order = ["live", "silent", "gated", "planned", "rejected"];
+  const tally = cov.tally || {};
+  const summary = `<div class="srcsum">
+    <span class="srcrow__n">${cov.n_live}/${cov.n_total} no ar</span>
+    ${order.filter(s => tally[s]).map(s =>
+      `<span class="sst sst--${s}">${tally[s]} ${esc(statusLabelOf(rows, s))}</span>`).join("")}
+  </div>`;
+
+  let html = summary;
+  for (const g of (cov.groups || [])) {
+    const inGroup = rows.filter(r => r.group === g.key);
+    if (!inGroup.length) continue;
+    html += `<div class="srcgrp">${esc(g.label)} · ${inGroup.length}</div>`;
+    html += inGroup.map(r => {
+      // Staleness only earns a chip when it is actually old — a "0 dias" chip on every
+      // healthy row is noise that makes the one stale row harder to see.
+      const stale = (r.staleness_days != null && r.staleness_days >= 2)
+        ? `<span class="flag low">${r.staleness_days}d sem dados</span>` : "";
+      // A band of stale/warn earns a visible chip too — an ingester that has not
+      // succeeded in 11 days is the thing this tab exists to surface, and it is
+      // invisible in the narrative counts (see source_coverage on the #76 blind spot).
+      const bandChip = r.band === "error" ? `<span class="flag gap">erro na execução</span>`
+        : (r.band === "stale" || r.band === "warn")
+          ? `<span class="flag low">execução ${esc(r.band === "stale" ? "parada" : "atrasada")}</span>` : "";
+      const issue = r.issue
+        ? ` · <a href="https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/${esc(r.issue)}" target="_blank" rel="noopener">#${esc(r.issue)}</a>`
+        : "";
+      return `<div class="srcrow">
+        <div class="srcrow__h">
+          <span class="sst sst--${esc(r.status)}">${esc(r.status_label)}</span>
+          <span class="srcrow__l">${esc(r.label)}</span>
+          <span class="srcrow__n">${esc(r.metric)}</span>${stale}${bandChip}
+        </div>
+        <div class="srcrow__m">${esc(r.method)} · ${esc(r.cadence)}${issue}${
+          r.note ? `<br>${esc(r.note)}` : ""}</div>
+      </div>`;
+    }).join("");
+  }
+  el.innerHTML = html;
+}
+function statusLabelOf(rows, status) {
+  const hit = rows.find(r => r.status === status);
+  return hit ? hit.status_label : status;
 }
 
 // Shared drill-down for the Radar de Risco / Balanço de Crença / Radar
@@ -2838,6 +2934,7 @@ renderAuthUI();
 document.getElementById("covTab").onclick = () => toggleDrawer("covDrawer", true);
 document.getElementById("gapsTab").onclick = () => toggleDrawer("gapsDrawer", true);
 document.getElementById("macroTab").onclick = () => toggleDrawer("macroDrawer", true);
+document.getElementById("srcTab").onclick = () => toggleDrawer("srcDrawer", true);
 document.getElementById("integTab").onclick = () => toggleDrawer("integDrawer", true);
 document.getElementById("radarTab").onclick = () => toggleDrawer("radarDrawer", true);
 document.getElementById("crencaTab").onclick = () => toggleDrawer("crencaDrawer", true);
