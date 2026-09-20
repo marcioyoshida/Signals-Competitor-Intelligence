@@ -73,3 +73,32 @@ def test_trajectory_computes_mom_pct():
     t = bal.trajectory(idx["records"]["bb"])
     assert t["month"] == 202606 and t["credito"] == 110.0 and t["credito_mom_pct"] == 10.0
     assert t["pdd_mom_pct"] == 20.0
+
+
+# --- #149: CNPJ-first resolution ------------------------------------------------------
+
+def test_cnpj_match_beats_the_name_path():
+    """COSIF abbreviates BANCO to BCO, which the alias map does not carry — name-only
+    matching left 106 of 169 institutions unresolved and missed Banco do Brasil entirely."""
+    month = {"00000000": {"name": "BCO DO BRASIL S.A.", "lines": {"credito": 885_100_000.0}}}
+    out = bal.map_to_entities(
+        month, resolver=lambda i: [], cnpj_resolver=lambda c: "bb" if c == "00000000" else None)
+    assert set(out) == {"bb"}
+    assert out["bb"]["lines"]["credito"] == 885_100_000.0
+
+
+def test_name_path_still_runs_when_the_cnpj_is_unknown():
+    month = {"99999999": {"name": "BANCO INTER", "lines": {"credito": 1.0}}}
+    out = bal.map_to_entities(month, resolver=lambda i: ["inter"], cnpj_resolver=lambda c: None)
+    assert set(out) == {"inter"}
+
+
+def test_cnpj_match_does_not_spray_the_row_across_sibling_entities():
+    """Live 2026-09-20: 'UBS BB BI S.A.' resolved by name to ['bb', 'ubs-bb-corretora',
+    'ubs-bb'] — UBS BB's balance sheet was being attributed to Banco do Brasil. The CNPJ
+    names exactly one owner."""
+    month = {"18520834": {"name": "UBS BB BI S.A.", "lines": {"credito": 10.0}}}
+    out = bal.map_to_entities(
+        month, resolver=lambda i: ["bb", "ubs-bb-corretora", "ubs-bb"],
+        cnpj_resolver=lambda c: "ubs-bb")
+    assert set(out) == {"ubs-bb"}

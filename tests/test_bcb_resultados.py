@@ -114,3 +114,26 @@ def test_a_real_lender_with_an_extreme_ratio_still_surfaces():
                    "pdd_desp": 3.0e9, "pdd_rev": 0.8e9}}
     r = res.map_to_entities(month, 202606, resolver=lambda i: ["x"])[0]
     assert r["custo_credito_pct"] == 21.46
+
+
+def test_cost_of_credit_is_suppressed_when_credit_is_not_the_dominant_receivable():
+    """A card issuer's receivables sit in OUTROS CRÉDITOS, not Operações de Crédito, so a
+    card-sized provision flow over a loan-sized carteira measures the wrong thing. #149's
+    CNPJ matching surfaced these for the first time and they arrived reading Afinz 98.08%,
+    Digimais 95.30%, Carrefour/CSF 89.27%."""
+    month = {"1": {"name": "BCO AFINZ S.A. - BM", "ativo": 2.0e9, "credito": 0.59e9,
+                   "outros_creditos": 0.99e9,          # 1.70x the carteira
+                   "pdd_desp": 0.4e9, "pdd_rev": 0.1e9, "opex": 0.2e9}}
+    r = res.map_to_entities(month, 202606, resolver=lambda i: ["afinz"])[0]
+    assert r["custo_credito_pct"] is None
+    assert r["opex_ativo_pct"] is not None
+
+
+def test_a_lender_whose_book_is_mostly_real_credit_is_unaffected():
+    """Banco do Brasil's outros/credito is 0.44 — every plausible institution measured on
+    2026-09-20 sat below 1.0 and every implausible one above it."""
+    month = {"1": {"name": "BCO DO BRASIL S.A.", "ativo": 2380e9, "credito": 885.1e9,
+                   "outros_creditos": 385.5e9,
+                   "pdd_desp": 140.85e9, "pdd_rev": 105.09e9, "opex": 18.55e9}}
+    r = res.map_to_entities(month, 202606, resolver=lambda i: ["bb"])[0]
+    assert r["custo_credito_pct"] == 8.08

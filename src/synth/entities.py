@@ -98,6 +98,30 @@ def _alias_map() -> dict[str, list[str]]:
     return ENTITY_ALIASES
 
 
+def resolve_by_cnpj(cnpj: Any) -> str | None:
+    """Entity id owning this CNPJ root, or None. Exact evidence — no fuzziness involved.
+
+    #149 — COSIF's monthly balancete names institutions ``BCO DO BRASIL S.A.``,
+    ``BCO SAFRA S.A.``, ``BCO PINE S.A.``; the alias map carries ``BANCO DO BRASIL`` and the
+    entity's own brand. The abbreviation alone left **106 of 169** institutions unresolved,
+    Banco do Brasil among them. The same CSV carries each institution's CNPJ, which resolves
+    72 of those 106 with no matching risk at all.
+
+    Returns None when the registry is unavailable, so callers fall back to the name path
+    rather than silently dropping everything.
+    """
+    root = "".join(c for c in str(cnpj or "") if c.isdigit())[:8]
+    if len(root) != 8 or not os.environ.get("ONCA_ENTITIES_TABLE"):
+        return None
+    try:
+        from src.synth import entity_registry
+
+        return entity_registry.load_cnpj_root_map().get(root)
+    except Exception as exc:  # pragma: no cover - graceful fallback
+        print(f"Warning: cnpj root map unavailable: {exc}")
+        return None
+
+
 def _trust_map() -> dict[str, bool]:
     """{entity_id: trusted-for-free-text-bare-token}. Registry entities are trusted
     iff curated or news_safe; the built-in seed (returned empty here) defaults to

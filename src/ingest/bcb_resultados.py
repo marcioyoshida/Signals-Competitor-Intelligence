@@ -61,7 +61,8 @@ _ATIVO = "1000000009"     # Ativo Realizável (asset total), stock
 _PDD_DESP = "8199200005"  # (-) DESPESAS DE PROVISÃO PARA RISCO DE CRÉDITO, YTD flow
 _PDD_REV = "7199200006"   # REVERSÃO DE PROVISÃO PARA RISCO DE CRÉDITO, YTD flow
 _CREDITO = "1600000007"   # Operações de Crédito (loan book), stock
-_WANT = frozenset({_OPEX, _ATIVO, _PDD_DESP, _PDD_REV, _CREDITO})
+_OUTROS = "1800000003"    # OUTROS CRÉDITOS — where card receivables sit, stock
+_WANT = frozenset({_OPEX, _ATIVO, _PDD_DESP, _PDD_REV, _CREDITO, _OUTROS})
 
 # #146 — the ratio is only meaningful for an institution that is materially a LENDER.
 # Custody, clearing and broker-dealer banks carry a group-level provision flow against a loan
@@ -81,6 +82,24 @@ _WANT = frozenset({_OPEX, _ATIVO, _PDD_DESP, _PDD_REV, _CREDITO})
 # credit was never a headline number is the cheaper error.
 _MIN_CREDITO = 0.3e9       # R$300m loan book
 _MIN_CREDITO_SHARE = 0.05  # and at least 5% of assets
+
+# #149 — and the carteira must actually BE the institution's credit exposure. A card issuer's
+# receivables sit in OUTROS CRÉDITOS (1800000003), not Operações de Crédito, so dividing a
+# card-sized provision flow by a loan-sized carteira measures the wrong thing. #149's CNPJ
+# matching surfaced these institutions for the first time — they had never resolved by name —
+# and they arrived reading Afinz 98.08%, Digimais 95.30%, Carrefour/CSF 89.27%, Bradescard
+# 47.32%.
+#
+# The split is clean and it has a reason, so this is a denominator-COMPLETENESS test, still
+# never an inspection of the answer. Measured 2026-09-20, outros ÷ crédito:
+#
+#     implausible:  afinz 1.70  digimais 1.09  csf 3.04  bradescard 4.47
+#                   itau-unibanco (the holding) 2.43   original 3.70
+#     plausible:    caixa 0.09  pan 0.22  bb 0.44  itau 0.51  inter 0.59  bradesco 0.76
+#
+# Requiring credit to be the DOMINANT receivable base also retires the holding-vs-institution
+# caveat #146 had to document as "stated, not solved".
+_MAX_OUTROS_RATIO = 1.0
 _DOC = "4010"
 
 
@@ -121,6 +140,8 @@ def fetch_month(ym: int, *, timeout: int = 120) -> dict[str, dict[str, Any]]:
             rec["ativo"] = v
         elif conta == _CREDITO:
             rec["credito"] = v
+        elif conta == _OUTROS:
+            rec["outros_creditos"] = abs(v)
         else:
             rec[{_OPEX: "opex", _PDD_DESP: "pdd_desp", _PDD_REV: "pdd_rev"}[conta]] = abs(v)
     return out
@@ -128,8 +149,14 @@ def fetch_month(ym: int, *, timeout: int = 120) -> dict[str, dict[str, Any]]:
 
 def map_to_entities(month_data: dict[str, dict[str, Any]], ym: int, *,
                     resolver: Callable[[dict[str, Any]], list[str]],
+                    cnpj_resolver: Callable[[Any], str | None] | None = None,
                     today: dt.date | None = None) -> list[dict[str, Any]]:
+    """#149 — CNPJ first, name second; see ``bcb_balancete.map_to_entities`` for why."""
     today = today or dt.date.today()
+    if cnpj_resolver is None:
+        from src.synth import entities as _ent
+
+        cnpj_resolver = _ent.resolve_by_cnpj
     ann = 12.0 / max(1, ym % 100)             # YTD flow → annualised
     best: dict[str, dict[str, Any]] = {}
     for cnpj, rec in month_data.items():
@@ -142,17 +169,27 @@ def map_to_entities(month_data: dict[str, dict[str, Any]], ym: int, *,
         # the expense but not the reversão account yields None rather than a number 4-25x
         # too large. Both legs or nothing.
         credito, desp, rev = rec.get("credito"), rec.get("pdd_desp"), rec.get("pdd_rev")
-        lends = bool(credito) and credito >= _MIN_CREDITO and credito >= _MIN_CREDITO_SHARE * ativo
+        outros = rec.get("outros_creditos") or 0.0
+        lends = (
+            bool(credito)
+            and credito >= _MIN_CREDITO
+            and credito >= _MIN_CREDITO_SHARE * ativo
+            and outros <= _MAX_OUTROS_RATIO * credito   # credit is the dominant receivable
+        )
         custo_credito = (
             round(100 * (desp - rev) * ann / credito, 2)
             if lends and desp is not None and rev is not None else None
         )
         if opex_ativo is None and custo_credito is None:
             continue
-        try:
-            ents = resolver({"source": "News", "title": name, "institution": name}) or []
-        except Exception:  # pragma: no cover
-            ents = []
+        by_cnpj = cnpj_resolver(cnpj)
+        if by_cnpj:
+            ents = [by_cnpj]
+        else:
+            try:
+                ents = resolver({"source": "News", "title": name, "institution": name}) or []
+            except Exception:  # pragma: no cover
+                ents = []
         if not ents:
             continue
         row = {"cnpj": cnpj, "name": name, "month": ym,

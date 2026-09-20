@@ -1937,23 +1937,27 @@ def backfill_curation(table: Any | None = None, *, force: bool = False) -> int:
 _ALIAS_MAP_CACHE: dict[str, list[str]] | None = None
 _TRUST_MAP_CACHE: dict[str, bool] | None = None
 _AMBIG_TOKENS_CACHE: set[str] | None = None
+_CNPJ_ROOT_CACHE: dict[str, str] | None = None
 
 
 def _load_maps(
     table: Any | None = None, force: bool = False
-) -> tuple[dict[str, list[str]], dict[str, bool], set[str]]:
-    global _ALIAS_MAP_CACHE, _TRUST_MAP_CACHE, _AMBIG_TOKENS_CACHE
+) -> tuple[dict[str, list[str]], dict[str, bool], set[str], dict[str, str]]:
+    global _ALIAS_MAP_CACHE, _TRUST_MAP_CACHE, _AMBIG_TOKENS_CACHE, _CNPJ_ROOT_CACHE
     if (
         _ALIAS_MAP_CACHE is not None
         and _TRUST_MAP_CACHE is not None
         and _AMBIG_TOKENS_CACHE is not None
+        and _CNPJ_ROOT_CACHE is not None
         and not force
     ):
-        return _ALIAS_MAP_CACHE, _TRUST_MAP_CACHE, _AMBIG_TOKENS_CACHE
+        return _ALIAS_MAP_CACHE, _TRUST_MAP_CACHE, _AMBIG_TOKENS_CACHE, _CNPJ_ROOT_CACHE
     t = _table(table)
     aliases: dict[str, list[str]] = {}
     trust: dict[str, bool] = {}
     ambig: set[str] = set()
+    roots: dict[str, str] = {}
+    root_owners: dict[str, set[str]] = {}
     kwargs: dict[str, Any] = {}
     while True:
         resp = t.scan(**kwargs)
@@ -1969,12 +1973,22 @@ def _load_maps(
                     t2 = str(tok).upper().strip()
                     if t2:
                         ambig.add(t2)
+                # #149 — CNPJ root -> entity, off the SAME scan (no extra read).
+                for raw in it.get("cnpj_roots") or []:
+                    root = "".join(c for c in str(raw) if c.isdigit())[:8]
+                    if len(root) == 8:
+                        root_owners.setdefault(root, set()).add(eid)
         start = resp.get("LastEvaluatedKey")
         if not start:
             break
         kwargs["ExclusiveStartKey"] = start
-    _ALIAS_MAP_CACHE, _TRUST_MAP_CACHE, _AMBIG_TOKENS_CACHE = aliases, trust, ambig
-    return aliases, trust, ambig
+    # A root claimed by more than one entity is ambiguous evidence, which is not
+    # evidence: drop it rather than pick. (Measured 2026-09-20: 1,686 roots across
+    # 1,824 entities, zero contested — so this is a guard, not a filter.)
+    roots = {r: next(iter(owners)) for r, owners in root_owners.items() if len(owners) == 1}
+    _ALIAS_MAP_CACHE, _TRUST_MAP_CACHE, _AMBIG_TOKENS_CACHE, _CNPJ_ROOT_CACHE = (
+        aliases, trust, ambig, roots)
+    return aliases, trust, ambig, roots
 
 
 def load_alias_map(table: Any | None = None, force: bool = False) -> dict[str, list[str]]:
@@ -1985,6 +1999,16 @@ def load_alias_map(table: Any | None = None, force: bool = False) -> dict[str, l
 def load_trust_map(table: Any | None = None, force: bool = False) -> dict[str, bool]:
     """Return {entity_id: trusted-for-free-text}. Trusted iff curated or news_safe."""
     return _load_maps(table, force)[1]
+
+
+def load_cnpj_root_map(table: Any | None = None, force: bool = False) -> dict[str, str]:
+    """Return {cnpj_root8: entity_id} from the registry (cached, same scan as the aliases).
+
+    #149 — CNPJ is exact evidence where a name is a guess. COSIF writes ``BCO DO BRASIL
+    S.A.``; the alias map carries ``BANCO DO BRASIL``, so the country's largest bank did not
+    resolve at all from the monthly balancete.
+    """
+    return _load_maps(table, force)[3]
 
 
 def load_ambiguous_tokens(table: Any | None = None, force: bool = False) -> set[str]:
@@ -2009,10 +2033,12 @@ def set_news_safe(entity_id: str, value: bool = True, table: Any | None = None) 
 
 def clear_cache() -> None:
     global _ALIAS_MAP_CACHE, _TRUST_MAP_CACHE, _AMBIG_TOKENS_CACHE, _ROLE_MAP_CACHE
+    global _CNPJ_ROOT_CACHE
     _ALIAS_MAP_CACHE = None
     _TRUST_MAP_CACHE = None
     _AMBIG_TOKENS_CACHE = None
     _ROLE_MAP_CACHE = None
+    _CNPJ_ROOT_CACHE = None
 
 
 # --- Curation CRUD (operator API surface) --------------------------------------

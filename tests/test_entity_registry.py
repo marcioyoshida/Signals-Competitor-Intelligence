@@ -838,3 +838,48 @@ def test_list_entity_attributes_exposes_capital_as_json_safe_floats():
     assert isinstance(cap["value"], float) and isinstance(cap["previous"], float)
     import json
     json.dumps(cap)
+
+
+# --- #149: CNPJ root index -------------------------------------------------------------
+
+def test_cnpj_root_map_is_built_from_the_same_scan(monkeypatch):
+    items = [
+        {"type": "entity", "entity_id": "bb", "aliases": ["BANCO DO BRASIL"],
+         "cnpj_roots": ["00000000"]},
+        {"type": "entity", "entity_id": "safra", "aliases": ["SAFRA"],
+         "cnpj_roots": ["58.160.789/0001-28"]},          # formatted forms normalise
+        {"type": "entity", "entity_id": "nocnpj", "aliases": ["X"]},
+    ]
+    scans = []
+
+    class _T:
+        def scan(self, **kw):
+            scans.append(kw)
+            return {"Items": items}
+
+    monkeypatch.setattr(er, "_table", lambda t=None: _T())
+    er.clear_cache()
+    assert er.load_cnpj_root_map() == {"00000000": "bb", "58160789": "safra"}
+    er.load_alias_map()          # served from the same cached scan
+    assert len(scans) == 1
+    er.clear_cache()
+
+
+def test_a_cnpj_root_claimed_by_two_entities_is_dropped(monkeypatch):
+    """Ambiguous evidence is not evidence. Measured 2026-09-20 there were zero contested
+    roots across 1,824 entities, so this is a guard rather than a filter — but silently
+    picking one of two owners is how financials get mis-attributed."""
+    items = [
+        {"type": "entity", "entity_id": "a", "aliases": [], "cnpj_roots": ["11111111"]},
+        {"type": "entity", "entity_id": "b", "aliases": [], "cnpj_roots": ["11111111"]},
+        {"type": "entity", "entity_id": "c", "aliases": [], "cnpj_roots": ["22222222"]},
+    ]
+
+    class _T:
+        def scan(self, **kw):
+            return {"Items": items}
+
+    monkeypatch.setattr(er, "_table", lambda t=None: _T())
+    er.clear_cache()
+    assert er.load_cnpj_root_map() == {"22222222": "c"}
+    er.clear_cache()

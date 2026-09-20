@@ -107,17 +107,33 @@ def latest_month(today: dt.date | None = None) -> int:
 
 
 def map_to_entities(month_data: dict[str, dict[str, Any]], *,
-                    resolver: Callable[[dict[str, Any]], list[str]]) -> dict[str, dict[str, Any]]:
-    """Resolve institution names → {entity_id: {name, lines}} (largest crédito wins on collision)."""
+                    resolver: Callable[[dict[str, Any]], list[str]],
+                    cnpj_resolver: Callable[[Any], str | None] | None = None,
+                    ) -> dict[str, dict[str, Any]]:
+    """Resolve institutions → {entity_id: {name, lines}} (largest crédito wins on collision).
+
+    #149 — **CNPJ first, name second.** COSIF abbreviates ``BANCO`` to ``BCO``, which the
+    alias map does not carry, so name-only matching resolved 63 of 169 institutions and
+    missed Banco do Brasil entirely. The same CSV carries the CNPJ; an exact root match is
+    direct evidence and is preferred over a name guess whenever it is available.
+    """
+    if cnpj_resolver is None:
+        from src.synth import entities as _ent
+
+        cnpj_resolver = _ent.resolve_by_cnpj
     best: dict[str, dict[str, Any]] = {}
     for cnpj, rec in month_data.items():
         name = rec.get("name")
         if not name:
             continue
-        try:
-            ents = resolver({"source": "News", "title": name, "institution": name}) or []
-        except Exception:  # pragma: no cover
-            ents = []
+        by_cnpj = cnpj_resolver(cnpj)
+        if by_cnpj:
+            ents = [by_cnpj]
+        else:
+            try:
+                ents = resolver({"source": "News", "title": name, "institution": name}) or []
+            except Exception:  # pragma: no cover
+                ents = []
         cred = (rec.get("lines") or {}).get("credito") or 0
         for eid in ents:
             prev = best.get(eid)
