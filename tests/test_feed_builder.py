@@ -796,3 +796,65 @@ def test_capital_moves_are_scoped_out_for_a_tenant_without_that_entity():
     assert scoped["capital_moves"] == []
     entry = feed_builder.derive_entry_feed(feed, industries=["insurance"])
     assert entry["capital_moves"] == []
+
+
+def test_groups_resolve_a_parent_that_was_later_merged_away():
+    """#151: `parent` is written once at discovery and never revisited, so when the parent
+    is later merged as a duplicate the child keeps pointing at the dead id. Four entities
+    were in that state live (e.g. goldman-sachs-corretora -> goldman-sachs, itself merged
+    into goldman_sachs). The group must file under the survivor."""
+    narratives = [_narr("n1", "goldman_sachs", "2026-08-20", 0.6),
+                  _narr("n2", "goldman-sachs-corretora", "2026-08-20", 0.4)]
+    imap = {"goldman_sachs": ["investment-banking"],
+            "goldman-sachs-corretora": ["investment-banking"]}
+    attrs = {
+        "goldman_sachs": {"industries": ["investment-banking"]},
+        "goldman-sachs": {"industries": ["investment-banking"],
+                          "canonical_id": "goldman_sachs"},
+        "goldman-sachs-corretora": {"industries": ["investment-banking"],
+                                    "parent": "goldman-sachs"},
+    }
+    feed = feed_builder.build_feed(
+        narratives, industry_map=imap, industry_meta={}, entity_attrs=attrs)
+    assert feed["groups"] == {"goldman_sachs": ["goldman-sachs-corretora"]}
+
+
+def test_groups_never_make_an_entity_its_own_child_after_a_merge():
+    # the duplicate is parented to the very entity it merges into: collapsing both ends
+    # would otherwise yield {abc_brasil: [abc_brasil]}.
+    narratives = [_narr("n1", "abc_brasil", "2026-08-20", 0.6)]
+    attrs = {"abc_brasil": {"industries": ["banking"]},
+             "abc": {"industries": ["banking"], "parent": "abc_brasil",
+                     "canonical_id": "abc_brasil"}}
+    feed = feed_builder.build_feed(
+        narratives, industry_map={"abc_brasil": ["banking"]}, industry_meta={},
+        entity_attrs=attrs)
+    assert feed["groups"] == {}
+
+
+def test_financials_follow_an_entity_through_its_merge():
+    """#151: the CNPJ lives on the discovered twin, so the ingesters key an institution's
+    numbers to the duplicate half while the surviving card is the curated brand. Without
+    re-keying, the merged card silently shows no financials."""
+    narratives = [_narr("n1", "abc_brasil", "2026-08-20", 0.6)]
+    attrs = {"abc_brasil": {"industries": ["banking"]},
+             "abc": {"industries": ["banking"], "canonical_id": "abc_brasil"}}
+    feed = feed_builder.build_feed(
+        narratives, industry_map={"abc_brasil": ["banking"]}, industry_meta={},
+        entity_attrs=attrs,
+        resultados={"abc": {"custo_credito_pct": 0.64, "opex_ativo_pct": 1.0}},
+        market_share={"abc": 1.5})
+    card = next(e for e in feed["entities"] if e["entity"] == "abc_brasil")
+    assert card["resultados"]["custo_credito_pct"] == 0.64
+    assert card["market_share_pct"] == 1.5
+
+
+def test_survivors_own_row_beats_one_inherited_from_a_duplicate():
+    narratives = [_narr("n1", "abc_brasil", "2026-08-20", 0.6)]
+    attrs = {"abc_brasil": {"industries": ["banking"]},
+             "abc": {"industries": ["banking"], "canonical_id": "abc_brasil"}}
+    feed = feed_builder.build_feed(
+        narratives, industry_map={"abc_brasil": ["banking"]}, industry_meta={},
+        entity_attrs=attrs, market_share={"abc": 1.5, "abc_brasil": 9.9})
+    card = next(e for e in feed["entities"] if e["entity"] == "abc_brasil")
+    assert card["market_share_pct"] == 9.9

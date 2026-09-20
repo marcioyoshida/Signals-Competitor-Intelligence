@@ -883,3 +883,43 @@ def test_a_cnpj_root_claimed_by_two_entities_is_dropped(monkeypatch):
     er.clear_cache()
     assert er.load_cnpj_root_map() == {"22222222": "c"}
     er.clear_cache()
+
+
+def test_propose_name_merges_finds_the_cnpj_split_and_ignores_sub_entities():
+    """#151: the curated brand carries no CNPJ, discovery creates a twin that does, and
+    CNPJ-first resolution then lands the financials on the twin. Propose, never commit."""
+    t = FakeTable()
+    # the shape #149 created: curated brand with no CNPJ + discovered twin with one.
+    er.put_entity("abc_brasil", "Banco ABC Brasil", ["ABC BRASIL"],
+                  confidence="curated", industries=["banking"], table=t)
+    er.put_entity("abc", "Abc", ["ABC", "BANCO ABC BRASIL S.A."], cnpj_roots=["28195667"],
+                  confidence="structured", industries=["banking"], table=t)
+    # a truncated display name is repaired by the full legal name in the aliases
+    er.put_entity("jpmorgan", "J.P. Morgan Brasil", ["J.P. MORGAN"],
+                  confidence="curated", industries=["investment-banking"], table=t)
+    er.put_entity("morgan", "Morgan", ["MORGAN", "BANCO J.P. MORGAN S.A."],
+                  cnpj_roots=["33172537"], confidence="structured",
+                  industries=["investment-banking"], table=t)
+    # a brokerage is a DIFFERENT legal entity, not a duplicate — CORRETORA discriminates,
+    # and its bare "ABC" alias must not stand in for its identity.
+    er.put_entity("abc-corretora", "Abc Corretora", ["ABC CORRETORA", "ABC"],
+                  cnpj_roots=["33817677"], confidence="structured",
+                  industries=["banking"], table=t)
+    # a fund vehicle wears its sponsor's whole brand and is never a duplicate of it
+    er.put_entity("paag11", "PATRIA", ["PATRIA"], cnpj_roots=["51575078"],
+                  confidence="cnpj", industries=["real-estate-funds"], table=t)
+    er.put_entity("patria", "Patria", ["PATRIA"], confidence="curated",
+                  industries=["private-markets"], table=t)
+    # both sides identified -> nothing to repair
+    er.put_entity("solo", "Solo", ["SOLO"], cnpj_roots=["44444444"],
+                  confidence="cnpj", industries=["fintech"], table=t)
+
+    n = er.propose_name_merges(table=t)
+    targets = {r["entity_id"]: r["target_id"] for r in er.list_reviews(table=t)}
+    assert targets == {"abc": "abc_brasil", "morgan": "jpmorgan"}
+    assert n == 2
+    # proposed only — no canonical_id was written
+    assert er.get_entity("abc", table=t)["canonical_id"] == "abc"
+    assert er.get_entity("morgan", table=t)["canonical_id"] == "morgan"
+    # idempotent
+    assert er.propose_name_merges(table=t) == 0

@@ -137,3 +137,24 @@ def test_a_lender_whose_book_is_mostly_real_credit_is_unaffected():
                    "pdd_desp": 140.85e9, "pdd_rev": 105.09e9, "opex": 18.55e9}}
     r = res.map_to_entities(month, 202606, resolver=lambda i: ["bb"])[0]
     assert r["custo_credito_pct"] == 8.08
+
+
+# --- #151: one row per institution, not per id it was ever called ---------------------
+
+def test_merge_evicts_a_stale_entity_holding_the_same_cnpj():
+    """#149 switched this ingester from name-first to CNPJ-first resolution, which moved
+    several institutions onto a different entity_id. A plain upsert kept the old id too,
+    so one balance sheet was stored twice — 11 CNPJs and 10.8% of total assets on the
+    live store. The incoming record must evict the twin."""
+    old = res.merge(None, [{"entity": "abc_brasil", "cnpj": "28195667", "ativo_bi": 61.6,
+                            "month": 202606, "opex_ativo_pct": 1.0}])
+    new = res.merge(old, [{"entity": "abc", "cnpj": "28195667", "ativo_bi": 61.6,
+                           "month": 202606, "opex_ativo_pct": 1.0}])
+    assert set(new["records"]) == {"abc"}
+    assert new["count"] == 1
+
+    # an unrelated institution is untouched, and re-running is stable
+    two = res.merge(new, [{"entity": "bb", "cnpj": "00000000", "ativo_bi": 2380.0,
+                           "month": 202606, "opex_ativo_pct": 1.56}])
+    assert set(two["records"]) == {"abc", "bb"}
+    assert set(res.merge(two, list(two["records"].values()))["records"]) == {"abc", "bb"}

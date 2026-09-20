@@ -1432,6 +1432,131 @@ def propose_group_merges(table: Any | None = None) -> int:
     return queued
 
 
+# #151 — legal-form and filler words only. Everything else is left in, because in this
+# registry the "generic-looking" words are the DISCRIMINATING ones: a corretora, a
+# seguradora and a DTVM are separate legal entities correctly modelled as sub-entities
+# (ADR 017 `parent`), not duplicates of the bank. Dropping CORRETORA/SEGUROS from the
+# comparison turned `bradesco_seguros`/`bradesco` and every `*-corretora` into false
+# positives and would have flooded the queue.
+#: Industries whose members are fund vehicles, not institutions. Mirrors
+#: `entity_discovery._LEAF_INDUSTRIES` — kept local so the registry does not import the
+#: discovery module, which imports it.
+_FUND_INDUSTRIES = frozenset({
+    "agri-funds", "betting", "consorcio", "crypto", "real-estate-funds",
+})
+
+_MERGE_STOPWORDS = frozenset({
+    "SA", "S", "A", "LTDA", "ME", "EPP", "EIRELI", "DO", "DA", "DE", "DOS", "DAS", "E",
+    "BANCO", "BCO", "BANK", "BRASIL", "BRAZIL", "GRUPO", "HOLDING", "HOLDINGS",
+    "INSTITUICAO", "PAGAMENTO", "MULTIPLO", "COMERCIAL", "INVESTIMENTO", "INVESTIMENTOS",
+})
+
+
+def _merge_key(name: str | None) -> frozenset[str]:
+    """Order-insensitive token set of a name, minus punctuation and legal-form noise.
+    `Banco ABC Brasil` and `ABC` both reduce to {ABC}; `Morgan Stanley` stays
+    {MORGAN, STANLEY}; `J.P. MORGAN` reduces to {JP, MORGAN} so it meets `JP MORGAN`."""
+    raw = re.sub(r"[^A-Z0-9 ]", "", normalize_alias(name or ""))
+    return frozenset(t for t in raw.split() if t and t not in _MERGE_STOPWORDS)
+
+
+def _merge_keys(entity: dict[str, Any]) -> set[frozenset[str]]:
+    """The entity's *most complete* names, as merge keys.
+
+    Aliases have to be considered and not just the display name, or the `morgan`/`jpmorgan`
+    pair is invisible: discovery truncated that entity's display name to the bare surname
+    "Morgan", and only its alias carries the full `BANCO J.P. MORGAN S.A.` that meets
+    `J.P. Morgan Brasil`. But indexing *every* alias is too permissive in the other
+    direction — `abc-corretora` also carries a bare "ABC" alias, which would file it under
+    the same key as Banco ABC Brasil and propose merging a brokerage into its parent bank.
+
+    So only the longest token set an entity is known by is indexed. A partial alias can no
+    longer stand in for the entity's identity, while a truncated display name is still
+    repaired by the full legal name sitting next to it.
+    """
+    keys = {k for k in (_merge_key(n) for n in
+                        [entity.get("display_name"), entity.get("entity_id"),
+                         *(entity.get("aliases") or [])]) if k}
+    if not keys:
+        return set()
+    widest = max(len(k) for k in keys)
+    return {k for k in keys if len(k) == widest}
+
+
+def propose_name_merges(table: Any | None = None) -> int:
+    """ADR step 5 producer: two entities whose names reduce to the *same* token set, where
+    exactly one of them holds a CNPJ, are probably one institution recorded twice.
+
+    This is the shape #149 created. Curated entities are hand-written brands and mostly
+    carry no CNPJ; discovery creates a second id from the BCB/Receita name and puts the
+    CNPJ there. CNPJ-first resolution then lands the financials on the discovered twin
+    while the news and the analyst curation sit on the curated one.
+
+    **Proposes, never auto-commits** — same rule as `propose_group_merges`, and for the
+    same reason (StoneX != StoneCo). The judgement a machine cannot make here is duplicate
+    vs. sub-entity: `abc` (CNPJ 28195667, *Banco ABC Brasil S.A.*) really is `abc_brasil`,
+    but `xp-investimentos` (CNPJ 02332886, *XP Investimentos CCTVM*) is a subsidiary of
+    `xp` and must stay a `parent` link. Both look identical to this detector, so both are
+    queued and a curator decides.
+
+    Deliberately narrow: exact token-set equality, not the subset/prefix matching that
+    first suggested itself. Subset matching scored 118 candidates on the live registry and
+    was dominated by correctly-parented fund vehicles (24 XP funds, 13 Bradesco
+    subsidiaries, Capitânia's FIIs). Equality scores 8 groups — small enough that a human
+    can actually work the queue. Returns the count of *newly* queued proposals.
+    """
+    t = _table(table)
+    by_key: dict[frozenset[str], dict[str, dict[str, Any]]] = {}
+    for e in _scan_type(t, "entity"):
+        if not e.get("entity_id"):
+            continue
+        # Fund vehicles carry their sponsor's brand as their whole name (`PÁTRIA`,
+        # `KINEA`, `XP`) and are legitimately hundreds of distinct entities under one
+        # manager. They are sub-entities by construction — never duplicates of the
+        # sponsor — and including them is what turned this detector into a flood.
+        inds = set(e.get("industries") or [])
+        if inds and not (inds - _FUND_INDUSTRIES):
+            continue
+        for key in _merge_keys(e):
+            by_key.setdefault(key, {})[e["entity_id"]] = e
+
+    queued = 0
+    seen_pairs: set[tuple[str, str]] = set()
+    for key, uniq in by_key.items():
+        if len(uniq) < 2:
+            continue
+        with_cnpj = [m for m in uniq.values() if m.get("cnpj_roots")]
+        without = [m for m in uniq.values() if not m.get("cnpj_roots")]
+        if not with_cnpj or not without:
+            continue  # both sides identified, or neither — no CNPJ-split to repair
+        # The survivor is the curated brand when there is one: it carries the analyst's
+        # display name and industries, and the discovered twin carries only a CNPJ.
+        curated = [m for m in without if m.get("confidence") == "curated"] or without
+        leader = min(curated, key=lambda m: m["entity_id"])
+        for eid, m in uniq.items():
+            if eid == leader["entity_id"]:
+                continue
+            if m.get("canonical_id") and m["canonical_id"] != eid:
+                continue  # already merged under something
+            pair = (eid, leader["entity_id"])
+            if pair in seen_pairs:   # an entity can match a twin under several of its names
+                continue
+            seen_pairs.add(pair)
+            rid = propose_review(
+                "group_merge",
+                key=f"{eid}->{leader['entity_id']}",
+                entity_id=eid,
+                target_id=leader["entity_id"],
+                reason=f"same normalized name ({' '.join(sorted(key))}), only one side has a CNPJ",
+                hint=" ".join(sorted(key)),
+                confidence="fuzzy",
+                table=t,
+            )
+            if rid:
+                queued += 1
+    return queued
+
+
 # --- Industry taxonomy (ADR 002 Phase B) --------------------------------------
 # Canonical modules under the "financial-services" umbrella. Slug -> display +
 # provisional pricing tier (NOT final — set from measured volume/concentration).

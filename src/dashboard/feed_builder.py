@@ -497,16 +497,56 @@ def _canonicalize_item(item: dict[str, Any], canon: dict[str, str]) -> None:
         item["entities"] = merged
 
 
+def _canonicalize_map(m: dict[str, Any] | None, canon: dict[str, str]) -> dict[str, Any]:
+    """Re-key an entity-keyed side map (financials, market share, …) onto surviving ids.
+
+    #151: every one of these maps is keyed by whichever id its *ingester* resolved to,
+    while the entity cards are keyed by the canonical id. When an institution's financials
+    land on the duplicate half of a merged pair — which is the normal case, because the
+    CNPJ lives on the discovered twin and the curated brand is the survivor — the card
+    looks up its own id, misses, and silently shows no financials at all.
+
+    This was masked until now: `bcb_resultados.merge` was append-only, so the store still
+    held a stale record under the old id as well and the lookup happened to hit. Fixing
+    that eviction removed the mask, so the re-keying has to be explicit.
+
+    An existing entry for the surviving id always wins over one inherited from a duplicate.
+    """
+    if not m or not canon:
+        return dict(m or {})
+    out: dict[str, Any] = {}
+    for eid, v in m.items():
+        out.setdefault(canon.get(eid, eid), v)
+    for eid, v in m.items():          # the survivor's own row is authoritative
+        if eid not in canon:
+            out[eid] = v
+    return out
+
+
 def _build_groups(entity_attrs: dict[str, Any] | None) -> dict[str, list[str]]:
     """ADR 017 corporate groups: {parent_id: sorted[child sub-entity ids]} from the
-    entities' `parent` links. Only parents that are themselves tracked are kept."""
+    entities' `parent` links. Only parents that are themselves tracked are kept.
+
+    Both ends run through the `canonical_id` map first (#151). A `parent` is written once,
+    at discovery, and never revisited — so when the parent is later merged away as a
+    duplicate the child keeps pointing at the dead id, and the group is filed under an id
+    that no feed item survives under. Four entities were in that state live
+    (`goldman-sachs-corretora` -> `goldman-sachs`, already merged into `goldman_sachs`;
+    likewise `zurich`, `allianz` and `pan`), which split each of those groups away from the
+    surviving parent's card.
+    """
     attrs = entity_attrs or {}
+    canon = _canonical_map(attrs)
     groups: dict[str, list[str]] = {}
     for eid, a in attrs.items():
         p = (a or {}).get("parent")
-        if p and p in attrs:
-            groups.setdefault(str(p), []).append(eid)
-    return {p: sorted(kids) for p, kids in groups.items()}
+        if not p:
+            continue
+        p = canon.get(str(p), str(p))
+        child = canon.get(eid, eid)
+        if p in attrs and p != child:
+            groups.setdefault(p, []).append(child)
+    return {p: sorted(set(kids)) for p, kids in groups.items()}
 
 
 def build_feed(
@@ -603,15 +643,17 @@ def build_feed(
         # ADR 015 §3: weighted count of this entity's expansion-lens narratives.
         rec["momentum"] += _momentum_weight(x["lenses"])
 
-    imap = industry_map or {}
-    share_map = market_share or {}
-    soundness_map = soundness or {}
-    balancete_map = balancete or {}
-    tone_map = financial_tone or {}
-    fund_map = fundamentals or {}
-    npl_map = inadimplencia or {}
-    res_map = resultados or {}
-    km1_map = pilar3_km1 or {}
+    # #151 — the entity cards below are keyed by the CANONICAL id, so every entity-keyed
+    # side map has to be re-keyed the same way or a merged institution loses its numbers.
+    imap = _canonicalize_map(industry_map, canon)
+    share_map = _canonicalize_map(market_share, canon)
+    soundness_map = _canonicalize_map(soundness, canon)
+    balancete_map = _canonicalize_map(balancete, canon)
+    tone_map = _canonicalize_map(financial_tone, canon)
+    fund_map = _canonicalize_map(fundamentals, canon)
+    npl_map = _canonicalize_map(inadimplencia, canon)
+    res_map = _canonicalize_map(resultados, canon)
+    km1_map = _canonicalize_map(pilar3_km1, canon)
     entities: list[dict[str, Any]] = []
     for rec in by_entity.values():
         timeline = [rec["by_date"][d] for d in sorted(rec["by_date"])]

@@ -205,11 +205,31 @@ def map_to_entities(month_data: dict[str, dict[str, Any]], ym: int, *,
 
 def merge(existing: dict[str, Any] | None, records: list[dict[str, Any]], *,
           today: dt.date | None = None) -> dict[str, Any]:
+    """Upsert this run's records into the store, keyed by entity_id.
+
+    **#151 — the store is keyed by entity, but the institution is the CNPJ.** When entity
+    resolution changes which id a CNPJ lands on, a plain upsert leaves the *previous* id's
+    record behind forever, and the same balance sheet is then stored twice under two ids.
+    #149 switching this ingester from name-first to CNPJ-first did exactly that: the run
+    that day emitted 134 records into a store that grew to 147, the 13 extras being the
+    name-resolved ids (`abc` vs `abc_brasil`, `morgan` vs `jpmorgan`, …) — 11 CNPJs held
+    by more than one entity, 10.8% of the store's total assets counted twice.
+
+    So an incoming record **evicts any other entity holding the same CNPJ**. The store is
+    one row per institution, not one row per id that institution was ever called.
+    """
     today = today or dt.date.today()
     store = dict((existing or {}).get("records") or {})
     for r in records:
-        if r.get("entity"):
-            store[r["entity"]] = r
+        eid = r.get("entity")
+        if not eid:
+            continue
+        cnpj = r.get("cnpj")
+        if cnpj:
+            for other, prev in list(store.items()):
+                if other != eid and prev.get("cnpj") == cnpj:
+                    store.pop(other)
+        store[eid] = r
     month = next((r.get("month") for r in records if r.get("month")), (existing or {}).get("month"))
     return {"as_of": today.isoformat(), "month": month, "count": len(store), "records": store}
 
