@@ -3075,8 +3075,13 @@ class OncaPrototypeStack(Stack):
             runtime=lambda_.Runtime.PYTHON_3_11,
             handler="src.ingest.bcb_soundness.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
-            timeout=Duration.minutes(5),
-            memory_size=1024,
+            # #150 — this handler runs FIVE ingests (solvency, fundamentals, inadimplência,
+            # resultados, KM1) and was timing out at 5 min with no output. The regex fix in
+            # `entities._word_re` cut the dominant cost ~7x, but 5 min was never a sane
+            # ceiling for five sequential network ingests. 1769MB is the full-vCPU tier —
+            # the work is CPU-bound in the resolver, so this is cheaper per run, not dearer.
+            timeout=Duration.minutes(12),
+            memory_size=1769,
             environment={
                 "PYTHONPATH": "/var/task",
                 "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
@@ -3202,14 +3207,33 @@ class OncaPrototypeStack(Stack):
         tone_task.add_retry(
             errors=["States.ALL"], max_attempts=2, interval=Duration.seconds(20), backoff_rate=2.0,
         )
+        # #150 — the four tasks used to run as one linear chain, so when SoundnessTask timed
+        # out it took balancete, the CVM statements (#145) and tone down with it and every
+        # financial store went stale together. That coupling was incidental: the tasks share
+        # no data except tone, which reads what soundness writes. Only that edge is real.
+        #
+        # Each branch also catches its own failure into a Pass, so a branch that dies leaves
+        # the others' results intact instead of failing the whole Parallel.
+        def _resilient(task: sfn.IChainable, name: str) -> sfn.IChainable:
+            task.add_catch(                                     # type: ignore[attr-defined]
+                sfn.Pass(self, f"{name}Failed", result=sfn.Result.from_object(
+                    {"status": "failed", "task": name})),
+                errors=["States.ALL"], result_path="$.error",
+            )
+            return task
+
+        financials_branches = sfn.Parallel(self, "FinancialsBranches", result_path="$.branches")
+        financials_branches.branch(
+            _resilient(soundness_task, "Soundness").next(_resilient(tone_task, "Tone")))
+        financials_branches.branch(_resilient(balancete_task, "Balancete"))
+        financials_branches.branch(_resilient(cvm_statements_task, "CvmStatements"))
+
         financials_pipeline = sfn.StateMachine(
             self,
             "OncaFinancialsPipeline",
-            definition_body=sfn.DefinitionBody.from_chainable(
-                soundness_task.next(balancete_task).next(cvm_statements_task).next(tone_task)
-            ),
-            # Raised from 30 with the CVM task (#145): four sequential tasks, and the new
-            # one can spend ~10 minutes on two package downloads in a bad-network month.
+            definition_body=sfn.DefinitionBody.from_chainable(financials_branches),
+            # The branches run concurrently now, so this bounds the slowest one (soundness →
+            # tone) rather than their sum.
             timeout=Duration.minutes(45),
         )
         # Monthly: the 6th at 06:00 UTC (03:00 BRT) — a few days after month-end so BCB has

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import re
+from functools import lru_cache as _lru_cache
 from typing import Any
 
 # Canonical entity id → aliases (uppercased substrings / tickers).
@@ -383,10 +384,26 @@ def _entity_token_index() -> dict[str, tuple[frozenset[str], bool]]:
     return _ENT_TOK_CACHE
 
 
+@_lru_cache(maxsize=65536)
+def _word_re(token: str) -> "re.Pattern[str]":
+    """Compiled boundary-anchored matcher for one alias token.
+
+    #150 — the pattern used to be built and handed to ``re.search`` on every call, leaning on
+    the ``re`` module's internal cache. That cache holds 512 entries; the registry now has
+    11,289 entities carrying tens of thousands of distinct aliases, so it thrashed completely
+    and **every alias recompiled its pattern on every resolve**. Profiling one
+    ``resolve_entities`` call: 7,795 ``re._compile`` calls of which 5,791 were real
+    compilations, 2.536s of 2.854s total — 89% of the work was the regex compiler.
+
+    Compiled patterns are pure functions of the token, so caching them changes no behaviour.
+    """
+    return re.compile(rf"(?<!{_WORD}){re.escape(token)}(?!{_WORD})")
+
+
 def _word_match(token: str, blob: str) -> bool:
     """Whole-word (boundary-anchored) match of an uppercase token/phrase — so
     STONE does not match STONEX/LIMESTONE, and ação does not match celebração."""
-    return re.search(rf"(?<!{_WORD}){re.escape(token)}(?!{_WORD})", blob) is not None
+    return _word_re(token).search(blob) is not None
 
 
 def _match_kinds(

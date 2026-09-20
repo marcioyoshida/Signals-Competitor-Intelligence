@@ -298,27 +298,48 @@ def lambda_handler(event: dict[str, Any] | None, context: Any) -> dict[str, Any]
     solvency ingest AND the competitor-fundamentals ingest (both IF.data quarterly). Reads
     ONCA_DIGESTS_BUCKET, honours ``{"force": true}`` to bypass the base-month no-op guard."""
     bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
+    t0 = time.time()
+
+    def _stage(key: str, fn: Callable[[], Any]) -> None:
+        """Run one best-effort stage, and say how long it took.
+
+        #150 — this handler used to time out at 300s having printed **nothing at all**
+        between START and END, so the only available diagnosis was "it hangs somewhere".
+        An elapsed line per stage costs nothing and turns the next failure into a location.
+        """
+        started = time.time()
+        try:
+            result[key] = fn()
+            status = (result[key] or {}).get("status", "ok") if isinstance(result[key], dict) else "ok"
+        except Exception as exc:  # pragma: no cover - best-effort, never blocks the rest
+            result[key] = {"status": "error", "reason": str(exc)}
+            status = "error"
+        print(f"soundness stage {key}: {status} in {time.time() - started:.1f}s "
+              f"(elapsed {time.time() - t0:.1f}s)")
+
     result = run(bucket, force=bool((event or {}).get("force")))
-    try:  # ADR 022 Tier-1 — profitability/leverage/funding/headroom fundamentals (best-effort)
+    print(f"soundness stage solvency: {result.get('status')} in {time.time() - t0:.1f}s")
+
+    def _fundamentals() -> Any:      # ADR 022 Tier-1 — profitability/leverage/funding/headroom
         from src.ingest import bcb_fundamentals
-        result["fundamentals"] = bcb_fundamentals.run(bucket)
-    except Exception as exc:  # pragma: no cover
-        result["fundamentals"] = {"status": "error", "reason": str(exc)}
-    try:  # ADR 022 Tier-2 — inadimplência / NPL (asset quality) for the CRO (best-effort)
+        return bcb_fundamentals.run(bucket)
+
+    def _inadimplencia() -> Any:     # ADR 022 Tier-2 — NPL / asset quality for the CRO
         from src.ingest import bcb_inadimplencia
-        result["inadimplencia"] = bcb_inadimplencia.run(bucket)
-    except Exception as exc:  # pragma: no cover
-        result["inadimplencia"] = {"status": "error", "reason": str(exc)}
-    try:  # ADR 022 Tier-3 — operating efficiency (opex/ativo) from the balancete P&L (best-effort)
+        return bcb_inadimplencia.run(bucket)
+
+    def _resultados() -> Any:        # ADR 022 Tier-3 — opex/ativo + #146 custo de crédito
         from src.ingest import bcb_resultados
-        result["resultados"] = bcb_resultados.run(bucket)
-    except Exception as exc:  # pragma: no cover
-        result["resultados"] = {"status": "error", "reason": str(exc)}
-    try:  # multi-bank Pilar 3 — Basel KM1 (LCR/NSFR/Basileia) via DASFN (best-effort)
+        return bcb_resultados.run(bucket)
+
+    def _km1() -> Any:               # multi-bank Pilar 3 — Basel KM1 (LCR/NSFR) via DASFN
         from src.ingest import bcb_km1
-        result["km1"] = bcb_km1.run(bucket)
-    except Exception as exc:  # pragma: no cover
-        result["km1"] = {"status": "error", "reason": str(exc)}
+        return bcb_km1.run(bucket)
+
+    for key, fn in (("fundamentals", _fundamentals), ("inadimplencia", _inadimplencia),
+                    ("resultados", _resultados), ("km1", _km1)):
+        _stage(key, fn)
+    print(f"soundness handler done in {time.time() - t0:.1f}s")
     return {"statusCode": 200, "body": json.dumps(result, ensure_ascii=False)}
 
 
