@@ -492,6 +492,8 @@ def _fundamentals_rows(feed: dict[str, Any]) -> list[dict[str, Any]]:
                      "label": e.get("label") or labels.get(e.get("entity")) or e.get("entity"),
                      "industries": e.get("industries") or _industries_of(feed, e.get("entity")),
                      "opex_ativo_pct": res.get("opex_ativo_pct"),
+                     # #146: net PDD / carteira, annualised — the CRO's cost-of-credit read.
+                     "custo_credito_pct": res.get("custo_credito_pct"),
                      **{k: fu.get(k) for k in keys}})
     rows.sort(key=lambda r: r["roe_pct"], reverse=True)
     return rows

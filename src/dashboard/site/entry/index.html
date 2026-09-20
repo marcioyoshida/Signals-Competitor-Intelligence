@@ -35,7 +35,13 @@
                 color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px; }
   .meta { color: var(--muted); font-size: 12px; margin-left: auto; }
   main { max-width: 1040px; margin: 0 auto; padding: 20px; }
-  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 18px; }
+  /* `repeat(4, 1fr)` cannot go narrower than the widest label: `1fr` floors at min-content, and
+     "ENTIDADES"/"FONTES" don't wrap, so each tile bottomed out at 85px and the strip ran to
+     415px inside a 375px viewport. `auto-fit` + an explicit minmax floor wraps to 2 columns on
+     a phone and still lays all four out side by side at the 1040px main width, with no
+     breakpoint to keep in step with the copy. */
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+          gap: 12px; margin-bottom: 18px; }
   .kpi { background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
          padding: 14px 16px; box-shadow: var(--shadow); }
   .kpi .n { font-size: 26px; font-weight: 700; }

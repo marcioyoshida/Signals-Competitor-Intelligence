@@ -1,4 +1,9 @@
-"""ADR 022 Tier-3 — operating efficiency (opex/ativo) from the balancete P&L (offline)."""
+"""ADR 022 Tier-3 — opex/ativo + #146 cost of credit, from the balancete P&L (offline).
+
+The figures are Banco do Brasil's real 202606 balancete lines, so these tests double as the
+reconciliation record: net PDD of R$35.76bn against the R$34.40bn BB itself filed with CVM
+as `3.04.01` for the same span (ratio 1.04).
+"""
 import io
 import sys
 import zipfile
@@ -13,7 +18,9 @@ _CSV = (
     "#DATA_BASE;DOCUMENTO;CNPJ;AGENCIA;NOME_INSTITUICAO;COD_CONGL;NOME_CONGL;TAXONOMIA;CONTA;NOME_CONTA;SALDO\n"
     "202606;4010;00000000;;BCO DO BRASIL S.A.;;;X;8170000004;(-) Despesas Administrativas;-18550000000,00\n"
     "202606;4010;00000000;;BCO DO BRASIL S.A.;;;X;1000000009;Ativo Realizável;2380000000000,00\n"
-    "202606;4010;00000000;;BCO DO BRASIL S.A.;;;X;1600000007;Operações de Crédito (ignored);885000000000,00\n"
+    "202606;4010;00000000;;BCO DO BRASIL S.A.;;;X;1600000007;Operações de Crédito;885100000000,00\n"
+    "202606;4010;00000000;;BCO DO BRASIL S.A.;;;X;8199200005;(-) DESPESAS DE PROVISÃO;-140850000000,00\n"
+    "202606;4010;00000000;;BCO DO BRASIL S.A.;;;X;7199200006;REVERSÃO DE PROVISÃO;105090000000,00\n"
     "202606;4016;00000000;;BCO DO BRASIL S.A.;;;X;8170000004;doc 4016 ignored;-1,00\n"
 )
 
@@ -33,7 +40,8 @@ def test_fetch_month_extracts_opex_and_ativo(monkeypatch):
     _patch(monkeypatch)
     d = res.fetch_month(202606)["00000000"]
     assert d["opex"] == 18.55e9 and d["ativo"] == 2380e9   # opex is |value|
-    assert "1600000007" not in d                            # non-target account ignored
+    assert d["credito"] == 885.1e9
+    assert d["pdd_desp"] == 140.85e9 and d["pdd_rev"] == 105.09e9
 
 
 def test_map_annualises_ytd_opex_over_ativo(monkeypatch):
@@ -50,4 +58,59 @@ def test_projection_and_merge(monkeypatch):
     recs = res.map_to_entities(res.fetch_month(202606), 202606, resolver=lambda i: ["bb"])
     idx = res.merge(None, recs)
     assert idx["month"] == 202606 and idx["count"] == 1
-    assert res.resultados_by_entity(idx) == {"bb": {"opex_ativo_pct": 1.56, "month": 202606}}
+    assert res.resultados_by_entity(idx) == {
+        "bb": {"opex_ativo_pct": 1.56, "custo_credito_pct": 8.08, "month": 202606}}
+
+
+# --- #146: cost of credit -------------------------------------------------------------
+
+def test_cost_of_credit_is_net_and_annualised(monkeypatch):
+    """(140.85 - 105.09) * (12/6) / 885.1 * 100 = 8.08%. The GROSS despesa alone would read
+    31.8% — that 4x is the whole reason #92 was parked as 'came out ~2x high'."""
+    _patch(monkeypatch)
+    r = res.map_to_entities(res.fetch_month(202606), 202606, resolver=lambda i: ["bb"])[0]
+    assert r["custo_credito_pct"] == 8.08
+    assert r["credito_bi"] == 885.1
+
+
+def test_cost_of_credit_is_none_without_the_reversao_leg():
+    """A month carrying the expense but not the reversão must yield nothing. The despesa on
+    its own is provision TURNOVER — BB reads R$109.75bn of it in January against a PDD stock
+    of R$5.62bn — so a partial read is not a conservative estimate, it is a 4-25x error."""
+    month = {"00000000": {"name": "BCO DO BRASIL S.A.", "ativo": 2380e9, "opex": 18.55e9,
+                          "credito": 885.1e9, "pdd_desp": 140.85e9}}
+    r = res.map_to_entities(month, 202606, resolver=lambda i: ["bb"])[0]
+    assert r["custo_credito_pct"] is None
+    assert r["opex_ativo_pct"] == 1.56          # the other ratio is unaffected
+
+
+def test_institution_with_only_cost_of_credit_is_kept():
+    month = {"11111111": {"name": "BCO X", "ativo": 100e9, "credito": 50e9,
+                          "pdd_desp": 3e9, "pdd_rev": 1e9}}
+    r = res.map_to_entities(month, 202606, resolver=lambda i: ["x"])[0]
+    assert r["opex_ativo_pct"] is None and r["custo_credito_pct"] == 8.0
+
+
+def test_institution_with_neither_ratio_is_dropped():
+    month = {"11111111": {"name": "BCO X", "ativo": 100e9}}
+    assert res.map_to_entities(month, 202606, resolver=lambda i: ["x"]) == []
+
+
+def test_cost_of_credit_is_suppressed_for_a_bank_that_does_not_lend():
+    """Custody/clearing banks carry a group-level provision flow against a ~zero loan book.
+    Live on 2026-09-19 that produced Citibank N.A. at -30.04% and BOFA Merrill Lynch at
+    +46.84%. The gate is on the DENOMINATOR, never on the computed value."""
+    month = {"1": {"name": "CITIBANK N.A.", "ativo": 26.3e9, "credito": 0.02e9,
+                   "pdd_desp": 2e9, "pdd_rev": 0.1e9, "opex": 0.3e9}}
+    r = res.map_to_entities(month, 202606, resolver=lambda i: ["citibank-n"])[0]
+    assert r["custo_credito_pct"] is None
+    assert r["opex_ativo_pct"] is not None      # the efficiency read is unaffected
+
+
+def test_a_real_lender_with_an_extreme_ratio_still_surfaces():
+    """The gate must not quietly become an outlier filter — a genuinely high cost of credit
+    at a real lender is a signal, not an error."""
+    month = {"1": {"name": "BCO X", "ativo": 48.8e9, "credito": 20.5e9,
+                   "pdd_desp": 3.0e9, "pdd_rev": 0.8e9}}
+    r = res.map_to_entities(month, 202606, resolver=lambda i: ["x"])[0]
+    assert r["custo_credito_pct"] == 21.46

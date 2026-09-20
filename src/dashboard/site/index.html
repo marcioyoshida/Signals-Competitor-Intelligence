@@ -89,7 +89,13 @@
   .ticker .tkch { font-variant-numeric: tabular-nums; font-size: 12px; min-width: 54px; text-align: right; }
   .ticker .tkch.up { color: #16a34a; } .ticker .tkch.down { color: var(--t-crit); }
   .ticker .tkfoot { padding: 7px 12px 2px; color: var(--muted); font-size: 10px; }
-  @media (max-width: 820px) { .feedwrap { flex-direction: column; }
+  /* `align-items: flex-start` above is right for the ROW direction — it stops the sticky
+     ticker stretching to the full height of the feed. Turning the container into a COLUMN
+     re-points align-items at the *width*, where flex-start means "size to fit-content", so
+     .feedcol grew to its widest card's max-content width: measured 1088px inside a 375px
+     viewport, 870 elements overflowing, and every signal card unreadable without horizontal
+     scrolling. Restoring `stretch` for the column case is the whole fix. */
+  @media (max-width: 820px) { .feedwrap { flex-direction: column; align-items: stretch; }
     .ticker { width: 100%; position: static; } }
   .review { padding: 10px 16px; border-top: 1px solid var(--border); }
   .review:first-child { border-top: 0; }

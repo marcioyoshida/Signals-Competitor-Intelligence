@@ -964,6 +964,7 @@ function rowsFinancials(list) {
     const meta = [r.roa_pct != null ? "ROA " + r.roa_pct + "%" : null,
                   r.leverage != null ? "alav " + r.leverage + "x" : null,
                   r.opex_ativo_pct != null ? "opex/ativo " + r.opex_ativo_pct + "%" : null,
+                  r.custo_credito_pct != null ? "custo crédito " + r.custo_credito_pct + "%" : null,
                   r.basileia_headroom_pp != null ? "headroom " + r.basileia_headroom_pp + "pp" : null,
                   r.lucro_share_pct != null ? r.lucro_share_pct + "% do lucro" : null].filter(Boolean).join(" · ");
     return `<div class="exrow">
