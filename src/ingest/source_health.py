@@ -21,6 +21,18 @@ from typing import Any
 
 INDEX_KEY = "source_health/index.json"
 
+#: Per-branch shard keys. The ingest Step Function runs `StructuredIngest` and
+#: `NewsIngest` as a `sfn.Parallel`, in two SEPARATE Lambda invocations. Both need to
+#: persist telemetry, and `merge_and_publish` is a read-modify-write — so if both wrote
+#: `INDEX_KEY` the later writer would silently drop the earlier one's sources.
+#: Each branch therefore owns its own object and `load_index` combines them on read.
+#: No locking, no conditional put: the writers never touch the same key.
+SHARDS = ("structured", "news")
+
+
+def shard_key(shard: str) -> str:
+    return "source_health/shard-%s.json" % shard
+
 # In-process ledger for the current run (reset at the start of each ingest handler invocation).
 _LEDGER: dict[str, dict[str, Any]] = {}
 
@@ -121,35 +133,86 @@ def coverage_confidence(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return {"score": score, "n_sources": len(rows), "n_healthy": n_healthy, "n_attention": n_attention}
 
 
-def load_index(bucket: str, *, s3: Any | None = None) -> dict[str, Any]:
-    import boto3
+def combine(parts: list[dict[str, Any]]) -> dict[str, Any]:
+    """Combine per-branch shards into one records map.
 
-    s3 = s3 or boto3.client("s3")
+    A source is written by exactly one branch, so shards are normally disjoint and this
+    is a plain union. When a source DOES appear twice (a mode change, or a legacy record
+    left in `INDEX_KEY` before the split), the most recent `last_run` wins — `runs` is
+    taken, not summed, because each shard already accumulated its own history and adding
+    them would double-count.
+    """
+    out: dict[str, dict[str, Any]] = {}
+    for part in parts:
+        for src, rec in ((part or {}).get("records") or {}).items():
+            prior = out.get(src)
+            if prior is None or str(rec.get("last_run") or "") >= str(prior.get("last_run") or ""):
+                # never lose a real success timestamp when a newer erroring record wins
+                merged = dict(rec)
+                if prior and not merged.get("last_ok") and prior.get("last_ok"):
+                    merged["last_ok"] = prior["last_ok"]
+                out[src] = merged
+    return {"records": out, "updated_at": _now_iso()}
+
+
+def _get_json(bucket: str, key: str, s3: Any) -> dict[str, Any]:
     try:
-        body = s3.get_object(Bucket=bucket, Key=INDEX_KEY)["Body"].read()
-        data = json.loads(body)
+        data = json.loads(s3.get_object(Bucket=bucket, Key=key)["Body"].read())
         return data if isinstance(data, dict) else {}
-    except Exception:  # pragma: no cover - first run
+    except Exception:  # pragma: no cover - missing shard / first run
         return {}
 
 
-def merge_and_publish(bucket: str, *, s3: Any | None = None) -> str | None:
-    """Fold the current run's ledger over the stored index and persist it. Best-effort; returns the
-    S3 URI or None. Reads the in-process ledger, so call once at the end of the ingest run."""
+def load_index(bucket: str, *, s3: Any | None = None, shard: str | None = None) -> dict[str, Any]:
+    """The durable store. With ``shard`` this reads that branch's object only (what a
+    writer folds its ledger over); without it, every shard PLUS the legacy single key,
+    combined — so the split is invisible to readers and no history is lost."""
+    import boto3
+
+    s3 = s3 or boto3.client("s3")
+    if shard:
+        return _get_json(bucket, shard_key(shard), s3)
+    parts = [_get_json(bucket, INDEX_KEY, s3)]
+    parts += [_get_json(bucket, shard_key(sh), s3) for sh in SHARDS]
+    return combine(parts)
+
+
+def merge_and_publish(bucket: str, *, s3: Any | None = None,
+                      shard: str | None = None) -> str | None:
+    """Fold the current run's ledger over this branch's stored shard and persist it.
+
+    Best-effort; returns the S3 URI or None. Reads the in-process ledger, so call once at
+    the end of the ingest run. ``shard`` MUST be set when the caller is one branch of the
+    parallel ingest — see `SHARDS`.
+    """
     if not bucket:
         return None
     import boto3
 
     s3 = s3 or boto3.client("s3")
+    key = shard_key(shard) if shard else INDEX_KEY
     try:
-        stored = load_index(bucket, s3=s3)
-        merged = merge(stored, ledger())
+        stored = load_index(bucket, s3=s3, shard=shard)
+        run = ledger()
+        if shard:
+            # A newly-created shard starts empty, which would reset every `runs` counter
+            # to 1 and throw away the history accumulated under the pre-split single key.
+            # Seed the prior record for exactly the sources THIS run touched — we can't
+            # know which branch owns a source in the abstract, but the ledger says which
+            # ones this branch just ran.
+            legacy = (_get_json(bucket, INDEX_KEY, s3).get("records") or {})
+            records = dict(stored.get("records") or {})
+            for src in run:
+                if src not in records and src in legacy:
+                    records[src] = legacy[src]
+            stored = {**stored, "records": records}
+        merged = merge(stored, run)
         s3.put_object(
-            Bucket=bucket, Key=INDEX_KEY,
+            Bucket=bucket, Key=key,
             Body=json.dumps(merged, ensure_ascii=False, indent=2).encode("utf-8"),
             ContentType="application/json",
         )
-        return f"s3://{bucket}/{INDEX_KEY}"
+        return f"s3://{bucket}/{key}"
     except Exception as exc:  # pragma: no cover - never blocks the ingest return
         print(f"Warning: source_health publish failed: {exc}")
         return None

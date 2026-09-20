@@ -512,10 +512,22 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                       parallel news branch and is overlaid at synth time).
       - "all" (default): both, in one invocation (local / back-compat)."""
     mode = (event or {}).get("mode") or os.environ.get("ONCA_INGEST_MODE", "all")
-    if mode == "news":
-        return _write_news_digest(_news_slice(context), context)
-
     from src.ingest import source_health as _source_health
+
+    if mode == "news":
+        # This branch used to return here WITHOUT ever persisting its telemetry ledger
+        # (`merge_and_publish` lives at the end of the structured path only), so every
+        # news-branch run was recorded in-process and then thrown away with the
+        # invocation. Trade press last persisted a run on 2026-09-09 and then read as
+        # "11 days stale" on the Fontes tab while it was in fact fetching fine 3x/day —
+        # a MONITORING outage that looked exactly like an ingestion outage.
+        _source_health.reset()
+        out = _write_news_digest(_news_slice(context), context)
+        bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
+        if bucket:
+            _source_health.merge_and_publish(bucket, shard="news")
+        return out
+
     _source_health.reset()  # #76: fresh per-run telemetry ledger for the structured path
 
     lookback_days = int(os.environ.get("ONCA_LOOKBACK_DAYS", "7"))
@@ -1639,7 +1651,11 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             print(f"Warning: S3 upload failed: {exc}")
 
     # #76: fold this run's per-source telemetry into the durable source-health store.
+    # Sharded by branch: `StructuredIngest` and `NewsIngest` are parallel Lambda
+    # invocations and this is a read-modify-write, so a shared key would let whichever
+    # finished last silently drop the other's sources.
     if bucket:
-        _source_health.merge_and_publish(bucket)
+        _source_health.merge_and_publish(
+            bucket, shard=("structured" if mode == "structured" else None))
 
     return {"statusCode": 200, "body": json.dumps(payload, ensure_ascii=False, indent=2)}

@@ -1091,3 +1091,42 @@ def test_lambda_handler_never_shadows_a_module_level_import_with_a_local_one():
         "regardless of whether the local-import branch executes. Use the module-level name "
         "directly instead of re-importing it locally."
     )
+
+
+def test_news_mode_persists_its_telemetry(monkeypatch):
+    """The news branch returned before ever reaching `merge_and_publish`, so every run
+    was recorded into the in-process ledger and thrown away with the invocation. Trade
+    press showed "11 days stale" on the Fontes tab while fetching fine 3x/day — the
+    ingester was healthy and the MONITORING was broken."""
+    from src.ingest import source_health as sh
+
+    published = {}
+
+    def fake_publish(bucket, *, s3=None, shard=None):
+        published["bucket"], published["shard"] = bucket, shard
+        published["ledger"] = sh.ledger()
+        return "s3://x"
+
+    monkeypatch.setenv("ONCA_DIGESTS_BUCKET", "b")
+    monkeypatch.setattr(sh, "merge_and_publish", fake_publish)
+    def fake_slice(ctx):
+        sh.record("Trade press", ok=True)   # what _source_budget does around the fetch
+        return {"count": 1, "new_count": 1, "items": [], "context": [], "fetched_ids": ["a"]}
+
+    monkeypatch.setattr(lambda_port, "_news_slice", fake_slice)
+    monkeypatch.setattr(lambda_port.boto3, "client", lambda *a, **k: _NoopS3())
+
+    resp = lambda_port.lambda_handler({"mode": "news"}, None)
+
+    assert resp["statusCode"] == 200
+    assert published["bucket"] == "b"
+    # written to its OWN shard — the structured branch runs in parallel on the same store
+    assert published["shard"] == "news"
+    # and the run actually reached the store instead of dying with the invocation
+    assert "Trade press" in published["ledger"]
+    assert published["ledger"]["Trade press"]["last_ok"]
+
+
+class _NoopS3:
+    def put_object(self, **kw):
+        return {}
