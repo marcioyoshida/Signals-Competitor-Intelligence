@@ -39,10 +39,21 @@ those 13 are a full fiscal year stale.
 2. **Annual only.** The call site hardcodes `doc="DFP"` (`lambda_port.py:1126`).
    `cvm_financials.fetch_statements` supports ITR, and `itr_cia_aberta_2026.zip` is live
    (HTTP 206 today) — quarterly *results* for listed competitors are simply never fetched.
-3. **Stale by construction.** The year default is `today.year - 1`. DFP package year *N*
-   contains fiscal year *N−1*, so the default resolves to FY2024 — which is exactly what
-   the store holds. `dfp_cia_aberta_2026.zip` (FY2025) is live today. The default should
-   be the newest *published* package, found by probing, not arithmetic on today's date.
+3. **A year default that guesses.** The year default is `today.year - 1`.
+
+   > **Correction (2026-09-19, while implementing #145).** This ADR first claimed the
+   > default was "stale by construction" because DFP package year *N* holds fiscal year
+   > *N−1*. That is wrong: the package year is the fiscal **reference** year.
+   > `dfp_cia_aberta_2025.zip` carries `DT_REFER = 2025-12-31` for 438 issuers, and
+   > `dfp_cia_aberta_2026.zip` carries 8 — only those whose fiscal year has already ended
+   > in 2026. So `today.year - 1` is right for most of the year and collapses every
+   > January–March, when last year's DFPs have not been filed yet. The store's FY2024
+   > contents therefore came from a pinned `ONCA_FINANCIALS_YEAR`, not from the default.
+
+   Either way the fix is the same and is what #145 asked for: pick the newest package that
+   actually carries filings, by **content**, not by arithmetic on today's date. The floor
+   has to be an issuer count rather than a truthiness check — an in-progress package is
+   not empty, it is sparse, and a bare `if stmts:` would have taken the 8.
 
 ### The 4016 finding — #92's stated blocker is wrong
 
@@ -200,7 +211,7 @@ new capability and should not be started while the built path sits switched off.
 
 | # | Story | Route | Effort |
 | --- | --- | --- | --- |
-| [#145](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/145) | F1 — CVM statements ingester is off, annual-only, a year stale | CVM (existing) | M |
+| [#145](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/145) | F1 — CVM statements ingester is off, annual-only, a year stale — **SHIPPED 2026-09-19** | CVM (existing) | M |
 | [#146](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/146) | F2 — mine COSIF 4010 groups 7/8; #92's stated blocker is wrong | COSIF (existing) | M |
 | [#147](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/147) | F3 **spike** — MZiQ coverage + workbook stability, with a kill criterion | IR sites | S–M |
 | [#148](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/148) | F4 — IR results-workbook adapter, triggered off CVM IPE (**gated on #147**) | IR sites | L |

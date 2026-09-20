@@ -1109,30 +1109,13 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             except Exception as exc:  # pragma: no cover - best-effort, never blocks ingest
                 print(f"Warning: NER harvest skipped: {exc}")
 
-    # Financial statements (issue #7 / ADR 011 stage 6): CVM DFP → per-issuer key-metric
-    # store (financials/index.json). Filings are annual/quarterly, so this is a periodic
-    # best-effort refresh, gated OFF by default (ONCA_FINANCIALS=true to enable).
-    if os.environ.get("ONCA_FINANCIALS", "false").lower() in ("1", "true", "yes"):
-        try:
-            with _source_budget("financials DFP", deadline, per_source):
-                import datetime as _dt
-
-                from src.ingest import cvm_financials
-                from src.synth import entities as _ent
-                from src.synth import entity_registry as _er
-
-                bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
-                year = int(os.environ.get("ONCA_FINANCIALS_YEAR", str(_dt.date.today().year - 1)))
-                stmts = cvm_financials.fetch_statements(year, doc="DFP")
-                idx = cvm_financials.build_index(
-                    list(_er.list_entities(include_inactive=True)), stmts,
-                    resolver=_ent.resolve_entities,
-                )
-                if idx and bucket:
-                    cvm_financials.persist(bucket, idx)
-                print(f"financials DFP {year}: issuers={len(stmts)} matched={len(idx)}")
-        except Exception as exc:  # pragma: no cover - best-effort, never blocks ingest
-            print(f"Warning: financials ingest skipped: {exc}")
+    # Financial statements (#7) moved OUT of this handler by #145 / ADR 028. They now run
+    # as CvmStatementsTask on the monthly OncaFinancialsPipeline
+    # (`cvm_financials.lambda_handler`). CVM publishes quarterly; downloading a ~30MB
+    # package three times a day against this handler's source budget bought nothing, and
+    # the gate here (`ONCA_FINANCIALS`) was never set in CDK, so it never ran at all.
+    # Deliberately no fallback: two writers to financials/index.json is how a fresh store
+    # gets overwritten by a stale one.
 
     # FIAGRO agri-funds — PL / cotista moves + newly-registered classes as
     # narrative-ready signal (task b). Entity discovery above only populates the

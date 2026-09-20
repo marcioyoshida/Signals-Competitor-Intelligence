@@ -3104,6 +3104,30 @@ class OncaPrototypeStack(Stack):
         digests_bucket.grant_read_write(balancete_fn)
         entities_table.grant_read_data(balancete_fn)
 
+        # #145 / ADR 028 — CVM DFP + ITR statements. Moved here off the 3x/day ingest
+        # handler, where it was gated behind an env var that was never set in CDK, so it
+        # had never run in the deployed stack. CVM publishes quarterly; monthly is already
+        # more often than the data changes.
+        cvm_statements_fn = lambda_.Function(
+            self,
+            "OncaCvmStatements",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.ingest.cvm_financials.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            # Downloads + parses BOTH packages (~13MB DFP + ~20MB ITR). Measured locally
+            # 2026-09-19: 2.5s/272MB for DFP, 5.9s/520MB for ITR, so the ceiling here is
+            # the ITR DRE member held as dicts, not the wall clock.
+            timeout=Duration.minutes(10),
+            memory_size=2048,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+                "ONCA_ENTITIES_TABLE": entities_table.table_name,
+            },
+        )
+        digests_bucket.grant_read_write(cvm_statements_fn)
+        entities_table.grant_read_data(cvm_statements_fn)
+
         soundness_task = sfn_tasks.LambdaInvoke(
             self,
             "SoundnessTask",
@@ -3125,6 +3149,19 @@ class OncaPrototypeStack(Stack):
             result_path="$.balancete",
         )
         balancete_task.add_retry(
+            errors=["States.ALL"],
+            max_attempts=2,
+            interval=Duration.seconds(30),
+            backoff_rate=2.0,
+        )
+        cvm_statements_task = sfn_tasks.LambdaInvoke(
+            self,
+            "CvmStatementsTask",
+            lambda_function=cvm_statements_fn,
+            payload=sfn.TaskInput.from_object({}),
+            result_path="$.cvm_statements",
+        )
+        cvm_statements_task.add_retry(
             errors=["States.ALL"],
             max_attempts=2,
             interval=Duration.seconds(30),
@@ -3169,9 +3206,11 @@ class OncaPrototypeStack(Stack):
             self,
             "OncaFinancialsPipeline",
             definition_body=sfn.DefinitionBody.from_chainable(
-                soundness_task.next(balancete_task).next(tone_task)
+                soundness_task.next(balancete_task).next(cvm_statements_task).next(tone_task)
             ),
-            timeout=Duration.minutes(30),
+            # Raised from 30 with the CVM task (#145): four sequential tasks, and the new
+            # one can spend ~10 minutes on two package downloads in a bad-network month.
+            timeout=Duration.minutes(45),
         )
         # Monthly: the 6th at 06:00 UTC (03:00 BRT) — a few days after month-end so BCB has
         # published. The no-op guard skips cheaply on months where the quarter is unchanged.
