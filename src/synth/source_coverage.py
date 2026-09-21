@@ -217,7 +217,7 @@ def build(feed: dict[str, Any], *, n_entities: int | None = None) -> dict[str, A
     for spec in ROADMAP:
         r = dict(spec)
         status = r["status"]
-        metric, band, stale = r.get("metric"), None, None
+        metric, band, stale, idle = r.get("metric"), None, None, False
 
         if r.get("lens") and r["lens"] in health:
             h = health[r["lens"]]
@@ -247,12 +247,14 @@ def build(feed: dict[str, Any], *, n_entities: int | None = None) -> dict[str, A
             # days ago while its lens read 0 days stale.
             if rr.get("staleness_days") is not None:
                 stale = rr["staleness_days"]
+            # An event-driven source that found no work is healthy, not quiet-and-suspect.
+            idle = bool(rr.get("idle"))
             # Telemetry outranks the declaration: an erroring ingester is not "live".
             if status == "live" and band == "error":
                 status = "silent"
 
         r.update(status=status, status_label=STATUS_LABEL[status],
-                 metric=metric or "—", band=band, staleness_days=stale)
+                 metric=metric or "—", band=band, staleness_days=stale, idle=idle)
         rows.append(r)
 
     rows.sort(key=lambda o: (GROUPS.index(o["group"]) if o["group"] in GROUPS else 9,

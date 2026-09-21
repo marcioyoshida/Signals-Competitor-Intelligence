@@ -121,3 +121,11 @@ def test_a_gated_source_is_not_demoted_to_silent_by_stale_telemetry():
     assert row["status"] == "gated"      # not "silent" — it is off, not broken
     assert out["n_attention"] == 0 or all(
         r["status"] != "silent" for r in out["rows"] if r["id"] == "contracts")
+
+
+def test_idle_flows_through_to_the_row():
+    feed = _feed(runs=[{"source": "Receita QSA", "band": "ok", "staleness_days": 0,
+                        "idle": True}])
+    out = sc.build(feed)
+    row = next(r for r in out["rows"] if r["id"] == "receita_qsa")
+    assert row["idle"] is True and row["status"] == "live"

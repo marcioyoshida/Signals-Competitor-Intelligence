@@ -32,12 +32,13 @@ from src.diff.engine import DynamoDbState, DynamoDbValueState, detect_moves, det
 from src.ingest.budget import SourceBudgetExceeded as _SourceBudgetExceeded  # noqa: E402
 
 
-def _record_health(label: str, *, ok: bool, error: str | None = None) -> None:
+def _record_health(label: str, *, ok: bool, error: str | None = None,
+                   idle: bool = False) -> None:
     """#76: best-effort per-source run telemetry into the source-health ledger. Never raises."""
     try:
         from src.ingest import source_health
 
-        source_health.record(label, ok=ok, error=error)
+        source_health.record(label, ok=ok, error=error, idle=idle)
     except Exception:  # pragma: no cover - telemetry must never affect ingestion
         pass
 
@@ -790,26 +791,30 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # Receita Federal enrichment: resolve the brand + controllers behind each new
     # entrant's (otherwise anonymous) CNPJ. Own budget so a slow lookup can't lose
     # the entrants list; only new entrants (bounded volume) are enriched.
-    if new_entrants and os.environ.get("ONCA_RECEITA_ENRICH", "true").lower() in (
-        "1",
-        "true",
-        "yes",
-    ):
+    _enrich_on = os.environ.get("ONCA_RECEITA_ENRICH", "true").lower() in ("1", "true", "yes")
+    if new_entrants and _enrich_on:
         try:
             with _source_budget("Receita QSA", deadline, per_source):
                 receita_cnpj.enrich_entrants(new_entrants)
         except Exception as exc:  # pragma: no cover - enrichment is best-effort
             print(f"Warning: Receita enrichment skipped: {exc}")
+    elif _enrich_on:
+        # No new entrants this cycle. This source is EVENT-DRIVEN — it fires only when an
+        # official register adds an institution — so staying silent here made it drift into
+        # `warn`/`stale` on the Fontes tab while working perfectly. Record the idle outcome
+        # so "the registers were quiet" stops reading as "the ingester is degraded".
+        _record_health("Receita QSA", ok=True, idle=True)
 
     # Entities registry auto-create (ADR step 3): give each new fintech entrant's
     # CNPJ a registry record so future signals about it (CVM/news/DOU) resolve and
     # cluster with no redeploy. CNPJ-keyed + idempotent; best-effort, never blocks.
-    if (
-        new_entrants
-        and os.environ.get("ONCA_ENTITIES_TABLE")
-        and os.environ.get("ONCA_ENTITIES_AUTOCREATE", "true").lower()
-        in ("1", "true", "yes")
-    ):
+    _autocreate_on = bool(os.environ.get("ONCA_ENTITIES_TABLE")) and os.environ.get(
+        "ONCA_ENTITIES_AUTOCREATE", "true"
+    ).lower() in ("1", "true", "yes")
+    if not new_entrants and _autocreate_on:
+        # Event-driven, same as Receita QSA above: no new entrants means nothing to create.
+        _record_health("entities auto-create", ok=True, idle=True)
+    if new_entrants and _autocreate_on:
         fintech_only = os.environ.get(
             "ONCA_ENTITIES_AUTOCREATE_FINTECH_ONLY", "true"
         ).lower() in ("1", "true", "yes")

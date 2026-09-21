@@ -46,13 +46,25 @@ def reset() -> None:
     _LEDGER.clear()
 
 
-def record(source: str, *, ok: bool, docs: int | None = None, error: str | None = None) -> None:
+def record(source: str, *, ok: bool, docs: int | None = None, error: str | None = None,
+           idle: bool = False) -> None:
     """Record one source's run outcome. ``ok`` = it completed without raising; ``error`` is the
-    stringified failure (budget/timeout/network) when not ok; ``docs`` is optional fetched count."""
+    stringified failure (budget/timeout/network) when not ok; ``docs`` is optional fetched count.
+
+    ``idle=True`` means the pipeline REACHED this source and it had no work — an
+    event-driven source whose upstream produced nothing this cycle. That is a healthy
+    outcome, not a skipped run, and recording it is what stops such a source drifting into
+    `warn`/`stale` purely because the world was quiet. `Receita QSA` and
+    `entities auto-create` only fire when an official register adds an institution; after
+    six days without one, both read as degraded while working perfectly (1,742 entrants
+    fetched, 0 new). Silence from an event-driven source is the absence of an event, not
+    the absence of health.
+    """
     src = (source or "").strip() or "unknown"
     e = _LEDGER.setdefault(src, {"source": src, "runs": 0})
     e["runs"] = int(e.get("runs") or 0) + 1
     e["last_run"] = _now_iso()
+    e["idle"] = bool(idle)
     if ok:
         e["last_ok"] = e["last_run"]
         e["last_error"] = None

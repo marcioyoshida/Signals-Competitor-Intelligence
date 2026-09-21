@@ -1121,6 +1121,11 @@ function renderSourceCoverage() {
       // execução" next to a disabled source reads as a live incident. Only rows that
       // are supposed to be running now get a band chip.
       const running = r.status === "live" || r.status === "silent";
+      // Event-driven sources (entrant enrichment, registry auto-create) fire only when an
+      // official register adds an institution. Say so, rather than leaving the row looking
+      // like it merely happened to produce nothing.
+      const idle = running && r.idle
+        ? `<span class="flag none">sem novidades no ciclo</span>` : "";
       const bandChip = !running ? ""
         : r.band === "error" ? `<span class="flag gap">erro na execução</span>`
         : (r.band === "stale" || r.band === "warn")
@@ -1132,7 +1137,7 @@ function renderSourceCoverage() {
         <div class="srcrow__h">
           <span class="sst sst--${esc(r.status)}">${esc(r.status_label)}</span>
           <span class="srcrow__l">${esc(r.label)}</span>
-          <span class="srcrow__n">${esc(r.metric)}</span>${stale}${bandChip}
+          <span class="srcrow__n">${esc(r.metric)}</span>${stale}${bandChip}${idle}
         </div>
         <div class="srcrow__m">${esc(r.method)} · ${esc(r.cadence)}${issue}${
           r.note ? `<br>${esc(r.note)}` : ""}</div>

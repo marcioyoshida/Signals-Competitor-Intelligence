@@ -184,3 +184,21 @@ def test_a_new_shard_inherits_history_from_the_pre_split_key():
     assert recs["BCB Pix"]["runs"] == 44
     # and the shard only claimed the source it actually ran
     assert set(sh.load_index("b", s3=s3, shard="news")["records"]) == {"Trade press"}
+
+
+def test_idle_records_a_healthy_run_for_an_event_driven_source():
+    """`Receita QSA` and `entities auto-create` fire only when an official register adds
+    an institution. Staying silent when nothing happened made them drift to warn/stale
+    while working perfectly (1,742 entrants fetched, 0 new, 6 days). Silence from an
+    event-driven source is the absence of an EVENT, not of health."""
+    sh.reset()
+    sh.record("Receita QSA", ok=True, idle=True)
+    rec = sh.ledger()["Receita QSA"]
+    assert rec["idle"] is True and rec["last_ok"] and rec["last_error"] is None
+    assert sh._band(rec) == "ok"
+
+
+def test_a_source_that_really_ran_is_not_marked_idle():
+    sh.reset()
+    sh.record("BCB Pix", ok=True, docs=12)
+    assert sh.ledger()["BCB Pix"]["idle"] is False
