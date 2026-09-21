@@ -2331,6 +2331,60 @@ class OncaPrototypeStack(Stack):
                     "SelfRegisterInteg", self_register_fn),
                 authorizer=jwt_authorizer,
             )
+
+            # E1 (#115): Stripe checkout webhook — the PAID counterpart of the lazy
+            # self-registration above. Same `if google_idp:` block on purpose: the payer
+            # logs in with Google, and entitling someone who then has no way to sign in
+            # is worse than having no funnel at all.
+            #
+            # Routed through the HTTP API (auth_api) WITHOUT an authorizer, not through
+            # a CloudFront/function-URL behavior like the other dashboard endpoints.
+            # Two reasons, both load-bearing:
+            #  - Stripe cannot present basic auth or a Cognito JWT, so the webhook
+            #    SIGNATURE is the authentication. billing_webhook.verify_signature is
+            #    fail-closed: an unset ONCA_STRIPE_WEBHOOK_SECRET rejects everything
+            #    rather than waving it through. Same pattern as /api/v1/agent/ask,
+            #    which also carries its own in-code credential check.
+            #  - A bodied POST through the CloudFront -> function-URL OAC path requires
+            #    the VIEWER to send the SHA-256 of the body in `x-amz-content-sha256`:
+            #    Lambda function URLs reject UNSIGNED-PAYLOAD and CloudFront will not
+            #    hash the body for us (AWS documents this explicitly). Our own clients
+            #    do it in `oacFetch`; Stripe never will, because that header is an AWS
+            #    signing detail no webhook sender knows about. Measured live 2026-09-21:
+            #    without the header a bodied POST dies at the function URL's SigV4 layer
+            #    ("signature we calculated does not match"); with it, the same POST
+            #    reaches the handler. So the function-URL route was never viable here.
+            #
+            # ONCA_BILLING_PRICES maps price_id -> {tier, modules} SERVER-SIDE, so the
+            # buyer never chooses their own entitlement; put_tenant_config's entry-tier
+            # allow-list is an independent second check. Both default EMPTY: the Stripe
+            # rails are still in TEST mode, so supplying them is the go-live switch and
+            # belongs with the live keys, not in this repo.
+            billing_fn = lambda_.Function(
+                self,
+                "OncaBillingWebhook",
+                runtime=lambda_.Runtime.PYTHON_3_11,
+                handler="src.dashboard.billing_webhook.lambda_handler",
+                code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+                timeout=Duration.seconds(30),
+                memory_size=256,
+                environment={
+                    "PYTHONPATH": "/var/task",
+                    "ONCA_TENANT_CONFIG_TABLE": tenant_config_table.table_name,
+                    "ONCA_FEDERATED_MAP_TABLE": federated_map_table.table_name,
+                    "ONCA_BILLING_PRICES": os.environ.get("ONCA_BILLING_PRICES", "{}"),
+                    "ONCA_STRIPE_WEBHOOK_SECRET": os.environ.get(
+                        "ONCA_STRIPE_WEBHOOK_SECRET", ""),
+                },
+            )
+            tenant_config_table.grant_read_write_data(billing_fn)
+            federated_map_table.grant_write_data(billing_fn)
+            auth_api.add_routes(
+                path="/api/billing/stripe",
+                methods=[apigwv2.HttpMethod.POST],
+                integration=apigwv2_int.HttpLambdaIntegration(
+                    "BillingWebhookInteg", billing_fn),
+            )
         # /api/registry/* — the operator control plane over the registry, cut over from
         # shared basic-auth to a verified JWT (2026-09-11). The authorizer only proves
         # WHO is calling; registry_api.py separately requires an ELEVATED claim, so an
