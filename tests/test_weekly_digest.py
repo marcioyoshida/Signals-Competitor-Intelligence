@@ -147,3 +147,101 @@ def test_metric_line_and_priority_lines_are_grounded_in_input():
     assert "Movimentos: 5" in line and "▲2" in line
     lines = wd._priority_lines(_wk()["top_priorities"])
     assert len(lines) == 2 and "Alerta ativo" in lines[0] and "Itaú" in lines[0]
+
+
+class _FakeS3:
+    """Minimal S3 double for the send-once marker."""
+
+    def __init__(self, store=None):
+        self.store = dict(store or {})
+        self.puts = 0
+
+    def get_object(self, Bucket, Key):
+        if (Bucket, Key) not in self.store:
+            raise KeyError("NoSuchKey")
+
+        class _B:
+            def __init__(self, b):
+                self._b = b
+
+            def read(self):
+                return self._b
+
+        return {"Body": _B(self.store[(Bucket, Key)])}
+
+    def put_object(self, Bucket, Key, Body, ContentType=None):
+        self.puts += 1
+        self.store[(Bucket, Key)] = Body
+
+
+def test_already_sent_is_false_when_no_marker_exists():
+    # Fail OPEN: a missing/unreadable marker must not suppress the week's brief.
+    assert wd.already_sent("b", "2026-09-21", s3=_FakeS3()) is False
+
+
+def test_already_sent_matches_only_the_same_day():
+    s3 = _FakeS3()
+    wd.mark_sent("b", "2026-09-21", {"email": True}, s3=s3)
+    assert wd.already_sent("b", "2026-09-21", s3=s3) is True
+    # next week's send must not be blocked by this week's marker
+    assert wd.already_sent("b", "2026-09-28", s3=s3) is False
+
+
+def test_marker_survives_an_unreadable_body():
+    s3 = _FakeS3({("b", wd.SENT_KEY): b"not json"})
+    assert wd.already_sent("b", "2026-09-21", s3=s3) is False
+
+
+def test_mark_sent_records_the_channel_report():
+    import json as _json
+
+    s3 = _FakeS3()
+    wd.mark_sent("b", "2026-09-21", {"email": True, "slack": None}, s3=s3)
+    saved = _json.loads(s3.store[("b", wd.SENT_KEY)])
+    assert saved["date"] == "2026-09-21"
+    assert saved["report"]["email"] is True
+
+
+def test_should_send_only_on_the_configured_weekday():
+    # 2026-09-21 is a Monday, 2026-09-22 a Tuesday.
+    assert wd.should_send("2026-09-21", weekday=0) is True
+    assert wd.should_send("2026-09-22", weekday=0) is False
+    assert wd.should_send("2026-09-22", weekday=1) is True
+
+
+def test_the_pipelines_three_daily_runs_send_the_brief_ONCE():
+    # The regression this guard exists for: OncaPipeline runs 3x/day, every run rebuilds
+    # the feed, so a weekday-only gate mailed every recipient three times each Monday.
+    s3 = _FakeS3()
+    sends = 0
+    for _run in range(3):
+        if wd.should_send("2026-09-21", weekday=0, bucket="b", s3=s3):
+            sends += 1
+            report = {"email": True, "slack": None, "teams": None}
+            if wd.delivered(report):
+                wd.mark_sent("b", "2026-09-21", report, s3=s3)
+    assert sends == 1
+
+
+def test_a_failed_send_leaves_the_day_open_for_a_retry():
+    # All channels unconfigured/errored => not delivered => no marker => the next run
+    # the same day tries again rather than burning the week's only send.
+    s3 = _FakeS3()
+    assert wd.delivered({"email": None, "slack": None, "teams": None}) is False
+    assert wd.delivered({"email": False}) is False
+    assert wd.should_send("2026-09-21", weekday=0, bucket="b", s3=s3) is True
+    assert s3.puts == 0
+
+
+def test_should_send_ignores_a_malformed_as_of():
+    assert wd.should_send("not-a-date", weekday=0) is False
+
+
+def test_a_missing_corpus_date_can_never_skip_a_week():
+    # Regression, found live 2026-09-21: feed.as_of is the CORPUS date and read Sunday on a
+    # Monday run, so a gate keyed to it fired on the wrong day — and would skip the week
+    # outright if no digest ever carried that Monday's date. The schedule is keyed to the
+    # RUN date instead; these are the two dates disagreeing.
+    corpus_date, run_date = "2026-09-20", "2026-09-21"   # Sunday, Monday
+    assert wd.should_send(corpus_date, weekday=0) is False
+    assert wd.should_send(run_date, weekday=0) is True

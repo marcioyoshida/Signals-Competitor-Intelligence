@@ -1787,11 +1787,23 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             from src.dashboard import weekly_digest
 
             _wd_day = int(os.environ.get("ONCA_DIGEST_WEEKDAY", "0"))  # 0 = Monday
-            _as_of = _dt.date.fromisoformat((feed.get("as_of") or _dt.date.today().isoformat())[:10])
-            if _as_of.weekday() == _wd_day:
+            # Schedule off the RUN date, not feed.as_of. `as_of` is the CORPUS date — on a
+            # Monday run it commonly still reads Sunday (verified live 2026-09-21), so gating
+            # on it shifts the brief a day and, worse, skips the week entirely whenever no
+            # digest carries that Monday's date. The recipient would never know.
+            _as_of = _dt.date.today()
+            _wd_bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
+            # The weekday gate alone would send three times every Monday — the pipeline runs
+            # 3x/day and each run rebuilds the feed. `should_send` adds a dated marker so the
+            # send is once-per-day; only a run that actually delivered marks it, so a run
+            # blocked by bad config leaves the day open for the next one to retry.
+            if weekly_digest.should_send(
+                    _as_of.isoformat(), weekday=_wd_day, bucket=_wd_bucket):
                 _report = weekly_digest.send_weekly_digest(
                     feed, dashboard_url=os.environ.get("ONCA_DASHBOARD_URL"))
                 print(f"Weekly CSO digest ({_as_of}): {_report}")
+                if _wd_bucket and weekly_digest.delivered(_report):
+                    weekly_digest.mark_sent(_wd_bucket, _as_of.isoformat(), _report)
         except Exception as exc:  # pragma: no cover - best-effort, never blocks publish
             print(f"Warning: weekly digest skipped: {exc}")
     # ADR 019 Phase 3b — vertical feed scoping: a sectorial deployment publishes ONLY its

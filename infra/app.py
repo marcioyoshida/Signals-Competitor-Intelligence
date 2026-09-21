@@ -1796,12 +1796,20 @@ class OncaPrototypeStack(Stack):
                 # real Teams/Slack webhook URLs + a verified SES sender/recipient are supplied
                 # (see src/dashboard/weekly_digest.py); each channel independently no-ops
                 # (returns None) if its own config is absent, so partial setup is safe.
-                "ONCA_WEEKLY_DIGEST": "false",
+                # ON since 2026-09-21: SES production access was GRANTED (case
+                # 178916509200662) and `onssa.org` is a DKIM-verified sending domain, which
+                # were the two external blockers on #111/G3. Recipient (ONCA_ALERT_EMAIL_TO)
+                # lives in the api-key secret, not here — it is a person, not infrastructure.
+                "ONCA_WEEKLY_DIGEST": "true",
+                "ONCA_ALERT_EMAIL_FROM": "briefing@onssa.org",
                 "ONCA_DIGEST_WEEKDAY": "0",  # 0 = Monday
                 "ONCA_DASHBOARD_URL": "https://d37aa8gtuqquoe.cloudfront.net/exec",
             },
         )
         digests_bucket.grant_read(feed_fn)
+        # weekly_digest.mark_sent writes the dated send marker so the day's later pipeline
+        # runs don't re-send the same brief (the pipeline runs 3x/day).
+        digests_bucket.grant_put(feed_fn)
         site_bucket.grant_put(feed_fn)
         entities_table.grant_read_data(feed_fn)
         # weekly_digest reads Teams/Slack webhook URLs + email addresses from the shared

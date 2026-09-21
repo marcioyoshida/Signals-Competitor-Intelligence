@@ -236,6 +236,76 @@ def send_weekly_digest(feed: dict[str, Any], *, sector: str = "__all__",
     }
 
 
+SENT_KEY = "weekly_digest/last_sent.json"
+
+
+def _s3_client(s3: Any | None = None) -> Any:
+    if s3 is not None:
+        return s3
+    import boto3
+
+    return boto3.client("s3")
+
+
+def already_sent(bucket: str, day: str, *, s3: Any | None = None) -> bool:
+    """Has the brief for `day` (ISO date) already gone out?
+
+    The weekday gate alone is NOT enough: `OncaPipeline` runs three times a day
+    (09:45 / 15:30 / 20:30 UTC) and every run rebuilds the feed, so a Monday-only
+    gate sends the same brief THREE times — to every recipient, every week. Sends
+    are therefore recorded by date, and the second and third runs of the day no-op.
+
+    Absent/unreadable marker ⇒ False (send). Failing open is correct here: a
+    duplicate brief is an annoyance, a silently-skipped one is a missed delivery
+    the recipient has no way to notice.
+    """
+    try:
+        body = _s3_client(s3).get_object(Bucket=bucket, Key=SENT_KEY)["Body"].read()
+        return str(json.loads(body).get("date") or "") == day
+    except Exception:
+        return False
+
+
+def mark_sent(bucket: str, day: str, report: dict[str, Any] | None = None,
+              *, s3: Any | None = None) -> None:
+    """Record that `day`'s brief was delivered. Only call when a channel actually
+    returned True — if every channel was unconfigured (None) or errored (False),
+    leaving the marker alone lets the SAME DAY's later pipeline runs retry, instead
+    of burning the week's only send on a broken config."""
+    payload = {"date": day, "report": dict(report or {})}
+    try:
+        _s3_client(s3).put_object(
+            Bucket=bucket, Key=SENT_KEY,
+            Body=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            ContentType="application/json")
+    except Exception as exc:  # pragma: no cover - best-effort
+        print(f"Warning: could not record weekly digest send: {exc}")
+
+
+def should_send(as_of: str, *, weekday: int = 0, bucket: str | None = None,
+                s3: Any | None = None) -> bool:
+    """Is the brief due for `as_of` (ISO date)? Two conditions, both required:
+    it is the configured weekday, AND it has not already gone out today."""
+    import datetime as _dt
+
+    try:
+        day = _dt.date.fromisoformat(str(as_of)[:10])
+    except Exception:
+        return False
+    if day.weekday() != weekday:
+        return False
+    if bucket and already_sent(bucket, day.isoformat(), s3=s3):
+        return False
+    return True
+
+
+def delivered(report: dict[str, Any] | None) -> bool:
+    """Did any channel actually deliver? Governs whether the day is marked done —
+    an all-None (unconfigured) or all-False (errored) report must leave the day
+    open so a later run the same day can retry."""
+    return any(v is True for v in (report or {}).values())
+
+
 def send_alert(headline: str, *, dashboard_url: str | None = None,
               teams_poster: Poster | None = None, slack_poster: Poster | None = None,
               email_sender: EmailSender | None = None) -> dict[str, bool | None]:
