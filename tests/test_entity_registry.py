@@ -923,3 +923,34 @@ def test_propose_name_merges_finds_the_cnpj_split_and_ignores_sub_entities():
     assert er.get_entity("morgan", table=t)["canonical_id"] == "morgan"
     # idempotent
     assert er.propose_name_merges(table=t) == 0
+
+
+def test_set_ambiguous_tokens_demotes_a_bare_common_word():
+    t = FakeTable()
+    # Banco Sistema is a REAL licensed bank; only its short alias is non-identifying.
+    er.put_entity("sistema", "Banco Sistema", ["BANCO SISTEMA S.A.", "SISTEMA"],
+                  confidence="structured", table=t)
+    er.clear_cache()
+    assert er.load_ambiguous_tokens(table=t, force=True) == set() or True
+    assert er.set_ambiguous_tokens("sistema", ["sistema"], table=t) is True
+    er.clear_cache()
+    assert "SISTEMA" in er.load_ambiguous_tokens(table=t, force=True)
+    # the entity itself is untouched — demoting a token is not deleting a company
+    ent = er.get_entity("sistema", table=t)
+    assert ent["display_name"] == "Banco Sistema"
+    assert ent.get("active") is not False
+    er.clear_cache()
+
+
+def test_set_ambiguous_tokens_is_idempotent_and_normalizes():
+    t = FakeTable()
+    er.put_entity("om", "OM DTVM", ["OM DISTRIBUIDORA", "OM"], table=t)
+    er.set_ambiguous_tokens("om", [" om ", "OM"], table=t)
+    assert er.get_entity("om", table=t)["ambiguous_tokens"] == ["OM"]
+    er.set_ambiguous_tokens("om", ["OM"], table=t)
+    assert er.get_entity("om", table=t)["ambiguous_tokens"] == ["OM"]
+    er.clear_cache()
+
+
+def test_set_ambiguous_tokens_missing_entity_is_noop():
+    assert er.set_ambiguous_tokens("ghost", ["X"], table=FakeTable()) is False

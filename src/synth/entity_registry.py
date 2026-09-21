@@ -2156,6 +2156,34 @@ def set_news_safe(entity_id: str, value: bool = True, table: Any | None = None) 
     return True
 
 
+def set_ambiguous_tokens(entity_id: str, tokens: Iterable[str],
+                         table: Any | None = None) -> bool:
+    """Mark this entity's bare tokens as common words, so they no longer resolve an
+    entity from free text on their own (`load_ambiguous_tokens` reads these).
+
+    The counterpart of `set_news_safe`: that one PROMOTES a bare brand to resolve
+    from news, this one DEMOTES one that never should have. Both exist because the
+    registry, not the code, is authoritative — the built-in AMBIGUOUS_TOKENS is a
+    seed, not the live set.
+
+    Note these entities are real, licensed institutions (Banco Sistema, OM DTVM,
+    BR Consórcios) — it is only their SHORT alias that is non-identifying. Marking
+    the token must never imply deleting or deactivating the entity.
+
+    Returns True if the entity existed and was updated.
+    """
+    t = _table(table)
+    ent = get_entity(entity_id, table=t)
+    if not ent:
+        return False
+    toks = sorted({
+        str(a).upper().strip() for a in (tokens or ()) if str(a).strip()
+    })
+    ent["ambiguous_tokens"] = toks
+    t.put_item(Item=ent)
+    return True
+
+
 def clear_cache() -> None:
     global _ALIAS_MAP_CACHE, _TRUST_MAP_CACHE, _AMBIG_TOKENS_CACHE, _ROLE_MAP_CACHE
     global _CNPJ_ROOT_CACHE
