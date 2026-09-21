@@ -342,15 +342,24 @@ class OncaPrototypeStack(Stack):
             ephemeral_storage_size=Size.mebibytes(1024),
             environment={
                 "PYTHONPATH": "/var/task",
-                # #104 (#14 Stage 2): Receita CNPJ bulk live shard fetch. LEFT OFF — live-tested
-                # 2026-09-08 against the only Lambda-reachable mirror and BOTH a 240s and a 480s
-                # per-source budget were exceeded (the second ran 885s, nearly the 900s Lambda
-                # cap) — the download is genuinely too slow for a shared-Lambda ingest run, not
-                # a bug. The code (src/ingest/receita_bulk.py fetch_shard/shard_for_day) is
-                # correct and tested; it needs a longer-running execution environment (e.g. a
-                # dedicated Fargate/Batch job, or the originally-scoped Athena/Glue pre-staged
-                # partition) before this is worth enabling here.
-                "ONCA_INGEST_RECEITA_BULK": "false",
+                # #104 (#14 Stage 2): Receita CNPJ bulk live shard fetch. ON since 2026-09-20.
+                #
+                # This was OFF with a note saying "the download is genuinely too slow for a
+                # shared-Lambda ingest run, not a bug". **That conclusion was wrong**, and the
+                # numbers say so (measured 2026-09-20 against the live mirror and table):
+                #   mirror index 0.7s · shard download 3.0s (342MB) · parse 32.6s
+                #   dedup ~3,206s  <- 21,749 candidates x resolve_by_cnpj @ 147ms each
+                # The download was never the problem. `propose_candidates` did one DynamoDB
+                # get_item PER CANDIDATE ROW; the registry root-map is the same information in
+                # one cached 4.3s scan. Fixed in src/ingest/receita_bulk.py — the whole source
+                # now runs in ~61s inside its 240s budget (live: shard 4, 25,305 candidates).
+                #
+                # Throttled deliberately: this is propose-only (ADR 011 §4) and every proposal
+                # lands in the curator's review queue, so 25/run (~75/day across 3 runs) keeps
+                # discovery flowing without the review-queue flood that the default 200 (~600/day)
+                # would cause.
+                "ONCA_INGEST_RECEITA_BULK": "true",
+                "ONCA_RECEITA_BULK_MAX_PROPOSE": "25",
                 "ONCA_RECEITA_SOURCE_TIMEOUT_SEC": "240",
                 "ONCA_STATE_TABLE": state_table.table_name,
                 "ONCA_ENTITIES_TABLE": entities_table.table_name,

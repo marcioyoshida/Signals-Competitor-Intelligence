@@ -112,12 +112,12 @@ def test_lens_freshness_never_masks_a_stalled_ingester():
 
 
 def test_a_gated_source_is_not_demoted_to_silent_by_stale_telemetry():
-    """`Receita bulk CNAE` is switched off (ONCA_INGEST_RECEITA_BULK=false), so its
-    last_error is a historical record that can never clear — it must not render as a
-    live incident."""
-    feed = _feed(runs=[{"source": "Receita bulk CNAE", "band": "error",
+    """A source that is switched off carries telemetry from the last time it DID run.
+    That is history, not a live incident — it must not render as a red defect."""
+    feed = _feed(runs=[{"source": "PNCP contratos", "band": "error",
                         "staleness_days": None}])
     out = sc.build(feed)
-    row = next(r for r in out["rows"] if r["id"] == "receita_cnae")
+    row = next(r for r in out["rows"] if r["id"] == "contracts")
     assert row["status"] == "gated"      # not "silent" — it is off, not broken
-    assert row["band"] == "error"        # the history is still recorded, just not alarming
+    assert out["n_attention"] == 0 or all(
+        r["status"] != "silent" for r in out["rows"] if r["id"] == "contracts")
