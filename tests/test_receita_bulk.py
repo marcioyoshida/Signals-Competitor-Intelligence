@@ -49,9 +49,25 @@ class _FakeTable:
     def put_item(self, Item):
         self.items[Item["pk"]] = dict(Item)
 
+    def scan(self, **kw):
+        # propose_candidates dedups via ONE registry scan (load_cnpj_root_map) rather
+        # than a get_item per candidate row — see its docstring.
+        return {"Items": list(self.items.values())}
+
+
+def _entity(eid, *roots):
+    return {"pk": f"ENTITY#{eid}", "type": "entity", "entity_id": eid,
+            "cnpj_roots": list(roots)}
+
+
+def _clear_registry_cache():
+    from src.synth import entity_registry as er
+    er.load_cnpj_root_map(table=_FakeTable(), force=True)
+
 
 def test_propose_dedups_by_cnpj_and_skips_nameless():
-    t = _FakeTable({"CNPJ#55555555": {"entity_id": "known"}})  # already registered
+    _clear_registry_cache()
+    t = _FakeTable({"ENTITY#known": _entity("known", "55555555")})  # already registered
     rows = [
         {"cnpj": "55555555000199", "name": "KNOWN BANK", "cnae": "6422", "industry": "banking"},
         {"cnpj": "66666666000199", "name": "NEW FINTECH", "cnae": "6499", "industry": "fintech"},
@@ -63,6 +79,7 @@ def test_propose_dedups_by_cnpj_and_skips_nameless():
 
 
 def test_propose_respects_budget():
+    _clear_registry_cache()
     t = _FakeTable()
     rows = [{"cnpj": f"{80000000 + i:08d}000199", "name": f"CO {i}", "cnae": "6499"}
             for i in range(5)]
@@ -122,3 +139,42 @@ def test_fetch_shard_best_effort_on_download_failure(tmp_path):
     def _boom(url, path, *, deadline=None):
         raise TimeoutError("exceeded budget")
     assert rb.fetch_shard(3, dump_date="2026-08-09", dest_dir=str(tmp_path), downloader=_boom) == []
+
+
+def test_dedup_costs_one_scan_regardless_of_how_many_rows():
+    """The budget bug: this used to be a DynamoDB get_item PER CANDIDATE, and one
+    Estabelecimentos shard yields ~21.7k of them (~3,206s of round-trips measured
+    2026-09-20). The dedup must scale with the REGISTRY, not with the dump."""
+    _clear_registry_cache()
+
+    class CountingTable(_FakeTable):
+        scans = 0
+        gets = 0
+
+        def scan(self, **kw):
+            CountingTable.scans += 1
+            return super().scan(**kw)
+
+        def get_item(self, Key):
+            CountingTable.gets += 1
+            return super().get_item(Key)
+
+    t = CountingTable({"ENTITY#known": _entity("known", "55555555")})
+    rows = [{"cnpj": f"{90000000 + i:08d}000199", "name": f"CO {i}", "cnae": "6499"}
+            for i in range(500)]
+    rows.append({"cnpj": "55555555000199", "name": "KNOWN", "cnae": "6422"})
+    rep = rb.propose_candidates(rows, max_propose=3, table=t)
+
+    assert rep["seen"] == 501 and rep["already"] == 1
+    assert CountingTable.scans == 1          # one registry read for 501 candidates
+    # the only remaining get_items are propose_review's idempotency checks, which are
+    # bounded by max_propose — NOT by the number of candidate rows
+    assert CountingTable.gets <= 3
+
+
+def test_caller_can_pass_a_prebuilt_root_map():
+    t = _FakeTable()
+    rep = rb.propose_candidates(
+        [{"cnpj": "55555555000199", "name": "KNOWN", "cnae": "6422"}],
+        table=t, known_roots={"55555555": "known"})
+    assert rep["already"] == 1 and rep["proposed"] == []

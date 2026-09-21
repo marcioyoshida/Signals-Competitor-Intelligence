@@ -51,10 +51,9 @@ def test_a_financial_source_reaching_nobody_is_a_defect_not_quiet():
 
 
 def test_run_telemetry_outranks_the_declaration():
-    feed = _feed(runs=[{"source": "Receita bulk CNAE", "band": "error",
-                        "staleness_days": None}])
+    feed = _feed(runs=[{"source": "Receita QSA", "band": "error", "staleness_days": None}])
     out = sc.build(feed)
-    row = next(r for r in out["rows"] if r["id"] == "receita_cnae")
+    row = next(r for r in out["rows"] if r["id"] == "receita_qsa")
     assert row["status"] == "silent" and row["band"] == "error"
 
 
@@ -110,3 +109,15 @@ def test_lens_freshness_never_masks_a_stalled_ingester():
     row = next(r for r in out["rows"] if r["id"] == "news")
     assert row["staleness_days"] == 11
     assert row["band"] == "stale"
+
+
+def test_a_gated_source_is_not_demoted_to_silent_by_stale_telemetry():
+    """`Receita bulk CNAE` is switched off (ONCA_INGEST_RECEITA_BULK=false), so its
+    last_error is a historical record that can never clear — it must not render as a
+    live incident."""
+    feed = _feed(runs=[{"source": "Receita bulk CNAE", "band": "error",
+                        "staleness_days": None}])
+    out = sc.build(feed)
+    row = next(r for r in out["rows"] if r["id"] == "receita_cnae")
+    assert row["status"] == "gated"      # not "silent" — it is off, not broken
+    assert row["band"] == "error"        # the history is still recorded, just not alarming

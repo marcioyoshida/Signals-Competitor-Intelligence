@@ -145,9 +145,12 @@ ROADMAP: list[Row] = [
         metric="entities", note="ADR 011 — duas verticais, portão de qualidade de nome"),
     Row("receita_qsa", "Receita QSA (controladores)", "registro", "live",
         run_source="Receita QSA", method="bulk", cadence="sob demanda"),
-    Row("receita_cnae", "Receita bulk CNAE", "registro", "live",
-        run_source="Receita bulk CNAE", method="bulk", cadence="sob demanda",
-        note="estoura o orçamento de 480s com frequência — ver telemetria"),
+    Row("receita_cnae", "Receita bulk CNAE (descoberta por CNAE)", "registro", "gated",
+        run_source="Receita bulk CNAE", method="bulk (shard mensal)", cadence="sob demanda",
+        issue="104",
+        note="ONCA_INGEST_RECEITA_BULK=false. O erro de orçamento herdado era dedup "
+             "linha-a-linha no DynamoDB (~21,7 mil get_item por shard); agora é UMA "
+             "varredura em memória. Propose-only (ADR 011 §4)."),
     Row("consorcio", "BCB consórcio (roster)", "registro", "live",
         run_source="entity discovery consórcio", method="OLINDA", cadence="3×/dia",
         issue="46"),

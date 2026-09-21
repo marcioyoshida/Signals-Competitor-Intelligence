@@ -122,11 +122,32 @@ def parse_estabelecimentos(
 
 def propose_candidates(
     rows: Iterable[dict[str, Any]], *, max_propose: int = 200, table: Any | None = None,
+    known_roots: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Dedup FS-CNAE candidates against the registry by CNPJ root; PROPOSE the new ones
-    (never auto-create — ADR 011 §4). Returns a report. Idempotent by (kind, key)."""
+    (never auto-create — ADR 011 §4). Returns a report. Idempotent by (kind, key).
+
+    **The dedup is ONE scan, not one query per row.** This used to call
+    ``er.resolve_by_cnpj`` for every candidate, which is a DynamoDB ``get_item`` each —
+    and a single Estabelecimentos shard yields ~21.7k FS-CNAE candidates. Measured
+    2026-09-20 at 147ms per call from outside the region (~10ms in-region), that is
+    3,206s (53 min) of round-trips — against a 480s source budget inside a 900s Lambda.
+    The source had therefore NEVER completed a run: `last_ok` was null across its whole
+    history, and it died with `Receita bulk CNAE exceeded 480s budget` every time, the
+    alarm landing inside botocore (which re-wraps it as an HTTPClientError).
+
+    ``er.load_cnpj_root_map()`` is the same information in one cached scan — 4.3s for
+    1,686 roots — so the per-row cost becomes a dict lookup. ~750x less wall clock, and
+    it scales with the REGISTRY (thousands) instead of with the DUMP (millions).
+    """
     from src.synth import entity_registry as er
 
+    if known_roots is None:
+        # force=True: the entity-discovery stages run BEFORE this one in the ingest
+        # handler and create entities, so a cached map would be stale and we would
+        # propose duplicates of rows created minutes ago. One extra scan (~4s) against
+        # the 3,206s this function used to spend is not a trade worth thinking about.
+        known_roots = er.load_cnpj_root_map(table=table, force=True)
     report: dict[str, Any] = {"seen": 0, "already": 0, "proposed": [], "no_name": 0}
     budget = max_propose
     for r in rows:
@@ -134,7 +155,7 @@ def propose_candidates(
         root = "".join(ch for ch in str(r.get("cnpj") or "") if ch.isdigit())[:8]
         if not root:
             continue
-        if er.resolve_by_cnpj(root, table=table):
+        if root in known_roots:
             report["already"] += 1
             continue
         if budget <= 0:

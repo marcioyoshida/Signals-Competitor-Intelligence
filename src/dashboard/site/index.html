@@ -1110,12 +1110,19 @@ function renderSourceCoverage() {
     html += inGroup.map(r => {
       // Staleness only earns a chip when it is actually old — a "0 dias" chip on every
       // healthy row is noise that makes the one stale row harder to see.
-      const stale = (r.staleness_days != null && r.staleness_days >= 2)
+      const stale = (r.staleness_days != null && r.staleness_days >= 2
+                     && (r.status === "live" || r.status === "silent"))
         ? `<span class="flag low">${r.staleness_days}d sem dados</span>` : "";
       // A band of stale/warn earns a visible chip too — an ingester that has not
       // succeeded in 11 days is the thing this tab exists to surface, and it is
       // invisible in the narrative counts (see source_coverage on the #76 blind spot).
-      const bandChip = r.band === "error" ? `<span class="flag gap">erro na execução</span>`
+      // Telemetry describes the LAST time a source ran. For a source that is switched
+      // off or not built yet, that is history, not current state — showing "erro na
+      // execução" next to a disabled source reads as a live incident. Only rows that
+      // are supposed to be running now get a band chip.
+      const running = r.status === "live" || r.status === "silent";
+      const bandChip = !running ? ""
+        : r.band === "error" ? `<span class="flag gap">erro na execução</span>`
         : (r.band === "stale" || r.band === "warn")
           ? `<span class="flag low">execução ${esc(r.band === "stale" ? "parada" : "atrasada")}</span>` : "";
       const issue = r.issue
