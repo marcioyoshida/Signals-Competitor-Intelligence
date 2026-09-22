@@ -111,12 +111,15 @@
 
   <!-- E2 (#154): the sample is the PRIMARY action. A prospect who can inspect real
        output converts on evidence; "fale conosco" asks them to spend a meeting to
-       find out whether it is worth a meeting. The mailto stays as the secondary
-       path — and is what E3 (#155) replaces with a real channel. -->
+       find out whether it is worth a meeting.
+       E3 (#155): the fallback is now a role address, contato@onssa.org, not a
+       personal inbox — see infra/app.py's OncaContactReceiptRule/OncaContactForward
+       for how mail sent there actually gets read. -->
   <div class="cta">
     <a class="btn" href="/sample/">Ver uma amostra real</a>
     <div class="note" style="margin-top:12px">
-      ou <a href="mailto:marcioyoshida@gmail.com?subject=Onça%20—%20Interesse%20comercial">falar com a Onça</a>
+      ou <a href="mailto:contato@onssa.org?subject=Onça%20—%20Interesse%20comercial">falar com a Onça</a>
+      &nbsp;·&nbsp; <a href="/docs/">guia do plano Entry</a>
     </div>
   </div>
 

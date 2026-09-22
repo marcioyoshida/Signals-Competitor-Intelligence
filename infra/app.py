@@ -29,7 +29,9 @@ from aws_cdk import aws_iam as iam
 from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_s3 as s3
 from aws_cdk import aws_s3_deployment as s3deploy
+from aws_cdk import aws_s3_notifications as s3n
 from aws_cdk import aws_s3vectors as s3vectors
+from aws_cdk import aws_ses as ses
 from aws_cdk import aws_sns as sns
 from aws_cdk import aws_sns_subscriptions as sns_subs
 from aws_cdk import aws_stepfunctions as sfn
@@ -752,20 +754,23 @@ class OncaPrototypeStack(Stack):
         # the whole corpus. What makes the sample publishable is not its filename but
         # `derive_sample_feed` — it withholds the officer block, the framework stores,
         # the depth sections and the entity roster before this path ever serves it.
-        # The directory-index rewrite lives in the basic-auth Function, which this
-        # behavior deliberately does NOT carry — so /sample and /sample/ would 403 on
-        # a nonexistent S3 "directory" key (measured live). A separate, auth-free
-        # function does only the rewrite. Keeping it separate is the point: nothing
-        # here should be able to drift into granting or gating access.
-        sample_rewrite_fn = cloudfront.Function(
+        # The directory-index rewrite lives in the basic-auth Function, which these
+        # behaviors deliberately do NOT carry — so a bare /sample or /docs would 403 on
+        # a nonexistent S3 "directory" key (measured live for /sample). A separate,
+        # auth-free function does only the rewrite, for every no-auth public path, not
+        # one Function per path. Keeping it separate is the point: nothing on the
+        # public side should be able to drift into granting or gating access.
+        public_rewrite_fn = cloudfront.Function(
             self,
-            "OncaSampleRewrite",
+            "OncaPublicRewrite",
             code=cloudfront.FunctionCode.from_inline(
                 "function handler(event) {\n"
                 "  var r = event.request;\n"
-                '  if (r.uri === "/sample" || r.uri === "/sample/") {\n'
-                '    r.uri = "/sample/index.html";\n'
-                "  }\n"
+                '  var routes = { "/sample": "/sample/index.html",\n'
+                '                 "/sample/": "/sample/index.html",\n'
+                '                 "/docs": "/docs/index.html",\n'
+                '                 "/docs/": "/docs/index.html" };\n'
+                "  if (routes[r.uri]) { r.uri = routes[r.uri]; }\n"
                 "  return r;\n"
                 "}\n"
             ),
@@ -776,7 +781,7 @@ class OncaPrototypeStack(Stack):
             viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
             function_associations=[
                 cloudfront.FunctionAssociation(
-                    function=sample_rewrite_fn,
+                    function=public_rewrite_fn,
                     event_type=cloudfront.FunctionEventType.VIEWER_REQUEST,
                 )
             ],
@@ -789,6 +794,22 @@ class OncaPrototypeStack(Stack):
             # day's signals, not an edge-cached week-old copy that makes a live product
             # look abandoned.
             cache_policy=cloudfront.CachePolicy.CACHING_DISABLED,
+        )
+
+        # E3 (#155): the Entry getting-started guide — same public, credential-free
+        # class as /pricing.html and /sample/*. Static content, no feed to leak, so
+        # there is no derive_*-style scoping concern here; the only thing this page
+        # must not do is invent numbers, which is a copy discipline, not a code gate.
+        distribution.add_behavior(
+            "/docs*",
+            site_origin,
+            viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+            function_associations=[
+                cloudfront.FunctionAssociation(
+                    function=public_rewrite_fn,
+                    event_type=cloudfront.FunctionEventType.VIEWER_REQUEST,
+                )
+            ],
         )
 
         # --- Phase C: identity (Cognito) — ADR 002 Decision 7 "7 gates 6" --------
@@ -1162,6 +1183,7 @@ class OncaPrototypeStack(Stack):
                 "/entry/index.html",
                 "/pricing.html",  # G5 (#113): public, unauthenticated
                 "/sample/index.html",  # E2 (#154): public conversion sample
+                "/docs/index.html",  # E3 (#155): public Entry getting-started guide
                 # v2 multi-context dashboards (six clean routes + shared assets).
                 "/v2/admin/index.html",
                 "/v2/newentry/index.html",
@@ -2435,6 +2457,100 @@ class OncaPrototypeStack(Stack):
                 integration=apigwv2_int.HttpLambdaIntegration(
                     "BillingWebhookInteg", billing_fn),
             )
+
+        # E3 (#155): the public contact channel — `contato@onssa.org` — so the
+        # pricing/sample pages never have to show a personal inbox as the company's
+        # commercial front door. `onssa.org` was SEND-only from G3 (#111): its SPF
+        # record locks it to `amazonses.com`, and there was no MX record, so nothing
+        # could reach a mailbox behind that address. This is the receiving half.
+        #
+        # SES allows exactly ONE active receipt rule SET per region, and this account
+        # already has one (from another fork's support inbox) — so this adds a RULE to
+        # that existing active set rather than creating a competing one, which would
+        # either fail to activate or silently take over inbound routing for every
+        # fork sharing the account. `SHARED_RECEIPT_RULE_SET` names it explicitly so
+        # the coupling is visible in the diff, not discovered by an outage.
+        SHARED_RECEIPT_RULE_SET = os.environ.get(
+            "ONCA_SES_RULE_SET_NAME", "bluefin-inbound")
+
+        contact_bucket = s3.Bucket(
+            self,
+            "OncaContactMailBucket",
+            removal_policy=RemovalPolicy.RETAIN,  # inbound mail; never auto-delete
+            block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
+            enforce_ssl=True,
+        )
+        # SES's receipt-rule S3 action writes as the SES service principal, not as an
+        # IAM identity in this account — grant_put() (bucket-owner grant) can't cover
+        # that. `aws:SourceAccount` is the guard against a different account's SES
+        # rule writing into this bucket by guessing its name (matches the working
+        # policy on this same account's other SES-fed bucket, bluefinstack's support
+        # mailbox — `aws:Referer` looked right per older docs but SES's own CREATE-time
+        # write probe against a prefix-restricted resource with that condition key
+        # failed live: CREATE_FAILED "Could not write to bucket").
+        contact_bucket.add_to_resource_policy(
+            iam.PolicyStatement(
+                actions=["s3:PutObject"],
+                principals=[iam.ServicePrincipal("ses.amazonaws.com")],
+                resources=[contact_bucket.arn_for_objects("*")],
+                conditions={"StringEquals": {"aws:SourceAccount": self.account}},
+            )
+        )
+
+        contact_forward_fn = lambda_.Function(
+            self,
+            "OncaContactForward",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.dashboard.contact_forward.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.seconds(30),
+            memory_size=256,
+            environment={
+                "PYTHONPATH": "/var/task",
+                # The operator's own inbox, kept out of this file on purpose — the
+                # forwarder has no business knowing whose address that is; it is
+                # configuration, not a wired-in destination. Empty ⇒ fails closed
+                # (contact_forward.forward_object refuses to forward nowhere).
+                "ONCA_CONTACT_FORWARD_TO": os.environ.get("ONCA_CONTACT_FORWARD_TO", ""),
+            },
+        )
+        contact_bucket.grant_read(contact_forward_fn)
+        contact_forward_fn.add_to_role_policy(
+            iam.PolicyStatement(actions=["ses:SendEmail", "ses:SendRawEmail"],
+                                resources=["*"])
+        )
+        contact_bucket.add_event_notification(
+            s3.EventType.OBJECT_CREATED,
+            s3n.LambdaDestination(contact_forward_fn),
+            s3.NotificationKeyFilter(prefix="contato/"),
+        )
+
+        contact_receipt_rule = ses.CfnReceiptRule(
+            self,
+            "OncaContactReceiptRule",
+            rule_set_name=SHARED_RECEIPT_RULE_SET,
+            rule=ses.CfnReceiptRule.RuleProperty(
+                name="onca-contact",
+                enabled=True,
+                recipients=["contato@onssa.org"],
+                actions=[
+                    ses.CfnReceiptRule.ActionProperty(
+                        s3_action=ses.CfnReceiptRule.S3ActionProperty(
+                            bucket_name=contact_bucket.bucket_name,
+                            object_key_prefix="contato/",
+                        )
+                    )
+                ],
+                tls_policy="Optional",
+            ),
+        )
+        # CDK's add_to_resource_policy() doesn't wire an implicit CFN dependency the
+        # way grant_*() does, so without this the ReceiptRule and the BucketPolicy can
+        # be created in parallel — and SES validates write access to the bucket AT
+        # RULE-CREATE TIME, so a race loses as CREATE_FAILED "Could not write to
+        # bucket" (measured live twice before adding this).
+        contact_receipt_rule.node.add_dependency(contact_bucket.policy)
+
         # /api/registry/* — the operator control plane over the registry, cut over from
         # shared basic-auth to a verified JWT (2026-09-11). The authorizer only proves
         # WHO is calling; registry_api.py separately requires an ELEVATED claim, so an

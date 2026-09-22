@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Onça — Guia do plano Entry</title>
+<style>
+  /* E3 (#155). Same tokens as pricing.html/sample — one visual system across every
+     page a stranger can reach without credentials. */
+  :root {
+    --bg: #0e1116; --panel: #161b22; --panel2: #1d232c; --border: #2a313b;
+    --ink: #e6e9ee; --ink2: #aeb6c2; --muted: #79818c; --accent: #3fbdb6;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  header { padding: 28px 22px 10px; text-align: center; }
+  header h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: .2px; }
+  header .sub { color: var(--muted); font-size: 14px; }
+  .wrap { padding: 20px 22px 60px; max-width: 760px; margin: 0 auto; }
+  section { margin-top: 34px; }
+  h2 { font-size: 15px; color: var(--ink2); text-transform: uppercase;
+       letter-spacing: .5px; margin-bottom: 12px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+          padding: 18px 20px; }
+  .verticals { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+               gap: 10px; }
+  .v { background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+       padding: 12px 14px; }
+  .v b { display: block; font-size: 14px; }
+  .v span { color: var(--muted); font-size: 12.5px; }
+  dl { margin: 0; }
+  dt { font-weight: 650; margin-top: 14px; }
+  dt:first-child { margin-top: 0; }
+  dd { margin: 4px 0 0; color: var(--ink2); }
+  ul { margin: 8px 0 0; padding-left: 20px; color: var(--ink2); }
+  li { margin-bottom: 4px; }
+  code { background: var(--panel2); border-radius: 4px; padding: 1px 6px; font-size: 13px; }
+  .cta { text-align: center; margin-top: 36px; }
+  .cta a.btn { display: inline-block; background: var(--accent); color: #06211f; font-weight: 650;
+               padding: 10px 22px; border-radius: 10px; font-size: 14px; }
+  .foot { color: var(--muted); font-size: 12.5px; margin-top: 34px;
+          border-top: 1px solid var(--border); padding-top: 18px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🐆 Guia do plano Entry</h1>
+  <div class="sub">O que você recebe, como ler um sinal, e o que fica de fora</div>
+</header>
+<div class="wrap">
+
+  <section>
+    <h2>O que é o Entry</h2>
+    <div class="card">
+      Entry é um portal por setor: cada tenant licencia <b>um</b> dos cinco setores abaixo, sobre a
+      infraestrutura compartilhada do portal. Todo cartão que você vê é gerado do mesmo pipeline que
+      atende os clientes Enterprise — não é uma versão reduzida da inteligência, é um recorte de setor
+      e de profundidade (veja "O que não está incluído" abaixo).
+    </div>
+  </section>
+
+  <section>
+    <h2>Setores elegíveis</h2>
+    <div class="verticals">
+      <div class="v"><b>Fundos Imobiliários</b><span>FIIs — real-estate-funds</span></div>
+      <div class="v"><b>Fundos do Agro</b><span>FIAGRO — agri-funds</span></div>
+      <div class="v"><b>Consórcios</b><span>consorcio</span></div>
+      <div class="v"><b>Crypto &amp; Digital Assets</b><span>crypto</span></div>
+      <div class="v"><b>Betting &amp; iGaming</b><span>betting</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Como ler um cartão</h2>
+    <div class="card">
+      <dl>
+        <dt>Score</dt>
+        <dd>0–1, combinando sinal, magnitude, ineditismo e amplitude da narrativa. Não é uma nota de
+          risco absoluta — compare cartões do mesmo setor entre si, não setores diferentes.</dd>
+        <dt>● alerta</dt>
+        <dd>Sinaliza um cartão que cruzou o limiar de relevância imediata para aquele setor — vale
+          leitura prioritária, não é um veredito automático.</dd>
+        <dt>Fonte</dt>
+        <dd>Todo cartão cita a fonte primária de onde o fato foi extraído (CVM, BCB, imprensa
+          especializada, etc.). Onça nunca publica uma narrativa sem uma citação rastreável — se você
+          não consegue verificar a origem de um cartão, é um bug, não um traço do produto.</dd>
+      </dl>
+    </div>
+  </section>
+
+  <section>
+    <h2>O resumo semanal</h2>
+    <div class="card">
+      Toda segunda-feira, um resumo por e-mail com os sinais mais relevantes da semana no seu setor —
+      o mesmo brief que os clientes Enterprise recebem, escopado à sua licença. Chega de
+      <code>briefing@onssa.org</code>; adicione à lista de remetentes confiáveis para não cair em spam.
+    </div>
+  </section>
+
+  <section>
+    <h2>O que não está incluído no Entry</h2>
+    <div class="card">
+      <ul>
+        <li>Sinais de estresse financeiro e recuperação judicial por entidade</li>
+        <li>Movimentos de capital: captações, fusões e aquisições</li>
+        <li>Cobertura reputacional e de conduta</li>
+        <li>Demonstrações financeiras estruturadas (CVM DFP/ITR)</li>
+        <li>Painéis executivos por diretoria (CSO, CRO, CCO, CPO)</li>
+        <li>Frameworks por entidade: SWOT, TOWS, Porter, PESTLE, Ansoff, BCG, 7S</li>
+        <li>Pergunte à Onça (agente de Q&amp;A fundamentado no corpus)</li>
+      </ul>
+      Essas camadas fazem parte do plano SaaS, licenciado por setor. Veja
+      <a href="/pricing.html">planos e preços</a>.
+    </div>
+  </section>
+
+  <section>
+    <h2>Dúvidas</h2>
+    <div class="card">
+      Fale com <a href="mailto:contato@onssa.org">contato@onssa.org</a> — canal comercial e de
+      suporte da Onça, respondido por um humano.
+    </div>
+  </section>
+
+  <div class="cta">
+    <a class="btn" href="/sample/">Ver uma amostra real</a>
+  </div>
+
+  <div class="foot">
+    Este guia cobre o plano Entry. Para Sovereign e implantações dedicadas, veja
+    <a href="/pricing.html">planos e preços</a> ou escreva para
+    <a href="mailto:contato@onssa.org">contato@onssa.org</a>.
+  </div>
+</div>
+</body>
+</html>
