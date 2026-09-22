@@ -182,6 +182,23 @@ factored for it, not a config flag on the existing one. Concretely, in order:
 3. **Flip `entities.py`'s resolution mode** — internal registry lookup (vendor
    stack, unchanged) vs. `/resolve` HTTP call (tenant stack) — behind one seam,
    so synth code above it never branches on which plane it's running in.
+   **Started 2026-09-22** (`src/synth/resolver.py`): the seam covers exactly the
+   known-id lookups (`resolve_by_cnpj`, and by construction `name`/`ispb`/
+   `ticker` once a caller needs them) that map onto a single `get_item` / a
+   single `/resolve` call. It does **not** cover `resolve_entities` — that
+   function scans the FULL alias corpus against free text, and `/resolve`'s
+   response deliberately withholds the alias set (Decision 3), so there is
+   nothing safe to cache and match against remotely. **This is a real,
+   unresolved product gap, not an implementation detail**: a Sovereign tenant's
+   own locally-ingested public-source narratives cannot be entity-tagged by
+   free-text mention at all under the current `/resolve` contract — only
+   documents carrying a structured identifier the tenant already extracted
+   (CNPJ, ticker) can resolve. `resolve_entities` degrades to returning no
+   matches in remote mode (one loud warning, not a crash, not a silent guess).
+   Closing it needs a different mechanism — e.g. the tenant's own local, non-
+   registry candidate-name extraction (a generic NLP pass, not the moat), each
+   candidate then resolved one at a time through the same seam — which is new
+   design work, not implied by "flip the mode," and isn't scoped here.
 4. Pin a supported stack version per ADR 005 §Costs ("the resolve contract is the
    compatibility boundary") — decide the versioning/upgrade story before the
    first tenant deploy, not after two tenants are on different versions.

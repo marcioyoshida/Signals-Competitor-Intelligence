@@ -109,9 +109,25 @@ def resolve_by_cnpj(cnpj: Any) -> str | None:
 
     Returns None when the registry is unavailable, so callers fall back to the name path
     rather than silently dropping everything.
+
+    ADR 016 addendum (2026-09-22) Decision 4 step 3: this is a resolve-by-known-id
+    lookup — CNPJ root in, one entity id out — so it's the one function in this
+    module that seams cleanly onto a Sovereign-plane remote `/resolve` call (see
+    `src.synth.resolver`). `ONCA_RESOLUTION_MODE=remote` routes here through the
+    tenant's local encounter cache + a signed call to the vendor; unset/`registry`
+    (the default) is the exact bulk-map lookup this function has always done —
+    unchanged, so every existing SaaS/vendor caller sees no behavior change.
     """
     root = "".join(c for c in str(cnpj or "") if c.isdigit())[:8]
-    if len(root) != 8 or not os.environ.get("ONCA_ENTITIES_TABLE"):
+    if len(root) != 8:
+        return None
+    from src.synth import resolver
+
+    if resolver.mode() == resolver.REMOTE:
+        result = resolver.resolve_known_id(cnpj_root=root)
+        return result["entity_id"] if result else None
+
+    if not os.environ.get("ONCA_ENTITIES_TABLE"):
         return None
     try:
         from src.synth import entity_registry
@@ -547,7 +563,28 @@ def resolve_entities(item: dict[str, Any]) -> list[str]:
     news does not cluster into Stone the acquirer). A free-text match that is only
     a cited data source ("segundo a Serasa") is likewise dropped. Also links
     QSA-controller parents so a new fintech clusters into a known player's narrative.
+
+    ADR 016 addendum (2026-09-22) Decision 4 step 3: this does NOT seam onto the
+    Sovereign-plane resolver — it scans the FULL curated alias corpus
+    (`_alias_map()`) against free text, and `/resolve`'s response deliberately
+    withholds the alias set, so there is nothing safe to cache and match against
+    remotely. In remote mode this degrades to "no free-text entity attribution"
+    rather than either crashing synth or silently shipping the alias corpus to
+    resolve it locally — see `resolver.guard_free_text_resolution_unavailable`.
     """
+    from src.synth import resolver
+
+    if resolver.guard_free_text_resolution_unavailable():
+        print(
+            "Warning: free-text entity resolution (resolve_entities) has no "
+            "Sovereign-plane equivalent under the current /resolve contract "
+            "(it withholds the alias set by design) — narratives will resolve "
+            "only entities found by a known id (CNPJ/ticker/name) elsewhere in "
+            "the item. See ADR 016 addendum, Decision 4 step 3."
+        )
+    if resolver.mode() == resolver.REMOTE:
+        return []
+
     blob = f" {signal_blob(item)} "
     blob_nospace = blob.replace(" ", "")
     free_text = str(item.get("source") or "").upper() in _FREE_TEXT_SOURCES
