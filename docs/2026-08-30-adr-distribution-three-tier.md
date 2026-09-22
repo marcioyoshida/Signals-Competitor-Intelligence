@@ -1,6 +1,10 @@
 # ADR 016 — Distribution tiers: Entry Portal · SaaS Platform · Sovereign (delivery × vertical)
 
-- Status: **Proposed** (2026-08-30).
+- Status: **Proposed** (2026-08-30). **See
+  [2026-09-22 addendum](2026-09-22-adr016-addendum-sovereign-packaging.md)** for
+  the concrete telemetry-off boundary, the `/resolve` API contract, and a real
+  bug this ADR's design surfaced (`tier="sovereign"` already means something
+  else in the running code) — the design pass #49 needed before any packaging.
 - **Revises** [ADR 015 — Portal & Marketplace](2026-08-29-adr-distribution-portal-marketplace.md).
   ADR 015's **telemetry axis and moat invariant stand**; this ADR adds a second,
   orthogonal **delivery-mechanism / sovereignty axis** and keys the default tier to the
