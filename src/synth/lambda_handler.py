@@ -148,7 +148,17 @@ if __name__ == "__main__":
     # python -m src.synth.lambda_handler /path/to/digest.json
     # python -m src.synth.lambda_handler --s3   (needs AWS creds + bucket env)
     if len(sys.argv) > 1 and sys.argv[1] == "--s3":
-        os.environ.setdefault("ONCA_DIGESTS_BUCKET", "onca-digests-668449743071")
+        # ADR 016 addendum (2026-09-22), Finding 0.4: this used to default to the
+        # VENDOR's own bucket (onca-digests-668449743071) when the env var was
+        # unset — a hardcoded vendor-account resource name is exactly what a
+        # telemetry-off/in-account promise (Sovereign, #49) can't tolerate, even
+        # in a debug-only path never reached by the deployed Lambda. Fail loud
+        # instead: whoever runs this must supply their own account's bucket.
+        if not os.environ.get("ONCA_DIGESTS_BUCKET"):
+            raise SystemExit(
+                "ONCA_DIGESTS_BUCKET is not set — pass your own bucket "
+                "(no default is assumed; see ADR 016 addendum Finding 0.4)"
+            )
         print(lambda_handler({}, None)["body"])
     elif len(sys.argv) > 1:
         digest = json.loads(open(sys.argv[1], encoding="utf-8").read())
