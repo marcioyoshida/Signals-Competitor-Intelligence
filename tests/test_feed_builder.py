@@ -873,3 +873,106 @@ def test_source_coverage_is_operator_only_in_scoped_feeds():
     assert entry.get("source_coverage") == {}
     scoped = feed_builder.scope_feed_to_modules(feed, ["banking"])
     assert scoped.get("source_coverage") == {}
+
+
+# --- E2 (#154): the public conversion sample -------------------------------------
+# This is the ONLY artifact Onça serves to an anonymous reader, so these tests are
+# about what must NOT be in it as much as what must.
+
+def _sample_fixture():
+    from src.synth import executive
+
+    narratives = [
+        _narr("bk", "itau", "2026-08-20", 0.9, is_alert=True),          # banking: higher tier
+        _narr("rf1", "fundoa", "2026-08-20", 0.8, is_alert=True),       # entry, sample vertical
+        _narr("rf2", "fundob", "2026-08-19", 0.6),
+        _narr("rf3", "fundoc", "2026-08-18", 0.4),
+        _narr("ag", "agroca", "2026-08-20", 0.5),                       # entry, OTHER vertical
+    ]
+    imap = {"itau": ["banking"], "fundoa": ["real-estate-funds"],
+            "fundob": ["real-estate-funds"], "fundoc": ["real-estate-funds"],
+            "agroca": ["agri-funds"]}
+    attrs = {k: {"industries": v} for k, v in imap.items()}
+    meta = {s: {"display_name": s} for s in
+            ["banking", "real-estate-funds", "agri-funds"]}
+    feed = feed_builder.build_feed(
+        narratives, industry_map=imap, industry_meta=meta, entity_attrs=attrs
+    )
+    feed["executive"] = executive.build_executive(feed)
+    return feed
+
+
+def test_the_public_sample_shows_one_entry_vertical_and_nothing_else():
+    sample = feed_builder.derive_sample_feed(_sample_fixture())
+
+    assert sample["sample"] is True and sample["sample_of"] == "real-estate-funds"
+    assert {c["id"] for c in sample["feed"]} == {"rf1", "rf2", "rf3"}
+    # not just the higher tier — the OTHER entry verticals are absent too; this is a
+    # sample of one vertical, not a free copy of the entry bundle.
+    assert {e["entity"] for e in sample["entities"]} == {"fundoa", "fundob", "fundoc"}
+    for leaked in ("itau", "agroca"):
+        assert leaked not in sample["entity_attrs"]
+
+
+def test_the_public_sample_never_carries_an_officer_dashboard():
+    # `executive` is DERIVED and has shipped unscoped once before (see
+    # _rescope_executive). On the one anonymous path it is absent, not filtered.
+    sample = feed_builder.derive_sample_feed(_sample_fixture())
+    assert sample["executive"] == {"officers": [], "cso": {}}
+
+
+def test_the_public_sample_withholds_the_paid_depth():
+    feed = _sample_fixture()
+    feed["distress"] = [{"entity": "fundoa", "stage": "RJ"}]
+    feed["reputation"] = [{"entity": "fundoa", "score": 3}]
+    feed["financials"] = [{"entity": "fundob", "revenue": 1}]
+    feed["capital_moves"] = [{"entity": "fundoa", "kind": "raise"}]
+    feed["swot"] = {"fundoa": {"strengths": ["s"]}}
+    feed["porter"] = {"fundoa": {"rivalry": "high"}}
+
+    sample = feed_builder.derive_sample_feed(feed)
+
+    for k in ("distress", "reputation", "financials", "capital_moves",
+              "coverage_gaps", "reviews"):
+        assert sample[k] == [], f"{k} leaked into the public sample"
+    for k in ("swot", "porter", "tows", "pestle", "groups"):
+        assert sample[k] == {}, f"{k} leaked into the public sample"
+    # ...but it SAYS so, rather than silently reading as a thin product.
+    assert set(sample["withheld"]["sections"]) >= {
+        "distress", "reputation", "financials", "capital_moves", "swot", "porter",
+        "executive"}
+
+
+def test_the_public_sample_caps_volume_and_reports_what_it_held_back():
+    sample = feed_builder.derive_sample_feed(_sample_fixture(), limit=2)
+    # most RECENT kept, not an arbitrary two
+    assert [c["id"] for c in sample["feed"]] == ["rf1", "rf2"]
+    assert sample["withheld"]["cards"] == 1
+    # the roster shrinks WITH the cards — fundoc is no longer citable, so publishing
+    # its registry row would hand over an entity the sample doesn't even show.
+    assert {e["entity"] for e in sample["entities"]} == {"fundoa", "fundob"}
+    assert sample["withheld"]["entities"] == 1
+    assert sample["kpis"]["narratives_total"] == 2
+    assert sample["kpis"]["entities_tracked"] == 2
+
+
+def test_the_public_sample_keeps_operator_only_sections_empty():
+    feed = _sample_fixture()
+    feed["integrity"] = {"findings": [{"entity": "fundoa", "kind": "parent_inversion"}],
+                         "counts": {"parent_inversion": 1}, "total": 1}
+    feed["source_coverage"] = {"cvm": {"rows": 10}}
+    feed["regulatory_coverage"] = {"bcb": {"covered": 5}}
+
+    sample = feed_builder.derive_sample_feed(feed)
+    assert sample["integrity"]["findings"] == [] and sample["integrity"]["total"] == 0
+    assert sample["source_coverage"] == {} and sample["regulatory_coverage"] == {}
+    assert sample["source_runs"] == []
+
+
+def test_an_empty_vertical_yields_an_empty_sample_not_a_crash():
+    # fail closed: a vertical with no cards must publish nothing, never fall back to
+    # a wider slice to avoid looking empty.
+    sample = feed_builder.derive_sample_feed(_sample_fixture(), industry="consorcio")
+    assert sample["feed"] == [] and sample["entities"] == []
+    assert sample["sample_of"] == "consorcio"
+    assert sample["kpis"]["narratives_total"] == 0

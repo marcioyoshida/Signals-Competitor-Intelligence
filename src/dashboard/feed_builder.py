@@ -45,6 +45,15 @@ FEED_KEY = "feed.json"
 # ADR 016 — the Entry Portal's scoped slice (entry-tier industries only). The Entry
 # dashboard fetches THIS, never feed.json, so a higher-tier industry can't leak.
 ENTRY_FEED_KEY = "feed.entry.json"
+# E2 (#154) — the PUBLIC conversion sample. Credential-free, so it is a strict subset
+# of the entry slice, not a second projection of the full feed. See derive_sample_feed.
+SAMPLE_FEED_KEY = "feed.sample.json"
+# real-estate-funds is the one entry vertical that is BOTH ga_ready and not CCO-thin
+# under the #117 sales-tier gate, so the sample can show real depth rather than a
+# vertical we would not yet pitch. Overridable, but changing it should follow that
+# measurement, not taste.
+SAMPLE_INDUSTRY = "real-estate-funds"
+SAMPLE_CARD_LIMIT = 12
 
 try:  # single source of truth for the entry-tier vertical set (ADR 016)
     from src.dashboard.tenant_config import ENTRY_INDUSTRIES
@@ -1082,6 +1091,99 @@ def derive_entry_feed(
     return out
 
 
+def derive_sample_feed(
+    feed: dict[str, Any], *, industry: str = SAMPLE_INDUSTRY,
+    limit: int = SAMPLE_CARD_LIMIT,
+) -> dict[str, Any]:
+    """E2 (#154): the PUBLIC, credential-free conversion sample — one entry vertical,
+    deliberately truncated.
+
+    This is the only artifact Onça publishes to an anonymous reader, so it is built by
+    SUBTRACTION from the already-scoped entry feed rather than by assembling something
+    new. `derive_entry_feed` is the thing that has been reviewed for leaks; re-deriving
+    a public slice straight off the full feed would put a second, unreviewed filter on
+    the most exposed path we have.
+
+    Three things are withheld, each for a different reason:
+
+    - **Depth.** distress / capital_moves / reputation / financials / the framework
+      stores (SWOT, TOWS, Porter…) and the officer `executive` block are the entry
+      tier's actual value. Publishing them leaves nothing to buy. The sample proves the
+      corpus is real; it does not deliver the product.
+    - **The roster.** Entities are cut to only those the surviving cards cite — NOT
+      every entity in the vertical. The curated registry IS the commercial asset
+      (ADR: registry as API product); a public list of every institution we track,
+      with aliases and classifications, hands a competitor the expensive half for free.
+    - **Volume.** `limit` most-recent cards, so the reader sees the shape and the
+      citation quality without receiving a usable substitute for a subscription.
+
+    `withheld` is emitted so the page can state honestly what is hidden and how much of
+    it there is. A sample that silently omits the good parts reads as a thin product
+    rather than a preview, which is the opposite of what a conversion surface is for.
+    """
+    slug = str(industry).strip().lower()
+    out = derive_entry_feed(feed, industries=(slug,))
+
+    cards = sorted(
+        out.get("feed") or [], key=lambda c: str(c.get("date") or ""), reverse=True
+    )
+    kept = cards[: max(0, int(limit))]
+    shown: set[str] = set()
+    for c in kept:
+        for e in [c.get("entity"), *(c.get("entities") or [])]:
+            if e:
+                shown.add(e)
+
+    withheld = {
+        "cards": max(0, len(cards) - len(kept)),
+        "entities": max(0, len(out.get("entities") or []) - len(shown)),
+        "sections": sorted(
+            k for k in ("distress", "capital_moves", "reputation", "financials", "swot",
+                        "tows", "porter", "pestle", "ansoff", "bcg", "four_corners",
+                        "seven_s", "executive")
+            if out.get(k)
+        ),
+    }
+
+    out.update({
+        "tier": "sample",
+        "sample": True,
+        "sample_of": slug,
+        "feed": kept,
+        "entities": [r for r in (out.get("entities") or []) if r.get("entity") in shown],
+        "entity_attrs": {
+            e: a for e, a in (out.get("entity_attrs") or {}).items() if e in shown
+        },
+        "topic_options": topic_options(kept),
+        "withheld": withheld,
+    })
+    # Paid depth — emptied AFTER `withheld` is counted, so the page can say what it is
+    # not showing. Anything entity-attributed that survives here would also re-expose
+    # the roster the cut above just removed.
+    for key in ("distress", "capital_moves", "reputation", "financials", "coverage_gaps",
+                "reviews", "swot_proposals", "graph_proposals"):
+        out[key] = []
+    for key in ("swot", "tows", "porter", "pestle", "ansoff", "bcg", "four_corners",
+                "seven_s", "groups"):
+        out[key] = {}
+    # Not _rescope_executive({}) — the officer dashboard is the entry tier's headline
+    # feature and this block has leaked unscoped once before (see _rescope_executive).
+    # On the one anonymous path, absent beats filtered.
+    out["executive"] = {"officers": [], "cso": {}}
+    out["kpis"] = {
+        "narratives_latest": sum(1 for c in kept if c.get("date") == feed.get("run_date")),
+        "alerts_latest": sum(
+            1 for c in kept if c.get("date") == feed.get("run_date") and c.get("is_alert")
+        ),
+        "entities_tracked": len(shown),
+        "sources": len({
+            s for c in kept for cit in (c.get("citations") or []) if (s := _source_of(cit))
+        }),
+        "narratives_total": len(kept),
+    }
+    return out
+
+
 def _rescope_executive(scoped_feed: dict[str, Any]) -> dict[str, Any]:
     """`feed.executive` is DERIVED from the sections above (cards/distress/reputation/...),
     but it was never itself re-scoped by either projection above — `GET /api/feed` and the
@@ -1822,6 +1924,11 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # the full feed so the Entry Portal serves ONLY entry data (no higher-tier leak).
     entry_feed = derive_entry_feed(feed)
     entry_body = json.dumps(entry_feed, ensure_ascii=False, default=_json_default).encode("utf-8")
+    # E2 (#154): the public conversion sample, derived from the entry slice above.
+    sample_feed = derive_sample_feed(feed)
+    sample_body = json.dumps(
+        sample_feed, ensure_ascii=False, default=_json_default
+    ).encode("utf-8")
 
     published = None
     if site_bucket:
@@ -1858,6 +1965,16 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             )
         except Exception as exc:  # pragma: no cover - publish is best-effort
             print(f"Warning: entry feed publish failed: {exc}")
+        try:
+            s3.put_object(
+                Bucket=site_bucket,
+                Key=SAMPLE_FEED_KEY,
+                Body=sample_body,
+                ContentType="application/json",
+                CacheControl="no-cache",
+            )
+        except Exception as exc:  # pragma: no cover - publish is best-effort
+            print(f"Warning: sample feed publish failed: {exc}")
 
     return {
         "statusCode": 200,
@@ -1867,6 +1984,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 "as_of": feed["as_of"],
                 "feed_count": len(feed["feed"]),
                 "entry_feed_count": len(entry_feed["feed"]),
+                "sample_feed_count": len(sample_feed["feed"]),
                 "entities": len(feed["entities"]),
                 "industries_covered": sum(1 for i in feed["industries"] if i["covered"]),
                 "industry_coverage_gaps": [

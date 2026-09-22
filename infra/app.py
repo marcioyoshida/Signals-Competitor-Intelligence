@@ -742,6 +742,55 @@ class OncaPrototypeStack(Stack):
             viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
         )
 
+        # E2 (#154): the public conversion sample — the second and third
+        # credential-free paths, for the same reason as /pricing.html above. A price
+        # with no way to see the product is only half a funnel.
+        #
+        # `feed.sample.json` is listed EXPLICITLY, not as part of a wildcard next to
+        # the other feeds. `feed.json` and `feed.entry.json` must stay behind the
+        # basic-auth gate: the entry feed is the paid artifact and the full feed is
+        # the whole corpus. What makes the sample publishable is not its filename but
+        # `derive_sample_feed` — it withholds the officer block, the framework stores,
+        # the depth sections and the entity roster before this path ever serves it.
+        # The directory-index rewrite lives in the basic-auth Function, which this
+        # behavior deliberately does NOT carry — so /sample and /sample/ would 403 on
+        # a nonexistent S3 "directory" key (measured live). A separate, auth-free
+        # function does only the rewrite. Keeping it separate is the point: nothing
+        # here should be able to drift into granting or gating access.
+        sample_rewrite_fn = cloudfront.Function(
+            self,
+            "OncaSampleRewrite",
+            code=cloudfront.FunctionCode.from_inline(
+                "function handler(event) {\n"
+                "  var r = event.request;\n"
+                '  if (r.uri === "/sample" || r.uri === "/sample/") {\n'
+                '    r.uri = "/sample/index.html";\n'
+                "  }\n"
+                "  return r;\n"
+                "}\n"
+            ),
+        )
+        distribution.add_behavior(
+            "/sample*",
+            site_origin,
+            viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+            function_associations=[
+                cloudfront.FunctionAssociation(
+                    function=sample_rewrite_fn,
+                    event_type=cloudfront.FunctionEventType.VIEWER_REQUEST,
+                )
+            ],
+        )
+        distribution.add_behavior(
+            "/feed.sample.json",
+            site_origin,
+            viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+            # no-store: a prospect landing the day after a pipeline run should see that
+            # day's signals, not an edge-cached week-old copy that makes a live product
+            # look abandoned.
+            cache_policy=cloudfront.CachePolicy.CACHING_DISABLED,
+        )
+
         # --- Phase C: identity (Cognito) — ADR 002 Decision 7 "7 gates 6" --------
         # Per-tenant identity is THE prerequisite for entitlement + the distribution
         # tiers (ADR 015/016): the shared basic-auth edge cannot attribute a request to
@@ -1111,7 +1160,8 @@ class OncaPrototypeStack(Stack):
             distribution_paths=[
                 "/index.html",
                 "/entry/index.html",
-                "/pricing.html",  # G5 (#113): the one public, unauthenticated page
+                "/pricing.html",  # G5 (#113): public, unauthenticated
+                "/sample/index.html",  # E2 (#154): public conversion sample
                 # v2 multi-context dashboards (six clean routes + shared assets).
                 "/v2/admin/index.html",
                 "/v2/newentry/index.html",

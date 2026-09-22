@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<!-- noindex matches pricing.html: this surface is public so a prospect can reach it
+     without credentials, which is NOT the same decision as wanting it indexed. Flip
+     both together when that call is made. -->
+<meta name="robots" content="noindex, nofollow" />
+<title>Onça — Amostra pública: Fundos Imobiliários</title>
+<style>
+  /* E2 (#154). Design tokens follow pricing.html, not the warroom: this is a
+     conversion surface a stranger lands on, and it should read as the same product
+     as the page that quotes the price. Dark-only for the same reason — the warroom
+     honours prefers-color-scheme because operators live in it all day; this is one
+     page, seen once. */
+  :root {
+    --bg: #0e1116; --panel: #161b22; --panel2: #1d232c; --border: #2a313b;
+    --ink: #e6e9ee; --ink2: #aeb6c2; --muted: #79818c; --accent: #3fbdb6;
+    --t-crit: #ff6b6b; --t-high: #ffa04d; --t-med: #ffd166; --t-low: #8a95a5;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  header { padding: 28px 22px 10px; text-align: center; }
+  header h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: .2px; }
+  header .sub { color: var(--muted); font-size: 14px; }
+  .tag { display: inline-block; font-size: 11px; text-transform: uppercase; letter-spacing: .8px;
+         color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 2px 9px; }
+  .wrap { padding: 20px 22px 60px; max-width: 900px; margin: 0 auto; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+          gap: 12px; margin: 18px 0 22px; }
+  .kpi { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+  .kpi .n { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .kpi .l { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .5px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+          padding: 14px 16px; margin-bottom: 10px; border-left: 4px solid var(--t-low); }
+  .card.crit { border-left-color: var(--t-crit); } .card.high { border-left-color: var(--t-high); }
+  .card.med { border-left-color: var(--t-med); } .card.low { border-left-color: var(--t-low); }
+  .card h3 { margin: 0 0 4px; font-size: 15px; }
+  .card .sub { color: var(--muted); font-size: 12px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .card p { margin: 8px 0 0; color: var(--ink2); overflow-wrap: anywhere; }
+  .card .foot { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .score { font-variant-numeric: tabular-nums; font-weight: 700; }
+  .alert { color: var(--t-crit); font-weight: 700; }
+  .cite { font-size: 12px; }
+  .empty { color: var(--muted); text-align: center; padding: 40px; }
+  .section h3 { font-size: 15px; color: var(--ink2); text-transform: uppercase;
+                letter-spacing: .5px; margin: 34px 0 10px; }
+  .gate { background: var(--panel2); border: 1px solid var(--border); border-radius: 14px; padding: 20px; }
+  .gate ul { margin: 10px 0 0; padding-left: 20px; color: var(--ink2); font-size: 14px; }
+  .gate li { margin-bottom: 4px; }
+  .gate b { color: var(--ink); }
+  .cta { text-align: center; margin-top: 30px; }
+  .cta a.btn { display: inline-block; background: var(--accent); color: #06211f; font-weight: 650;
+               padding: 10px 22px; border-radius: 10px; font-size: 14px; }
+  .foot { color: var(--muted); font-size: 12.5px; margin-top: 34px;
+          border-top: 1px solid var(--border); padding-top: 18px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🐆 Onça — amostra pública</h1>
+  <div class="sub" id="sub">Fundos Imobiliários (FIIs)</div>
+  <div style="margin-top:8px"><span class="tag" id="asof">carregando…</span></div>
+</header>
+<div class="wrap">
+  <section class="kpis" id="kpis"></section>
+  <section id="feed"><div class="empty">Carregando…</div></section>
+
+  <section class="section">
+    <h3>O que esta amostra não mostra</h3>
+    <div class="gate" id="gate"></div>
+    <div class="cta">
+      <a class="btn" href="/pricing.html">Ver planos e preços</a>
+    </div>
+  </section>
+
+  <div class="foot">
+    Sinais reais, gerados pelo mesmo pipeline que alimenta os clientes — não é uma simulação.
+    Cada cartão traz a fonte primária; clique para conferir.
+    Esta amostra cobre <b id="foot-ind">um</b> setor de cinco no plano Entry.
+  </div>
+</div>
+<script>
+// The page renders ONLY what feed.sample.json contains. It never fetches feed.json or
+// feed.entry.json: those are behind basic auth, and a public page that depends on a
+// credentialed artifact fails silently for exactly the visitor it exists to serve.
+const LABELS = {
+  "agri-funds": "Fundos do Agro (FIAGRO)", "betting": "Betting & iGaming",
+  "consorcio": "Consórcios", "crypto": "Crypto & Digital Assets",
+  "real-estate-funds": "Fundos Imobiliários (FIIs)",
+};
+// What each withheld section IS, in buyer language. A raw key name ("capital_moves")
+// tells a prospect nothing about what they would be buying.
+const WITHHELD_LABELS = {
+  distress: "Sinais de estresse financeiro e recuperação judicial por entidade",
+  capital_moves: "Movimentos de capital: captações, fusões e aquisições",
+  reputation: "Cobertura reputacional e de conduta",
+  financials: "Demonstrações financeiras estruturadas (CVM DFP/ITR)",
+  executive: "Painéis executivos por diretoria (CSO, CRO, CCO, CPO)",
+  swot: "SWOT por entidade, revisado por analista",
+  tows: "TOWS — estratégias cruzadas",
+  porter: "Cinco Forças de Porter", pestle: "PESTLE",
+  ansoff: "Matriz de Ansoff", bcg: "Matriz BCG",
+  four_corners: "Four Corners", seven_s: "McKinsey 7S",
+};
+
+function sev(s) { return s >= 0.75 ? "crit" : s >= 0.5 ? "high" : s >= 0.25 ? "med" : "low"; }
+function esc(x) { return String(x == null ? "" : x).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+
+// Narratives embed raw source URLs. Render them as a compact ↗ anchor rather than
+// letting a 400-char link overflow the card. Same treatment as the Entry Portal.
+function linkify(raw) {
+  const s = String(raw == null ? "" : raw), re = /https?:\/\/[^\s]+/g;
+  let out = "", last = 0, m;
+  while ((m = re.exec(s))) {
+    out += esc(s.slice(last, m.index));
+    let url = m[0], trail = "";
+    const tm = url.match(/[.,;:)\]]+$/);
+    if (tm) { trail = url.slice(url.length - tm[0].length); url = url.slice(0, -tm[0].length); }
+    out += `<a href="${esc(url)}" target="_blank" rel="noopener" class="cite" title="${esc(url)}">↗</a>` + esc(trail);
+    last = m.index + m[0].length;
+  }
+  return out + esc(s.slice(last));
+}
+
+function renderGate(feed) {
+  const w = feed.withheld || {};
+  const secs = (w.sections || []).map(k => WITHHELD_LABELS[k]).filter(Boolean);
+  const bits = [];
+  // Say the size of what's held back. "Mais sinais" is a sales line; a number the
+  // reader can check against the cards above is evidence.
+  if (w.cards > 0)
+    bits.push(`<b>${w.cards}</b> sinais adicionais neste mesmo setor, além dos ${(feed.feed || []).length} acima`);
+  if (w.entities > 0)
+    bits.push(`<b>${w.entities}</b> entidades acompanhadas que não aparecem nesta amostra`);
+  bits.push(`os outros <b>quatro</b> setores do plano Entry`);
+  bits.push(`o resumo semanal por e-mail, toda segunda-feira`);
+
+  document.getElementById("gate").innerHTML =
+    `<div style="color:var(--ink2);font-size:14px">A amostra acima é um recorte deliberado: ` +
+    `um setor, os sinais mais recentes, sem as camadas derivadas. O plano Entry inclui:</div>` +
+    `<ul>${[...secs, ...bits].map(t => `<li>${t}</li>`).join("")}</ul>`;
+}
+
+function render(feed) {
+  const slug = feed.sample_of || "real-estate-funds";
+  const label = LABELS[slug] || slug;
+  document.getElementById("sub").textContent = label;
+  document.getElementById("foot-ind").textContent = label;
+  document.title = `Onça — Amostra pública: ${label}`;
+  document.getElementById("asof").textContent = `dados de ${feed.as_of || "—"}`;
+
+  const k = feed.kpis || {};
+  document.getElementById("kpis").innerHTML = [
+    ["Sinais na amostra", k.narratives_total], ["Alertas", k.alerts_latest],
+    ["Entidades", k.entities_tracked], ["Fontes", k.sources],
+  ].map(([l, n]) => `<div class="kpi"><div class="n">${n ?? 0}</div><div class="l">${esc(l)}</div></div>`).join("");
+
+  const cards = feed.feed || [];
+  const el = document.getElementById("feed");
+  if (!cards.length) {
+    // Honest empty state: never invent filler on the one page a stranger judges us by.
+    el.innerHTML = `<div class="empty">Sem sinais publicados para este setor no momento.</div>`;
+  } else {
+    el.innerHTML = cards.map(c => {
+      const s = Number(c.threat_score || 0);
+      const cite = (c.citations || [])[0];
+      return `<article class="card ${sev(s)}">
+        <h3>${esc(c.entity_label || c.entity || c.kind || "Sinal")}</h3>
+        <div class="sub">
+          <span>${esc(c.date || "")}</span>
+          <span class="score">score ${s.toFixed(2)}</span>
+          ${c.is_alert ? '<span class="alert">● alerta</span>' : ""}
+        </div>
+        <p>${linkify(c.narrative || "")}</p>
+        <div class="foot">
+          ${cite && cite.url ? `<a class="cite" href="${esc(cite.url)}" target="_blank" rel="noopener">fonte ↗</a>` : ""}
+        </div>
+      </article>`;
+    }).join("");
+  }
+  renderGate(feed);
+}
+
+fetch("/feed.sample.json", { cache: "no-store" })
+  .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+  .then(render)
+  .catch(() => {
+    document.getElementById("feed").innerHTML =
+      `<div class="empty">Amostra indisponível no momento. <a href="/pricing.html">Ver planos</a></div>`;
+    document.getElementById("asof").textContent = "indisponível";
+  });
+</script>
+</body>
+</html>
