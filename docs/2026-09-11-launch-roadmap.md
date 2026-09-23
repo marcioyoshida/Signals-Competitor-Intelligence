@@ -72,18 +72,24 @@ an E1 blocker only — it does not block M0 or M1.
 ## M3 — Enterprise. Target: 2026-12+
 
 - **#49** AWS Marketplace in-account packaging (tier-1 delivery plane `marketplace`).
-  Design pass done — see the
-  [2026-09-22 ADR 016 addendum](2026-09-22-adr016-addendum-sovereign-packaging.md):
-  the `/resolve` API doesn't exist yet (ADR 005/016 assumed it did), the `plane`
-  field that should gate in-account behavior is currently write-only, and
-  `tier="sovereign"` is *already* live as a shared-infra privilege elevation —
-  not the same thing as "runs in the tenant's account." That collision needs
-  fixing before, not after, packaging work starts. Four ordered build steps are
-  named in the addendum's Decision 4.
-- Sovereign-plane hardening: per-account deploy runbook, telemetry-off verification.
-  The addendum argues telemetry-off is structural (deployment locality), not a
-  flag — verification should be two automated checks (a static scan + a synth-time
-  egress assertion), not a manual runbook line.
+  **All five Decisions in the [2026-09-22 ADR 016 addendum](2026-09-22-adr016-addendum-sovereign-packaging.md)
+  are now built and live-verified** (as of 2026-09-23): telemetry-off confirmed
+  structural (Decision 1); the `tier`/`plane` privilege collision found and fixed
+  live — no tenant is granted operator rights just for licensing the sovereign
+  pricing tier anymore (Decision 2); the vendor-side `POST /resolve` API is
+  deployed (Decision 3); the tenant CDK stack extraction, private-S3 lens,
+  resolution-mode seam, and version pin are all shipped (Decision 4's four
+  steps); and both automated telemetry-off checks — the static hardcoded-
+  vendor-ref scan and the synth-time cross-account IAM egress assertion — are
+  in place and run on every relevant build/synth (Decision 5).
+- **What's left is no longer a design or build gap — it's onboarding.** No real
+  Sovereign tenant account exists yet; the `OncaTenantStack` has never been
+  deployed anywhere (deliberately — see its module docstring). The remaining
+  work is sales/calendar (closing a Sovereign design partner) and, once one
+  exists, the mechanical onboarding steps the addendum's code already
+  anticipates (registering that tenant's `resolve_caller_role_arn`, granting
+  its role's cross-account Lambda-invoke permissions per the documented trap
+  in `infra/app.py`'s `OncaResolveApi` block).
 
 ---
 

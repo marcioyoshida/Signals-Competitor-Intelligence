@@ -295,18 +295,33 @@ that the structure holds, run against every tenant-stack synth/deploy:
   `src/` module references a vendor-account resource identity — bucket name,
   table name, account ID, hardcoded ARN — rather than reading it from
   environment/config. This directly closes Finding 0.4's category of bug, not
-  just that one instance.
+  just that one instance. **Done** — `tests/test_no_hardcoded_vendor_refs.py`.
 - **A synth-time assertion** on the tenant CDK stack: enumerate every IAM
   principal/resource policy the stack grants, and fail if anything reaches
   outside the tenant's own account except the one `/resolve` role trust
   relationship from Decision 3. This is the CDK-level version of ADR 016's "one
   governed, audited egress" — turned from a sentence into a test that runs on
-  every deploy, not a property someone remembers to eyeball.
+  every deploy, not a property someone remembers to eyeball. **Done
+  2026-09-23** (`infra/egress_audit.py`, wired into `infra/tenant_app.py` so
+  it runs on every real `cdk synth`/`cdk deploy`, not just a test someone has
+  to remember to run). The anticipated `/resolve`-trust exception turned out
+  not to exist within this stack's own template at all — that relationship is
+  a resource policy on the VENDOR's `OncaResolveApi` Lambda, granted to a
+  tenant's role ARN, never anything this stack itself grants outward — so
+  `ALLOWED_CROSS_ACCOUNT_ACCOUNT_IDS` is correctly empty today, a stronger
+  result than assumed. Building it caught and fixed a real false-positive
+  along the way: `enforce_ssl=True`'s standard `Deny`-non-TLS bucket-policy
+  statement (`Principal: "*"`) is not a grant and must not be checked — only
+  `Effect: Allow` statements are. Verified against the real deployable
+  (`OncaTenantStack` synths clean) and against injected violations (a role
+  trusting a literal foreign account, a bucket policy granting one) to prove
+  the checker isn't a no-op — the same discipline check 1's meta-test applies.
 
 Both are small (a day or two each) relative to Decision 4's scope, and they are
 the difference between "we believe telemetry is off" and "we can prove it on every
 deploy" — the second is what a compliance-bound Sovereign buyer is actually paying
-the premium for.
+the premium for. **Both checks are now built — Decision 5 is complete, and with
+it every Decision in this addendum has a shipped, live-verified implementation.**
 
 ## Answering ADR 016's open decisions, as far as this addendum can
 

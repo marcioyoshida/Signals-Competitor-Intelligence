@@ -13,8 +13,8 @@ tenant's deploy.
 
 This is check 1 of 2 from the addendum's Decision 5. Check 2 (a synth-time
 egress assertion on the tenant CDK stack — "the only thing crossing the account
-boundary is the one governed /resolve call") lands with the tenant stack itself,
-once it has Lambdas whose IAM grants there are something to assert about.
+boundary is the one governed /resolve call") is `infra/egress_audit.py`, wired
+into `infra/tenant_app.py`; see `tests/test_tenant_egress_audit.py`.
 """
 import re
 from pathlib import Path
