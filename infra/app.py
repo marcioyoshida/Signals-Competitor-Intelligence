@@ -142,6 +142,12 @@ class OncaPrototypeStack(Stack):
                 point_in_time_recovery_enabled=True
             ),
         )
+        # Exposed so OTHER stacks in this same App (e.g. OncaGdeltBridgeStack's Receita
+        # BigQuery discovery function) can reference it as a real CDK token — CDK wires
+        # the CloudFormation cross-stack export/import automatically — instead of a
+        # hardcoded physical table name, which would carry the random CDK-generated
+        # suffix and break silently if this table were ever replaced.
+        self.entities_table = entities_table
 
         # Phase D — per-tenant entitlement source of truth (ADR 002 Phase D + ADR 016).
         # tenant_id -> {tier ∈ entry|saas|sovereign, modules[]}. The read boundary scopes
@@ -344,23 +350,24 @@ class OncaPrototypeStack(Stack):
             ephemeral_storage_size=Size.mebibytes(1024),
             environment={
                 "PYTHONPATH": "/var/task",
-                # #104 (#14 Stage 2): Receita CNPJ bulk live shard fetch. ON since 2026-09-20.
+                # #104 (#14 Stage 2): Receita CNPJ bulk live shard fetch. RETIRED 2026-09-23 —
+                # was ON 2026-09-20→23 and genuinely working (confirmed live via CloudWatch:
+                # `Receita bulk CNAE (live shard N): candidates=25305 already=101 proposed=25
+                # no_name=36`), NOT the silent failure an earlier assumption in this repo's
+                # history guessed it might be — correcting that record here.
                 #
-                # This was OFF with a note saying "the download is genuinely too slow for a
-                # shared-Lambda ingest run, not a bug". **That conclusion was wrong**, and the
-                # numbers say so (measured 2026-09-20 against the live mirror and table):
-                #   mirror index 0.7s · shard download 3.0s (342MB) · parse 32.6s
-                #   dedup ~3,206s  <- 21,749 candidates x resolve_by_cnpj @ 147ms each
-                # The download was never the problem. `propose_candidates` did one DynamoDB
-                # get_item PER CANDIDATE ROW; the registry root-map is the same information in
-                # one cached 4.3s scan. Fixed in src/ingest/receita_bulk.py — the whole source
-                # now runs in ~61s inside its 240s budget (live: shard 4, 25,305 candidates).
-                #
-                # Throttled deliberately: this is propose-only (ADR 011 §4) and every proposal
-                # lands in the curator's review queue, so 25/run (~75/day across 3 runs) keeps
-                # discovery flowing without the review-queue flood that the default 200 (~600/day)
-                # would cause.
-                "ONCA_INGEST_RECEITA_BULK": "true",
+                # Superseded by `src/ingest/receita_bigquery.py` /
+                # `infra/gdelt_bridge.py`'s `ReceitaBigqueryFn` (its own isolated, dedicated
+                # Lambda on its own daily schedule): one query against the public
+                # `basedosdados.br_me_cnpj` BigQuery mirror covers the FULL active FS-CNAE
+                # universe in ~44s (vs. this path's ~61s/run covering only 1 of 9 rotating
+                # shards), fixes a real live gap this path still has (9-66 candidates/run
+                # dropped for lack of a name — the new path LEFT JOINs `empresas` for razão
+                # social and measured `no_name=0` on its first live run), and runs in its OWN
+                # budget instead of the shared, already-tight main ingest Lambda's. Kept OFF
+                # rather than deleted — the code, tests, and shard-fetch mechanics all still
+                # work and are a documented fallback if the BigQuery mirror ever goes stale.
+                "ONCA_INGEST_RECEITA_BULK": "false",
                 "ONCA_RECEITA_BULK_MAX_PROPOSE": "25",
                 "ONCA_RECEITA_SOURCE_TIMEOUT_SEC": "240",
                 "ONCA_STATE_TABLE": state_table.table_name,
@@ -3599,7 +3606,7 @@ class OncaPrototypeStack(Stack):
 
 
 app = App()
-OncaPrototypeStack(app, "OncaPrototypeStack")
+main_stack = OncaPrototypeStack(app, "OncaPrototypeStack")
 # AWS-native GitOps CI/CD (issue #6) — its own stack so the pipeline that deploys
 # the app stack is not part of it. Deploy once: `cdk deploy OncaCicdStack`.
 from cicd import OncaCicdStack  # noqa: E402  (local module, after app-stack def)
@@ -3614,7 +3621,7 @@ OncaQaPipelineStack(app, "OncaQaPipelineStack")
 # its own stack for the same isolation reason as the QA pipeline above.
 from gdelt_bridge import OncaGdeltBridgeStack  # noqa: E402  (local module, after app-stack def)
 
-OncaGdeltBridgeStack(app, "OncaGdeltBridgeStack")
+OncaGdeltBridgeStack(app, "OncaGdeltBridgeStack", entities_table=main_stack.entities_table)
 # App-wide identification + Cost Explorer allocation tag across every resource in both
 # stacks (the standalone "tr:project-name" tag OncaPrototypeStack used to carry alongside
 # this one was retired 2026-09-14 — every fork now rolls up under this single "project" key).

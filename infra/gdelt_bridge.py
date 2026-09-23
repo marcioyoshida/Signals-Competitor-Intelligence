@@ -53,14 +53,20 @@ from constructs import Construct
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 GDELT_BRIDGE_ASSET = REPO_ROOT / "build" / "lambda-gdelt-bridge"
+# #104 — its own isolated asset: the shared build/lambda src/ tree (needed for
+# `receita_bulk.propose_candidates` -> `entity_registry`) PLUS the same heavy
+# google-cloud-bigquery deps as GDELT's asset. Kept separate from GDELT_BRIDGE_ASSET
+# so a change to one function's deps never risks the other's build.
+RECEITA_BIGQUERY_ASSET = REPO_ROOT / "build" / "lambda-receita-bigquery"
 
 ROLE_NAME = "OncaGdeltBridgeRole"
 FN_NAME = "OncaGdeltBridgeFn"
 MACRO_FN_NAME = "OncaGdeltMacroFn"
+RECEITA_FN_NAME = "OncaReceitaBigqueryFn"
 
 
 class OncaGdeltBridgeStack(Stack):
-    def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
+    def __init__(self, scope: Construct, construct_id: str, *, entities_table=None, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
         gcp_ready = self.node.try_get_context("gdelt_bridge_ready")
@@ -137,4 +143,57 @@ class OncaGdeltBridgeStack(Stack):
                 schedule=events.Schedule.cron(minute="0", hour="7"),
                 targets=[targets.LambdaFunction(macro_fn)],
                 description="O2 (#137): daily GDELT macro-theme sweep, ~$0.002/run.",
+            )
+
+        # #104 (#14 Stage 2) — Receita CNAE discovery via the public basedosdados
+        # BigQuery mirror, replacing the live-shard-streaming approach that measured
+        # non-viable on a shared Lambda (885s against a 900s ceiling). SAME role as
+        # the GDELT functions above — reusing it means zero new GCP-side trust/grant
+        # work, since the GCP workload identity provider trusts this one AWS role by
+        # name, not by function. `entities_table` is a real cross-stack CDK token from
+        # `OncaPrototypeStack` (see infra/app.py) — the registry this function proposes
+        # into, not a table this stack owns.
+        receita_env = dict(env)
+        if entities_table is not None:
+            receita_env["ONCA_ENTITIES_TABLE"] = entities_table.table_name
+        receita_env["PYTHONPATH"] = "/var/task"
+        # Throttled for the SAME reason the retired shard-based path was (see
+        # infra/app.py's ONCA_INGEST_RECEITA_BULK comment): every proposal lands
+        # in a human curator's review queue — 25/day keeps discovery flowing
+        # without a flood. The code default (200) stays available for a manual
+        # ad-hoc invoke that deliberately wants to seed/clear a larger backlog.
+        receita_env["ONCA_RECEITA_BQ_MAX_PROPOSE"] = "25"
+
+        receita_fn = lambda_.Function(
+            self,
+            "ReceitaBigqueryFn",
+            function_name=RECEITA_FN_NAME,
+            runtime=lambda_.Runtime.PYTHON_3_12,
+            handler="receita_bigquery_handler.handler",
+            code=lambda_.Code.from_asset(str(RECEITA_BIGQUERY_ASSET)),
+            role=role,
+            timeout=Duration.minutes(5),
+            memory_size=512,
+            environment=receita_env,
+        )
+        if entities_table is not None:
+            # propose_candidates only ever proposes (ADR 011 §4) — never auto-creates
+            # — but load_cnpj_root_map + propose_review both need read+write on the
+            # registry table itself, same grant every other discovery-writing Lambda
+            # in the main stack already has.
+            entities_table.grant_read_write_data(role)
+
+        if gcp_ready:
+            # Daily; not time-sensitive relative to GDELT's own schedule (this source
+            # refreshes monthly upstream, not daily) — picked 08:00 UTC to land after
+            # the GDELT sweep rather than contend with it for the shared role's
+            # concurrent-invocation headroom.
+            events.Rule(
+                self,
+                "ReceitaBigqueryDailyTrigger",
+                schedule=events.Schedule.cron(minute="0", hour="8"),
+                targets=[targets.LambdaFunction(
+                    receita_fn, event=events.RuleTargetInput.from_object({"mode": "discover"})
+                )],
+                description="#104: daily Receita CNAE discovery via BigQuery, propose-only.",
             )
