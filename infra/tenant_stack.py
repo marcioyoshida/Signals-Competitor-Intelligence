@@ -66,6 +66,15 @@ VECTOR_DIMENSION = 1024
 # every Sovereign tenant within a month rather than being cached stale for years.
 ENTITY_CACHE_TTL_DAYS = 30
 
+# ADR 016 addendum Decision 4 step 4: this deployable's pinned version. Tracks
+# `src/synth/resolver.py`'s RESOLVE_CONTRACT_VERSION 1:1 — bump both together,
+# only when the `/resolve` request/response shape changes (ADR 005 §Costs:
+# "the resolve contract is the compatibility boundary" — that's the thing this
+# version actually gates, not internal CDK refactors). Full policy — what
+# counts as breaking, the support window, the upgrade procedure — lives in
+# docs/tenant-stack-versioning.md, not duplicated here.
+TENANT_STACK_VERSION = "1.0.0"
+
 
 class OncaTenantStack(Stack):
     """The in-account half of a Sovereign deployment (ADR 005/016, #49).
@@ -91,6 +100,8 @@ class OncaTenantStack(Stack):
 
         Tags.of(self).add("onca-tenant-id", tenant_id)
         Tags.of(self).add("onca-plane", "marketplace")  # ADR 016 addendum Decision 2
+        Tags.of(self).add("onca-tenant-stack-version", TENANT_STACK_VERSION)
+        CfnOutput(self, "TenantStackVersion", value=TENANT_STACK_VERSION)
 
         # --- The encounter-only entity cache + this tenant's own engagement log ----
         # ONE table, matching the vendor's own single-table convention exactly

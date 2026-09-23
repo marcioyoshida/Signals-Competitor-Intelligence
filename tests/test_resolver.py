@@ -216,3 +216,49 @@ def test_guard_is_false_in_registry_mode(monkeypatch):
     monkeypatch.delenv("ONCA_RESOLUTION_MODE", raising=False)
     resolver._warned_free_text = False
     assert resolver.guard_free_text_resolution_unavailable() is False
+
+
+# --- Decision 4 step 4: the resolve-contract version pin -----------------------
+
+def test_sign_and_post_sends_the_contract_version_header_inside_the_signed_request(monkeypatch):
+    import boto3
+    from botocore.credentials import Credentials
+
+    monkeypatch.setattr(
+        boto3, "Session",
+        lambda: type("S", (), {"get_credentials": staticmethod(
+            lambda: Credentials("AKIAFAKE", "secretfake")
+        )})(),
+    )
+
+    captured = {}
+
+    class _FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self):
+            return b'{"entity_id": "acme"}'
+
+    def fake_urlopen(req, timeout=10):
+        captured["headers"] = dict(req.headers)
+        return _FakeResponse()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    result = resolver._sign_and_post("https://vendor.example/resolve", {"cnpj_root": "12345678"})
+
+    assert result == {"entity_id": "acme"}
+    # urllib.request.Request lower-cases header names on the way in.
+    assert captured["headers"]["X-onca-resolve-contract-version"] == resolver.RESOLVE_CONTRACT_VERSION
+    # Covered by the SigV4 signature — present in the signed Authorization/
+    # SignedHeaders set, not just tacked on after signing.
+    assert "x-onca-resolve-contract-version" in captured["headers"]["Authorization"].lower()
+
+
+def test_resolve_contract_version_is_a_stable_non_empty_string():
+    assert isinstance(resolver.RESOLVE_CONTRACT_VERSION, str)
+    assert resolver.RESOLVE_CONTRACT_VERSION

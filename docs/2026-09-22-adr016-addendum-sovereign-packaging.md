@@ -217,6 +217,20 @@ factored for it, not a config flag on the existing one. Concretely, in order:
 4. Pin a supported stack version per ADR 005 §Costs ("the resolve contract is the
    compatibility boundary") — decide the versioning/upgrade story before the
    first tenant deploy, not after two tenants are on different versions.
+   **Done 2026-09-22** (`docs/tenant-stack-versioning.md`): what's actually
+   pinned is the `/resolve` contract shape, not the stack's internals — the
+   only thing that crosses the account boundary and can therefore break a
+   deployed tenant without a redeploy. `infra/tenant_stack.py`'s
+   `TENANT_STACK_VERSION` and `src/synth/resolver.py`'s
+   `RESOLVE_CONTRACT_VERSION` move together (currently `1.0.0`/`1`), a
+   semver policy defines what's MAJOR/MINOR/PATCH, the version is tagged +
+   output on every tenant stack and sent (inside the SigV4-signed request) on
+   every `/resolve` call, and upgrades ride the normal `cdk deploy` — every
+   stateful resource is already `RemovalPolicy.RETAIN`, so no migration
+   tooling is needed. The support-window length (how many MAJOR versions the
+   vendor serves concurrently) is deliberately left undecided until Decision
+   3's endpoint exists and there's a real second version to weigh against the
+   first, rather than guessed at with zero tenants live.
 
 This is the multi-week item flagged when this addendum was proposed. Nothing here
 shortens it; naming the four steps is what makes "how far along is #49" answerable

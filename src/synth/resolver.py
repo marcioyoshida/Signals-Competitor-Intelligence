@@ -38,6 +38,20 @@ REMOTE = "remote"
 REGISTRY = "registry"
 _VALID_MODES = (REGISTRY, REMOTE)
 
+# ADR 016 addendum Decision 4 step 4: "the resolve contract is the
+# compatibility boundary" (ADR 005 §Costs) — so THIS is the one number that
+# actually needs pinning, not internal stack innards. Every remote-mode call
+# declares which contract shape it speaks via the `X-Onca-Resolve-Contract-
+# Version` header; a future vendor-side `/resolve` (Decision 3, not yet built)
+# checks it and rejects a stale caller with a clear error instead of silently
+# mismatching request/response shape. Bump this — and `infra/tenant_stack.py`'s
+# `TENANT_STACK_VERSION` alongside it — only when the `{name?, cnpj_root?,
+# ispb?, ticker?} -> {entity_id, display_name, canonical_id, industries[],
+# confidence}` request/response shape changes; internal refactors that don't
+# touch that shape never need to. See docs/tenant-stack-versioning.md for the
+# full policy (what counts as breaking, support window, upgrade procedure).
+RESOLVE_CONTRACT_VERSION = "1"
+
 # Mirrors infra/tenant_stack.py's ENTITY_CACHE_TTL_DAYS — kept as an independent
 # constant (src/ must not import from infra/, the two live on opposite sides of
 # the account boundary this whole seam exists to enforce) but the VALUE should
@@ -134,8 +148,16 @@ def _sign_and_post(url: str, payload: dict[str, Any]) -> dict[str, Any] | None:
     if creds is None:
         print("Warning: no AWS credentials available to sign the /resolve call")
         return None
-    req = AWSRequest(method="POST", url=url, data=body,
-                     headers={"content-type": "application/json"})
+    req = AWSRequest(
+        method="POST", url=url, data=body,
+        headers={
+            "content-type": "application/json",
+            # Included inside the AWSRequest (not added after signing) so it's
+            # covered by the SigV4 signature — a caller can't be downgraded to
+            # an older contract version by a header stripped in transit.
+            "x-onca-resolve-contract-version": RESOLVE_CONTRACT_VERSION,
+        },
+    )
     # service="execute-api": the vendor /resolve endpoint is assumed to be an
     # IAM-authenticated API Gateway route (matching the existing auth_api pattern
     # in infra/app.py), not a raw Lambda function URL. Confirm this against the
