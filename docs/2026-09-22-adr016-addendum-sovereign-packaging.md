@@ -178,7 +178,22 @@ factored for it, not a config flag on the existing one. Concretely, in order:
    current tenants; tenant stack — new, parameterized by tenant bucket list +
    vendor `/resolve` endpoint + the per-tenant IAM role from Decision 3).
 2. **Build `src/ingest/tenant_s3.py`** (the private-S3 lens ADR 005 §3 specifies)
-   — net-new, not an extraction.
+   — net-new, not an extraction. **Done 2026-09-22**: `collect()` enumerates
+   configured tenant buckets/prefixes (`ONCA_TENANT_PRIVATE_BUCKETS`), diffs
+   via `src/diff/engine.py`'s seen-set (keyed by bucket/key **and etag**, so an
+   object edited in place re-ingests instead of vanishing into the seen-set
+   forever), and normalizes to the same raw-doc shape every other
+   `src/ingest/*` source produces; `ingest()` hands the new docs to
+   `raw_writer.write_raw_documents` against `ONCA_RAW_BUCKET` — in a tenant
+   deployment, `infra/tenant_stack.py`'s `OncaTenantRawBucket`, never the
+   vendor's, by config rather than a mode flag. Both functions no-op (return
+   `[]`) when unconfigured, so the module is inert in every existing SaaS/
+   vendor deployment today. Scoped to plain-text-ish formats
+   (`.txt`/`.md`/`.csv`/`.json`) for this pass — PDF/DOCX/XLSX need real
+   extraction, not a `.decode()`, and are left for a follow-on. Not wired into
+   any Lambda yet (none exists to wire it into — see `infra/tenant_stack.py`'s
+   docstring); this module is the ingester itself, callable once a tenant
+   ingest Lambda exists.
 3. **Flip `entities.py`'s resolution mode** — internal registry lookup (vendor
    stack, unchanged) vs. `/resolve` HTTP call (tenant stack) — behind one seam,
    so synth code above it never branches on which plane it's running in.

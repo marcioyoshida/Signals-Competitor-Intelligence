@@ -15,6 +15,10 @@ import boto3
 
 
 def _document_text(doc: dict[str, Any]) -> str:
+    if doc.get("kind") == "tenant_private":
+        # ADR 005 §3 private-S3 lens (src/ingest/tenant_s3.py) — the document's
+        # own text, already extracted; nothing to reshape.
+        return doc.get("text") or ""
     if doc.get("kind") == "regulatory":
         return f"{doc.get('doc_type')} N° {doc.get('number')}\n\n{doc.get('subject') or ''}"
     if doc.get("kind") == "competitor":
@@ -105,7 +109,8 @@ def _metadata_attributes(doc: dict[str, Any]) -> dict[str, str]:
         or doc.get("issuer")
         or doc.get("leader")
         or doc.get("company")
-        or doc.get("ticker"),
+        or doc.get("ticker")
+        or doc.get("title"),
     }
     return {k: v for k, v in attrs.items() if v}
 
