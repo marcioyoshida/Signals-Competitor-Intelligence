@@ -11,11 +11,18 @@ asset ADR 002 calls the commercial product — so it is no longer gated by the s
 basic-auth edge. A *shared static password* cannot attribute an action to a person,
 cannot be revoked for one operator, and is the same credential every viewer of the
 warroom already has. The gate is now a **verified Cognito JWT carrying an elevated
-claim** (`operator`/`admin`/`sovereign` group, or an `operator`/`sovereign` tier),
-verified by the API Gateway authorizer before this handler runs — the same model as
-`/api/act` (ADR 020). Every mutation is journaled to `OncaCurationLog` (ADR 018),
-which is only meaningful now that the actor is a real identity rather than "whoever
-had the password".
+GROUP claim** (`operator`/`admin`), verified by the API Gateway authorizer before
+this handler runs — the same model as `/api/act` (ADR 020). Every mutation is
+journaled to `OncaCurationLog` (ADR 018), which is only meaningful now that the
+actor is a real identity rather than "whoever had the password".
+
+**Never `tier`** (ADR 016 addendum Decision 2, 2026-09-23): this used to also
+accept `tier in {"operator", "sovereign"}` as elevated — meaning any tenant
+provisioned at the `sovereign` PRICING tier got registry read/write rights on
+shared SaaS infra just by being a paying customer, a real entitlement-model bug.
+`tier` selects what a tenant is licensed to READ (module depth); a Cognito group
+is the role grant that decides who may WRITE to the registry. The two are
+independent and neither substitutes for the other.
 
 `ONCA_ORIGIN_SECRET` remains an **inert break-glass**: unset in the deployed stack,
 so there is no shared-secret path unless one is deliberately configured. Fail-closed
@@ -43,10 +50,10 @@ from typing import Any
 
 from src.dashboard import auth
 
-# Same elevated claims as the write-agent API (ADR 020) — one definition of
-# "operator" across every control-plane surface.
-_ELEVATED_TIERS = {"operator", "sovereign"}
-_ELEVATED_GROUPS = {"operator", "admin", "sovereign"}
+# Same elevated GROUPS as the write-agent API (ADR 020) — one definition of
+# "operator" across every control-plane surface. `tier` is never consulted here
+# (ADR 016 addendum Decision 2) — see the module docstring for why.
+_ELEVATED_GROUPS = {"operator", "admin"}
 
 
 def _resp(status: int, body: Any) -> dict[str, Any]:
@@ -100,9 +107,7 @@ def _authorize(event: dict[str, Any]) -> tuple[str | None, str | None]:
     secret can never *downgrade* an authenticated request to an anonymous one."""
     identity = auth.identity_from_event(event)
     if identity is not None:
-        elevated = (identity.tier in _ELEVATED_TIERS) or bool(
-            _ELEVATED_GROUPS.intersection(identity.groups)
-        )
+        elevated = bool(_ELEVATED_GROUPS.intersection(identity.groups))
         if not elevated:
             # Authenticated but not an operator: say so plainly. A tenant reaching
             # this endpoint is a misconfiguration, not an attack, and a 403 that

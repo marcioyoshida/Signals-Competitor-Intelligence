@@ -86,9 +86,21 @@ def test_elevated_jwt_is_authorized(monkeypatch):
     monkeypatch.setattr(er, "revert_entity_since", lambda eid, ts, **k: ["industries"])
     resp = act_api.lambda_handler(_event(
         {"intent": "revert_entity", "args": {"entity_id": "btg", "since_ts": "2026-01-01"}},
-        claims={"sub": "u1", "custom:tier": "sovereign"}), None)
+        claims={"sub": "u1", "cognito:groups": "operator"}), None)
     assert resp["statusCode"] == 200
     assert json.loads(resp["body"])["actor"] == "u1"
+
+
+def test_sovereign_tier_alone_is_no_longer_elevated(monkeypatch):
+    # ADR 016 addendum Decision 2: `tier` is a pricing/entitlement axis, not a
+    # role grant — a tenant licensed at the `sovereign` tier but with no
+    # elevated Cognito group must be refused, same as any other tenant.
+    _no_journal(monkeypatch)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
+    resp = act_api.lambda_handler(_event(
+        {"intent": "trigger_run"},
+        claims={"sub": "u1", "custom:tier": "sovereign"}), None)
+    assert resp["statusCode"] == 403
 
 
 # ---- catalog / dispatch ------------------------------------------------------------

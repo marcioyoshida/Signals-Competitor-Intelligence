@@ -126,6 +126,27 @@ privilege switch to checking the Cognito group instead. Doing this now, before
 the first real Sovereign deployment exists, costs an afternoon. Doing it after
 costs a support incident.
 
+**Done 2026-09-23** (`src/dashboard/act_api.py`, `src/dashboard/registry_api.py`,
+`infra/app.py`'s new `OncaGroupOperator` Cognito group): the `plane` half of this
+migration turned out to be a non-issue on inspection — the live seeded
+`qa-internal-admin` row already carried `plane="saas"` (`_default_plane`'s
+existing `"portal" if tier == "entry" else "saas"` rule already gets a
+`sovereign`-tier row right; no backfill was actually needed there. The REAL,
+confirmed live bug was the privilege check itself: `aws cognito-idp
+list-groups` on the deployed pool showed **no `operator` or `admin` group
+existed at all** before this commit, meaning the QA admin persona's — and
+every future `sovereign`-tier tenant's — elevated registry-write/`/api/act`
+access came *entirely* from `tier == "sovereign"`. Any tenant simply
+*provisioned* at the sovereign pricing tier (a purchase) got operator
+capabilities on shared SaaS infra, with no role grant involved at all. Fixed
+by removing `_ELEVATED_TIERS` from both modules (elevation now checks
+`_ELEVATED_GROUPS.intersection(identity.groups)` only), standing up a real
+`operator` Cognito group, and attaching the QA admin persona to it so it keeps
+working. Live-verified post-deploy by invoking the deployed
+`OncaRegistryApi` Lambda directly with two synthetic JWT-shaped events:
+`custom:tier=sovereign` alone now correctly gets `403`; `cognito:groups=
+operator` gets through — confirming the fix is live, not just unit-tested.
+
 ## Decision 3 — the `/resolve` API contract
 
 Adopt ADR 005 §2's contract as-specified; this addendum only makes the parts ADR

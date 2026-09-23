@@ -13,13 +13,18 @@ Design (ADR 020 §1):
     reachable only via CloudFront's SigV4-signed OAC origin request). Writes
     require an *elevated* capability and are **fail-closed**. The origin-secret operator
     (no JWT) is the elevated legacy actor — consistent with `review_action`/`run_trigger`;
-    a JWT identity must carry an elevated tier/group.
+    a JWT identity must carry an elevated Cognito **group** claim (`operator`/`admin`).
+    **Never `tier`** (ADR 016 addendum Decision 2, 2026-09-23): `tier` is a pricing/
+    entitlement axis (which modules/signal depth a tenant licenses) — a paying
+    `sovereign`-tier tenant on shared SaaS infra is a customer, not an operator, and
+    must not get registry-mutation rights just for buying the deepest license. A group
+    is a role grant; only a group can carry that meaning correctly.
   * **Typed catalog** — an intent can only be one of a fixed allowlist (`_CATALOG`); an
     arbitrary-mutation surface never exists by construction. Each entry declares its
     execution class (`apply` | `propose`) and a validated handler.
   * **Two execution classes** — `apply` is reversible/idempotent/low-blast (trigger a run,
     resolve an already-queued proposal, roll a field back). `propose` writes a review-queue
-    proposal for anything high-stakes; a human/elevated tier promotes it.
+    proposal for anything high-stakes; a human/elevated operator promotes it.
   * **Idempotency** — one `idempotency_key` per request; a replay returns the stored result.
   * **Audit** — every call is journaled to `OncaCurationLog` (ADR 018) with actor, args,
     and outcome (`applied` | `proposed` | `blocked` | `noop`).
@@ -35,9 +40,15 @@ from typing import Any, Callable
 from src.dashboard import auth, officers
 from src.synth import entity_registry
 
-# Tier/group claims that carry the elevated write capability (ADR 002 tiers).
-_ELEVATED_TIERS = {"operator", "sovereign"}
-_ELEVATED_GROUPS = {"operator", "admin", "sovereign"}
+# Cognito GROUPS that carry the elevated write capability — a role grant, not a
+# purchase. ADR 016 addendum Decision 2 (2026-09-23): this used to also accept
+# `tier in {"operator", "sovereign"}`, which meant any tenant provisioned at the
+# `sovereign` PRICING tier got operator/registry-mutation rights on shared SaaS
+# infra just by being a paying customer — a real, live entitlement-model bug
+# (confirmed: no Cognito group named "operator"/"admin" existed at all before
+# this fix; the seeded QA admin persona's elevated access came ENTIRELY from
+# its `tier` claim). `tier` is never consulted here now.
+_ELEVATED_GROUPS = {"operator", "admin"}
 
 APPLY = "apply"
 PROPOSE = "propose"
@@ -72,13 +83,12 @@ def _body(event: dict[str, Any]) -> dict[str, Any] | None:
 def _authorize(event: dict[str, Any]) -> tuple[str, bool]:
     """Return (actor, elevated). The origin-secret operator (no JWT) is elevated by
     design — the same trust the other operator endpoints assume. A JWT identity is
-    elevated only if it carries an elevated tier or group claim."""
+    elevated only if it carries an elevated Cognito GROUP claim — never `tier`
+    (ADR 016 addendum Decision 2): `tier` is what a tenant licenses, not a role."""
     identity = auth.identity_from_event(event)
     if identity is None:
         return "operator", True  # origin-secret already verified in the handler
-    elevated = (identity.tier in _ELEVATED_TIERS) or bool(
-        _ELEVATED_GROUPS.intersection(identity.groups)
-    )
+    elevated = bool(_ELEVATED_GROUPS.intersection(identity.groups))
     return (identity.sub or "unknown"), elevated
 
 

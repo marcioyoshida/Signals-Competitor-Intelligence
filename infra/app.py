@@ -990,6 +990,25 @@ class OncaPrototypeStack(Stack):
                 group_name=_ind,
                 description=f"Single-industry dashboard access: {_ind}",
             )
+
+        # ADR 016 addendum Decision 2 (2026-09-23): the elevated-operator GROUP —
+        # what `act_api.py`/`registry_api.py` actually gate registry-write/agent-
+        # act access on now, instead of the `tier` claim they used to also accept.
+        # Confirmed neither this group nor "admin" existed at all before this
+        # commit (`aws cognito-idp list-groups` returned only industry groups) —
+        # the seeded QA admin persona's elevated access came ENTIRELY from its
+        # `custom:tier=sovereign` claim, i.e. any tenant simply PROVISIONED at the
+        # sovereign pricing tier got registry-mutation rights on shared SaaS infra.
+        # Creating this group and attaching that one persona to it (below) is the
+        # backfill: the one live identity that needs to keep working after `tier`
+        # stops being consulted gets a real role grant instead.
+        operator_group = cognito.CfnUserPoolGroup(
+            self,
+            "OncaGroupOperator",
+            user_pool_id=user_pool.user_pool_id,
+            group_name="operator",
+            description="Elevated control-plane access: registry mutation, /api/act writes.",
+        )
         CfnOutput(
             self,
             "UserPoolHostedUi",
@@ -1117,7 +1136,7 @@ class OncaPrototypeStack(Stack):
             ("qa-test-entry@onca.example", "qa-internal-test", "entry"),
             ("qa-test-admin@onca.example", "qa-internal-admin", "sovereign"),
         ):
-            cognito.CfnUserPoolUser(
+            _qa_user = cognito.CfnUserPoolUser(
                 self, f"OncaQaUser{_qa_tier.capitalize()}",
                 user_pool_id=user_pool.user_pool_id,
                 username=_qa_username,
@@ -1133,6 +1152,21 @@ class OncaPrototypeStack(Stack):
                         name="custom:tier", value=_qa_tier),
                 ],
             )
+            if _qa_tenant == "qa-internal-admin":
+                # ADR 016 addendum Decision 2: this persona's elevated access used
+                # to come from `custom:tier=sovereign` alone; now it needs the real
+                # role grant the "operator" group represents (see OncaGroupOperator
+                # above) or ADR 027's Playwright QA pipeline loses coverage of the
+                # elevated/multi-industry surface the moment tier stops granting it.
+                _qa_attachment = cognito.CfnUserPoolUserToGroupAttachment(
+                    self, "OncaQaUserAdminOperatorGroup",
+                    user_pool_id=user_pool.user_pool_id,
+                    username=_qa_username,
+                    group_name=operator_group.group_name,
+                )
+                # `username` above is a plain string, not a CDK token, so CFN
+                # wouldn't otherwise infer this must wait for the user to exist.
+                _qa_attachment.add_dependency(_qa_user)
 
         # And a CloudWatch dashboard to watch pilot traffic at a glance.
         def _cf_metric(name: str, statistic: str) -> cloudwatch.Metric:
