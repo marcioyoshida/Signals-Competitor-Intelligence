@@ -131,6 +131,33 @@ costs a support incident.
 Adopt ADR 005 §2's contract as-specified; this addendum only makes the parts ADR
 005 left implicit concrete enough to build against.
 
+**Built and live-verified 2026-09-22** (`src/dashboard/resolve_api.py`,
+`infra/app.py`'s `OncaResolveApi` block, `tenant_config.py`'s new
+`resolve_caller_role_arn` field): shipped as an AWS_IAM Lambda Function URL
+(not API Gateway — `src/synth/resolver.py`'s SigV4 signing was corrected from
+its placeholder `service="execute-api"` assumption to `service="lambda"`),
+deliberately NOT behind CloudFront since the caller is a tenant's own Lambda
+in a different account, not a browser. The handler reuses
+`resolver.resolve_known_id` for the actual lookup rather than re-implementing
+it — this Lambda's environment never sets `ONCA_RESOLUTION_MODE`, so it runs
+in `registry` mode, the exact same single-`get_item` code path `entities.py`
+uses internally. Live-verified end-to-end against the deployed endpoint with a
+throwaway probe IAM role (assumed, signed a real request, deleted after): a
+known alias correctly resolved (`200`), an unknown identifier correctly missed
+(`404`), an unregistered/mismatched tenant was refused (`403`), and a
+zero-identifier request was rejected (`400`). One real trap surfaced during
+that verification, worth carrying forward: **a Lambda Function URL created
+after October 2025 requires BOTH `lambda:InvokeFunctionUrl` AND
+`lambda:InvokeFunction`** granted to the caller — granting only the first
+produces a bare AWS-edge 403 that never reaches the handler and is
+indistinguishable from a SigV4 signature bug until you know to check for it;
+documented in both `infra/app.py` and `resolve_api.py`'s docstring so the next
+real tenant onboarding doesn't rediscover it the hard way. No real Sovereign
+tenant is onboarded yet, so the function's resource policy currently grants
+nothing to any external account — that's the deliberate, correct state (per
+`infra/tenant_stack.py`'s same "not deployed anywhere by this commit"
+caution), not a gap.
+
 ```
 POST /resolve
   Request:  { name?, cnpj_root?, ispb?, ticker? }   -- resolve-by-known-id/-name only

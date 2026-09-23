@@ -158,12 +158,12 @@ def _sign_and_post(url: str, payload: dict[str, Any]) -> dict[str, Any] | None:
             "x-onca-resolve-contract-version": RESOLVE_CONTRACT_VERSION,
         },
     )
-    # service="execute-api": the vendor /resolve endpoint is assumed to be an
-    # IAM-authenticated API Gateway route (matching the existing auth_api pattern
-    # in infra/app.py), not a raw Lambda function URL. Confirm this against the
-    # actual endpoint once Decision 3's build item lands; a Lambda function URL
-    # would sign as service="lambda" instead.
-    SigV4Auth(creds, "execute-api", region).add_auth(req)
+    # service="lambda": Decision 3 shipped `/resolve` as an AWS_IAM Lambda
+    # Function URL (src/dashboard/resolve_api.py, infra/app.py's
+    # OncaResolveApi), matching every other cross-boundary-signed endpoint
+    # already in the stack (act_fn/registry_fn/quotes_fn's function URLs) —
+    # not API Gateway, so this signs as "lambda", not "execute-api".
+    SigV4Auth(creds, "lambda", region).add_auth(req)
     signed = req.prepare()
     http_req = urllib.request.Request(
         url, data=body, method="POST", headers=dict(signed.headers)

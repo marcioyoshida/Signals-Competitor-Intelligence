@@ -75,6 +75,29 @@ def test_delivery_plane_default_and_explicit():
         tc.put_tenant_config("x", "saas", ["banking"], plane="bogus", table=t)
 
 
+def test_resolve_caller_role_arn_roundtrips_and_defaults_to_none():
+    t = _FakeTable()
+    tc.put_tenant_config("s", "saas", ["banking"], table=t)
+    assert tc.get_tenant_config("s", table=t)["resolve_caller_role_arn"] is None
+
+    arn = "arn:aws:iam::123456789012:role/OncaResolveCallerRole"
+    mk = tc.put_tenant_config(
+        "tier1", "sovereign", ["banking"], plane="marketplace",
+        resolve_caller_role_arn=arn, table=t,
+    )
+    assert mk["resolve_caller_role_arn"] == arn
+    assert tc.get_tenant_config("tier1", table=t)["resolve_caller_role_arn"] == arn
+
+
+def test_resolve_caller_role_arn_must_be_an_iam_role_arn():
+    t = _FakeTable()
+    with pytest.raises(ValueError):
+        tc.put_tenant_config(
+            "tier1", "sovereign", ["banking"], plane="marketplace",
+            resolve_caller_role_arn="not-an-arn", table=t,
+        )
+
+
 def test_higher_tiers_are_unrestricted():
     t = _FakeTable()
     # saas/sovereign may license any industry, including entry ones.

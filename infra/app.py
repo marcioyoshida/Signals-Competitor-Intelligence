@@ -2138,6 +2138,65 @@ class OncaPrototypeStack(Stack):
                 )
             ],
         )
+        # ADR 016 addendum Decision 3: POST /resolve — the ONLY window a Sovereign
+        # (marketplace-plane) tenant's in-account synth has into the registry
+        # (src/dashboard/resolve_api.py is the full contract/auth doc; this block
+        # is just the wiring). Deliberately NOT behind CloudFront: the caller is a
+        # tenant's own Lambda in a DIFFERENT AWS account making a direct signed
+        # HTTPS call, not a browser — CloudFront's origin-secret/basic-auth dance
+        # is the wrong shape here, so this gets its own bare function URL.
+        #
+        # AWS_IAM auth means an unsigned or wrongly-signed request never reaches
+        # the handler at all — but a Lambda Function URL's resource policy also
+        # grants NOTHING to an external account by default; onboarding a REAL
+        # Sovereign tenant is a separate, deliberate step after this deploy:
+        # `resolve_fn.add_permission(...)` (or the equivalent `aws lambda
+        # add-permission` call) naming that tenant's specific
+        # `OncaResolveCallerRole` ARN, done once no real tenant account exists to
+        # grant against yet — mirrors `infra/tenant_stack.py`'s "not deployed
+        # anywhere by this commit" caution for the same reason.
+        #
+        # TRAP (live-verified 2026-09-22): a function URL created after October
+        # 2025 requires BOTH `lambda:InvokeFunctionUrl` AND `lambda:InvokeFunction`
+        # — granting only the first gets a bare AWS-edge 403 ("Forbidden...")
+        # that never reaches this handler at all, and reads identically to a
+        # signature problem even though the signature is fine. Onboarding a real
+        # tenant's role needs TWO `add-permission` calls (one per action; the AWS
+        # CLI rejects a combined statement), each on BOTH the caller's identity
+        # policy (their own account) AND this function's resource policy
+        # (cross-account calls need both sides, per-action).
+        resolve_quota_table = dynamodb.Table(
+            self,
+            "OncaResolveQuota",
+            partition_key=dynamodb.Attribute(name="pk", type=dynamodb.AttributeType.STRING),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            time_to_live_attribute="ttl",
+            removal_policy=RemovalPolicy.DESTROY,  # pure rate-limit/canary counters, disposable
+        )
+        resolve_fn = lambda_.Function(
+            self,
+            "OncaResolveApi",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.dashboard.resolve_api.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.seconds(15),
+            memory_size=256,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_ENTITIES_TABLE": entities_table.table_name,
+                "ONCA_TENANT_CONFIG_TABLE": tenant_config_table.table_name,
+                "ONCA_RESOLVE_QUOTA_TABLE": resolve_quota_table.table_name,
+                # Deliberately UNSET: ONCA_RESOLUTION_MODE must never be "remote"
+                # on the vendor side — this Lambda IS the registry side of the
+                # seam (src/synth/resolver.py), defaulting to registry mode.
+            },
+        )
+        entities_table.grant_read_data(resolve_fn)  # single get_item lookups only, never scan
+        tenant_config_table.grant_read_data(resolve_fn)
+        resolve_quota_table.grant_read_write_data(resolve_fn)
+        resolve_url = resolve_fn.add_function_url(auth_type=lambda_.FunctionUrlAuthType.AWS_IAM)
+        CfnOutput(self, "ResolveApiUrl", value=resolve_url.url)
+
         # Agent Q&A (ADR 010): read-only, grounded, curated NL question answering
         # over the tool's own data (feed.json + KB). Same auth model; registered
         # BEFORE the /api/* catch-all (insertion order). It reads the published

@@ -8,6 +8,7 @@ entitlement, so a verified-but-unprovisioned user sees nothing rather than every
 from __future__ import annotations
 
 import os
+import re
 from typing import Any
 
 VALID_TIERS = ("entry", "saas", "sovereign")
@@ -62,6 +63,11 @@ def get_tenant_config(tenant_id: str | None, *, table: Any | None = None) -> dic
         # marketplace (the SAME product in the tenant's own AWS account). tier-1 is SaaS
         # OR Marketplace — same per-tenant read boundary either way.
         "plane": str(item.get("plane") or _default_plane(tier)),
+        # ADR 016 addendum Decision 3: the IAM role ARN this marketplace-plane
+        # tenant's synth Lambda calls POST /resolve as — the trust-policy
+        # artifact exchanged during onboarding (infra/tenant_stack.py's
+        # `OncaResolveCallerRole`). None for every non-marketplace tenant.
+        "resolve_caller_role_arn": item.get("resolve_caller_role_arn") or None,
     }
 
 
@@ -77,6 +83,7 @@ def _default_plane(tier: str) -> str:
 def put_tenant_config(
     tenant_id: str, tier: str, modules: list[str], *, plane: str | None = None,
     table: Any | None = None, force_not_ready: bool = False,
+    resolve_caller_role_arn: str | None = None,
 ) -> dict[str, Any]:
     """Provision/update a tenant's entitlement. Idempotent upsert."""
     tier = str(tier)
@@ -109,9 +116,23 @@ def put_tenant_config(
                 f"{sorted(not_ready)} are not launch-ready (issue #119) — pass "
                 "force_not_ready=True to override for a named buyer with an ingestion plan"
             )
-    _table(table).put_item(
-        Item={"tenant_id": str(tenant_id), "tier": tier, "modules": mods, "plane": plane})
-    return {"tenant_id": str(tenant_id), "tier": tier, "modules": mods, "plane": plane}
+    if resolve_caller_role_arn and not re.match(
+        r"^arn:aws:iam::\d{12}:role/.+$", str(resolve_caller_role_arn)
+    ):
+        raise ValueError(
+            f"resolve_caller_role_arn must be an IAM role ARN "
+            f"(arn:aws:iam::<account>:role/<name>), got {resolve_caller_role_arn!r}"
+        )
+    item: dict[str, Any] = {
+        "tenant_id": str(tenant_id), "tier": tier, "modules": mods, "plane": plane,
+    }
+    # DynamoDB's Table resource rejects a bare `None` attribute value — omit
+    # the key entirely rather than write a NULL, same convention the rest of
+    # this module already follows for optional fields.
+    if resolve_caller_role_arn:
+        item["resolve_caller_role_arn"] = str(resolve_caller_role_arn)
+    _table(table).put_item(Item=item)
+    return dict(item)
 
 
 def cognito_upsert_user(
