@@ -101,20 +101,36 @@ def _build_query(*, exclude_known: bool, limit: int) -> str:
     exclusion = (
         f"AND est.{e['cnpj_basico']} NOT IN UNNEST(@known_roots)\n          " if exclude_known else ""
     )
+    # Both tables are a MONTHLY HISTORY keyed by (ano, mes), not a current snapshot.
+    # Unpinned, a company appears once per month, passes the "ativa" filter on a month
+    # it has since left, and the empresas join fans out per month. Each table is pinned
+    # to ITS OWN latest snapshot (they can publish on different months), and the output
+    # is still deduped to one row per root as a guard against intra-month duplicates.
     return f"""
+        WITH est_latest AS (
+          SELECT * FROM `{DATASET}.estabelecimentos`
+          WHERE (ano * 100 + mes) = (SELECT MAX(ano * 100 + mes) FROM `{DATASET}.estabelecimentos`)
+        ),
+        emp_latest AS (
+          SELECT {m['cnpj_basico']} AS cnpj_basico, ANY_VALUE({m['razao_social']}) AS razao_social
+          FROM `{DATASET}.empresas`
+          WHERE (ano * 100 + mes) = (SELECT MAX(ano * 100 + mes) FROM `{DATASET}.empresas`)
+          GROUP BY {m['cnpj_basico']}
+        )
         SELECT
           est.{e['cnpj_basico']} AS cnpj_basico,
           est.{e['nome_fantasia']} AS nome_fantasia,
-          emp.{m['razao_social']} AS razao_social,
+          emp.razao_social AS razao_social,
           est.{e['cnae']} AS cnae,
           est.{e['uf']} AS uf
-        FROM `{DATASET}.estabelecimentos` AS est
-        LEFT JOIN `{DATASET}.empresas` AS emp
-          ON est.{e['cnpj_basico']} = emp.{m['cnpj_basico']}
+        FROM est_latest AS est
+        LEFT JOIN emp_latest AS emp
+          ON est.{e['cnpj_basico']} = emp.cnpj_basico
         WHERE est.{e['situacao']} = @active_situacao
           AND est.{e['matriz_filial']} = @matriz_flag
           AND SUBSTR(CAST(est.{e['cnae']} AS STRING), 1, 2) IN UNNEST(@cnae_divisions)
-          {exclusion}LIMIT {int(limit)}
+          {exclusion}QUALIFY ROW_NUMBER() OVER (PARTITION BY est.{e['cnpj_basico']}) = 1
+        LIMIT {int(limit)}
     """
 
 

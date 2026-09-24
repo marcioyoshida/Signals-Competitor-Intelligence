@@ -160,6 +160,19 @@ def test_fetch_fs_candidates_omits_exclusion_when_no_known_roots(monkeypatch):
     assert f"LIMIT {rbq.DEFAULT_FETCH_LIMIT}" in sql
 
 
+def test_query_pins_both_tables_to_their_latest_snapshot_and_dedupes():
+    # Review finding 2026-09-23: basedosdados keeps a monthly (ano, mes) history, so an
+    # unpinned query repeats companies per month, lets a since-closed company pass the
+    # "ativa" filter on an old month, and fans out the empresas join.
+    sql = rbq._build_query(exclude_known=True, limit=10)
+    assert sql.count("MAX(ano * 100 + mes)") == 2
+    assert "FROM `basedosdados.br_me_cnpj.estabelecimentos`\n" not in sql.split("est_latest AS")[0]
+    assert "FROM est_latest" in sql and "LEFT JOIN emp_latest" in sql
+    assert "GROUP BY" in sql  # empresas collapsed to one row per root
+    assert "QUALIFY ROW_NUMBER() OVER (PARTITION BY est.cnpj_basico) = 1" in sql
+    assert sql.index("QUALIFY") < sql.index("LIMIT")
+
+
 def test_active_situacao_matches_the_live_leading_zero_stripped_encoding():
     # Confirmed live 2026-09-23 via sample_rows against the real BigQuery table:
     # basedosdados stores situacao_cadastral as '2', not the raw dump's '02' —
