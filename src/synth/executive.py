@@ -482,18 +482,27 @@ def _fundamentals_rows(feed: dict[str, Any]) -> list[dict[str, Any]]:
     labels = _labels(feed)
     keys = ("roe_pct", "roa_pct", "leverage", "credito_captacoes_pct", "basileia_headroom_pp",
             "carteira_share_pct", "lucro_share_pct", "ativo_bi", "lucro_bi", "base_date")
+    cvm = {r.get("entity_id"): r for r in (feed.get("financials") or [])}
     rows: list[dict[str, Any]] = []
     for e in (feed.get("entities") or []):
         fu = e.get("fundamentals") or {}
         if fu.get("roe_pct") is None:
             continue
         res = e.get("resultados") or {}      # ADR 022 Tier-3: operating efficiency (opex/ativo)
+        fin = cvm.get(e.get("entity")) or {}
+        cti = (fin.get("interim") or {}).get("cost_to_income") or fin.get("cost_to_income")
+        val = fin.get("valuation") or {}
         rows.append({"entity": e.get("entity"),
                      "label": e.get("label") or labels.get(e.get("entity")) or e.get("entity"),
                      "industries": e.get("industries") or _industries_of(feed, e.get("entity")),
                      "opex_ativo_pct": res.get("opex_ativo_pct"),
                      # #146: net PDD / carteira, annualised — the CRO's cost-of-credit read.
                      "custo_credito_pct": res.get("custo_credito_pct"),
+                     # #92: CVM-filed (pessoal + adm) / (margem bruta pré-PDD + serviços).
+                     "cost_to_income_pct": round(cti * 100, 1) if cti is not None else None,
+                     # #93: market valuation at the latest close — price × CVM share count.
+                     "market_cap_bi": round(val["market_cap"] / 1e9, 1) if val.get("market_cap") else None,
+                     "pb": val.get("pb"), "pe": val.get("pe"), "price_date": val.get("price_date"),
                      **{k: fu.get(k) for k in keys}})
     rows.sort(key=lambda r: r["roe_pct"], reverse=True)
     return rows

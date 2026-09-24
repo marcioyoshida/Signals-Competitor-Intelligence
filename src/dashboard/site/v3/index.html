@@ -965,6 +965,10 @@ function rowsFinancials(list) {
                   r.leverage != null ? "alav " + r.leverage + "x" : null,
                   r.opex_ativo_pct != null ? "opex/ativo " + r.opex_ativo_pct + "%" : null,
                   r.custo_credito_pct != null ? "custo crédito " + r.custo_credito_pct + "%" : null,
+                  r.cost_to_income_pct != null ? "custo/receita " + r.cost_to_income_pct + "%" : null,
+                  r.market_cap_bi != null ? "valor de mercado R$" + r.market_cap_bi + "bi" : null,
+                  r.pb != null ? "P/VP " + r.pb + "x" : null,
+                  r.pe != null ? "P/L " + r.pe + "x" : null,
                   r.basileia_headroom_pp != null ? "headroom " + r.basileia_headroom_pp + "pp" : null,
                   r.lucro_share_pct != null ? r.lucro_share_pct + "% do lucro" : null].filter(Boolean).join(" · ");
     return `<div class="exrow">

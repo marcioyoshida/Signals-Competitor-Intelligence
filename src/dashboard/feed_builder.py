@@ -1369,10 +1369,21 @@ def _load_financials(digests_bucket: str) -> list[dict[str, Any]]:
     try:
         from src.ingest import cvm_financials
 
-        return cvm_financials.load_index(digests_bucket)
+        records = cvm_financials.load_index(digests_bucket)
     except Exception as exc:  # pragma: no cover - best-effort, read-only
         print(f"Warning: load financials index failed: {exc}")
         return []
+    # #93: valuation needs a same-day price, so it is joined here (daily) rather than in the
+    # monthly financials run. Best-effort — a quote outage leaves the statements intact.
+    try:
+        from src.synth import entity_registry, valuation
+
+        tickers = {e["entity_id"]: e["ticker"] for e in entity_registry.list_entities()
+                   if e.get("ticker")}
+        valuation.attach(records, tickers)
+    except Exception as exc:  # pragma: no cover - best-effort
+        print(f"Warning: valuation join failed: {exc}")
+    return records
 
 
 def _load_distress(digests_bucket: str) -> list[dict[str, Any]]:

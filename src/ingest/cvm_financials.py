@@ -126,6 +126,69 @@ def _pick_net_income(dre_rows: list[dict[str, Any]]) -> dict[str, Any] | None:
     return max(cands, key=lambda r: r.get("CD_CONTA", ""), default=None)
 
 
+# #92 — cost-to-income for the BANK DRE layout. Codes cannot be pinned: measured over
+# itr_cia_aberta_2026 (12 bank-layout issuers) two layouts coexist and every 3.04.xx line
+# shifts by one between them (e.g. pessoal is 3.04.02 in one and 3.04.03 in the other), so
+# the lines are matched by LABEL, one level under their parent. Definition, stated rather
+# than reconciled to each bank's own "índice de eficiência" (every bank publishes a
+# different one): (pessoal + outras administrativas) / (resultado bruto de intermediação
+# ANTES da PDD + receitas de serviços). The PDD add-back matters for the layout that books
+# the provision inside 3.02 (Itaú, BTG, Mercantil) — without it their margin is post-loss
+# and the ratio overstates. Why not COSIF group 7: it is gross of trading/FX flows CVM nets
+# (BB H1-2026: R$345.7bn vs R$160.7bn filed), which would halve the ratio.
+_RE_BANK_TOP = _re.compile(r"INTERMEDIA")
+_RE_PDD = _re.compile(r"PROVIS|PERDA.*CREDITO|CREDITO ESPERADA")
+_RE_SERVICES = _re.compile(r"^RECEITAS? (DE|COM) PRESTACAO DE SERVICOS")
+_RE_PERSONNEL = _re.compile(r"^DESPESAS? (DE|COM) PESSOAL")
+_RE_ADMIN = _re.compile(r"^OUTRAS DESPESAS (DE )?ADMINISTRATIVAS")
+
+
+def _child(code: str, parent: str) -> bool:
+    return code.startswith(parent + ".") and code.count(".") == parent.count(".") + 1
+
+
+def _bank_efficiency(rows: list[dict[str, Any]]) -> dict[str, float] | None:
+    """Cost-to-income from one DRE span of a BANK-layout issuer; None for any other layout
+    or when a required line is missing (never a partial ratio)."""
+    by_code = {str(r.get("CD_CONTA") or ""): r for r in rows}
+    top = by_code.get("3.01")
+    if top is None or not _RE_BANK_TOP.search(_fold(top.get("DS_CONTA"))):
+        return None
+
+    def _v(r: dict[str, Any]) -> float:
+        return (_num(r.get("VL_CONTA")) or 0.0) * _scale(r)
+
+    def _lines(parent: str, rx) -> list[dict[str, Any]]:
+        return [r for c, r in by_code.items() if _child(c, parent) and rx.search(_fold(r.get("DS_CONTA")))]
+
+    gross, personnel, admin = by_code.get("3.03"), _lines("3.04", _RE_PERSONNEL), _lines("3.04", _RE_ADMIN)
+    if gross is None or len(personnel) != 1 or len(admin) != 1:
+        return None
+    income = _v(gross) - sum(_v(r) for r in _lines("3.02", _RE_PDD)) \
+        + sum(_v(r) for r in _lines("3.04", _RE_SERVICES))
+    cost = -(_v(personnel[0]) + _v(admin[0]))
+    if income <= 0 or cost <= 0:
+        return None
+    return {"cost_to_income": round(cost / income, 4), "admin_cost": cost, "operating_income": income}
+
+
+def _parse_shares(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """#93 — ``composicao_capital``: shares outstanding (paid-in minus treasury) per class,
+    newest DT_REFER per issuer. RAW counts: CVM carries no unit column and some issuers file
+    in thousands (Itaú: 11,026,869 for ~11bn shares) — the scale is resolved downstream in
+    ``src.synth.valuation`` against price and book value, never guessed here."""
+    out: dict[str, dict[str, Any]] = {}
+    for r in rows:
+        cnpj, refer = _root8(r.get("CNPJ_CIA")), _iso(r.get("DT_REFER"))
+        if not cnpj or refer < (out.get(cnpj) or {}).get("shares_as_of", ""):
+            continue
+        on = (_num(r.get("QT_ACAO_ORDIN_CAP_INTEGR")) or 0) - (_num(r.get("QT_ACAO_ORDIN_TESOURO")) or 0)
+        pn = (_num(r.get("QT_ACAO_PREF_CAP_INTEGR")) or 0) - (_num(r.get("QT_ACAO_PREF_TESOURO")) or 0)
+        if on + pn > 0:
+            out[cnpj] = {"shares_on": on, "shares_pn": pn, "shares_as_of": refer}
+    return out
+
+
 def _iso(v: Any) -> str:
     return str(v or "")[:10]
 
@@ -227,6 +290,13 @@ def parse_statements(zf: zipfile.ZipFile, *, doc: str = "DFP") -> dict[str, dict
             rec["revenue"] = _num(rev["VL_CONTA"]) * _scale(rev)
         if ni is not None and _num(ni.get("VL_CONTA")) is not None:
             rec["net_income"] = _num(ni["VL_CONTA"]) * _scale(ni)
+        eff = _bank_efficiency(rows)
+        if eff:
+            rec.update(eff)
+
+    for cnpj, sh in _parse_shares(_open_csv(zf, "composicao_capital")).items():
+        if cnpj in out and sh["shares_as_of"] == newest.get(cnpj):
+            out[cnpj].setdefault("ÚLTIMO", {"period": sh["shares_as_of"], "doc": doc}).update(sh)
     return out
 
 
@@ -334,6 +404,12 @@ def build_index(
             if comparable and rev is not None and prev_rev not in (None, 0) else None,
             "leverage": round((assets - equity) / equity, 3)
             if assets is not None and equity not in (None, 0) else None,
+            # #92 — bank layout only (None elsewhere); a ratio of two same-span flows, so
+            # an ITR's 6-month read is directly comparable with a DFP's 12-month one.
+            "cost_to_income": cur.get("cost_to_income"),
+            # #93 — raw CVM counts; see _parse_shares for why the unit is not trusted here.
+            "shares_on": cur.get("shares_on"), "shares_pn": cur.get("shares_pn"),
+            "shares_as_of": cur.get("shares_as_of"),
             "source_url": source_url,
         }
         index[eid] = rec
@@ -342,7 +418,8 @@ def build_index(
 
 _INTERIM_FIELDS = ("doc", "period", "period_start", "months", "prior_period", "revenue",
                    "net_income", "assets", "equity", "prior_revenue", "prior_net_income",
-                   "net_margin", "revenue_growth", "leverage")
+                   "net_margin", "revenue_growth", "leverage", "cost_to_income",
+                   "shares_on", "shares_pn", "shares_as_of")
 
 
 def merge_interim(
