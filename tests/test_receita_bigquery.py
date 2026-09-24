@@ -23,9 +23,30 @@ class FakeBigQueryClient:
         self._rows = rows
         self.queries: list[tuple[str, object]] = []
 
-    def query(self, sql, job_config=None):
+    def query(self, sql, job_config=None, **_kw):
         self.queries.append((sql, job_config))
+        if "GROUP BY ano, mes" in sql:  # latest_snapshot probe
+            return _FakeResult([{"ano": 2026, "mes": 8}])
         return _FakeResult(self._rows)
+
+
+import types  # noqa: E402
+
+import pytest  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def fake_bigquery(monkeypatch):
+    """Every query in the module goes through `_run`, which builds a QueryJobConfig —
+    so the fake module is needed by every test, not only the fetch ones."""
+    mod = types.SimpleNamespace(
+        QueryJobConfig=lambda **kw: kw,
+        ScalarQueryParameter=lambda *a: a,
+        ArrayQueryParameter=lambda *a: a,
+    )
+    monkeypatch.setitem(sys.modules, "google.cloud.bigquery", mod)
+    monkeypatch.setitem(sys.modules, "google.cloud", types.SimpleNamespace(bigquery=mod))
+    return mod
 
 
 # --- _row_to_candidate --------------------------------------------------------
@@ -137,7 +158,7 @@ def test_fetch_fs_candidates_pushes_known_roots_exclusion_into_the_sql(monkeypat
 
     rbq.fetch_fs_candidates(fake_client, known_roots=["11111111", "22222222"])
 
-    sql, job_config = fake_client.queries[0]
+    sql, job_config = fake_client.queries[-1]
     assert "NOT IN UNNEST" in sql
     assert any(p[0] == "known_roots" for p in job_config["query_parameters"])
 
@@ -155,22 +176,54 @@ def test_fetch_fs_candidates_omits_exclusion_when_no_known_roots(monkeypatch):
 
     rbq.fetch_fs_candidates(fake_client)
 
-    sql, job_config = fake_client.queries[0]
+    sql, job_config = fake_client.queries[-1]
     assert "NOT IN UNNEST" not in sql
     assert f"LIMIT {rbq.DEFAULT_FETCH_LIMIT}" in sql
 
 
-def test_query_pins_both_tables_to_their_latest_snapshot_and_dedupes():
-    # Review finding 2026-09-23: basedosdados keeps a monthly (ano, mes) history, so an
-    # unpinned query repeats companies per month, lets a since-closed company pass the
-    # "ativa" filter on an old month, and fans out the empresas join.
+def test_query_pins_both_tables_by_parameter_not_subquery():
+    # #156: BigQuery prunes only on a direct column-vs-parameter comparison — no
+    # `MAX(...)` subquery and no expression wrapped around ano/mes.
     sql = rbq._build_query(exclude_known=True, limit=10)
-    assert sql.count("MAX(ano * 100 + mes)") == 2
-    assert "FROM `basedosdados.br_me_cnpj.estabelecimentos`\n" not in sql.split("est_latest AS")[0]
-    assert "FROM est_latest" in sql and "LEFT JOIN emp_latest" in sql
+    assert "MAX(" not in sql and "ano * 100" not in sql
+    assert "ano = @est_ano AND mes = @est_mes" in sql
+    assert "ano = @emp_ano AND mes = @emp_mes" in sql
+    assert "SELECT *" not in sql  # bytes are billed per column read
     assert "GROUP BY" in sql  # empresas collapsed to one row per root
     assert "QUALIFY ROW_NUMBER() OVER (PARTITION BY est.cnpj_basico) = 1" in sql
     assert sql.index("QUALIFY") < sql.index("LIMIT")
+
+
+def test_fetch_passes_each_tables_own_snapshot_as_params():
+    client = FakeBigQueryClient([])
+    rbq.fetch_fs_candidates(client, known_roots=["1"])
+    names = {p[0]: p[2] for p in client.queries[-1][1]["query_parameters"]}
+    assert names["est_ano"] == 2026 and names["est_mes"] == 8
+    assert names["emp_ano"] == 2026 and names["emp_mes"] == 8
+
+
+def test_every_query_carries_the_byte_cap(monkeypatch):
+    monkeypatch.setenv("ONCA_RECEITA_BQ_MAX_BYTES", "12345")
+    client = FakeBigQueryClient([])
+    rbq.fetch_fs_candidates(client, known_roots=["1"])
+    rbq.introspect_schema(client)
+    rbq.sample_rows(client, table="empresas", limit=2)
+    rbq.recheck_roots(client, ["1"])
+    assert client.queries and all(cfg["maximum_bytes_billed"] == 12345 for _, cfg in client.queries)
+
+
+def test_sample_rows_is_pinned_to_the_latest_snapshot():
+    client = FakeBigQueryClient([])
+    rbq.sample_rows(client, table="estabelecimentos", limit=2)
+    assert "ano = @s_ano AND mes = @s_mes" in client.queries[-1][0]
+
+
+def test_byte_cap_hit_raises_a_distinct_error():
+    class CapClient(FakeBigQueryClient):
+        def query(self, sql, job_config=None, **_kw):
+            raise RuntimeError("400 Query exceeded limit for bytes billed: 12345. bytesBilledLimitExceeded")
+    with pytest.raises(rbq.ByteCapExceeded):
+        rbq.introspect_schema(CapClient([]))
 
 
 def test_stale_proposals_flags_closed_missing_and_non_fs():
@@ -194,6 +247,6 @@ def test_active_situacao_matches_the_live_leading_zero_stripped_encoding():
 def test_sample_rows_targets_the_requested_table():
     fake_client = FakeBigQueryClient([{"cnpj_basico": "1"}])
     rbq.sample_rows(fake_client, table="empresas", limit=3)
-    sql = fake_client.queries[0][0]
+    sql = fake_client.queries[-1][0]
     assert f"{rbq.DATASET}.empresas" in sql
     assert "LIMIT 3" in sql

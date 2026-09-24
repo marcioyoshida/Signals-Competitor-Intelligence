@@ -39,6 +39,7 @@ name instead of being silently dropped by `propose_candidates`'s `no_name` skip.
 """
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from src.ingest.receita_bulk import FS_CNAE_DIVISIONS, cnae_to_industry, is_fs_cnae
@@ -72,6 +73,115 @@ _ACTIVE_SITUACAO = "2"
 _MATRIZ_FLAG = "1"
 
 
+# #156 — hard ceiling on bytes billed for EVERY job this module issues. Onça and Anteater
+# bill to the same GCP project and share one 1 TB/month free tier; a regression (lost
+# snapshot pin, schema change) must FAIL the job, not silently spend it. Env-overridable.
+DEFAULT_MAX_BYTES = 50 * 1024**3
+
+# Bytes billed by this module's jobs in the current process — the handler reports the
+# delta per invocation, so a cost change is visible in every run's result, not inferred.
+BYTES_BILLED = {"total": 0}
+
+
+class ByteCapExceeded(RuntimeError):
+    """A job hit `maximum_bytes_billed` — a cost regression, not a generic failure."""
+
+
+def _max_bytes() -> int:
+    return int(os.environ.get("ONCA_RECEITA_BQ_MAX_BYTES") or DEFAULT_MAX_BYTES)
+
+
+def _run(client: Any, sql: str, params: list[Any] | None = None, *,
+         use_cache: bool = True) -> list[dict[str, Any]]:
+    from google.cloud import bigquery
+
+    job_config = bigquery.QueryJobConfig(query_parameters=list(params or []),
+                                         maximum_bytes_billed=_max_bytes(),
+                                         use_query_cache=use_cache)
+    try:
+        # job_id_prefix forces a REAL job: the jobless fast path BigQuery otherwise picks
+        # returns rows with no statistics at all, so bytes billed read as unknown (live).
+        job = client.query(sql, job_config=job_config, job_id_prefix="onca_receita_")
+        rows = [dict(r) for r in job.result()]
+    except Exception as exc:
+        if "bytesBilledLimitExceeded" in str(exc) or "bytes billed" in str(exc).lower():
+            raise ByteCapExceeded(str(exc)[:500]) from exc
+        raise
+    # Statistics are not always populated by result() alone (first live run reported 0
+    # for every job) — reload once so the per-run cost read is real, not a silent zero.
+    if getattr(job, "total_bytes_billed", None) is None and hasattr(job, "reload"):
+        try:
+            job.reload()
+        except Exception as exc:  # pragma: no cover - best-effort telemetry
+            print(f"receita_bigquery: job reload failed: {exc}")
+    # None = UNKNOWN (a jobless fast-path query carries no statistics — seen live), never 0.
+    billed = getattr(job, "total_bytes_billed", None)
+    if billed is None:
+        BYTES_BILLED["unknown"] = BYTES_BILLED.get("unknown", 0) + 1
+    else:
+        billed = int(billed)
+        BYTES_BILLED["total"] += billed
+    BYTES_BILLED.setdefault("jobs", []).append({
+        "sql": " ".join(sql.split())[:60], "billed": billed,
+        "processed": getattr(job, "total_bytes_processed", None),
+        "cache_hit": getattr(job, "cache_hit", None),
+    })
+    return rows
+
+
+def latest_snapshot(client: Any, table: str) -> tuple[int, int]:
+    """(ano, mes) of the newest snapshot — reads only the two INT64 partition-candidate
+    columns. #156: resolved FIRST and then passed as parameters, because BigQuery only
+    prunes on a direct column-vs-constant/parameter comparison; the earlier
+    `(ano*100+mes) = (SELECT MAX(...))` form wraps the column AND uses a subquery."""
+    if table not in ("estabelecimentos", "empresas"):
+        raise ValueError(table)
+    rows = _run(client, f"SELECT ano, mes FROM `{DATASET}.{table}` "
+                        "GROUP BY ano, mes ORDER BY ano DESC, mes DESC LIMIT 1")
+    return int(rows[0]["ano"]), int(rows[0]["mes"])
+
+
+def estimate_bytes(client: Any, *, known_roots: Any = ("00000000",),
+                   limit: int | None = None) -> dict[str, Any]:
+    """#156 — measure whether the (ano, mes) parameters actually prune, instead of assuming.
+
+    Runs the REAL discover query once with the result cache OFF (bytes billed are the scan
+    cost, independent of LIMIT) and sets it against each table's total stored size from
+    `__TABLES__` metadata. Pinned bytes ≪ table size ⇒ pruning works. Dry runs were tried
+    first and returned no statistics through this client path (live, 2026-09-24).
+    Still under the byte cap; read-only, no registry writes."""
+    from google.cloud import bigquery
+
+    est, emp = latest_snapshot(client, "estabelecimentos"), latest_snapshot(client, "empresas")
+    params = [
+        bigquery.ScalarQueryParameter("active_situacao", "STRING", _ACTIVE_SITUACAO),
+        bigquery.ScalarQueryParameter("matriz_flag", "STRING", _MATRIZ_FLAG),
+        bigquery.ArrayQueryParameter("cnae_divisions", "STRING", list(FS_CNAE_DIVISIONS)),
+        bigquery.ArrayQueryParameter("known_roots", "STRING", list(known_roots)),
+        *_snapshot_params("est", est), *_snapshot_params("emp", emp),
+    ]
+    sizes = _run(client, f"SELECT table_id, size_bytes, row_count FROM `{DATASET}.__TABLES__` "
+                         "WHERE table_id IN ('estabelecimentos', 'empresas')")
+    n_before = len(BYTES_BILLED.get("jobs") or [])
+    _run(client, _build_query(exclude_known=True, limit=limit or DEFAULT_FETCH_LIMIT), params,
+         use_cache=False)
+    discover = (BYTES_BILLED.get("jobs") or [])[n_before:]
+    return {
+        "snapshot_est": list(est), "snapshot_emp": list(emp),
+        "table_sizes": {r["table_id"]: {"size_bytes": r["size_bytes"], "rows": r["row_count"]}
+                        for r in sizes},
+        "discover_bytes_billed": discover[-1]["billed"] if discover else None,
+        "max_bytes_cap": _max_bytes(),
+    }
+
+
+def _snapshot_params(prefix: str, snap: tuple[int, int]) -> list[Any]:
+    from google.cloud import bigquery
+
+    return [bigquery.ScalarQueryParameter(f"{prefix}_ano", "INT64", snap[0]),
+            bigquery.ScalarQueryParameter(f"{prefix}_mes", "INT64", snap[1])]
+
+
 def introspect_schema(client: Any) -> list[dict[str, str]]:
     """Run a FIXED schema-introspection query (never arbitrary SQL) against the two
     tables `fetch_fs_candidates` depends on. Returns `[{table_name, column_name,
@@ -83,16 +193,21 @@ def introspect_schema(client: Any) -> list[dict[str, str]]:
         WHERE table_name IN ('estabelecimentos', 'empresas')
         ORDER BY table_name, ordinal_position
     """
-    return [dict(row) for row in client.query(query).result()]
+    return _run(client, query)
 
 
 def sample_rows(client: Any, *, table: str = "estabelecimentos", limit: int = 5) -> list[dict[str, Any]]:
     """A FIXED `SELECT * LIMIT n` probe (never arbitrary SQL) — schema introspection
     tells you column NAMES/types, not whether `situacao_cadastral` is coded `'02'` or
     already translated to `'Ativa'` by basedosdados' own "traduzido" convention. Run
-    this before trusting `_ACTIVE_SITUACAO`/`_MATRIZ_FLAG`'s literal values."""
-    query = f"SELECT * FROM `{DATASET}.{table}` LIMIT {int(limit)}"
-    return [dict(row) for row in client.query(query).result()]
+    this before trusting `_ACTIVE_SITUACAO`/`_MATRIZ_FLAG`'s literal values.
+
+    #156: `LIMIT` does not reduce bytes billed — an unpinned `SELECT *` bills every
+    column of every month. Pinned to the latest snapshot, and still under the byte cap."""
+    snap = latest_snapshot(client, table)
+    query = (f"SELECT * FROM `{DATASET}.{table}` "
+             f"WHERE ano = @s_ano AND mes = @s_mes LIMIT {int(limit)}")
+    return _run(client, query, _snapshot_params("s", snap))
 
 
 def _build_query(*, exclude_known: bool, limit: int) -> str:
@@ -106,15 +221,18 @@ def _build_query(*, exclude_known: bool, limit: int) -> str:
     # it has since left, and the empresas join fans out per month. Each table is pinned
     # to ITS OWN latest snapshot (they can publish on different months), and the output
     # is still deduped to one row per root as a guard against intra-month duplicates.
+    # #156: pinned by PARAMETER (resolved by `latest_snapshot` first) so BigQuery can
+    # prune; SELECT only the columns used, since bytes billed are per column read.
     return f"""
         WITH est_latest AS (
-          SELECT * FROM `{DATASET}.estabelecimentos`
-          WHERE (ano * 100 + mes) = (SELECT MAX(ano * 100 + mes) FROM `{DATASET}.estabelecimentos`)
+          SELECT {', '.join(sorted(set(e.values())))}
+          FROM `{DATASET}.estabelecimentos`
+          WHERE ano = @est_ano AND mes = @est_mes
         ),
         emp_latest AS (
           SELECT {m['cnpj_basico']} AS cnpj_basico, ANY_VALUE({m['razao_social']}) AS razao_social
           FROM `{DATASET}.empresas`
-          WHERE (ano * 100 + mes) = (SELECT MAX(ano * 100 + mes) FROM `{DATASET}.empresas`)
+          WHERE ano = @emp_ano AND mes = @emp_mes
           GROUP BY {m['cnpj_basico']}
         )
         SELECT
@@ -146,17 +264,18 @@ def recheck_roots(client: Any, roots: list[str]) -> dict[str, dict[str, Any]]:
         SELECT {e['cnpj_basico']} AS cnpj_basico, ANY_VALUE({e['situacao']}) AS situacao,
                ANY_VALUE({e['cnae']}) AS cnae
         FROM `{DATASET}.estabelecimentos`
-        WHERE (ano * 100 + mes) = (SELECT MAX(ano * 100 + mes) FROM `{DATASET}.estabelecimentos`)
+        WHERE ano = @est_ano AND mes = @est_mes
           AND {e['matriz_filial']} = @matriz_flag
           AND {e['cnpj_basico']} IN UNNEST(@roots)
         GROUP BY {e['cnpj_basico']}
     """
-    job_config = bigquery.QueryJobConfig(query_parameters=[
+    params = [
         bigquery.ScalarQueryParameter("matriz_flag", "STRING", _MATRIZ_FLAG),
         bigquery.ArrayQueryParameter("roots", "STRING", list(roots)),
-    ])
+        *_snapshot_params("est", latest_snapshot(client, "estabelecimentos")),
+    ]
     return {str(r["cnpj_basico"]): {"situacao": str(r["situacao"] or ""), "cnae": str(r["cnae"] or "")}
-            for r in (dict(x) for x in client.query(sql, job_config=job_config).result())}
+            for r in _run(client, sql, params)}
 
 
 def stale_proposals(pending: list[dict[str, Any]], current: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
@@ -238,8 +357,9 @@ def fetch_fs_candidates(
     exclude_known = known_roots is not None
     if exclude_known:
         params.append(bigquery.ArrayQueryParameter("known_roots", "STRING", list(known_roots)))
-    job_config = bigquery.QueryJobConfig(query_parameters=params)
-    rows = client.query(_build_query(exclude_known=exclude_known, limit=limit), job_config=job_config).result()
+    params += _snapshot_params("est", latest_snapshot(client, "estabelecimentos"))
+    params += _snapshot_params("emp", latest_snapshot(client, "empresas"))
+    rows = _run(client, _build_query(exclude_known=exclude_known, limit=limit), params)
     out: list[dict[str, Any]] = []
     for row in rows:
         candidate = _row_to_candidate(dict(row))

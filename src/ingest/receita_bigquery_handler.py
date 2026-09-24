@@ -19,9 +19,11 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from typing import Any
 
-from receita_bigquery import fetch_fs_candidates, introspect_schema, sample_rows
+import receita_bigquery
+from receita_bigquery import ByteCapExceeded, fetch_fs_candidates, introspect_schema, sample_rows
 
 
 def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
@@ -30,9 +32,28 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     from google.cloud import bigquery
 
-    project = os.environ.get("GCP_PROJECT", "")
-    client = bigquery.Client(project=project)
+    client = bigquery.Client(project=os.environ.get("GCP_PROJECT", ""))
+    before = receita_bigquery.BYTES_BILLED["total"]
+    receita_bigquery.BYTES_BILLED["jobs"] = []
+    try:
+        result = _dispatch(mode, event, client)
+    except ByteCapExceeded as exc:
+        # #156: a cost regression must read as one, not as a generic failure.
+        # BigQuery states the exact scan size ("N or higher required") — the one precise
+        # cost figure available, since this path returns no job statistics.
+        need = re.search(r"(\d+) or higher required", str(exc))
+        result = {"ok": False, "mode": mode, "reason": "byte_cap",
+                  "max_bytes": receita_bigquery._max_bytes(),
+                  "required_bytes": int(need.group(1)) if need else None, "error": str(exc)[:300]}
+        print(json.dumps(result))
+    unknown = receita_bigquery.BYTES_BILLED.pop("unknown", 0)
+    result["bytes_billed"] = None if unknown else receita_bigquery.BYTES_BILLED["total"] - before
+    result["jobs"] = receita_bigquery.BYTES_BILLED["jobs"]
+    print(json.dumps({"mode": mode, "bytes_billed": result["bytes_billed"]}))
+    return result
 
+
+def _dispatch(mode: str, event: dict[str, Any], client: Any) -> dict[str, Any]:
     if mode == "introspect":
         result = {
             "ok": True,
@@ -80,6 +101,25 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         print(json.dumps(result))
         return result
 
+    if mode == "estimate":
+        # #156: read-only cost measurement. `max_bytes` may only LOWER the cap for this one
+        # run — a pass under a tight cap is a proven upper bound on the scan, which is the
+        # one cost read that works when BigQuery returns no job statistics (seen live).
+        # Restored in `finally`: a warm container keeps os.environ, and a leaked low cap
+        # would fail the next scheduled discover (seen live — 0.5GB carried over).
+        cap, saved = int(event.get("max_bytes") or 0), os.environ.get("ONCA_RECEITA_BQ_MAX_BYTES")
+        if 0 < cap < receita_bigquery._max_bytes():
+            os.environ["ONCA_RECEITA_BQ_MAX_BYTES"] = str(cap)
+        try:
+            result = {"ok": True, "mode": mode, **receita_bigquery.estimate_bytes(client)}
+        finally:
+            if saved is None:
+                os.environ.pop("ONCA_RECEITA_BQ_MAX_BYTES", None)
+            else:
+                os.environ["ONCA_RECEITA_BQ_MAX_BYTES"] = saved
+        print(json.dumps(result))
+        return result
+
     if mode == "recheck":
         # Read-only audit: which PENDING Receita proposals no longer qualify against the
         # latest snapshot? Reports only — rejecting stays a curator decision.
@@ -95,4 +135,4 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         print(json.dumps(result, default=str)[:4000])
         return json.loads(json.dumps(result, default=str))
 
-    return {"ok": False, "error": f"unknown mode {mode!r} (expected introspect|discover|recheck)"}
+    return {"ok": False, "error": f"unknown mode {mode!r} (expected introspect|discover|recheck|estimate)"}
