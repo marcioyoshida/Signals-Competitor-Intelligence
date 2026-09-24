@@ -80,4 +80,19 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         print(json.dumps(result))
         return result
 
-    return {"ok": False, "error": f"unknown mode {mode!r} (expected introspect|discover)"}
+    if mode == "recheck":
+        # Read-only audit: which PENDING Receita proposals no longer qualify against the
+        # latest snapshot? Reports only — rejecting stays a curator decision.
+        from src.synth import entity_registry as er
+        from receita_bigquery import recheck_roots, stale_proposals
+
+        pending = [r for r in er.list_reviews("pending")
+                   if r.get("kind") == "discovery" and r.get("reason") == "receita_cnae"]
+        roots = sorted({str((r.get("payload") or {}).get("cnpj") or "") for r in pending} - {""})
+        stale = stale_proposals(pending, recheck_roots(client, roots)) if roots else []
+        result = {"ok": True, "mode": mode, "pending": len(pending), "stale": len(stale),
+                  "stale_items": stale}
+        print(json.dumps(result, default=str)[:4000])
+        return json.loads(json.dumps(result, default=str))
+
+    return {"ok": False, "error": f"unknown mode {mode!r} (expected introspect|discover|recheck)"}

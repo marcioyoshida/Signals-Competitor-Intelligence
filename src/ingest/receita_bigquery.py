@@ -134,6 +134,47 @@ def _build_query(*, exclude_known: bool, limit: int) -> str:
     """
 
 
+def recheck_roots(client: Any, roots: list[str]) -> dict[str, dict[str, Any]]:
+    """Current state of the given cnpj roots' HEAD OFFICE in the latest snapshot:
+    ``{root: {situacao, cnae}}``. A root absent from the result has no head-office row
+    in the latest month. Read-only — used to audit proposals queued by the pre-fix,
+    snapshot-unpinned query (2026-09-23)."""
+    from google.cloud import bigquery
+
+    e = _ESTABELECIMENTOS_COLUMNS
+    sql = f"""
+        SELECT {e['cnpj_basico']} AS cnpj_basico, ANY_VALUE({e['situacao']}) AS situacao,
+               ANY_VALUE({e['cnae']}) AS cnae
+        FROM `{DATASET}.estabelecimentos`
+        WHERE (ano * 100 + mes) = (SELECT MAX(ano * 100 + mes) FROM `{DATASET}.estabelecimentos`)
+          AND {e['matriz_filial']} = @matriz_flag
+          AND {e['cnpj_basico']} IN UNNEST(@roots)
+        GROUP BY {e['cnpj_basico']}
+    """
+    job_config = bigquery.QueryJobConfig(query_parameters=[
+        bigquery.ScalarQueryParameter("matriz_flag", "STRING", _MATRIZ_FLAG),
+        bigquery.ArrayQueryParameter("roots", "STRING", list(roots)),
+    ])
+    return {str(r["cnpj_basico"]): {"situacao": str(r["situacao"] or ""), "cnae": str(r["cnae"] or "")}
+            for r in (dict(x) for x in client.query(sql, job_config=job_config).result())}
+
+
+def stale_proposals(pending: list[dict[str, Any]], current: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    """Pending Receita proposals that no longer qualify against ``current`` (from
+    ``recheck_roots``): head office gone, no longer ``ativa``, or CNAE left FS."""
+    out = []
+    for p in pending:
+        root = str((p.get("payload") or {}).get("cnpj") or "")
+        cur = current.get(root)
+        why = ("no_head_office_in_latest" if cur is None
+               else "not_active" if cur["situacao"] != _ACTIVE_SITUACAO
+               else "cnae_not_fs" if not is_fs_cnae(cur["cnae"]) else None)
+        if why:
+            out.append({"review_id": p.get("review_id"), "cnpj": root, "name": p.get("proposed"),
+                        "reason": why, **({"situacao": cur["situacao"]} if cur else {})})
+    return out
+
+
 def _row_to_candidate(row: Any) -> dict[str, Any] | None:
     cnpj_basico = str(row.get("cnpj_basico") or "").strip()
     if not cnpj_basico:

@@ -35,6 +35,7 @@ _BDR_SUFFIXES = {"32", "33", "34", "35"}
 # Plausible price-to-book band for a listed issuer. Deliberately wide — it only has to
 # separate "right unit" from "off by 1000×", and those sit three orders of magnitude apart.
 _PB_BAND = (0.05, 50.0)
+_IMMATERIAL = 0.001  # a share class below 0.1% of the total is ignored
 
 
 def fetch_price(symbol: str, *, timeout: int = 6) -> dict[str, Any] | None:
@@ -80,6 +81,9 @@ def value(rec: dict[str, Any], ticker: str,
     equity = src.get("equity") or rec.get("equity")
     if on + pn <= 0 or not equity or equity <= 0:
         return None
+    # An immaterial class (IRB files ONE preferred share — a golden share that never
+    # trades) must not withhold the whole company for want of a quote it cannot have.
+    on, pn = (0.0 if on / (on + pn) < _IMMATERIAL else on), (0.0 if pn / (on + pn) < _IMMATERIAL else pn)
     prices = _class_prices(ticker, quote, on > 0, pn > 0)
     if not prices:
         return None

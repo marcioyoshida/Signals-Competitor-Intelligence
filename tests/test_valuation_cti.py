@@ -121,6 +121,13 @@ def test_ticker_root_with_a_digit_is_accepted():
     assert round(v["market_cap"] / 1e9) == 90
 
 
+def test_immaterial_golden_share_class_does_not_withhold():
+    # IRB: 81,168,796 ON + exactly 1 PN; IRBR4 does not quote.
+    rec = {"shares_on": 81168796.0, "shares_pn": 1.0, "equity": 5328366000.0}
+    v = valuation.value(rec, "IRBR3", lambda s: {"price": 59.46, "date": "2026-09-23"} if s == "IRBR3" else None)
+    assert round(v["market_cap"] / 1e9, 1) == 4.8
+
+
 def test_bdr_is_skipped():
     rec = {"shares_on": 1e9, "shares_pn": 0, "equity": 1e10}
     assert valuation.value(rec, "ROXO34", _quote) is None

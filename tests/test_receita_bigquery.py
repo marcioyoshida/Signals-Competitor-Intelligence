@@ -173,6 +173,17 @@ def test_query_pins_both_tables_to_their_latest_snapshot_and_dedupes():
     assert sql.index("QUALIFY") < sql.index("LIMIT")
 
 
+def test_stale_proposals_flags_closed_missing_and_non_fs():
+    pending = [{"review_id": f"r{i}", "proposed": f"N{i}", "payload": {"cnpj": root}}
+               for i, root in enumerate(["11111111", "22222222", "33333333", "44444444"])]
+    current = {"11111111": {"situacao": "2", "cnae": "6422800"},   # still fine
+               "22222222": {"situacao": "8", "cnae": "6422800"},   # baixada
+               "44444444": {"situacao": "2", "cnae": "4711301"}}   # left FS
+    out = {s["cnpj"]: s["reason"] for s in rbq.stale_proposals(pending, current)}
+    assert out == {"22222222": "not_active", "33333333": "no_head_office_in_latest",
+                   "44444444": "cnae_not_fs"}
+
+
 def test_active_situacao_matches_the_live_leading_zero_stripped_encoding():
     # Confirmed live 2026-09-23 via sample_rows against the real BigQuery table:
     # basedosdados stores situacao_cadastral as '2', not the raw dump's '02' —
