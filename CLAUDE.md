@@ -85,7 +85,7 @@ licensed aggregator (People Data Labs / Explorium), never scraped.
   citations; correlation logic (regulatory event + competitor signal → one
   flagged narrative). This correlation IS the product.
   **Stage A (done)** — raw corpus to `onca-raw-{account}` + Bedrock KB
-  (S3 Vectors, KB `CQ5LBZBQTY`). Titan V2 embed quota 60 RPM approved
+  (S3 Vectors, KB `MHFHPHYIQH` / `onca-corpus-v2`; the original KB `CQ5LBZBQTY` was deleted — older docs still cite it). Titan V2 embed quota 60 RPM approved
   2026-08-10; ingestion + cited retrieval validated.
   **Stage B (live 2026-08-14)** — `src/synth/` synthesis Lambda producing
   LLM-written (nova-lite Converse) + KB-retrieved, source-cited fused
