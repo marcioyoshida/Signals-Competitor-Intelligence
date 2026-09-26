@@ -1983,19 +1983,24 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 _report = weekly_digest.send_weekly_digest(
                     feed, dashboard_url=os.environ.get("ONCA_DASHBOARD_URL"))
                 print(f"Weekly CSO digest ({_as_of}): {_report}")
-                # #159: the weekly CPO Product Radar digest rides the same weekday gate and
-                # channels. Its own opt-in flag, so enabling it never changes the CSO brief;
-                # it is not counted in `delivered` — the dated marker stays the CSO brief's.
-                if os.environ.get("ONCA_CPO_DIGEST", "false").lower() in ("1", "true", "yes"):
-                    try:
-                        _cpo = weekly_digest.send_cpo_digest(
-                            feed, dashboard_url=os.environ.get("ONCA_DASHBOARD_URL"),
-                            as_of=_as_of.isoformat())
-                        print(f"Weekly CPO radar digest ({_as_of}): {_cpo}")
-                    except Exception as exc:  # pragma: no cover - best-effort
-                        print(f"Warning: CPO radar digest skipped: {exc}")
                 if _wd_bucket and weekly_digest.delivered(_report):
                     weekly_digest.mark_sent(_wd_bucket, _as_of.isoformat(), _report)
+            # #159: the weekly CPO Product Radar digest — same weekday and channels, its own
+            # opt-in flag and its OWN dated marker: a CSO retry never re-sends it, and a failed
+            # CPO send is retried by the day's later runs regardless of the CSO brief.
+            if os.environ.get("ONCA_CPO_DIGEST", "false").lower() in ("1", "true", "yes") \
+                    and weekly_digest.should_send(_as_of.isoformat(), weekday=_wd_day,
+                                                  bucket=_wd_bucket, key=weekly_digest.CPO_SENT_KEY):
+                try:
+                    _cpo = weekly_digest.send_cpo_digest(
+                        feed, dashboard_url=os.environ.get("ONCA_DASHBOARD_URL"),
+                        as_of=_as_of.isoformat())
+                    print(f"Weekly CPO radar digest ({_as_of}): {_cpo}")
+                    if _wd_bucket and weekly_digest.delivered(_cpo):
+                        weekly_digest.mark_sent(_wd_bucket, _as_of.isoformat(), _cpo,
+                                                key=weekly_digest.CPO_SENT_KEY)
+                except Exception as exc:  # pragma: no cover - best-effort
+                    print(f"Warning: CPO radar digest skipped: {exc}")
         except Exception as exc:  # pragma: no cover - best-effort, never blocks publish
             print(f"Warning: weekly digest skipped: {exc}")
     # ADR 019 Phase 3b — vertical feed scoping: a sectorial deployment publishes ONLY its

@@ -245,3 +245,16 @@ def test_a_missing_corpus_date_can_never_skip_a_week():
     corpus_date, run_date = "2026-09-20", "2026-09-21"   # Sunday, Monday
     assert wd.should_send(corpus_date, weekday=0) is False
     assert wd.should_send(run_date, weekday=0) is True
+
+
+def test_cpo_digest_marker_is_independent_of_the_cso_marker():
+    # #159: a CSO send marks only the CSO key — the CPO digest is still due that day, and
+    # marking the CPO key doesn't close the (still-failing) CSO brief's retry window.
+    s3 = _FakeS3()
+    wd.mark_sent("b", "2026-09-28", {"email": True}, s3=s3)
+    assert wd.should_send("2026-09-28", weekday=0, bucket="b", s3=s3) is False
+    assert wd.should_send("2026-09-28", weekday=0, bucket="b", s3=s3, key=wd.CPO_SENT_KEY) is True
+    s3 = _FakeS3()
+    wd.mark_sent("b", "2026-09-28", {"email": True}, s3=s3, key=wd.CPO_SENT_KEY)
+    assert wd.should_send("2026-09-28", weekday=0, bucket="b", s3=s3, key=wd.CPO_SENT_KEY) is False
+    assert wd.should_send("2026-09-28", weekday=0, bucket="b", s3=s3) is True

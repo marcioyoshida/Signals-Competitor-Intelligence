@@ -1919,6 +1919,7 @@ class OncaPrototypeStack(Stack):
                 # were the two external blockers on #111/G3. Recipient (ONCA_ALERT_EMAIL_TO)
                 # lives in the api-key secret, not here — it is a person, not infrastructure.
                 "ONCA_WEEKLY_DIGEST": "true",
+                "ONCA_CPO_DIGEST": "true",   # #159 weekly CPO Product Radar digest (own sent-marker)
                 "ONCA_ALERT_EMAIL_FROM": "briefing@onssa.org",
                 "ONCA_DIGEST_WEEKDAY": "0",  # 0 = Monday
                 "ONCA_DASHBOARD_URL": "https://d37aa8gtuqquoe.cloudfront.net/exec",

@@ -256,6 +256,9 @@ def send_weekly_digest(feed: dict[str, Any], *, sector: str = "__all__",
 
 
 SENT_KEY = "weekly_digest/last_sent.json"
+#: #159 — the CPO radar digest keeps its OWN marker, so a CSO retry never re-sends it and a
+#: failed CPO send is retried by the day's later runs independently of the CSO brief.
+CPO_SENT_KEY = "weekly_digest/cpo_last_sent.json"
 
 
 def _s3_client(s3: Any | None = None) -> Any:
@@ -266,7 +269,7 @@ def _s3_client(s3: Any | None = None) -> Any:
     return boto3.client("s3")
 
 
-def already_sent(bucket: str, day: str, *, s3: Any | None = None) -> bool:
+def already_sent(bucket: str, day: str, *, s3: Any | None = None, key: str = SENT_KEY) -> bool:
     """Has the brief for `day` (ISO date) already gone out?
 
     The weekday gate alone is NOT enough: `OncaPipeline` runs three times a day
@@ -279,14 +282,14 @@ def already_sent(bucket: str, day: str, *, s3: Any | None = None) -> bool:
     the recipient has no way to notice.
     """
     try:
-        body = _s3_client(s3).get_object(Bucket=bucket, Key=SENT_KEY)["Body"].read()
+        body = _s3_client(s3).get_object(Bucket=bucket, Key=key)["Body"].read()
         return str(json.loads(body).get("date") or "") == day
     except Exception:
         return False
 
 
 def mark_sent(bucket: str, day: str, report: dict[str, Any] | None = None,
-              *, s3: Any | None = None) -> None:
+              *, s3: Any | None = None, key: str = SENT_KEY) -> None:
     """Record that `day`'s brief was delivered. Only call when a channel actually
     returned True — if every channel was unconfigured (None) or errored (False),
     leaving the marker alone lets the SAME DAY's later pipeline runs retry, instead
@@ -294,7 +297,7 @@ def mark_sent(bucket: str, day: str, report: dict[str, Any] | None = None,
     payload = {"date": day, "report": dict(report or {})}
     try:
         _s3_client(s3).put_object(
-            Bucket=bucket, Key=SENT_KEY,
+            Bucket=bucket, Key=key,
             Body=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
             ContentType="application/json")
     except Exception as exc:  # pragma: no cover - best-effort
@@ -302,7 +305,7 @@ def mark_sent(bucket: str, day: str, report: dict[str, Any] | None = None,
 
 
 def should_send(as_of: str, *, weekday: int = 0, bucket: str | None = None,
-                s3: Any | None = None) -> bool:
+                s3: Any | None = None, key: str = SENT_KEY) -> bool:
     """Is the brief due for `as_of` (ISO date)? Two conditions, both required:
     it is the configured weekday, AND it has not already gone out today."""
     import datetime as _dt
@@ -313,7 +316,7 @@ def should_send(as_of: str, *, weekday: int = 0, bucket: str | None = None,
         return False
     if day.weekday() != weekday:
         return False
-    if bucket and already_sent(bucket, day.isoformat(), s3=s3):
+    if bucket and already_sent(bucket, day.isoformat(), s3=s3, key=key):
         return False
     return True
 
