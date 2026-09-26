@@ -38,6 +38,8 @@ SEED_CNPJ_ROOTS: dict[str, str] = {
     "caixa": "00360305",
     "btg": "30306294",
     "safra": "58160789",
+    "banrisul": "92702067",      # the bank; 93026847 is its brokerage (CVM files under this one)
+    "abc": "28195667",           # Banco ABC Brasil
     "original": "92894922",
     "c6": "31872495",
     # Fintechs / payments
