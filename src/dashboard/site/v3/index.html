@@ -255,6 +255,10 @@
     .mom > :first-child, .tlrow > :first-child, .crow > :first-child {
       grid-column: 1 / -1; white-space: normal; }
     .exrow .ent { min-width: 76px; }
+    /* #159 radar rows carry a source badge + links: wrap so the reason and the
+       sources each get a full-width line instead of pushing past the viewport. */
+    .exrow--radar { flex-wrap: wrap; row-gap: 4px; }
+    .exrow--radar .ttl, .exrow--radar .meta { flex-basis: 100%; }
     .officer-tabs a { padding: 10px var(--s3); }
     .selwrap select, .authbtn { padding: 9px var(--s2); min-height: 40px; }
   }
@@ -907,7 +911,7 @@ function rowsRadar(pr) {
     const links = (r.sources || []).slice(0, 3).map((s, i) =>
       `<a href="${U.esc(s.url)}" target="_blank" rel="noopener" title="${U.esc(s.label || s.url)}">[${i + 1}]</a>`).join(" ");
     const txt = (r.title || "") + (r.reason ? " — " + r.reason : "");
-    return `<div class="exrow">
+    return `<div class="exrow exrow--radar">
     <span class="dt">${r.date ? U.fmtDate(r.date) : ""}</span>
     <span class="badge badge--${RADAR_SEV[r.type] || "low"}">${U.esc(r.type_label || r.type || "")}</span>
     <span class="ent" title="${U.esc(r.product_label || r.entity_label || "—")}">${U.esc(r.product_label || r.entity_label || "—")}</span>
@@ -1523,7 +1527,7 @@ function render() {
     band("Ambiente PESTLE", "político·econômico·social·tecnológico·legal·ambiental · beliefs vetados",
       panel("Entidades por dimensão", null, "dimensão · avaliação", rowsFramework(p.pestle)));
   else if (OFFICER === "cpo") board +=
-    band("Radar de produto", "App Store vs linha de base (≥10/dia, z ≥3) · mudanças datadas em vídeos · #159",
+    band("Radar de produto", "App Store vs linha de base (≥10/dia, z ≥3) · mudanças datadas em vídeos",
       panel("Eventos de produto dos concorrentes", ((p.product_radar || {}).events || []).filter(inSector).length,
         "mais recente primeiro · fontes linkadas", rowsRadar(p.product_radar))) +
     band("Movimentos de produto", "lançamentos & ofertas · lente ofertas/produto",
