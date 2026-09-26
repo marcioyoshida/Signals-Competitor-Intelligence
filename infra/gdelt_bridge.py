@@ -182,18 +182,21 @@ class OncaGdeltBridgeStack(Stack):
             # registry table itself, same grant every other discovery-writing Lambda
             # in the main stack already has.
             entities_table.grant_read_write_data(role)
+        role.add_to_principal_policy(iam.PolicyStatement(
+            actions=["ssm:GetParameter", "ssm:PutParameter"],
+            resources=[f"arn:aws:ssm:{self.region}:{self.account}:parameter/onca/receita-bq/*"],
+        ))
 
         if gcp_ready:
-            # Daily; not time-sensitive relative to GDELT's own schedule (this source
-            # refreshes monthly upstream, not daily) — picked 08:00 UTC to land after
-            # the GDELT sweep rather than contend with it for the shared role's
-            # concurrent-invocation headroom.
+            # Monthly (the mirror refreshes monthly at best); the handler additionally
+            # skips the ~7 GiB scan when the snapshot hasn't moved since the last run
+            # (SSM marker). 08:00 UTC lands after the GDELT sweep.
             events.Rule(
                 self,
-                "ReceitaBigqueryDailyTrigger",
-                schedule=events.Schedule.cron(minute="0", hour="8"),
+                "ReceitaBigqueryMonthlyTrigger",
+                schedule=events.Schedule.cron(minute="0", hour="8", day="5"),
                 targets=[targets.LambdaFunction(
                     receita_fn, event=events.RuleTargetInput.from_object({"mode": "discover"})
                 )],
-                description="#104: daily Receita CNAE discovery via BigQuery, propose-only.",
+                description="#104: monthly Receita CNAE discovery via BigQuery, snapshot-gated, propose-only.",
             )

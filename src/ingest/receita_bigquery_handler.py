@@ -13,7 +13,9 @@ IAM-gated model as every other bridge function in this stack):
     `_ESTABELECIMENTOS_COLUMNS`/`_ACTIVE_SITUACAO`/`_MATRIZ_FLAG` before switching modes.
   - `mode: "discover"` (the real path) — runs `fetch_fs_candidates` then
     `receita_bulk.propose_candidates`, same propose-only discipline (ADR 011 §4) as
-    every other entity-discovery source; never auto-creates.
+    every other entity-discovery source; never auto-creates. Gated on the snapshot:
+    skips (cheap probe only) when the mirror's (ano, mes) matches the SSM marker of
+    the last processed run; `force: true` overrides.
 """
 from __future__ import annotations
 
@@ -79,10 +81,20 @@ def _dispatch(mode: str, event: dict[str, Any], client: Any) -> dict[str, Any]:
         # exclusion timed out a 300s/512MB Lambda before it could even finish
         # materializing the result set) and propose_candidates (so it doesn't
         # re-scan the registry a second time for the same information).
+        # Snapshot gate: the mirror refreshes monthly at best (and sat on 2026-01 for
+        # months), so the ~7 GiB discover scan runs only when the probe sees a snapshot
+        # it hasn't processed. `force: true` bypasses it for a manual run.
+        snaps = receita_bigquery.current_snapshots(client)
+        key = receita_bigquery.snapshot_key(snaps)
+        if not event.get("force") and key == _read_marker():
+            result = {"ok": True, "mode": mode, "skipped": "snapshot_unchanged", "snapshot": key}
+            print(json.dumps(result))
+            return result
+
         known_roots = er.load_cnpj_root_map(force=True)
         fetch_limit = int(os.environ.get("ONCA_RECEITA_BQ_FETCH_LIMIT", "0")) or None
         candidates = fetch_fs_candidates(
-            client, known_roots=known_roots.keys(),
+            client, known_roots=known_roots.keys(), snapshots=snaps,
             **({"limit": fetch_limit} if fetch_limit else {}),
         )
         report = receita_bulk.propose_candidates(
@@ -97,7 +109,9 @@ def _dispatch(mode: str, event: dict[str, Any], client: Any) -> dict[str, Any]:
             "already": report["already"],
             "proposed": len(report["proposed"]),
             "no_name": report["no_name"],
+            "snapshot": key,
         }
+        _write_marker(key)
         print(json.dumps(result))
         return result
 
@@ -122,7 +136,7 @@ def _dispatch(mode: str, event: dict[str, Any], client: Any) -> dict[str, Any]:
 
     if mode == "recheck":
         # Read-only audit: which PENDING Receita proposals no longer qualify against the
-        # latest snapshot? Reports only — rejecting stays a curator decision.
+        # latest snapshot? Reports only, unless `table: true` (a reversible set-aside, never a reject).
         from src.synth import entity_registry as er
         from receita_bigquery import recheck_roots, stale_proposals
 
@@ -130,9 +144,34 @@ def _dispatch(mode: str, event: dict[str, Any], client: Any) -> dict[str, Any]:
                    if r.get("kind") == "discovery" and r.get("reason") == "receita_cnae"]
         roots = sorted({str((r.get("payload") or {}).get("cnpj") or "") for r in pending} - {""})
         stale = stale_proposals(pending, recheck_roots(client, roots)) if roots else []
+        # `table: true` sets the stale ones aside (reversible status, not a rejection).
+        tabled = [s["review_id"] for s in stale if event.get("table") and er.table_review(
+            s["review_id"], f"receita recheck {s['reason']}")]
         result = {"ok": True, "mode": mode, "pending": len(pending), "stale": len(stale),
-                  "stale_items": stale}
+                  "tabled": len(tabled), "stale_items": stale}
         print(json.dumps(result, default=str)[:4000])
         return json.loads(json.dumps(result, default=str))
 
     return {"ok": False, "error": f"unknown mode {mode!r} (expected introspect|discover|recheck|estimate)"}
+
+
+_MARKER_PARAM = os.environ.get("ONCA_RECEITA_BQ_MARKER_PARAM", "/onca/receita-bq/last-snapshot")
+
+
+def _read_marker() -> str | None:
+    import boto3
+
+    try:
+        return boto3.client("ssm").get_parameter(Name=_MARKER_PARAM)["Parameter"]["Value"]
+    except Exception as exc:  # ParameterNotFound on first run → proceed
+        print(f"receita_bigquery: marker read: {exc}")
+        return None
+
+
+def _write_marker(key: str) -> None:
+    import boto3
+
+    try:
+        boto3.client("ssm").put_parameter(Name=_MARKER_PARAM, Value=key, Type="String", Overwrite=True)
+    except Exception as exc:  # the next run just re-scans — costly, never wrong
+        print(f"receita_bigquery: marker write: {exc}")

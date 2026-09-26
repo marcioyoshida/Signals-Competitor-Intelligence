@@ -1358,6 +1358,30 @@ def resolve_review(
     return item
 
 
+def table_review(review_id: str, note: str, table: Any | None = None) -> dict[str, Any] | None:
+    """Set a PENDING review aside (status ``tabled``) — out of the curator's queue,
+    neither applied nor rejected, reason kept. Reversible via ``untable_review``;
+    ``propose_review`` never re-queues it. No-op unless currently pending."""
+    t = _table(table)
+    item = t.get_item(Key={"pk": f"REVIEW#{review_id}"}).get("Item")
+    if not item or item.get("status") != "pending":
+        return None
+    item.update(status="tabled", tabled_note=note, tabled_at=_now_iso())
+    t.put_item(Item=item)
+    return item
+
+
+def untable_review(review_id: str, table: Any | None = None) -> dict[str, Any] | None:
+    """Return a tabled review to the pending queue."""
+    t = _table(table)
+    item = t.get_item(Key={"pk": f"REVIEW#{review_id}"}).get("Item")
+    if not item or item.get("status") != "tabled":
+        return None
+    item["status"] = "pending"
+    t.put_item(Item=item)
+    return item
+
+
 def propose_news_safe(entity_id: str, brand: str, *, table: Any | None = None) -> str | None:
     """Queue a review to let a new entity's bare brand resolve from news/DOU
     (ADR 002). Idempotent by entity_id; a curator approves it once the brand is

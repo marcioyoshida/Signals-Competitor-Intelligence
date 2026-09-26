@@ -141,6 +141,16 @@ def latest_snapshot(client: Any, table: str) -> tuple[int, int]:
     return int(rows[0]["ano"]), int(rows[0]["mes"])
 
 
+def current_snapshots(client: Any) -> dict[str, tuple[int, int]]:
+    """Both tables' newest (ano, mes) — the change probe for the snapshot gate."""
+    return {t: latest_snapshot(client, t) for t in ("estabelecimentos", "empresas")}
+
+
+def snapshot_key(snaps: dict[str, tuple[int, int]]) -> str:
+    """Stable marker string, e.g. 'est=2026-01;emp=2026-01'."""
+    return ";".join(f"{t[:3]}={a:04d}-{m:02d}" for t, (a, m) in sorted(snaps.items(), reverse=True))
+
+
 def estimate_bytes(client: Any, *, known_roots: Any = ("00000000",),
                    limit: int | None = None) -> dict[str, Any]:
     """#156 — measure whether the (ano, mes) parameters actually prune, instead of assuming.
@@ -336,6 +346,7 @@ DEFAULT_FETCH_LIMIT = 20_000
 def fetch_fs_candidates(
     client: Any, *, cnae_divisions: tuple[str, ...] = FS_CNAE_DIVISIONS,
     known_roots: Any = None, limit: int = DEFAULT_FETCH_LIMIT,
+    snapshots: dict[str, tuple[int, int]] | None = None,
 ) -> list[dict[str, Any]]:
     """Query the live BigQuery mirror for active, head-office, FS-CNAE establishments
     and shape the results into `receita_bulk.propose_candidates`-compatible rows.
@@ -357,8 +368,9 @@ def fetch_fs_candidates(
     exclude_known = known_roots is not None
     if exclude_known:
         params.append(bigquery.ArrayQueryParameter("known_roots", "STRING", list(known_roots)))
-    params += _snapshot_params("est", latest_snapshot(client, "estabelecimentos"))
-    params += _snapshot_params("emp", latest_snapshot(client, "empresas"))
+    snaps = snapshots or current_snapshots(client)
+    params += _snapshot_params("est", snaps["estabelecimentos"])
+    params += _snapshot_params("emp", snaps["empresas"])
     rows = _run(client, _build_query(exclude_known=exclude_known, limit=limit), params)
     out: list[dict[str, Any]] = []
     for row in rows:

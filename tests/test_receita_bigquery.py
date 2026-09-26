@@ -250,3 +250,39 @@ def test_sample_rows_targets_the_requested_table():
     sql = fake_client.queries[-1][0]
     assert f"{rbq.DATASET}.empresas" in sql
     assert "LIMIT 3" in sql
+
+
+def test_snapshot_key_is_stable_and_readable():
+    assert rbq.snapshot_key({"empresas": (2026, 1), "estabelecimentos": (2026, 8)}) == "est=2026-08;emp=2026-01"
+
+
+def test_fetch_reuses_given_snapshots_without_probing():
+    client = FakeBigQueryClient([])
+    rbq.fetch_fs_candidates(client, known_roots=["1"],
+                            snapshots={"estabelecimentos": (2025, 12), "empresas": (2025, 11)})
+    assert len(client.queries) == 1
+    names = {p[0]: p[2] for p in client.queries[-1][1]["query_parameters"]}
+    assert (names["est_mes"], names["emp_mes"]) == (12, 11)
+
+
+def test_discover_skips_when_snapshot_unchanged(monkeypatch):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src" / "ingest"))
+    import receita_bigquery_handler as h
+    client = FakeBigQueryClient([])
+    monkeypatch.setattr(h, "_read_marker", lambda: "est=2026-08;emp=2026-08")
+    out = h._dispatch("discover", {}, client)
+    assert out["skipped"] == "snapshot_unchanged"
+    assert all("GROUP BY ano, mes" in q for q, _ in client.queries)  # probe only
+
+
+def test_table_review_sets_aside_and_untable_restores():
+    from src.synth import entity_registry as er
+
+    class T:
+        def __init__(self): self.d = {"REVIEW#r1": {"pk": "REVIEW#r1", "status": "pending"}}
+        def get_item(self, Key): return {"Item": dict(self.d[Key["pk"]])} if Key["pk"] in self.d else {}
+        def put_item(self, Item): self.d[Item["pk"]] = Item
+    t = T()
+    assert er.table_review("r1", "receita recheck not_active", table=t)["status"] == "tabled"
+    assert er.table_review("r1", "again", table=t) is None  # only from pending
+    assert er.untable_review("r1", table=t)["status"] == "pending"
