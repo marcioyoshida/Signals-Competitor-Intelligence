@@ -50,12 +50,12 @@ SEED_CNPJ_ROOTS: dict[str, str] = {
     "stone": "16501555",         # Stone Instituição de Pagamento
     "mercado_pago": "10573521",
     "neon": "20855875",          # Neon Pagamentos
-    "creditas": "23361442",
+    "creditas": "17770708",
     "infinitepay": "18189547",   # CloudWalk
     "crefisa": "60779196",
     # Insurers
     "porto_seguro": "61198164",
-    "caixa_seguridade": "17960987",
+    "caixa_seguridade": "22543331",
     "bb_seguridade": "17344597",
     "icatu": "42283770",         # Icatu Seguros
     # Data & consórcio
