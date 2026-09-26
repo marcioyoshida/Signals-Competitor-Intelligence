@@ -492,6 +492,14 @@ def _fundamentals_rows(feed: dict[str, Any]) -> list[dict[str, Any]]:
         fin = cvm.get(e.get("entity")) or {}
         cti = (fin.get("interim") or {}).get("cost_to_income") or fin.get("cost_to_income")
         val = fin.get("valuation") or {}
+        kpi = (fin.get("issuer_kpis") or {}).get("metrics") or {}
+
+        def _kpi_pct(name: str) -> float | None:
+            # #152 — group-level figures only: a ``scope``d metric (Porto Bank's efficiency on
+            # the Porto Seguro card) would read as the group's own ratio.
+            m = kpi.get(name) or {}
+            return round(m["value"] * 100, 1) if m.get("value") is not None and not m.get("scope") else None
+
         rows.append({"entity": e.get("entity"),
                      "label": e.get("label") or labels.get(e.get("entity")) or e.get("entity"),
                      "industries": e.get("industries") or _industries_of(feed, e.get("entity")),
@@ -500,6 +508,11 @@ def _fundamentals_rows(feed: dict[str, Any]) -> list[dict[str, Any]]:
                      "custo_credito_pct": res.get("custo_credito_pct"),
                      # #92: CVM-filed (pessoal + adm) / (margem bruta pré-PDD + serviços).
                      "cost_to_income_pct": round(cti * 100, 1) if cti is not None else None,
+                     # #152: the issuer's OWN published ratios (IR workbook), beside ours.
+                     "issuer_efficiency_pct": _kpi_pct("efficiency_ratio"),
+                     "nim_pct": _kpi_pct("nim"),
+                     "stage3_pct": _kpi_pct("stage3_ratio"),
+                     "issuer_kpi_period": (fin.get("issuer_kpis") or {}).get("period_label"),
                      # #93: market valuation at the latest close — price × CVM share count.
                      "market_cap_bi": round(val["market_cap"] / 1e9, 1) if val.get("market_cap") else None,
                      "pb": val.get("pb"), "pe": val.get("pe"), "price_date": val.get("price_date"),

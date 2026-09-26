@@ -3470,6 +3470,27 @@ class OncaPrototypeStack(Stack):
         digests_bucket.grant_read_write(cvm_statements_fn)
         entities_table.grant_read_data(cvm_statements_fn)
 
+        # #152 — issuer IR workbooks (MZiQ "Séries Históricas") for the ratios neither COSIF
+        # nor CVM carries: NIM, the issuer's own efficiency, ROE/ROA, Basileia, IFRS-9 stages.
+        # Five curated issuers, ~2 catalog calls + one ≤1.3MB workbook each; the timeout is
+        # headroom for the MZiQ API, not the parse. Writes financials/issuer_kpis.json only.
+        issuer_kpis_fn = lambda_.Function(
+            self,
+            "OncaIssuerKpis",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="src.ingest.mziq_workbooks.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.minutes(5),
+            memory_size=512,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+                "ONCA_ENTITIES_TABLE": entities_table.table_name,
+            },
+        )
+        digests_bucket.grant_read_write(issuer_kpis_fn)
+        entities_table.grant_read_data(issuer_kpis_fn)    # resolve_by_cnpj reads the registry
+
         soundness_task = sfn_tasks.LambdaInvoke(
             self,
             "SoundnessTask",
@@ -3504,6 +3525,19 @@ class OncaPrototypeStack(Stack):
             result_path="$.cvm_statements",
         )
         cvm_statements_task.add_retry(
+            errors=["States.ALL"],
+            max_attempts=2,
+            interval=Duration.seconds(30),
+            backoff_rate=2.0,
+        )
+        issuer_kpis_task = sfn_tasks.LambdaInvoke(
+            self,
+            "IssuerKpisTask",
+            lambda_function=issuer_kpis_fn,
+            payload=sfn.TaskInput.from_object({}),
+            result_path="$.issuer_kpis",
+        )
+        issuer_kpis_task.add_retry(
             errors=["States.ALL"],
             max_attempts=2,
             interval=Duration.seconds(30),
@@ -3564,6 +3598,9 @@ class OncaPrototypeStack(Stack):
             _resilient(soundness_task, "Soundness").next(_resilient(tone_task, "Tone")))
         financials_branches.branch(_resilient(balancete_task, "Balancete"))
         financials_branches.branch(_resilient(cvm_statements_task, "CvmStatements"))
+        # #152 — quarterly data on the monthly cadence: the store only changes when an issuer
+        # publishes a new workbook, and a re-run over an unchanged quarter rewrites the same KPIs.
+        financials_branches.branch(_resilient(issuer_kpis_task, "IssuerKpis"))
 
         financials_pipeline = sfn.StateMachine(
             self,

@@ -1383,7 +1383,31 @@ def _load_financials(digests_bucket: str) -> list[dict[str, Any]]:
         valuation.attach(records, tickers)
     except Exception as exc:  # pragma: no cover - best-effort
         print(f"Warning: valuation join failed: {exc}")
+    attach_issuer_kpis(records, _load_issuer_kpis(digests_bucket))
     return records
+
+
+def _load_issuer_kpis(digests_bucket: str) -> dict[str, dict[str, Any]]:
+    """#152 issuer-workbook KPI store (monthly financials run), best-effort. {} if absent."""
+    try:
+        from src.ingest import mziq_workbooks
+
+        return mziq_workbooks.kpis_by_entity(mziq_workbooks.load_index(digests_bucket))
+    except Exception as exc:  # pragma: no cover - best-effort, read-only
+        print(f"Warning: load issuer KPIs failed: {exc}")
+        return {}
+
+
+def attach_issuer_kpis(records: list[dict[str, Any]], kpis: dict[str, dict[str, Any]]) -> None:
+    """#152 — join the issuer-reported ratios onto their CVM financials record as a SEPARATE
+    ``issuer_kpis`` block, never into ``revenue`` or any top-level field that
+    ``market_structure`` / ``bcg`` read. Attach-only: an issuer with no financials record is
+    not given a synthetic one, so no card appears that the statements store does not back."""
+    for rec in records:
+        k = kpis.get(rec.get("entity_id"))
+        if k:
+            rec["issuer_kpis"] = {"period": k.get("period"), "period_label": k.get("period_label"),
+                                  "source_url": k.get("source_url"), "metrics": k.get("metrics") or {}}
 
 
 def _load_distress(digests_bucket: str) -> list[dict[str, Any]]:
