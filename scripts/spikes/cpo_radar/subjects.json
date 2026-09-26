@@ -1,0 +1,69 @@
+{
+  "_doc": "CPO Product Radar spike (#158) subjects. Pattern: Bluefin identity.py (subject + aliases + official-account allowlist). App IDs from iTunes search API country=br; channel IDs from YouTube channels.list(forHandle) / search(type=channel) + subscriber check, 2026-09-26. Fee-table CNPJs (8-digit roots) from BCB Informes_ListaTarifasPorInstituicaoFinanceira ListaInstituicoesDeGrupoConsolidado. onca_entities = entity ids in Onça's feed.json.",
+  "products": [
+    {
+      "id": "nubank",
+      "name": "Nubank",
+      "aliases": ["Nubank", "Nu Bank", "Nu Holdings", "NuConta", "roxinho", "NuCel", "NuPay"],
+      "namesake_risk": "'Nu' alone is too short; never match bare 'nu'.",
+      "apple_app_ids": [{"id": "814456780", "name": "Nubank: Conta, Cartão e mais"}],
+      "youtube_channels": [{"id": "UCgsDX3hTwiPdtGHJjMFfDxg", "handle": "@nubank", "title": "Nubank"}],
+      "fee_table_cnpjs": [
+        {"cnpj": "18236120", "name": "NU PAGAMENTOS S.A. - INSTITUIÇÃO DE PAGAMENTO"},
+        {"cnpj": "30680829", "name": "NU FINANCEIRA S.A. - SCFI"}
+      ],
+      "onca_entities": ["nubank"]
+    },
+    {
+      "id": "inter",
+      "name": "Inter",
+      "aliases": ["Banco Inter", "Inter&Co", "Inter & Co", "Inter Shop", "Super App Inter", "app do Inter"],
+      "namesake_risk": "'Inter' collides with Internacional (football), 'inter' prefix words. Require 'Banco Inter'/'Inter&Co' or channel/app context.",
+      "apple_app_ids": [{"id": "839711154", "name": "Inter: Conta, Cartão e Pix"}],
+      "youtube_channels": [{"id": "UCp5slyl74k9sz3yKLh4_Hrw", "handle": "@interbr", "title": "Inter"}],
+      "fee_table_cnpjs": [
+        {"cnpj": "00416968", "name": "BANCO INTER S.A."},
+        {"cnpj": "22177858", "name": "INTER PAG INSTITUIÇÃO DE PAGAMENTO S.A."}
+      ],
+      "onca_entities": ["inter", "inter-corretora"]
+    },
+    {
+      "id": "picpay",
+      "name": "PicPay",
+      "aliases": ["PicPay", "Pic Pay", "PicPay Bank"],
+      "namesake_risk": "low",
+      "apple_app_ids": [{"id": "561524792", "name": "PicPay: Conta, Cartão e Pix"}],
+      "youtube_channels": [{"id": "UCzFgTFhoNXk7G59vKCxY9Wg", "handle": "@picpay", "title": "PicPay"}],
+      "fee_table_cnpjs": [
+        {"cnpj": "09516419", "name": "PICPAY BANK - BANCO MÚLTIPLO S.A"},
+        {"cnpj": "22896431", "name": "PICPAY INSTITUIÇÃO DE PAGAMENTO S.A."}
+      ],
+      "onca_entities": ["picpay"]
+    },
+    {
+      "id": "mercado_pago",
+      "name": "Mercado Pago",
+      "aliases": ["Mercado Pago", "MercadoPago", "conta Mercado Pago", "cartão Mercado Pago"],
+      "namesake_risk": "Mercado Livre marketplace news mentions Mercado Pago in passing; the @mercadopago channel is Argentina (Spanish) - use the BR channel.",
+      "apple_app_ids": [{"id": "925436649", "name": "Mercado Pago: banco digital"}],
+      "youtube_channels": [{"id": "UCyhF4h2vnHyvHFK5zoMSwYQ", "handle": "@mercadopagobrasiloficial", "title": "Mercado Pago Brasil"}],
+      "fee_table_cnpjs": [
+        {"cnpj": "10573521", "name": "MERCADO PAGO INSTITUIÇÃO DE PAGAMENTO LTDA."},
+        {"cnpj": "37679449", "name": "MERCADO CRÉDITO SCFI S.A."}
+      ],
+      "onca_entities": ["mercado_pago", "mercado_pago-corretora"]
+    },
+    {
+      "id": "c6",
+      "name": "C6 Bank",
+      "aliases": ["C6 Bank", "C6Bank", "Banco C6", "C6 Carbon", "C6 Global"],
+      "namesake_risk": "Bare 'C6' collides with cars/chemistry; require 'C6 Bank'/'Banco C6'. search(type=channel) returned 6 zero-subscriber 'C6 Bank: Cartão, Conta e Mais!' channels (created 2025-07-16) - impersonation candidates, out of scope here (CRO/CISO).",
+      "apple_app_ids": [{"id": "1463463143", "name": "C6 Bank: Cartão, conta e mais!"}],
+      "youtube_channels": [{"id": "UCjNVJpBwOc81Vmpni5GXV-w", "handle": "@c6bankoficial", "title": "C6 Bank"}],
+      "fee_table_cnpjs": [
+        {"cnpj": "31872495", "name": "BANCO C6 S.A."}
+      ],
+      "onca_entities": ["c6"]
+    }
+  ]
+}
