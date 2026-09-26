@@ -892,6 +892,29 @@ function rowsGap(list) {
     <span class="ttl" title="${U.esc(r.question || "")}">${U.esc(r.question || "")}</span>
     <span class="meta">${r.count || 0}× · ${U.esc(r.triage || "")}</span></div>`).join("");
 }
+// #159 CPO Product Radar — App Store baseline alerts + dated product changes, with sources.
+const RADAR_SEV = { outage: "crit", complaint: "high", price: "warn", launch: "info", feature: "low" };
+function rowsRadar(pr) {
+  pr = pr || {};
+  const list = (pr.events || []).filter(inSector);
+  if (!list.length) {
+    const yt = (pr.sources || {}).youtube;
+    return U.empty(pr.as_of ? "Sem eventos de produto no escopo." : "Radar de produto ainda sem execução.",
+      yt && yt.indexOf("disabled") === 0 ? "YouTube desativado (sem chave) — só App Store" : "", "○");
+  }
+  return list.slice(0, 20).map(r => {
+    const src = r.source === "appstore" ? "App Store" : "YouTube";
+    const links = (r.sources || []).slice(0, 3).map((s, i) =>
+      `<a href="${U.esc(s.url)}" target="_blank" rel="noopener" title="${U.esc(s.label || s.url)}">[${i + 1}]</a>`).join(" ");
+    const txt = (r.title || "") + (r.reason ? " — " + r.reason : "");
+    return `<div class="exrow">
+    <span class="dt">${r.date ? U.fmtDate(r.date) : ""}</span>
+    <span class="badge badge--${RADAR_SEV[r.type] || "low"}">${U.esc(r.type_label || r.type || "")}</span>
+    <span class="ent" title="${U.esc(r.product_label || r.entity_label || "—")}">${U.esc(r.product_label || r.entity_label || "—")}</span>
+    <span class="ttl" title="${U.esc(txt)}">${U.esc(txt)}</span>
+    <span class="meta"><span class="badge badge--ghost">${src}${r.confidence ? " · " + U.esc(r.confidence) : ""}</span> ${links}</span></div>`;
+  }).join("");
+}
 function rowsDiscovery(list) {
   list = (list || []).filter(inSectorStrict);
   if (!list.length) return U.empty("Sem propostas de descoberta no escopo.", "", "○");
@@ -1500,6 +1523,9 @@ function render() {
     band("Ambiente PESTLE", "político·econômico·social·tecnológico·legal·ambiental · beliefs vetados",
       panel("Entidades por dimensão", null, "dimensão · avaliação", rowsFramework(p.pestle)));
   else if (OFFICER === "cpo") board +=
+    band("Radar de produto", "App Store vs linha de base (≥10/dia, z ≥3) · mudanças datadas em vídeos · #159",
+      panel("Eventos de produto dos concorrentes", ((p.product_radar || {}).events || []).filter(inSector).length,
+        "mais recente primeiro · fontes linkadas", rowsRadar(p.product_radar))) +
     band("Movimentos de produto", "lançamentos & ofertas · lente ofertas/produto",
       panel("Feed de produto", null, "mais recente primeiro", rowsCard(p.product_moves))) +
     band("Crescimento (Ansoff) & portfólio (BCG)", "vetores de crescimento · quadrante · beliefs vetados",

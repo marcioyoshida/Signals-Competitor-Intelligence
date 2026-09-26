@@ -1,0 +1,329 @@
+{
+ "feed": {
+  "author": {
+   "name": {
+    "label": "iTunes Store"
+   },
+   "uri": {
+    "label": "http://www.apple.com/br/itunes/"
+   }
+  },
+  "entry": [
+   {
+    "author": {
+     "uri": {
+      "label": "https://itunes.apple.com/br/reviews/id0"
+     },
+     "name": {
+      "label": "<redacted>"
+     },
+     "label": ""
+    },
+    "updated": {
+     "label": "2026-09-25T09:56:53-07:00"
+    },
+    "im:rating": {
+     "label": "5"
+    },
+    "im:version": {
+     "label": "26.16.1"
+    },
+    "id": {
+     "label": "14592409228"
+    },
+    "title": {
+     "label": "Zezario"
+    },
+    "content": {
+     "label": "Ótimo",
+     "attributes": {
+      "type": "text"
+     }
+    },
+    "link": {
+     "attributes": {
+      "rel": "related",
+      "href": "https://itunes.apple.com/br/review?id=839711154&type=Purple%20Software"
+     }
+    },
+    "im:voteSum": {
+     "label": "0"
+    },
+    "im:contentType": {
+     "attributes": {
+      "term": "Application",
+      "label": "Aplicativo"
+     }
+    },
+    "im:voteCount": {
+     "label": "0"
+    }
+   },
+   {
+    "author": {
+     "uri": {
+      "label": "https://itunes.apple.com/br/reviews/id0"
+     },
+     "name": {
+      "label": "<redacted>"
+     },
+     "label": ""
+    },
+    "updated": {
+     "label": "2026-09-25T09:12:03-07:00"
+    },
+    "im:rating": {
+     "label": "5"
+    },
+    "im:version": {
+     "label": "26.16.1"
+    },
+    "id": {
+     "label": "14592264093"
+    },
+    "title": {
+     "label": "10"
+    },
+    "content": {
+     "label": "10",
+     "attributes": {
+      "type": "text"
+     }
+    },
+    "link": {
+     "attributes": {
+      "rel": "related",
+      "href": "https://itunes.apple.com/br/review?id=839711154&type=Purple%20Software"
+     }
+    },
+    "im:voteSum": {
+     "label": "0"
+    },
+    "im:contentType": {
+     "attributes": {
+      "term": "Application",
+      "label": "Aplicativo"
+     }
+    },
+    "im:voteCount": {
+     "label": "0"
+    }
+   },
+   {
+    "author": {
+     "uri": {
+      "label": "https://itunes.apple.com/br/reviews/id0"
+     },
+     "name": {
+      "label": "<redacted>"
+     },
+     "label": ""
+    },
+    "updated": {
+     "label": "2026-09-25T06:38:26-07:00"
+    },
+    "im:rating": {
+     "label": "5"
+    },
+    "im:version": {
+     "label": "26.16.1"
+    },
+    "id": {
+     "label": "14591737038"
+    },
+    "title": {
+     "label": "Melhor banco"
+    },
+    "content": {
+     "label": "Melhor banco que já utilizei.",
+     "attributes": {
+      "type": "text"
+     }
+    },
+    "link": {
+     "attributes": {
+      "rel": "related",
+      "href": "https://itunes.apple.com/br/review?id=839711154&type=Purple%20Software"
+     }
+    },
+    "im:voteSum": {
+     "label": "0"
+    },
+    "im:contentType": {
+     "attributes": {
+      "term": "Application",
+      "label": "Aplicativo"
+     }
+    },
+    "im:voteCount": {
+     "label": "0"
+    }
+   },
+   {
+    "author": {
+     "uri": {
+      "label": "https://itunes.apple.com/br/reviews/id0"
+     },
+     "name": {
+      "label": "<redacted>"
+     },
+     "label": ""
+    },
+    "updated": {
+     "label": "2026-09-25T06:16:55-07:00"
+    },
+    "im:rating": {
+     "label": "5"
+    },
+    "im:version": {
+     "label": "26.16.1"
+    },
+    "id": {
+     "label": "14591663227"
+    },
+    "title": {
+     "label": "Excelente!"
+    },
+    "content": {
+     "label": "Melhor banco digital que já tive, uso só o Inter.",
+     "attributes": {
+      "type": "text"
+     }
+    },
+    "link": {
+     "attributes": {
+      "rel": "related",
+      "href": "https://itunes.apple.com/br/review?id=839711154&type=Purple%20Software"
+     }
+    },
+    "im:voteSum": {
+     "label": "0"
+    },
+    "im:contentType": {
+     "attributes": {
+      "term": "Application",
+      "label": "Aplicativo"
+     }
+    },
+    "im:voteCount": {
+     "label": "0"
+    }
+   },
+   {
+    "author": {
+     "uri": {
+      "label": "https://itunes.apple.com/br/reviews/id0"
+     },
+     "name": {
+      "label": "<redacted>"
+     },
+     "label": ""
+    },
+    "updated": {
+     "label": "2026-09-25T05:43:56-07:00"
+    },
+    "im:rating": {
+     "label": "5"
+    },
+    "im:version": {
+     "label": "26.16.1"
+    },
+    "id": {
+     "label": "14591553342"
+    },
+    "title": {
+     "label": "Completo mas simples de utilizar"
+    },
+    "content": {
+     "label": "App rápido e com várias opções de operações bancárias e de investimentos para grandes e pequenos investidores.",
+     "attributes": {
+      "type": "text"
+     }
+    },
+    "link": {
+     "attributes": {
+      "rel": "related",
+      "href": "https://itunes.apple.com/br/review?id=839711154&type=Purple%20Software"
+     }
+    },
+    "im:voteSum": {
+     "label": "0"
+    },
+    "im:contentType": {
+     "attributes": {
+      "term": "Application",
+      "label": "Aplicativo"
+     }
+    },
+    "im:voteCount": {
+     "label": "0"
+    }
+   },
+   {
+    "author": {
+     "uri": {
+      "label": "https://itunes.apple.com/br/reviews/id0"
+     },
+     "name": {
+      "label": "<redacted>"
+     },
+     "label": ""
+    },
+    "updated": {
+     "label": "2026-09-24T19:46:20-07:00"
+    },
+    "im:rating": {
+     "label": "1"
+    },
+    "im:version": {
+     "label": "26.16.1"
+    },
+    "id": {
+     "label": "14590077107"
+    },
+    "title": {
+     "label": "App não está abrindo"
+    },
+    "content": {
+     "label": "App não está abrindo",
+     "attributes": {
+      "type": "text"
+     }
+    },
+    "link": {
+     "attributes": {
+      "rel": "related",
+      "href": "https://itunes.apple.com/br/review?id=839711154&type=Purple%20Software"
+     }
+    },
+    "im:voteSum": {
+     "label": "0"
+    },
+    "im:contentType": {
+     "attributes": {
+      "term": "Application",
+      "label": "Aplicativo"
+     }
+    },
+    "im:voteCount": {
+     "label": "0"
+    }
+   }
+  ],
+  "updated": {
+   "label": "2026-09-26T15:56:34-07:00"
+  },
+  "rights": {
+   "label": "Copyright 2008 Apple Inc."
+  },
+  "title": {
+   "label": "iTunes Store: Críticas de clientes"
+  },
+  "icon": {
+   "label": "http://itunes.apple.com/favicon.ico"
+  },
+  "id": {
+   "label": "https://itunes.apple.com/br/rss/customerreviews/page=1/id=839711154/sortby=mostrecent/json"
+  }
+ }
+}

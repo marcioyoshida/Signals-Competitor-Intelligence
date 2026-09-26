@@ -12,7 +12,7 @@ import datetime as dt
 import json
 import os
 from decimal import Decimal
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import urlparse
 
 import boto3
@@ -961,6 +961,7 @@ def scope_feed_to_modules(feed: dict[str, Any], modules: Any) -> dict[str, Any]:
             "reputation": [r for r in (feed.get("reputation") or []) if row_ok(r)],
             "coverage_gaps": [r for r in (feed.get("coverage_gaps") or []) if row_ok(r)],
             "financials": [r for r in (feed.get("financials") or []) if row_ok(r)],
+            "product_radar": scope_product_radar(feed.get("product_radar"), row_ok),  # #159
             "integrity": {"findings": [], "counts": {}, "total": 0},  # operator-only
             "regulatory_coverage": {},                                # operator-only (#2)
             "source_runs": [],  # operator-only (#139) — raw per-source telemetry incl. error
@@ -1081,6 +1082,7 @@ def derive_entry_feed(
             "reputation": [r for r in (feed.get("reputation") or []) if row_ok(r)],
             "coverage_gaps": [r for r in (feed.get("coverage_gaps") or []) if row_ok(r)],
             "financials": [r for r in (feed.get("financials") or []) if row_ok(r)],
+            "product_radar": scope_product_radar(feed.get("product_radar"), row_ok),  # #159
             "integrity": {"findings": [], "counts": {}, "total": 0},  # operator-only
             "regulatory_coverage": {},                                # operator-only (#2)
             "source_runs": [],  # operator-only (#139) — see scope_feed_to_modules
@@ -1140,7 +1142,7 @@ def derive_sample_feed(
         "sections": sorted(
             k for k in ("distress", "capital_moves", "reputation", "financials", "swot",
                         "tows", "porter", "pestle", "ansoff", "bcg", "four_corners",
-                        "seven_s", "executive")
+                        "seven_s", "executive", "product_radar")
             if out.get(k)
         ),
     }
@@ -1164,7 +1166,7 @@ def derive_sample_feed(
                 "reviews", "swot_proposals", "graph_proposals"):
         out[key] = []
     for key in ("swot", "tows", "porter", "pestle", "ansoff", "bcg", "four_corners",
-                "seven_s", "groups"):
+                "seven_s", "groups", "product_radar"):
         out[key] = {}
     # Not _rescope_executive({}) — the officer dashboard is the entry tier's headline
     # feature and this block has leaked unscoped once before (see _rescope_executive).
@@ -1408,6 +1410,45 @@ def attach_issuer_kpis(records: list[dict[str, Any]], kpis: dict[str, dict[str, 
         if k:
             rec["issuer_kpis"] = {"period": k.get("period"), "period_label": k.get("period_label"),
                                   "source_url": k.get("source_url"), "metrics": k.get("metrics") or {}}
+
+
+def _load_product_radar(digests_bucket: str | None) -> dict[str, Any]:
+    """#159 ``product_radar/latest.json`` (daily cpo_radar run), best-effort. {} if absent."""
+    if not digests_bucket:
+        return {}
+    try:
+        from src.ingest import cpo_radar
+
+        return attach_product_radar(cpo_radar.load_radar(digests_bucket))
+    except Exception as exc:  # pragma: no cover - best-effort, read-only
+        print(f"Warning: load product radar failed: {exc}")
+        return {}
+
+
+def attach_product_radar(radar: dict[str, Any] | None) -> dict[str, Any]:
+    """The feed-facing slice of the radar: events/alerts + source status + product meta. The
+    per-product ingestion telemetry (``coverage``, token/quota usage) stays in S3 — like
+    ``source_runs`` it is operator detail, not a client's view of its market."""
+    r = radar or {}
+    if not r.get("events") and not r.get("sources"):
+        return {}
+    return {"as_of": r.get("as_of"), "generated_at": r.get("generated_at"),
+            "window_days": r.get("window_days"), "thresholds": r.get("thresholds") or {},
+            "sources": r.get("sources") or {},
+            "products": [{k: p.get(k) for k in ("id", "name", "entity", "app")}
+                         for p in (r.get("products") or [])],
+            "events": list(r.get("events") or []), "alerts": list(r.get("alerts") or [])}
+
+
+def scope_product_radar(radar: dict[str, Any] | None, row_ok: Callable[[dict[str, Any]], bool]) -> dict[str, Any]:
+    """Entity-scope the radar for a tenant / entry projection: events, alerts and product meta
+    survive only when bound to an in-scope entity (fail closed on unbound rows)."""
+    if not radar:
+        return {}
+    return dict(radar,
+                events=[e for e in (radar.get("events") or []) if row_ok(e)],
+                alerts=[e for e in (radar.get("alerts") or []) if row_ok(e)],
+                products=[p for p in (radar.get("products") or []) if row_ok(p)])
 
 
 def _load_distress(digests_bucket: str) -> list[dict[str, Any]]:
@@ -1874,6 +1915,9 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     except Exception as exc:  # pragma: no cover - best-effort, read-only
         print(f"Warning: ifdata_market load skipped: {exc}")
         feed["ifdata_market"] = {}
+    # #159: CPO Product Radar (daily cpo_radar ingester) — attached before the executive block
+    # so build_cpo can project it. Best-effort: absent store → {} and the panel says so.
+    feed["product_radar"] = _load_product_radar(digests_bucket)
     # ADR 021 §D/§G: the per-officer executive block (read-track: CSO), industry-scoped.
     # Derived from the feed above — no new data; best-effort so a failure never blocks publish.
     try:
@@ -1939,6 +1983,17 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 _report = weekly_digest.send_weekly_digest(
                     feed, dashboard_url=os.environ.get("ONCA_DASHBOARD_URL"))
                 print(f"Weekly CSO digest ({_as_of}): {_report}")
+                # #159: the weekly CPO Product Radar digest rides the same weekday gate and
+                # channels. Its own opt-in flag, so enabling it never changes the CSO brief;
+                # it is not counted in `delivered` — the dated marker stays the CSO brief's.
+                if os.environ.get("ONCA_CPO_DIGEST", "false").lower() in ("1", "true", "yes"):
+                    try:
+                        _cpo = weekly_digest.send_cpo_digest(
+                            feed, dashboard_url=os.environ.get("ONCA_DASHBOARD_URL"),
+                            as_of=_as_of.isoformat())
+                        print(f"Weekly CPO radar digest ({_as_of}): {_cpo}")
+                    except Exception as exc:  # pragma: no cover - best-effort
+                        print(f"Warning: CPO radar digest skipped: {exc}")
                 if _wd_bucket and weekly_digest.delivered(_report):
                     weekly_digest.mark_sent(_wd_bucket, _as_of.isoformat(), _report)
         except Exception as exc:  # pragma: no cover - best-effort, never blocks publish

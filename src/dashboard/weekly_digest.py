@@ -77,12 +77,28 @@ def _metric_line(m: dict[str, Any]) -> str:
 
 
 def _priority_lines(top: list[dict[str, Any]]) -> list[str]:
-    out = []
+    out: list[str] = []
     for p in top[:3]:
         dec = p.get("decision") or {}
         out.append(f"[{p.get('so_what') or '—'}] {p.get('entity_label') or '—'} — "
                     f"{dec.get('text') or (p.get('title') or '')[:100]}")
     return out
+
+
+def _title(w: dict[str, Any]) -> str:
+    return str(w.get("title") or "Briefing semanal do CSO")
+
+
+def _lines(w: dict[str, Any]) -> list[str]:
+    """A digest may carry ready-made ``lines`` (the CPO radar digest); otherwise the CSO
+    brief's top-3 priorities."""
+    if "lines" in w:
+        return [str(x) for x in (w.get("lines") or [])]
+    return _priority_lines(w.get("top_priorities") or [])
+
+
+def _lines_heading(w: dict[str, Any]) -> str:
+    return str(w.get("lines_heading") or "Top prioridades")
 
 
 def weekly_scope(feed: dict[str, Any], sector: str = "__all__") -> dict[str, Any] | None:
@@ -96,13 +112,14 @@ def format_teams(w: dict[str, Any], *, dashboard_url: str | None = None) -> dict
     facts = [{"title": label, "value": str((w.get("metrics") or {}).get(key, {}).get("now", "—"))}
              for key, label in _METRIC_LABEL.items()]
     items: list[dict[str, Any]] = [
-        {"type": "TextBlock", "text": "Briefing semanal do CSO", "weight": "Bolder", "size": "Medium"},
+        {"type": "TextBlock", "text": _title(w), "weight": "Bolder", "size": "Medium"},
         {"type": "TextBlock", "text": w.get("headline") or "", "wrap": True},
-        {"type": "FactSet", "facts": facts},
     ]
-    lines = _priority_lines(w.get("top_priorities") or [])
+    if "lines" not in w:
+        items.append({"type": "FactSet", "facts": facts})
+    lines = _lines(w)
     if lines:
-        items.append({"type": "TextBlock", "text": "Top prioridades", "weight": "Bolder", "spacing": "Medium"})
+        items.append({"type": "TextBlock", "text": _lines_heading(w), "weight": "Bolder", "spacing": "Medium"})
         items.append({"type": "TextBlock", "text": "\n".join(f"• {l}" for l in lines), "wrap": True})
     card: dict[str, Any] = {
         "type": "AdaptiveCard", "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
@@ -117,15 +134,16 @@ def format_teams(w: dict[str, Any], *, dashboard_url: str | None = None) -> dict
 # --- Slack (Block Kit) -----------------------------------------------------------------
 def format_slack(w: dict[str, Any], *, dashboard_url: str | None = None) -> dict[str, Any]:
     blocks: list[dict[str, Any]] = [
-        {"type": "header", "text": {"type": "plain_text", "text": "Briefing semanal do CSO"}},
+        {"type": "header", "text": {"type": "plain_text", "text": _title(w)}},
         {"type": "section", "text": {"type": "mrkdwn", "text": w.get("headline") or ""}},
-        {"type": "context", "elements": [{"type": "mrkdwn", "text": _metric_line(w.get("metrics") or {})}]},
     ]
-    lines = _priority_lines(w.get("top_priorities") or [])
+    if "lines" not in w:
+        blocks.append({"type": "context", "elements": [{"type": "mrkdwn", "text": _metric_line(w.get("metrics") or {})}]})
+    lines = _lines(w)
     if lines:
         blocks.append({"type": "divider"})
         blocks.append({"type": "section", "text": {"type": "mrkdwn",
-                       "text": "*Top prioridades*\n" + "\n".join(f"• {l}" for l in lines)}})
+                       "text": f"*{_lines_heading(w)}*\n" + "\n".join(f"• {l}" for l in lines)}})
     if dashboard_url:
         blocks.append({"type": "actions", "elements": [{"type": "button",
                        "text": {"type": "plain_text", "text": "Abrir painel"}, "url": dashboard_url}]})
@@ -135,17 +153,18 @@ def format_slack(w: dict[str, Any], *, dashboard_url: str | None = None) -> dict
 # --- Email (plain + a lightly-styled HTML body) -----------------------------------------
 def format_email(w: dict[str, Any], *, dashboard_url: str | None = None) -> tuple[str, str, str]:
     """Returns (subject, text_body, html_body)."""
-    subject = "Briefing semanal do CSO — Onça"
-    lines = _priority_lines(w.get("top_priorities") or [])
-    text = (w.get("headline") or "") + "\n\n" + _metric_line(w.get("metrics") or {})
+    subject = f"{_title(w)} — Onça"
+    lines = _lines(w)
+    metric = "" if "lines" in w else _metric_line(w.get("metrics") or {})
+    text = (w.get("headline") or "") + ("\n\n" + metric if metric else "")
     if lines:
-        text += "\n\nTop prioridades:\n" + "\n".join(f"- {l}" for l in lines)
+        text += f"\n\n{_lines_heading(w)}:\n" + "\n".join(f"- {l}" for l in lines)
     if dashboard_url:
         text += f"\n\nAbrir painel: {dashboard_url}"
     html_lines = "".join(f"<li>{_esc(l)}</li>" for l in lines)
-    html = (f"<h2>Briefing semanal do CSO</h2><p>{_esc(w.get('headline') or '')}</p>"
-            f"<p style='color:#666'>{_esc(_metric_line(w.get('metrics') or {}))}</p>"
-            + (f"<h3>Top prioridades</h3><ul>{html_lines}</ul>" if lines else "")
+    html = (f"<h2>{_esc(_title(w))}</h2><p>{_esc(w.get('headline') or '')}</p>"
+            + (f"<p style='color:#666'>{_esc(metric)}</p>" if metric else "")
+            + (f"<h3>{_esc(_lines_heading(w))}</h3><ul>{html_lines}</ul>" if lines else "")
             + (f"<p><a href='{_esc(dashboard_url)}'>Abrir painel</a></p>" if dashboard_url else ""))
     return subject, text, html
 
@@ -314,6 +333,28 @@ def send_alert(headline: str, *, dashboard_url: str | None = None,
     `format_email` with a bare `{"headline": ...}` — those already render gracefully with
     empty metrics/priorities, so this needed no new formatting code, just a new caller."""
     w = {"headline": headline}
+    return {
+        "teams": send_teams(w, dashboard_url=dashboard_url, poster=teams_poster),
+        "slack": send_slack(w, dashboard_url=dashboard_url, poster=slack_poster),
+        "email": send_email(w, dashboard_url=dashboard_url, sender_fn=email_sender),
+    }
+
+
+def send_cpo_digest(feed: dict[str, Any], *, dashboard_url: str | None = None,
+                    teams_poster: Poster | None = None, slack_poster: Poster | None = None,
+                    email_sender: EmailSender | None = None,
+                    as_of: str | None = None) -> dict[str, bool | None]:
+    """#159 weekly CPO Product Radar digest — the last 7 days of ``feed.product_radar`` events,
+    rendered by ``cpo_radar.render_weekly_digest`` and sent on the SAME configured channels as
+    the CSO brief. Sends nothing when the radar is absent (no store yet ≠ "quiet week")."""
+    radar = feed.get("product_radar") or {}
+    if not radar:
+        return {"teams": None, "slack": None, "email": None}
+    from src.ingest import cpo_radar
+
+    d = cpo_radar.render_weekly_digest(radar, as_of=as_of)
+    w = {"title": d["title"], "headline": d["headline"], "lines": d["lines"],
+         "lines_heading": "Eventos da semana"}
     return {
         "teams": send_teams(w, dashboard_url=dashboard_url, poster=teams_poster),
         "slack": send_slack(w, dashboard_url=dashboard_url, poster=slack_poster),

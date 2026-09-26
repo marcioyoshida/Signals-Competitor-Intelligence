@@ -117,6 +117,9 @@ _DOMAIN_CUES = {
     # consumer reputation (Reclame Aqui, #31).
     "reclamacao", "reclamacoes", "reclame", "reputacao", "nota", "atendimento",
     "cliente", "clientes", "consumidor", "satisfacao", "resolvidas",
+    # CPO product radar (#159): app quality + product changes.
+    "aplicativo", "produto", "produtos", "lancamento", "lancamentos", "instabilidade",
+    "cashback", "beneficio", "beneficios", "tarifa", "tarifas",
 }
 # Hard off-domain / injection cues → refuse even if a domain word slips in.
 _REFUSE_CUES = {
@@ -626,6 +629,40 @@ def reputation_cards(feed: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
+def product_radar_cards(feed: dict[str, Any]) -> list[dict[str, Any]]:
+    """#159 — project feed.json.product_radar events (App Store baseline alerts + dated product
+    changes from official/creator videos) into citable cards, so "o que o Inter mudou no app?"
+    grounds on the same rows the /exec CPO panel shows. Each card cites the event's own source
+    links (review feed / store page / videos); nothing is added beyond the stored event."""
+    radar = feed.get("product_radar") or {}
+    out: list[dict[str, Any]] = []
+    for e in (radar.get("events") or []):
+        ent = e.get("entity")
+        if not ent or not e.get("id"):
+            continue
+        src = "avaliações da App Store" if e.get("source") == "appstore" else "vídeos do YouTube"
+        bits = [f"{e.get('product_label') or ent} — {e.get('type_label') or e.get('type')} "
+                f"({src}, {e.get('date')}): {e.get('title') or ''}", str(e.get("reason") or "")]
+        dv = e.get("dominant_version") or {}
+        if dv.get("version"):
+            bits.append(f"versão dominante {dv['version']}")
+        errs = [x.get("text") for x in (e.get("error_strings") or []) if x.get("text")]
+        if errs:
+            bits.append("erros citados: " + ", ".join(errs[:3]))
+        if e.get("confidence"):
+            bits.append(f"confiança: {e['confidence']}")
+        urls = [s.get("url") for s in (e.get("sources") or []) if s.get("url")] or (
+            [e["url"]] if e.get("url") else [])
+        out.append({
+            "id": e["id"], "date": e.get("date"), "entity": ent,
+            "entity_label": e.get("product_label") or ent, "entities": [ent],
+            "lenses": ["produto", "radar"], "is_alert": e.get("source") == "appstore",
+            "threat_score": None, "narrative": ". ".join(b for b in bits if b) + ".",
+            "citations": [{"url": u} for u in urls[:5]],
+        })
+    return out
+
+
 # --- orchestrator (DI) ----------------------------------------------------
 
 def _scope_cards_to_modules(
@@ -678,7 +715,7 @@ def answer(
     # per-entity classification facts (ADR-013: ownership/certifications).
     feed_cards = (list(feed.get("feed") or []) + distress_cards(feed)
                   + entity_fact_cards(feed) + reputation_cards(feed)
-                  + financials_cards(feed))
+                  + financials_cards(feed) + product_radar_cards(feed))
     if modules is not None:
         feed_cards = _scope_cards_to_modules(feed_cards, feed, modules)
     entity_vocab = set()

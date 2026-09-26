@@ -3496,6 +3496,49 @@ class OncaPrototypeStack(Stack):
         digests_bucket.grant_read_write(issuer_kpis_fn)
         entities_table.grant_read_data(issuer_kpis_fn)    # resolve_by_cnpj reads the registry
 
+        # #159 — CPO Product Radar: Apple reviews RSS (daily, beats the 500-review cap) + optional
+        # YouTube (≤1,000 units/day; YOUTUBE_API_KEY in the api-key secret, leg disabled without
+        # it) + Nova Lite classification. Writes product_radar/{latest,state,YYYY-MM-DD}.json and
+        # prunes dated snapshots >30 d. Cold run (empty state) ≈51 s per product; warm daily <1 min.
+        cpo_radar_fn = lambda_.Function(
+            self,
+            "OncaCpoRadar",
+            runtime=LAMBDA_RUNTIME,
+            handler="src.ingest.cpo_radar.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.minutes(10),
+            memory_size=512,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+                "ONCA_CPO_YT_QUOTA": "1000",
+                "ONCA_CPO_YT_SEARCH_PAGES": "1",
+                "ONCA_CPO_YT_LOOKBACK_DAYS": "2",
+            },
+        )
+        digests_bucket.grant_read_write(cpo_radar_fn)   # includes DeleteObject for the 30-d prune
+        cpo_radar_fn.add_to_role_policy(iam.PolicyStatement(
+            actions=["bedrock:InvokeModel"],             # Converse is authorized by InvokeModel
+            resources=[
+                "arn:aws:bedrock:*::foundation-model/amazon.nova-lite-v1:0",
+                f"arn:aws:bedrock:{self.region}:{self.account}:inference-profile/us.amazon.nova-lite-v1:0",
+            ],
+        ))
+        cpo_radar_fn.add_to_role_policy(iam.PolicyStatement(
+            actions=["secretsmanager:GetSecretValue"],
+            resources=[f"arn:aws:secretsmanager:{self.region}:{self.account}"
+                       ":secret:signalscompetitor/onca/api-key-*"],
+        ))
+        # Own daily schedule, NOT the pipeline: OncaPipeline runs 3×/day, which would triple the
+        # YouTube quota and Nova spend for no new data. 08:30 UTC = 05:30 BRT, so the next
+        # pipeline run's feed_builder picks up the fresh latest.json; a failure just leaves the
+        # previous latest.json in place.
+        events.Rule(
+            self,
+            "OncaCpoRadarDaily",
+            schedule=events.Schedule.cron(minute="30", hour="8"),
+        ).add_target(targets.LambdaFunction(cpo_radar_fn, retry_attempts=1))
+
         soundness_task = sfn_tasks.LambdaInvoke(
             self,
             "SoundnessTask",

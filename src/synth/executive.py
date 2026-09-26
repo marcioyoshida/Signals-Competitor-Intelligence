@@ -1168,6 +1168,37 @@ def _ifdata_market_labeled(feed: dict[str, Any]) -> dict[str, Any]:
     return m
 
 
+def _product_radar(feed: dict[str, Any]) -> dict[str, Any]:
+    """#159 CPO Product Radar — `feed.product_radar` (src/ingest/cpo_radar.py) projected into
+    CPO rows: one per event (clustered creator videos / official uploads / App Store baseline
+    alerts), each with its source links, date, product, type and a one-line reason. The radar
+    is the evidence; nothing here is re-inferred. Industries come from the bound Onça entity so
+    the /exec sector filter and tenant scoping apply."""
+    radar = feed.get("product_radar") or {}
+    labels = _labels(feed)
+    rows = []
+    for e in radar.get("events") or []:
+        ent = e.get("entity")
+        rows.append({
+            "id": e.get("id"), "date": e.get("date"), "last_seen": e.get("last_seen"),
+            "product": e.get("product"), "product_label": e.get("product_label") or labels.get(ent, ent),
+            "entity": ent, "entity_label": labels.get(ent, e.get("product_label") or ent),
+            "type": e.get("type"), "type_label": e.get("type_label") or e.get("type"),
+            "source": e.get("source"), "confidence": e.get("confidence"),
+            "title": e.get("title"), "reason": e.get("reason"), "url": e.get("url"),
+            "sources": [{"url": s.get("url"), "label": s.get("channel") or s.get("title")}
+                        for s in (e.get("sources") or []) if s.get("url")][:5],
+            "n_sources": e.get("n_sources"),
+            "dominant_version": e.get("dominant_version"),
+            "error_strings": e.get("error_strings") or [],
+            "industries": _industries_of(feed, ent),
+        })
+    rows.sort(key=lambda r: str(r.get("date") or ""), reverse=True)
+    return {"as_of": radar.get("as_of"), "sources": radar.get("sources") or {},
+            "events": rows[:40],
+            "n_alerts": sum(1 for r in rows if r["source"] == "appstore")}
+
+
 def build_cpo(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     industries = list(feed.get("industries") or [])
     gaps = list(feed.get("coverage_gaps") or [])
@@ -1321,6 +1352,8 @@ def build_cpo(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         "product_moves": [_headline(c) for c in sorted(
             (c for c in ctx["cards"] if set(c.get("lenses") or []) & {"ofertas", "produto"}),
             key=lambda c: str(c.get("date") or ""), reverse=True)[:24]],
+        # #159: CPO Product Radar — App Store baseline alerts + dated product changes (YouTube).
+        "product_radar": _product_radar(feed),
         "soundness_coverage": soundness_coverage,               # ADR 022 (CPO instrumentation angle)
         "source_health": feed.get("source_health") or [],       # R5 (lens-freshness proxy)
         "source_runs": feed.get("source_runs") or [],            # #76 (real per-ingester reliability, operator-only)
@@ -1460,7 +1493,10 @@ REFERENCE: dict[str, Any] = {
             "Pontos cegos — perguntas sem resposta (loop de cobertura)"]},
         {"h": "Descoberta & fontes", "items": [
             "Propostas de descoberta (review-gated)", "Registro de fontes por vertical (ADR-019)",
-            "JTBD — quais tarefas do comprador a base atende"]}]},
+            "JTBD — quais tarefas do comprador a base atende"]},
+        {"h": "Radar de produto (#159)", "items": [
+            "Avaliações da App Store vs a própria linha de base (≥10/dia e z ≥3)",
+            "Mudanças datadas em vídeos oficiais e de criadores (tutorial perene não conta)"]}]},
 }
 
 
