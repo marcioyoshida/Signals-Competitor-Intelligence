@@ -220,6 +220,15 @@ def parse_statements(zf: zipfile.ZipFile, *, doc: str = "DFP") -> dict[str, dict
     """
     doc = doc.upper()
     members = {n: _open_csv(zf, n) for n in ("BPA_con", "BPP_con", "DRE_con")}
+    # An issuer with no consolidated set files ONLY individual statements (Banco ABC
+    # Brasil, live 2026-09-26) — then the individual set IS the entity's statement. The
+    # fallback is per issuer: anyone with any consolidated row never reads `_ind`.
+    has_con = {_root8(r.get("CNPJ_CIA")) for rows in members.values() for r in rows}
+    ind_only: set[str] = set()
+    for n in ("BPA", "BPP", "DRE"):
+        extra = [r for r in _open_csv(zf, f"{n}_ind") if _root8(r.get("CNPJ_CIA")) not in has_con]
+        ind_only |= {_root8(r.get("CNPJ_CIA")) for r in extra}
+        members[f"{n}_con"] = members[f"{n}_con"] + extra
 
     # Pass 1 — newest reference date per issuer, across every statement member.
     newest: dict[str, str] = {}
@@ -294,6 +303,9 @@ def parse_statements(zf: zipfile.ZipFile, *, doc: str = "DFP") -> dict[str, dict
         if eff:
             rec.update(eff)
 
+    for cnpj in ind_only & out.keys():
+        for rec in out[cnpj].values():
+            rec["basis"] = "individual"
     for cnpj, sh in _parse_shares(_open_csv(zf, "composicao_capital")).items():
         if cnpj in out and sh["shares_as_of"] == newest.get(cnpj):
             out[cnpj].setdefault("ÚLTIMO", {"period": sh["shares_as_of"], "doc": doc}).update(sh)
@@ -410,6 +422,7 @@ def build_index(
             # #93 — raw CVM counts; see _parse_shares for why the unit is not trusted here.
             "shares_on": cur.get("shares_on"), "shares_pn": cur.get("shares_pn"),
             "shares_as_of": cur.get("shares_as_of"),
+            "basis": cur.get("basis") or "consolidated",
             "source_url": source_url,
         }
         index[eid] = rec
@@ -419,7 +432,7 @@ def build_index(
 _INTERIM_FIELDS = ("doc", "period", "period_start", "months", "prior_period", "revenue",
                    "net_income", "assets", "equity", "prior_revenue", "prior_net_income",
                    "net_margin", "revenue_growth", "leverage", "cost_to_income",
-                   "shares_on", "shares_pn", "shares_as_of")
+                   "shares_on", "shares_pn", "shares_as_of", "basis")
 
 
 def merge_interim(

@@ -145,3 +145,26 @@ def test_interim_shares_preferred_over_annual():
                        "equity": 190767860000.0}}
     v = valuation.value(rec, "BBAS3", _quote)
     assert v["shares_as_of"] == "2026-06-30" and v["share_scale"] == 1
+
+
+# --- individual-only filers (Banco ABC Brasil) ------------------------------------------
+
+def _pkg(files):
+    import io, zipfile
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        hdr = "CNPJ_CIA;DT_REFER;DENOM_CIA;CD_CVM;ORDEM_EXERC;DT_INI_EXERC;DT_FIM_EXERC;CD_CONTA;DS_CONTA;VL_CONTA;ESCALA_MOEDA\n"
+        for name, lines in files.items():
+            z.writestr(f"itr_cia_aberta_{name}_2026.csv", (hdr + "\n".join(lines)).encode("latin-1"))
+    buf.seek(0)
+    return zipfile.ZipFile(buf)
+
+
+def test_individual_statements_used_only_when_issuer_has_no_consolidated_set():
+    con = "11.111.111/0001-11;2026-06-30;CON SA;1;ÚLTIMO;;2026-06-30;1;Ativo Total;100;MIL"
+    ind_same = "11.111.111/0001-11;2026-06-30;CON SA;1;ÚLTIMO;;2026-06-30;1;Ativo Total;999;MIL"
+    ind_only = "28.195.667/0001-06;2026-06-30;ABC;2;ÚLTIMO;;2026-06-30;1;Ativo Total;500;MIL"
+    out = cf.parse_statements(_pkg({"BPA_con": [con], "BPA_ind": [ind_same, ind_only]}), doc="ITR")
+    assert out["11111111"]["ÚLTIMO"]["assets"] == 100_000 and "basis" not in out["11111111"]["ÚLTIMO"]
+    assert out["28195667"]["ÚLTIMO"]["assets"] == 500_000
+    assert out["28195667"]["ÚLTIMO"]["basis"] == "individual"
