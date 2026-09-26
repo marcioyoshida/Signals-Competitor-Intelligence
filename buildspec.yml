@@ -24,7 +24,7 @@ phases:
       - pytest tests -q -m "not network"
       # Stage the Lambda asset: runtime deps + src (boto3 is provided by Lambda).
       - rm -rf build/lambda && mkdir -p build/lambda
-      - pip install -r requirements.txt -t build/lambda
+      - pip install -r requirements.txt -t build/lambda --platform manylinux2014_x86_64 --implementation cp --python-version 3.13 --only-binary=:all:
       - rsync -a --delete --exclude=__pycache__ --exclude='*.pyc' src/ build/lambda/src/
       # Deploy the app stack (NOT the CI/CD stack — that is managed out of band).
       - cd infra && cdk deploy OncaPrototypeStack --require-approval never --app "python app.py"

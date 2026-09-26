@@ -43,6 +43,11 @@ VECTOR_DIMENSION = 1024
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 LAMBDA_ASSET = REPO_ROOT / "build" / "lambda"
+
+#: The ONE Lambda runtime for every function in this stack (#157). python3.11 runs on Amazon
+#: Linux 2, which reached EOL 2026-06-30; python3.11 itself deprecates 2027-06-30. Staging MUST
+#: build deps for the same version -- see the pip --python-version flag in buildspec.yml.
+LAMBDA_RUNTIME = lambda_.Runtime.PYTHON_3_13
 SITE_ASSET = REPO_ROOT / "src" / "dashboard" / "site"
 WATCHLIST_CONFIG = REPO_ROOT / "config" / "watchlist.yaml"
 
@@ -336,7 +341,7 @@ class OncaPrototypeStack(Stack):
         func = lambda_.Function(
             self,
             "OncaLambdaPrototype",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.ingest.lambda_port.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             # Ingest does many sequential live fetches (BCB/CVM/SEC/IF.data,
@@ -565,7 +570,7 @@ class OncaPrototypeStack(Stack):
         synth = lambda_.Function(
             self,
             "OncaSynthesisLambda",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.synth.lambda_handler.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.minutes(5),
@@ -957,7 +962,7 @@ class OncaPrototypeStack(Stack):
             )
             pretoken_fn = lambda_.Function(
                 self, "OncaPreTokenGenFn",
-                runtime=lambda_.Runtime.PYTHON_3_13,
+                runtime=LAMBDA_RUNTIME,
                 handler="src.dashboard.lambda_pretoken.lambda_handler",
                 code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
                 timeout=Duration.seconds(10),
@@ -1250,7 +1255,7 @@ class OncaPrototypeStack(Stack):
         feature_fn = lambda_.Function(
             self,
             "OncaFeatureStore",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.synth.feature_store.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.minutes(5),
@@ -1272,7 +1277,7 @@ class OncaPrototypeStack(Stack):
         silence_fn = lambda_.Function(
             self,
             "OncaSilence",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.synth.silence.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.minutes(5),
@@ -1294,7 +1299,7 @@ class OncaPrototypeStack(Stack):
         longitudinal_fn = lambda_.Function(
             self,
             "OncaLongitudinal",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.synth.longitudinal.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.minutes(5),
@@ -1315,7 +1320,7 @@ class OncaPrototypeStack(Stack):
         comparative_fn = lambda_.Function(
             self,
             "OncaComparative",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.synth.comparative.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.minutes(5),
@@ -1337,7 +1342,7 @@ class OncaPrototypeStack(Stack):
         thematic_fn = lambda_.Function(
             self,
             "OncaThematic",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.synth.thematic.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.minutes(5),
@@ -1360,7 +1365,7 @@ class OncaPrototypeStack(Stack):
         regulatory_fn = lambda_.Function(
             self,
             "OncaRegulatory",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.synth.regulatory.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.minutes(5),
@@ -1392,7 +1397,7 @@ class OncaPrototypeStack(Stack):
         cohort_fn = lambda_.Function(
             self,
             "OncaCohort",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.synth.cohort.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.minutes(5),
@@ -1413,7 +1418,7 @@ class OncaPrototypeStack(Stack):
         swot_fn = lambda_.Function(
             self,
             "OncaSwot",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.synth.swot_store.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.minutes(5),
@@ -1435,7 +1440,7 @@ class OncaPrototypeStack(Stack):
         reconcile_fn = lambda_.Function(
             self,
             "OncaSwotReconcile",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.synth.swot_reconcile.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.minutes(5),
@@ -1469,7 +1474,7 @@ class OncaPrototypeStack(Stack):
         seed_fn = lambda_.Function(
             self,
             "OncaSwotSeed",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.synth.swot_seed.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.minutes(5),
@@ -1502,7 +1507,7 @@ class OncaPrototypeStack(Stack):
         maintenance_fn = lambda_.Function(
             self,
             "OncaSwotMaintenance",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.synth.swot_maintenance.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.minutes(2),
@@ -1522,7 +1527,7 @@ class OncaPrototypeStack(Stack):
         tows_fn = lambda_.Function(
             self,
             "OncaTows",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.synth.tows.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.minutes(3),
@@ -1550,7 +1555,7 @@ class OncaPrototypeStack(Stack):
         porter_fn = lambda_.Function(
             self,
             "OncaPorter",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.synth.porter.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.minutes(3),
@@ -1578,7 +1583,7 @@ class OncaPrototypeStack(Stack):
         pestle_fn = lambda_.Function(
             self,
             "OncaPestle",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.synth.pestle.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.minutes(3),
@@ -1606,7 +1611,7 @@ class OncaPrototypeStack(Stack):
         ansoff_fn = lambda_.Function(
             self,
             "OncaAnsoff",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.synth.ansoff.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.minutes(3),
@@ -1634,7 +1639,7 @@ class OncaPrototypeStack(Stack):
         bcg_fn = lambda_.Function(
             self,
             "OncaBcg",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.synth.bcg.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.minutes(3),
@@ -1662,7 +1667,7 @@ class OncaPrototypeStack(Stack):
         four_corners_fn = lambda_.Function(
             self,
             "OncaFourCorners",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.synth.four_corners.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.minutes(3),
@@ -1690,7 +1695,7 @@ class OncaPrototypeStack(Stack):
         seven_s_fn = lambda_.Function(
             self,
             "OncaSevenS",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.synth.seven_s.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.minutes(3),
@@ -1720,7 +1725,7 @@ class OncaPrototypeStack(Stack):
         autoapprove_fn = lambda_.Function(
             self,
             "OncaAutoApprove",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.synth.curate.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.minutes(2),
@@ -1741,7 +1746,7 @@ class OncaPrototypeStack(Stack):
         threads_fn = lambda_.Function(
             self,
             "OncaThreads",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.synth.threads.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.minutes(5),
@@ -1761,7 +1766,7 @@ class OncaPrototypeStack(Stack):
         behavioral_fn = lambda_.Function(
             self,
             "OncaBehavioral",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.synth.behavioral.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.minutes(5),
@@ -1783,7 +1788,7 @@ class OncaPrototypeStack(Stack):
         relational_fn = lambda_.Function(
             self,
             "OncaRelational",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.synth.relational.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.minutes(5),
@@ -1808,7 +1813,7 @@ class OncaPrototypeStack(Stack):
         qsa_fn = lambda_.Function(
             self,
             "OncaWatchlistQsa",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.ingest.watchlist_qsa.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.minutes(5),
@@ -1833,7 +1838,7 @@ class OncaPrototypeStack(Stack):
         operatives_fn = lambda_.Function(
             self,
             "OncaOperatives",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.synth.operatives.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.minutes(5),
@@ -1851,7 +1856,7 @@ class OncaPrototypeStack(Stack):
         predictive_fn = lambda_.Function(
             self,
             "OncaPredictive",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.synth.predictive.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.minutes(5),
@@ -1875,7 +1880,7 @@ class OncaPrototypeStack(Stack):
         ecosystem_fn = lambda_.Function(
             self,
             "OncaEcosystem",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.synth.ecosystem.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.minutes(5),
@@ -1892,7 +1897,7 @@ class OncaPrototypeStack(Stack):
         feed_fn = lambda_.Function(
             self,
             "OncaFeedBuilder",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.dashboard.feed_builder.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.minutes(5),
@@ -2008,7 +2013,7 @@ class OncaPrototypeStack(Stack):
         review_fn = lambda_.Function(
             self,
             "OncaReviewAction",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.dashboard.review_action.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.seconds(30),
@@ -2044,7 +2049,7 @@ class OncaPrototypeStack(Stack):
         registry_fn = lambda_.Function(
             self,
             "OncaRegistryApi",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.dashboard.registry_api.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.seconds(30),
@@ -2065,7 +2070,7 @@ class OncaPrototypeStack(Stack):
         quotes_fn = lambda_.Function(
             self,
             "OncaQuotesApi",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.dashboard.quotes_api.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.seconds(15),
@@ -2100,7 +2105,7 @@ class OncaPrototypeStack(Stack):
         run_fn = lambda_.Function(
             self,
             "OncaRunTrigger",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.dashboard.run_trigger.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.seconds(30),
@@ -2142,7 +2147,7 @@ class OncaPrototypeStack(Stack):
         act_fn = lambda_.Function(
             self,
             "OncaActApi",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.dashboard.act_api.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.seconds(60),  # ADR-020 Phase 2: run_integrity_audit scans the registry
@@ -2217,7 +2222,7 @@ class OncaPrototypeStack(Stack):
         resolve_fn = lambda_.Function(
             self,
             "OncaResolveApi",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.dashboard.resolve_api.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.seconds(15),
@@ -2245,7 +2250,7 @@ class OncaPrototypeStack(Stack):
         agent_fn = lambda_.Function(
             self,
             "OncaAgent",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.dashboard.agent_ask.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.seconds(60),
@@ -2294,7 +2299,7 @@ class OncaPrototypeStack(Stack):
         agent_api_fn = lambda_.Function(
             self,
             "OncaAgentApi",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.dashboard.agent_api.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.seconds(60),
@@ -2332,7 +2337,7 @@ class OncaPrototypeStack(Stack):
         api_keys_admin_fn = lambda_.Function(
             self,
             "OncaApiKeysAdmin",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.dashboard.api_keys_api.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.seconds(30),
@@ -2353,7 +2358,7 @@ class OncaPrototypeStack(Stack):
         gaps_fn = lambda_.Function(
             self,
             "OncaGapsApi",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.dashboard.gaps_api.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.seconds(90),
@@ -2403,7 +2408,7 @@ class OncaPrototypeStack(Stack):
         feed_api_fn = lambda_.Function(
             self,
             "OncaFeedApi",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.dashboard.feed_api.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.seconds(30),
@@ -2483,7 +2488,7 @@ class OncaPrototypeStack(Stack):
             self_register_fn = lambda_.Function(
                 self,
                 "OncaSelfRegisterFn",
-                runtime=lambda_.Runtime.PYTHON_3_11,
+                runtime=LAMBDA_RUNTIME,
                 handler="src.dashboard.self_register.lambda_handler",
                 code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
                 timeout=Duration.seconds(10),
@@ -2535,7 +2540,7 @@ class OncaPrototypeStack(Stack):
             billing_fn = lambda_.Function(
                 self,
                 "OncaBillingWebhook",
-                runtime=lambda_.Runtime.PYTHON_3_11,
+                runtime=LAMBDA_RUNTIME,
                 handler="src.dashboard.billing_webhook.lambda_handler",
                 code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
                 timeout=Duration.seconds(30),
@@ -2600,7 +2605,7 @@ class OncaPrototypeStack(Stack):
         contact_forward_fn = lambda_.Function(
             self,
             "OncaContactForward",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.dashboard.contact_forward.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.seconds(30),
@@ -3331,7 +3336,7 @@ class OncaPrototypeStack(Stack):
         alert_fn = lambda_.Function(
             self,
             "OncaAlertNotifier",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.dashboard.alert_notifier.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.seconds(30),
@@ -3409,7 +3414,7 @@ class OncaPrototypeStack(Stack):
         financials_fn = lambda_.Function(
             self,
             "OncaFinancials",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.ingest.bcb_soundness.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             # #150 — this handler runs FIVE ingests (solvency, fundamentals, inadimplência,
@@ -3432,7 +3437,7 @@ class OncaPrototypeStack(Stack):
         balancete_fn = lambda_.Function(
             self,
             "OncaBalancete",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.ingest.bcb_balancete.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.minutes(10),   # downloads + parses a ~10MB monthly CSV
@@ -3453,7 +3458,7 @@ class OncaPrototypeStack(Stack):
         cvm_statements_fn = lambda_.Function(
             self,
             "OncaCvmStatements",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.ingest.cvm_financials.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             # Downloads + parses BOTH packages (~13MB DFP + ~20MB ITR). Measured locally
@@ -3477,7 +3482,7 @@ class OncaPrototypeStack(Stack):
         issuer_kpis_fn = lambda_.Function(
             self,
             "OncaIssuerKpis",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.ingest.mziq_workbooks.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.minutes(5),
@@ -3551,7 +3556,7 @@ class OncaPrototypeStack(Stack):
         tone_fn = lambda_.Function(
             self,
             "OncaFinancialTone",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=LAMBDA_RUNTIME,
             handler="src.synth.financial_tone.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
             timeout=Duration.minutes(10),
