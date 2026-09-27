@@ -1,8 +1,16 @@
 # ADR 011 — Entity discovery, enrichment & profile composition (a separate curated pipeline)
 
-- Status: **Partial — first vertical LIVE (2026-08-28).** Design 2026-08-25;
-  FIAGRO structured sync + keyword harvest shipped 2026-08-28. Remaining: general
-  unresolved-mention NER, FII sibling, DFP/ITR → KB, dashboard "Descoberta" tab.
+- Status: **Implemented — issue #14 closed 2026-09-26.** Design 2026-08-25; first vertical
+  (FIAGRO) 2026-08-28. Every pipeline stage shipped via sub-tickets #102–#107 and is live, with
+  these flags ON in the ingest Lambda: `ONCA_ENTITY_DISCOVERY`, `ONCA_ENTITY_DISCOVERY_AUTOCREATE`,
+  `ONCA_NER_HARVEST`, `ONCA_INGEST_SUSEP`, `ONCA_INGEST_PREVIC`.
+  - Stage 1 registry sync: FIAGRO, FII, SUSEP, SPA, PREVIC, CVM cadastro.
+  - Stage 2 CNPJ bulk: Receita via BigQuery, run monthly with a snapshot gate (#104/#136).
+  - Stage 3 NER and web expansion.
+  - Stage 4 radar tier.
+  - Stage 5 follow-up probe.
+  The history below is kept as written. (Original status: "Partial — first vertical LIVE
+  (2026-08-28)".)
 - Delivers **issue #14 (New Pipeline for Entity Discovery)**, **#22 (B3 ticker → entity)**,
   and **#7 (balance-sheet ingestion → KB for inference)**.
 - Builds on: the entities registry as source-of-truth
