@@ -598,10 +598,15 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # are published as SPA/MF acts in the DOU, which we already parse. These
     # thematic terms surface those acts (the new-authorisation event) and tag an
     # operator when the act names one. Toggle with ONCA_DOU_BETTING.
+    # #173/#174: these are TOPIC terms (industry-tagged, own budget, searched first), not
+    # competitor names — an act they match carries industries=["betting"] and no entity.
+    # They were dead config until #174: the organ filter dropped every SPA / Presidência /
+    # Poder Executivo act, so MP 1.394 (the 2026-09-25 online-betting ban) never landed.
+    dou_topics: dict[str, list[str]] = {}
     if os.environ.get("ONCA_DOU_BETTING", "true").lower() in ("1", "true", "yes"):
-        dou_terms = list(dict.fromkeys(
-            dou_terms + ["Secretaria de Prêmios e Apostas", "apostas de quota fixa"]
-        ))
+        for _t in ("Secretaria de Prêmios e Apostas", "apostas de quota fixa",
+                   "Lei nº 14.790", "jogos de azar"):
+            dou_topics[_t] = ["betting"]
 
     # Trade-press news is fetched by _news_slice (its own parallel branch); see
     # the mode dispatch at the top of lambda_handler.
@@ -1402,7 +1407,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         "competitor": lambda: cvm_fundos.fetch_funds(watchlist_admins=competitors),
         "ofertas": lambda: cvm_ofertas.fetch_recent(
             lookback_days=ofertas_lookback, watchlist=ofertas_watch or None),
-        "dou": lambda: dou.fetch_dou(dou_terms, lookback_days=dou_lookback) if dou_terms else [],
+        "dou": lambda: (dou.fetch_dou(dou_terms, lookback_days=dou_lookback, topic_terms=dou_topics)
+                        if (dou_terms or dou_topics) else []),
         "cade": lambda: cade.map_to_entities(
             cade.fetch_atos(lookback_days=_cade_lookback), resolver=_resolve_entities),
         "sanctions": _fetch_sanctions,

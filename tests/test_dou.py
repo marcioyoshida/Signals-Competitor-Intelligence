@@ -60,3 +60,72 @@ def test_malformed_html_degrades_to_empty():
         fetcher=lambda t, s, e: "<html>no params here</html>", pause_sec=0,
     )
     assert acts == []
+
+
+# --- #173/#174: the 2026-09-25 online-betting ban (MP 1.394) must be visible -----------------------
+import datetime as _dt
+import pathlib as _pl
+
+_FX = _pl.Path(__file__).parent / "fixtures" / "dou"
+_SEARCH = (_FX / "search_todos_quota_fixa_2026-09-27.html").read_text(encoding="utf-8")
+_ACT = (_FX / "act_mp_1394.html").read_text(encoding="utf-8")
+
+
+def _live_like_fetch(term, section, exact_date):
+    # the real Imprensa Nacional behaviour: extra editions only come back for s=todos
+    if section == "todos":
+        return _SEARCH
+    return _SEARCH.replace("DO1_EXTRA_A", "__never_in_do1__") if section == "do1" else ""
+
+
+def test_old_config_misses_mp_1394_and_new_default_catches_it():
+    from src.ingest import dou
+
+    old_organs = tuple(o for o in dou.RELEVANT_ORGANS
+                       if o not in ("Presidência da República", "Atos do Poder Executivo",
+                                    "Secretaria de Prêmios e Apostas",
+                                    "Ministério da Fazenda/Gabinete do Ministro"))
+    topics = {"apostas de quota fixa": ["betting"]}
+    kw = dict(lookback_days=7, today=_dt.date(2026, 9, 27), pause_sec=0, topic_terms=topics,
+              fetcher=_live_like_fetch, act_fetcher=lambda u: _ACT)
+    old = dou.fetch_dou([], sections=("do1",), organs=old_organs, **kw)
+    assert not any("1.394" in r["title"] for r in old)               # the bug, reproduced
+    new = dou.fetch_dou([], **kw)                                     # defaults = the fix
+    mp = next(r for r in new if "MEDIDA PROVISÓRIA Nº 1.394" in r["title"])
+    assert mp["section"] == "DO1_EXTRA_A" and mp["organ"] == "Atos do Poder Executivo"
+    assert mp["industries"] == ["betting"] and mp["company"] is None and mp["name"] is None
+    assert mp["full_text"] and "Ficam proibidas, no território nacional" in mp["text"]
+    # the organ filter still drops unrelated organs from the same page (noise control)
+    assert not any("Ministério Público" in (r["organ"] or "") for r in new)
+    assert not any("Planejamento" in (r["organ"] or "") for r in new)
+    assert all("<span" not in r["text"] for r in new)                 # snippet markup stripped
+
+
+def test_topic_terms_have_their_own_budget_and_merge_with_entity_hits():
+    from src.ingest import dou
+
+    many = [f"COMPETITOR {i}" for i in range(40)]
+    calls = []
+
+    def fetch(term, section, exact_date):
+        calls.append(term)
+        return _SEARCH if term in ("apostas de quota fixa", "COMPETITOR 0") else ""
+
+    recs = dou.fetch_dou(many, lookback_days=7, today=_dt.date(2026, 9, 27), pause_sec=0,
+                         max_terms=5, topic_terms={"apostas de quota fixa": ["betting"]},
+                         fetcher=fetch, full_text=False)
+    assert calls[0] == "apostas de quota fixa"                       # topics first, never cut
+    mp = next(r for r in recs if "1.394" in r["title"])
+    assert mp["company"] == "COMPETITOR 0" and mp["industries"] == ["betting"]   # merged
+
+
+def test_raw_writer_keeps_dou_act_content_for_the_kb():
+    from src.ingest import raw_writer
+
+    doc = {"source": "DOU", "kind": "regulatory", "doc_type": "Medida Provisória",
+           "title": "MEDIDA PROVISÓRIA Nº 1.394, DE 25 DE SETEMBRO DE 2026", "organ": "Atos do Poder Executivo",
+           "section": "DO1_EXTRA_A", "date": "2026-09-25", "industries": ["betting"],
+           "text": "Art. 1º Ficam proibidas, no território nacional, a exploração ..."}
+    txt = raw_writer._document_text(doc)
+    assert "N° None" not in txt and "1.394" in txt and "Ficam proibidas" in txt and "betting" in txt
+    assert raw_writer._metadata_attributes(doc)["industries"] == "betting"

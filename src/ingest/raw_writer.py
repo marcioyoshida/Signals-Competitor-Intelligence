@@ -19,6 +19,16 @@ def _document_text(doc: dict[str, Any]) -> str:
         # ADR 005 §3 private-S3 lens (src/ingest/tenant_s3.py) — the document's
         # own text, already extracted; nothing to reshape.
         return doc.get("text") or ""
+    if doc.get("kind") == "regulatory" and doc.get("source") == "DOU":
+        # #173/#174: DOU acts carry title/organ/section and (for sector-wide normative acts)
+        # the FULL act text — the old number/subject template wrote "Despacho N° None" + the
+        # title, so the KB could never quote an act's content.
+        head = [doc.get("title") or doc.get("subject") or "", doc.get("organ") or "",
+                " · ".join(x for x in (doc.get("section"), doc.get("date")) if x)]
+        if doc.get("industries"):
+            head.append("Setores: " + ", ".join(doc["industries"]))
+        body = (doc.get("text") or "").strip()
+        return "\n".join(h for h in head if h) + (f"\n\n{body}" if body else "")
     if doc.get("kind") == "regulatory":
         return f"{doc.get('doc_type')} N° {doc.get('number')}\n\n{doc.get('subject') or ''}"
     if doc.get("kind") == "competitor":
@@ -103,6 +113,7 @@ def _metadata_attributes(doc: dict[str, Any]) -> dict[str, str]:
         or doc.get("filed"),
         "url": doc.get("url"),
         "cnpj": doc.get("cnpj") or doc.get("issuer_cnpj"),
+        "industries": ",".join(doc.get("industries") or []) or None,
         "name": doc.get("name")
         or doc.get("fund_name")
         or doc.get("admin")

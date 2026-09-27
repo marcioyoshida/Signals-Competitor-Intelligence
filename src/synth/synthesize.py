@@ -250,6 +250,10 @@ _DOU_ORGANS = [
     ("Valores Mobiliários", "CVM"),
     ("Conselho Nacional de Seguros", "CNSP"),
     ("Conselho Monetário", "CMN"),
+    ("Secretaria de Prêmios e Apostas", "SPA"),          # #174
+    ("Atos do Poder Executivo", "Poder Executivo"),      # MPs, decrees
+    ("Presidência da República", "Presidência"),
+    ("Ministério da Fazenda/Gabinete do Ministro", "Min. Fazenda"),
 ]
 
 
