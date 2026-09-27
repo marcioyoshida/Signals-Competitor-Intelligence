@@ -108,8 +108,55 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
-def load_subjects(path: pathlib.Path | str | None = None) -> list[dict[str, Any]]:
+def load_seed_subjects(path: pathlib.Path | str | None = None) -> list[dict[str, Any]]:
+    """The checked-in SEED file (cpo_radar_subjects.json). Seed-only: the registry is the
+    source of truth — see seed_registry() and load_subjects()."""
     return json.loads(pathlib.Path(path or SUBJECTS_PATH).read_text(encoding="utf-8"))["products"]
+
+
+#: Where the last load_subjects() call got its subjects ("registry" | "seed_fallback" | "seed").
+SUBJECTS_SOURCE: dict[str, str] = {"v": "seed"}
+
+
+def load_subjects(path: pathlib.Path | str | None = None, *, table: Any | None = None) -> list[dict[str, Any]]:
+    """Radar subjects from the entity registry (``product_radar`` on each entity). An explicit
+    ``path`` reads that file. With no registry configured (tests, local runs) → the seed file.
+    If the registry is configured but unreachable or has no subjects, fall back to the seed
+    file LOUDLY (printed + recorded in the output's sources) rather than run an empty radar."""
+    if path is not None:
+        SUBJECTS_SOURCE["v"] = "seed"
+        return load_seed_subjects(path)
+    if table is None and not os.environ.get("ONCA_ENTITIES_TABLE"):
+        SUBJECTS_SOURCE["v"] = "seed"
+        return load_seed_subjects()
+    try:
+        from src.synth import entity_registry
+
+        subs = entity_registry.list_product_radar_subjects(table=table)
+        if subs:
+            SUBJECTS_SOURCE["v"] = "registry"
+            return subs
+        print("Warning: registry has no product_radar subjects; using the seed file")
+    except Exception as exc:  # registry unreachable → still run, but say so
+        print(f"Warning: registry subjects unavailable ({exc.__class__.__name__}); using the seed file")
+    SUBJECTS_SOURCE["v"] = "seed_fallback"
+    return load_seed_subjects()
+
+
+def seed_registry(*, table: Any | None = None, source: str = "seed:cpo_radar_subjects.json",
+                  path: pathlib.Path | str | None = None) -> dict[str, bool]:
+    """Write the seed file's subjects onto their entities (idempotent; returns changed per id).
+    Run once to migrate:  python -m src.ingest.cpo_radar --seed-registry"""
+    from src.synth import entity_registry
+
+    out: dict[str, bool] = {}
+    for s in load_seed_subjects(path):
+        ents = s.get("onca_entities") or [s["id"]]
+        cfg = {k: s.get(k) for k in ("name", "aliases", "search_query", "namesake_risk",
+                                     "apple_app_ids", "youtube_channels")}
+        cfg["related_entities"] = list(ents[1:])
+        out[ents[0]] = entity_registry.set_product_radar(ents[0], cfg, source=source, table=table)
+    return out
 
 
 _YT_KEY: dict[str, str | None] = {}
@@ -906,7 +953,9 @@ def run(store: Any | None, *, today: dt.date | None = None, subjects: list[dict[
     ``reclassify_youtube``: re-score every STORED video (after a prompt/taxonomy change) — they
     re-enter the classify step as unscored; reviews are untouched (they drive the baseline)."""
     today = today or dt.datetime.now(BRT).date()
+    subjects_source = "given" if subjects else None
     subjects = subjects or load_subjects()
+    subjects_source = subjects_source or SUBJECTS_SOURCE["v"]
     if products:
         subjects = [s for s in subjects if s["id"] in set(products)]
     state = (store.get(STATE_KEY) if store else None) or {}
@@ -1007,12 +1056,13 @@ def run(store: Any | None, *, today: dt.date | None = None, subjects: list[dict[
     radar = {
         "as_of": today.isoformat(), "generated_at": _now(), "window_days": EVENT_WINDOW_DAYS,
         "thresholds": {"alert_min_count": ALERT_MIN_COUNT, "alert_z": ALERT_Z, "baseline_days": BASELINE_DAYS},
-        "sources": sources, "coverage": coverage, "products": products_out,
+        "sources": sources, "subjects_source": subjects_source, "coverage": coverage, "products": products_out,
         "events": all_events, "alerts": alerts,
         "youtube_quota": {"units": yt.units, "by_endpoint": dict(yt.used), "budget": yt.budget} if yt else None,
         "nova": usage,
     }
-    summary: dict[str, Any] = {"as_of": radar["as_of"], "sources": sources, "events": len(events),
+    summary: dict[str, Any] = {"as_of": radar["as_of"], "sources": sources, "subjects_source": subjects_source,
+                               "n_subjects": len(subjects), "events": len(events),
                                "alerts": len(alerts), "youtube_units": yt.units if yt else 0,
                                "nova_calls": usage.get("calls", 0)}
     if store is not None:
@@ -1076,3 +1126,12 @@ def lambda_handler(event: dict[str, Any] | None, context: Any) -> dict[str, Any]
               reclassify_youtube=bool(event.get("reclassify_youtube")))
     out.pop("radar", None)
     return {"statusCode": 200, "body": json.dumps(out, ensure_ascii=False)}
+
+
+if __name__ == "__main__":  # pragma: no cover - operator CLI
+    import sys
+
+    if "--seed-registry" in sys.argv:
+        print(json.dumps(seed_registry(), indent=1))
+    else:
+        print("usage: python -m src.ingest.cpo_radar --seed-registry")

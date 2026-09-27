@@ -17,7 +17,7 @@ from src.ingest import cpo_radar as cr
 from src.synth import executive
 
 FIX = Path(__file__).resolve().parent / "fixtures" / "cpo_radar"
-SUBJ = {s["id"]: s for s in cr.load_subjects()}
+SUBJ = {s["id"]: s for s in cr.load_seed_subjects()}
 
 
 def _load(name):
@@ -619,3 +619,52 @@ def test_send_cpo_digest_uses_existing_channels_and_is_silent_without_radar():
                                                    "lines": w["lines"]})
     assert subj.startswith("Radar de produto semanal do CPO") and "Inter" in text
     assert weekly_digest.send_cpo_digest({}, as_of="2026-09-26") == {"teams": None, "slack": None, "email": None}
+
+
+# --- #159 follow-up: subjects live in the entity registry -----------------------------------------
+
+def _registry_with_entities():
+    from src.synth import entity_registry as er
+    from tests.test_entity_registry import FakeTable
+
+    t = FakeTable()
+    for s in cr.load_seed_subjects():
+        for eid in s["onca_entities"]:
+            er.put_entity(eid, s["name"], [s["name"]], table=t)
+    return er, t
+
+
+def test_seed_registry_round_trips_every_seed_subject():
+    er, t = _registry_with_entities()
+    changed = cr.seed_registry(table=t)
+    assert set(changed) == {"nubank", "inter", "picpay", "mercado_pago", "c6"} and all(changed.values())
+    assert not any(cr.seed_registry(table=t).values())                 # idempotent
+    reg = {s["id"]: s for s in er.list_product_radar_subjects(table=t)}
+    for s in cr.load_seed_subjects():
+        r = reg[s["id"]]
+        for k in ("name", "aliases", "search_query", "namesake_risk", "apple_app_ids",
+                  "youtube_channels", "onca_entities"):
+            assert r[k] == s[k], (s["id"], k)
+    assert er.get_entity("inter", table=t)["_prov"]["product_radar"]["source"].startswith("seed:")
+
+
+def test_load_subjects_prefers_registry_and_falls_back_loudly():
+    er, t = _registry_with_entities()
+    assert cr.load_subjects(table=t) and cr.SUBJECTS_SOURCE["v"] == "seed_fallback"   # empty registry
+    cr.seed_registry(table=t)
+    er.set_product_radar("c6", None, table=t)                           # removed from the radar
+    subs = cr.load_subjects(table=t)
+    assert cr.SUBJECTS_SOURCE["v"] == "registry" and {s["id"] for s in subs} == {
+        "nubank", "inter", "picpay", "mercado_pago"}
+    cfg = dict(er.get_entity("picpay", table=t)["product_radar"], active=False)
+    er.set_product_radar("picpay", cfg, table=t)                        # paused, config kept
+    assert "picpay" not in {s["id"] for s in cr.load_subjects(table=t)}
+
+
+def test_set_product_radar_rejects_a_subject_with_nothing_to_fetch():
+    er, t = _registry_with_entities()
+    import pytest
+
+    with pytest.raises(ValueError):
+        er.set_product_radar("nubank", {"name": "Nubank", "aliases": ["Nubank"]}, table=t)
+    assert er.set_product_radar("ghost", {"apple_app_ids": [{"id": "1"}]}, table=t) is False

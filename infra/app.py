@@ -3515,9 +3515,13 @@ class OncaPrototypeStack(Stack):
                 "ONCA_CPO_YT_QUOTA": "1000",
                 "ONCA_CPO_YT_SEARCH_PAGES": "1",
                 "ONCA_CPO_YT_LOOKBACK_DAYS": "2",
+                # subjects come from the registry (entity.product_radar); the checked-in
+                # cpo_radar_subjects.json is seed-only and a loud fallback.
+                "ONCA_ENTITIES_TABLE": entities_table.table_name,
             },
         )
-        digests_bucket.grant_read_write(cpo_radar_fn)   # includes DeleteObject for the 30-d prune
+        digests_bucket.grant_read_write(cpo_radar_fn)
+        entities_table.grant_read_data(cpo_radar_fn)   # includes DeleteObject for the 30-d prune
         cpo_radar_fn.add_to_role_policy(iam.PolicyStatement(
             actions=["bedrock:InvokeModel"],             # Converse is authorized by InvokeModel
             resources=[

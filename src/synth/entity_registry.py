@@ -814,6 +814,65 @@ def load_attribution_roles(table: Any | None = None, force: bool = False) -> dic
     return roles
 
 
+# #159 — CPO Product Radar subject config, stored ON the entity the radar's events bind to.
+# The registry is the source of truth (like cnpj_roots); src/ingest/cpo_radar_subjects.json
+# is seed-only. Shape: name, aliases, search_query, namesake_risk, apple_app_ids
+# [{id, name}], youtube_channels [{id, handle, title}], related_entities [entity ids],
+# active (default True).
+PRODUCT_RADAR_KEYS = ("name", "aliases", "search_query", "namesake_risk", "apple_app_ids",
+                      "youtube_channels", "related_entities", "active")
+
+
+def set_product_radar(entity_id: str, cfg: dict[str, Any] | None, *, source: str = "curated",
+                      table: Any | None = None) -> bool:
+    """Set (or clear, with None/{}) an entity's CPO Product Radar subject config.
+    Non-destructive to other fields; idempotent; provenance-stamped and audit-logged
+    (ADR 018). A subject must name at least one Apple app or YouTube channel — a config
+    the radar cannot fetch anything for is rejected rather than silently stored."""
+    t = _table(table)
+    e = get_entity(entity_id, table=t)
+    if not e:
+        return False
+    want = {k: cfg[k] for k in PRODUCT_RADAR_KEYS if cfg and k in cfg and cfg[k] is not None} if cfg else {}
+    if want and not (want.get("apple_app_ids") or want.get("youtube_channels")):
+        raise ValueError(f"product_radar for {entity_id}: needs apple_app_ids or youtube_channels")
+    if want:
+        want.setdefault("name", e.get("display_name") or entity_id)
+        want["aliases"] = [str(a) for a in (want.get("aliases") or [])]
+        want["related_entities"] = [str(r) for r in (want.get("related_entities") or [])
+                                    if str(r) != entity_id]
+        want["active"] = bool(want.get("active", True))
+    want_safe = _ddb_safe(want)
+    if (e.get("product_radar") or {}) == want_safe:
+        return False
+    prov = {**(e.get("_prov") or {}), "product_radar": _prov_entry(source)}  # ADR 018
+    update_entity(entity_id, {"product_radar": want_safe, "_prov": prov}, table=t)
+    _log(entity_id, "set_product_radar", source,
+         {"active": bool(want.get("active")) if want else False,
+          "apps": len(want.get("apple_app_ids") or []), "channels": len(want.get("youtube_channels") or [])})
+    return True
+
+
+def list_product_radar_subjects(table: Any | None = None) -> list[dict[str, Any]]:
+    """Active radar subjects in the shape cpo_radar consumes: the product id IS the entity
+    id, and ``onca_entities`` = [entity_id, *related_entities] (events bind to [0])."""
+    out: list[dict[str, Any]] = []
+    for e in list_entities(table=table):
+        pr = e.get("product_radar") or {}
+        if not pr or not pr.get("active", True):
+            continue
+        eid = e["entity_id"]
+        out.append({
+            "id": eid, "name": pr.get("name") or e.get("display_name") or eid,
+            "aliases": list(pr.get("aliases") or []), "search_query": pr.get("search_query") or "",
+            "namesake_risk": pr.get("namesake_risk") or "",
+            "apple_app_ids": _json_safe(list(pr.get("apple_app_ids") or [])),
+            "youtube_channels": _json_safe(list(pr.get("youtube_channels") or [])),
+            "onca_entities": [eid, *[r for r in (pr.get("related_entities") or []) if r != eid]],
+        })
+    return out
+
+
 def list_entity_attributes(table: Any | None = None) -> dict[str, dict[str, Any]]:
     """Compact per-entity classification map for the feed/agent: every active
     entity → {label, ownership, certifications, ticker, industries,
@@ -2295,6 +2354,12 @@ def update_entity(
         elif key == "capital":
             # #143 capital social {value, previous, changed_at, first_seen}.
             ent["capital"] = _ddb_safe(dict(val)) if val else {}
+        elif key == "product_radar":
+            # #159 CPO Product Radar subject config (see set_product_radar). Empty clears it.
+            if val:
+                ent["product_radar"] = _ddb_safe(dict(val))
+            else:
+                ent.pop("product_radar", None)
         elif key == "_prov":
             # ADR 018. Callers pass the WHOLE merged map ({**existing, field: entry}),
             # never a fragment, so this replaces rather than patches. Without this branch
