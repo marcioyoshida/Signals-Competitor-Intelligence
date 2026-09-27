@@ -24,6 +24,8 @@ from __future__ import annotations
 import csv
 import datetime as dt
 import io
+import json
+import re
 import zipfile
 from typing import Any, BinaryIO, Iterable
 
@@ -185,6 +187,113 @@ def _normalize_legacy(row: dict[str, Any]) -> dict[str, Any]:
         "url": "https://dados.cvm.gov.br/dataset/oferta-distrib",
         "raw": None,
     }
+
+
+# --- status-change detection (#194, audit R5 B3) ---------------------------------------------
+# `fetch_recent` above is a `detect_new`-on-id source: an offering that flips to
+# "Oferta Suspensa" (a CVM/SRE stop order) or "Oferta Revogada" (cancelled) is invisible,
+# because the offering id was already "seen" the first time it appeared. The 2026-09-27
+# regulator-coverage audit's B3 finding (OPEA Securitizadora CRI 554ª emissão, suspended
+# ~03/09/2026) is exactly this: `cvm_ofertas` only ever detects NEW ids.
+#
+# `detect_status_changes` is a small categorical diff (id -> last-seen status), independent
+# of the id-existence diff above; the caller persists `status_index` between runs (durable
+# store, same shape as `ceis_cnep`'s `sanctions/index.json`).
+STATUS_INDEX_KEY = "cvm_ofertas/status_index.json"
+#: status values worth alerting on a transition INTO (a stop/cancel event, not every move —
+#: e.g. "Aguardando Bookbuilding" -> "Oferta Encerrada" is the normal lifecycle, not news).
+_ALERT_STATUSES = re.compile(r"suspens|revogad|cancelad|caducad", re.I)
+
+
+def detect_status_changes(
+    records: Iterable[dict[str, Any]],
+    prior_status: dict[str, str] | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, str]]:
+    """Offerings whose status moved INTO a stop/cancel state since the last run.
+
+    Returns ``(change_records, updated_status_index)``. ``change_records`` are shaped as
+    ``kind: "regulatory"`` documents (organ/doc_type/title/date/url/text) so they flow
+    through the same corpus + KB path as any other regulatory act, quotable on their own —
+    not just a numeric field flip. A record with no ``status`` or whose status didn't change
+    updates the index (if present) but never alerts; the FIRST time an id is seen with an
+    already-suspended status is also not alerted (no prior value to compare against — same
+    "first run seeds a baseline" rule as every other diff in this project).
+    """
+    prior_status = dict(prior_status or {})
+    updated = dict(prior_status)
+    changes: list[dict[str, Any]] = []
+    for r in records or []:
+        oid = r.get("id")
+        status = r.get("status")
+        if not oid or not status:
+            continue
+        prev = prior_status.get(oid)
+        updated[oid] = status
+        if prev is None or prev == status:
+            continue
+        if not _ALERT_STATUSES.search(status):
+            continue
+        title = (
+            f"{r.get('security') or 'Oferta'} — {r.get('issuer') or r.get('offeror') or '?'}: "
+            f"{prev} → {status}"
+        )
+        text = " | ".join(str(x) for x in (
+            f"Emissor: {r.get('issuer') or r.get('offeror') or '?'}",
+            f"Líder: {r.get('leader')}" if r.get("leader") else None,
+            f"Valor mobiliário: {r.get('security')}" if r.get("security") else None,
+            f"Status anterior: {prev}", f"Status atual: {status}",
+            f"Processo CVM: {r.get('process')}" if r.get("process") else None,
+        ) if x)
+        changes.append({
+            "id": f"cvm-oferta-status:{oid}:{status}",
+            "source": "CVM",
+            "kind": "regulatory",
+            "organ": "Comissão de Valores Mobiliários",
+            "doc_type": "Mudança de status de oferta (SRE)",
+            "title": title,
+            "subject": title,
+            "text": text,
+            "date": r.get("event_date"),
+            "url": r.get("url"),
+            "issuer": r.get("issuer") or r.get("offeror"),
+            "issuer_cnpj": r.get("issuer_cnpj"),
+            "prev_status": prev,
+            "status": status,
+        })
+    return changes, updated
+
+
+def load_status_index(bucket: str, *, s3: Any | None = None) -> dict[str, str]:
+    import boto3
+    s3 = s3 or boto3.client("s3")
+    try:
+        body = s3.get_object(Bucket=bucket, Key=STATUS_INDEX_KEY)["Body"].read()
+        data = json.loads(body)
+        return data if isinstance(data, dict) else {}
+    except Exception:  # pragma: no cover - first run / missing object
+        return {}
+
+
+def save_status_index(index: dict[str, str], bucket: str, *, s3: Any | None = None) -> str:
+    import boto3
+    s3 = s3 or boto3.client("s3")
+    s3.put_object(
+        Bucket=bucket, Key=STATUS_INDEX_KEY,
+        Body=json.dumps(index, ensure_ascii=False, indent=2).encode("utf-8"),
+        ContentType="application/json",
+    )
+    return f"s3://{bucket}/{STATUS_INDEX_KEY}"
+
+
+def update_status_changes(
+    records: Iterable[dict[str, Any]], bucket: str, *, s3: Any | None = None,
+) -> list[dict[str, Any]]:
+    """Load the durable status index, diff, persist, return the new change records."""
+    prior = load_status_index(bucket, s3=s3)
+    changes, updated = detect_status_changes(records, prior)
+    if updated != prior:
+        save_status_index(updated, bucket, s3=s3)
+    return changes
 
 
 def _clean_cnpj(value: Any) -> str | None:

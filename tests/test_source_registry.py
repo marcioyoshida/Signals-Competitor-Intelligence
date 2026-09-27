@@ -29,7 +29,7 @@ def test_known_lens_policy_snapshot():
     # Guardrail against an accidental policy drift (these are the shipped values).
     assert r.lens_weight()["regulatory"] == 0.35 and r.lens_weight()["market"] == 0.08
     assert r.solo_lenses() == frozenset(
-        {"regulatory", "antitrust", "sanctions", "fatos", "dou", "sec", "ofertas",
+        {"regulatory", "antitrust", "sanctions", "fatos", "dou", "cvm_normas", "sec", "ofertas",
          "entrants", "funds", "contracts"})
     assert r.backdrop_lenses() == frozenset({"market"})
     assert "news" not in r.solo_lenses()             # news needs corroboration

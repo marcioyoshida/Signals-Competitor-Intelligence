@@ -99,7 +99,8 @@ def test_spa_2750_new_procedures_is_high_and_revoking_a_portaria_is_not_critical
 def test_mp_1393_desenrola_is_credit_high():
     c = fa.classify(_act("act_mp_1393.html", "MEDIDA PROVISÓRIA Nº 1.393, DE 25 DE SETEMBRO DE 2026",
                          "Atos do Poder Executivo", "DO1_EXTRA_A", "Medida Provisória"))
-    assert c["industries"] == ["securitization"] and c["severity"] == "high"
+    # #195: a consumer-credit programme run by the lenders → banking + fintech, not securitization
+    assert c["industries"] == ["banking", "fintech"] and c["severity"] == "high"
 
 
 def test_despacho_forwarding_the_mp_is_medium_and_cites_it():
@@ -248,3 +249,45 @@ def test_real_implementing_portaria_names_its_mp_not_the_sector():
     assert fa.classify(rec)["industries"] == []
     c = fa.classify(rec, known_instruments={"mp 1.391": ["betting"]})
     assert c["industries"] == ["betting"] and c["cites"] == ["mp 1.391"]
+
+
+# --- #195: AML compliance tag + the 8 new industry vocabularies (real DOU acts) ----------------
+BCB_DC = "Banco Central do Brasil/Diretoria Colegiada"
+
+
+def test_res_bcb_588_aml_is_a_compliance_tag_not_an_industry():
+    # A2 of the regulator audit: amends Circular 3.978 (PLD/FT) — was industries=[] / low
+    rec = _act("act_res_bcb_588.html", "RESOLUÇÃO BCB Nº 588, DE 23 DE SETEMBRO DE 2026", BCB_DC, "DO1",
+               "Resolução", id="dou:bcb588")
+    c = fa.classify(rec)
+    assert c["industries"] == [] and c["compliance"] == ["aml"]
+    assert c["severity"] != "low"                     # the tag is coverage for severity
+    fa.annotate([rec])
+    assert rec["compliance_tags"] == ["aml"] and "industries" not in rec
+
+
+def test_res_bcb_589_psav_stays_crypto_without_aml_tag():
+    c = fa.classify(_act("act_res_bcb_589.html", "RESOLUÇÃO BCB Nº 589, DE 23 DE SETEMBRO DE 2026", BCB_DC,
+                         "DO1", "Resolução"))
+    assert c["industries"] == ["crypto"] and c["compliance"] == []
+
+
+def test_dtvm_liquidation_maps_to_investment_banking():
+    # A3: Ato 1.389 (Trustee DTVM) — was "no covered industry"
+    c = fa.classify(_act("act_ato_bcb_1389.html", "ATO Nº 1.389, DE 3 DE SETEMBRO DE 2026",
+                         "Banco Central do Brasil/Presidência", "DO1", "Ato"))
+    assert c["industries"] == ["investment-banking"] and c["severity"] != "low"
+
+
+def test_new_industry_vocabularies_match_their_sector_and_not_homonyms():
+    ind = fa.industries_in
+    assert "real-estate-funds" in ind("altera a Lei nº 8.668, que dispõe sobre fundos de investimento imobiliário")
+    assert "agri-funds" in ind("Fiagro: Fundos de Investimento nas Cadeias Produtivas Agroindustriais")
+    assert "acquiring" in ind("regras para credenciadoras de cartões e subcredenciadores")
+    assert "advisory" in ind("credenciamento de consultor de valores mobiliários")
+    assert "private-markets" in ind("Fundo de Investimento em Participações Multiestratégia")
+    assert "wealth-management" in ind("assessores de investimento e carteiras administradas")
+    assert "financial-data-analytics" in ind("entidades registradoras de recebíveis de cartão")
+    # "credenciadora" alone is an accreditation body in the DOU (75/75 non-FS hits, live)
+    assert "acquiring" not in ind("entidade credenciadora de cursos de formação")
+    assert fa.compliance_in("Custo do PLD no mercado de energia") == []

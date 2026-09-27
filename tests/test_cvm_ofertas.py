@@ -115,3 +115,88 @@ def test_parse_date_formats():
     assert cvm_ofertas._parse_date("2026-07-01") == date(2026, 7, 1)
     assert cvm_ofertas._parse_date("01/07/2026") == date(2026, 7, 1)
     assert cvm_ofertas._parse_date("") is None
+
+
+# --- status-change detection (#194, audit R5 B3: OPEA Securitizadora CRI suspended) --------
+
+def _offer(oid, status, **extra):
+    return {
+        "id": oid, "status": status, "security": "CRI", "issuer": "OPEA SECURITIZADORA S.A.",
+        "url": "https://dados.cvm.gov.br/dataset/oferta-distrib", "event_date": "2026-09-03",
+        **extra,
+    }
+
+
+def test_detect_status_changes_alerts_on_suspension():
+    prior = {"cvm-oferta:r160:554": "Aguardando Bookbuilding"}
+    records = [_offer("cvm-oferta:r160:554", "Oferta Suspensa")]
+    changes, updated = cvm_ofertas.detect_status_changes(records, prior)
+    assert len(changes) == 1
+    c = changes[0]
+    assert c["kind"] == "regulatory" and c["source"] == "CVM"
+    assert c["organ"] == "Comissão de Valores Mobiliários"
+    assert c["prev_status"] == "Aguardando Bookbuilding" and c["status"] == "Oferta Suspensa"
+    assert "OPEA" in c["title"] and "Suspensa" in c["title"]
+    assert updated["cvm-oferta:r160:554"] == "Oferta Suspensa"
+
+
+def test_detect_status_changes_no_alert_on_routine_lifecycle_move():
+    # "Aguardando Bookbuilding" -> "Registro Concedido" is the normal path, not a stop/cancel.
+    prior = {"x": "Aguardando Bookbuilding"}
+    changes, _ = cvm_ofertas.detect_status_changes(
+        [_offer("x", "Registro Concedido")], prior
+    )
+    assert changes == []
+
+
+def test_detect_status_changes_no_alert_on_first_sighting():
+    # No prior value: same "first run seeds a baseline" rule as detect_new/detect_moves.
+    changes, updated = cvm_ofertas.detect_status_changes(
+        [_offer("y", "Oferta Suspensa")], {}
+    )
+    assert changes == []
+    assert updated["y"] == "Oferta Suspensa"
+
+
+def test_detect_status_changes_no_alert_when_unchanged():
+    prior = {"z": "Oferta Suspensa"}
+    changes, updated = cvm_ofertas.detect_status_changes(
+        [_offer("z", "Oferta Suspensa")], prior
+    )
+    assert changes == []
+    assert updated["z"] == "Oferta Suspensa"
+
+
+class _FakeS3:
+    def __init__(self):
+        self.objects: dict[str, bytes] = {}
+
+    def get_object(self, Bucket, Key):
+        import io as _io
+        if Key not in self.objects:
+            raise KeyError(Key)
+        return {"Body": _io.BytesIO(self.objects[Key])}
+
+    def put_object(self, Bucket, Key, Body, **kw):
+        self.objects[Key] = Body if isinstance(Body, bytes) else Body.encode("utf-8")
+
+
+def test_update_status_changes_round_trips_through_s3_store():
+    s3 = _FakeS3()
+    bucket = "onca-digests-test"
+    first = cvm_ofertas.update_status_changes(
+        [_offer("cvm-oferta:r160:554", "Aguardando Bookbuilding")], bucket, s3=s3
+    )
+    assert first == []  # first sighting, no prior -> no alert, but the index is seeded
+
+    second = cvm_ofertas.update_status_changes(
+        [_offer("cvm-oferta:r160:554", "Oferta Suspensa")], bucket, s3=s3
+    )
+    assert len(second) == 1
+    assert second[0]["status"] == "Oferta Suspensa"
+
+    # idempotent: re-running with the same status a third time alerts nothing new
+    third = cvm_ofertas.update_status_changes(
+        [_offer("cvm-oferta:r160:554", "Oferta Suspensa")], bucket, s3=s3
+    )
+    assert third == []

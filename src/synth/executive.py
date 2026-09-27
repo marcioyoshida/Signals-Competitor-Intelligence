@@ -1021,8 +1021,42 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
 _CCO_MIN_REPUTATION_SIGNAL = 5
 
 
+# --- #193 sanctions / enforcement register (feed.enforcement) -------------------------------
+# Supervisor actions against ONE operator: BCB liquidação/RAET/intervenção, SPA/COAF/CVM
+# sanction proceedings, CEIS/CNEP, and enforcement news (CVM PAS, MPF operations). An action
+# with no industry (a liquidated DTVM that is not on the roster) is market-wide: visible in
+# every sector, like the page's inSector().
+_ENF_SEV_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+
+
+def _enforcement(feed: dict[str, Any]) -> list[dict[str, Any]]:
+    acts = [a for a in (feed.get("enforcement") or []) if isinstance(a, dict) and a.get("id")]
+    acts = sorted(acts, key=lambda a: str(a.get("last_evidence") or a.get("date") or ""), reverse=True)
+    return sorted(acts, key=lambda a: _ENF_SEV_RANK.get(a.get("severity") or "", 9))
+
+
+def _in_scope_or_market(item: dict[str, Any], slug: str | None) -> bool:
+    return not (item.get("industries") or []) or _in_industry(item, slug)
+
+
+def _enforcement_row(a: dict[str, Any], labels: dict[str, str]) -> dict[str, Any]:
+    srcs = [{"kind": s.get("kind"), "title": s.get("title"), "url": s.get("url"), "date": s.get("date"),
+             "label": s.get("label")} for s in (a.get("sources") or [])[:6]]
+    ent = a.get("entity")
+    return {"id": a.get("id"), "kind": a.get("kind"), "kind_label": a.get("kind_label"),
+            "authority": a.get("authority"), "entity": ent,
+            "label": labels.get(ent) if ent else (a.get("label") or a.get("target")),
+            "target": a.get("target"), "industries": list(a.get("industries") or []),
+            "severity": a.get("severity"), "confidence": a.get("confidence"),
+            "date": a.get("date"), "last_evidence": a.get("last_evidence"),
+            "title": a.get("title"), "summary": a.get("summary"),
+            "n_sources": len(a.get("sources") or []), "n_outlets": a.get("n_outlets") or 0,
+            "sources": srcs}
+
+
 def build_cco(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     labels = ctx["labels"]
+    enforcement = [_enforcement_row(a, labels) for a in _enforcement(feed)]
     findings = list((feed.get("integrity") or {}).get("findings") or [])
     distress = _trusted_distress(feed)
     # #140: the store now holds two scales that do NOT compare — BCB publishes a positional
@@ -1059,7 +1093,11 @@ def build_cco(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
                  "industries": _industries_of(feed, r.get("entity"))} for r in reputation]
     # Risk register = confirmed distress + worst-reputation + high-severity integrity.
     risk_register = (
-        [{"kind": "distress", "label": labels.get(d.get("entity"), d.get("entity")),
+        [{"kind": "enforcement", "label": r.get("label") or "—",
+          "detail": f"{r.get('authority')} · {r.get('kind_label')} · {r.get('title') or ''}",
+          "industries": r["industries"], "severity": "high" if r.get("severity") == "critical" else "med"}
+         for r in enforcement if r.get("severity") in ("critical", "high")][:8]
+        + [{"kind": "distress", "label": labels.get(d.get("entity"), d.get("entity")),
           "detail": d.get("label"), "industries": _industries_of(feed, d.get("entity")),
           "severity": "high"} for d in distress]
         + [{"kind": "reputacao", "label": r["label"], "detail": f"#{r['rank']} reclamações · índice {r['index']}",
@@ -1080,7 +1118,11 @@ def build_cco(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         # a buyer. NB this said "consumidor.gov.br" until 2026-09-18; that ingester (#63) has
         # never fed this store — it is default-off and its source host is now dead.
         insufficient = len(si) == 0 and len(sr) < _CCO_MIN_REPUTATION_SIGNAL
+        se = [r for r in enforcement if _in_scope_or_market(r, slug)]
         return {"n_integrity": len(si), "n_distress": len(sd), "n_rep": len(sr),
+                "n_enforcement": len(se),
+                "n_enforcement_severe": sum(1 for r in se if r.get("severity") in ("critical", "high")),
+                "enforcement_severity": se[0].get("severity") if se else None,
                 "n_high": sum(1 for i in si if i.get("severity") == "high"),
                 "worst_rank": min([r["rank"] for r in sr if r.get("rank")], default=None),
                 "signal_state": "insufficient" if insufficient else "sufficient"}
@@ -1092,7 +1134,15 @@ def build_cco(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         i = high[0]
         recs.append(_rec("imediato", f"Sinalizar achado de integridade: {i.get('entity_id') or i.get('card_id')}",
                          "flag_entity", officer="cco", entity=i.get("entity_id"), industries=i.get("industries")))
+    bound = [r for r in enforcement if r.get("entity") and r.get("severity") in ("critical", "high")]
+    if bound:
+        r = bound[0]
+        recs.append(_rec("imediato", f"Revisar exposição: {r.get('authority')} — {r.get('kind_label')} "
+                         f"({r.get('label')})", "flag_entity", officer="cco", entity=r.get("entity"),
+                         evidence_id=r.get("id"), industries=r.get("industries")))
     return {"by_industry": _by_industry(ctx["sectors"], agg), "panels": {
+        # #193: supervisor actions against one operator — most severe, then newest, first.
+        "enforcement": enforcement[:40],
         "integrity": integrity_rows[:40],
         "risk_register": risk_register[:30],
         "reputation": rep_rows[:30],
@@ -1498,6 +1548,18 @@ def build_flow(feed: dict[str, Any], ctx: dict[str, Any]) -> list[dict[str, Any]
                          f"Processo de {d.get('label') or 'distress'} (confiança {d.get('confidence')}).",
                          industries=_industries_of(feed, e), evidence_ids=(d.get("evidence") or [])[:2],
                          action="Sinalizar para revisão de compliance", action_ref="flag_entity", key=e or ""))
+
+    # #193: an OFFICIAL critical enforcement act (liquidação / intervenção / RAET / cassação) → CCO.
+    for a in [x for x in _enforcement(feed)
+              if x.get("severity") == "critical" and x.get("confidence") == "official"][:3]:
+        who = labels.get(a.get("entity")) if a.get("entity") else (a.get("target") or "instituição")
+        brief = (f"{a.get('title') or ''} · {a.get('authority')} · {len(a.get('sources') or [])} fonte(s) "
+                 f"oficial(is), {a.get('date')}.")
+        out.append(_traj("enforcement", f"Enforcement — {a.get('kind_label')} ({who})", "cco", "crit", brief,
+                         industries=list(a.get("industries") or []), evidence_ids=[a.get("id")],
+                         action="Avaliar exposição de contraparte",
+                         action_ref="flag_entity" if a.get("entity") else "open_watch",
+                         key=a.get("id") or ""))
 
     # High-severity integrity finding → CCO.
     for f in [x for x in ((feed.get("integrity") or {}).get("findings") or []) if x.get("severity") == "high"][:3]:

@@ -47,9 +47,15 @@ def reset() -> None:
 
 
 def record(source: str, *, ok: bool, docs: int | None = None, error: str | None = None,
-           idle: bool = False) -> None:
+           idle: bool = False, metrics: dict[str, Any] | None = None) -> None:
     """Record one source's run outcome. ``ok`` = it completed without raising; ``error`` is the
     stringified failure (budget/timeout/network) when not ok; ``docs`` is optional fetched count.
+
+    ``metrics`` (#192/R6) merges arbitrary source-specific yield numbers into the ledger
+    record (e.g. CADE's ``acs_per_week`` distinct-Ato-de-Concentração rate) — a source can
+    report "ran fine, docs > 0" while its actual extraction is dead (parties empty, or a
+    single stale AC repeating every run); a per-source yield metric is what a "live/ok"
+    status can't otherwise reveal.
 
     ``idle=True`` means the pipeline REACHED this source and it had no work — an
     event-driven source whose upstream produced nothing this cycle. That is a healthy
@@ -72,6 +78,8 @@ def record(source: str, *, ok: bool, docs: int | None = None, error: str | None 
         e["last_error"] = (error or "erro")[:300]
     if docs is not None:
         e["docs"] = int(docs)
+    if metrics:
+        e.setdefault("metrics", {}).update({k: v for k, v in metrics.items() if v is not None})
 
 
 def ledger() -> dict[str, dict[str, Any]]:

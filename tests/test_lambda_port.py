@@ -1130,3 +1130,16 @@ def test_news_mode_persists_its_telemetry(monkeypatch):
 class _NoopS3:
     def put_object(self, **kw):
         return {}
+
+
+def test_large_digest_returns_s3_pointer_not_inline_body():
+    # 2026-09-27: a >256 KB result failed the SFN task (States.DataLimitExceeded) after the
+    # seen-state was committed, so the retry's digest had 0 new acts.
+    big = {"source": "lambda_port", "dou": {"count": 3, "new_count": 3, "items": ["x" * 300_000]}}
+    body = json.loads(lambda_port._response_body(big, "lambda-digests/r.json"))
+    assert body == {"source": "lambda_port", "digest_key": "lambda-digests/r.json", "inline": False,
+                    "counts": {"dou": {"count": 3, "new_count": 3}}}
+    # no S3 copy → the body is the only copy, keep it whole; small bodies stay inline
+    assert json.loads(lambda_port._response_body(big, None)) == big
+    small = {"source": "lambda_port"}
+    assert json.loads(lambda_port._response_body(small, "k")) == small

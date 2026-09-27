@@ -32,6 +32,26 @@ from src.diff.engine import DynamoDbState, DynamoDbValueState, detect_moves, det
 from src.ingest.budget import SourceBudgetExceeded as _SourceBudgetExceeded  # noqa: E402
 
 
+def _dou_with_stats(recs: list) -> list:
+    """#191: publish the DOU run's paging telemetry (queries, pages, SATURATED terms — a full
+    page limit still inside the lookback) to source_health as metrics of "DOU saturation"."""
+    try:
+        from src.ingest import dou as _dou
+        from src.ingest import source_health
+
+        st = dict(_dou.LAST_STATS or {})
+        sat = st.get("saturated") or []
+        source_health.record("DOU saturation", ok=not sat, docs=len(recs),
+                             error=(f"{len(sat)} saturated: " + ", ".join(x["term"] for x in sat[:8]))
+                             if sat else None,
+                             metrics={"queries": st.get("queries", 0), "pages": st.get("pages", 0),
+                                      "saturated_terms": [x["term"] for x in sat],
+                                      "paged_terms": [x["term"] for x in st.get("paged") or []]})
+    except Exception:  # pragma: no cover - telemetry must never affect ingestion
+        pass
+    return recs
+
+
 def _record_health(label: str, *, ok: bool, error: str | None = None,
                    idle: bool = False) -> None:
     """#76: best-effort per-source run telemetry into the source-health ledger. Never raises."""
@@ -128,6 +148,7 @@ from src.ingest import (
     cvm_fundos,
     cvm_inf_diario,
     cvm_ipe,
+    cvm_normas,
     cvm_ofertas,
     ans_igr,
     bcb_reclamacoes,
@@ -546,6 +567,24 @@ def _write_news_digest(slice_: dict[str, Any], context: Any) -> dict[str, Any]:
     return {"statusCode": 200, "body": json.dumps(payload, ensure_ascii=False)}
 
 
+
+# Step Functions caps a task result at 256 KB even with result_path=DISCARD
+# (States.DataLimitExceeded). A failed attempt has already committed the seen-state, so the
+# retry saw 0 new items and the run's new acts never reached a digest (2026-09-27, #188–#195
+# volume). Once the digest is in S3 (synth reads it from there), return a pointer instead.
+MAX_INLINE_BODY_BYTES = 200_000
+
+
+def _response_body(payload: dict, digest_key: str | None) -> str:
+    body = json.dumps(payload, ensure_ascii=False, indent=2)
+    if digest_key is None or len(body.encode("utf-8")) <= MAX_INLINE_BODY_BYTES:
+        return body
+    counts = {k: {f: v[f] for f in ("count", "new_count") if f in v}
+              for k, v in payload.items() if isinstance(v, dict) and ("count" in v or "new_count" in v)}
+    return json.dumps({"source": payload.get("source"), "digest_key": digest_key,
+                       "inline": False, "counts": counts}, ensure_ascii=False)
+
+
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """Return a small digest payload for downstream Lambda/CDK wiring.
 
@@ -652,7 +691,19 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         dou_topics = registry.dou_topic_terms(_active_vertical(), enabled=_topic_enabled)
         dou_topic_organs = {p: o for p, o in registry.dou_topic_organs(_active_vertical()).items()
                             if p in dou_topics}
-    dou_max_topics = int(os.environ.get("ONCA_DOU_MAX_TOPIC_TERMS", "30"))
+    # #188: watched primary acts (MP 1.394/1.393) — their conversion law / expiry arrives months
+    # later, outside the lookback: search for acts citing them, and pass them as known critical
+    # instruments so those acts inherit the industries. Searched FIRST (ahead of topic phrases).
+    dou_known: dict[str, list[str]] = {}
+    if dou_topics or dou_terms:
+        _watched = {}
+        for _key, _phrase, _inds in registry.watched_acts():
+            dou_known[_key] = _inds
+            _watched[_phrase] = _inds
+            dou_topic_organs[_phrase] = list(registry.NORMATIVE_ISSUERS)
+        dou_topics = {**_watched, **dou_topics}
+    # 19 → 40+ phrases after #188/#189/#195; each is one query (+ walked-back pages, #191).
+    dou_max_topics = int(os.environ.get("ONCA_DOU_MAX_TOPIC_TERMS", "45"))
 
     # Trade-press news is fetched by _news_slice (its own parallel branch); see
     # the mode dispatch at the top of lambda_handler.
@@ -1448,6 +1499,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # (The numeric "moves" sources and the special-shape/side-effecting ones remain bespoke
     # below — they have distinct mechanics; migrating them is the tracked follow-on.)
     _cade_lookback = int(os.environ.get("ONCA_CADE_LOOKBACK_DAYS", "45"))
+    cvm_normas_lookback = int(os.environ.get("ONCA_CVM_NORMAS_LOOKBACK_DAYS", "30"))
     _FETCHERS: dict[str, Any] = {
         # #175: every regulatory item leaves ingest with severity (+ industries when a covered
         # industry applies) — BCB normativos here, DOU inside dou.fetch_dou.
@@ -1455,8 +1507,15 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         "competitor": lambda: cvm_fundos.fetch_funds(watchlist_admins=competitors),
         "ofertas": lambda: cvm_ofertas.fetch_recent(
             lookback_days=ofertas_lookback, watchlist=ofertas_watch or None),
-        "dou": lambda: (dou.fetch_dou(dou_terms, lookback_days=dou_lookback, topic_terms=dou_topics,
-                                      topic_organs=dou_topic_organs, max_topic_terms=dou_max_topics)
+        # #194 (audit R5): CVM legislação (Resoluções/Instruções/Ofícios-Circulares) + the
+        # gov.br/cvm notícias listing (PAS judgments, SRE stop orders, Ofício-Circular
+        # announcements) — the CVM had no normative/enforcement source at all before this.
+        "cvm_normas": lambda: federal_acts.annotate(
+            cvm_normas.fetch_recent(lookback_days=cvm_normas_lookback)),
+        "dou": lambda: (_dou_with_stats(dou.fetch_dou(
+                            dou_terms, lookback_days=dou_lookback, topic_terms=dou_topics,
+                            topic_organs=dou_topic_organs, max_topic_terms=dou_max_topics,
+                            known_instruments=dou_known))
                         if (dou_terms or dou_topics) else []),
         "cade": lambda: cade.map_to_entities(
             cade.fetch_atos(lookback_days=_cade_lookback), resolver=_resolve_entities),
@@ -1487,9 +1546,24 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     funds, new_funds = loop_results.get("competitor", ([], []))
     offerings, new_ofertas = loop_results.get("ofertas", ([], []))
     dou_acts, new_dou = loop_results.get("dou", ([], []))
+    cvm_normas_acts, new_cvm_normas = loop_results.get("cvm_normas", ([], []))
     cade_records, new_cade = loop_results.get("cade", ([], []))
     sanctions_records, new_sanctions = loop_results.get("sanctions", ([], []))
     contracts_records, new_contracts = loop_results.get("contracts", ([], []))
+
+    # CVM ofertas status-change detection (#194, audit R5 B3) — `offerings` above is the
+    # id-existence diff (`detect_new`); an offering whose status FLIPS to suspensa/revogada
+    # after it was already seen never re-alerts there. This is a second, categorical diff
+    # over the same fetch, durable-stored (`cvm_ofertas/status_index.json`) like `ceis_cnep`.
+    new_ofertas_status: list[dict[str, Any]] = []
+    if offerings and os.environ.get("ONCA_DIGESTS_BUCKET"):
+        try:
+            with _source_budget("CVM ofertas status", deadline, per_source):
+                new_ofertas_status = cvm_ofertas.update_status_changes(
+                    offerings, os.environ["ONCA_DIGESTS_BUCKET"]
+                )
+        except Exception as exc:  # pragma: no cover - defensive; upstream best-effort
+            print(f"Warning: CVM ofertas status-change detection failed: {exc}")
 
     # Entities registry alias accumulation (ADR step 4): a structured CVM signal
     # (offering issuer / fato relevante company) that carries a CNPJ already
@@ -1614,7 +1688,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # Corpus gets document-like signals only (not numeric Pix/juros/AUM moves).
     _populate_corpus_and_sync(
         new_normativos + new_funds + new_entrants + new_ofertas + new_sec
-        + new_fatos + new_dou
+        + new_fatos + new_dou + new_cvm_normas + new_ofertas_status
     )
 
     # ADR 021 §H/§F — promote closed decisions (+ officer reference) into the KB (gated).
@@ -1649,6 +1723,14 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         },
         # sec_filings + fatos are still bespoke (corpus write / alias accrual side effects).
         "sec_filings": _lens_section(sec_filings_rows, new_sec, registry.by_id("sec_filings")),
+        # CVM ofertas status changes (#194, audit R5 B3) — categorical diff, not a registry-loop
+        # source (it re-diffs the "ofertas" fetch above rather than fetching independently).
+        "cvm_ofertas_status": {
+            "count": len(new_ofertas_status),
+            "new_count": len(new_ofertas_status),
+            "items": _tag_new(new_ofertas_status[:8]),
+            "context": _strip_raw(new_ofertas_status[:12]),
+        },
         "fatos": _lens_section(
             fatos, new_fatos, registry.by_id("fatos"),
             governance_count=sum(1 for f in new_fatos if f.get("governance")),
@@ -1698,6 +1780,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             payload.pop(_sid, None)
 
     bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
+    digest_key = None
     if bucket:
         try:
             s3 = boto3.client("s3")
@@ -1707,6 +1790,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 Key=key,
                 Body=json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8"),
             )
+            digest_key = key
         except Exception as exc:  # pragma: no cover - defensive handling for S3 write failures
             print(f"Warning: S3 upload failed: {exc}")
 
@@ -1718,4 +1802,4 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         _source_health.merge_and_publish(
             bucket, shard=("structured" if mode == "structured" else None))
 
-    return {"statusCode": 200, "body": json.dumps(payload, ensure_ascii=False, indent=2)}
+    return {"statusCode": 200, "body": _response_body(payload, digest_key)}

@@ -73,6 +73,22 @@ def _update_sector_events(digest: dict[str, Any], entities: list[dict[str, Any]]
         return {"events": 0, "store": {}}
 
 
+def _update_enforcement(digest: dict[str, Any]) -> dict[str, Any]:
+    """#193: fold this run's enforcement acts (BCB liquidação/RAET/intervenção, SPA/COAF/CVM
+    sanction proceedings), enforcement news and the CEIS/CNEP index into the durable
+    ``enforcement/latest.json`` register the CCO panel reads. Best-effort."""
+    bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
+    if not bucket:
+        return {"actions": 0}
+    try:
+        from src.synth import enforcement
+
+        return enforcement.update_from_digest(digest, bucket)
+    except Exception as exc:  # pragma: no cover - best-effort; never crash synth
+        print(f"Warning: enforcement register update skipped: {exc}")
+        return {"actions": 0}
+
+
 def _run_coverage_alarm(digest: dict[str, Any], events: list[dict[str, Any]],
                         entities: list[dict[str, Any]]) -> dict[str, Any]:
     """#178: per-industry news-volume spike with no matching sector event → operator alert
@@ -158,6 +174,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     sector = _update_sector_events(digest, reg_entities)
     coverage = _run_coverage_alarm(digest, (sector.get("store") or {}).get("events") or [],
                                    reg_entities)
+    enforcement_summary = _update_enforcement(digest)  # #193 CCO sanctions/enforcement register
 
     fusion = {
         "entity_fusion": sum(1 for c in cands if c.get("kind") == "entity_fusion"),
@@ -170,6 +187,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         "distress": distress_summary,
         "sector_events": {k: v for k, v in sector.items() if k != "store"},
         "coverage_alarm": coverage,
+        "enforcement": enforcement_summary,
     }
     status = "ok" if narratives else "ok_empty"
     # Return a COMPACT result: narratives are persisted to S3 (``keys``) and the

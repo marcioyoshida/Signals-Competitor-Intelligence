@@ -166,6 +166,24 @@ def instruments_in(narrative: dict[str, Any], *, include_comunicados: bool = Fal
     return found
 
 
+def own_instrument(ref: Any) -> str | None:
+    """The instrument key an act IS, from its own name ("RESOLUÇÃO BCB Nº 589, DE …" /
+    "Resolução BCB 589") — the first instrument mention in it, or None."""
+    ms = _mentions(_norm(str(ref or "")), include_comunicados=True)
+    return min(ms, key=lambda m: m[2])[0] if ms else None
+
+
+def _acts_by_instrument(narrative: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """#195: {instrument key: the ingest-time federal_acts call of the source act that IS that
+    instrument} for this narrative (``source_acts``, written by synthesize)."""
+    out: dict[str, dict[str, Any]] = {}
+    for a in narrative.get("source_acts") or []:
+        key = own_instrument(a.get("ref")) if isinstance(a, dict) else None
+        if key and key not in out:
+            out[key] = a
+    return out
+
+
 def _domain_of(text: str) -> str:
     t = _norm(text)
     for label, pats in _DOMAIN_PATS:
@@ -271,6 +289,7 @@ def threads(narratives: list[dict[str, Any]], *, as_of: str, recency: int,
         raw = n.get("narrative") or ""
         norm = _norm(raw)
         mentions = _mentions(norm, include_comunicados=include_comunicados)
+        acts = _acts_by_instrument(n)
         seen_here: set[str] = set()
         for key, disp, start, end in mentions:
             # Bind deadline/domain to a window AROUND this mention, so a date or topic
@@ -278,8 +297,15 @@ def threads(narratives: list[dict[str, Any]], *, as_of: str, recency: int,
             ctx = norm[max(0, start - _CONTEXT_WINDOW): end + _CONTEXT_WINDOW]
             g = groups.setdefault(
                 key, {"label": disp, "cards": [], "latest": "", "deadline": None,
-                      "domain": None, "mentions": []}
+                      "domain": None, "mentions": [],
+                      "record_industries": [], "compliance_tags": []}
             )
+            # #195: the act's own federal_acts call wins over the narrative regex (a fused card
+            # about BCB 589 + two Comunicados reads "Câmbio"; the act itself is crypto)
+            act = acts.get(key)
+            if act is not None:
+                for fld, src in (("record_industries", "industries"), ("compliance_tags", "compliance_tags")):
+                    g[fld] += [i for i in (act.get(src) or []) if i and i not in g[fld]]
             if len(disp) > len(g["label"]):
                 g["label"] = disp
             if key not in seen_here:  # count a card once per instrument
@@ -342,11 +368,16 @@ def nominate(
             key=lambda n: (_score(n.get("threat_score")), feature_store._date_of(n)),
             reverse=True,
         )[:3]
+        domain, industries, ind_source = resolve_scope(
+            g["domain"], g.get("record_industries"), g.get("compliance_tags"))
         out.append(
             {
                 "instrument": key,
                 "label": g["label"],
-                "domain": g["domain"],
+                "domain": domain,
+                "industries": industries,
+                "industries_source": ind_source,
+                "compliance_tags": list(g.get("compliance_tags") or []),
                 "deadline": g["deadline"],
                 "days_to_deadline": dtd,
                 "mentions": len(g["cards"]),
@@ -425,10 +456,35 @@ _DOMAIN_INDUSTRIES = {
     "Autorizações & governança": ["banking", "fintech", "insurance", "investment-banking", "consorcio"],
     "Setor financeiro": ["banking", "fintech", "insurance"],
 }
+#: #195: an AML/CFT rule (compliance tag "aml", no industry) binds every supervised institution:
+#: DISPLAY cohort = the supervised FS set; SCOPING is recall-first (whole universe), like the
+#: catch-all — see industries_for_domain.
+AML_DOMAIN = "PLD/FT & compliance"
+_DOMAIN_INDUSTRIES[AML_DOMAIN] = ["banking", "fintech", "investment-banking", "consorcio",
+                                  "acquiring", "crypto", "insurance", "betting"]
+_CATCH_ALL_DOMAINS = ("Setor financeiro", AML_DOMAIN)
+
 _INDUSTRY_PT = {
     "acquiring": "Adquirência", "fintech": "Fintechs", "banking": "Bancos",
     "insurance": "Seguros", "investment-banking": "Banco de investimento",
     "consorcio": "Consórcios",
+    # #195: every taxonomy slug, now that a card's cohort can come from the act itself
+    "crypto": "Cripto", "betting": "Apostas", "closed-pension": "Previdência fechada",
+    "securitization": "Securitização & crédito", "asset-management": "Gestoras",
+    "real-estate-funds": "FIIs", "agri-funds": "Fiagro", "advisory": "Consultoria",
+    "wealth-management": "Gestão de patrimônio", "private-markets": "Private equity / FIP",
+    "financial-data-analytics": "Infraestrutura de mercado",
+}
+# #195: the affected-domain label of a card whose cohort comes from the act's own classification
+_INDUSTRY_DOMAIN = {
+    "banking": "Bancos", "fintech": "Pagamentos & fintechs", "acquiring": "Adquirência",
+    "crypto": "Ativos virtuais (PSAV)", "betting": "Apostas de quota fixa",
+    "insurance": "Seguros & previdência", "closed-pension": "Previdência complementar",
+    "securitization": "Securitização & crédito", "consorcio": "Consórcios",
+    "asset-management": "Fundos & gestão de recursos", "real-estate-funds": "Fundos imobiliários",
+    "agri-funds": "Fiagro", "investment-banking": "Intermediação (DTVM/corretoras)",
+    "advisory": "Consultoria de valores mobiliários", "wealth-management": "Gestão de patrimônio",
+    "private-markets": "Private equity / FIP", "financial-data-analytics": "Infraestrutura de mercado",
 }
 
 
@@ -436,6 +492,22 @@ def _industries_for(domain: str) -> list[str]:
     """The PRECISE affected cohort for DISPLAY (narrative + chips) — the domain's mapped
     verticals; unknown → the core FS set."""
     return list(_DOMAIN_INDUSTRIES.get(domain) or _DOMAIN_INDUSTRIES["Setor financeiro"])
+
+
+def resolve_scope(domain: str | None, record_industries: Any = None,
+                  compliance_tags: Any = None) -> tuple[str, list[str], str]:
+    """#195 — ONE industry classifier. ``(domain, industries, industries_source)`` for a card:
+    the underlying act's ingest-time ``federal_acts`` industries when it carries any
+    (source "federal_acts"); else an AML compliance tag → the cross-industry PLD/FT domain
+    ("compliance"); else the legacy regex domain over the narrative ("domain")."""
+    inds = [str(i) for i in dict.fromkeys(record_industries or []) if i]
+    if inds:
+        labels = list(dict.fromkeys(_INDUSTRY_DOMAIN.get(i, i) for i in inds))
+        return " · ".join(labels[:3]), inds, "federal_acts"
+    if "aml" in (compliance_tags or []):
+        return AML_DOMAIN, _industries_for(AML_DOMAIN), "compliance"
+    domain = domain or "Setor financeiro"
+    return domain, _industries_for(domain), "domain"
 
 
 def industries_for_domain(domain: str, universe: Any = None) -> list[str]:
@@ -447,7 +519,7 @@ def industries_for_domain(domain: str, universe: Any = None) -> list[str]:
     """
     uni = None if universe is None else [str(u).strip().lower() for u in universe if u]
     mapped = _DOMAIN_INDUSTRIES.get(domain)
-    if mapped is None or domain == "Setor financeiro":         # catch-all / unknown → all
+    if mapped is None or domain in _CATCH_ALL_DOMAINS:         # catch-all / AML / unknown → all
         return list(uni) if uni else list(_DOMAIN_INDUSTRIES["Setor financeiro"])
     if uni is not None:
         keep = set(uni)
@@ -538,7 +610,10 @@ def build_narrative(cand: dict[str, Any], *, change_record: dict[str, Any] | Non
     is_alert = bool(deadline and dtd is not None and dtd <= ALERT_WITHIN)
     drivers = cand.get("drivers") or []
     citations = _instrument_citations(cand["instrument"], label, drivers)
-    industries = _industries_for(domain)
+    # #195: the act's own classification when the candidate carries it (nominate); a legacy
+    # candidate (no "industries_source") keeps the regex-domain cohort
+    industries = list(cand.get("industries") or _industries_for(domain))
+    ind_source = cand.get("industries_source") or "domain"
     source_ids: list[str] = []
     for d in drivers:
         source_ids.extend(d.get("source_ids") or [])
@@ -577,6 +652,9 @@ def build_narrative(cand: dict[str, Any], *, change_record: dict[str, Any] | Non
         "industries": industries,
         # #70: precise cohort for DISPLAY (chips); `industries` is overridden recall-first at feed-build for scoping.
         "affected_industries": industries,
+        # #195: "federal_acts" (the act's ingest-time call) | "compliance" (AML) | "domain" (regex)
+        "industries_source": ind_source,
+        "compliance_tags": list(cand.get("compliance_tags") or []),
         "changes": changes,
         "n_changes": len(changes),
         # ADR 009 §3: the LLM change-record (rated), when drafted (radar cards too).
@@ -645,8 +723,12 @@ def build_lifecycles(
             status = "developing"
         else:
             status = "open"
+        domain, industries, ind_source = resolve_scope(
+            g["domain"], g.get("record_industries"), g.get("compliance_tags"))
         out[key] = {
-            "instrument": key, "label": g["label"], "domain": g["domain"],
+            "instrument": key, "label": g["label"], "domain": domain,
+            "industries": industries, "industries_source": ind_source,
+            "compliance_tags": list(g.get("compliance_tags") or []),
             "deadline": deadline, "days_to_deadline": dtd,
             "stages_seen": stages_seen, "current_stage": current, "status": status,
             "first_seen": min(dates), "last_updated": max(dates),
@@ -707,7 +789,7 @@ def build_lifecycle_card(lc: dict[str, Any]) -> dict[str, Any]:
         f"{STAGE_LABELS[s]} ({_fmt(next(m['date'] for m in lc['timeline'] if m['stage'] == s))})"
         for s in lc["stages_seen"]
     )
-    industries = _industries_for(lc["domain"])
+    industries = list(lc.get("industries") or _industries_for(lc["domain"]))  # #195
     ind_pt = ", ".join(_INDUSTRY_PT.get(s, s) for s in industries)
     changes = reg_change.parse_changes(
         " ".join((m.get("summary") or "") for m in lc.get("timeline") or [])[:3000],
@@ -735,6 +817,8 @@ def build_lifecycle_card(lc: dict[str, Any]) -> dict[str, Any]:
         "industries": industries,
         # #70: precise cohort for DISPLAY (chips); `industries` is overridden recall-first at feed-build for scoping.
         "affected_industries": industries,
+        "industries_source": lc.get("industries_source") or "domain",  # #195
+        "compliance_tags": list(lc.get("compliance_tags") or []),
         "changes": changes,
         "n_changes": len(changes),
         # ADR 009 §3: the LLM change-record (rated impact/blast/difficulty), when drafted.
@@ -837,7 +921,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                     self_key=cand["instrument"])
                 rec = reg_change_record.record_for(
                     cand.get("label", ""), cand.get("domain", ""), changes, ind_counts,
-                    effective_date=cand.get("deadline"))
+                    effective_date=cand.get("deadline"), industries=cand.get("industries"))
                 if rec:
                     n_records += 1
             except Exception as exc:  # pragma: no cover

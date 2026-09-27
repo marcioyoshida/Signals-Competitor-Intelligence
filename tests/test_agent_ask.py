@@ -564,3 +564,31 @@ def test_reputation_cards_never_credit_a_provider_the_record_did_not_name():
     assert "reclamações de consumidores" in texts      # unattributed -> generic
     assert "Banco Central" in texts                     # BCB -> named correctly
     assert texts.count("Reclame Aqui") == 1             # ONLY the record that said so
+
+
+def test_labeled_and_listed_citations_normalized():
+    # #190: "[card_id: kb:0]" (prompt placeholder echoed) and "[a:1, b:2]" lists must validate
+    assert aa.tidy_citations("x [card_id: kb:0] y") == "x [kb:0] y"
+    assert aa.tidy_citations("x [kb:0, reg:bcb-589]") == "x [kb:0][reg:bcb-589]"
+    assert aa.tidy_citations("see [1, 2] and [a, b]") == "see [1, 2] and [a, b]"  # prose untouched
+    cites = aa.validate_citations(aa.tidy_citations("Regra nova [card_id: kb:0]."), [],
+                                  [{"id": "kb:0", "title": "Resolução BCB 589"}])
+    assert [c["id"] for c in cites] == ["kb:0"]
+
+
+def test_liquidacao_extrajudicial_question_keeps_kb():
+    # #190: a regulator's liquidação extrajudicial is an ACT, not third-party distress news
+    kb_calls = []
+
+    def kb(q):
+        kb_calls.append(q)
+        return [{"id": "kb:0", "title": "Ato BCB — liquidação extrajudicial da Trustee DTVM"}]
+
+    def conv(user, system=None, max_tokens=700):
+        return "O BCB decretou a liquidação extrajudicial [kb:0]."
+    r = aa.answer("o BCB decretou alguma liquidação extrajudicial este mês?", feed=_feed(),
+                  converser=conv, kb_retrieve=kb)
+    assert kb_calls and r["grounded"]
+    kb_calls.clear()
+    aa.answer("quem está em recuperação extrajudicial?", feed=_feed(), converser=conv, kb_retrieve=kb)
+    assert kb_calls == []

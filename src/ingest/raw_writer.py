@@ -19,12 +19,15 @@ def _document_text(doc: dict[str, Any]) -> str:
         # ADR 005 §3 private-S3 lens (src/ingest/tenant_s3.py) — the document's
         # own text, already extracted; nothing to reshape.
         return doc.get("text") or ""
-    if doc.get("kind") == "regulatory" and doc.get("source") == "DOU":
+    if doc.get("kind") == "regulatory" and doc.get("source") in ("DOU", "CVM"):
         # #173/#174: DOU acts carry title/organ/section and (for sector-wide normative acts)
         # the FULL act text — the old number/subject template wrote "Despacho N° None" + the
-        # title, so the KB could never quote an act's content.
+        # title, so the KB could never quote an act's content. #194: CVM legislação/notícias
+        # (cvm_normas.py) records carry the same shape (title/organ/doc_type/date + full text),
+        # so they get the same quotable treatment instead of the BCB-style stub below.
         head = [doc.get("title") or doc.get("subject") or "", doc.get("organ") or "",
-                " · ".join(x for x in (doc.get("section"), doc.get("date")) if x)]
+                " · ".join(x for x in (doc.get("doc_type"), doc.get("section"), doc.get("date"))
+                           if x)]
         if doc.get("industries"):
             head.append("Setores: " + ", ".join(doc["industries"]))
         body = (doc.get("text") or "").strip()

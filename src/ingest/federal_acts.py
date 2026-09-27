@@ -84,6 +84,12 @@ def industries_in(text: Any, vocab: dict[str, list[str]] | None = None, *, min_h
             if len(rx.findall(t)) >= min_hits]
 
 
+def compliance_in(text: Any) -> list[str]:
+    """Cross-industry compliance tags (#195: "aml") whose vocabulary occurs in ``text`` — a
+    tag, never an industry (``registry.COMPLIANCE_TOPICS``)."""
+    return industries_in(text, registry.compliance_vocabulary())
+
+
 # --- act anatomy -----------------------------------------------------------------------------
 # The enacting clause that ends an act's ementa ("O PRESIDENTE DA REPÚBLICA, no uso…",
 # "A SECRETÁRIA DE PRÊMIOS E APOSTAS…, no uso das atribuições…", "… resolve:").
@@ -138,6 +144,82 @@ _DEADLINE = re.compile(
 _PROCEDURAL = re.compile(
     r"\b(?:citac\w*|intimac\w*|notificac\w*|julgamento|pauta|sessao|recurso|audiencia|consulta publica"
     r"|encaminhamento|mensagem|processo administrativo|sancionador\w*|penalidade|advertencia|multa)\b")
+
+
+# --- operator-level enforcement (#193, audit R8/R10) ------------------------------------------
+# A BCB/SUSEP/PREVIC resolution regime imposed on ONE institution — liquidação extrajudicial,
+# intervenção, RAET — or a cassação of its authorization is the strongest thing a supervisor
+# does to an operator. None of it is in _BAN / _REVOKED_AUTH, and these acts name no covered
+# industry ("Trustee DTVM"), so Atos do Presidente 1.389/1.390 (03/09) came out ``low``.
+# Checked FIRST in _severity: "a nomeação do liquidante" must not read as a personnel act.
+_ENF_KINDS: tuple[tuple[str, str, re.Pattern], ...] = (
+    ("liquidacao", "liquidação extrajudicial", re.compile(r"\bliquidacao extrajudicial\b")),
+    ("raet", "RAET", re.compile(r"\braet\b|\bregime de administracao especial temporaria\b")),
+    ("intervencao", "intervenção",
+     re.compile(r"\bintervencao extrajudicial\b|\bregime de intervencao\b|\bsob intervencao\b"
+                r"|\bintervencao (?:n[ao]s?|em)\b")),
+    ("cassacao", "cassação de autorização",
+     re.compile(r"\bcass(?:a|am|ar|ou|ada|ado|acao)\b\W+(?:\w+\W+){0,6}?"
+                r"(?:autorizac\w*|registros?|licenc\w*|credenciament\w*|outorga\w*|concess\w*)")),
+)
+_DECREE = re.compile(r"\bdecret(?:a|am|ar|ou|ada|ado|acao)\b")
+# "…liquidação extrajudicial da Trustee Distribuidora de Títulos e Valores Mobiliários Ltda., a
+# nomeação…" → the institution. Runs on the UNFOLDED text: a name starts with a capital.
+_ENF_TARGET = re.compile(
+    r"(?i:liquida[çc][ãa]o extrajudicial|interven[çc][ãa]o(?: extrajudicial)?|RAET"
+    r"|regime de administra[çc][ãa]o especial tempor[áa]ria"
+    r"|cass(?:a[çc][ãa]o|a|ar|ou|ada|ado)\s+(?:d?[ao]s?\s+)?(?:autoriza[çc](?:[ãa]o|[õo]es)|registros?|licen[çc]as?)"
+    r"(?: para (?:funcionar|funcionamento|operar))?)"
+    r"(?:\s*\([^)]{1,12}\))?\s+(?i:d[aoe]s?|n[ao]s?|em)\s+"
+    r"(?P<name>[A-ZÀ-Ý0-9][^;\n]{2,160}?)"
+    r"(?=,\s+(?:a|o|as|os|e|com|conforme|nos|nas|que|cuj[ao])\s|;|\s+-\s|\s+e\s+(?:a\s+)?(?:nomea|nomeia|indispon|decret|determin)"
+    r"|\.\s*$|(?<![A-Z]\.[A-Z])\.\s+[A-ZÀ-Ý]|\s*$)")
+
+
+def enforcement_target(text: Any) -> str | None:
+    """The institution an enforcement act names ("Trustee Distribuidora de Títulos e Valores
+    Mobiliários Ltda."), verbatim from the act, or None."""
+    s = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", str(text or ""))).strip()
+    m = _ENF_TARGET.search(s)
+    if not m:
+        return None
+    name = m.group("name").strip(" ,.-")
+    if name.lower().startswith(("instituic", "instituiç", "entidade", "sociedade que", "empresa que")):
+        return None  # "…liquidação extrajudicial de instituições…": a framework, not one operator
+    return name + ("." if re.search(r"\b(?:ltda|s\.a|s/a|cia)$", name, re.I) else "")
+
+
+def enforcement_of(rec: dict[str, Any], *, lead: str | None = None) -> dict[str, Any] | None:
+    """Operator-level enforcement classification of one act, or None.
+
+    ``{"kind", "kind_label", "target", "severity", "reason"}``:
+
+    - a DECREE of liquidação extrajudicial / intervenção / RAET ("Decreta…", "Comunica a
+      decretação…"), or a cassação of an authorization → ``critical``;
+    - any other act about one named institution's liquidação / intervenção / RAET (prazo
+      prorrogado, encerramento, conversão) → ``high``.
+
+    A sector-wide framework ("dispõe sobre o regime de liquidação extrajudicial das
+    instituições…") names no institution and is not a decree, so it is left to the normal rules.
+    """
+    if lead is None:
+        t, e, a = _lead(rec)
+        lead = f"{t} {e} {a}"
+    raw = " ".join(str(x) for x in (rec.get("title"), rec.get("subject"), str(rec.get("text") or "")[:1500]) if x)
+    for kind, label, rx in _ENF_KINDS:
+        hit = rx.search(lead)
+        if not hit:
+            continue
+        target = enforcement_target(raw)
+        decree = bool(_DECREE.search(lead))
+        if kind == "cassacao" or (decree and (target or kind != "intervencao")):
+            return {"kind": kind, "kind_label": label, "target": target, "severity": "critical",
+                    "reason": f"operator-level enforcement: {label}"
+                              + (f" ({hit.group(0).strip()!r}, decretação)" if decree else f" ({hit.group(0).strip()!r})")}
+        if target:
+            return {"kind": kind, "kind_label": label, "target": target, "severity": "high",
+                    "reason": f"operator-level enforcement: {label} ({hit.group(0).strip()!r})"}
+    return None
 
 
 def _lead(rec: dict[str, Any]) -> tuple[str, str, str]:
@@ -246,14 +328,23 @@ def classify(rec: dict[str, Any], *, vocab: dict[str, list[str]] | None = None,
     if not inds:
         basis = None
 
-    sev, why = _severity(rec, title, ementa, art1, has_scope=bool(inds or rec.get("company")))
+    # #195: an AML/CFT rule binds every supervised institution — a compliance TAG (from the lead
+    # + organ: a COAF/UIF act is AML by issuer), and coverage for severity like an industry
+    compliance = compliance_in(lead)
+    sev, why = _severity(rec, title, ementa, art1,
+                         has_scope=bool(inds or compliance or rec.get("company")))
     return {"industries": inds, "industries_basis": basis, "severity": sev, "severity_reason": why,
-            "cites": cites}
+            "cites": cites, "compliance": compliance}
 
 
 def _severity(rec: dict[str, Any], title: str, ementa: str, art1: str, *, has_scope: bool) -> tuple[str, str]:
     doc_type = fold(rec.get("doc_type"))
     head = f"{title} {ementa}"
+    # #193: operator-level enforcement first — it names its own subject (the institution), so
+    # it needs no covered industry, and "nomeação do liquidante" is not a personnel act.
+    enf = enforcement_of(rec, lead=f"{title} {ementa} {art1}")
+    if enf:
+        return enf["severity"], enf["reason"]
     if not has_scope:
         return "low", "no covered industry or entity"
     if str(rec.get("section") or "").upper().startswith("DO2") or _PERSONNEL.search(head[:500]):
@@ -313,6 +404,10 @@ def annotate(records: Iterable[dict[str, Any]], *, vocab: dict[str, list[str]] |
             rec.pop("industries_basis", None)
         if c.get("cites"):
             rec["cites"] = c["cites"]
+        if c.get("compliance"):  # #195: cross-industry tag (AML), never an industry
+            rec["compliance_tags"] = c["compliance"]
+        else:
+            rec.pop("compliance_tags", None)
         rec["severity"] = c["severity"]
         rec["severity_reason"] = c["severity_reason"]
     return recs

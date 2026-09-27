@@ -167,7 +167,26 @@ def synthesize_candidate(
         "as_of": candidate.get("as_of") or run_date_today(),
         "data_as_of": candidate.get("data_as_of") or {},
         "source_ids": [s.get("id") for s in sources if s.get("id")],
+        # #195: the ingest-time federal_acts call per regulatory source, so a reg card built from
+        # this (LLM-fused) narrative takes its industries from the ACT, not a regex over the prose.
+        "source_acts": source_acts(sources),
     }
+
+
+def source_acts(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Compact per-act classification of the regulatory sources ({id, ref, industries,
+    compliance_tags, severity}); ``ref`` is the act's own name ("Resolução BCB 589" / the DOU
+    title) so the regulatory axis can bind it to the instrument it threads."""
+    out: list[dict[str, Any]] = []
+    for s in sources or []:
+        if not isinstance(s, dict) or s.get("kind") != "regulatory" or not s.get("severity"):
+            continue
+        ref = s.get("title") or " ".join(str(x) for x in (s.get("doc_type"), s.get("number")) if x)
+        out.append({"id": s.get("id"), "ref": str(ref or "")[:160],
+                    "industries": list(s.get("industries") or []),
+                    "compliance_tags": list(s.get("compliance_tags") or []),
+                    "severity": s.get("severity")})
+    return out
 
 
 def _build_prompt(candidate: dict[str, Any]) -> str:

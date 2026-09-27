@@ -415,6 +415,10 @@ def _project_item(n: dict[str, Any]) -> dict[str, Any]:
         # cards; `affected_industries` is the PRECISE cohort kept for display (chips).
         "domain": n.get("domain"),
         "affected_industries": n.get("affected_industries") or [],
+        # #195: where the cohort came from ("federal_acts" = the act's own classification) +
+        # cross-industry compliance tags (AML) — not industries.
+        "industries_source": n.get("industries_source"),
+        "compliance_tags": n.get("compliance_tags") or [],
         "lenses": n.get("lenses") or [],
         # ADR #34 Phase 2: coarse topic rollup (from lenses+axis) for the dashboard
         # topic filter + agent grounding boost. Derived here so no synth/backfill.
@@ -729,6 +733,14 @@ def build_feed(
         # RECALL-FIRST (#70): a sector-wide rule (catch-all `Setor financeiro` / unknown
         # domain) reaches EVERY licensed tenant, so no tenant's Radar Regulatório is empty;
         # a specific domain scopes to its verticals. Intersected with the live universe.
+        # #195: a reg card whose cohort came from the ACT's own federal_acts call scopes to exactly
+        # that cohort (a crypto rule belongs on the crypto panel, not every tenant's).
+        if c.get("industries_source") == "federal_acts" and c.get("affected_industries"):
+            keep = set(_reg_universe)
+            scoped = sorted({str(i).strip().lower() for i in c["affected_industries"]
+                             if str(i).strip().lower() in keep})
+            if scoped:
+                return scoped
         dom = c.get("domain")
         if dom:
             from src.synth import regulatory
@@ -964,6 +976,7 @@ def scope_feed_to_modules(feed: dict[str, Any], modules: Any) -> dict[str, Any]:
             "product_radar": scope_product_radar(feed.get("product_radar"), row_ok),  # #159
             # #177: an industry-level event is visible only to tenants licensed for it.
             "sector_events": scope_sector_events(feed.get("sector_events"), keep),
+            "enforcement": _scope_enforcement(feed.get("enforcement"), keep, row_ok),  # #193
             "integrity": {"findings": [], "counts": {}, "total": 0},  # operator-only
             "regulatory_coverage": {},                                # operator-only (#2)
             "source_runs": [],  # operator-only (#139) — raw per-source telemetry incl. error
@@ -1086,6 +1099,7 @@ def derive_entry_feed(
             "financials": [r for r in (feed.get("financials") or []) if row_ok(r)],
             "product_radar": scope_product_radar(feed.get("product_radar"), row_ok),  # #159
             "sector_events": scope_sector_events(feed.get("sector_events"), keep),  # #177
+            "enforcement": _scope_enforcement(feed.get("enforcement"), keep, row_ok),  # #193
             "integrity": {"findings": [], "counts": {}, "total": 0},  # operator-only
             "regulatory_coverage": {},                                # operator-only (#2)
             "source_runs": [],  # operator-only (#139) — see scope_feed_to_modules
@@ -1145,7 +1159,7 @@ def derive_sample_feed(
         "sections": sorted(
             k for k in ("distress", "capital_moves", "reputation", "financials", "swot",
                         "tows", "porter", "pestle", "ansoff", "bcg", "four_corners",
-                        "seven_s", "executive", "product_radar", "sector_events")
+                        "seven_s", "executive", "product_radar", "sector_events", "enforcement")
             if out.get(k)
         ),
     }
@@ -1166,7 +1180,7 @@ def derive_sample_feed(
     # not showing. Anything entity-attributed that survives here would also re-expose
     # the roster the cut above just removed.
     for key in ("distress", "capital_moves", "reputation", "financials", "coverage_gaps",
-                "reviews", "swot_proposals", "graph_proposals", "sector_events"):
+                "reviews", "swot_proposals", "graph_proposals", "sector_events", "enforcement"):
         out[key] = []
     for key in ("swot", "tows", "porter", "pestle", "ansoff", "bcg", "four_corners",
                 "seven_s", "groups", "product_radar"):
@@ -1468,6 +1482,30 @@ def _load_sector_events(digests_bucket: str | None, entity_attrs: dict[str, Any]
     except Exception as exc:  # pragma: no cover - best-effort, read-only
         print(f"Warning: load sector events failed: {exc}")
         return []
+
+
+def _load_enforcement(digests_bucket: str | None, entity_attrs: dict[str, Any] | None
+                      ) -> list[dict[str, Any]]:
+    """#193 ``enforcement/latest.json`` (the CCO sanctions/enforcement register, written by
+    synth), best-effort. [] if absent. Industries/labels come from THIS feed's roster."""
+    if not digests_bucket:
+        return []
+    try:
+        from src.synth import enforcement
+
+        return enforcement.for_feed(enforcement.load_store(digests_bucket), entity_attrs=entity_attrs)
+    except Exception as exc:  # pragma: no cover - best-effort, read-only
+        print(f"Warning: load enforcement register failed: {exc}")
+        return []
+
+
+def _scope_enforcement(actions: list[dict[str, Any]] | None, industries: Any,
+                       row_ok: Callable[[dict[str, Any]], bool]) -> list[dict[str, Any]]:
+    """#193 tenant / entry scoping: an entity-bound action follows its entity; an unbound one
+    (a public act about an untracked institution) needs no industry or a licensed one."""
+    from src.synth import enforcement
+
+    return enforcement.scope(actions, industries or [], row_ok)
 
 
 def scope_sector_events(events: list[dict[str, Any]] | None, industries: Any) -> list[dict[str, Any]]:
@@ -1948,6 +1986,9 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # #177: industry-level regulatory events (synth → sector_events/latest.json), attached before
     # the executive block so CRO reg_threat / n_changes / "Eventos setoriais" can project them.
     feed["sector_events"] = _load_sector_events(digests_bucket, feed.get("entity_attrs"))
+    # #193: the CCO sanctions/enforcement register (BCB liquidações, SPA/COAF/CVM sanctions,
+    # CEIS/CNEP, enforcement news) — attached before the executive block so build_cco sees it.
+    feed["enforcement"] = _load_enforcement(digests_bucket, feed.get("entity_attrs"))
     # ADR 021 §D/§G: the per-officer executive block (read-track: CSO), industry-scoped.
     # Derived from the feed above — no new data; best-effort so a failure never blocks publish.
     try:

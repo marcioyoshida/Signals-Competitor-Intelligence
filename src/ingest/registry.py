@@ -71,6 +71,7 @@ class SourceSpec:
 # --- Lens policy — reproduces candidates.py's LENS_WEIGHT + the three *_LENSES sets ---------
 LENSES: dict[str, LensSpec] = {
     "regulatory": LensSpec("regulatory", 0.35, solo=True),
+    "cvm_normas": LensSpec("cvm_normas", 0.33, solo=True),  # #194 CVM legislação/notícias
     "antitrust":  LensSpec("antitrust", 0.33, solo=True),                       # #61 CADE
     "sanctions":  LensSpec("sanctions", 0.32, solo=True, structured_subject=True),  # #60
     "fatos":      LensSpec("fatos", 0.30, solo=True, structured_subject=True),
@@ -101,6 +102,8 @@ SOURCES: list[SourceSpec] = [
                state_key="cvm_ofertas", label="CVM ofertas"),
     SourceSpec("fatos", "fatos", items_limit=12),
     SourceSpec("dou", "dou", label="Diário Oficial"),
+    SourceSpec("cvm_normas", "cvm_normas", items_limit=8, context_limit=12,                  # #194
+               state_key="cvm_normas", label="CVM normas/sancionador", seed_if_empty=False),
     SourceSpec("sanctions", "sanctions", resolution="cnpj", verticals=frozenset({ALL}),     # #60
                integration="store", state_key="ceis_cnep", env_flag="ONCA_CEIS_CNEP",
                label="CEIS/CNEP sanctions"),
@@ -198,15 +201,51 @@ def active(vertical: str | None = None) -> list[SourceSpec]:
 #: Organs whose topic-phrase hits are kept (substring of DOU ``hierarchyStr``; a trailing ``$``
 #: means the organ must be EXACTLY that — "Presidência da República" alone is the despachos
 #: organ, while "Presidência da República/Casa Civil/ABIN" is not a sector-wide issuer).
+#: An entry ``"organ@DO1:Resolução,Circular"`` (#189) keeps only that organ's acts published in
+#: a DO1 edition (DO1 + DO1_EXTRA_*) whose doc type starts with one of the listed types: the
+#: sector regulators' RULES (Resolução Susep 96/97, Portaria Previc 728, RN ANS 679) without
+#: their per-entity DO1 Portarias (authorizations, plan approvals) or DO2/DO3 notices.
 NORMATIVE_ISSUERS: tuple[str, ...] = (
-    "Atos do Poder Executivo",                       # MPs, Decretos, Leis
+    "Atos do Poder Executivo",                       # MPs, Decretos
+    # #188: LAWS are published under the legislative organs, not the Executive — LC 237
+    # (resseguro, 2026-09-15, DO1_EXTRA_C) was invisible. Conversion/expiry of an MP arrives here.
+    "Atos do Poder Legislativo",                     # Leis, Leis Complementares
+    "Atos do Congresso Nacional",                    # Atos Declaratórios (MP prorrogação/vigência)
     "Presidência da República$",                     # despachos / mensagens / vetos
     "Ministério da Fazenda/Gabinete do Ministro",    # Portarias MF
     "Conselho Monetário Nacional",                   # CMN resolutions
     "Conselho Nacional de Seguros Privados",         # CNSP
     "Conselho Nacional de Previdência Complementar",  # CNPC
     "Secretaria de Prêmios e Apostas",               # SPA (betting regulator)
+    # #189: the sector regulators' own normative DO1 acts
+    "Superintendência de Seguros Privados@DO1:Resolução,Circular",
+    "Previdência Complementar/Diretoria de Normas@DO1:Portaria,Resolução,Instrução",
+    "Superintendência Nacional de Previdência Complementar$@DO1:Resolução,Instrução",
+    "Comissão de Valores Mobiliários@DO1:Resolução,Instrução,Deliberação,Ofício",
+    "Banco Central do Brasil/Diretoria Colegiada@DO1:Resolução,Instrução,Circular",
+    "Agência Nacional de Saúde Suplementar@DO1:Resolução",
+    "Controle de Atividades Financeiras@DO1:Resolução,Instrução",
+    "Unidade de Inteligência Financeira@DO1:Resolução,Instrução",
 )
+
+#: #188: explicit watch on primary acts whose FATE arrives months later, outside the DOU
+#: lookback (an MP lives 60+60 days; its conversion law or the Congress's Ato Declaratório of
+#: expiry cites it by number). Each phrase is searched as a topic term (scoped to
+#: NORMATIVE_ISSUERS) until ``until``, and is passed to federal_acts as a known critical
+#: instrument so every act citing it inherits ``industries``. (instrument key, phrase,
+#: industries, until ISO date).
+WATCHED_ACTS: tuple[tuple[str, str, tuple[str, ...], str], ...] = (
+    ("mp 1.394", "Medida Provisória nº 1.394", ("betting",), "2027-03-31"),   # online-betting ban
+    ("mp 1.393", "Medida Provisória nº 1.393", ("banking", "fintech"), "2027-03-31"),  # credit programme
+)
+
+
+def watched_acts(today: "str | None" = None) -> list[tuple[str, str, list[str]]]:
+    """The WATCHED_ACTS still live on ``today`` (ISO; default: now) as (key, phrase, industries)."""
+    import datetime as _dt
+
+    t = today or _dt.date.today().isoformat()
+    return [(k, p, list(i)) for k, p, i, until in WATCHED_ACTS if t <= until]
 
 
 @dataclass(frozen=True)
@@ -218,6 +257,12 @@ class IndustryTopicSpec:
     vocabulary: tuple[str, ...] = ()
     env_flag: str | None = None        # extra ONCA_* toggle for this industry's DOU phrases
 
+
+#: #195: government consumer-credit programmes (MP 1.393 Desenrola Brasil 3.0, Desenrola
+#: Adimplentes) — renegotiation run by the LENDERS, so banking + fintech, not securitization.
+_CREDIT_PROGRAMMES: tuple[str, ...] = (
+    "desenrola", "renegociacao de dividas", "credito responsavel", "concessao responsavel de credito",
+    "tomadores de credito", "superendividamento")
 
 INDUSTRY_TOPICS: list[IndustryTopicSpec] = [
     IndustryTopicSpec(
@@ -257,7 +302,7 @@ INDUSTRY_TOPICS: list[IndustryTopicSpec] = [
                     # NOT "CMN": the council rules for every FS industry, so naming it says nothing
                     # about WHICH industry an act touches (a CMN FIDC rule is not a banking act).
                     "depositos a vista", "recolhimento compulsorio", "compulsorio*", "febraban",
-                    "open finance", "basileia"),
+                    "open finance", "basileia") + _CREDIT_PROGRAMMES,
     ),
     IndustryTopicSpec(
         "fintech",
@@ -267,16 +312,20 @@ INDUSTRY_TOPICS: list[IndustryTopicSpec] = [
         vocabulary=("instituic* de pagamento", "arranjo* de pagamento", "transac* de pagamento",
                     "conta* de pagamento", "iniciador* de pagamento", "moeda eletronica", "fintech*",
                     "pix", "sociedade* de credito direto", "sociedade* de emprestimo entre pessoas",
-                    "banking as a service", "baas"),
+                    "banking as a service", "baas") + _CREDIT_PROGRAMMES,
     ),
     IndustryTopicSpec(
         "insurance",
-        dou_phrases=("seguros privados", "resseguro"),
+        # #189: + the issuers' own act names (Resolução Susep 96/97 were invisible) and the
+        # ANS's Resoluções Normativas (health insurers are in "insurance").
+        dou_phrases=("seguros privados", "resseguro", "Resolução Susep", "Resolução CNSP",
+                     "Resolução Normativa ANS"),
         news_queries=("Susep regras seguros", "seguradoras Susep"),
         vocabulary=("re:\\bseguros?\\b(?!-desemprego|-defeso| desemprego| defeso)",
                     "seguradora*", "resseguro*", "resseguradora*", "susep", "cnsp", "seguros privados",
                     "titulos de capitalizacao", "capitalizacao", "previdencia complementar aberta",
-                    "corretor* de seguros", "mercado segurador"),
+                    "corretor* de seguros", "mercado segurador",
+                    "saude suplementar", "resolucao normativa ans", "operadora* de plano* de saude", "plano* privado* de assistencia a saude"),
     ),
     IndustryTopicSpec(
         # Securitização & Crédito (credit originators, FIDC/CRI/CRA, consignado)
@@ -285,9 +334,11 @@ INDUSTRY_TOPICS: list[IndustryTopicSpec] = [
         news_queries=("FIDC regras", "crédito consignado regras"),
         vocabulary=("credito consignado", "consignado", "consignados", "securitiza*",
                     "direitos creditorios", "fidc", "fidcs", "certificado* de recebiveis",
-                    "cessao de credito", "credito rotativo", "juros do rotativo", "desenrola",
-                    "cadastro positivo", "superendividamento", "recebiveis",
-                    "renegociacao de dividas", "credito responsavel", "tomadores de credito"),
+                    "cessao de credito", "credito rotativo", "juros do rotativo",
+                    "cadastro positivo", "recebiveis"),
+        # #195: the consumer-credit PROGRAMME terms (Desenrola, renegociação de dívidas, crédito
+        # responsável, superendividamento) moved to banking + fintech (_CREDIT_PROGRAMMES): MP 1.393
+        # is run by the lenders, and tagging it securitization-only (0 active entities) hid it.
     ),
     IndustryTopicSpec(
         "asset-management",
@@ -317,14 +368,120 @@ INDUSTRY_TOPICS: list[IndustryTopicSpec] = [
     ),
     IndustryTopicSpec(
         "closed-pension",
-        dou_phrases=("previdência complementar",),
+        dou_phrases=("previdência complementar", "Portaria Previc", "Resolução CNPC"),  # #189
         news_queries=("fundos de pensão Previc", "previdência complementar Previc"),
         vocabulary=("previdencia complementar fechada", "re:\\bprevidencia complementar\\b(?! aberta)",
                     "entidade* fechada* de previdencia", "efpc*", "fundo* de pensao", "previc",
                     "cnpc", "conselho nacional de previdencia complementar",
                     "lei complementar 109", "lei complementar no 109"),
     ),
+    # --- #195: the 8 covered industries that had no spec (audit R8). -------------------------
+    # DOU phrases were replayed live 2026-09-27 (30-day window, delta=75 pages, organ allowlist +
+    # NORMATIVE_ISSUERS incl. the #189 doc-type scopes). Every candidate for these industries
+    # kept 0 acts: their DOU hits are per-entity CVM Atos Declaratórios, BCB editais, CADE
+    # despachos and CARF pautas — not sector rules — so they carry NO dou_phrases (dead config
+    # costs one HTTP per run). Measured: "fundos de investimento imobiliário" 10 raw/0 kept,
+    # "Lei nº 8.668" 0 (2 kept in 12 months), "Lei nº 14.130" 0, "Fiagro" 0, "distribuidoras de
+    # títulos e valores mobiliários" 28/0, "corretoras de títulos e valores mobiliários" 7/0,
+    # "credenciadoras" 75/0 (all non-FS), "consultoria de valores mobiliários" 19/0, "Fundos de
+    # Investimento em Participações" 7/0, "entidades registradoras" 1/0 (3 kept in 12 months).
+    # Their sector rules arrive via the BCB normativos source, the CMN/CVM/BCB issuer phrases and
+    # the full-text lead; the VOCABULARY below is what tags them.
+    IndustryTopicSpec(
+        "real-estate-funds",
+        news_queries=("fundos imobiliários CVM regras",),
+        vocabulary=("fundo* de investimento imobiliario*", "fundo* imobiliario*", "fii", "fiis",
+                    "lei 8.668", "lei no 8.668"),
+    ),
+    IndustryTopicSpec(
+        "agri-funds",
+        news_queries=("Fiagro regras",),
+        vocabulary=("fiagro*", "cadeias produtivas agroindustriais", "lei 14.130", "lei no 14.130"),
+    ),
+    IndustryTopicSpec(
+        # DTVMs / corretoras (reg_coverage maps BCB + CVM intermediaries here) + underwriting
+        "investment-banking",
+        news_queries=("corretoras DTVM Banco Central",),
+        vocabulary=("distribuidora* de titulos e valores mobiliarios", "dtvm", "dtvms",
+                    "corretora* de titulos e valores mobiliarios", "corretora* de cambio, titulos e valores",
+                    "ctvm", "corretora* de valores", "banco* de investimento",
+                    "oferta* publica* de distribuicao", "coordenador* lider*", "underwriting"),
+    ),
+    IndustryTopicSpec(
+        # credenciadoras (maquininhas). NOT bare "credenciadora": in the DOU it is overwhelmingly
+        # an accreditation body (health, education, inspection) — 75/75 non-FS hits, live.
+        "acquiring",
+        news_queries=("credenciadoras maquininhas Banco Central",),
+        vocabulary=("credenciadora* de cart*", "credenciador* de estabelecimento*",
+                    "instituic* de pagamento credenciador*", "subcredenciador*", "adquirencia",
+                    "maquininha*", "credenciadoras de pagamento*"),
+    ),
+    IndustryTopicSpec(
+        # consultoria de valores mobiliários (CVM Res. 19) — cvm_participantes "consultores"
+        "advisory",
+        news_queries=("consultoria de valores mobiliários CVM",),
+        vocabulary=("consultor* de valores mobiliarios", "consultoria de valores mobiliarios",
+                    "analista* de valores mobiliarios", "resolucao cvm 19", "resolucao cvm no 19"),
+    ),
+    IndustryTopicSpec(
+        "wealth-management",
+        news_queries=("assessores de investimento CVM",),
+        vocabulary=("gestao de patrimonio*", "wealth management", "private banking", "family office*",
+                    "assessor* de investimento*", "assessoria* de investimento*", "carteira* administrada*",
+                    "resolucao cvm 178", "resolucao cvm no 178"),
+    ),
+    IndustryTopicSpec(
+        # FIP / private equity / venture capital
+        "private-markets",
+        news_queries=("FIP private equity regras",),
+        vocabulary=("fundo* de investimento em participac*", "fip", "fips", "private equity",
+                    "venture capital", "capital de risco", "capital empreendedor"),
+    ),
+    IndustryTopicSpec(
+        # market infrastructure: registradoras, bolsa/depositária, credit bureaus
+        "financial-data-analytics",
+        news_queries=("registradoras de recebíveis Banco Central",),
+        vocabulary=("entidade* registradora*", "registradora* de recebiveis", "registro de recebiveis",
+                    "infraestrutura* do mercado financeiro", "infraestrutura* de mercado financeiro",
+                    "bolsa* de valores", "depositario central", "central depositaria",
+                    "gestor* de banco* de dados", "biro* de credito", "bureau* de credito"),
+    ),
 ]
+
+# --- Cross-industry compliance tags (#195) ----------------------------------------------------
+# A compliance topic is NOT an industry: an AML/CFT rule (Res. BCB 588 amending Circular 3.978)
+# binds every supervised institution at once. federal_acts tags the act ``compliance_tags``
+# from its LEAD (same vocabulary syntax as above) and treats the tag as coverage for severity,
+# so the rule is no longer "low: no covered industry". DOU phrases: none — "lavagem de dinheiro"
+# (19 raw / 4 kept) and "financiamento do terrorismo" (13 / 5) replayed live 2026-09-27 kept
+# only acts the betting/pension/BCB routes already deliver (MP 1.394, SPA 2.750/2.596,
+# Previc 728, BCB 588).
+
+
+@dataclass(frozen=True)
+class ComplianceTopicSpec:
+    tag: str
+    label: str                          # pt-BR display
+    vocabulary: tuple[str, ...] = ()
+
+
+COMPLIANCE_TOPICS: list[ComplianceTopicSpec] = [
+    ComplianceTopicSpec(
+        "aml", "PLD/FT (prevenção à lavagem de dinheiro)",
+        vocabulary=("lavagem de dinheiro", "re:\\blavagem\\W{0,2} ou ocultacao", "ocultacao de bens",
+                    "financiamento do terrorismo", "financiamento da proliferacao de armas",
+                    "pld/ft*", "pld-ft*", "prevencao a lavagem", "prevencao da lavagem",
+                    "coaf", "conselho de controle de atividades financeiras",
+                    "unidade de inteligencia financeira", "lei 9.613", "lei no 9.613",
+                    "circular 3.978", "circular no 3.978"),
+    ),
+]
+COMPLIANCE: dict[str, ComplianceTopicSpec] = {c.tag: c for c in COMPLIANCE_TOPICS}
+
+
+def compliance_vocabulary() -> dict[str, list[str]]:
+    """{compliance tag: [vocabulary terms]} (same syntax as the industry vocabulary)."""
+    return {c.tag: list(c.vocabulary) for c in COMPLIANCE_TOPICS if c.vocabulary}
 
 TOPICS: dict[str, IndustryTopicSpec] = {t.industry: t for t in INDUSTRY_TOPICS}
 MAX_NEWS_QUERIES_PER_INDUSTRY = 3

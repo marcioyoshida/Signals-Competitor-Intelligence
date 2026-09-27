@@ -46,6 +46,7 @@
   .exrow .dt, .exrow .meta, .exrow .heat, .exrow .badge { margin-top:1px; }
   .exrow .dt { color:var(--muted); font-size:var(--fs-micro); min-width:64px; font-variant-numeric:tabular-nums; }
   .exrow .meta { color:var(--muted); font-size:var(--fs-micro); font-variant-numeric:tabular-nums; }
+  .exrow .badge.enf-src { white-space:normal; overflow-wrap:anywhere; max-width:100%; }
 
   /* momentum — diverging bar anchored to a center baseline (rising vs receding) */
   .mom { display:grid; grid-template-columns:140px 1fr 66px; align-items:center; gap:var(--s3);
@@ -273,6 +274,11 @@
     .exrow--radar .ttl, .exrow--radar .meta,
     .exrow--sector .ttl, .exrow--sector .meta { flex-basis: 100%; }
     .exrow--sector .ent { flex: 1; max-width: none; white-space: normal; }
+    /* #193 enforcement rows: the institution name ("Trustee Distribuidora de Títulos e Valores
+       Mobiliários Ltda.") and the authority·confidence badge are long — wrap, never overflow. */
+    .exrow--enf { flex-wrap: wrap; row-gap: 4px; }
+    .exrow--enf .ttl, .exrow--enf .meta { flex-basis: 100%; }
+    .exrow--enf .ent { flex: 1; max-width: none; white-space: normal; overflow-wrap: anywhere; }
     .officer-tabs a { padding: 10px var(--s3); }
     .selwrap select, .authbtn { padding: 9px var(--s2); min-height: 40px; }
   }
@@ -955,6 +961,27 @@ function rowsSectorEvents(list) {
     <span class="meta"><span class="badge badge--ghost">${meta}</span> ${links}</span></div>`;
   }).join("");
 }
+// #193 — CCO sanctions/enforcement register: a supervisor acting against ONE operator (BCB
+// liquidação/RAET/intervenção, SPA/COAF/CVM sanctions, CEIS/CNEP, enforcement news), sources linked.
+// inSector (not Strict): an action with no industry (a liquidated DTVM off the roster) is market-wide.
+const ENF_CONF_PT = { official: "ato oficial", corroborated: "imprensa · corroborado", reported: "imprensa · 1 veículo" };
+function rowsEnforcement(list) {
+  list = (list || []).filter(inSector);
+  if (!list.length) return U.empty("Nenhuma ação de enforcement no escopo.", "BCB · SPA · COAF · CVM · CEIS/CNEP · MPF", "○");
+  return list.slice(0, 30).map(r => {
+    const links = (r.sources || []).slice(0, 4).map((s, i) =>
+      `<a href="${U.esc(s.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="${U.esc((s.label || "") + " — " + (s.title || ""))}">[${i + 1}]</a>`).join(" ");
+    const txt = (r.title || "") + (r.summary && r.summary !== r.title ? " — " + r.summary : "");
+    const meta = `${U.esc(r.authority || "")} · ${U.esc(ENF_CONF_PT[r.confidence] || r.confidence || "")}` +
+      (r.n_sources > 1 ? ` · ${r.n_sources} fontes` : "");
+    return `<div class="exrow exrow--enf" data-id="${U.esc(r.id)}">
+    <span class="dt">${r.date ? U.fmtDate(r.date) : ""}</span>
+    <span class="badge badge--${SECTOR_SEV[r.severity] || "low"}">${U.esc(SECTOR_SEV_PT[r.severity] || r.severity || "")}</span>
+    <span class="ent" title="${U.esc(r.label || r.target || "—")}">${U.esc(r.label || r.target || "—")}</span>
+    <span class="ttl" title="${U.esc(txt)}"><b>${U.esc(r.kind_label || r.kind || "")}</b> · ${U.esc(txt)}</span>
+    <span class="meta"><span class="badge badge--ghost enf-src">${meta}</span> ${links}</span></div>`;
+  }).join("");
+}
 function rowsDiscovery(list) {
   list = (list || []).filter(inSectorStrict);
   if (!list.length) return U.empty("Sem propostas de descoberta no escopo.", "", "○");
@@ -1474,13 +1501,18 @@ function render() {
       readout(heroCount("Achados graves", a.n_high, bandBadge(rc[0], rc[1]), "severidade alta na auditoria"),
         [tile("Achados de integridade", a.n_integrity, "registro", a.n_integrity > 0 ? "warn" : (sigOk ? "ok" : null)),
          tile("Distress (confirmado)", a.n_distress, "insolvência", a.n_distress > 0 ? "crit" : "ok"),
-         tile("Reputação", a.n_rep, "rankings BCB")]) +
+         tile("Reputação", a.n_rep, "rankings BCB"),
+         tile("Enforcement", a.n_enforcement || 0, (a.n_enforcement_severe || 0) + " crítico/alto",
+              a.enforcement_severity === "critical" ? "crit" : a.enforcement_severity === "high" ? "high" : null)]) +
       (SECTOR !== "__all__" && !sigOk ? band("Sinal de compliance", "insuficiente",
         `<div class="panel"><div class="panel__bd" style="padding:var(--s4);color:var(--muted);font-size:var(--fs-meta)">` +
         `Cobertura de integridade/reputação para este setor é insuficiente para uma leitura de compliance — ` +
         `os zeros acima significam "sem sinal ingerido", não "auditado e limpo". Hoje o sinal robusto está ` +
         `concentrado em banking e fintech (ranking de reclamações do BCB).</div></div>`) : "") +
-      band("Registro de risco", "", panel("Distress · reputação · integridade", null, "prioridade", rowsRisk(p.risk_register))) +
+      band("Enforcement & sanções", "liquidação · intervenção · RAET · cassação · sanções · CEIS/CNEP · #193",
+           panel("Ações de supervisores contra operadores", (p.enforcement || []).filter(inSector).length,
+             "mais grave primeiro · fontes linkadas", rowsEnforcement(p.enforcement))) +
+      band("Registro de risco", "", panel("Enforcement · distress · reputação · integridade", null, "prioridade", rowsRisk(p.risk_register))) +
       band("Integridade & reputação", "",
         grid("1fr 1fr", [panel("Auditoria de integridade", null, "achados do registro", rowsIntegrity(p.integrity)),
                         panel("Reputação (reclamações)", null, "pior ranking primeiro", rowsRep(p.reputation))]));
@@ -1718,8 +1750,23 @@ function inspectSectorEvent(id) {
   openDrawer();
   return true;
 }
+function inspectEnforcement(id) {
+  const r = (((EX.cco || {}).panels || {}).enforcement || []).find(x => x.id === id);
+  if (!r) return false;
+  const KIND = { official: "ato oficial", registry: "cadastro oficial", news: "imprensa" };
+  const src = (r.sources || []).map(s => `<li><a href="${U.esc(s.url)}" target="_blank" rel="noopener">${U.esc(s.title || s.url)}</a>` +
+    ` <span class="hd-note">${U.esc(KIND[s.kind] || s.kind || "")} · ${U.esc(s.label || "")} · ${U.esc(s.date || "")}</span></li>`).join("");
+  document.getElementById("drTitle").textContent = "Enforcement — " + (r.kind_label || r.kind || "");
+  document.getElementById("drBody").innerHTML = `<div class="callout"><p><b>${U.esc(r.label || r.target || "—")}</b></p>` +
+    `<p>${U.esc(r.title || "")}</p>` + (r.summary && r.summary !== r.title ? `<p>${U.esc(r.summary)}</p>` : "") +
+    `<p class="hd-note">${U.esc(r.authority || "")} · severidade ${U.esc(SECTOR_SEV_PT[r.severity] || r.severity || "—")} · ` +
+    `${U.esc(ENF_CONF_PT[r.confidence] || r.confidence || "")}${r.entity ? "" : " · instituição fora do roster"}</p><ol>${src}</ol></div>`;
+  openDrawer();
+  return true;
+}
 function inspect(id) {
   if (String(id || "").indexOf("sector_event:") === 0 && inspectSectorEvent(id)) return;
+  if (String(id || "").indexOf("enf:") === 0 && inspectEnforcement(id)) return;
   const c = BYID[id];
   document.getElementById("drTitle").textContent = (c && (c.entity_label || c.subject_label || c.entity)) || "Detalhe";
   document.getElementById("drBody").innerHTML = c

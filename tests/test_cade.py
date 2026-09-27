@@ -38,7 +38,7 @@ def test_fetch_atos_keeps_only_mergers_and_extracts_fields():
     atos = cade.fetch_atos(fetcher=lambda: _RAW)
     assert len(atos) == 2                              # the non-merger edital is dropped
     a = next(a for a in atos if a["ac_number"] == "08700.012323/2025-27")
-    assert a["id"] == "cade:pauta-271" and a["kind"] == "antitrust"
+    assert a["id"] == "cade:pauta-271:08700.012323/2025-27" and a["kind"] == "antitrust"
     assert a["parties"].startswith("B3 S.A.")
     assert "<span" not in a["text"]
 
@@ -52,7 +52,7 @@ def test_map_resolves_parties_by_name_and_stamps_all_entities():
 
     recs = cade.map_to_entities(atos, resolver=resolver)
     merger = next(r for r in recs if r["ac_number"] == "08700.012323/2025-27")
-    assert merger["id"] == "antitrust:cade:pauta-271"
+    assert merger["id"] == "antitrust:cade:pauta-271:08700.012323/2025-27"
     assert merger["entity"] == "b3" and set(merger["_entities"]) == {"b3", "neurotech"}
 
 

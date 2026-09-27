@@ -25,9 +25,12 @@ def test_topic_registry_covers_real_industries_within_budget():
     assert set(slugs) <= set(entity_registry.INDUSTRIES)
     assert {"betting", "banking", "fintech", "insurance", "securitization", "asset-management",
             "crypto", "consorcio", "closed-pension"} <= set(slugs)
+    # #195: EVERY covered industry has a spec (the 8 missing ones were audit R8)
+    assert set(slugs) == set(entity_registry.INDUSTRIES)
     for t in registry.INDUSTRY_TOPICS:
         assert 1 <= len(t.news_queries) <= registry.MAX_NEWS_QUERIES_PER_INDUSTRY, t.industry
-        assert t.dou_phrases and t.vocabulary, t.industry
+        # dou_phrases are optional: a phrase measured dead live (0 kept acts) is not added
+        assert t.vocabulary, t.industry
     # every vocabulary compiles, and every DOU phrase is recognised by its own industry's vocabulary
     pats = federal_acts.vocabulary_patterns()
     for t in registry.INDUSTRY_TOPICS:

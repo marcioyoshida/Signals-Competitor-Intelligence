@@ -129,3 +129,105 @@ def test_raw_writer_keeps_dou_act_content_for_the_kb():
     txt = raw_writer._document_text(doc)
     assert "N° None" not in txt and "1.394" in txt and "Ficam proibidas" in txt and "betting" in txt
     assert raw_writer._metadata_attributes(doc)["industries"] == "betting"
+
+
+# --- #188 / #189 / #191 (regulator coverage audit) -----------------------------------------
+from src.ingest import registry  # noqa: E402
+
+SUSEP_ORG = "Ministério da Fazenda/Superintendência de Seguros Privados"
+SUSEP_AUT = "Ministério da Fazenda/Superintendência de Seguros Privados/Diretoria de Autorizações"
+PREVIC_NORMAS = "Ministério da Previdência Social/Superintendência Nacional de Previdência Complementar/Diretoria de  Normas"
+PREVIC_LIC = "Ministério da Previdência Social/Superintendência Nacional de Previdência Complementar/Diretoria de Licenciamento"
+LEGIS = "Atos do Poder Legislativo"
+
+
+def _topic_run(items, phrase, industries, **kw):
+    return dou.fetch_dou(
+        [], today=dt.date(2026, 9, 27), topic_terms={phrase: industries},
+        topic_organs={phrase: list(registry.NORMATIVE_ISSUERS)},
+        fetcher=lambda t, s, e: _html(items), pause_sec=0, full_text=False, **kw)
+
+
+def test_laws_and_sector_rules_kept_by_topic_scope():
+    items = [
+        _item("lc-237", "LEI COMPLEMENTAR Nº 237", LEGIS, "15/09/2026", art="Lei Complementar",
+              pub="DO1_EXTRA_C", content="Altera a Lei Complementar nº 229 ... resseguro"),
+        _item("res-susep-96", "RESOLUÇÃO SUSEP Nº 96", SUSEP_ORG, "17/09/2026", art="Resolução",
+              pub="DO1_EXTRA_D", content="seguros ... resseguro"),
+        _item("port-cgaut", "PORTARIA CGAUT/SUSEP nº 182", SUSEP_AUT, "24/09/2026",
+              content="autoriza ... resseguro"),                       # per-entity: dropped
+        _item("edital-susep", "EDITAL DE CONSULTA PÚBLICA Nº 5", SUSEP_ORG, "17/09/2026",
+              art="Edital", pub="DO3", content="resseguro"),            # DO3: dropped
+    ]
+    ids = {a["id"] for a in _topic_run(items, "resseguro", ["insurance"])}
+    assert ids == {"dou:lc-237", "dou:res-susep-96"}
+
+
+def test_previc_rules_only_from_diretoria_de_normas():
+    items = [
+        _item("previc-728", "Portaria Previc Nº 728", PREVIC_NORMAS, "17/09/2026",
+              pub="DO1_EXTRA_D", content="previdência complementar Plano ASG"),
+        _item("previc-647", "Portaria Previc Nº 647", PREVIC_LIC, "17/09/2026",
+              content="previdência complementar aprova regulamento"),
+    ]
+    acts = _topic_run(items, "Portaria Previc", ["closed-pension"])
+    assert [a["id"] for a in acts] == ["dou:previc-728"]
+    assert acts[0]["normative"] is True        # doc-type-scoped keep → full-text candidate
+
+
+def test_watched_act_citation_inherits_industries():
+    items = [_item("lei-conv", "LEI Nº 15.999", LEGIS, "20/12/2026", art="Lei", pub="DO1",
+                   content="Conversão da Medida Provisória nº 1.394, de 25 de setembro de 2026.")]
+    acts = dou.fetch_dou(
+        [], today=dt.date(2026, 12, 21), topic_terms={"Medida Provisória nº 1.394": ["betting"]},
+        topic_organs={"Medida Provisória nº 1.394": list(registry.NORMATIVE_ISSUERS)},
+        fetcher=lambda t, s, e: _html(items), pause_sec=0, full_text=False,
+        known_instruments={"mp 1.394": ["betting"]})
+    assert acts and "betting" in (acts[0].get("industries") or [])
+    assert [k for k, _, _ in registry.watched_acts("2026-12-21")] == ["mp 1.394", "mp 1.393"]
+    assert registry.watched_acts("2027-04-01") == []
+
+
+def _days(n, start=dt.date(2026, 9, 26)):
+    return [(start - dt.timedelta(days=i)) for i in range(n)]
+
+
+def test_full_page_is_walked_back_by_date_window():
+    # 75 acts on 09-26..09-24 fill page 1; the window page (publishTo = 09-24) returns older ones
+    page1 = [_item(f"a{i}", f"PORTARIA {i}", SUSEP_ORG, d.strftime("%d/%m/%Y"))
+             for i, d in enumerate([dt.date(2026, 9, 26 - (i // 30)) for i in range(75)])]
+    page2 = [_item("a74", "dup", SUSEP_ORG, "24/09/2026"),
+             _item("old1", "PORTARIA old1", SUSEP_ORG, "10/09/2026")]
+    calls = []
+
+    def fetcher(t, s, e):
+        calls.append(e)
+        return _html(page2 if e.startswith("personalizado:") else page1)
+    acts = dou.fetch_dou(["BRADESCO"], today=dt.date(2026, 9, 27), fetcher=fetcher,
+                         pause_sec=0, full_text=False, classify=False)
+    assert calls[0] == "mes|delta=75"
+    assert calls[1] == "personalizado:28-08-2026:24-09-2026|delta=75"
+    assert len(acts) == 76 and any(a["id"] == "dou:old1" for a in acts)
+    assert dou.LAST_STATS["paged"] and not dou.LAST_STATS["saturated"]
+
+
+def test_saturated_query_is_reported_not_silent():
+    def fetcher(t, s, e):  # every window is full and inside the lookback
+        base = 26 if not e.startswith("personalizado:") else int(e.split(":")[2][:2])
+        return _html([_item(f"{e}-{i}", "P", SUSEP_ORG, f"{base - (i // 40):02d}/09/2026")
+                      for i in range(75)])
+    dou.fetch_dou(["BRADESCO"], today=dt.date(2026, 9, 27), fetcher=fetcher, pause_sec=0,
+                  full_text=False, classify=False, max_pages=2)
+    sat = dou.LAST_STATS["saturated"]
+    assert sat and sat[0]["term"] == "BRADESCO"
+
+
+def test_full_text_budget_goes_to_primary_acts_first(monkeypatch):
+    monkeypatch.setattr(dou, "FULL_TEXT_MAX_PER_RUN", 1)
+    spa = "Ministério da Fazenda/Secretaria de Prêmios e Apostas"
+    recs = [{"id": "spa", "organ": spa, "section": "DO1", "url": "u-spa"},
+            {"id": "lc", "organ": LEGIS, "section": "DO1_EXTRA_C", "url": "u-lc"}]
+    fetched = []
+    dou._attach_full_text(recs, lambda u: (fetched.append(u) or
+                                           '<div class="texto-dou"><p>corpo</p></div>\n</div>'))
+    assert fetched == ["u-lc"] and recs[1]["full_text"]

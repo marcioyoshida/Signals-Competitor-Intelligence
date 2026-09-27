@@ -224,8 +224,11 @@ _CLASSIFICATION_CUES = {
 # third party's filing (issue #33: "B3 está em recuperação extrajudicial"
 # from a headline about Braskem). "judicial" alone is too common (court
 # decisions, DOU seção) — require a distress-specific token.
+# #190: NOT "extrajudicial" alone — a BCB/SUSEP/ANS *liquidação extrajudicial* is a regulator
+# ACT (the KB holds the DOU ato), and the cue switched the KB off for every such question.
+# "recuperação extrajudicial" still trips the gate via "recuperacao".
 _DISTRESS_CUES = {
-    "recuperacao", "extrajudicial", "falencia", "falida", "insolvencia", "distress",
+    "recuperacao", "falencia", "falida", "insolvencia", "distress",
 }
 
 
@@ -397,10 +400,39 @@ _CITE_RE = re.compile(r"\[([A-Za-z0-9:_\-]+)\]")
 _RUN_RE = re.compile(r"(\[[A-Za-z0-9:_\-]+\])(?:\s*\1)+")
 
 
+# #190: the model sometimes echoes the prompt's "[card_id]" placeholder literally —
+# "[card_id: kb:0]" — or lists several ids in one bracket ("[kb:0, cvm:x]"). Both are
+# rewritten to the canonical "[id][id]" form, so the answer validates as grounded.
+_LABELED_CITE_RE = re.compile(r"\[\s*(?:card_id|card|id)\s*:\s*([^\]]+?)\s*\]", re.I)
+_LIST_CITE_RE = re.compile(r"\[\s*([A-Za-z0-9:_\-]+(?:\s*[,;]\s*[A-Za-z0-9:_\-]+)+)\s*\]")
+_ID_TOKEN_RE = re.compile(r"^[A-Za-z0-9_\-]+:[A-Za-z0-9:_\-]+$")
+
+
+def _split_cite_list(m: re.Match) -> str:
+    parts = [p.strip() for p in re.split(r"[,;]", m.group(1)) if p.strip()]
+    if not parts or not all(re.fullmatch(r"[A-Za-z0-9:_\-]+", p) for p in parts):
+        return m.group(0)
+    return "".join(f"[{p}]" for p in parts)
+
+
+def normalize_citations(text: str) -> str:
+    """Canonicalize citation forms the model improvises into "[id]" (see #190)."""
+    text = _LABELED_CITE_RE.sub(_split_cite_list, text or "")
+
+    def _list(m: re.Match) -> str:
+        parts = [p.strip() for p in re.split(r"[,;]", m.group(1))]
+        # only when every item looks like a namespaced card id — never "[1, 2]" prose
+        if all(_ID_TOKEN_RE.match(p) for p in parts):
+            return "".join(f"[{p}]" for p in parts)
+        return m.group(0)
+
+    return _LIST_CITE_RE.sub(_list, text)
+
+
 def tidy_citations(text: str) -> str:
     """Collapse runs of the same repeated inline citation (models often stack the
     same [id] after every clause) so the answer reads cleanly."""
-    return _RUN_RE.sub(r"\1", text or "")
+    return _RUN_RE.sub(r"\1", normalize_citations(text or ""))
 
 
 def validate_citations(
@@ -726,6 +758,44 @@ def sector_event_cards(feed: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
+def enforcement_cards(feed: dict[str, Any]) -> list[dict[str, Any]]:
+    """#193 — project feed.json.enforcement (the CCO sanctions/enforcement register) into
+    citable cards, so "O Banco Central decretou alguma liquidação extrajudicial?" or "A CVM
+    aplicou sanção ao Banco Master?" grounds on the act / headlines themselves. The narrative
+    restates only the action's stored fields; citations are its own sources (official first)."""
+    out: list[dict[str, Any]] = []
+    for a in (feed.get("enforcement") or []):
+        aid = a.get("id")
+        if not aid:
+            continue
+        who = a.get("label") or a.get("target") or a.get("entity") or "instituição"
+        srcs = a.get("sources") or []
+        bits = [f"Enforcement — {a.get('authority')}: {a.get('kind_label') or a.get('kind')} "
+                f"contra {who}, em {a.get('date')}: {a.get('title') or ''}"]
+        if a.get("summary") and a.get("summary") != a.get("title"):
+            bits.append(str(a["summary"]))
+        news = [s for s in srcs if s.get("kind") == "news"]
+        if news:
+            bits.append(f"Imprensa ({a.get('n_outlets') or len(news)} veículo(s)): " + "; ".join(
+                f"\"{s.get('title')}\" — {s.get('label')}" for s in news[:4]))
+        bits.append(f"Severidade {a.get('severity')}; confiança {a.get('confidence')}")
+        card = {
+            "id": aid, "date": a.get("date"), "entity": a.get("entity"),
+            "entity_label": who, "subject_label": who,
+            "entities": [a["entity"]] if a.get("entity") else [],
+            "lenses": ["integridade", "enforcement", "regulatorio"],
+            "topics": ["compliance", "sancoes"],
+            "is_alert": a.get("severity") in ("critical", "high"),
+            "threat_score": None,
+            "narrative": ". ".join(b.rstrip(".") for b in bits if b) + ".",
+            "citations": [{"url": s.get("url")} for s in srcs[:6] if s.get("url")],
+        }
+        if a.get("industries") or not a.get("entity"):
+            card["industries"] = list(a.get("industries") or [])  # unbound + untagged: fail closed
+        out.append(card)
+    return out
+
+
 # --- orchestrator (DI) ----------------------------------------------------
 
 def _scope_cards_to_modules(
@@ -779,7 +849,7 @@ def answer(
     feed_cards = (list(feed.get("feed") or []) + distress_cards(feed)
                   + entity_fact_cards(feed) + reputation_cards(feed)
                   + financials_cards(feed) + product_radar_cards(feed)
-                  + sector_event_cards(feed))
+                  + sector_event_cards(feed) + enforcement_cards(feed))
     if modules is not None:
         feed_cards = _scope_cards_to_modules(feed_cards, feed, modules)
     entity_vocab = set()

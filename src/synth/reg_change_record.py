@@ -127,7 +127,7 @@ def record_for(
     label: str, domain: str, changes: list[dict[str, Any]],
     industry_counts: dict[str, int] | None = None, *, effective_date: str | None = None,
     source_url: str | None = None, converse_fn: Callable[..., "str | None"] = _default_converse,
-    model_id: str | None = None,
+    model_id: str | None = None, industries: "list[str] | None" = None,
 ) -> dict[str, Any] | None:
     """Draft a change record for any changed instrument (radar OR lifecycle): derive the
     affected industries from the domain and the concrete n_entities from the registry counts,
@@ -136,7 +136,8 @@ def record_for(
         return None
     from src.synth import regulatory
 
-    industries = regulatory._industries_for(domain or "")
+    # #195: the instrument's own (act-classified) cohort when the caller has it
+    industries = list(industries or regulatory._industries_for(domain or ""))
     n_entities = sum((industry_counts or {}).get(i, 0) for i in industries)
     return build_change_record(
         label=label or "", domain=domain or "", industries=industries, n_entities=n_entities,
@@ -162,7 +163,7 @@ def enrich_lifecycles(
             self_key=lc.get("instrument"))
         rec = record_for(lc.get("label") or lc.get("instrument") or "", lc.get("domain") or "",
                          changes, industry_counts, effective_date=lc.get("deadline"),
-                         converse_fn=converse_fn, model_id=model_id)
+                         converse_fn=converse_fn, model_id=model_id, industries=lc.get("industries"))
         if rec:
             lc["change_record"] = rec
             drafted += 1
