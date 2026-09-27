@@ -117,16 +117,18 @@ _AUTHORITY_ORGAN: list[tuple[str, re.Pattern]] = [
 ]
 #: Organs whose own sanction proceedings belong in the register (CADE is merger control here).
 SANCTIONING = ("SPA/MF", "CVM", "COAF", "SUSEP", "PREVIC", "BCB")
-_INDIVIDUAL_DOC = re.compile(r"^(?:edita(?:l|is)|citac|intimac|decis|despacho|acordao|julgamento|pauta)")
+# CVM notícias carry doc_type "PAS (julgamento)" (#194)
+_INDIVIDUAL_DOC = re.compile(r"^(?:edita(?:l|is)|citac|intimac|decis|despacho|acordao|julgamento|pauta|pas\b)")
 _PROCEEDING = re.compile(r"sancionador\w*|acao sancionadora|\bimputad[ao]s?\b|auto de infracao"
                          r"|processo administrativo")
 _PENALTY = re.compile(r"\bmultas?\b|\bpenalidades?\b|\binabilitac\w*|\badvertencia\b|\bcondena\w*"
                       r"|\bpena de\b|\bcassac\w*")
-_RULING_DOC = re.compile(r"^(?:decis|acordao|julgamento|despacho decisorio)")
+_RULING_DOC = re.compile(r"^(?:decis|acordao|julgamento|despacho decisorio|pas \(julgamento)")
 # "…foi imputada à empresa PHD BRASIL CURSOS…", "Interessado: XPTO Ltda.", "Acusados: …"
 _PARTY = re.compile(
     r"(?:imputad[ao]s?\s+(?:a|à)\s+(?:empresa|pessoa jur[ií]dica|sociedade)\s+"
-    r"|(?:interessad|acusad|autuad|indiciad|recorrent)[ao]s?\s*:\s*)"
+    r"|(?:interessad|acusad|autuad|indiciad|recorrent)[ao]s?\s*:\s*"
+    r"|\bPAS\s+[\d./-]+\s*:\s*)"   # CVM julgamento: "PAS 19957.007976/2020-94 : Sefer … Ltda."
     r"(?P<name>[A-ZÀ-Ý0-9][^,;:\n]{2,120}?)"
     r"(?=\s*(?:,|;|\.\.\.|…|\(|\s-\s|\s+inscrit|\s+CNPJ|\s+a\s+pr[aá]tica|\s+pela\s|$|\.\s)|EDITAL\s+DE)")
 

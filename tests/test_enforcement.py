@@ -316,3 +316,18 @@ def test_feed_projection_scopes_enforcement():
     out = feed_builder.scope_feed_to_modules(feed, ["betting"])
     assert all(a.get("entity") != "itau" for a in out["enforcement"])
     assert any("Banvox" in (a.get("target") or "") for a in out["enforcement"])
+
+
+def test_cvm_pas_julgamento_noticia_is_a_sanction_ruling():
+    # real gov.br/cvm notícia (2026-09-08 session), doc_type from cvm_normas — was dropped
+    # because the doc-type pattern was anchored on "julgamento" and no party form matched
+    item = {"source": "CVM", "kind": "regulatory", "doc_type": "PAS (julgamento)",
+            "organ": "Comissão de Valores Mobiliários",
+            "title": "CVM aplica multas que somam mais de R$ 200 milhões em caso envolvendo Banco Master",
+            "text": ("A Comissão de Valores Mobiliários (CVM) realizou, em 8/9/2026, sessão de julgamento "
+                     "dos seguintes processos administrativos sancionadores (PAS): PAS 19957.007976/2020-94 : "
+                     "Sefer Investimentos Distribuidora de Títulos e Valores Mobiliários Ltda. - Em "
+                     "Liquidação Extrajudicial, Benjamim Botelho de Almeida. Multas aplicadas.")}
+    a = enf.official_action(item)
+    assert a["kind"] == "sancao" and a["authority"] == "CVM" and a["severity"] == "high"
+    assert a["target"].startswith("Sefer Investimentos Distribuidora")
