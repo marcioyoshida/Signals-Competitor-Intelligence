@@ -643,16 +643,29 @@ async function loadFeed() {
     }
     return;
   }
+  // #166 warm launch: paint THIS user's last feed at once (same per-user cache as the offline
+  // copy — only while their session is valid), then refresh from /api/feed and re-render. The
+  // full scoped feed is ~600 KB; waiting for it made "Hoje" usable only after ~7s on 4G.
+  let painted = false;
+  if (Ctx.isLoggedIn()) {
+    const cached = await Ctx.readCachedFeed().catch(() => null);
+    if (cached && cached.data) {
+      DATA = cached.data; STALE = true; LICENSED = licensedIndustries(DATA);
+      boot(); painted = true;
+    }
+  }
   const res = await Ctx.loadScopedFeed({});
-  if (res.needAuth || res.noAccess || res.error) {
+  if (res.needAuth || res.noAccess || (res.error && !painted)) {
     Ctx.mountGate(document.getElementById("board"), res.error || (res.needAuth ? "needAuth" : "noAccess"), "seu painel executivo");
     return;
   }
+  if (res.error) { OFFLINE = true; STALE = false; boot(); return; }   // keep the painted copy, flagged
   DATA = res.data;
-  OFFLINE = !!res.offline;
+  OFFLINE = !!res.offline; STALE = false;
   LICENSED = licensedIndustries(DATA);
   boot();
 }
+let STALE = false, BOOTED = false, QUOTES_TIMER = null, SESSION_LOGGED = false;
 let OFFLINE = false;
 // #162: an offline render is the LAST feed this user loaded — say so, visibly.
 window.addEventListener("online", () => { if (OFFLINE) location.reload(); });
@@ -660,23 +673,25 @@ window.addEventListener("online", () => { if (OFFLINE) location.reload(); });
 function boot() {
   EX = DATA.executive || {};
   BYID = {}; (DATA.feed || []).forEach(c => { BYID[c.id] = c; });
-  document.getElementById("asof").textContent = DATA.as_of ? `dados de ${U.fmtDate(DATA.as_of)}${OFFLINE ? " · offline" : ""}` : "";
+  document.getElementById("asof").textContent = DATA.as_of ? `dados de ${U.fmtDate(DATA.as_of)}${OFFLINE ? " · offline" : STALE ? " · atualizando…" : ""}` : "";
   const ob = document.getElementById("offlineBar");
   if (ob) { ob.hidden = !OFFLINE; ob.textContent = OFFLINE ? `Sem conexão — exibindo dados de ${DATA.as_of ? U.fmtDate(DATA.as_of) : "—"} · offline` : ""; }
   document.getElementById("macroStrip").innerHTML = macroStrip(DATA.macro);  // shared header
-  setInterval(() => { if (OFFICER === "cso") loadQuotes(); }, 60000);  // B3 quotes refresh
+  if (!QUOTES_TIMER) QUOTES_TIMER = setInterval(() => { if (OFFICER === "cso" && VIEW === "painel") loadQuotes(); }, 60000);  // B3 quotes refresh
   const sel = document.getElementById("sectorSel");
+  while (sel.options.length > 1) sel.remove(1);   // boot() runs twice on a warm launch (cached, then fresh)
   // feed.executive is already server-scoped to LICENSED (feed_builder._rescope_executive);
   // filtering here too is a client-side belt-and-suspenders, not the trust boundary itself.
   (EX.sectors || []).filter(s => !LICENSED.length || LICENSED.includes(s.slug))
     .forEach(s => { const o = document.createElement("option"); o.value = s.slug; o.textContent = s.label; sel.appendChild(o); });
   SECTOR = activeSector();
   sel.value = SECTOR;
-  setView(initialView());
+  if (VIEW === null) setView(initialView());
   syncOnline();
-  setTimeout(resolveSharedLink, 0);   // #170: ?c=<hash> deep link, after the first render
+  const first = !BOOTED; BOOTED = true;
+  if (first) setTimeout(resolveSharedLink, 0);   // #170: ?c=<hash> deep link, after the first render
   // #165: one session event per open (device class + installed-app flag only)
-  if (!ADMIN && !OFFLINE) engage("session", "open", null);
+  if (!ADMIN && !OFFLINE && !STALE && !SESSION_LOGGED) { SESSION_LOGGED = true; engage("session", "open", null); }
   if (!EX.officers || !EX.officers.length) {
     document.getElementById("board").innerHTML =
       U.empty("Bloco executivo ausente", "feed.executive ainda não foi publicado.", "○"); return;
@@ -1927,7 +1942,7 @@ function renderHoje(el) {
     `<div class="pushbox" id="pushBox"><span class="hd-note">verificando…</span></div>`);
   html += `<a href="#painel" class="btn hoje-act" id="hojeFull">Ver painel completo →</a>`;
   el.innerHTML = `<div class="hoje">${html}</div>`;
-  engage("hoje", "open", null);
+  if (!STALE) engage("hoje", "open", null);   // not for the cached pre-paint (it re-renders)
   el.querySelectorAll(".exrow[data-id]").forEach(row => row.addEventListener("click", () => {
     const id = row.getAttribute("data-id"); if (BYID[id]) inspect(id); }));
   el.querySelectorAll(".exrow[data-url],.exrow[data-href]").forEach(row => row.addEventListener("click", () => {

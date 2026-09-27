@@ -1084,7 +1084,7 @@
   global.OncaCtx = {
     // auth
     login, logout, isLoggedIn, getIdToken, renderAuthBox, handleAuthCallback,
-    ensureSession, clearUserData, decodeJwt,
+    ensureSession, clearUserData, decodeJwt, readCachedFeed: readUserFeed,
     bootSaaS,
     // feed
     loadScopedFeed, mountGate, setData,
