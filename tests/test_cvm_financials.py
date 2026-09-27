@@ -71,6 +71,7 @@ def test_cnpj_beats_name_and_name_picks_largest():
     idx = cf.build_index(ents, stmts, resolver=resolver)
     assert idx["btg"]["revenue"] == 500.0    # CNPJ match wins over the name-only holding
     assert idx["b3"]["revenue"] == 250.0     # among name matches, the largest by revenue
+    assert idx["btg"]["match"] == "cnpj" and idx["b3"]["match"] == "name"   # binding is recorded
 
 
 def test_untracked_and_ambiguous_issuers_skipped():

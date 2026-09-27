@@ -389,7 +389,7 @@ def build_index(
             best[eid] = (prio, rev, periods)
 
     index: dict[str, dict[str, Any]] = {}
-    for eid, (_prio, _rev, periods) in best.items():
+    for eid, (prio, _rev, periods) in best.items():
         cur = periods.get("ÚLTIMO") or {}
         prior = periods.get("PENÚLTIMO") or {}
         if not cur.get("revenue") and not cur.get("net_income") and not cur.get("assets"):
@@ -406,6 +406,9 @@ def build_index(
         ) or cur.get("months") == prior.get("months")
         rec = {
             "entity_id": eid, "name": cur.get("name"), "doc": cur.get("doc"),
+            # how the filer was bound to the entity: "cnpj" (exact root) or "name" (the
+            # single-listed-entity fallback) — makes a weak binding visible, not inferred.
+            "match": "cnpj" if prio == 2 else "name",
             "period": cur.get("period"), "period_start": cur.get("period_start"),
             "months": cur.get("months"),
             "prior_period": prior.get("period"), "currency": "BRL",

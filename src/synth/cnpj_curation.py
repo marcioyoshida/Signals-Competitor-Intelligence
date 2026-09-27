@@ -50,7 +50,8 @@ SEED_CNPJ_ROOTS: dict[str, str] = {
     "stone": "16501555",         # Stone Instituição de Pagamento
     "mercado_pago": "10573521",
     "neon": "20855875",          # Neon Pagamentos
-    "creditas": "17770708",
+    "creditas": "17770708",   # Creditas Soluções Ltda (brand/platform). The lender, Creditas SCD S.A.
+                               # (32997490, BCB-supervised), was added as a 2nd root on 2026-09-26.
     "infinitepay": "18189547",   # CloudWalk
     "crefisa": "60779196",
     # Insurers
