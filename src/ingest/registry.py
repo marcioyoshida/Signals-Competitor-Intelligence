@@ -241,8 +241,17 @@ INDUSTRY_TOPICS: list[IndustryTopicSpec] = [
     IndustryTopicSpec(
         "banking",
         dou_phrases=("instituições financeiras", "Sistema Financeiro Nacional"),
-        news_queries=("Conselho Monetário Nacional", "bancos Banco Central nova regra"),
-        vocabulary=("instituicoes financeiras", "instituicao financeira", "bancos", "banco multiplo",
+        # Tuned live 2026-09-27 (the prior pair yielded 0 kept headlines in 30 days: CMN
+        # headlines never name the sector, and the gate is right to drop them).
+        # These three return Brazilian bank-rule news: BC deadlines/accounting rules, the
+        # STJ consignado refunds, obligations placed on banks.
+        news_queries=("instituições financeiras Banco Central", "BC determina bancos",
+                      "consignado regra bancos"),
+        # "bancos" excludes CENTRAL banks (Fed/ECB/Vietnam stories) and non-financial banks
+        # ("bancos de sangue/alimentos/leite"), the two noise sources measured live.
+        vocabulary=("instituicoes financeiras", "instituicao financeira",
+                    "re:\\bbancos\\b(?! centra| de sangue| de alimento| de leite| de dados| de horas)",
+                    "banco multiplo",
                     "bancos multiplos", "setor bancario", "sistema bancario", "tarifas bancarias",
                     "sistema financeiro nacional",
                     # NOT "CMN": the council rules for every FS industry, so naming it says nothing

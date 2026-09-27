@@ -232,3 +232,18 @@ def test_sector_items_have_their_own_digest_caps(monkeypatch):
     kinds = [i["query_kind"] for i in sl["items"]]
     assert kinds.count("entity") == 5 and kinds.count("sector") == 3      # newer sector items don't evict
     assert sl["count"] == 14 and len(sl["fetched_ids"]) == 14              # every id still committed
+
+
+def test_banking_vocabulary_excludes_central_and_non_financial_banks():
+    # Tuned live 2026-09-27: "bancos" matched "bancos centrais" (Fed/ECB/Vietnam stories) and
+    # "bancos de sangue"; the old banking queries kept 0 headlines in 30 days.
+    from src.ingest import federal_acts, registry
+
+    rx = federal_acts.vocabulary_patterns(registry.industry_vocabulary())["banking"]
+    hit = lambda t: bool(rx.search(federal_acts.fold(t)))  # noqa: E731
+    assert hit("BC dá até dezembro para bancos colocarem dados em ordem")
+    assert hit("STJ obriga bancos a devolver consignado do INSS sem contrato válido")
+    assert not hit("Bancos centrais do Brasil e da Europa avaliam interligar Pix")
+    assert not hit("Bancos de sangue de municípios do RJ terão novas regras")
+    assert "Conselho Monetário Nacional" not in registry.news_topic_queries()["banking"]
+    assert len(registry.news_topic_queries()["banking"]) <= 3

@@ -260,8 +260,15 @@
     /* band headers carry a long provenance badge (and the silence rows a long briefing):
        wrap them instead of pushing the page wider than the phone (#177 check, 390px). */
     .band > .band-hd { flex-wrap: wrap; row-gap: 4px; }
-    .band > .band-hd .badge { white-space: normal; }
+    /* overflow-wrap: the CCO PESTLE badge is words joined by middots with no spaces
+       ("político·econômico·social·…"), one unbreakable run that made the page 459px wide. */
+    .band > .band-hd .badge { white-space: normal; overflow-wrap: anywhere; max-width: 100%; }
     .silrow { flex-wrap: wrap; }
+    /* "Sinais prospectivos": the hub meta ("hub BTG PACTUAL SERVIÇOS FINANCEIROS S/A DTVM ·
+       12 expostos") is inline nowrap, so it scrolled its panel sideways at 390px. */
+    .exrow--axis { flex-wrap: wrap; row-gap: 2px; }
+    .exrow--axis .axis-meta { flex-basis: 100%; white-space: normal !important; overflow-wrap: anywhere; }
+    .exrow--axis > span, .exrow--axis > b { overflow-wrap: anywhere; }
     .exrow--radar, .exrow--sector { flex-wrap: wrap; row-gap: 4px; }
     .exrow--radar .ttl, .exrow--radar .meta,
     .exrow--sector .ttl, .exrow--sector .meta { flex-basis: 100%; }
@@ -1003,13 +1010,13 @@ function rowsAxis(list) {
   return rows.slice(0, 14).map(r => {
     const meta = [];
     if (r.horizon_days != null) meta.push("horizonte " + r.horizon_days + "d");
-    if (r.hub) meta.push("hub " + r.hub + (r.n_dependents != null ? " · " + r.n_dependents + " expostos" : ""));
+    if (r.hub) meta.push("hub " + U.esc(r.hub) + (r.n_dependents != null ? " · " + r.n_dependents + " expostos" : ""));
     if (r.relation) meta.push(U.esc(r.relation));
     if (r.pattern) meta.push(U.esc(r.pattern));
-    return `<div class="exrow" data-id="${U.esc(r.id || "")}" style="display:flex;gap:var(--s3);align-items:baseline;padding:var(--s2) var(--s3)">
+    return `<div class="exrow exrow--axis" data-id="${U.esc(r.id || "")}" style="display:flex;gap:var(--s3);align-items:baseline;padding:var(--s2) var(--s3)">
       <b style="min-width:110px">${U.esc(r.entity_label)}</b>
       <span style="flex:1;min-width:0">${U.esc(r.title || "")}</span>
-      <span class="hd-note" style="white-space:nowrap">${meta.join(" · ")}</span></div>`;
+      <span class="hd-note axis-meta" style="white-space:nowrap">${meta.join(" · ")}</span></div>`;
   }).join("");
 }
 function rowsFinancials(list) {
