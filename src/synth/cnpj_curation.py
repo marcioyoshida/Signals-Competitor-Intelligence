@@ -42,9 +42,11 @@ SEED_CNPJ_ROOTS: dict[str, str] = {
     "abc": "28195667",           # Banco ABC Brasil
     "original": "92894922",
     "c6": "31872495",
+    "bmg": "61186680",           # Banco BMG
     # Fintechs / payments
     "nubank": "18236120",        # Nu Pagamentos
-    "inter": "00416968",         # Banco Inter
+    "inter": "00416968",         # Banco Inter. The CVM filer, Inter & Co, Inc. (42737954, Cayman,
+                                 # CVM foreign-issuer register), is a 2nd root since 2026-09-26.
     "picpay": "22896431",
     "pagseguro": "08561701",     # PagSeguro Internet
     "stone": "16501555",         # Stone Instituição de Pagamento
@@ -55,12 +57,16 @@ SEED_CNPJ_ROOTS: dict[str, str] = {
     "infinitepay": "18189547",   # CloudWalk
     "crefisa": "60779196",
     # Insurers
-    "porto_seguro": "61198164",
+    "porto_seguro": "61198164",  # Porto Seguro Cia de Seguros Gerais. The listed holding, Porto
+                                 # Seguro S.A. (02149205, the CVM filer), is a 2nd root since 2026-09-26.
     "caixa_seguridade": "22543331",
     "bb_seguridade": "17344597",
     "icatu": "42283770",         # Icatu Seguros
     # Data & consórcio
     "serasa": "62173620",        # Serasa
+    # Market infrastructure & brokers
+    "b3": "09346601",            # B3 S.A. - Brasil, Bolsa, Balcão
+    "br_partners": "10739356",   # BRBI BR Partners S.A.
     "sinqia": "04065791",
 }
 
