@@ -95,6 +95,12 @@ _PRIMARY_ORGANS = ("Atos do Poder Executivo", "Atos do Poder Legislativo", "Atos
 PAGE_SIZE = 75
 MAX_PAGES_PER_QUERY = 4
 MAX_EXTRA_PAGES_PER_RUN = 40
+# #199: a "todos" query still full at the cap finishes the older span in these sections only
+# (DO3 is procurement — licitações, extratos de contrato — which the filters drop anyway).
+# The per-section walk misses EXTRA editions, which only "todos" returns (#173).
+SPLIT_SECTIONS = ("do1", "do2")
+#: a saturation leaving at most this many days of the lookback unfetched is a warning, not an error
+SATURATION_WARN_DAYS = 3
 #: per-run telemetry of the last fetch_dou call: queries, pages, saturated terms
 LAST_STATS: dict[str, Any] = {}
 _TEXTO_RE = re.compile(r'<div class="texto-dou">(.*?)</div>\s*</div>', re.S)
@@ -158,21 +164,26 @@ def fetch_dou(
     plan = [(t, True) for t in list(topics)[:max_topic_terms]]
     plan += [(t, False) for t in [t for t in dict.fromkeys(str(t).strip() for t in terms) if t
                                   and t not in topics][:max_terms]]
-    stats: dict[str, Any] = {"queries": 0, "pages": 0, "saturated": [], "paged": [], "fuzzy": []}
+    stats: dict[str, Any] = {"queries": 0, "pages": 0, "saturated": [], "paged": [], "fuzzy": [],
+                             "split": []}
     LAST_STATS.clear()
     LAST_STATS.update(stats)
 
-    def _pages(term: str, section: str, literal: bool = False) -> tuple[list[dict[str, Any]], bool]:
-        """Every result for (term, section) back to ``cutoff``, walking full pages back by date
-        window (#191). Returns (records, got_any_response). ``literal`` (entity terms, #197):
-        a full page that is mostly stem matches is not walked back — it is noise, not volume."""
+    def _walk(term: str, section: str, window: tuple[dt.date, dt.date] | None,
+              literal: bool) -> tuple[list[dict[str, Any]], bool, dict[str, Any] | None]:
+        """Every result for (term, section) in ``window`` (None = the "mes" default) back to
+        ``cutoff``, walking full pages back by date window (#191). Returns (records,
+        got_any_response, saturation) — ``saturation`` is None, or {"oldest", "pages", ...} when
+        the page cap stopped the walk inside the lookback. ``literal`` (entity terms, #197): a full
+        page that is mostly stem matches is not walked back — it is noise, not volume."""
         stats["queries"] += 1
-        page = fetch(term, section, _window(exact_date, None, page_size))
+        page = fetch(term, section, _window(exact_date, window, page_size))
         stats["pages"] += 1
         recs = _parse(page, term)
         got = bool(page)
         seen = {r["id"] for r in recs}
         n = 1
+        sat: dict[str, Any] | None = None
         while len(recs) and _full(page, recs, page_size):
             oldest = min((d for d in (_parse_date(r.get("date")) for r in recs[-page_size:]) if d),
                          default=None)
@@ -187,10 +198,7 @@ def fetch_dou(
                           f"({rate:.0%} literal hits on a full page); not paging")
                     break
             if n >= max_pages or stats["pages"] - stats["queries"] >= MAX_EXTRA_PAGES_PER_RUN:
-                stats["saturated"].append({"term": term, "section": section,
-                                           "oldest": oldest.isoformat(), "pages": n})
-                print(f"Warning: DOU query saturated: {term!r} {section} — {n} full page(s), "
-                      f"oldest {oldest} > cutoff {cutoff}; older acts not fetched")
+                sat = {"oldest": oldest, "pages": n}
                 break
             page = fetch(term, section, _window(exact_date, (cutoff, oldest), page_size))
             stats["pages"] += 1
@@ -204,12 +212,44 @@ def fetch_dou(
                 more = [r for r in _parse(page, term) if r["id"] not in seen]
                 if not more:
                     break
-                stats["saturated"].append({"term": term, "section": section, "oldest": oldest.isoformat(),
-                                           "pages": n, "day_overflow": True})
+                _saturated(term, section, oldest, n, day_overflow=True)
             seen |= {r["id"] for r in more}
             recs += more
         if n > 1:
             stats["paged"].append({"term": term, "section": section, "pages": n})
+        return recs, got, sat
+
+    def _saturated(term: str, section: str, oldest: dt.date, pages: int, **extra: Any) -> None:
+        missing = (oldest - cutoff).days
+        stats["saturated"].append({"term": term, "section": section, "oldest": oldest.isoformat(),
+                                   "pages": pages, "missing_days": missing, **extra})
+        print(f"Warning: DOU query saturated: {term!r} {section} — {pages} full page(s), "
+              f"oldest {oldest} > cutoff {cutoff}; {missing} day(s) of older acts not fetched")
+
+    def _pages(term: str, section: str, literal: bool = False) -> tuple[list[dict[str, Any]], bool]:
+        """(records, got_any_response) for (term, section). #199: a "todos" query still full at
+        the page cap (BANCO DO BRASIL: 184/276 hits are its own DO3 licitações/extratos) finishes
+        the uncovered span with DO1 and DO2 only — the regulatory sections — rather than
+        truncating every section alike. DO3 procurement older than the cap is skipped (and
+        recorded in ``stats["split"]``); only a DO1/DO2 walk that saturates too is reported."""
+        recs, got, sat = _walk(term, section, None, literal)
+        if not sat:
+            return recs, got
+        if section != "todos" or not SPLIT_SECTIONS:
+            _saturated(term, section, sat["oldest"], sat["pages"])
+            return recs, got
+        seen = {r["id"] for r in recs}
+        stats["split"].append({"term": term, "oldest": sat["oldest"].isoformat(),
+                               "sections": list(SPLIT_SECTIONS), "skipped": "do3"})
+        print(f"Info: DOU query {term!r} todos full after {sat['pages']} page(s) (oldest "
+              f"{sat['oldest']}); finishing {cutoff}..{sat['oldest']} in {'/'.join(SPLIT_SECTIONS)}")
+        for sec in SPLIT_SECTIONS:
+            more, got_, sat_ = _walk(term, sec, (cutoff, sat["oldest"]), literal)
+            got = got or got_
+            recs += [r for r in more if r["id"] not in seen]
+            seen |= {r["id"] for r in more}
+            if sat_:
+                _saturated(term, sec, sat_["oldest"], sat_["pages"])
         return recs, got
 
     def _run(plan_: list[tuple[str, bool]]) -> None:

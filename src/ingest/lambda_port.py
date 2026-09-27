@@ -40,13 +40,28 @@ def _dou_with_stats(recs: list) -> list:
         from src.ingest import source_health
 
         st = dict(_dou.LAST_STATS or {})
-        sat = list(dict.fromkeys(x["term"] for x in st.get("saturated") or []))
-        source_health.record("DOU saturation", ok=not sat, docs=len(recs),
-                             error=(f"{len(sat)} saturated: " + ", ".join(sat[:8])) if sat else None,
+        sat_recs = st.get("saturated") or []
+        sat = list(dict.fromkeys(x["term"] for x in sat_recs))
+        # #199: a truncation leaving ≤ SATURATION_WARN_DAYS of the lookback unfetched is a
+        # warning; a larger (or unmeasured) gap is an error
+        worst = {}
+        for x in sat_recs:
+            d = x.get("missing_days")
+            worst[x["term"]] = max(worst.get(x["term"], -1), 10**6 if d is None else int(d))
+        hard = [t for t in sat if worst[t] > _dou.SATURATION_WARN_DAYS]
+        soft = [t for t in sat if t not in hard]
+        msg = lambda ts: f"{len(ts)} saturated: " + ", ".join(ts[:8])  # noqa: E731
+        source_health.record("DOU saturation", ok=not hard, docs=len(recs),
+                             error=msg(hard) if hard else None,
+                             warning=msg(soft) if soft else None,
                              metrics={"queries": st.get("queries", 0), "pages": st.get("pages", 0),
                                       "saturated_terms": sat,
+                                      "missing_days": {t: worst[t] for t in sat},
                                       "paged_terms": list(dict.fromkeys(
                                           x["term"] for x in st.get("paged") or [])),
+                                      # #199: "todos" full at the cap → older span via DO1/DO2 only
+                                      "split_terms": list(dict.fromkeys(
+                                          x["term"] for x in st.get("split") or [])),
                                       # #197: stem-matched entity queries (not paged, not volume)
                                       "fuzzy_terms": list(dict.fromkeys(
                                           x["term"] for x in st.get("fuzzy") or []))})

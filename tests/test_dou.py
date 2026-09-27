@@ -255,3 +255,40 @@ def test_literal_hit_is_accent_and_case_folded_whole_word():
     assert dou.literal_hit(rec, "CREDITAS")
     assert not dou.literal_hit({"text": "operações de créditos consignados"}, "CREDITAS")
     assert not dou.literal_hit({"text": "NUBANKING"}, "NUBANK")
+
+
+def test_saturated_todos_finishes_older_span_in_do1_do2_only():
+    # #199: BANCO DO BRASIL fills "todos" at the cap with its own DO3 licitações; the uncovered
+    # span is fetched in DO1/DO2 only — no DO3 query, nothing reported saturated
+    calls = []
+
+    def fetcher(t, s, e):
+        calls.append((s, e))
+        if s == "todos":
+            base = 26 if not e.startswith("personalizado:") else int(e.split(":")[2][:2])
+            return _html([_item(f"{e}-{i}", "EXTRATO BANCO DO BRASIL", SUSEP_ORG,
+                                f"{base - (i // 40):02d}/09/2026", pub="DO3") for i in range(75)])
+        return _html([_item(f"old-{s}", "PORTARIA BANCO DO BRASIL", SUSEP_ORG, "29/08/2026",
+                            pub=s.upper())])
+    acts = dou.fetch_dou(["BANCO DO BRASIL"], today=dt.date(2026, 9, 27), fetcher=fetcher,
+                         pause_sec=0, full_text=False, classify=False, max_pages=2)
+    sections = [s for s, _ in calls]
+    assert "do3" not in sections and sections.count("do1") == 1 and sections.count("do2") == 1
+    oldest = dou.LAST_STATS["split"][0]["oldest"]
+    assert next(e for s, e in calls if s == "do1").startswith(
+        "personalizado:28-08-2026:" + dt.date.fromisoformat(oldest).strftime("%d-%m-%Y"))
+    assert {"dou:old-do1", "dou:old-do2"} <= {a["id"] for a in acts}
+    assert not dou.LAST_STATS["saturated"]
+
+
+def test_saturation_records_missing_days():
+    def fetcher(t, s, e):
+        base = 26 if not e.startswith("personalizado:") else int(e.split(":")[2][:2])
+        return _html([_item(f"{s}{e}-{i}", "P BRADESCO", SUSEP_ORG, f"{base - (i // 40):02d}/09/2026")
+                      for i in range(75)])
+    dou.fetch_dou(["BRADESCO"], today=dt.date(2026, 9, 27), fetcher=fetcher, pause_sec=0,
+                  full_text=False, classify=False, max_pages=2)
+    sat = dou.LAST_STATS["saturated"]
+    assert {x["section"] for x in sat} == {"do1", "do2"}
+    assert all(x["missing_days"] == (dt.date.fromisoformat(x["oldest"]) - dt.date(2026, 8, 28)).days
+               for x in sat)

@@ -202,3 +202,13 @@ def test_a_source_that_really_ran_is_not_marked_idle():
     sh.reset()
     sh.record("BCB Pix", ok=True, docs=12)
     assert sh.ledger()["BCB Pix"]["idle"] is False
+
+
+def test_warning_bands_warn_not_error():
+    # #199: a bounded, known truncation is a warning — the source still ran fine
+    sh.record("DOU saturation", ok=True, warning="1 saturated: BANCO DO BRASIL")
+    rec = sh.ledger()["DOU saturation"]
+    assert rec["last_error"] is None and rec["last_warning"].startswith("1 saturated")
+    assert sh._band(rec) == "warn"
+    sh.record("DOU saturation", ok=True)
+    assert sh._band(sh.ledger()["DOU saturation"]) == "ok"

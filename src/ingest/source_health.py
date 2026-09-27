@@ -47,7 +47,8 @@ def reset() -> None:
 
 
 def record(source: str, *, ok: bool, docs: int | None = None, error: str | None = None,
-           idle: bool = False, metrics: dict[str, Any] | None = None) -> None:
+           idle: bool = False, metrics: dict[str, Any] | None = None,
+           warning: str | None = None) -> None:
     """Record one source's run outcome. ``ok`` = it completed without raising; ``error`` is the
     stringified failure (budget/timeout/network) when not ok; ``docs`` is optional fetched count.
 
@@ -56,6 +57,9 @@ def record(source: str, *, ok: bool, docs: int | None = None, error: str | None 
     report "ran fine, docs > 0" while its actual extraction is dead (parties empty, or a
     single stale AC repeating every run); a per-source yield metric is what a "live/ok"
     status can't otherwise reveal.
+
+    ``warning`` (#199): the run succeeded but is knowingly incomplete in a bounded way (a DOU
+    query truncated ≤ 3 days short of its lookback) — bands "warn", not "error".
 
     ``idle=True`` means the pipeline REACHED this source and it had no work — an
     event-driven source whose upstream produced nothing this cycle. That is a healthy
@@ -74,6 +78,7 @@ def record(source: str, *, ok: bool, docs: int | None = None, error: str | None 
     if ok:
         e["last_ok"] = e["last_run"]
         e["last_error"] = None
+        e["last_warning"] = (warning or "")[:300] or None
     else:
         e["last_error"] = (error or "erro")[:300]
     if docs is not None:
@@ -107,6 +112,8 @@ def _band(rec: dict[str, Any], *, now: _dt.datetime | None = None) -> str:
     s = _staleness_days(rec.get("last_ok"), now=now)
     if s is None:
         return "never_ok"
+    if rec.get("last_warning") and s <= 2:
+        return "warn"
     return "ok" if s <= 2 else "warn" if s <= 7 else "stale"
 
 

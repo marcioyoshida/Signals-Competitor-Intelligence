@@ -1175,3 +1175,21 @@ def test_concurrency_guard_skips_the_later_of_two_overlapping_runs():
 def test_guard_mode_dispatches_before_any_ingest(monkeypatch):
     monkeypatch.setattr(lambda_port, "concurrency_guard", lambda ev: {"busy": True, "blocking": "x"})
     assert lambda_port.lambda_handler({"mode": "guard"}, None) == {"busy": True, "blocking": "x"}
+
+
+def test_dou_saturation_bands_by_missing_days(monkeypatch):
+    # #199: ≤ 3 unfetched days → warning; more → error
+    from src.ingest import dou as _dou
+    from src.ingest import source_health as sh
+
+    sh.reset()
+    monkeypatch.setattr(_dou, "LAST_STATS", {"queries": 1, "pages": 4, "split": [{"term": "BB"}],
+                                             "saturated": [{"term": "BB", "missing_days": 3}]})
+    lambda_port._dou_with_stats([])
+    rec = sh.ledger()["DOU saturation"]
+    assert rec["last_error"] is None and "BB" in rec["last_warning"]
+    assert rec["metrics"]["missing_days"] == {"BB": 3} and rec["metrics"]["split_terms"] == ["BB"]
+    sh.reset()
+    monkeypatch.setattr(_dou, "LAST_STATS", {"saturated": [{"term": "BB", "missing_days": 9}]})
+    lambda_port._dou_with_stats([])
+    assert sh.ledger()["DOU saturation"]["last_error"] == "1 saturated: BB"

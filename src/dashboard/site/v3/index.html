@@ -1421,7 +1421,7 @@ function sourceRunsChart(list) {
   const blbl = { ok: "ok", warn: "atenção", stale: "defasada", error: "erro", never_ok: "sem sucesso" };
   return `<div class="chart">` + list.slice(0, 16).map(s => `<div class="cov" style="padding:5px 0">
     <span class="dot ${bmap[s.band] || "gap"}"></span><span class="cl" style="min-width:150px" title="${U.esc(s.source)}">${U.esc(s.source)}</span>
-    <span class="meta" style="flex:1" title="${U.esc(s.last_error || "")}">${s.last_error ? U.esc(String(s.last_error).slice(0, 40)) : (blbl[s.band] || s.band)}</span>
+    <span class="meta" style="flex:1" title="${U.esc(s.last_error || s.last_warning || "")}">${(s.last_error || s.last_warning) ? U.esc(String(s.last_error || s.last_warning).slice(0, 40)) : (blbl[s.band] || s.band)}</span>
     <span class="cv">${s.staleness_days == null ? "—" : s.staleness_days + "d"}</span></div>`).join("") + `</div>`;
 }
 function pricingBadge(p) {
