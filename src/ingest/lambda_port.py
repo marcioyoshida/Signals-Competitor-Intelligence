@@ -568,6 +568,26 @@ def _write_news_digest(slice_: dict[str, Any], context: Any) -> dict[str, Any]:
 
 
 
+_OFFICIAL_ACT_FIELDS = ("id", "source", "kind", "organ", "doc_type", "title", "date", "url",
+                        "industries", "compliance_tags", "severity", "severity_reason")
+
+
+def _official_acts(records: list[dict[str, Any]]) -> dict[str, Any]:
+    """#198: compact, uncapped list of new official acts rated medium+ with a classification."""
+    acts: dict[str, dict[str, Any]] = {}
+    for r in records:
+        if not isinstance(r, dict) or not r.get("id") or r.get("kind") != "regulatory":
+            continue
+        if str(r.get("severity") or "").lower() not in ("medium", "high", "critical"):
+            continue
+        if not (r.get("industries") or r.get("compliance_tags")):
+            continue
+        a = {f: r.get(f) for f in _OFFICIAL_ACT_FIELDS if r.get(f) is not None}
+        a["text"] = str(r.get("text") or r.get("subject") or "")[:1500]
+        acts.setdefault(str(r["id"]), a)
+    return {"count": len(acts), "acts": list(acts.values())}
+
+
 # Step Functions caps a task result at 256 KB even with result_path=DISCARD
 # (States.DataLimitExceeded). A failed attempt has already committed the seen-state, so the
 # retry saw 0 new items and the run's new acts never reached a digest (2026-09-27, #188–#195
@@ -1725,6 +1745,10 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         "sec_filings": _lens_section(sec_filings_rows, new_sec, registry.by_id("sec_filings")),
         # CVM ofertas status changes (#194, audit R5 B3) — categorical diff, not a registry-loop
         # source (it re-diffs the "ofertas" fetch above rather than fetching independently).
+        # #198: EVERY new classified official act (medium+), uncapped and compact — the lens
+        # sections above keep only items_limit, so the 11th+ act of a busy DOU week (LC 237)
+        # never reached synth. Key "acts" (not items/context) so lens consumers ignore it.
+        "official_acts": _official_acts(new_dou + new_cvm_normas + new_normativos),
         "cvm_ofertas_status": {
             "count": len(new_ofertas_status),
             "new_count": len(new_ofertas_status),

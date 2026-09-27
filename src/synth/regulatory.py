@@ -90,7 +90,20 @@ _INSTRUMENTS = [
     # reg-lifecycle + change-record + "Mudança regulatória" treatment.
     ("res-cnsp", "Resolução CNSP {n}", re.compile(r"resolucao\s+cnsp\s*(?:n[o]?\s*)?[:\s]*" + _NUM)),
     ("circ-susep", "Circular SUSEP {n}", re.compile(r"circular\s+susep\s*(?:n[o]?\s*)?[:\s]*" + _NUM)),
+    # #198: SUSEP/PREVIC/CNPC/ANS normative acts (the DOU topic scopes of #189 fetch them)
+    ("res-susep", "Resolução SUSEP {n}", re.compile(r"resolucao\s+susep\s*(?:n[o]?\s*)?[:\s]*" + _NUM)),
+    ("port-previc", "Portaria PREVIC {n}", re.compile(r"portaria\s+previc\s*(?:n[o]?\s*)?[:\s]*" + _NUM)),
+    ("res-previc", "Resolução PREVIC {n}", re.compile(r"resolucao\s+previc\s*(?:n[o]?\s*)?[:\s]*" + _NUM)),
+    ("res-cnpc", "Resolução CNPC {n}", re.compile(r"resolucao\s+cnpc\s*(?:n[o]?\s*)?[:\s]*" + _NUM)),
+    ("rn-ans", "Resolução Normativa ANS {n}",
+     re.compile(r"resolucao\s+normativa\s+ans\s*(?:n[o]?\s*)?[:\s]*" + _NUM)),
     ("circ", "Circular BCB {n}", re.compile(r"circular\s+(?:bcb\s+)?" + _NUM)),
+]
+# #198: laws are threaded only as an act's OWN instrument (act intake), never as a mention in
+# a narrative — "Lei nº 8.668" is cited by half the fund corpus and is not news.
+_OWN_ONLY_INSTRUMENTS = [
+    ("lc", "Lei Complementar {n}", re.compile(r"^lei\s+complementar\s*(?:n[o]?\s*)?[:\s]*" + _NUM)),
+    ("lei", "Lei {n}", re.compile(r"^lei\s*(?:n[o]?\s*)?[:\s]*" + _NUM)),
 ]
 _PIX_REGULAMENTO = re.compile(r"(manual de padroes[^.]{0,40}pix|regulamento do pix)")
 _PIX_VERSION = re.compile(r"vers[aã]o\s*([\d.]+)")
@@ -137,10 +150,12 @@ _DOMAINS = [
 _DOMAIN_PATS = [(label, [re.compile(p) for p in pats]) for label, pats in _DOMAINS]
 
 
-def _mentions(text: str, *, include_comunicados: bool) -> list[tuple[str, str, int, int]]:
-    """Every instrument mention as (key, display_label, start, end) on normalized text."""
+def _mentions(text: str, *, include_comunicados: bool,
+              own_only: bool = False) -> list[tuple[str, str, int, int]]:
+    """Every instrument mention as (key, display_label, start, end) on normalized text.
+    ``own_only`` adds the patterns valid only for an act's own name (laws, #198)."""
     out: list[tuple[str, str, int, int]] = []
-    for prefix, disp_t, rx in _INSTRUMENTS:
+    for prefix, disp_t, rx in _INSTRUMENTS + (_OWN_ONLY_INSTRUMENTS if own_only else []):
         for m in rx.finditer(text):
             num = _num(m.group(1))
             out.append((f"{prefix}-{num}", disp_t.format(n=num), m.start(), m.end()))
@@ -169,7 +184,7 @@ def instruments_in(narrative: dict[str, Any], *, include_comunicados: bool = Fal
 def own_instrument(ref: Any) -> str | None:
     """The instrument key an act IS, from its own name ("RESOLUÇÃO BCB Nº 589, DE …" /
     "Resolução BCB 589") — the first instrument mention in it, or None."""
-    ms = _mentions(_norm(str(ref or "")), include_comunicados=True)
+    ms = _mentions(_norm(str(ref or "")).strip(), include_comunicados=True, own_only=True)
     return min(ms, key=lambda m: m[2])[0] if ms else None
 
 
@@ -288,7 +303,13 @@ def threads(narratives: list[dict[str, Any]], *, as_of: str, recency: int,
             continue
         raw = n.get("narrative") or ""
         norm = _norm(raw)
-        mentions = _mentions(norm, include_comunicados=include_comunicados)
+        if n.get("act_intake"):
+            # #198: an act thread is about the act itself — not every instrument it cites
+            own = n.get("instrument_key")
+            mentions = [m for m in _mentions(norm, include_comunicados=True, own_only=True)
+                        if m[0] == own][:1]
+        else:
+            mentions = _mentions(norm, include_comunicados=include_comunicados)
         acts = _acts_by_instrument(n)
         seen_here: set[str] = set()
         for key, disp, start, end in mentions:
@@ -877,6 +898,122 @@ def publish_lifecycles(lifecycles: dict[str, dict[str, Any]], bucket: str, *,
     return len(cards)
 
 
+# --- #198: direct intake of classified official acts ---------------------------------------
+# Instrument threads used to come only out of entity narratives, so a sector-wide act that
+# names no company (Res. Susep 96, Portaria Previc 728, LC 237) never became a card. Official
+# acts classified at ingest (federal_acts: severity + industries) are kept in a durable store,
+# accumulated across runs like sector_events (a digest only holds one run), and each one
+# becomes an "act-intake" pseudo-narrative that threads ONLY its own instrument.
+REG_ACTS_KEY = "reg_acts/index.json"
+ACT_INTAKE_SEVERITIES = ("medium", "high", "critical")
+_SEV_SCORE = {"medium": 0.4, "high": 0.6, "critical": 0.8}
+_ACT_FIELDS = ("id", "source", "organ", "doc_type", "title", "subject", "date", "url",
+               "industries", "compliance_tags", "severity", "severity_reason")
+
+
+def _digest_items(digest: dict[str, Any] | None) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for key, section in (digest or {}).items():
+        if key == "news" or not isinstance(section, dict):
+            continue
+        for it in ((section.get("items") or []) + (section.get("context") or [])
+                   + (section.get("acts") or [])):   # "official_acts" (#198)
+            if isinstance(it, dict):
+                out.append(it)
+    return out
+
+
+def acts_from_digest(digest: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Official acts worth a radar card: ``kind=regulatory``, severity ≥ medium, classified
+    to ≥1 industry or a compliance tag, and named as a known instrument."""
+    out: dict[str, dict[str, Any]] = {}
+    for it in _digest_items(digest):
+        if it.get("kind") != "regulatory" or it.get("query_kind") == "sector":
+            continue
+        if str(it.get("severity") or "").lower() not in ACT_INTAKE_SEVERITIES:
+            continue
+        if not (it.get("industries") or it.get("compliance_tags")):
+            continue
+        key = own_instrument(it.get("title"))
+        if not key or not it.get("id"):
+            continue
+        rec = {f: it.get(f) for f in _ACT_FIELDS if it.get(f) is not None}
+        rec["text"] = str(it.get("text") or "")[:1500]
+        rec["instrument_key"] = key
+        out.setdefault(str(it["id"]), rec)
+    return list(out.values())
+
+
+def merge_acts(store: dict[str, Any] | None, acts: list[dict[str, Any]], *, as_of: str,
+               window: int) -> dict[str, Any]:
+    """Fold this run's acts into the store (first-seen kept); drop acts older than ``window``."""
+    known = dict((store or {}).get("acts") or {})
+    for a in acts:
+        prev = known.get(a["id"])
+        known[a["id"]] = {**a, "first_seen": (prev or {}).get("first_seen") or as_of}
+    keep = {}
+    for i, a in known.items():
+        gap = _days_between(as_of, str(a.get("date") or a.get("first_seen") or "")[:10])
+        if gap is not None and 0 <= gap <= window:
+            keep[i] = a
+    return {"as_of": as_of, "acts": keep}
+
+
+def act_narratives(store: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Pseudo-narratives for :func:`threads` — one per stored act, dated by publication."""
+    out: list[dict[str, Any]] = []
+    for a in ((store or {}).get("acts") or {}).values():
+        title = str(a.get("title") or "").strip()
+        body = str(a.get("text") or "")
+        if body.upper().startswith(title.upper()):
+            body = body[len(title):].strip()
+        date = str(a.get("date") or a.get("first_seen") or "")[:10]
+        out.append({
+            "id": f"act-{a['id']}",
+            "act_intake": True,
+            "instrument_key": a.get("instrument_key"),
+            "narrative": f"{title}. {body}".strip(),
+            "run_date": date,
+            "threat_score": _SEV_SCORE.get(str(a.get("severity") or "").lower(), 0.4),
+            "severity": a.get("severity"),
+            "citations": ([{"url": a["url"], "title": title, "source": a.get("source") or "DOU"}]
+                          if a.get("url") else []),
+            "source_ids": [a["id"]],
+            "source_acts": [{"ref": title, "industries": a.get("industries") or [],
+                             "compliance_tags": a.get("compliance_tags") or [],
+                             "severity": a.get("severity")}],
+        })
+    return out
+
+
+def load_acts(bucket: str, s3: Any) -> dict[str, Any]:
+    try:
+        return json.loads(s3.get_object(Bucket=bucket, Key=REG_ACTS_KEY)["Body"].read())
+    except Exception as exc:
+        if "NoSuchKey" not in str(exc) and "Not Found" not in str(exc):
+            print(f"Warning: reg_acts store unreadable, not overwriting: {exc}")
+            return {"unreadable": True}
+        return {}
+
+
+def update_acts(bucket: str, s3: Any, *, as_of: str, window: int) -> dict[str, Any]:
+    """Load the store, fold in the latest digest's acts, publish. Never overwrites an
+    unreadable store (a transient read error must not wipe the accumulated acts)."""
+    from src.synth import digest_io
+
+    store = load_acts(bucket, s3)
+    if store.get("unreadable"):
+        return {}
+    digest = digest_io.load_latest_digest_from_s3(bucket)
+    store = merge_acts(store, acts_from_digest(digest), as_of=as_of, window=window)
+    try:
+        s3.put_object(Bucket=bucket, Key=REG_ACTS_KEY, ContentType="application/json",
+                      Body=json.dumps(store, ensure_ascii=False).encode("utf-8"))
+    except Exception as exc:  # pragma: no cover
+        print(f"Warning: reg_acts publish failed: {exc}")
+    return store
+
+
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """Load recent history, emit regulatory-instrument radar narratives."""
     digests_bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
@@ -888,6 +1025,10 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     run_date = run_date_today()
 
     recent = feature_store.load_history(digests_bucket, window_days, s3=s3)
+    # #198: + one pseudo-narrative per classified official act (sector-wide, entity-less)
+    acts_store = update_acts(digests_bucket, s3, as_of=run_date,
+                             window=int(_f("ONCA_REG_RECENCY_DAYS", RECENCY_DAYS)))
+    recent = recent + act_narratives(acts_store)
     cands = nominate(recent, as_of=run_date)
 
     # ADR 009 §3: rate changes with a bounded LLM (labeled inference). Gated OFF by default
