@@ -281,7 +281,18 @@ function renderMobileUsage() {
     `<th>tablet</th><th>desktop</th><th>% celular</th><th>app instalado</th><th>instalações</th><th>por oficial (cel/total)</th></tr></thead>` +
     `<tbody>${rows}</tbody></table></div>` +
     `<div style="margin-top:var(--s3)"><span class="overline">No celular</span> ${jobs || '<span class="sub">—</span>'}</div>` +
-    `<p class="sub" style="margin-top:var(--s2)">${U.esc(g.note || "")}</p>`;
+    `<p class="sub" style="margin-top:var(--s2)">${U.esc(g.note || "")}</p>` + pushStats(mu.push);
+}
+// #167: push delivery is reported honestly — sent / accepted by the push service / failed /
+// pruned (expired subscription) / opened, per day.
+function pushStats(ps) {
+  if (!ps) return "";
+  const rows = (ps.days || []).slice(0, 14).map(d => `<tr><td>${U.esc(d.date)}</td><td>${d.sent || 0}</td>` +
+    `<td>${d.delivered || 0}</td><td>${d.failed || 0}</td><td>${d.pruned || 0}</td><td>${d.opened || 0}</td></tr>`).join("");
+  return `<div style="margin-top:var(--s3)"><span class="overline">Alertas push · ${ps.subscriptions || 0} aparelho(s) inscrito(s)</span>` +
+    (rows ? `<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>dia</th><th>enviados</th><th>aceitos</th>` +
+      `<th>falhas</th><th>removidos</th><th>abertos</th></tr></thead><tbody>${rows}</tbody></table></div>`
+      : `<p class="sub">Nenhum envio ainda.</p>`) + `</div>`;
 }
 
 // #14 — the discovery/coverage asset: CVM/BCB regulated-segment coverage (roster-synced

@@ -1240,6 +1240,7 @@ class OncaPrototypeStack(Stack):
                 "/pricing.html",  # G5 (#113): public, unauthenticated
                 "/sample/index.html",  # E2 (#154): public conversion sample
                 "/docs/index.html",  # E3 (#155): public Entry getting-started guide
+                "/docs/celular-seguranca.html",  # #164: public mobile security answers
                 # v2 multi-context dashboards (six clean routes + shared assets).
                 "/v2/admin/index.html",
                 "/v2/newentry/index.html",
@@ -2533,6 +2534,69 @@ class OncaPrototypeStack(Stack):
         for _spath in ("/api/session/exchange", "/api/session/refresh", "/api/session/logout"):
             auth_api.add_routes(path=_spath, methods=[apigwv2.HttpMethod.POST],
                                 integration=_session_integ)
+        # #167 content-free push alerts. The VAPID private key is a SecureString created out of
+        # band (never in the template): `/onca/push/vapid-private`, base64url(32-byte scalar) —
+        # src/dashboard/webpush.generate_private_key(). Subscriptions + per-day counters live here.
+        push_table = dynamodb.Table(
+            self,
+            "OncaPushTable",
+            partition_key=dynamodb.Attribute(name="pk", type=dynamodb.AttributeType.STRING),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.RETAIN,
+        )
+        _vapid_param = "/onca/push/vapid-private"
+        _vapid_arn = f"arn:aws:ssm:{self.region}:{self.account}:parameter{_vapid_param}"
+        _push_env = {
+            "PYTHONPATH": "/var/task",
+            "ONCA_PUSH_TABLE": push_table.table_name,
+            "ONCA_VAPID_PARAM": _vapid_param,
+            "ONCA_TENANT_CONFIG_TABLE": tenant_config_table.table_name,
+        }
+        push_api_fn = lambda_.Function(
+            self,
+            "OncaPushApi",
+            runtime=LAMBDA_RUNTIME,
+            handler="src.dashboard.push.api_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.seconds(15),
+            memory_size=256,
+            environment=_push_env,
+        )
+        push_notifier_fn = lambda_.Function(
+            self,
+            "OncaPushNotifier",
+            runtime=LAMBDA_RUNTIME,
+            handler="src.dashboard.push.notifier_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.minutes(5),
+            memory_size=1024,
+            environment={**_push_env, "ONCA_SITE_BUCKET": site_bucket.bucket_name},
+        )
+        for _fn in (push_api_fn, push_notifier_fn):
+            push_table.grant_read_write_data(_fn)
+            tenant_config_table.grant_read_data(_fn)   # subscriber scope = /api/feed's scope
+            _fn.add_to_role_policy(iam.PolicyStatement(actions=["ssm:GetParameter"], resources=[_vapid_arn]))
+        site_bucket.grant_read(push_notifier_fn)
+        _push_integ = apigwv2_int.HttpLambdaIntegration("PushInteg", push_api_fn)
+        auth_api.add_routes(path="/api/me/push", methods=[apigwv2.HttpMethod.GET],
+                            integration=_push_integ, authorizer=jwt_authorizer)
+        for _ppath in ("/api/me/push/subscribe", "/api/me/push/unsubscribe"):
+            auth_api.add_routes(path=_ppath, methods=[apigwv2.HttpMethod.POST],
+                                integration=_push_integ, authorizer=jwt_authorizer)
+        # the service worker's routes: no JWT (a worker has no token) — the subscription endpoint
+        # URL is the capability, and all they reveal is a COUNT
+        for _ppath in ("/api/push/pending", "/api/push/opened"):
+            auth_api.add_routes(path=_ppath, methods=[apigwv2.HttpMethod.POST], integration=_push_integ)
+        # hourly 07:05–20:05 BRT (10–23 UTC): quiet hours default 21–07 BRT, so a morning run's
+        # alerts go out at 07:05, not at the 06:45 pipeline run
+        events.Rule(
+            self,
+            "OncaPushNotifierHourly",
+            schedule=events.Schedule.cron(minute="5", hour="10-23"),
+        ).add_target(targets.LambdaFunction(push_notifier_fn, retry_attempts=0))
+        feed_fn.add_environment("ONCA_PUSH_TABLE", push_table.table_name)
+        push_table.grant_read_data(feed_fn)   # #167 operator counters in feed.mobile_usage.push
+
         # #164 remote sign-out: the operator act `revoke_user_sessions`
         act_fn.add_environment("ONCA_USER_POOL_ID", user_pool.user_pool_id)
         act_fn.add_to_role_policy(iam.PolicyStatement(
@@ -2775,7 +2839,8 @@ class OncaPrototypeStack(Stack):
         # below — CloudFront matches behaviors by INSERTION ORDER, not specificity, so
         # losing this position would silently route curation calls to the review action.
         _api_patterns = ["/api/ask*", "/api/gaps*", "/api/feed*", "/api/registry*",
-                          "/api/v1/agent*", "/api/keys*", "/api/me/*", "/api/session/*"]
+                          "/api/v1/agent*", "/api/keys*", "/api/me/*", "/api/session/*",
+                          "/api/push/*"]
         if google_idp:
             _api_patterns.append("/api/register*")
         for _pat in _api_patterns:

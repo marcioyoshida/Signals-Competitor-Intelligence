@@ -128,6 +128,15 @@
   // prefs ("onca_u_*" keys), the device-session marker. Called on logout AND when the
   // server says the session is over (idle limit, operator remote sign-out).
   async function clearUserData() {
+    // #167: this device stops receiving the user's pushes (the server prunes the now-dead
+    // subscription at its next send; logout also deletes it server-side first)
+    try {
+      if (global.navigator && navigator.serviceWorker) {
+        const reg = await navigator.serviceWorker.getRegistration("/exec");
+        const ps = reg && reg.pushManager ? await reg.pushManager.getSubscription() : null;
+        if (ps) await ps.unsubscribe();
+      }
+    } catch (e) {}
     try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) {}
     try {
       Object.keys(localStorage).filter((k) => k.indexOf("onca_u_") === 0)
@@ -173,6 +182,7 @@
     return _refreshing;
   }
   async function logout() {
+    try { if (global.__oncaBeforeLogout) await global.__oncaBeforeLogout(); } catch (e) {}
     try { await sessionPost("logout"); } catch (e) {}
     await clearUserData();
     const params = new URLSearchParams({ client_id: AUTH.clientId, logout_uri: AUTH.redirectUri });

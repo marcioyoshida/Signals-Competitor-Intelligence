@@ -14,9 +14,11 @@ Bedrock foundation models used for synthesis.
 | Entities registry | Curated per-entity record: identity, aliases, industry, ownership, classification, provenance | DynamoDB `OncaEntitiesTable` | No TTL. PITR + deletion protection enabled. Kept indefinitely — this is the commercial asset (ADR 002) |
 | Curation log | Append-only journal of every registry mutation | DynamoDB `OncaCurationLog` | No TTL. PITR + deletion protection. Append-only, kept indefinitely — it *is* the audit trail (ADR 018) |
 | Tenant entitlement | `{tenant_id: tier, modules[]}` | DynamoDB `OncaTenantConfig` | No TTL. PITR + deletion protection. Defines the per-tenant read boundary (ADR 016) |
-| Decision log & engagement telemetry | Officer decisions and card-level engagement events | Items inside `OncaEntitiesTable` — **not** separate tables | No TTL; inherits the entities table's retention. See gap below on tenant scoping |
+| Decision log & engagement telemetry | Officer decisions and card-level engagement events; since #161/#165 each carries the verified `tenant` and a device CLASS (phone/tablet/desktop — never a user agent) | Items inside `OncaEntitiesTable` — **not** separate tables | No TTL; inherits the entities table's retention. See gap below on tenant scoping |
 | Dashboard site | Built static site + `feed.json` copies | S3 (CloudFront origin) | Rebuilt on every deploy, public-access-blocked, TLS-enforced |
 | Identity | Login accounts, `custom:tenant`/`custom:tier` claims | Amazon Cognito | Retained across stack updates. No password ever touches Onça code — Cognito Hosted-UI/PKCE |
+| Push subscriptions (#167) | Per device: push-service endpoint URL, user id, tenant, officer, alert-type prefs, ids of already-notified events, per-day send/delivered/opened counters. **No finding content** | DynamoDB `OncaPushTable` | Until the user disables alerts, logs out, loses entitlement, or the push service reports the endpoint gone (then pruned) |
+| On the officer's phone (#162/#164) | App shell (no data); the user's own last-loaded scoped feed (offline copy, keyed by user); a session marker (user id + last activity, no token); per-user "last visit" per officer | Browser Cache Storage / `localStorage` on the device | Replaced on every load; wiped on logout or when the server ends the session (idle limit, remote sign-out). The refresh token is an HttpOnly cookie on `/api/session`, never readable by script |
 
 ## Backup / recovery posture
 

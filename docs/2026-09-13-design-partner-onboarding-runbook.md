@@ -79,6 +79,11 @@ python scripts/provision_tenant.py put <tenant-id> saas <module1> <module2> \
 - Confirm the sector picker shows **only** the licensed module(s) — not the full
   17-sector list. If it shows everything, stop and see the read-boundary failure
   mode below before letting the buyer continue.
+- On a phone, `/exec` installs as an app (Add to Home Screen / install prompt) and needs no
+  shared password. For the buyer's InfoSec questionnaire, send the public page
+  [`/docs/celular-seguranca.html`](https://onssa.org/docs/celular-seguranca.html) — sessions,
+  what stays on the device, content-free alerts, remote sign-out (#164). To set a stricter idle
+  limit, put `session_idle_days` (1–30) on the tenant's `OncaTenantConfig` row.
 - Confirm `?admin=1` is **not** how the buyer is accessing the dashboard — that
   query param is the operator/curator full-feed bypass (still behind shared
   basic-auth), never a customer-facing link.

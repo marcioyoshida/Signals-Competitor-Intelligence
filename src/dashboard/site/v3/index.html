@@ -1920,6 +1920,8 @@ function renderHoje(el) {
     const ev = ((((EX.cpo || {}).panels || {}).product_radar) || DATA.product_radar || {});
     html += hojeSec("hoje-radar", "Radar de produto", null, "mais recente", rowsRadar({ ...ev, events: (ev.events || []).slice(0, 3) }));
   }
+  html += hojeSec("hoje-alertas-cel", "Alertas no celular", null, "sem conteúdo na tela bloqueada",
+    `<div class="pushbox" id="pushBox"><span class="hd-note">verificando…</span></div>`);
   html += `<a href="#painel" class="btn hoje-act" id="hojeFull">Ver painel completo →</a>`;
   el.innerHTML = `<div class="hoje">${html}</div>`;
   engage("hoje", "open", null);
@@ -1929,9 +1931,86 @@ function renderHoje(el) {
     const u = row.getAttribute("data-url") || row.getAttribute("data-href"); if (u) window.open(u, "_blank", "noopener"); }));
   el.querySelectorAll(".traj-f button[data-tv]").forEach(b => b.addEventListener("click", () => askConfirm(b, captureTraj)));
   document.getElementById("hojeFull").addEventListener("click", (e) => { e.preventDefault(); setView("painel"); render(); window.scrollTo(0, 0); });
+  renderPushBox();
   const m = (location.hash || "").match(/^#(hoje-[a-z]+)/);
   if (m) { const t = document.getElementById(m[1]); if (t) t.scrollIntoView({ block: "start" }); }
 }
+
+// --- #167 content-free push: opt-in per device, per alert type ------------------------------
+// The notification never carries a finding ("Novo alerta no seu painel Onça" + a count); the
+// finding shows only after the app opens. iOS needs 16.4+ AND the app installed to the home screen.
+const PUSH_TYPE_PT = { radar: "radar de produto (instabilidade/reclamações)", distress: "estresse financeiro / RJ",
+                       regulatory: "mudança regulatória material" };
+const PUSH_DEFAULT = { cso: ["radar", "distress", "regulatory"], cpo: ["radar"], cco: ["distress"], cro: ["regulatory"] };
+function pushSupported() { return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window; }
+function b64uBytes(s) {
+  const b = atob((s + "=".repeat((4 - s.length % 4) % 4)).replace(/-/g, "+").replace(/_/g, "/"));
+  return Uint8Array.from(b, c => c.charCodeAt(0));
+}
+async function pushSub() {
+  const reg = await navigator.serviceWorker.getRegistration("/exec");
+  return reg ? reg.pushManager.getSubscription() : null;
+}
+async function pushApi(path, body, method) {
+  await Ctx.ensureSession();
+  const r = await fetch(path, { method: method || "POST", cache: "no-store",
+    headers: { "content-type": "application/json", authorization: `Bearer ${Ctx.getIdToken() || ""}` },
+    body: body ? JSON.stringify(body) : undefined });
+  return r.ok ? r.json() : Promise.reject(new Error("HTTP " + r.status));
+}
+async function renderPushBox(note) {
+  const box = document.getElementById("pushBox"); if (!box || ADMIN) { if (box) box.innerHTML = ""; return; }
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
+  if (!pushSupported()) {
+    box.innerHTML = `<p class="hd-note">${ios && !isStandalone() ? "No iPhone, instale o app (Compartilhar → Adicionar à Tela de Início) para receber alertas." : "Este navegador não suporta alertas."}</p>`;
+    return;
+  }
+  const sub = await pushSub().catch(() => null);
+  let state = null;
+  if (sub) { try { state = await pushApi(`/api/me/push?endpoint=${encodeURIComponent(sub.endpoint)}`, null, "GET"); } catch (e) {} }
+  const on = !!(sub && state && state.subscribed);
+  const types = (on && state.prefs && state.prefs.types) || PUSH_DEFAULT[OFFICER] || PUSH_DEFAULT.cso;
+  box.innerHTML = `<div style="padding:0 var(--s3) var(--s3)">
+    ${Object.keys(PUSH_TYPE_PT).map(t => `<label class="cvsub" style="display:flex;gap:var(--s2);align-items:center;min-height:44px">
+      <input type="checkbox" class="ptype" value="${t}" ${types.indexOf(t) !== -1 ? "checked" : ""}> ${U.esc(PUSH_TYPE_PT[t])}</label>`).join("")}
+    <p class="hd-note">Silêncio 21h–7h · no máximo 3 por dia (o excedente vira um só aviso).</p>
+    <button class="btn ${on ? "" : "btn--primary"} hoje-act" id="pushToggle" type="button">${on ? "Desativar alertas neste aparelho" : "Ativar alertas neste aparelho"}</button>
+    ${on ? `<button class="btn hoje-act" id="pushSave" type="button">Salvar tipos</button>` : ""}
+    <span class="hd-note" id="pushMsg">${U.esc(note || "")}</span></div>`;
+  const msg = (t) => { const e = document.getElementById("pushMsg"); if (e) e.textContent = t; };
+  const chosen = () => [...box.querySelectorAll(".ptype:checked")].map(x => x.value);
+  document.getElementById("pushToggle").onclick = async () => {
+    let note = "";
+    try {
+      if (on) { await disablePush(); note = "alertas desativados"; }
+      else {
+        if (await Notification.requestPermission() !== "granted") { msg("permissão negada no aparelho"); return; }
+        const reg = await navigator.serviceWorker.ready;
+        const cfg = await pushApi("/api/me/push", null, "GET");
+        const ps = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uBytes(cfg.public_key) });
+        await pushApi("/api/me/push/subscribe", { subscription: ps.toJSON(), officer: OFFICER, prefs: { types: chosen() } });
+        engage("push", "open", null);
+        note = "alertas ativados";
+      }
+    } catch (e) { note = "não foi possível ativar neste navegador (" + (e.message || e) + ")"; }
+    renderPushBox(note);
+  };
+  const save = document.getElementById("pushSave");
+  if (save) save.onclick = async () => {
+    try { await pushApi("/api/me/push/subscribe", { subscription: sub.toJSON(), officer: OFFICER, prefs: { types: chosen() } }); msg("tipos salvos"); }
+    catch (e) { msg("falha ao salvar"); }
+  };
+}
+async function disablePush() {
+  const sub = await pushSub().catch(() => null);
+  if (!sub) return;
+  try { await pushApi("/api/me/push/unsubscribe", { endpoint: sub.endpoint }); } catch (e) {}
+  try { await sub.unsubscribe(); } catch (e) {}
+}
+window.__oncaBeforeLogout = disablePush;   // #167: logout removes this device's subscription
+if (navigator.serviceWorker) navigator.serviceWorker.addEventListener("message", (e) => {
+  if (e.data && e.data.type === "onca-open") { setView("hoje"); location.hash = "#hoje-alertas"; render(); }
+});
 
 // --- #168 decisions from the phone: a second tap + optional note, idempotent, online-only ---
 // A decision is append-only (irreversible), so every Aprovar/Rejeitar asks for confirmation. The

@@ -4,7 +4,7 @@ The #128 matrix measures one page (/exec, default officer) at 480px. Real phones
 (390 iPhone 13–15, 412 common Android), and three overflow bugs were found BY HAND on
 2026-09-26 on views the matrix never opens (an officer tab, /v2/admin). This check walks:
 
-    pages  : /exec × each officer tab (cso/cro/cco/cpo), /v2/admin, /entry/
+    pages  : /exec × {Hoje, Painel} × each officer tab (cso/cro/cco/cpo), /v2/admin, /entry/
     widths : 390×844, 412×915   (touch, mobile UA metrics)
     themes : light, dark
 
@@ -128,16 +128,18 @@ def run(event: dict) -> dict:
             page.set_viewport_size(vp)
             for theme in THEMES:
                 page.evaluate("([k, t]) => localStorage.setItem(k, t)", [THEME_KEY, theme])
-                for officer in OFFICERS:
-                    _goto(page, f"{site}/exec")
-                    page.evaluate("(o) => { const a = document.querySelector(`#officerTabs a[data-officer=\"${o}\"]`); if (a) a.click(); }", officer)
-                    page.wait_for_timeout(500)
-                    _settle(page)
-                    _measure(page, f"/exec[{officer}]@{wkey}/{theme}", c, taps=True)
-                    if theme == "dark" and wkey == "390":
-                        path = f"/tmp/phone-exec-{officer}.png"
-                        page.screenshot(path=path)
-                        shots.append(path)
+                # #166: phones open on "Hoje"; the full board ("Painel") must stay usable too
+                for view in ("hoje", "painel"):
+                    for officer in OFFICERS:
+                        _goto(page, f"{site}/exec#{view}")
+                        page.evaluate("(o) => { const a = document.querySelector(`#officerTabs a[data-officer=\"${o}\"]`); if (a) a.click(); }", officer)
+                        page.wait_for_timeout(500)
+                        _settle(page)
+                        _measure(page, f"/exec#{view}[{officer}]@{wkey}/{theme}", c, taps=True)
+                        if theme == "dark" and wkey == "390":
+                            path = f"/tmp/phone-exec-{view}-{officer}.png"
+                            page.screenshot(path=path)
+                            shots.append(path)
                 # /v2/admin in its real operator view (?admin=1&opkey=) — that's where the badge
                 # overflow lived; without the key it only renders the login gate
                 for path_, qs in (("/v2/admin/", f"?admin=1&opkey={config.operator_secret()}"),

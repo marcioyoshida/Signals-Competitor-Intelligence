@@ -10,7 +10,7 @@
      "onca-user-feed" cache keyed by the user's sub and wipes it on logout.
    Push (#167) is handled below: payload-free — the lock screen never carries content. */
 "use strict";
-const SHELL_VERSION = "exec-shell-v1";
+const SHELL_VERSION = "exec-shell-v2";
 const SHELL = ["/exec", "/v2/app.css", "/v2/app.js", "/v2/context.js",
   "/v3/manifest.webmanifest", "/v3/icons/icon-192.png", "/v3/icons/apple-touch-icon.png"];
 
@@ -74,6 +74,10 @@ self.addEventListener("push", (e) => {
 self.addEventListener("notificationclick", (e) => {
   e.notification.close();
   const target = (e.notification.data && e.notification.data.target) || "/exec#hoje";
+  // opened-count for the operator view (by the opaque endpoint; no content involved)
+  self.registration.pushManager.getSubscription().then((sub) => sub && fetch("/api/push/opened", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ endpoint: sub.endpoint }) })).catch(() => {});
   e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((wins) => {
     for (const w of wins) {
       if (new URL(w.url).pathname.indexOf("/exec") === 0 && "focus" in w) {

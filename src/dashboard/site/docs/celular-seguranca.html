@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Onça no celular — segurança</title>
+<style>
+  /* #164. Same tokens as /docs, /pricing.html and /sample — one visual system for every page a
+     stranger can reach without credentials. Every statement here is tested behaviour. */
+  :root {
+    --bg: #0e1116; --panel: #161b22; --panel2: #1d232c; --border: #2a313b;
+    --ink: #e6e9ee; --ink2: #aeb6c2; --muted: #79818c; --accent: #3fbdb6;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  header { padding: 28px 22px 10px; text-align: center; }
+  header h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: .2px; }
+  header .sub { color: var(--muted); font-size: 14px; }
+  .wrap { padding: 20px 22px 60px; max-width: 760px; margin: 0 auto; }
+  section { margin-top: 30px; }
+  h2 { font-size: 15px; color: var(--ink2); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 12px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px; }
+  dl { margin: 0; }
+  dt { font-weight: 650; margin-top: 14px; }
+  dt:first-child { margin-top: 0; }
+  dd { margin: 4px 0 0; color: var(--ink2); }
+  ul { margin: 8px 0 0; padding-left: 20px; color: var(--ink2); }
+  li { margin-bottom: 4px; }
+  code { background: var(--panel2); border-radius: 4px; padding: 1px 6px; font-size: 13px; overflow-wrap: anywhere; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--ink2); font-weight: 600; }
+  .scroll { overflow-x: auto; }
+  .foot { color: var(--muted); font-size: 12.5px; margin-top: 34px; border-top: 1px solid var(--border); padding-top: 18px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🐆 Onça no celular — segurança</h1>
+  <div class="sub">Respostas para o questionário de segurança da informação do seu banco ou seguradora</div>
+</header>
+<div class="wrap">
+
+  <section>
+    <h2>O que é</h2>
+    <div class="card">
+      A Onça no celular é o mesmo painel executivo (<code>/exec</code>) instalado como aplicativo web
+      (PWA) — o mesmo código da versão de mesa, sem app nativo, sem SDK de terceiros e sem
+      rastreadores. Cada oficial entra com a própria conta; não existe senha compartilhada.
+    </div>
+  </section>
+
+  <section>
+    <h2>Sessão e autenticação</h2>
+    <div class="card">
+      <dl>
+        <dt>Login</dt>
+        <dd>Amazon Cognito (Authorization Code + PKCE, login Google quando configurado). A Onça nunca
+          recebe nem armazena a senha.</dd>
+        <dt>Token de acesso</dt>
+        <dd>Token de identidade de <b>1 hora</b>, guardado apenas em <code>sessionStorage</code> — some ao
+          fechar o app ou a aba. Nunca em <code>localStorage</code>.</dd>
+        <dt>Renovação</dt>
+        <dd>O token de renovação fica num cookie <b>HttpOnly, Secure, SameSite=Strict</b>, restrito ao caminho
+          <code>/api/session</code>: nenhum código da página consegue lê-lo. A troca do código de login
+          acontece no servidor.</dd>
+        <dt>Inatividade</dt>
+        <dd>Sem uso por <b>7 dias</b> (padrão, configurável por cliente entre 1 e 30), a sessão expira e o
+          oficial entra de novo. Limite absoluto: 30 dias.</dd>
+        <dt>Sair</dt>
+        <dd>“Sair” revoga o token de renovação no Cognito, apaga o cookie, o token, a cópia offline do
+          painel e as preferências locais do usuário, e remove a inscrição de alertas do aparelho.</dd>
+        <dt>Desligamento remoto</dt>
+        <dd>A equipe Onça, a pedido do cliente, encerra todas as sessões de um usuário (sign-out global
+          do Cognito). Na próxima abertura, o app cai na tela de login e apaga os dados locais.</dd>
+      </dl>
+    </div>
+  </section>
+
+  <section>
+    <h2>O que fica no aparelho</h2>
+    <div class="card scroll">
+      <table>
+        <tr><th>Dado</th><th>Onde</th><th>Por quanto tempo</th></tr>
+        <tr><td>Estrutura do app (HTML/CSS/JS, ícones) — sem dados</td><td>Cache do service worker</td><td>Até a próxima versão publicada</td></tr>
+        <tr><td>Último painel carregado <b>pelo próprio usuário</b> (para leitura sem conexão)</td><td>Cache do navegador, chaveado pelo usuário</td><td>Até o próximo carregamento, “Sair” ou fim da sessão; nunca é mostrado a outro usuário</td></tr>
+        <tr><td>Marcador de sessão (id do usuário, último acesso — sem token)</td><td><code>localStorage</code></td><td>Até “Sair” ou fim da sessão</td></tr>
+        <tr><td>“Última visita” por oficial (para o resumo Hoje)</td><td><code>localStorage</code>, chaveado pelo usuário</td><td>Até “Sair”</td></tr>
+      </table>
+      <p style="color:var(--ink2)">O painel de operação (<code>?opkey</code>), respostas de API e telas de curadoria
+        <b>nunca</b> são guardados no aparelho.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Alertas (notificações)</h2>
+    <div class="card">
+      <ul>
+        <li><b>Nenhum conteúdo na tela bloqueada.</b> O texto é sempre “Novo alerta no seu painel Onça” e,
+          no máximo, a quantidade. O fato em si só aparece depois que o app abre — ou seja, depois do login.
+          A mensagem de push não tem corpo.</li>
+        <li>Opcional, por aparelho e por tipo de alerta; silêncio padrão das 21h às 7h e no máximo 3 por dia.</li>
+        <li>Disparados só pelo que já está no escopo licenciado do usuário, com o mesmo filtro do painel.</li>
+        <li>Inscrições expiradas são removidas; envios, entregas e aberturas são contados.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>Compartilhar um cartão</h2>
+    <div class="card">
+      O link compartilhado não contém nome de empresa, número nem identificador legível — só um código
+      opaco. A prévia do link é genérica (“Onça — painel executivo”). Quem recebe precisa entrar com a
+      própria conta e só vê o cartão se ele estiver no escopo da licença dela; caso contrário, “sem acesso”.
+    </div>
+  </section>
+
+  <section>
+    <h2>Medição de uso</h2>
+    <div class="card">
+      Registramos apenas a <b>classe</b> do aparelho (celular, tablet ou computador, inferida da largura da
+      tela e do tipo de toque) e se o app está instalado. Nenhum user-agent, modelo, identificador de
+      aparelho ou localização.
+    </div>
+  </section>
+
+  <section>
+    <h2>Fora do escopo hoje</h2>
+    <div class="card">
+      Distribuição por App Store / Google Play ou MDM gerenciado. Se a sua política exigir, fale com a
+      gente — é uma etapa planejada, disparada por demanda.
+    </div>
+  </section>
+
+  <div class="foot">
+    Dúvidas do seu time de segurança: <a href="mailto:contato@onssa.org">contato@onssa.org</a>.
+    Veja também o <a href="/docs/">guia do plano Entry</a>.
+  </div>
+</div>
+</body>
+</html>

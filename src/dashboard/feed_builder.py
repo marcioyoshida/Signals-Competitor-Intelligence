@@ -2022,6 +2022,9 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         try:  # #165 operator-only: phone usage by device class (the M2 store-app gate evidence)
             from src.synth import mobile_usage
             feed["mobile_usage"] = mobile_usage.build(_engagement, _decisions)
+            if os.environ.get("ONCA_PUSH_TABLE"):   # #167 send/delivered/opened counters
+                from src.dashboard import push as _push
+                feed["mobile_usage"]["push"] = _push.stats()
         except Exception as exc:  # pragma: no cover - best-effort, read-only
             print(f"Warning: mobile usage skipped: {exc}")
         feed["executive"] = executive.build_executive(feed, decisions=_decisions,

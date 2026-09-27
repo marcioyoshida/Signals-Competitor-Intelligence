@@ -24,6 +24,23 @@ never a default-open fallback.
   against the canonical industry taxonomy before being trusted, so a role group
   (`operator`/`admin`) or a typo can never resolve to a bogus module.
 
+### Sessions on the phone (#161, #164)
+
+- `/exec` (the officer suite) is **not** behind the shared edge password: each officer signs
+  in with their own Cognito account, and the page renders nothing but a login gate until a
+  verified JWT fetches the scoped feed. Only the page shell and its static assets are
+  exempt — an exact list pinned by `tests/test_edge_policy.py` (`infra/edge_policy.py`).
+- The code exchange runs server-side (`/api/session/exchange`); the refresh token lives in
+  an HttpOnly/Secure/SameSite=Strict cookie scoped to `/api/session`. Page script only ever
+  holds the 1-hour ID token, in `sessionStorage`.
+- Idle limit: the cookie's sliding `Max-Age` = the tenant's `session_idle_days` (default 7,
+  1–30); absolute cap = the 30-day Cognito refresh-token validity. Logout revokes the refresh
+  token at Cognito. The operator act `revoke_user_sessions` runs a Cognito global sign-out —
+  verified live: the installed app's next launch lands on the gate and wipes local data.
+- `/exec` writes go to `/api/me/act` (JWT): a tenant token may call only its own decision
+  capture + engagement; the tenant is stamped from the verified claim, and a decision of
+  another tenant answers 404.
+
 ## Per-tenant read boundary
 
 - `OncaTenantConfig` (DynamoDB) is the single source of truth for what a tenant is
@@ -64,7 +81,8 @@ difference in isolation *mechanism*, not just price.
 ## The coarse edge gate
 
 Every path on the shared CloudFront distribution — dashboard pages and static
-assets — additionally sits behind a single shared password checked at the edge.
+assets, except `/exec`'s own shell (above) — additionally sits behind a single shared
+password checked at the edge.
 This is a coarse perimeter control (anti-scrape, keep-random-people-off-the-internet),
 **not** a tenant boundary — it is one password shared by everyone who uses the
 product, and it never distinguishes tenants. `/pricing.html` is the one path
