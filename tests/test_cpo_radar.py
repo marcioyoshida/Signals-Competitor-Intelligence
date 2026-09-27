@@ -668,3 +668,54 @@ def test_set_product_radar_rejects_a_subject_with_nothing_to_fetch():
     with pytest.raises(ValueError):
         er.set_product_radar("nubank", {"name": "Nubank", "aliases": ["Nubank"]}, table=t)
     assert er.set_product_radar("ghost", {"apple_app_ids": [{"id": "1"}]}, table=t) is False
+
+
+# --- 2026-09-26 live fixes: flaky empty first page; per-app backfill for multi-app products --------
+
+def test_empty_first_page_is_retried_before_concluding_no_reviews(monkeypatch):
+    monkeypatch.setattr(cr, "EMPTY_RETRY_PAUSE_S", 0)
+    calls = {"p1": 0}
+
+    def flaky(url, params=None):
+        if "page=1/" in url:
+            calls["p1"] += 1
+            return {"feed": {}} if calls["p1"] == 1 else _load("appstore_rss_inter_page1.json")
+        return {"feed": {}}
+
+    new, cov = cr.pull_reviews("839711154", seen=set(), since="2026-01-01", fetch=flaky)
+    assert calls["p1"] == 2 and new and cov["stop"] == "empty"      # recovered, then page 2 ends it
+    new, cov = cr.pull_reviews("839711154", seen=set(), since="2026-01-01",
+                               fetch=lambda u, p=None: {"feed": {}})
+    assert new == [] and cov["stop"] == "empty_first_page"          # persistent → flagged, not "none"
+
+
+def test_second_app_backfills_its_own_window(tmp_path, monkeypatch):
+    import datetime as dt
+
+    monkeypatch.setattr(cr, "EMPTY_RETRY_PAUSE_S", 0)
+    page = _load("appstore_rss_inter_page1.json")
+    seen_since: dict[str, str] = {}
+    real_pull = cr.pull_reviews
+
+    def spy(app_id, *, seen, since, fetch=None, **kw):
+        seen_since[app_id] = since
+        return real_pull(app_id, seen=seen, since=since, fetch=fetch, **kw)
+
+    monkeypatch.setattr(cr, "pull_reviews", spy)
+
+    def fetch(url, params=None):
+        if "customerreviews" in url:
+            return page if ("page=1/" in url and "id=111/" in url) else {"feed": {}}
+        if "lookup" in url:
+            return {"results": [{"version": "1.0", "currentVersionReleaseDate": "2026-09-01T00:00:00Z"}]}
+        raise AssertionError(url)
+
+    subj = {"id": "bank", "name": "Bank", "aliases": ["Bank"], "search_query": "Bank", "namesake_risk": "",
+            "apple_app_ids": [{"id": "111", "name": "Main"}, {"id": "222", "name": "Side"}],
+            "youtube_channels": [], "onca_entities": ["bank"]}
+    out = cr.run(cr.LocalStore(tmp_path), today=dt.date(2026, 9, 25), subjects=[subj], fetch=fetch,
+                 yt_key=False, converse=lambda p, n: (None, {}))
+    # the side app's cold start reaches back the full window, not to the main app's newest review
+    assert seen_since["222"] == seen_since["111"]
+    cov = out["radar"]["coverage"]["bank"]
+    assert cov["appstore"]["app_id"] == "111" and set(cov["appstore_by_app"]) == {"111", "222"}

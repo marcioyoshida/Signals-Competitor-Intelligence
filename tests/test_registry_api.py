@@ -202,3 +202,23 @@ def test_writes_are_journaled_under_the_authenticated_operator(monkeypatch):
     assert api.lambda_handler(ev, None)["statusCode"] == 201
     import os
     assert os.environ["ONCA_CURATION_ACTOR"] == "ana@onca.example"
+
+
+def test_product_radar_lists_active_and_paused_subjects_read_only(monkeypatch):
+    t = _setup(monkeypatch)
+    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    eids = [e["entity_id"] for e in reg.list_entities(table=t)][:2]
+    for i, eid in enumerate(eids):
+        reg.set_product_radar(eid, {"apple_app_ids": [{"id": "81445678%d" % i, "name": "App"}],
+                                    "active": i == 0}, table=t)
+    r = api.lambda_handler(_jwt_ev("GET", "/api/registry/product_radar", groups=["operator"]), None)
+    assert r["statusCode"] == 200
+    body = json.loads(r["body"])
+    assert body["count"] == 2
+    assert {s["entity_id"]: s["active"] for s in body["subjects"]} == {eids[0]: True, eids[1]: False}
+    # writes go through /api/act's typed intents, not a raw registry verb
+    r = api.lambda_handler(_jwt_ev("POST", "/api/registry/product_radar", groups=["operator"],
+                                   body={"entity_id": eids[0]}), None)
+    assert r["statusCode"] == 405
+    r = api.lambda_handler(_jwt_ev("GET", "/api/registry/product_radar", tier="sovereign"), None)
+    assert r["statusCode"] == 403

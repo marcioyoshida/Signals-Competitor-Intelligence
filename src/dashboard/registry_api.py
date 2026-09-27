@@ -40,6 +40,8 @@ Routes (under /api/registry):
   GET    /industries               the industry taxonomy
   GET    /reviews                  pending review queue (ADR step 5)
   POST   /reviews/{id}             resolve a review ({decision, industries?})
+  GET    /product_radar            every CPO Product Radar subject, active AND paused
+                                   (#159; writes go through /api/act's typed intents)
 """
 from __future__ import annotations
 
@@ -136,7 +138,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     method = _method(event)
     segs = _segments(_path(event))
     if not segs:
-        return _resp(200, {"service": "onca-registry", "resources": ["entities", "industries", "reviews"]})
+        return _resp(200, {"service": "onca-registry", "resources": ["entities", "industries", "reviews", "product_radar"]})
 
     resource = segs[0]
     try:
@@ -146,6 +148,11 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             return _resp(200, {"industries": reg.industry_rollup()})
         if resource == "reviews":
             return _reviews(method, segs[1:], event, reg)
+        if resource == "product_radar" and not segs[1:]:
+            if method != "GET":
+                return _resp(405, {"error": "method not allowed; write via /api/act"})
+            subs = reg.list_product_radar_configs()
+            return _resp(200, {"subjects": subs, "count": len(subs)})
     except Exception as exc:  # pragma: no cover - defensive; never leak a stack
         print(f"registry_api error: {exc}")
         return _resp(500, {"error": "internal error"})

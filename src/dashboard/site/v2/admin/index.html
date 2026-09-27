@@ -6,6 +6,27 @@
 <meta name="robots" content="noindex, nofollow" />
 <title>Onça · Admin — Sala de Guerra</title>
 <link rel="stylesheet" href="/v2/app.css" />
+<style>
+  /* Radar de produto form (drawer) — page-scoped; everything else is shared app.css. */
+  .prform { display: flex; flex-direction: column; gap: var(--s3); }
+  .prform label { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-micro); color: var(--muted); }
+  .prform .field { width: 100%; box-sizing: border-box; }
+  .prform textarea.field { min-height: 56px; resize: vertical; }
+  .prform .hint { font-size: var(--fs-micro); color: var(--muted); }
+  .prform .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .prmsg { font-size: var(--fs-micro); }
+  .prmsg--err { color: var(--t-crit); }
+  #prList .qrow__actions { flex-wrap: wrap; justify-content: flex-end; }
+  #prList .chip { overflow-wrap: anywhere; }
+  #prList .chip a { color: inherit; }
+  #prAdd { white-space: nowrap; }
+  @media (max-width: 560px) {
+    /* rows stack: badge + main on top, actions below (no horizontal overflow at 390px) */
+    #prList .qrow { grid-template-columns: auto 1fr; }
+    #prList .qrow__actions { grid-column: 1 / -1; grid-row: auto; justify-content: flex-start; }
+    #prPanel .panel__hd .hd-note { display: none; }  /* the lede fits the band; keep the header one line */
+  }
+</style>
 </head>
 <body>
 <!-- ===================== app bar (shared shell) ===================== -->
@@ -103,6 +124,22 @@
           <span class="spacer"></span><span class="hd-note">força de proveniência por entidade</span></div>
         <div class="panel__bd" id="radarRoll"></div>
       </div>
+    </div>
+  </section>
+
+  <!-- ===================== Radar de produto (#159) ===================== -->
+  <!-- The CPO Product Radar's subjects, managed from here instead of a Python call.
+       Reads/writes go through /api/act's typed intents (list/set/pause/resume/
+       remove_product_radar): curated, idempotent, journaled. -->
+  <section class="band">
+    <div class="band-hd"><span class="overline">Radar de produto</span><span class="rule"></span>
+      <span class="badge badge--ghost">CPO · App Store · YouTube</span></div>
+    <div class="panel" id="prPanel">
+      <div class="panel__hd"><h2>Produtos monitorados</h2><span class="count" id="prCount">0</span>
+        <span class="spacer"></span>
+        <span class="hd-note">coleta diária · pausar mantém a configuração</span>
+        <button class="btn btn--primary btn--sm" id="prAdd">+ Adicionar</button></div>
+      <div class="panel__bd panel__bd--flush" id="prList"></div>
     </div>
   </section>
 
@@ -248,6 +285,158 @@ function renderDescoberta() {
     }).join("") || U.empty("Sem radar", "entity_attrs sem radar.", "○");
   }
 }
+
+/* ======================= Radar de produto (#159) ======================= */
+// CPO Product Radar subjects live on their entity (`product_radar`). Managed through
+// /api/act's typed intents — same fetch/auth path as the other operator actions.
+let PR = { subjects: null, error: null };
+const PR_ERR_PT = [
+  [/apple_app_ids or youtube_channels/, "Informe ao menos um app da App Store ou um canal do YouTube."],
+  [/invalid Apple app id/, "ID de app da Apple inválido — use só os dígitos (ex.: 814456780)."],
+  [/invalid YouTube channel id/, "ID de canal do YouTube inválido — use o id UC… (24 caracteres), não o @handle."],
+  [/entity not found/, "Entidade não encontrada no registro."],
+  [/entity_id required/, "Informe o id da entidade."],
+  [/elevated capability/, "Sem permissão: exige papel de operador."],
+];
+function prErr(j, status) {
+  const raw = (j && (j.error || j.detail)) || (status ? `HTTP ${status}` : "falha de rede");
+  const hit = PR_ERR_PT.find(([re]) => re.test(raw));
+  return hit ? hit[1] : `Não foi possível concluir (${raw}).`;
+}
+async function prAct(intent, args) {
+  const body = { intent, args };
+  try { if (crypto.randomUUID) body.idempotency_key = `admin-pr-${crypto.randomUUID()}`; } catch (e) {}
+  try {
+    const r = await U.oacFetch("/api/act", { method: "POST", credentials: "include",
+      headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    let j = null; try { j = await r.json(); } catch (e) {}
+    return { ok: r.ok, status: r.status, j: j || {} };
+  } catch (e) { console.error("act failed", e); return { ok: false, status: 0, j: {} }; }
+}
+async function loadRadar() {
+  const res = await prAct("list_product_radar", {});
+  if (res.ok && Array.isArray(res.j.subjects)) { PR = { subjects: res.j.subjects, error: null }; }
+  else { PR = { subjects: PR.subjects, error: prErr(res.j, res.status) }; }
+  renderRadar();
+}
+function renderRadar() {
+  const el = document.getElementById("prList");
+  const subs = (PR.subjects || []).slice().sort((a, b) =>
+    (b.active - a.active) || String(a.name).localeCompare(String(b.name), "pt-BR"));
+  setCount("prCount", subs.length, subs.length ? "" : "zero");
+  if (PR.subjects === null) {
+    el.innerHTML = PR.error ? U.empty("Radar indisponível", PR.error, "!") : U.empty("Carregando…", "", "◷");
+    return;
+  }
+  const banner = PR.error ? `<div class="qrow"><div class="qrow__main prmsg prmsg--err" style="grid-column:1/-1">${U.esc(PR.error)}</div></div>` : "";
+  if (!subs.length) {
+    el.innerHTML = banner + U.empty("Nenhum produto no radar", "Adicione uma entidade com um app da App Store ou um canal do YouTube.", "○");
+    return;
+  }
+  el.innerHTML = banner + subs.map((s) => {
+    const st = s.active
+      ? `<span class="badge badge--ok"><span class="g" aria-hidden="true">●</span>ativo</span>`
+      : `<span class="badge badge--ghost"><span class="g" aria-hidden="true">❙❙</span>pausado</span>`;
+    const apps = (s.apple_app_ids || []).map((a) =>
+      `<span class="chip" title="${U.esc(a.name || "")}">App Store <a href="https://apps.apple.com/br/app/id${encodeURIComponent(a.id)}" target="_blank" rel="noopener">${U.esc(a.id)}</a></span>`).join("");
+    const chans = (s.youtube_channels || []).map((c) =>
+      `<span class="chip" title="${U.esc(c.title || "")}">YouTube <a href="https://www.youtube.com/channel/${encodeURIComponent(c.id)}" target="_blank" rel="noopener">${U.esc(c.handle || c.id)}</a></span>`).join("");
+    // one <span> per fact: .qrow__meta is a wrapping flex row, so bare text + <b> would split
+    const meta = [
+      `entidade <b>${U.esc(s.entity_id)}</b>`,
+      (s.aliases || []).length ? `${s.aliases.length} alias(es)` : "",
+      s.search_query ? `busca: ${U.esc(s.search_query)}` : "",
+    ].filter(Boolean).map((m) => `<span>${m}</span>`).join('<span aria-hidden="true">·</span>');
+    return `<div class="qrow" data-eid="${U.esc(s.entity_id)}"${s.active ? "" : ' style="opacity:.72"'}>
+      <div class="qrow__type">${st}</div>
+      <div class="qrow__main">
+        <div class="qrow__title"><b>${U.esc(s.name)}</b>${s.namesake_risk ? ` <span class="badge badge--warn" title="${U.esc(s.namesake_risk)}"><span class="g" aria-hidden="true">◆</span>homônimo</span>` : ""}</div>
+        <div class="qrow__meta">${meta}</div>
+        <div class="qrow__meta chiprow">${apps}${chans}</div>
+        <div class="qrow__meta prmsg" data-msg></div>
+      </div>
+      <div class="qrow__actions">
+        <button class="btn btn--sm" data-op="edit">Editar</button>
+        <button class="btn btn--sm" data-op="${s.active ? "pause" : "resume"}">${s.active ? "Pausar" : "Retomar"}</button>
+        <button class="btn btn--reject btn--sm" data-op="remove">Remover</button>
+      </div>
+    </div>`;
+  }).join("");
+  el.querySelectorAll(".qrow[data-eid]").forEach((row) => {
+    const s = subs.find((x) => x.entity_id === row.dataset.eid);
+    row.querySelectorAll("button[data-op]").forEach((b) => b.onclick = () => radarRowOp(s, b.dataset.op, b, row));
+  });
+}
+async function radarRowOp(s, op, btn, row) {
+  if (op === "edit") return openRadarForm(s);
+  const msg = row.querySelector("[data-msg]");
+  if (op === "remove" && btn.dataset.armed !== "1") {   // two-step: no accidental removal
+    btn.dataset.armed = "1"; btn.textContent = "Confirmar remoção";
+    msg.textContent = "Remove a configuração do radar (a entidade permanece). Pausar a mantém.";
+    return;
+  }
+  const intent = { pause: "pause_product_radar", resume: "resume_product_radar", remove: "remove_product_radar" }[op];
+  row.classList.add("busy"); row.querySelectorAll("button").forEach((b) => b.disabled = true);
+  const res = await prAct(intent, { entity_id: s.entity_id });
+  if (!res.ok) {
+    row.classList.remove("busy"); row.querySelectorAll("button").forEach((b) => b.disabled = false);
+    msg.classList.add("prmsg--err"); msg.textContent = prErr(res.j, res.status); return;
+  }
+  loadRadar();
+}
+function openRadarForm(s) {
+  const edit = !!s; s = s || {};
+  const ids = (xs) => (xs || []).map((x) => x.id).join(", ");
+  const ents = Object.entries(DATA.entity_attrs || {}).map(([eid, a]) =>
+    `<option value="${U.esc(eid)}">${U.esc(a.display_name || eid)}</option>`).join("");
+  document.getElementById("drTitle").textContent = edit ? `Editar radar · ${s.name}` : "Adicionar ao radar de produto";
+  document.getElementById("drBody").innerHTML = `
+    <form class="prform" id="prForm" novalidate>
+      <label>Entidade (id no registro)
+        <input class="field" name="entity_id" list="prEnts" required value="${U.esc(s.entity_id || "")}" ${edit ? "readonly" : ""} autocomplete="off" />
+        <datalist id="prEnts">${ents}</datalist></label>
+      <label>Nome do produto
+        <input class="field" name="name" value="${U.esc(s.name || "")}" placeholder="padrão: nome da entidade" /></label>
+      <label>Aliases <span class="hint">separados por vírgula</span>
+        <input class="field" name="aliases" value="${U.esc((s.aliases || []).join(", "))}" /></label>
+      <label>Consulta de busca (search_query)
+        <input class="field" name="search_query" value="${U.esc(s.search_query || "")}" placeholder='ex.: "Banco Inter"' /></label>
+      <label>Risco de homônimo (namesake_risk)
+        <textarea class="field" name="namesake_risk" placeholder="ex.: 'Inter' colide com o clube de futebol">${U.esc(s.namesake_risk || "")}</textarea></label>
+      <label>IDs de app na App Store (Apple) <span class="hint">só dígitos, separados por vírgula</span>
+        <input class="field" name="apple_app_ids" inputmode="numeric" value="${U.esc(ids(s.apple_app_ids))}" placeholder="814456780" /></label>
+      <label>IDs de canal do YouTube <span class="hint">UC… (24 caracteres), separados por vírgula</span>
+        <input class="field" name="youtube_channels" value="${U.esc(ids(s.youtube_channels))}" placeholder="UCgsDX3hTwiPdtGHJjMFfDxg" /></label>
+      <div class="hint">Exige ao menos um app ou um canal. ${edit ? (s.active ? "O produto segue ativo." : "O produto segue pausado.") : "Novo produto entra ativo."}</div>
+      <div class="actions">
+        <button class="btn btn--primary" type="submit">${edit ? "Salvar" : "Adicionar"}</button>
+        <button class="btn btn--ghost" type="button" id="prCancel">Cancelar</button>
+      </div>
+      <div class="prmsg" id="prFormMsg" role="status"></div>
+    </form>`;
+  const form = document.getElementById("prForm");
+  document.getElementById("prCancel").onclick = closeDrawer;
+  form.onsubmit = async (ev) => {
+    ev.preventDefault();
+    const fd = new FormData(form), out = document.getElementById("prFormMsg");
+    const args = {};
+    ["entity_id", "name", "aliases", "search_query", "namesake_risk", "apple_app_ids", "youtube_channels"]
+      .forEach((k) => { args[k] = String(fd.get(k) || "").trim(); });
+    if (!args.entity_id) { out.className = "prmsg prmsg--err"; out.textContent = "Informe o id da entidade."; return; }
+    const sub = form.querySelector('button[type="submit"]'); sub.disabled = true;
+    out.className = "prmsg"; out.textContent = "Salvando…";
+    const res = await prAct("set_product_radar", args);
+    sub.disabled = false;
+    if (!res.ok) { out.className = "prmsg prmsg--err"; out.textContent = prErr(res.j, res.status); return; }
+    out.textContent = res.j.outcome === "noop" ? "Nada mudou." : "Salvo ✓";
+    closeDrawer(); loadRadar();
+  };
+  openDrawer();
+  (edit ? form.elements.name : form.elements.entity_id).focus();
+}
+document.getElementById("prAdd").addEventListener("click", () => openRadarForm(null));
+renderRadar();
+loadRadar();
 
 /* ======================= LEAD 1 — Action queue ======================= */
 // Unified vetting queue: entity reviews + SWOT/framework proposals + graph

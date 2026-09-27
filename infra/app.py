@@ -3507,12 +3507,16 @@ class OncaPrototypeStack(Stack):
             runtime=LAMBDA_RUNTIME,
             handler="src.ingest.cpo_radar.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
-            timeout=Duration.minutes(10),
+            # 10 subjects since 2026-09-26: a cold backfill of the high-volume apps (Itaú,
+            # Bradesco: 3M+ ratings) runs several minutes; a warm daily run stays short.
+            timeout=Duration.minutes(15),
             memory_size=512,
             environment={
                 "PYTHONPATH": "/var/task",
                 "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
-                "ONCA_CPO_YT_QUOTA": "1000",
+                # ~100 units of creator search per subject + a few for uploads/videos: 10
+                # subjects need ~1,020/day. 2,000 = 20% of the key's 10k daily quota.
+                "ONCA_CPO_YT_QUOTA": "2000",
                 "ONCA_CPO_YT_SEARCH_PAGES": "1",
                 "ONCA_CPO_YT_LOOKBACK_DAYS": "2",
                 # subjects come from the registry (entity.product_radar); the checked-in

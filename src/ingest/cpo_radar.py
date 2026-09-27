@@ -69,6 +69,8 @@ RSS_URL = "https://itunes.apple.com/br/rss/customerreviews/page={page}/id={app}/
 LOOKUP_URL = "https://itunes.apple.com/lookup"
 STORE_URL = "https://apps.apple.com/br/app/id{app}?see-all=reviews"
 RSS_MAX_PAGES = 10            # Apple's hard cap: 10 x 50 = the 500 most recent reviews
+EMPTY_FIRST_PAGE_RETRIES = 2
+EMPTY_RETRY_PAUSE_S = 3.0
 YT_API = "https://www.googleapis.com/youtube/v3"
 YT_COST = {"playlistItems": 1, "search": 100, "videos": 1}
 
@@ -300,6 +302,21 @@ def pull_reviews(app_id: str, *, seen: set[str], since: str, fetch: Fetch | None
             stop_reason = "error"
             break
         rows = parse_rss_page(doc)
+        if not rows and page == 1:
+            # Apple's legacy RSS intermittently serves an EMPTY first page for an app that has
+            # reviews (live 2026-09-26: Neon page 1 empty on Lambda, 50 entries seconds later).
+            # An empty page 1 is suspect, not an answer: retry before concluding "no reviews".
+            for _ in range(EMPTY_FIRST_PAGE_RETRIES):
+                time.sleep(EMPTY_RETRY_PAUSE_S)
+                try:
+                    rows = parse_rss_page(fetch(RSS_URL.format(page=page, app=app_id), None))
+                except Exception:  # noqa: BLE001
+                    rows = []
+                if rows:
+                    break
+            if not rows:
+                stop_reason = "empty_first_page"
+                break
         if not rows:
             stop_reason = "empty"
             break
@@ -995,17 +1012,29 @@ def run(store: Any | None, *, today: dt.date | None = None, subjects: list[dict[
         seen = {r["id"] for r in reviews}
         cov_since = prev.get("coverage_since")
         app_meta: dict[str, Any] = {}
-        for app in s.get("apple_app_ids") or []:
-            since = max((r["date"] for r in reviews), default=None)
+        by_app: dict[str, Any] = {}
+        for i, app in enumerate(s.get("apple_app_ids") or []):
+            # `since` is PER APP: a product with two apps (Bradesco + next) must not cut the
+            # quieter app's backfill at the busier app's newest review (live 2026-09-26: next
+            # got 2 reviews instead of 30 days). Rows stored before app_id existed belong to
+            # the first (primary) app.
+            mine = [r for r in reviews if (r.get("app_id") or (s["apple_app_ids"][0]["id"])) == app["id"]]
+            since = max((r["date"] for r in mine), default=None)
             since = _days_back(dt.date.fromisoformat(since), 1) if since else review_cut
             new, c = pull_reviews(app["id"], seen=seen, since=since, fetch=fetch)
             for r in new:
                 r.update(source="appstore", product=pid, app_id=app["id"])
             reviews += new
-            app_meta = app_lookup(app["id"], fetch=fetch)
-            cov["appstore"] = dict(c, app_id=app["id"])
+            meta = app_lookup(app["id"], fetch=fetch)
+            if i == 0:
+                app_meta = meta        # alerts carry the PRIMARY app's version/release context
+            by_app[app["id"]] = dict(c, app_id=app["id"])
+            if i == 0:
+                cov["appstore"] = dict(c, app_id=app["id"])
             if c.get("error"):
                 sources["appstore"] = "partial: RSS error"
+            if c.get("stop") == "empty_first_page":
+                sources["appstore"] = f"partial: empty RSS for app {app['id']}"
             if not cov_since and new:
                 # cold start: the oldest fetched day is partial unless we stopped on `since`
                 oldest = min(r["date"] for r in new)
@@ -1041,6 +1070,8 @@ def run(store: Any | None, *, today: dt.date | None = None, subjects: list[dict[
         events += [cluster_to_event(s, g) for g in cluster_mentions(s, cand)]
         pa = detect_alerts(s, reviews, eval_days=eval_days, coverage_since=cov_since, app=app_meta)
         alerts += pa
+        if len(by_app) > 1:
+            cov["appstore_by_app"] = by_app
         coverage[pid] = cov
         products_out.append({"id": pid, "name": s["name"], "entity": (s.get("onca_entities") or [None])[0],
                              "app": app_meta, "reviews_held": len(reviews), "videos_held": len(videos),

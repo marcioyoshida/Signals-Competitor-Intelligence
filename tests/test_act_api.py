@@ -514,3 +514,175 @@ def test_action_links_back_to_decision(monkeypatch):
     act_api.lambda_handler(_event(
         {"intent": "set_board_adoption", "officer": "cco", "args": {"decision_id": "d9", "adopted": True}}), None)
     assert linked == {}  # excluded from self-referential linking
+
+
+# ---- #159 CPO Product Radar subjects (curation admin) ------------------------------
+NU_APP = "814456780"
+NU_CH = "UCgsDX3hTwiPdtGHJjMFfDxg"
+
+
+def _radar_registry(monkeypatch):
+    """In-memory registry with two plain entities; journal/idempotency stubbed off."""
+    from tests.test_entity_registry import FakeTable
+
+    _no_journal(monkeypatch)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
+    monkeypatch.delenv("ONCA_CURATION_ACTOR", raising=False)
+    t = FakeTable()
+    monkeypatch.setattr(er, "_table", lambda table=None: t if table is None else table)
+    er.put_entity("nubank", "Nubank", ["Nubank"], table=t)
+    er.put_entity("inter", "Banco Inter", ["Banco Inter"], table=t)
+    return t
+
+
+def _act(intent, args, claims=None, idem=None):
+    body = {"intent": intent, "args": args}
+    if idem:
+        body["idempotency_key"] = idem
+    resp = act_api.lambda_handler(_event(body, claims=claims), None)
+    return resp["statusCode"], json.loads(resp["body"])
+
+
+def _nu_args(**over):
+    a = {"entity_id": "nubank", "name": "Nubank", "aliases": "Nubank, Nu Bank, NuConta",
+         "search_query": "Nubank", "namesake_risk": "never match bare 'nu'",
+         "apple_app_ids": NU_APP, "youtube_channels": NU_CH}
+    a.update(over)
+    return a
+
+
+def test_radar_intents_are_in_the_catalog(monkeypatch):
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
+    cat = json.loads(act_api.lambda_handler(_event("{}", method="GET"), None)["body"])["catalog"]
+    for i in ("set_product_radar", "pause_product_radar", "resume_product_radar",
+              "remove_product_radar", "list_product_radar"):
+        assert cat[i] == "apply"
+
+
+def test_set_product_radar_creates_curated_config_with_radar_shape(monkeypatch):
+    _radar_registry(monkeypatch)
+    code, body = _act("set_product_radar", _nu_args())
+    assert code == 200 and body["outcome"] == "applied" and body["created"] is True
+    ent = er.get_entity("nubank")
+    pr = ent["product_radar"]
+    assert pr["aliases"] == ["Nubank", "Nu Bank", "NuConta"]
+    # cpo_radar formats a['name'] and ch['handle'] — both must exist on form-added ids
+    assert pr["apple_app_ids"] == [{"id": NU_APP, "name": "Nubank"}]
+    assert pr["youtube_channels"] == [{"id": NU_CH, "handle": "", "title": "Nubank"}]
+    assert pr["active"] is True
+    assert ent["_prov"]["product_radar"]["source"] == "curated"      # a curator write
+    subs = er.list_product_radar_subjects()
+    assert [s["id"] for s in subs] == ["nubank"] and subs[0]["onca_entities"] == ["nubank"]
+
+
+def test_set_product_radar_is_idempotent_noop_on_same_config(monkeypatch):
+    _radar_registry(monkeypatch)
+    assert _act("set_product_radar", _nu_args())[1]["outcome"] == "applied"
+    code, body = _act("set_product_radar", _nu_args())
+    assert code == 200 and body["outcome"] == "noop"
+
+
+def test_set_product_radar_idempotency_key_replays_without_reapplying(monkeypatch):
+    _radar_registry(monkeypatch)
+    store = {}
+    monkeypatch.setattr(act_api, "_get_act", lambda k, table=None: store.get(k))
+    monkeypatch.setattr(act_api, "_put_act",
+                        lambda k, s, r, table=None: store.__setitem__(k, {"status": s, "result": r}))
+    calls = []
+    real = er.set_product_radar
+    monkeypatch.setattr(er, "set_product_radar", lambda *a, **k: calls.append(1) or real(*a, **k))
+    c1, b1 = _act("set_product_radar", _nu_args(), idem="radar-k1")
+    c2, b2 = _act("set_product_radar", _nu_args(), idem="radar-k1")
+    assert c1 == c2 == 200 and b1["outcome"] == b2["outcome"] == "applied"
+    assert b2["idempotent_replay"] is True and len(calls) == 1
+
+
+def test_set_product_radar_without_app_or_channel_is_400(monkeypatch):
+    _radar_registry(monkeypatch)
+    code, body = _act("set_product_radar", _nu_args(apple_app_ids="", youtube_channels=[]))
+    assert code == 400 and body["outcome"] == "blocked"
+    assert "apple_app_ids or youtube_channels" in body["error"]
+    assert not er.get_entity("nubank").get("product_radar")
+
+
+def test_set_product_radar_rejects_malformed_ids_and_missing_entity(monkeypatch):
+    _radar_registry(monkeypatch)
+    assert _act("set_product_radar", _nu_args(apple_app_ids="nubank-app"))[0] == 400
+    assert _act("set_product_radar", _nu_args(youtube_channels="@nubank"))[0] == 400
+    assert _act("set_product_radar", _nu_args(entity_id=""))[0] == 400
+    code, body = _act("set_product_radar", _nu_args(entity_id="ghost"))
+    assert code == 404 and body["outcome"] == "blocked"
+
+
+def test_set_product_radar_partial_edit_keeps_unsent_fields_and_names(monkeypatch):
+    t = _radar_registry(monkeypatch)
+    er.set_product_radar("nubank", {
+        "name": "Nubank", "apple_app_ids": [{"id": NU_APP, "name": "Nubank: Conta"}],
+        "youtube_channels": [{"id": NU_CH, "handle": "@nubank", "title": "Nubank"}],
+        "related_entities": ["nu_holdings"], "active": False}, table=t)
+    code, body = _act("set_product_radar", {"entity_id": "nubank", "search_query": "\"Nubank\"",
+                                            "apple_app_ids": [NU_APP], "youtube_channels": NU_CH})
+    assert code == 200 and body["outcome"] == "applied"
+    pr = er.get_entity("nubank")["product_radar"]
+    assert pr["search_query"] == "\"Nubank\""
+    assert pr["apple_app_ids"] == [{"id": NU_APP, "name": "Nubank: Conta"}]          # name kept
+    assert pr["youtube_channels"][0]["handle"] == "@nubank"                            # handle kept
+    assert pr["related_entities"] == ["nu_holdings"] and pr["active"] is False         # not reset
+
+
+def test_pause_keeps_config_and_resume_restores(monkeypatch):
+    _radar_registry(monkeypatch)
+    _act("set_product_radar", _nu_args())
+    before = dict(er.get_entity("nubank")["product_radar"])
+    code, body = _act("pause_product_radar", {"entity_id": "nubank"})
+    assert code == 200 and body["outcome"] == "applied" and body["active"] is False
+    paused = er.get_entity("nubank")["product_radar"]
+    assert paused["active"] is False
+    assert {k: v for k, v in paused.items() if k != "active"} == \
+        {k: v for k, v in before.items() if k != "active"}                            # config kept
+    assert er.list_product_radar_subjects() == []                                     # radar stops
+    listed = _act("list_product_radar", {})[1]
+    assert listed["count"] == 1 and listed["subjects"][0]["active"] is False          # admin sees it
+    assert _act("pause_product_radar", {"entity_id": "nubank"})[1]["outcome"] == "noop"
+    code, body = _act("resume_product_radar", {"entity_id": "nubank"})
+    assert code == 200 and body["outcome"] == "applied"
+    assert er.get_entity("nubank")["product_radar"] == before
+
+
+def test_pause_without_config_404_and_remove_is_idempotent(monkeypatch):
+    _radar_registry(monkeypatch)
+    code, body = _act("pause_product_radar", {"entity_id": "inter"})
+    assert code == 404 and body["outcome"] == "noop"
+    _act("set_product_radar", _nu_args())
+    code, body = _act("remove_product_radar", {"entity_id": "nubank"})
+    assert code == 200 and body["outcome"] == "applied"
+    assert not er.get_entity("nubank").get("product_radar")
+    assert er.get_entity("nubank")["display_name"] == "Nubank"                      # entity intact
+    assert _act("remove_product_radar", {"entity_id": "nubank"})[1]["outcome"] == "noop"
+    assert _act("remove_product_radar", {"entity_id": "ghost"})[0] == 404
+
+
+def test_radar_writes_require_elevated_group(monkeypatch):
+    _radar_registry(monkeypatch)
+    for intent, args in (("set_product_radar", _nu_args()), ("list_product_radar", {}),
+                         ("pause_product_radar", {"entity_id": "nubank"}),
+                         ("remove_product_radar", {"entity_id": "nubank"})):
+        code, _ = _act(intent, args, claims={"sub": "u1", "custom:tier": "sovereign"})
+        assert code == 403, intent
+    assert not er.get_entity("nubank").get("product_radar")
+    code, body = _act("set_product_radar", _nu_args(), claims={"sub": "u9", "cognito:groups": "operator"})
+    assert code == 200 and body["actor"] == "u9"
+
+
+def test_radar_write_is_journaled_under_the_caller(monkeypatch):
+    _radar_registry(monkeypatch)
+    rows = []
+    monkeypatch.setattr(er, "_log", lambda eid, action, source, detail=None:
+                        rows.append((eid, action, source, act_api.os.environ.get("ONCA_CURATION_ACTOR"))))
+    _act("set_product_radar", _nu_args(), claims={"sub": "u9", "cognito:groups": "admin"})
+    assert ("nubank", "set_product_radar", "curated", "u9") in rows                 # registry row
+    assert any(r[0] == "nubank" and r[1] == "act:set_product_radar" for r in rows)   # act journal
+    assert "ONCA_CURATION_ACTOR" not in act_api.os.environ                           # restored
+    rows.clear()
+    _act("list_product_radar", {})
+    assert rows == []                                                                # reads unjournaled

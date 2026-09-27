@@ -35,6 +35,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 from typing import Any, Callable
 
 from src.dashboard import auth, officers
@@ -441,9 +442,172 @@ def _act_set_tdr_baseline(args: dict[str, Any], actor: str) -> tuple[str, int, d
     return "applied", 200, {"baseline_hours": item["baseline_hours"], "set_at": item["set_at"]}
 
 
+# ---- #159 CPO Product Radar subjects (curation admin) -------------------------------
+# The radar's subjects live on their entity as `product_radar` (entity_registry.
+# set_product_radar). These intents let the curation admin manage them without a Python
+# call. Every write is a CURATED write (source="curated", the curator precedence class,
+# same as rollback_field) and set_product_radar journals it under the calling actor.
+_APPLE_ID_RE = re.compile(r"^\d{5,12}$")
+_YT_CHANNEL_RE = re.compile(r"^UC[A-Za-z0-9_-]{22}$")
+
+
+class _as_actor:
+    """Attribute the registry's own journal row (entity_registry._log reads the ambient
+    ONCA_CURATION_ACTOR, as registry_api sets it) to the /api/act caller, then restore."""
+
+    def __init__(self, actor: str) -> None:
+        self.actor, self.prev = actor, None
+
+    def __enter__(self) -> None:
+        self.prev = os.environ.get("ONCA_CURATION_ACTOR")
+        os.environ["ONCA_CURATION_ACTOR"] = str(self.actor)
+
+    def __exit__(self, *exc: Any) -> None:
+        if self.prev is None:
+            os.environ.pop("ONCA_CURATION_ACTOR", None)
+        else:
+            os.environ["ONCA_CURATION_ACTOR"] = self.prev
+
+
+def _as_list(v: Any, *, sep: str = ",") -> list[Any]:
+    """A list arg, or a comma/newline-separated string (the admin form's text inputs)."""
+    if v is None:
+        return []
+    if isinstance(v, (list, tuple)):
+        return [x for x in v if x is not None and str(x).strip() != ""]
+    return [p.strip() for p in str(v).replace("\n", sep).split(sep) if p.strip()]
+
+
+def _truthy(v: Any) -> bool:
+    if isinstance(v, bool):
+        return v
+    return str(v).strip().lower() not in ("false", "0", "no", "off", "")
+
+
+def _norm_apps(v: Any, current: list[Any], label: str) -> list[dict[str, str]]:
+    """Apple app ids → [{id, name}]. The radar formats `name` for every app, so an id added
+    by id alone keeps its existing name, else takes the subject label. Raises ValueError."""
+    known = {str(a.get("id")): a for a in current if isinstance(a, dict)}
+    out: list[dict[str, str]] = []
+    for x in _as_list(v):
+        d = x if isinstance(x, dict) else {"id": x}
+        aid = str(d.get("id") or "").strip().lower().removeprefix("id")
+        if not _APPLE_ID_RE.match(aid):
+            raise ValueError(f"invalid Apple app id: {d.get('id')!r}")
+        if aid in {a["id"] for a in out}:
+            continue
+        name = str(d.get("name") or (known.get(aid) or {}).get("name") or label)
+        out.append({"id": aid, "name": name})
+    return out
+
+
+def _norm_channels(v: Any, current: list[Any], label: str) -> list[dict[str, str]]:
+    """YouTube channel ids (UC…) → [{id, handle, title}], keeping a known channel's
+    handle/title. Raises ValueError on a malformed id."""
+    known = {str(c.get("id")): c for c in current if isinstance(c, dict)}
+    out: list[dict[str, str]] = []
+    for x in _as_list(v):
+        d = x if isinstance(x, dict) else {"id": x}
+        cid = str(d.get("id") or "").strip()
+        if not _YT_CHANNEL_RE.match(cid):
+            raise ValueError(f"invalid YouTube channel id (UC + 22 chars): {cid!r}")
+        if cid in {c["id"] for c in out}:
+            continue
+        k = known.get(cid) or {}
+        out.append({"id": cid, "handle": str(d.get("handle") or k.get("handle") or ""),
+                    "title": str(d.get("title") or k.get("title") or label)})
+    return out
+
+
+def _radar_entity(args: dict[str, Any]) -> tuple[str, dict[str, Any] | None, tuple | None]:
+    """(entity_id, entity, error-tuple). The error tuple is a ready handler return."""
+    eid = str(args.get("entity_id") or "").strip()
+    if not eid:
+        return eid, None, ("blocked", 400, {"error": "entity_id required"})
+    ent = entity_registry.get_entity(eid)
+    if not ent:
+        return eid, None, ("blocked", 404, {"error": "entity not found", "entity_id": eid})
+    return eid, ent, None
+
+
+def _act_set_product_radar(args: dict[str, Any], actor: str) -> tuple[str, int, dict[str, Any]]:
+    """apply: upsert an entity's radar subject config. A field absent from args keeps its
+    stored value (so a partial edit never drops e.g. related_entities or a paused state);
+    a field present replaces it. Rejected (400) with no app and no channel."""
+    eid, ent, err = _radar_entity(args)
+    if err:
+        return err
+    cur = dict(ent.get("product_radar") or {})
+    name = str(args.get("name") or "").strip() or cur.get("name") or ent.get("display_name") or eid
+    cfg: dict[str, Any] = {"name": name}
+    try:
+        for k in ("search_query", "namesake_risk"):
+            cfg[k] = str(args[k]).strip() if k in args and args[k] is not None else cur.get(k) or ""
+        cfg["aliases"] = ([str(a) for a in _as_list(args["aliases"])] if "aliases" in args
+                          else list(cur.get("aliases") or []))
+        cfg["apple_app_ids"] = (_norm_apps(args["apple_app_ids"], list(cur.get("apple_app_ids") or []), name)
+                                if "apple_app_ids" in args else list(cur.get("apple_app_ids") or []))
+        cfg["youtube_channels"] = (_norm_channels(args["youtube_channels"],
+                                                  list(cur.get("youtube_channels") or []), name)
+                                   if "youtube_channels" in args else list(cur.get("youtube_channels") or []))
+        cfg["related_entities"] = ([str(r) for r in _as_list(args["related_entities"])]
+                                   if "related_entities" in args else list(cur.get("related_entities") or []))
+        cfg["active"] = _truthy(args["active"]) if "active" in args else bool(cur.get("active", True))
+        with _as_actor(actor):
+            changed = entity_registry.set_product_radar(eid, cfg, source="curated")
+    except ValueError as exc:
+        return "blocked", 400, {"error": str(exc), "entity_id": eid}
+    detail = {"entity_id": eid, "created": not cur, "active": cfg["active"],
+              "apps": len(cfg["apple_app_ids"]), "channels": len(cfg["youtube_channels"])}
+    return ("applied", 200, detail) if changed else ("noop", 200, {**detail, "detail": "unchanged"})
+
+
+def _set_radar_active(args: dict[str, Any], actor: str, active: bool) -> tuple[str, int, dict[str, Any]]:
+    eid, ent, err = _radar_entity(args)
+    if err:
+        return err
+    cur = dict(ent.get("product_radar") or {})
+    if not cur:
+        return "noop", 404, {"error": "no product_radar config", "entity_id": eid}
+    if bool(cur.get("active", True)) == active:
+        return "noop", 200, {"entity_id": eid, "active": active, "detail": "unchanged"}
+    with _as_actor(actor):
+        entity_registry.set_product_radar(eid, {**cur, "active": active}, source="curated")
+    return "applied", 200, {"entity_id": eid, "active": active}
+
+
+def _act_pause_product_radar(args: dict[str, Any], actor: str) -> tuple[str, int, dict[str, Any]]:
+    """apply: stop the radar watching a subject — the config is KEPT (active=False)."""
+    return _set_radar_active(args, actor, False)
+
+
+def _act_resume_product_radar(args: dict[str, Any], actor: str) -> tuple[str, int, dict[str, Any]]:
+    """apply: re-activate a paused subject with its stored config."""
+    return _set_radar_active(args, actor, True)
+
+
+def _act_remove_product_radar(args: dict[str, Any], actor: str) -> tuple[str, int, dict[str, Any]]:
+    """apply: clear an entity's radar config (the entity itself is untouched). Reversible
+    through the journal, which records what was set."""
+    eid, ent, err = _radar_entity(args)
+    if err:
+        return err
+    if not ent.get("product_radar"):
+        return "noop", 200, {"entity_id": eid, "detail": "no product_radar config"}
+    with _as_actor(actor):
+        entity_registry.set_product_radar(eid, None, source="curated")
+    return "applied", 200, {"entity_id": eid, "removed": True}
+
+
+def _act_list_product_radar(args: dict[str, Any], actor: str) -> tuple[str, int, dict[str, Any]]:
+    """apply (read-only): every radar subject, active AND paused — the admin's list."""
+    subs = entity_registry.list_product_radar_configs()
+    return "applied", 200, {"subjects": subs, "count": len(subs)}
+
+
 # Intents whose calls are NOT written to the OncaCurationLog audit journal (high-frequency
-# telemetry, not a state mutation).
-_NO_JOURNAL = frozenset({"record_engagement"})
+# telemetry, or a pure read — not a state mutation).
+_NO_JOURNAL = frozenset({"record_engagement", "list_product_radar"})
 
 # DEC-6: decision-management intents operate ON a decision — they must NOT be linked back as
 # "actions authorized BY" that decision (would self-reference).
@@ -473,6 +637,12 @@ _CATALOG: dict[str, tuple[str, Callable[..., tuple[str, int, dict[str, Any]]], s
     "append_reference": (APPLY, _act_append_reference, None),
     # ADR 021 §E — engagement telemetry (attention signal)
     "record_engagement": (APPLY, _act_record_engagement, None),
+    # #159 CPO Product Radar subjects — curation admin (/v2/admin "Radar de produto")
+    "set_product_radar": (APPLY, _act_set_product_radar, "entity_id"),
+    "pause_product_radar": (APPLY, _act_pause_product_radar, "entity_id"),
+    "resume_product_radar": (APPLY, _act_resume_product_radar, "entity_id"),
+    "remove_product_radar": (APPLY, _act_remove_product_radar, "entity_id"),
+    "list_product_radar": (APPLY, _act_list_product_radar, None),
 }
 
 

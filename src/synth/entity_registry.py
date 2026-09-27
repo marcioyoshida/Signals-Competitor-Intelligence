@@ -873,6 +873,31 @@ def list_product_radar_subjects(table: Any | None = None) -> list[dict[str, Any]
     return out
 
 
+def list_product_radar_configs(table: Any | None = None) -> list[dict[str, Any]]:
+    """EVERY radar subject config (active AND paused) for the curation admin — the stored
+    config as-is plus entity id/label and provenance. ``list_product_radar_subjects`` is
+    the radar's consumption view (active only); this is the operator's management view."""
+    out: list[dict[str, Any]] = []
+    for e in list_entities(table=table):
+        pr = e.get("product_radar") or {}
+        if not pr:
+            continue
+        eid = e["entity_id"]
+        out.append({
+            "entity_id": eid, "display_name": e.get("display_name") or eid,
+            "name": pr.get("name") or e.get("display_name") or eid,
+            "aliases": list(pr.get("aliases") or []),
+            "search_query": pr.get("search_query") or "",
+            "namesake_risk": pr.get("namesake_risk") or "",
+            "apple_app_ids": _json_safe(list(pr.get("apple_app_ids") or [])),
+            "youtube_channels": _json_safe(list(pr.get("youtube_channels") or [])),
+            "related_entities": list(pr.get("related_entities") or []),
+            "active": bool(pr.get("active", True)),
+            "prov": _json_safe(((e.get("_prov") or {}).get("product_radar")) or {}),
+        })
+    return out
+
+
 def list_entity_attributes(table: Any | None = None) -> dict[str, dict[str, Any]]:
     """Compact per-entity classification map for the feed/agent: every active
     entity → {label, ownership, certifications, ticker, industries,
