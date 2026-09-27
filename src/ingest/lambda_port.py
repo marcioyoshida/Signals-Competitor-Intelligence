@@ -40,13 +40,16 @@ def _dou_with_stats(recs: list) -> list:
         from src.ingest import source_health
 
         st = dict(_dou.LAST_STATS or {})
-        sat = st.get("saturated") or []
+        sat = list(dict.fromkeys(x["term"] for x in st.get("saturated") or []))
         source_health.record("DOU saturation", ok=not sat, docs=len(recs),
-                             error=(f"{len(sat)} saturated: " + ", ".join(x["term"] for x in sat[:8]))
-                             if sat else None,
+                             error=(f"{len(sat)} saturated: " + ", ".join(sat[:8])) if sat else None,
                              metrics={"queries": st.get("queries", 0), "pages": st.get("pages", 0),
-                                      "saturated_terms": [x["term"] for x in sat],
-                                      "paged_terms": [x["term"] for x in st.get("paged") or []]})
+                                      "saturated_terms": sat,
+                                      "paged_terms": list(dict.fromkeys(
+                                          x["term"] for x in st.get("paged") or [])),
+                                      # #197: stem-matched entity queries (not paged, not volume)
+                                      "fuzzy_terms": list(dict.fromkeys(
+                                          x["term"] for x in st.get("fuzzy") or []))})
     except Exception:  # pragma: no cover - telemetry must never affect ingestion
         pass
     return recs
@@ -568,6 +571,36 @@ def _write_news_digest(slice_: dict[str, Any], context: Any) -> dict[str, Any]:
 
 
 
+def concurrency_guard(event: dict[str, Any], sfn_client: Any | None = None) -> dict[str, Any]:
+    """#196: ``{"busy": bool, "blocking": arn|None}`` — is an EARLIER execution of this state
+    machine still running? Every downstream task reads the *latest* digest in S3, so two
+    overlapping executions swap digests: one run's synth consumed the other's 0-new digest
+    after its own ingest had committed the seen-state, and the new acts reached no feed
+    (2026-09-27). The later execution skips BEFORE ingesting — nothing is consumed; the
+    earlier one produces the fresh feed. Ties (same start) break on the execution ARN.
+    Fails OPEN: if the check itself errors, the run proceeds (never block the pipeline)."""
+    sm = (event or {}).get("state_machine")
+    me = (event or {}).get("execution")
+    if not sm or not me:
+        return {"busy": False, "blocking": None}
+    try:
+        client = sfn_client or boto3.client("stepfunctions")
+        running = client.list_executions(stateMachineArn=sm, statusFilter="RUNNING",
+                                          maxResults=20).get("executions") or []
+        mine = next((e for e in running if e.get("executionArn") == me), None)
+        my_key = (mine or {}).get("startDate"), me
+        for e in running:
+            arn = e.get("executionArn")
+            if arn == me:
+                continue
+            if mine is None or (e.get("startDate"), arn) < my_key:
+                print(f"Warning: concurrent execution {arn} still running; skipping this run")
+                return {"busy": True, "blocking": arn}
+    except Exception as exc:  # pragma: no cover - defensive: fail open
+        print(f"Warning: concurrency guard failed open: {exc}")
+    return {"busy": False, "blocking": None}
+
+
 _OFFICIAL_ACT_FIELDS = ("id", "source", "kind", "organ", "doc_type", "title", "date", "url",
                         "industries", "compliance_tags", "severity", "severity_reason")
 
@@ -615,6 +648,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                       parallel news branch and is overlaid at synth time).
       - "all" (default): both, in one invocation (local / back-compat)."""
     mode = (event or {}).get("mode") or os.environ.get("ONCA_INGEST_MODE", "all")
+    if mode == "guard":
+        return concurrency_guard(event)
     from src.ingest import source_health as _source_health
 
     if mode == "news":

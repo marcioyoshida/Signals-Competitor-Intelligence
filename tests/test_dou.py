@@ -34,7 +34,7 @@ def test_parses_filters_organ_and_date():
     ]
     acts = dou.fetch_dou(
         ["BRADESCO"], lookback_days=30, today=dt.date(2026, 8, 16),
-        fetcher=lambda t, s, e: _html(items), pause_sec=0,
+        fetcher=lambda t, s, e: _html([dict(i, content=f"... {t} ...") for i in items]), pause_sec=0,
     )
     ids = {a["id"] for a in acts}
     assert ids == {"dou:portaria-susep-140", "dou:despacho-cade-941"}  # SUSEP + CADE only
@@ -46,7 +46,7 @@ def test_parses_filters_organ_and_date():
 
 
 def test_empty_organ_filter_keeps_all():
-    items = [_item("x", "t", RECEITA, "13/08/2026")]
+    items = [_item("x", "t", RECEITA, "13/08/2026", content="... X S.A. ...")]
     acts = dou.fetch_dou(
         ["X"], lookback_days=30, today=dt.date(2026, 8, 16), organs=(),
         fetcher=lambda t, s, e: _html(items), pause_sec=0,
@@ -104,19 +104,20 @@ def test_old_config_misses_mp_1394_and_new_default_catches_it():
 def test_topic_terms_have_their_own_budget_and_merge_with_entity_hits():
     from src.ingest import dou
 
-    many = [f"COMPETITOR {i}" for i in range(40)]
+    # entity 0 must literally occur in the act (#197): "…exploração de loterias de aposta…"
+    many = ["LOTERIAS"] + [f"COMPETITOR {i}" for i in range(1, 40)]
     calls = []
 
     def fetch(term, section, exact_date):
         calls.append(term)
-        return _SEARCH if term in ("apostas de quota fixa", "COMPETITOR 0") else ""
+        return _SEARCH if term in ("apostas de quota fixa", "LOTERIAS") else ""
 
     recs = dou.fetch_dou(many, lookback_days=7, today=_dt.date(2026, 9, 27), pause_sec=0,
                          max_terms=5, topic_terms={"apostas de quota fixa": ["betting"]},
                          fetcher=fetch, full_text=False)
     assert calls[0] == "apostas de quota fixa"                       # topics first, never cut
     mp = next(r for r in recs if "1.394" in r["title"])
-    assert mp["company"] == "COMPETITOR 0" and mp["industries"] == ["betting"]   # merged
+    assert mp["company"] == "LOTERIAS" and mp["industries"] == ["betting"]       # merged
 
 
 def test_raw_writer_keeps_dou_act_content_for_the_kb():
@@ -194,10 +195,10 @@ def _days(n, start=dt.date(2026, 9, 26)):
 
 def test_full_page_is_walked_back_by_date_window():
     # 75 acts on 09-26..09-24 fill page 1; the window page (publishTo = 09-24) returns older ones
-    page1 = [_item(f"a{i}", f"PORTARIA {i}", SUSEP_ORG, d.strftime("%d/%m/%Y"))
+    page1 = [_item(f"a{i}", f"PORTARIA {i} BRADESCO", SUSEP_ORG, d.strftime("%d/%m/%Y"))
              for i, d in enumerate([dt.date(2026, 9, 26 - (i // 30)) for i in range(75)])]
     page2 = [_item("a74", "dup", SUSEP_ORG, "24/09/2026"),
-             _item("old1", "PORTARIA old1", SUSEP_ORG, "10/09/2026")]
+             _item("old1", "PORTARIA old1 BRADESCO", SUSEP_ORG, "10/09/2026")]
     calls = []
 
     def fetcher(t, s, e):
@@ -214,7 +215,7 @@ def test_full_page_is_walked_back_by_date_window():
 def test_saturated_query_is_reported_not_silent():
     def fetcher(t, s, e):  # every window is full and inside the lookback
         base = 26 if not e.startswith("personalizado:") else int(e.split(":")[2][:2])
-        return _html([_item(f"{e}-{i}", "P", SUSEP_ORG, f"{base - (i // 40):02d}/09/2026")
+        return _html([_item(f"{e}-{i}", "P BRADESCO", SUSEP_ORG, f"{base - (i // 40):02d}/09/2026")
                       for i in range(75)])
     dou.fetch_dou(["BRADESCO"], today=dt.date(2026, 9, 27), fetcher=fetcher, pause_sec=0,
                   full_text=False, classify=False, max_pages=2)
@@ -231,3 +232,26 @@ def test_full_text_budget_goes_to_primary_acts_first(monkeypatch):
     dou._attach_full_text(recs, lambda u: (fetched.append(u) or
                                            '<div class="texto-dou"><p>corpo</p></div>\n</div>'))
     assert fetched == ["u-lc"] and recs[1]["full_text"]
+
+
+def test_stemmed_entity_hits_are_dropped_and_not_paged():
+    # #197: "CREDITAS" is stem-matched to "crédito(s)" — 75/75 raw hits, MP 1.393 bound to Creditas
+    page = [_item(f"c{i}", f"AVISO {i}", "Banco Central do Brasil/Área de Organização", "26/09/2026")
+            for i in range(74)] + [_item("mp", "MEDIDA PROVISÓRIA Nº 1.393", LEGIS, "25/09/2026"),
+                                   ]
+    calls = []
+
+    def fetcher(t, s, e):
+        calls.append(e)
+        return _html(page)
+    acts = dou.fetch_dou(["CREDITAS"], today=dt.date(2026, 9, 27), fetcher=fetcher, pause_sec=0,
+                         full_text=False, classify=False)
+    assert acts == [] and len(calls) == 1          # nothing bound, no walk-back
+    assert dou.LAST_STATS["fuzzy"][0]["term"] == "CREDITAS" and not dou.LAST_STATS["saturated"]
+
+
+def test_literal_hit_is_accent_and_case_folded_whole_word():
+    rec = {"title": "EXTRATO", "text": "... a Creditás Soluções Financeiras Ltda. ..."}
+    assert dou.literal_hit(rec, "CREDITAS")
+    assert not dou.literal_hit({"text": "operações de créditos consignados"}, "CREDITAS")
+    assert not dou.literal_hit({"text": "NUBANKING"}, "NUBANK")

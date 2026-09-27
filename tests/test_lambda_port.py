@@ -1143,3 +1143,35 @@ def test_large_digest_returns_s3_pointer_not_inline_body():
     assert json.loads(lambda_port._response_body(big, None)) == big
     small = {"source": "lambda_port"}
     assert json.loads(lambda_port._response_body(small, "k")) == small
+
+
+class _Sfn:
+    def __init__(self, running):
+        self.running = running
+
+    def list_executions(self, **kw):
+        assert kw["statusFilter"] == "RUNNING"
+        return {"executions": self.running}
+
+
+def test_concurrency_guard_skips_the_later_of_two_overlapping_runs():
+    # #196: 2026-09-27 — a manual run and the 15:30 UTC schedule overlapped; synth read the
+    # other run's 0-new digest. The LATER execution must skip; the earlier one proceeds.
+    import datetime as _dt
+    t0, t1 = _dt.datetime(2026, 9, 27, 15, 25), _dt.datetime(2026, 9, 27, 15, 30)
+    manual = {"executionArn": "arn:exec:manual", "startDate": t0}
+    sched = {"executionArn": "arn:exec:sched", "startDate": t1}
+    ev = {"mode": "guard", "state_machine": "arn:sm"}
+    later = lambda_port.concurrency_guard({**ev, "execution": "arn:exec:sched"}, _Sfn([sched, manual]))
+    assert later == {"busy": True, "blocking": "arn:exec:manual"}
+    earlier = lambda_port.concurrency_guard({**ev, "execution": "arn:exec:manual"}, _Sfn([sched, manual]))
+    assert earlier == {"busy": False, "blocking": None}
+    alone = lambda_port.concurrency_guard({**ev, "execution": "arn:exec:manual"}, _Sfn([manual]))
+    assert alone["busy"] is False
+    # no execution context (local / direct invoke) → never blocks
+    assert lambda_port.concurrency_guard({"mode": "guard"}, _Sfn([sched]))["busy"] is False
+
+
+def test_guard_mode_dispatches_before_any_ingest(monkeypatch):
+    monkeypatch.setattr(lambda_port, "concurrency_guard", lambda ev: {"busy": True, "blocking": "x"})
+    assert lambda_port.lambda_handler({"mode": "guard"}, None) == {"busy": True, "blocking": "x"}

@@ -158,13 +158,14 @@ def fetch_dou(
     plan = [(t, True) for t in list(topics)[:max_topic_terms]]
     plan += [(t, False) for t in [t for t in dict.fromkeys(str(t).strip() for t in terms) if t
                                   and t not in topics][:max_terms]]
-    stats: dict[str, Any] = {"queries": 0, "pages": 0, "saturated": [], "paged": []}
+    stats: dict[str, Any] = {"queries": 0, "pages": 0, "saturated": [], "paged": [], "fuzzy": []}
     LAST_STATS.clear()
     LAST_STATS.update(stats)
 
-    def _pages(term: str, section: str) -> tuple[list[dict[str, Any]], bool]:
+    def _pages(term: str, section: str, literal: bool = False) -> tuple[list[dict[str, Any]], bool]:
         """Every result for (term, section) back to ``cutoff``, walking full pages back by date
-        window (#191). Returns (records, got_any_response)."""
+        window (#191). Returns (records, got_any_response). ``literal`` (entity terms, #197):
+        a full page that is mostly stem matches is not walked back — it is noise, not volume."""
         stats["queries"] += 1
         page = fetch(term, section, _window(exact_date, None, page_size))
         stats["pages"] += 1
@@ -177,6 +178,14 @@ def fetch_dou(
                          default=None)
             if oldest is None or oldest <= cutoff:
                 break
+            if literal:
+                rate = sum(1 for r in recs if literal_hit(r, term)) / len(recs)
+                if rate < MIN_LITERAL_RATE:
+                    stats["fuzzy"].append({"term": term, "section": section,
+                                           "literal_rate": round(rate, 2)})
+                    print(f"Info: DOU query {term!r} {section} is fuzzy "
+                          f"({rate:.0%} literal hits on a full page); not paging")
+                    break
             if n >= max_pages or stats["pages"] - stats["queries"] >= MAX_EXTRA_PAGES_PER_RUN:
                 stats["saturated"].append({"term": term, "section": section,
                                            "oldest": oldest.isoformat(), "pages": n})
@@ -207,7 +216,7 @@ def fetch_dou(
         for term, is_topic in plan_:
             got = False
             for section in sections:
-                page_recs, got_ = _pages(term, section)
+                page_recs, got_ = _pages(term, section, literal=not is_topic)
                 got = got or got_
                 for rec in page_recs:
                     date = _parse_date(rec.get("date"))
@@ -218,6 +227,10 @@ def fetch_dou(
                         if not any(f in org for f in organ_filters):
                             continue
                     if is_topic and not _organ_in_scope(rec.get("organ"), scopes.get(term), rec):
+                        continue
+                    # #197: the search stems ("CREDITAS" → "créditos"), so an entity hit must
+                    # carry the name itself — else MP 1.393 was bound to Creditas
+                    if not is_topic and not literal_hit(rec, term):
                         continue
                     if is_topic:
                         rec.update(company=None, name=None, topic_term=term, industries=list(topics[term]))
@@ -268,6 +281,27 @@ def fetch_dou(
             _run([(p, True) for p, _ in follow])
             out = _finish()
     return out
+
+
+# #197: in.gov.br stems the quoted query ("CREDITAS" matches "crédito(s)": 75/75 hits on a page,
+# 2 kept, both mis-bound to the company). Entity terms need the literal name.
+MIN_LITERAL_RATE = 0.2
+
+
+def _fold_ascii(s: Any) -> str:
+    import unicodedata
+    t = unicodedata.normalize("NFKD", _html.unescape(str(s or "")))
+    return re.sub(r"\s+", " ", "".join(c for c in t if not unicodedata.combining(c))).lower()
+
+
+def literal_hit(rec: dict[str, Any], term: str) -> bool:
+    """True when ``term`` occurs as whole words in the record's title/snippet (accent-folded)."""
+    t = _fold_ascii(term).strip()
+    if not t:
+        return False
+    blob = _fold_ascii(re.sub(r"<[^>]+>", " ",   # the snippet's highlight <span>s
+                              " ".join(str(rec.get(k) or "") for k in ("title", "subject", "text"))))
+    return re.search(r"(?<![a-z0-9])" + re.escape(t) + r"(?![a-z0-9])", blob) is not None
 
 
 def _norm(s: Any) -> str:

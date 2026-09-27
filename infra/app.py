@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 
 import yaml
-from aws_cdk import App, CfnOutput, Duration, RemovalPolicy, SecretValue, Size, Stack, Tags
+from aws_cdk import App, ArnFormat, CfnOutput, Duration, RemovalPolicy, SecretValue, Size, Stack, Tags
 from aws_cdk import aws_bedrock as bedrock
 from aws_cdk import aws_apigatewayv2 as apigwv2
 from aws_cdk import aws_certificatemanager as acm
@@ -2806,6 +2806,34 @@ class OncaPrototypeStack(Stack):
         ingest_task = sfn.Parallel(self, "Ingest", result_path=sfn.JsonPath.DISCARD)
         ingest_task.branch(structured_ingest)
         ingest_task.branch(news_ingest)
+        # #196: every task downstream reads the LATEST digest in S3, so two overlapping
+        # executions (a schedule + the dashboard's "Executar", or a manual run) swap digests
+        # and one run's new items reach no feed. The later execution skips before ingesting
+        # anything (no seen-state consumed); the earlier one produces the fresh feed.
+        concurrency_guard = sfn_tasks.LambdaInvoke(
+            self,
+            "ConcurrencyGuard",
+            lambda_function=func,
+            payload=sfn.TaskInput.from_object({
+                "mode": "guard",
+                "state_machine": sfn.JsonPath.string_at("$$.StateMachine.Id"),
+                "execution": sfn.JsonPath.string_at("$$.Execution.Id"),
+            }),
+            payload_response_only=True,
+            result_path="$.guard",
+        )
+        func.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["states:ListExecutions"],
+                resources=[Stack.of(self).format_arn(
+                    service="states", resource="stateMachine", resource_name="OncaPipeline*",
+                    arn_format=ArnFormat.COLON_RESOURCE_NAME)],
+            )
+        )
+        skipped_concurrent = sfn.Succeed(
+            self, "SkippedConcurrentRun",
+            comment="An earlier execution is still running; it produces the fresh feed (#196).",
+        )
         feature_task = sfn_tasks.LambdaInvoke(
             self,
             "FeatureTask",
@@ -3230,11 +3258,17 @@ class OncaPrototypeStack(Stack):
             self,
             "OncaPipeline",
             definition_body=sfn.DefinitionBody.from_chainable(
-                ingest_task.next(feature_task)
-                .next(synth_task)
-                .next(belief_axes)
-                .next(detectors)
-                .next(feed_task)
+                concurrency_guard.next(
+                    sfn.Choice(self, "AnotherRunInFlight")
+                    .when(sfn.Condition.boolean_equals("$.guard.busy", True), skipped_concurrent)
+                    .otherwise(
+                        ingest_task.next(feature_task)
+                        .next(synth_task)
+                        .next(belief_axes)
+                        .next(detectors)
+                        .next(feed_task)
+                    )
+                )
             ),
             # Budget for a 15-min ingest, then synth, then the detector fan-out, then
             # feed. NOT sized to absorb retried ingest timeouts any more — a sandbox
