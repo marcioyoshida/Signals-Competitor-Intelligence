@@ -75,7 +75,10 @@ YT_COST = {"playlistItems": 1, "search": 100, "videos": 1}
 MODEL_IDS = ("amazon.nova-lite-v1:0", "us.amazon.nova-lite-v1:0")
 BATCH = 10
 WORKERS = 4
-EVENTS = ("launch", "feature", "price", "outage", "complaint", "praise", "other")
+# "corporate" (M&A, deal rumours, funding, earnings, executive/legal news) is a DECLARED sink, not a
+# surfaced type: without it the classifier forced a Nubank-buys-Monzo rumour into "launch" (live
+# 2026-09-26). Corporate news belongs to the main feed's lenses, not the CPO product radar.
+EVENTS = ("launch", "feature", "price", "outage", "complaint", "praise", "corporate", "other")
 SURFACE_EVENTS = {"launch", "feature", "price", "outage", "complaint"}
 ALERT_METRICS = ("outage", "complaint")
 FALLBACK_METRIC = "low_star"   # ≤2★, deterministic: a trigger only when the classifier was down
@@ -422,8 +425,11 @@ def build_prompt(s: dict[str, Any], batch: list[dict[str, Any]]) -> str:
         '"i" (item number), '
         '"relevant" (true only if the item is substantively about the SUBJECT\'s own products/app, '
         'not a namesake, not a passing mention in a list of banks), '
-        '"event" ("launch" new product | "feature" new/changed feature | "price" fee/rate/cashback/limit/'
-        'benefit change | "outage" app/service failure | "complaint" user problem | "praise" | "other"), '
+        '"event" ("launch" new product customers can now use | "feature" new/changed feature | '
+        '"price" fee/rate/cashback/limit/benefit change | "outage" app/service failure | '
+        '"complaint" user problem | "praise" | "corporate" company news that is not a customer-facing '
+        'product change: M&A, acquisition talks or rumours, funding, earnings, executives, lawsuits | '
+        '"other"), '
         '"sentiment" ("positive"|"neutral"|"negative"), '
         '"feature" (the specific product or feature named, e.g. "Pix parcelado", else ""), '
         '"is_new_change" (true ONLY if the item reports a specific, recent, dated change by the SUBJECT: '
@@ -894,9 +900,11 @@ def _subject_youtube(subject: dict[str, Any], yt: YouTubeClient, *, since: str, 
 def run(store: Any | None, *, today: dt.date | None = None, subjects: list[dict[str, Any]] | None = None,
         products: list[str] | None = None, fetch: Fetch | None = None,
         converse: Converser | None = None, yt_key: str | None | bool = None,
-        youtube: bool = True) -> dict[str, Any]:
+        youtube: bool = True, reclassify_youtube: bool = False) -> dict[str, Any]:
     """One daily radar run. ``store`` None = compute only (no persistence).
-    ``yt_key``: None → resolve (env/secret); False/"" → treat as absent."""
+    ``yt_key``: None → resolve (env/secret); False/"" → treat as absent.
+    ``reclassify_youtube``: re-score every STORED video (after a prompt/taxonomy change) — they
+    re-enter the classify step as unscored; reviews are untouched (they drive the baseline)."""
     today = today or dt.datetime.now(BRT).date()
     subjects = subjects or load_subjects()
     if products:
@@ -967,6 +975,9 @@ def run(store: Any | None, *, today: dt.date | None = None, subjects: list[dict[
                 sources["youtube"] = "partial: API error"
             elif ycov.get("quota") and sources["youtube"] == "ok":
                 sources["youtube"] = "partial: quota budget reached"
+        if reclassify_youtube:
+            for v in videos:
+                v["provenance"] = "unscored"
         # --- classify (new + previously unscored) --------------------------------------------
         todo = [m for m in videos + reviews if m.get("provenance") != "llm"][:max_classify]
         for m in todo:
@@ -1061,6 +1072,7 @@ def lambda_handler(event: dict[str, Any] | None, context: Any) -> dict[str, Any]
         bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
         store = S3Store(bucket) if bucket else None
     today = dt.date.fromisoformat(event["today"]) if event.get("today") else None
-    out = run(store, today=today, products=event.get("products"), youtube=event.get("youtube", True) is not False)
+    out = run(store, today=today, products=event.get("products"), youtube=event.get("youtube", True) is not False,
+              reclassify_youtube=bool(event.get("reclassify_youtube")))
     out.pop("radar", None)
     return {"statusCode": 200, "body": json.dumps(out, ensure_ascii=False)}

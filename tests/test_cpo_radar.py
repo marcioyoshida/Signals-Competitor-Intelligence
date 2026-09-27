@@ -280,6 +280,19 @@ def test_surfaceable_gate_excludes_evergreen_tutorials_and_spanish():
     assert cr.surfaceable(dict(v, relevant=False)) is False
 
 
+def test_corporate_news_is_classified_but_never_surfaced():
+    # Live 2026-09-26: "Nubank negocia compra da Monzo" came out as a "launch". Corporate news
+    # now has its own type, which the parser keeps and the card gate drops.
+    assert "corporate" in cr.EVENTS and "corporate" not in cr.SURFACE_EVENTS
+    m = {"video_id": "UygrItpHdGQ", "title": "Nubank negocia compra da Monzo", "description": ""}
+    cr.apply_result(m, {"relevant": True, "event": "corporate", "is_new_change": True, "pt_br": True,
+                        "change": "compra da Monzo", "why": "negociação de aquisição"})
+    assert m["event"] == "corporate" and cr.surfaceable(m) is False
+    p = cr.build_prompt(SUBJ["nubank"], [m]) if hasattr(cr, "build_prompt") else ""
+    if p:
+        assert '"corporate"' in p and "acquisition talks or rumours" in p
+
+
 # --- clustering ----------------------------------------------------------------------------------
 
 def test_three_creators_on_priority_pass_cluster_into_one_event():
@@ -453,6 +466,29 @@ def test_run_with_key_clusters_creators_and_meters_quota(tmp_path, monkeypatch):
     assert len(yt_events) == 1 and yt_events[0]["n_sources"] == 3
     assert radar["youtube_quota"]["units"] <= 1000
     assert radar["youtube_quota"]["by_endpoint"]["search"] == 100
+
+
+def test_reclassify_youtube_rescores_stored_videos_only(tmp_path, monkeypatch):
+    import datetime as dt
+
+    monkeypatch.setenv("ONCA_CPO_YT_LOOKBACK_DAYS", "3")
+    store = cr.LocalStore(tmp_path)
+    kw = dict(today=dt.date(2026, 9, 24), products=["inter"], fetch=_stub_fetch(), yt_key="test-key")
+    cr.run(store, converse=_stub_converse(), **kw)
+    prompts: list[str] = []
+
+    def spy(p, n):
+        prompts.append(p)
+        return _stub_converse()(p, n)
+
+    cr.run(store, converse=spy, **kw)
+    n_plain = len(prompts)
+    prompts.clear()
+    out = cr.run(store, converse=spy, reclassify_youtube=True, **kw)
+    assert len(prompts) > n_plain                     # stored videos went back through Nova
+    assert out["radar"]["sources"]["classifier"] == "ok"
+    st = json.loads((tmp_path / "product_radar" / "state.json").read_text())
+    assert all(v["provenance"] == "llm" for v in st["youtube"]["inter"])
 
 
 def test_run_bedrock_unavailable_keeps_items_unscored(tmp_path, monkeypatch):
