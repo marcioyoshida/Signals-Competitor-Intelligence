@@ -270,12 +270,22 @@ class OncaQaPipelineStack(Stack):
         )
         vision_task.add_catch(sfn.Pass(self, "QaVisionFailed"), result_path="$.error")
 
+        # #163: phone viewports (390/412 × light/dark × every /exec officer tab, /v2/admin,
+        # /entry) — HARD gate: no horizontal overflow, 44px primary tap targets.
+        phone_task = sfn_tasks.LambdaInvoke(
+            self, "QaPhoneTask", lambda_function=runner_fn,
+            payload=sfn.TaskInput.from_object({"mode": "phone", "persona": "admin", **RUN_ID}),
+            payload_response_only=True,
+        )
+        phone_task.add_catch(sfn.Pass(self, "QaPhoneFailed"), result_path="$.error")
+
         pipeline = sfn.Parallel(self, "QaBranches")
         pipeline.branch(login_task.next(inject_matrix).next(matrix_map))
         pipeline.branch(smoke_task)
         pipeline.branch(routing_task)
         pipeline.branch(resilience_task)
         pipeline.branch(vision_task)
+        pipeline.branch(phone_task)  # index 5 in checks/report.py
 
         # #133: consolidate every branch's output into one static HTML report. A Pass
         # reshapes the Parallel's raw array output (branch order = declaration order above)

@@ -1255,6 +1255,11 @@ class OncaPrototypeStack(Stack):
                 "/v2/context.js",
                 # v3 executive dashboard (ADR 021) — clean route /exec.
                 "/v3/index.html",
+                # #162 PWA: worker (root, scopes /exec) + manifest/icons; #170 share image
+                "/exec-sw.js",
+                "/v3/manifest.webmanifest",
+                "/v3/icons/*",
+                "/v3/og.png",
             ],
             prune=False,
         )

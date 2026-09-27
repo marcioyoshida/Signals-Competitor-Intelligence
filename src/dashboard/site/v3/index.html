@@ -5,6 +5,21 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="robots" content="noindex, nofollow" />
 <title>Onça · Sala Executiva</title>
+<!-- #162 installable PWA -->
+<link rel="manifest" href="/v3/manifest.webmanifest" />
+<link rel="apple-touch-icon" href="/v3/icons/apple-touch-icon.png" />
+<link rel="icon" type="image/png" sizes="192x192" href="/v3/icons/icon-192.png" />
+<meta name="theme-color" content="#f5f3ee" media="(prefers-color-scheme: light)" />
+<meta name="theme-color" content="#0e1214" media="(prefers-color-scheme: dark)" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="Onça" />
+<!-- #170 link previews are GENERIC by design: a shared card link never previews its finding -->
+<meta property="og:title" content="Onça — painel executivo" />
+<meta property="og:description" content="Conteúdo disponível apenas para usuários autorizados." />
+<meta property="og:image" content="https://onssa.org/v3/og.png" />
+<meta property="og:type" content="website" />
+<meta name="twitter:card" content="summary_large_image" />
 <link rel="stylesheet" href="/v2/app.css" />
 <style>
   /* v3 executive — built on the shared design tokens (dual-theme, no hardcoded hex) */
@@ -281,6 +296,10 @@
     .exrow--enf .ent { flex: 1; max-width: none; white-space: normal; overflow-wrap: anywhere; }
     .officer-tabs a { padding: 10px var(--s3); }
     .selwrap select, .authbtn { padding: 9px var(--s2); min-height: 40px; }
+    /* #163 hard gate: primary actions are at least 44×44 CSS px on a phone */
+    .officer-tabs a { min-height: 44px; display: inline-flex; align-items: center; }
+    .askbtn, .askrow input { min-height: 44px; }
+    .rec .cap button, .traj-f button { min-height: 44px; min-width: 88px; padding: 0 var(--s4); }
   }
   .offline-bar { background: var(--warn-fill); color: var(--warn); border-bottom: 1px solid var(--warn);
     padding: var(--s2) var(--s4); font-size: 13px; text-align: center; }
@@ -448,6 +467,7 @@ async function askOnca() {
   const input = document.getElementById("askInput"), q = (input.value || "").trim();
   if (!q) return;
   askBusy = true;
+  engage("ask", "open", null);   // #165 (the question text is never sent with it)
   const btn = document.getElementById("askBtn"), prev = btn.textContent; btn.disabled = true; btn.textContent = "Pensando…";
   const box = document.getElementById("askAns"); box.style.display = "block"; box.className = "askans"; box.innerHTML = `<span class="thinking">Consultando a base da Onça…</span>`;
   const scope = {}; if (SECTOR && SECTOR !== "__all__") scope.industry = SECTOR;
@@ -472,6 +492,12 @@ async function askOnca() {
 }
 renderAskPanel();
 Ctx.handleAuthCallback().then(() => Ctx.ensureSession()).then(renderAuthUI).then(loadFeed);
+window.addEventListener("appinstalled", () => { if (!ADMIN) engage("install", "open", null); });  // #165
+// #162: the /exec service worker (shell cache + content-free push). Never on the operator
+// preview — an ?opkey page must not leave anything behind on the device.
+if ("serviceWorker" in navigator && !new URLSearchParams(location.search).get("opkey")) {
+  navigator.serviceWorker.register("/exec-sw.js", { scope: "/exec" }).catch((e) => console.warn("sw", e));
+}
 
 // The tenant's licensed industry slugs, from the SERVER-SCOPED feed's `scoped_modules`
 // (never derived from a superset) — same rule as /v2/industries.js `licensedIndustries`,
@@ -531,6 +557,8 @@ function boot() {
     .forEach(s => { const o = document.createElement("option"); o.value = s.slug; o.textContent = s.label; sel.appendChild(o); });
   SECTOR = activeSector();
   sel.value = SECTOR;
+  // #165: one session event per open (device class + installed-app flag only)
+  if (!ADMIN && !OFFLINE) engage("session", "open", null);
   if (!EX.officers || !EX.officers.length) {
     document.getElementById("board").innerHTML =
       U.empty("Bloco executivo ausente", "feed.executive ainda não foi publicado.", "○"); return;

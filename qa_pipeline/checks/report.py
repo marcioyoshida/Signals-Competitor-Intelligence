@@ -126,10 +126,12 @@ def run(event: dict) -> dict:
     routing = branches[2] if len(branches) > 2 else {}
     resilience = branches[3] if len(branches) > 3 else {}
     vision = branches[4] if len(branches) > 4 else {}
+    phone = branches[5] if len(branches) > 5 else {}
 
     hard_gates_ok = (
         all(s.get("ok") for s in matrix) and smoke.get("ok", False)
         and routing.get("ok", False) and resilience.get("ok", False)
+        and phone.get("ok", False)
     )
     summary_cls = "allok" if hard_gates_ok else "anyfail"
 
@@ -144,6 +146,7 @@ def run(event: dict) -> dict:
         _checklist_rows("Smoke & critical-path navigation (#129)", smoke.get("checks", [])),
         _checklist_rows("Deep-linking & routing (#130)", routing.get("checks", [])),
         _checklist_rows("Resiliency (#131)", resilience.get("checks", [])),
+        _checklist_rows("Phone viewports — hard gate (#163)", phone.get("checks", [])),
         _vision_section(ARTIFACTS_BUCKET, run_id, vision.get("findings", [])),
         "</body></html>",
     ]

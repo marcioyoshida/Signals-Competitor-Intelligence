@@ -18,6 +18,9 @@ Dispatches on `event["mode"]`:
     aborted API calls). See qa_pipeline/checks/resilience.py.
   - "vision" — #132: Bedrock (Nova Pro) image-inference visual QA on a curated set of
     chart panels. Advisory only — never fails. See qa_pipeline/checks/vision.py.
+  - "phone" — #163: phone viewports (390/412, light/dark) over every /exec officer tab,
+    /v2/admin and /entry — HARD gate on horizontal overflow + 44px tap targets.
+    See qa_pipeline/checks/phone.py.
   - "report" — #133: consolidates every branch's output (passed in as `event["branches"]`
     by the state machine) into one static HTML summary, uploaded to S3. See
     qa_pipeline/checks/report.py.
@@ -29,7 +32,7 @@ import time
 
 from playwright.sync_api import sync_playwright
 
-from qa_pipeline.checks import report, resilience, routing, smoke, vision
+from qa_pipeline.checks import phone, report, resilience, routing, smoke, vision
 from qa_pipeline.lib import auth, config
 from qa_pipeline.lib.browser import (
     ARTIFACTS_BUCKET,
@@ -143,6 +146,7 @@ _DISPATCH = {
     "routing": routing.run,
     "resilience": resilience.run,
     "vision": vision.run,
+    "phone": phone.run,
     "report": report.run,
 }
 

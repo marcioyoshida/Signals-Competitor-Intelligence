@@ -13,6 +13,7 @@ ALL_OK_BRANCHES = [
     {"ok": True, "checks": [{"name": "hash", "ok": True, "detail": ""}]},
     {"ok": True, "checks": [{"name": "route_ok:/exec", "ok": True, "detail": ""}]},
     {"ok": True, "findings": []},
+    {"ok": True, "checks": [{"name": "no_overflow:/exec[cso]@390/dark", "ok": True, "detail": ""}]},
 ]
 
 
@@ -63,3 +64,12 @@ def test_missing_branches_default_gracefully_not_a_crash():
     ]}
     with pytest.raises(AssertionError):
         report.run(event)
+
+
+def test_phone_gate_failure_fails_the_run():
+    # #163: a horizontal overflow at 390/412 is a HARD gate, like the broken-link scan
+    branches = [b if not isinstance(b, list) else list(b) for b in ALL_OK_BRANCHES]
+    branches[5] = {"ok": False, "checks": [{"name": "no_overflow:/v2/admin/@390/light", "ok": False,
+                                            "detail": "scrollWidth=397 innerWidth=390"}]}
+    with pytest.raises(AssertionError):
+        report.run({"run_id": "t-phone", "branches": branches})

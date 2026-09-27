@@ -25,6 +25,10 @@
     #prList .qrow { grid-template-columns: auto 1fr; }
     #prList .qrow__actions { grid-column: 1 / -1; grid-row: auto; justify-content: flex-start; }
     #prPanel .panel__hd .hd-note { display: none; }  /* the lede fits the band; keep the header one line */
+    /* #163: band headers carry long provenance badges ("resposta fundamentada · feed completo"
+       made the page 397px at 390) — wrap them, as /exec does */
+    .band > .band-hd { flex-wrap: wrap; row-gap: 4px; }
+    .band > .band-hd .badge { white-space: normal; overflow-wrap: anywhere; max-width: 100%; }
   }
 </style>
 </head>
@@ -103,6 +107,19 @@
         <span class="hd-note" id="covWindow"></span>
       </div>
       <div class="panel__bd" id="coverage"></div>
+    </div>
+  </section>
+
+  <!-- ===================== Uso no celular (#165) ===================== -->
+  <!-- Operator-only (feed.mobile_usage is blanked in every tenant feed): sessions by device
+       class and officer, installs, jobs done on a phone — the Mobile M2 store-app gate input. -->
+  <section class="band">
+    <div class="band-hd"><span class="overline">Uso no celular</span><span class="rule"></span>
+      <span class="badge badge--ghost">classe de dispositivo · sem user-agent</span></div>
+    <div class="panel">
+      <div class="panel__hd"><h2>Sessões por dispositivo</h2><span class="spacer"></span>
+        <span class="hd-note" id="muGate"></span></div>
+      <div class="panel__bd" id="mobileUsage"></div>
     </div>
   </section>
 
@@ -237,9 +254,34 @@ function render() {
   renderIntegrity();
   renderCoverage();
   renderDescoberta();
+  renderMobileUsage();
   renderKpis();
   renderMapa();
   renderExceptions();
+}
+
+// #165 — phone usage by device class (the M2 gate evidence). Read-only from feed.mobile_usage.
+function renderMobileUsage() {
+  const el = document.getElementById("mobileUsage"), mu = DATA.mobile_usage || {};
+  const weeks = mu.weeks || [];
+  const g = mu.gate || {};
+  document.getElementById("muGate").textContent = g.weeks_required
+    ? `gate M2: ${g.weeks_met || 0}/${g.weeks_required} semanas ≥ ${Math.round((g.phone_share_min || 0) * 100)}% no celular` : "";
+  if (!weeks.length) { el.innerHTML = U.empty("Sem sessões registradas", "Nenhum evento de sessão com classe de dispositivo ainda.", "○"); return; }
+  const pct = (v) => v == null ? "—" : `${Math.round(v * 100)}%`;
+  const rows = weeks.map(w => {
+    const d = w.by_device || {};
+    const offs = Object.entries(w.by_officer || {}).map(([o, c]) => `${U.esc(o)} ${c.phone || 0}/${Object.values(c).reduce((a, b) => a + b, 0)}`).join(" · ");
+    return `<tr><td>${U.esc(w.week)}</td><td>${w.sessions}</td><td>${d.phone || 0}</td><td>${d.tablet || 0}</td>` +
+      `<td>${d.desktop || 0}</td><td><b>${pct(w.phone_share)}</b></td><td>${w.standalone || 0}</td><td>${w.installs || 0}</td>` +
+      `<td class="sub">${offs}</td></tr>`;
+  }).join("");
+  const jobs = (mu.phone_jobs || []).map(j => `<span class="chip">${U.esc(j.job)} · ${j.count}</span>`).join(" ");
+  el.innerHTML = `<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>semana</th><th>sessões</th><th>celular</th>` +
+    `<th>tablet</th><th>desktop</th><th>% celular</th><th>app instalado</th><th>instalações</th><th>por oficial (cel/total)</th></tr></thead>` +
+    `<tbody>${rows}</tbody></table></div>` +
+    `<div style="margin-top:var(--s3)"><span class="overline">No celular</span> ${jobs || '<span class="sub">—</span>'}</div>` +
+    `<p class="sub" style="margin-top:var(--s2)">${U.esc(g.note || "")}</p>`;
 }
 
 // #14 — the discovery/coverage asset: CVM/BCB regulated-segment coverage (roster-synced

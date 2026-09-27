@@ -979,6 +979,7 @@ def scope_feed_to_modules(feed: dict[str, Any], modules: Any) -> dict[str, Any]:
             "enforcement": _scope_enforcement(feed.get("enforcement"), keep, row_ok),  # #193
             "integrity": {"findings": [], "counts": {}, "total": 0},  # operator-only
             "regulatory_coverage": {},                                # operator-only (#2)
+            "mobile_usage": {},  # operator-only (#165) — per-officer device usage
             "source_runs": [],  # operator-only (#139) — raw per-source telemetry incl. error
                                 # text; clients get only the reduced "coverage_confidence" score,
                                 # which `dict(feed)` already carried over unchanged.
@@ -1103,6 +1104,7 @@ def derive_entry_feed(
             "integrity": {"findings": [], "counts": {}, "total": 0},  # operator-only
             "regulatory_coverage": {},                                # operator-only (#2)
             "source_runs": [],  # operator-only (#139) — see scope_feed_to_modules
+            "mobile_usage": {},  # operator-only (#165)
             "source_coverage": {},  # operator-only — see scope_feed_to_modules
         }
     )
@@ -2017,6 +2019,11 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             _review_days = int(os.environ.get("ONCA_OUTCOME_REVIEW_DAYS") or 7)
         except (TypeError, ValueError):
             _review_days = 7
+        try:  # #165 operator-only: phone usage by device class (the M2 store-app gate evidence)
+            from src.synth import mobile_usage
+            feed["mobile_usage"] = mobile_usage.build(_engagement, _decisions)
+        except Exception as exc:  # pragma: no cover - best-effort, read-only
+            print(f"Warning: mobile usage skipped: {exc}")
         feed["executive"] = executive.build_executive(feed, decisions=_decisions,
                                                        engagement=_engagement, tdr_baseline_hours=_tdr_base,
                                                        outcome_review_days=_review_days)
