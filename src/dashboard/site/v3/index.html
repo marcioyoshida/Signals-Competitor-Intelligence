@@ -330,6 +330,9 @@
     .rec .cap button, .traj-f button { min-height: 44px; min-width: 88px; padding: 0 var(--s4); }
   }
   /* #166 "Hoje" — the phone-first morning brief */
+  /* the Hoje/Painel switch widened the header past 860px (#128 tablet shard: 877/902px) — let
+     /exec's app bar wrap below 1180px instead of the shared 780px breakpoint */
+  @media (max-width: 1180px) { .appbar { flex-wrap: wrap; row-gap: var(--s1); } }
   .view-tabs a { border-bottom:2px solid transparent; border-radius:0; padding:var(--s2) var(--s3); font-weight:700; }
   .view-tabs a[aria-current="page"] { border-bottom-color:var(--primary); color:var(--ink); }
   body.view-hoje #macroStrip, body.view-hoje #askPanel, body.view-hoje #recsBand { display:none; }
