@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 
 import yaml
+from edge_policy import exec_exemption_js
 from aws_cdk import App, ArnFormat, CfnOutput, Duration, RemovalPolicy, SecretValue, Size, Stack, Tags
 from aws_cdk import aws_bedrock as bedrock
 from aws_cdk import aws_apigatewayv2 as apigwv2
@@ -686,6 +687,7 @@ class OncaPrototypeStack(Stack):
                 '  else if (r.uri.charAt(r.uri.length - 1) === "/" && r.uri.indexOf("/api/") !== 0) {\n'
                 '    r.uri = r.uri + "index.html";\n'
                 "  }\n"
+                + exec_exemption_js() +
                 f'  var expected = "Basic {basic}";\n'
                 "  if (!h.authorization || h.authorization.value !== expected) {\n"
                 "    return { statusCode: 401, statusDescription: 'Unauthorized',\n"
@@ -915,6 +917,14 @@ class OncaPrototypeStack(Stack):
                 ],
             ),
             prevent_user_existence_errors=True,
+            # #164 mobile session posture (docs/onca-celular-seguranca): 1h ID tokens; the
+            # refresh token (held ONLY in the /api/session httpOnly cookie) is capped at 30
+            # days absolute — the per-tenant idle limit is the cookie's sliding Max-Age.
+            # Revocation lets logout / operator global sign-out kill a refresh token.
+            id_token_validity=Duration.hours(1),
+            access_token_validity=Duration.hours(1),
+            refresh_token_validity=Duration.days(30),
+            enable_token_revocation=True,
         )
         if google_idp:
             _client_kwargs["supported_identity_providers"] = [
@@ -2479,6 +2489,50 @@ class OncaPrototypeStack(Stack):
             integration=apigwv2_int.HttpLambdaIntegration("FeedInteg", feed_api_fn),
             authorizer=jwt_authorizer,
         )
+        # #161: the officer suite's writes + quotes for a Cognito-signed-in caller (the phone /
+        # installed-PWA path, no shared basic auth). Same Lambdas as the operator /api/act and
+        # /api/quotes behaviors; the JWT authorizer verifies the token, and act_api then limits a
+        # non-elevated tenant identity to its own decision capture + engagement (_SELF_SERVICE).
+        auth_api.add_routes(
+            path="/api/me/act",
+            methods=[apigwv2.HttpMethod.POST],
+            integration=apigwv2_int.HttpLambdaIntegration("MeActInteg", act_fn),
+            authorizer=jwt_authorizer,
+        )
+        auth_api.add_routes(
+            path="/api/me/quotes",
+            methods=[apigwv2.HttpMethod.GET],
+            integration=apigwv2_int.HttpLambdaIntegration("MeQuotesInteg", quotes_fn),
+            authorizer=jwt_authorizer,
+        )
+        # #164: session broker — code exchange + refresh via an httpOnly cookie, logout revokes.
+        # No JWT authorizer: the cookie is the credential (src/dashboard/session_api.py).
+        session_fn = lambda_.Function(
+            self,
+            "OncaSessionApi",
+            runtime=LAMBDA_RUNTIME,
+            handler="src.dashboard.session_api.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.seconds(15),
+            memory_size=256,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_COGNITO_DOMAIN": user_pool_domain.base_url(),
+                "ONCA_COGNITO_CLIENT_ID": user_pool_client.user_pool_client_id,
+                "ONCA_TENANT_CONFIG_TABLE": tenant_config_table.table_name,
+                "ONCA_SESSION_EXTRA_HOSTS": distribution.distribution_domain_name,
+            },
+        )
+        tenant_config_table.grant_read_data(session_fn)  # per-tenant session_idle_days
+        _session_integ = apigwv2_int.HttpLambdaIntegration("SessionInteg", session_fn)
+        for _spath in ("/api/session/exchange", "/api/session/refresh", "/api/session/logout"):
+            auth_api.add_routes(path=_spath, methods=[apigwv2.HttpMethod.POST],
+                                integration=_session_integ)
+        # #164 remote sign-out: the operator act `revoke_user_sessions`
+        act_fn.add_environment("ONCA_USER_POOL_ID", user_pool.user_pool_id)
+        act_fn.add_to_role_policy(iam.PolicyStatement(
+            actions=["cognito-idp:AdminUserGlobalSignOut"], resources=[user_pool.user_pool_arn]))
+
         # POST /api/register — lazy Entry-tier self-registration for a first-time
         # Google login (see docs/google-oauth-runbook.md, src.dashboard.self_register).
         # Only exists once Google is wired: a password-only pool has no self-sign-up
@@ -2716,7 +2770,7 @@ class OncaPrototypeStack(Stack):
         # below — CloudFront matches behaviors by INSERTION ORDER, not specificity, so
         # losing this position would silently route curation calls to the review action.
         _api_patterns = ["/api/ask*", "/api/gaps*", "/api/feed*", "/api/registry*",
-                          "/api/v1/agent*", "/api/keys*"]
+                          "/api/v1/agent*", "/api/keys*", "/api/me/*", "/api/session/*"]
         if google_idp:
             _api_patterns.append("/api/register*")
         for _pat in _api_patterns:

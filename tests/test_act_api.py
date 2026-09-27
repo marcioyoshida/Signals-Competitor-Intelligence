@@ -686,3 +686,83 @@ def test_radar_write_is_journaled_under_the_caller(monkeypatch):
     rows.clear()
     _act("list_product_radar", {})
     assert rows == []                                                                # reads unjournaled
+
+
+# ---- #161 /api/me/act: a Cognito-signed-in officer, no shared basic auth / origin secret ----
+def _me(body, claims=None):
+    """What the HTTP API JWT authorizer delivers: verified claims, NO origin-secret header."""
+    return _event(body, headers={}, claims=claims or {"sub": "u1", "custom:tenant": "acme"})
+
+
+def test_me_path_allows_self_service_decision_capture_stamped_with_verified_tenant(monkeypatch):
+    _no_journal(monkeypatch)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
+    from src.synth import decision_log
+    seen = {}
+    monkeypatch.setattr(decision_log, "record_decision",
+                        lambda **k: seen.update(k) or {"decision_id": "d1", "verdict": k["verdict"]})
+    resp = act_api.lambda_handler(_me({"intent": "record_decision", "args": {
+        "officer": "cso", "recommendation": "r", "verdict": "aprovado",
+        "tenant": "evil", "device": "phone"}}), None)
+    assert resp["statusCode"] == 200
+    assert seen["tenant"] == "acme" and seen["device"] == "phone" and seen["actor"] == "u1"
+
+
+def test_me_path_forbids_operator_intents_for_a_tenant_token(monkeypatch):
+    _no_journal(monkeypatch)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
+    for intent in ("trigger_run", "revoke_user_sessions", "set_product_radar", "set_tdr_baseline"):
+        assert act_api.lambda_handler(_me({"intent": intent}), None)["statusCode"] == 403
+
+
+def test_me_path_cannot_touch_another_tenants_decision(monkeypatch):
+    _no_journal(monkeypatch)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
+    from src.synth import decision_log
+    monkeypatch.setattr(decision_log, "get_decision",
+                        lambda did: {"decision_id": did, "tenant": "other"})
+    called = []
+    monkeypatch.setattr(decision_log, "set_outcome", lambda *a, **k: called.append(1))
+    resp = act_api.lambda_handler(_me({"intent": "set_outcome",
+                                       "args": {"decision_id": "d9", "outcome": "favoravel"}}), None)
+    assert resp["statusCode"] == 404 and not called
+
+
+def test_me_path_idempotency_keys_are_per_caller(monkeypatch):
+    _no_journal(monkeypatch)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
+    keys = []
+    monkeypatch.setattr(act_api, "_get_act", lambda k, *a, **kw: keys.append(k) or None)
+    from src.synth import engagement_log
+    monkeypatch.setattr(engagement_log, "record_engagement",
+                        lambda **k: {"engagement_id": "e", "kind": "h", "action": "open"})
+    act_api.lambda_handler(_me({"intent": "record_engagement", "idempotency_key": "k1"}), None)
+    assert keys == ["u1:k1"]
+
+
+def test_engagement_keeps_only_a_device_class(monkeypatch):
+    _no_journal(monkeypatch)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
+    from src.synth import engagement_log
+    seen = {}
+    monkeypatch.setattr(engagement_log, "record_engagement",
+                        lambda **k: seen.update(k) or {"engagement_id": "e", "kind": "h", "action": "open"})
+    act_api.lambda_handler(_me({"intent": "record_engagement", "args": {
+        "device": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0)", "standalone": True}}), None)
+    assert seen["device"] is None and seen["standalone"] is True and seen["tenant"] == "acme"
+
+
+def test_revoke_user_sessions_global_signs_out(monkeypatch):
+    _no_journal(monkeypatch)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
+    monkeypatch.setenv("ONCA_USER_POOL_ID", "us-east-1_X")
+    calls = []
+
+    class _Cog:
+        def admin_user_global_sign_out(self, **k):
+            calls.append(k)
+    monkeypatch.setattr(boto3, "client", lambda name, *a, **k: _Cog())
+    resp = act_api.lambda_handler(_event({"intent": "revoke_user_sessions",
+                                          "args": {"username": "ana@banco.com"}}), None)
+    assert resp["statusCode"] == 200
+    assert calls == [{"UserPoolId": "us-east-1_X", "Username": "ana@banco.com"}]

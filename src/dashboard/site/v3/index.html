@@ -282,6 +282,9 @@
     .officer-tabs a { padding: 10px var(--s3); }
     .selwrap select, .authbtn { padding: 9px var(--s2); min-height: 40px; }
   }
+  .offline-bar { background: var(--warn-fill); color: var(--warn); border-bottom: 1px solid var(--warn);
+    padding: var(--s2) var(--s4); font-size: 13px; text-align: center; }
+  [hidden] { display: none !important; }
 </style>
 </head>
 <body>
@@ -296,6 +299,7 @@
   <button class="icnbtn" id="themeBtn" title="Alternar tema" aria-label="Alternar tema">◐</button>
 </header>
 
+<div class="offline-bar" id="offlineBar" role="status" hidden></div>
 <main class="wrap">
   <div class="pagehead"><h1 id="pgTitle">Sala executiva</h1><p class="lede" id="pgLede"></p></div>
   <div id="macroStrip" class="macro-strip"></div>
@@ -374,6 +378,27 @@ document.querySelectorAll("#officerTabs a").forEach(a => a.addEventListener("cli
 // duplicate this and fetch the raw unscoped /feed.json regardless of login — see the
 // 2026-09-12 sector-scoped-sessions plan).
 const Ctx = window.OncaCtx;
+// #165: a device CLASS only (viewport width + pointer), never a user-agent string.
+function deviceClass() {
+  const w = Math.min(window.innerWidth || 0, (screen && screen.width) || 99999);
+  const coarse = window.matchMedia && matchMedia("(pointer: coarse)").matches;
+  return w < 600 && coarse ? "phone" : (w < 1024 && coarse ? "tablet" : "desktop");
+}
+function isStandalone() {
+  return !!((window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone);
+}
+// #161: writes go to /api/me/act with the officer's own Cognito token (no shared basic
+// auth on the phone). The operator preview (?admin=1&opkey=) keeps the origin-secret path.
+function actFetch(body, extra) {
+  if (ADMIN) {
+    return U.oacFetch("/api/act", Object.assign({ method: "POST", credentials: "include",
+      headers: { "content-type": "application/json" }, body }, extra || {}));
+  }
+  const tok = Ctx.getIdToken();
+  if (!tok) return Promise.reject(new Error("sem sessão"));
+  return fetch("/api/me/act", Object.assign({ method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${tok}` }, body }, extra || {}));
+}
 function renderAuthUI() {
   Ctx.renderAuthBox("authBox", () => renderAskLoginState());
 }
@@ -427,9 +452,15 @@ async function askOnca() {
   const box = document.getElementById("askAns"); box.style.display = "block"; box.className = "askans"; box.innerHTML = `<span class="thinking">Consultando a base da Onça…</span>`;
   const scope = {}; if (SECTOR && SECTOR !== "__all__") scope.industry = SECTOR;
   try {
-    const r = await fetch("/api/ask", { method: "POST",
+    const call = () => fetch("/api/ask", { method: "POST",
       headers: { "content-type": "application/json", "authorization": `Bearer ${Ctx.getIdToken()}` },
       body: JSON.stringify({ q, scope, officer: OFFICER }) });
+    await Ctx.ensureSession();
+    let r = await call();
+    if (r.status === 401) {
+      try { sessionStorage.removeItem("onca_id_token"); } catch (e) {}
+      if (await Ctx.ensureSession() === "ok") r = await call();
+    }
     if (r.status === 401) {
       try { sessionStorage.removeItem("onca_id_token"); } catch (e) {}
       renderAuthUI(); renderAnswer({ refused: true, answer: "Sessão expirada. Entre novamente para perguntar." }); return;
@@ -440,7 +471,7 @@ async function askOnca() {
   finally { btn.disabled = false; btn.textContent = prev; askBusy = false; }
 }
 renderAskPanel();
-Ctx.handleAuthCallback().then(renderAuthUI).then(loadFeed);
+Ctx.handleAuthCallback().then(() => Ctx.ensureSession()).then(renderAuthUI).then(loadFeed);
 
 // The tenant's licensed industry slugs, from the SERVER-SCOPED feed's `scoped_modules`
 // (never derived from a superset) — same rule as /v2/industries.js `licensedIndustries`,
@@ -477,14 +508,20 @@ async function loadFeed() {
     return;
   }
   DATA = res.data;
+  OFFLINE = !!res.offline;
   LICENSED = licensedIndustries(DATA);
   boot();
 }
+let OFFLINE = false;
+// #162: an offline render is the LAST feed this user loaded — say so, visibly.
+window.addEventListener("online", () => { if (OFFLINE) location.reload(); });
 
 function boot() {
   EX = DATA.executive || {};
   BYID = {}; (DATA.feed || []).forEach(c => { BYID[c.id] = c; });
-  document.getElementById("asof").textContent = DATA.as_of ? `dados de ${U.fmtDate(DATA.as_of)}` : "";
+  document.getElementById("asof").textContent = DATA.as_of ? `dados de ${U.fmtDate(DATA.as_of)}${OFFLINE ? " · offline" : ""}` : "";
+  const ob = document.getElementById("offlineBar");
+  if (ob) { ob.hidden = !OFFLINE; ob.textContent = OFFLINE ? `Sem conexão — exibindo dados de ${DATA.as_of ? U.fmtDate(DATA.as_of) : "—"} · offline` : ""; }
   document.getElementById("macroStrip").innerHTML = macroStrip(DATA.macro);  // shared header
   setInterval(() => { if (OFFICER === "cso") loadQuotes(); }, 60000);  // B3 quotes refresh
   const sel = document.getElementById("sectorSel");
@@ -629,7 +666,10 @@ async function loadQuotes() {
   if (!el) return;
   try {
     const ind = SECTOR && SECTOR !== "__all__" ? SECTOR : "";
-    const r = await U.oacFetch(`/api/quotes${ind ? "?industry=" + encodeURIComponent(ind) : ""}`, { cache: "no-store" });
+    const qs = ind ? "?industry=" + encodeURIComponent(ind) : "";
+    const r = ADMIN ? await U.oacFetch(`/api/quotes${qs}`, { cache: "no-store" })
+      : await fetch(`/api/me/quotes${qs}`, { cache: "no-store",
+          headers: { authorization: `Bearer ${Ctx.getIdToken() || ""}` } });
     if (!r.ok) { el.innerHTML = U.empty("Cotações indisponíveis.", "", "○"); return; }
     const payload = await r.json();
     const rows = payload.quotes || [];
@@ -1296,8 +1336,7 @@ function beacon(did, url, officer) {
   // hash the AWS_IAM function URL now requires (WAF Phase 0). fetch(keepalive) keeps
   // the survive-unload guarantee for a body this small and does allow headers.
   try {
-    U.oacFetch("/api/act", { method: "POST", credentials: "include", keepalive: true,
-      headers: { "content-type": "application/json" }, body }).catch(() => {});
+    actFetch(body, { keepalive: true }).catch(() => {});
   } catch (e) { /* best-effort — never blocks navigation */ }
 }
 // §E engagement telemetry — an attention event (headline expand/open), tagged for intelligence.
@@ -1306,11 +1345,11 @@ function engage(kind, action, cardId) {
   const body = JSON.stringify({ intent: "record_engagement", officer: OFFICER, args: {
     kind, action, officer: OFFICER, sector: SECTOR, card_id: cardId,
     entity: c && c.entity, threat_score: c && c.threat_score,
-    industries: (c && c.industries) || [], topics: (c && c.topics) || [] } });
+    industries: (c && c.industries) || [], topics: (c && c.topics) || [],
+    device: deviceClass(), standalone: isStandalone() } });
   // See beacon() above: sendBeacon cannot sign, fetch(keepalive) can.
   try {
-    U.oacFetch("/api/act", { method: "POST", credentials: "include", keepalive: true,
-      headers: { "content-type": "application/json" }, body }).catch(() => {});
+    actFetch(body, { keepalive: true }).catch(() => {});
   } catch (e) { /* best-effort */ }
 }
 function evUrl(evId) { const c = BYID[evId]; return (c && (c.citations || [])[0] && c.citations[0].url) || ("card:" + evId); }
@@ -1730,8 +1769,9 @@ async function setOutcome(did, outcome, sel) {
   sel.disabled = false; if (res && res.decision_outcome) sel.title = "resultado registrado";
 }
 async function postAct(body) {
-  try { const r = await U.oacFetch("/api/act", { method: "POST", credentials: "include",
-    headers: { "content-type": "application/json" }, body: JSON.stringify(body) }); return await r.json(); }
+  if (body && body.intent === "record_decision" && body.args) body.args.device = deviceClass();
+  try { if (!ADMIN) await Ctx.ensureSession();
+    const r = await actFetch(JSON.stringify(body)); return await r.json(); }
   catch (e) { console.error("act failed", e); return null; }
 }
 

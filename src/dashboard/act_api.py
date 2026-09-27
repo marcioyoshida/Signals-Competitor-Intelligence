@@ -355,6 +355,8 @@ def _act_record_decision(args: dict[str, Any], actor: str) -> tuple[str, int, di
             context_id=(args.get("context_id") or None),
             rationale=(args.get("rationale") or None),
             started_at=(args.get("started_at") or None),
+            tenant=(args.get("tenant") or None),
+            device=_device(args.get("device")),
         )
     except ValueError as exc:
         return "blocked", 400, {"error": str(exc)}
@@ -422,7 +424,9 @@ def _act_record_engagement(args: dict[str, Any], actor: str) -> tuple[str, int, 
             card_id=args.get("card_id"), entity=args.get("entity"),
             action=args.get("action"), threat_score=args.get("threat_score"),
             industries=args.get("industries") if isinstance(args.get("industries"), list) else None,
-            topics=args.get("topics") if isinstance(args.get("topics"), list) else None)
+            topics=args.get("topics") if isinstance(args.get("topics"), list) else None,
+            tenant=(args.get("tenant") or None), device=_device(args.get("device")),
+            standalone=(bool(args["standalone"]) if "standalone" in args else None))
     except Exception as exc:  # pragma: no cover - telemetry best-effort
         return "noop", 200, {"detail": f"engagement skipped: {exc}"}
     return "applied", 200, {"engagement_id": item["engagement_id"], "kind": item["kind"],
@@ -607,6 +611,35 @@ def _act_list_product_radar(args: dict[str, Any], actor: str) -> tuple[str, int,
 
 # Intents whose calls are NOT written to the OncaCurationLog audit journal (high-frequency
 # telemetry, or a pure read — not a state mutation).
+_DEVICES = frozenset({"phone", "tablet", "desktop"})
+
+
+def _device(v: Any) -> str | None:
+    """#165: a device CLASS only — anything else (a raw UA, a model string) is dropped."""
+    d = str(v or "").strip().lower()
+    return d if d in _DEVICES else None
+
+
+def _act_revoke_user_sessions(args: dict[str, Any], actor: str) -> tuple[str, int, dict[str, Any]]:
+    """apply (#164 remote sign-out): Cognito global sign-out for one user — every refresh token
+    is revoked, so the user's installed app lands on the login gate at its next launch (its
+    ``/api/session/refresh`` gets 401 and the client wipes its per-user caches)."""
+    import boto3
+
+    username = str(args.get("username") or args.get("email") or "").strip()
+    pool = os.environ.get("ONCA_USER_POOL_ID") or ""
+    if not username or not pool:
+        return "blocked", 400, {"error": "username (or email) required"}
+    try:
+        boto3.client("cognito-idp").admin_user_global_sign_out(UserPoolId=pool, Username=username)
+    except Exception as exc:
+        name = type(exc).__name__
+        if "UserNotFound" in name or "UserNotFound" in str(exc):
+            return "noop", 404, {"detail": "user not found"}
+        return "blocked", 502, {"error": f"sign-out failed: {name}"}
+    return "applied", 200, {"revoked": True}
+
+
 _NO_JOURNAL = frozenset({"record_engagement", "list_product_radar"})
 
 # DEC-6: decision-management intents operate ON a decision — they must NOT be linked back as
@@ -643,7 +676,16 @@ _CATALOG: dict[str, tuple[str, Callable[..., tuple[str, int, dict[str, Any]]], s
     "resume_product_radar": (APPLY, _act_resume_product_radar, "entity_id"),
     "remove_product_radar": (APPLY, _act_remove_product_radar, "entity_id"),
     "list_product_radar": (APPLY, _act_list_product_radar, None),
+    # #164 remote sign-out (operator only — elevated)
+    "revoke_user_sessions": (APPLY, _act_revoke_user_sessions, None),
 }
+
+# #161: what a NON-elevated tenant identity (Cognito JWT via /api/me/act) may call — the officer's
+# own decision capture and attention telemetry, nothing that touches the registry or pipeline.
+_SELF_SERVICE = frozenset({"record_decision", "set_outcome", "set_board_adoption",
+                           "append_reference", "record_engagement"})
+# of those, the ones that act on an EXISTING decision — tenant-checked before they run
+_ON_DECISION = frozenset({"set_outcome", "set_board_adoption", "append_reference"})
 
 
 def catalog() -> dict[str, str]:
@@ -657,7 +699,11 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # reaches here); the origin secret CloudFront injects is the backstop.
     from src.dashboard.auth import origin_secret_ok
 
-    if not origin_secret_ok(event):
+    # #161: /api/me/act reaches this handler through the Cognito HTTP API, whose JWT authorizer
+    # has already verified the token (claims in requestContext.authorizer.jwt) — that identity
+    # IS the gate there. Every other caller must be CloudFront's origin-secret operator path.
+    identity = auth.identity_from_event(event)
+    if identity is None and not origin_secret_ok(event):
         return _resp(403, {"error": "forbidden"})
 
     # GET → advertise the catalog + officer roster (helps clients discover intents/officers).
@@ -670,16 +716,30 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         return _resp(400, {"error": "invalid JSON body"})
 
     actor, elevated = _authorize(event)
-    if not elevated:
+    intent = str(body.get("intent") or "").strip()
+    if not elevated and not (identity is not None and intent in _SELF_SERVICE):
         return _resp(403, {"error": "write requires an elevated capability"})
 
-    intent = str(body.get("intent") or "").strip()
     entry = _CATALOG.get(intent)
     if entry is None:
         return _resp(400, {"error": "unknown intent", "catalog": list(_CATALOG)})
     exec_class, handler, subject_key = entry
-    args = body.get("args") if isinstance(body.get("args"), dict) else {}
+    args = dict(body.get("args")) if isinstance(body.get("args"), dict) else {}
     idem = str(body.get("idempotency_key") or "").strip()
+    if identity is not None:
+        # the tenant is the VERIFIED claim, never a client-supplied arg; idempotency keys are
+        # per-caller so one tenant can never replay (and read) another's stored result
+        args["tenant"] = identity.tenant
+        if idem:
+            idem = f"{identity.sub}:{idem}"
+        if not elevated and intent in _ON_DECISION:
+            from src.synth import decision_log
+
+            did = str(args.get("decision_id") or "").strip()
+            dec = decision_log.get_decision(did) if did else None
+            if not dec or not identity.tenant or dec.get("tenant") != identity.tenant:
+                return _resp(404, {"outcome": "noop", "detail": "decision not found",
+                                   "decision_id": did})
 
     # Phase 2/3: officer scoping + chief-of-staff hand-off. An `officer` may only emit its
     # own catalog actions; an action owned EXCLUSIVELY by another officer is handed off to

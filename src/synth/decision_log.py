@@ -70,6 +70,8 @@ def record_decision(
     rationale: str | None = None,
     started_at: str | None = None,
     source: str = "curated",
+    tenant: str | None = None,
+    device: str | None = None,
     table: Any | None = None,
 ) -> dict[str, Any]:
     """Append a decision. Returns the stored item (incl. the generated ``decision_id``).
@@ -78,6 +80,8 @@ def record_decision(
     :func:`set_outcome` when the result is observed. ``started_at`` (ISO) is when the executive
     FIRST engaged the item — with ``created_at`` it gives the real deliberation time (§E TDR).
     ``source`` (ADR-018, DEC-5) stamps who set the label — a human/API decision is ``curated``.
+    ``tenant`` is the deciding identity's tenant (a JWT caller may only touch its own tenant's
+    decisions, #161); ``device`` = phone|tablet|desktop, so phone decisions are visible (#168).
     Raises ValueError on a bad verdict / empty recommendation."""
     verdict = (verdict or "").strip().lower()
     if verdict not in _VERDICTS:
@@ -99,6 +103,8 @@ def record_decision(
         "rationale": (rationale or "").strip() or None,
         "actor": actor,
         "started_at": (started_at or "").strip() or None,
+        "tenant": (tenant or "").strip() or None,
+        "device": (device or "").strip() or None,
         "created_at": _er._now_iso(),
         "outcome": "pendente",
         "outcome_note": None,

@@ -26,12 +26,22 @@ from qa_pipeline.lib import auth, config  # noqa: E402
 
 def run(persona: str, url: str) -> dict:
     creds = config.qa_credentials()["personas"][persona]
-    user, pw = config.basic_auth()
+    # #161: /exec is signed in with Cognito ONLY — no shared basic-auth password. The smoke
+    # deliberately sends none there, so a regression that re-gates /exec fails here.
+    kw = {}
+    if "/exec" not in url:
+        user, pw = config.basic_auth()
+        kw["http_credentials"] = {"username": user, "password": pw}
     with sync_playwright() as pw_ctx:
         browser = pw_ctx.chromium.launch(headless=True)
-        context = browser.new_context(http_credentials={"username": user, "password": pw})
+        context = browser.new_context(**kw)
         page = context.new_page()
         storage = auth.login_with_password(page, url, creds["username"], creds["password"])
+        # #164: the refresh token must be an HttpOnly cookie scoped to /api/session — never
+        # readable by page script
+        rt = [c for c in context.cookies() if c["name"] == "onca_rt"]
+        if "/exec" in url and not (rt and rt[0]["httpOnly"] and rt[0]["path"] == "/api/session"):
+            raise RuntimeError("session broker did not set the HttpOnly onca_rt cookie")
         browser.close()
     return {"persona": persona, "username": creds["username"], "tenant_id": creds["tenant_id"],
             "tier": creds["tier"], "session_storage": storage}

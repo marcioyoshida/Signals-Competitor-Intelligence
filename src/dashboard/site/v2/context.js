@@ -83,6 +83,12 @@
   // onclick handler, which would otherwise pass the click MouseEvent as `idp`.
   async function login(idp) {
     const useIdp = typeof idp === "string" ? idp : null;
+    // #166/#170: a deep link (#hoje-…, ?c=…) must survive the login redirect — Cognito only
+    // returns to the bare redirect_uri.
+    try {
+      const back = location.search.replace(/[?&](code|state)=[^&]*/g, "") + location.hash;
+      if (back && back !== "?") sessionStorage.setItem("onca_return", back);
+    } catch (e) {}
     const verifier = randomPkceVerifier();
     sessionStorage.setItem(VERIFIER_KEY, verifier);
     const challenge = await pkceChallenge(verifier);
@@ -94,8 +100,81 @@
     const path = useIdp ? "oauth2/authorize" : "login";
     location.href = `${AUTH.domain}/${path}?${params.toString()}`;
   }
-  function logout() {
+  /* ---- Session broker (#161/#164) -----------------------------------------
+     The Cognito refresh token never touches page JavaScript: /api/session/exchange does
+     the PKCE code exchange server-side and keeps it in an HttpOnly, SameSite=Strict
+     cookie scoped to /api/session; /api/session/refresh trades it for a fresh 1h ID
+     token (sliding, per-tenant idle limit); /api/session/logout revokes it. Only the
+     short-lived ID token lives here, in sessionStorage. */
+  const USER_FEED_CACHE = "onca-user-feed";
+  const DEVICE_SESSION_KEY = "onca_u_session";   // {sub, last_active, idle_days} — no token
+  function sessionPost(path, body) {
+    return fetch("/api/session/" + path, {
+      method: "POST", credentials: "same-origin", cache: "no-store",
+      headers: { "content-type": "application/json", "x-onca-session": "1" },
+      body: JSON.stringify(body || {}),
+    });
+  }
+  function markDeviceSession(idleDays) {
+    const p = decodeJwt(getIdToken() || "") || {};
+    if (!p.sub) return;
+    let prev = {};
+    try { prev = JSON.parse(localStorage.getItem(DEVICE_SESSION_KEY) || "{}"); } catch (e) {}
+    const rec = { sub: p.sub, last_active: Date.now(),
+      idle_days: idleDays || (prev.sub === p.sub && prev.idle_days) || 7 };
+    try { localStorage.setItem(DEVICE_SESSION_KEY, JSON.stringify(rec)); } catch (e) {}
+  }
+  // Every trace of the signed-in user on this device: token, offline feed, per-user
+  // prefs ("onca_u_*" keys), the device-session marker. Called on logout AND when the
+  // server says the session is over (idle limit, operator remote sign-out).
+  async function clearUserData() {
     try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) {}
+    try {
+      Object.keys(localStorage).filter((k) => k.indexOf("onca_u_") === 0)
+        .forEach((k) => localStorage.removeItem(k));
+    } catch (e) {}
+    try { if (global.caches) await caches.delete(USER_FEED_CACHE); } catch (e) {}
+    try {
+      if (global.indexedDB && indexedDB.databases) {
+        (await indexedDB.databases()).filter((d) => d.name && d.name.indexOf("onca-u") === 0)
+          .forEach((d) => indexedDB.deleteDatabase(d.name));
+      }
+    } catch (e) {}
+  }
+  let _refreshing = null, _noSession = false;
+  // Resolve a usable ID token: "ok" (valid now), "ended" (no/ended server session — user
+  // data wiped), or "offline" (couldn't reach the broker; nothing wiped).
+  function ensureSession() {
+    if (isLoggedIn()) { markDeviceSession(); return Promise.resolve("ok"); }
+    if (_noSession) return Promise.resolve("ended");   // asked once this page: none
+    if (_refreshing) return _refreshing;
+    _refreshing = (async () => {
+      let r;
+      try { r = await sessionPost("refresh"); }
+      catch (e) { return "offline"; }
+      let j = {};
+      if (r.ok) {
+        j = await r.json().catch(() => ({}));
+        if (j.id_token) {
+          sessionStorage.setItem(TOKEN_KEY, j.id_token);
+          markDeviceSession(j.idle_days);
+          return "ok";
+        }
+      }
+      if (r.status === 401 || r.status === 403 || j.session === "none") {
+        _noSession = true;
+        let had = false;
+        try { had = !!localStorage.getItem(DEVICE_SESSION_KEY); } catch (e) {}
+        if (had) await clearUserData();
+        return "ended";
+      }
+      return "offline";
+    })().finally(() => { _refreshing = null; });
+    return _refreshing;
+  }
+  async function logout() {
+    try { await sessionPost("logout"); } catch (e) {}
+    await clearUserData();
     const params = new URLSearchParams({ client_id: AUTH.clientId, logout_uri: AUTH.redirectUri });
     location.href = `${AUTH.domain}/logout?${params.toString()}`;
   }
@@ -104,18 +183,18 @@
     sessionStorage.removeItem(VERIFIER_KEY);
     if (!verifier) return false;
     try {
-      const body = new URLSearchParams({
-        grant_type: "authorization_code", client_id: AUTH.clientId,
-        code, redirect_uri: AUTH.redirectUri, code_verifier: verifier,
-      });
-      const r = await fetch(`${AUTH.domain}/oauth2/token`, {
-        method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" },
-        body: body.toString(),
-      });
+      const r = await sessionPost("exchange",
+        { code, code_verifier: verifier, redirect_uri: AUTH.redirectUri });
       if (!r.ok) throw new Error("HTTP " + r.status);
       const j = await r.json();
       if (!j.id_token) throw new Error("sem id_token");
+      // a different person on this device: nothing of the previous user may survive
+      let prev = {};
+      try { prev = JSON.parse(localStorage.getItem(DEVICE_SESSION_KEY) || "{}"); } catch (e) {}
+      const sub = (decodeJwt(j.id_token) || {}).sub;
+      if (prev.sub && prev.sub !== sub) await clearUserData();
       sessionStorage.setItem(TOKEN_KEY, j.id_token);
+      markDeviceSession(j.idle_days);
       return true;
     } catch (e) { console.error("Onça auth: troca de código falhou", e); return false; }
   }
@@ -125,7 +204,9 @@
     if (!code) return;
     await exchangeCodeForToken(code);
     url.searchParams.delete("code"); url.searchParams.delete("state");
-    history.replaceState({}, "", url.pathname + (url.search || "") + url.hash);
+    let back = "";
+    try { back = sessionStorage.getItem("onca_return") || ""; sessionStorage.removeItem("onca_return"); } catch (e) {}
+    history.replaceState({}, "", url.pathname + (back || ((url.search || "") + url.hash)));
   }
   // Header auth affordance: signed-in email + Sair, or Entrar.
   function renderAuthBox(elId, onChange) {
@@ -170,15 +251,62 @@
       catch (e) { return { error: "feed de entrada indisponível" }; }
     }
     // SaaS: server-authoritative per-tenant scoping.
-    if (!isLoggedIn()) return { needAuth: true };
+    const st = await ensureSession();
+    if (st === "ended") return { needAuth: true };
+    if (st === "offline" && !isLoggedIn()) {
+      const cached = await readUserFeed();
+      return cached ? { data: cached.data, offline: true, cachedAt: cached.at } : { needAuth: true, offline: true };
+    }
     try {
       const r = await fetch("/api/feed", { cache: "no-store",
         headers: { authorization: `Bearer ${getIdToken()}` } });
       if (r.status === 401) { try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) {} return { needAuth: true }; }
       if (r.status === 403) return { noAccess: true };
       if (!r.ok) return { error: "feed indisponível (HTTP " + r.status + ")" };
-      return { data: await r.json() };
-    } catch (e) { return { error: "falha de rede ao carregar o feed" }; }
+      const data = await r.json();
+      writeUserFeed(data);
+      return { data };
+    } catch (e) {
+      // #162: offline / weak signal — the LAST feed this same user loaded, flagged as such
+      const cached = await readUserFeed();
+      if (cached) return { data: cached.data, offline: true, cachedAt: cached.at };
+      return { error: "falha de rede ao carregar o feed" };
+    }
+  }
+
+  /* ---- #162 per-user offline feed ---------------------------------------------
+     One cache entry, keyed by the user's `sub`; writing it for user B deletes user A's.
+     Read back only for the same `sub` — from the live token, or (installed app launched
+     offline) from the device-session marker while it is inside its idle window. Wiped by
+     clearUserData() on logout / server-ended session. The operator (?opkey) feed never
+     comes through here. */
+  function currentSub() {
+    const p = decodeJwt(getIdToken() || "") || {};
+    if (p.sub) return p.sub;
+    try {
+      const m = JSON.parse(localStorage.getItem(DEVICE_SESSION_KEY) || "{}");
+      if (m.sub && m.last_active && Date.now() - m.last_active < (m.idle_days || 7) * 86400000) return m.sub;
+    } catch (e) {}
+    return null;
+  }
+  async function writeUserFeed(data) {
+    const sub = currentSub();
+    if (!sub || !global.caches) return;
+    try {
+      const c = await caches.open(USER_FEED_CACHE);
+      for (const k of await c.keys()) { if (!k.url.endsWith("/__feed/" + sub)) await c.delete(k); }
+      await c.put("/__feed/" + sub, new Response(JSON.stringify({ at: new Date().toISOString(), data }),
+        { headers: { "content-type": "application/json" } }));
+    } catch (e) { /* quota / private mode: offline copy is best-effort */ }
+  }
+  async function readUserFeed() {
+    const sub = currentSub();
+    if (!sub || !global.caches) return null;
+    try {
+      const c = await caches.open(USER_FEED_CACHE);
+      const r = await c.match("/__feed/" + sub);
+      return r ? await r.json() : null;
+    } catch (e) { return null; }
   }
 
   // Mirrors tenant_config.ENTRY_INDUSTRIES (Python is the source of truth; the
@@ -928,6 +1056,7 @@
     if (themeBtn) themeBtn.addEventListener("click", () => { U.toggleTheme(); if (global.DATA) cfg.render(global.DATA); });
     const leadEls = () => Array.from(document.querySelectorAll(".panel--lead .panel__bd"));
     async function load() {
+      await ensureSession();
       renderAuthBox("authBox");
       const first = leadEls()[0] || document.querySelector(".panel__bd");
       const res = await loadScopedFeed({});
@@ -945,6 +1074,7 @@
   global.OncaCtx = {
     // auth
     login, logout, isLoggedIn, getIdToken, renderAuthBox, handleAuthCallback,
+    ensureSession, clearUserData, decodeJwt,
     bootSaaS,
     // feed
     loadScopedFeed, mountGate, setData,

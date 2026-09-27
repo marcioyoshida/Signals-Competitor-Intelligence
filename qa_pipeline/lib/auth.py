@@ -1,7 +1,9 @@
 """Playwright login helpers for the ADR 027 QA personas (#126).
 
 Onça's session token lives in `sessionStorage` under the key `onca_id_token`
-(`src/dashboard/site/v2/context.js`), NOT `localStorage` and NOT a cookie.
+(`src/dashboard/site/v2/context.js`), NOT `localStorage`. Since #161/#164 the code exchange runs
+server-side (`/api/session/exchange`) and the REFRESH token is an HttpOnly cookie scoped to
+`/api/session` — a page with no ID token silently gets one from `/api/session/refresh`.
 Playwright's own `BrowserContext.storage_state()` only captures cookies + localStorage,
 so it does NOT carry this token — the widely-used "storageState reuse" pattern does not
 apply here out of the box. This module captures sessionStorage explicitly after login and

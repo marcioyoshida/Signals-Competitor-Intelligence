@@ -67,3 +67,15 @@ def test_bad_ticker_is_skipped(monkeypatch):
     monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
     body = json.loads(q.lambda_handler(_ev({"industry": "banking"}), None)["body"])
     assert "BBDC4" not in [x["symbol"] for x in body["quotes"]] and body["quotes"]
+
+
+def test_verified_jwt_identity_stands_in_for_the_origin_secret(monkeypatch):
+    # #161: /api/me/quotes reaches the Lambda via the Cognito HTTP API (no origin secret)
+    from src.dashboard import quotes_api
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", "s")
+    monkeypatch.setattr(quotes_api, "_quote", lambda t: None)
+    ev = {"headers": {}, "queryStringParameters": {"industry": "betting"},
+          "requestContext": {"authorizer": {"jwt": {"claims": {"sub": "u1"}}}}}
+    assert quotes_api.lambda_handler(ev, None)["statusCode"] == 200
+    ev.pop("requestContext")
+    assert quotes_api.lambda_handler(ev, None)["statusCode"] == 403

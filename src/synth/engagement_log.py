@@ -36,10 +36,17 @@ def record_engagement(
     threat_score: Any = None,
     industries: list[str] | None = None,
     topics: list[str] | None = None,
+    tenant: str | None = None,
+    device: str | None = None,
+    standalone: bool | None = None,
     table: Any | None = None,
 ) -> dict[str, Any]:
     """Append one engagement event. `kind` = the interaction (e.g. 'headline'); `action` =
-    expand|collapse|open|follow. Best-effort; returns the stored item."""
+    expand|collapse|open|follow. Best-effort; returns the stored item.
+
+    #165: ``device`` = phone|tablet|desktop (a CLASS from viewport width + pointer type, never a
+    raw user agent) and ``standalone`` = the session ran as an installed PWA. ``tenant`` is the
+    caller's verified tenant. No other device data is stored."""
     eid = uuid.uuid4().hex[:16]
     item = {
         "pk": f"ENGAGEMENT#{eid}", "type": "engagement", "engagement_id": eid,
@@ -52,6 +59,9 @@ def record_engagement(
         "threat_score": threat_score,
         "industries": list(industries or []),
         "topics": list(topics or []),
+        "tenant": (tenant or "").strip() or None,
+        "device": (device or "").strip() or None,
+        "standalone": bool(standalone) if standalone is not None else None,
         "actor": actor, "created_at": _er._now_iso(),
     }
     _table(table).put_item(Item={k: v for k, v in item.items() if v is not None})

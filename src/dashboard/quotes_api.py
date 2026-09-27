@@ -76,9 +76,11 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # Reached same-origin via CloudFront, which signs the origin request (OAC/SigV4)
     # and injects the shared origin secret. Both gates fail closed, so the Yahoo
     # proxy is never open — an unset secret denies rather than disables the check.
-    from src.dashboard.auth import origin_secret_ok
+    # #161: /api/me/quotes comes through the Cognito HTTP API instead — its JWT authorizer
+    # has verified the caller, so a verified identity stands in for the origin secret.
+    from src.dashboard.auth import identity_from_event, origin_secret_ok
 
-    if not origin_secret_ok(event):
+    if identity_from_event(event) is None and not origin_secret_ok(event):
         return _resp(403, {"error": "forbidden"})
     industry = _qs(event, "industry")
     # A NAMED sector with no listed reps returns empty + an explicit note rather than
