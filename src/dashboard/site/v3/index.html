@@ -299,8 +299,59 @@
     /* #163 hard gate: primary actions are at least 44×44 CSS px on a phone */
     .officer-tabs a { min-height: 44px; display: inline-flex; align-items: center; }
     .askbtn, .askrow input { min-height: 44px; }
+    /* #166: a compact phone header — brand + Hoje/Painel, then ONE scrolling row of officer
+       tabs, then sector/account/theme; the long e-mail and the "Setor" label drop */
+    .appbar { row-gap: var(--s1); }
+    .officer-tabs { order: 5; flex: 1 1 100%; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
+      -webkit-overflow-scrolling: touch; }
+    .officer-tabs::-webkit-scrollbar { display: none; }
+    .officer-tabs a { flex: 0 0 auto; white-space: nowrap; }
+    .appbar > .spacer { display: none; }
+    .selwrap { order: 6; flex: 1 1 auto; }
+    .selwrap .hd-note { display: none; }
+    .selwrap select { width: 100%; }
+    #asof { display: none; }                 /* Hoje shows its own "desde" date */
+    .authbox { order: 8; }
+    .authbox .sub { display: none; }
+    #themeBtn { order: 9; }
+    .selwrap { min-width: 0; }
+    /* Hoje on a phone: no page title/lede, rows stack (title gets the full width) */
+    body.view-hoje .pagehead { display: none; }
+    .hoje .exrow { flex-wrap: wrap; row-gap: 2px; }
+    .hoje .exrow .ttl { flex: 1 1 100%; order: 5; }
+    .hoje .exrow .ent { flex: 1; max-width: none; }
+    .hoje-hd { flex-wrap: wrap; }
+    /* #169: iOS zooms any input under 16px; chips scroll sideways; answer readable unzoomed */
+    .askrow input { font-size: 16px; }
+    .askex { display: flex; flex-wrap: nowrap; overflow-x: auto; gap: var(--s2); padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
+    .askex .chip { flex: 0 0 auto; white-space: nowrap; min-height: 36px; display: inline-flex; align-items: center; }
+    .askans { font-size: 16px; line-height: 1.55; }
+    .cites .cite { display: inline-flex; min-height: 36px; align-items: center; }
     .rec .cap button, .traj-f button { min-height: 44px; min-width: 88px; padding: 0 var(--s4); }
   }
+  /* #166 "Hoje" — the phone-first morning brief */
+  .view-tabs a { border-bottom:2px solid transparent; border-radius:0; padding:var(--s2) var(--s3); font-weight:700; }
+  .view-tabs a[aria-current="page"] { border-bottom-color:var(--primary); color:var(--ink); }
+  body.view-hoje #macroStrip, body.view-hoje #askPanel, body.view-hoje #recsBand { display:none; }
+  .hoje { display:flex; flex-direction:column; gap:var(--s3); }
+  .hoje-sec { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md, 10px); overflow:hidden; }
+  .hoje-hd { display:flex; align-items:baseline; gap:var(--s2); padding:var(--s3) var(--s3) var(--s2); }
+  .hoje-hd h2 { font-size:var(--fs-md); margin:0; }
+  .hoje-hd .n { font-weight:800; color:var(--primary); }
+  .hoje-hd .sub { margin-left:auto; }
+  .hoje-rec { display:block; width:100%; text-align:left; background:none; border:0; border-top:1px solid var(--border);
+    padding:var(--s3); color:var(--ink); font:inherit; cursor:pointer; min-height:44px; }
+  .hoje-act { display:inline-flex; align-items:center; gap:var(--s1); min-height:44px; padding:0 var(--s3); }
+  /* #168 decision confirm step (second tap) — online only */
+  .dconf { display:flex; flex-wrap:wrap; align-items:center; gap:var(--s2); width:100%; margin-top:var(--s2); }
+  .dconf .dnote { flex:1 1 180px; min-height:44px; padding:0 var(--s2); border:1px solid var(--border-2); border-radius:var(--r-sm);
+    background:var(--surface); color:var(--ink); font:inherit; }
+  .dconf button { min-height:44px; min-width:88px; font:inherit; font-weight:700; border-radius:var(--r-sm); border:1px solid var(--border-2);
+    background:var(--surface-2); color:var(--ink); cursor:pointer; }
+  .dconf .dok { background:var(--primary); border-color:var(--primary); color:var(--on-primary, #fff); }
+  body.is-offline .cap button, body.is-offline .traj-f button, body.is-offline .dconf .dok { pointer-events:none; opacity:.45; }
+  .nonet { display:none; color:var(--warn); font-size:var(--fs-micro); font-weight:600; }
+  body.is-offline .nonet { display:inline; }
   .offline-bar { background: var(--warn-fill); color: var(--warn); border-bottom: 1px solid var(--warn);
     padding: var(--s2) var(--s4); font-size: 13px; text-align: center; }
   [hidden] { display: none !important; }
@@ -309,6 +360,8 @@
 <body>
 <header class="appbar">
   <div class="brand"><span class="mark">ON<b>Ç</b>A</span><span class="ctx">Executivo</span></div>
+  <nav class="ctxnav view-tabs" id="viewTabs" aria-label="Visão">
+    <a href="#hoje" data-view="hoje">Hoje</a><a href="#painel" data-view="painel">Painel</a></nav>
   <nav class="ctxnav officer-tabs" id="officerTabs" aria-label="Oficiais"></nav>
   <span class="spacer"></span>
   <span class="selwrap"><label for="sectorSel" class="hd-note">Setor</label>
@@ -324,7 +377,7 @@
   <div id="macroStrip" class="macro-strip"></div>
   <section id="askPanel" class="ask-band"></section>
   <div id="board"></div>
-  <section class="band">
+  <section class="band" id="recsBand">
     <div class="band-hd"><span class="overline">Ações recomendadas</span><span class="rule"></span>
       <span class="badge badge--ghost">captura ativa · decisões → OncaDecisionLog</span></div>
     <div class="panel"><div class="panel__bd" id="recs"></div></div>
@@ -334,6 +387,7 @@
 <div class="scrim" id="scrim"></div>
 <aside class="drawer" id="drawer" aria-hidden="true" role="dialog" aria-labelledby="drTitle">
   <div class="drawer__hd"><h3 id="drTitle">Inspeção</h3>
+    <button class="btn btn--sm drshare" id="drShare" type="button" hidden>Compartilhar</button>
     <button class="drawer__close" id="drClose" aria-label="Fechar">×</button></div>
   <div class="drawer__bd" id="drBody"></div>
 </aside>
@@ -372,10 +426,33 @@ document.getElementById("scrim").addEventListener("click", closeDrawer);
 function activeSector() {
   const h = (location.hash || "").replace(/^#/, "").toLowerCase();
   if (h === "__all__" || (h && LICENSED.indexOf(h) !== -1)) return h;
+  // #166: #hoje[-section] / #painel pick the VIEW and keep the current sector
+  if (/^(hoje|painel)/.test(h)) return SECTOR || "__all__";
   return "__all__";
 }
+// #166 view: "hoje" (phone-first brief) | "painel" (the full board). Phones default to Hoje;
+// a #hoje-<section> deep link (digest e-mails, push taps) always opens it.
+let VIEW = null;
+function initialView() {
+  const h = (location.hash || "").toLowerCase();
+  if (h.indexOf("#hoje") === 0) return "hoje";
+  if (h === "#painel") return "painel";
+  return deviceClass() === "phone" ? "hoje" : "painel";
+}
+function setView(v) {
+  VIEW = v;
+  document.body.classList.toggle("view-hoje", v === "hoje");
+  document.querySelectorAll("#viewTabs a").forEach(a =>
+    a.setAttribute("aria-current", a.getAttribute("data-view") === v ? "page" : "false"));
+}
+document.querySelectorAll("#viewTabs a").forEach(a => a.addEventListener("click", (e) => {
+  e.preventDefault(); setView(a.getAttribute("data-view")); render(); window.scrollTo(0, 0);
+}));
+function syncOnline() { document.body.classList.toggle("is-offline", !navigator.onLine || OFFLINE); }
+window.addEventListener("online", syncOnline); window.addEventListener("offline", syncOnline);
 document.getElementById("sectorSel").addEventListener("change", (e) => { location.hash = e.target.value; });
 window.addEventListener("hashchange", () => {
+  if ((location.hash || "").toLowerCase().indexOf("#hoje") === 0 && VIEW !== "hoje") setView("hoje");
   SECTOR = activeSector();
   const sel = document.getElementById("sectorSel");
   if (sel.value !== SECTOR) sel.value = SECTOR;
@@ -429,7 +506,8 @@ function renderAskPanel() {
   el.innerHTML = `<div class="askwrap">
     <div class="askhd"><h2>Perguntar à Onça</h2>
       <span class="sub">resposta fundamentada só nos dados · escopo: <b id="askScope">—</b></span></div>
-    <div class="askrow"><input id="askInput" type="text" placeholder="Entre para perguntar à Onça" disabled>
+    <div class="askrow"><input id="askInput" type="text" placeholder="Entre para perguntar à Onça" disabled
+      enterkeyhint="send" autocapitalize="sentences" autocomplete="off">
       <button class="askbtn" id="askBtn" disabled>Perguntar</button></div>
     <div class="askex" id="askEx"></div>
     <div class="askhint" id="askAuthHint" style="display:none">Entre com sua conta para perguntar à Onça.</div>
@@ -437,7 +515,10 @@ function renderAskPanel() {
   document.getElementById("askEx").innerHTML = ASK_EXAMPLES.map(q => `<span class="chip">${U.esc(q)}</span>`).join("");
   document.querySelectorAll("#askEx .chip").forEach(c => c.onclick = () => { document.getElementById("askInput").value = c.textContent; askOnca(); });
   document.getElementById("askBtn").onclick = askOnca;
-  document.getElementById("askInput").addEventListener("keydown", e => { if (e.key === "Enter") askOnca(); });
+  const inp = document.getElementById("askInput");
+  inp.addEventListener("keydown", e => { if (e.key === "Enter") askOnca(); });
+  // #169: on a phone the on-screen keyboard covers the lower half — keep the input in view
+  inp.addEventListener("focus", () => { if (deviceClass() !== "desktop") setTimeout(() => inp.scrollIntoView({ block: "center" }), 250); });
 }
 function renderAskLoginState() {
   const hint = document.getElementById("askAuthHint"), input = document.getElementById("askInput"), btn = document.getElementById("askBtn");
@@ -454,11 +535,29 @@ function renderAnswer(res) {
   if (res.refused || !res.answer) { box.className = "askans refused"; box.textContent = res.answer || "Não consegui responder."; return; }
   box.className = "askans";
   const cites = res.citations || [], byId = {}; cites.forEach((c, i) => byId[c.id] = i + 1);
-  let html = U.esc(res.answer).replace(/\[([A-Za-z0-9:_\-]+)\]/g, (m, id) => byId[id] ? `<sup class="cref" title="${U.esc(id)}">[${byId[id]}]</sup>` : "");
+  const citeUrl = (c) => { const s0 = (c.sources || [])[0]; return c.url || (s0 && (s0.url || (typeof s0 === "string" ? s0 : ""))) || ""; };
+  const body = (txt) => U.esc(txt).replace(/\[([A-Za-z0-9:_\-]+)\]/g, (m, id) => byId[id] ? `<sup class="cref" title="${U.esc(id)}">[${byId[id]}]</sup>` : "");
+  // #169: a long answer leads with a short summary; the full text is one tap away
+  const full = String(res.answer), LIM = 420;
+  let html;
+  if (full.length > LIM + 120) {
+    const cut = full.lastIndexOf(". ", LIM) > 200 ? full.lastIndexOf(". ", LIM) + 1 : LIM;
+    html = `<div class="ans-sum">${body(full.slice(0, cut))}…</div><div class="ans-full" hidden>${body(full)}</div>` +
+      `<button class="btn btn--sm ans-more" type="button">ver resposta completa</button>`;
+  } else {
+    html = body(full);
+  }
+  // citations are LINKS to their first-party source (new tab — the answer stays put)
   html += cites.length
-    ? `<div class="cites">` + cites.map((c, i) => `<span class="cite">[${i + 1}] ${U.esc(c.entity_label || c.entity || (c.kb ? "base de conhecimento" : c.id))}</span>`).join("") + `</div>`
+    ? `<div class="cites">` + cites.map((c, i) => {
+        const u = citeUrl(c), label = U.esc(c.entity_label || c.entity || (c.kb ? "base de conhecimento" : c.id));
+        return u ? `<a class="cite" href="${U.esc(u)}" target="_blank" rel="noopener">[${i + 1}] ${label} ↗</a>`
+                 : `<span class="cite">[${i + 1}] ${label}</span>`;
+      }).join("") + `</div>`
     : `<div class="cites"><span style="color:var(--muted)">Sem fontes citadas — trate com cautela.</span></div>`;
   box.innerHTML = html;
+  const more = box.querySelector(".ans-more");
+  if (more) more.onclick = () => { box.querySelector(".ans-sum").hidden = true; box.querySelector(".ans-full").hidden = false; more.remove(); };
 }
 let askBusy = false;
 async function askOnca() {
@@ -469,10 +568,16 @@ async function askOnca() {
   askBusy = true;
   engage("ask", "open", null);   // #165 (the question text is never sent with it)
   const btn = document.getElementById("askBtn"), prev = btn.textContent; btn.disabled = true; btn.textContent = "Pensando…";
-  const box = document.getElementById("askAns"); box.style.display = "block"; box.className = "askans"; box.innerHTML = `<span class="thinking">Consultando a base da Onça…</span>`;
+  const box = document.getElementById("askAns"); box.style.display = "block"; box.className = "askans";
+  // #169: visible progress, and a timeout that keeps the question for a one-tap retry
+  const t0 = Date.now();
+  box.innerHTML = `<span class="thinking">Consultando a base da Onça… <span id="askSecs">0s</span></span>`;
+  const tick = setInterval(() => { const e = document.getElementById("askSecs"); if (e) e.textContent = Math.round((Date.now() - t0) / 1000) + "s"; }, 1000);
+  const ctl = ("AbortController" in window) ? new AbortController() : null;
+  const timer = setTimeout(() => ctl && ctl.abort(), ASK_TIMEOUT_MS);
   const scope = {}; if (SECTOR && SECTOR !== "__all__") scope.industry = SECTOR;
   try {
-    const call = () => fetch("/api/ask", { method: "POST",
+    const call = () => fetch("/api/ask", { method: "POST", signal: ctl ? ctl.signal : undefined,
       headers: { "content-type": "application/json", "authorization": `Bearer ${Ctx.getIdToken()}` },
       body: JSON.stringify({ q, scope, officer: OFFICER }) });
     await Ctx.ensureSession();
@@ -487,9 +592,16 @@ async function askOnca() {
     }
     const j = await r.json();
     renderAnswer(r.ok ? j : { refused: true, answer: "Falha ao consultar. Tente novamente." });
-  } catch { renderAnswer({ refused: true, answer: "Falha de rede ao consultar." }); }
-  finally { btn.disabled = false; btn.textContent = prev; askBusy = false; }
+  } catch (e) {
+    const timedOut = e && e.name === "AbortError";
+    box.className = "askans refused";
+    box.innerHTML = `${timedOut ? "A resposta demorou demais." : "Falha de rede ao consultar."} ` +
+      `<button class="btn btn--sm" id="askRetry" type="button">Tentar de novo</button>`;
+    document.getElementById("askRetry").onclick = () => askOnca();   // the input still holds the question
+  }
+  finally { clearInterval(tick); clearTimeout(timer); btn.disabled = false; btn.textContent = prev; askBusy = false; }
 }
+const ASK_TIMEOUT_MS = 60000;
 renderAskPanel();
 Ctx.handleAuthCallback().then(() => Ctx.ensureSession()).then(renderAuthUI).then(loadFeed);
 window.addEventListener("appinstalled", () => { if (!ADMIN) engage("install", "open", null); });  // #165
@@ -557,6 +669,9 @@ function boot() {
     .forEach(s => { const o = document.createElement("option"); o.value = s.slug; o.textContent = s.label; sel.appendChild(o); });
   SECTOR = activeSector();
   sel.value = SECTOR;
+  setView(initialView());
+  syncOnline();
+  setTimeout(resolveSharedLink, 0);   // #170: ?c=<hash> deep link, after the first render
   // #165: one session event per open (device class + installed-app flag only)
   if (!ADMIN && !OFFLINE) engage("session", "open", null);
   if (!EX.officers || !EX.officers.length) {
@@ -620,7 +735,10 @@ function sevBadge(x) { return x ? `<span class="badge badge--${SEV[x] || "low"}"
 // threat_score is already 0–100 — U.heat() is a 0..1 CONFIDENCE formatter that multiplies by
 // 100, so feeding it a raw threat score produced nonsense 4-digit "percentages" (e.g. 65 -> 6500%).
 function threatChip(score) {
-  const s = Math.round(Number(score) || 0);
+  // panels carry the feed's 0–1 threat_score (executive._headline) — scale it like
+  // executive._threat does, or every chip rounds to 0/1
+  const v = Number(score) || 0;
+  const s = Math.round(v <= 1 ? v * 100 : v);
   const [cls] = bandThreat(s, 65, 40);
   return `<span class="badge badge--${cls}" title="ameaça ${s}/100">${s}</span>`;
 }
@@ -1241,16 +1359,19 @@ function flowBand() {
   const nd = FLOW.filter(t => !t.decided).length;
   return band("Fluxo executivo", `incidente → decisão · ${nd} rascunho(s) pendente(s)`, `<div class="trajs">${cards}</div>`);
 }
-async function captureTraj(btn) {
+async function captureTraj(btn, extra) {
   const t = FLOW[Number(btn.getAttribute("data-i"))]; if (!t) return;
   const verdict = btn.getAttribute("data-tv"), f = btn.closest(".traj-f");
-  f.querySelectorAll("button").forEach(x => { x.disabled = true; });
+  const x = extra || {};
   const industry = SECTOR !== "__all__" ? SECTOR : (t.industries && t.industries[0]) || null;
-  const res = await postAct({ intent: "record_decision", officer: t.officer,
+  const res = await postAct({ intent: "record_decision", officer: t.officer, idempotency_key: x.idem,
     args: { officer: t.officer, recommendation: t.title, verdict, industry, action_ref: t.action_ref,
-            evidence_id: (t.evidence_ids || [])[0], context_id: t.id, started_at: SEEN[t.id] } });
-  if (!res || !res.decision_id) { f.insertAdjacentHTML("beforeend", `<span class="done" style="color:var(--t-high)">falha</span>`); return; }
+            evidence_id: (t.evidence_ids || [])[0], context_id: t.id, started_at: SEEN[t.id],
+            rationale: x.note || null } });
+  if (!res || !res.decision_id) return false;
+  t.decided = true; t.verdict = verdict;
   const card = btn.closest(".traj"); if (card) { card.dataset.did = res.decision_id; card.dataset.off = t.officer; }
+  f.querySelectorAll(".dconf, button[data-tv]").forEach(n => n.remove());
   f.insertAdjacentHTML("beforeend", `<span class="done">✓ ${verdict}</span>
     <select data-did="${res.decision_id}" class="ocsel"><option value="pendente">pendente</option>
       <option value="favoravel">favorável</option><option value="desfavoravel">desfavorável</option><option value="neutro">neutro</option></select>${boardHtml()}`);
@@ -1508,6 +1629,7 @@ function render() {
   const p = block().panels || {}, a = agg();
   const el = document.getElementById("board");
   let board = "";
+  if (VIEW === "hoje") { renderHoje(el); return; }
 
   if (OFFICER === "cso") {
     const [bc, bl] = bandGood(a.climate || 0, 70, 45);
@@ -1687,11 +1809,11 @@ function render() {
   el.querySelectorAll(".exrow[data-id]").forEach(row => row.addEventListener("click", () => inspect(row.getAttribute("data-id"))));
   el.querySelectorAll(".exrow[data-url],.exrow[data-href]").forEach(row => row.addEventListener("click", () => {
     const u = row.getAttribute("data-url") || row.getAttribute("data-href"); if (u) window.open(u, "_blank", "noopener"); }));
-  el.querySelectorAll(".traj-f button[data-tv]").forEach(b => b.addEventListener("click", () => captureTraj(b)));
+  el.querySelectorAll(".traj-f button[data-tv]").forEach(b => b.addEventListener("click", () => askConfirm(b, captureTraj)));
   el.querySelectorAll(".traj-f a[data-ev]").forEach(a => a.addEventListener("click", (e) => { e.preventDefault(); onEvidence(a); }));
   // CSO weekly brief: its rows are plain `.rec` divs directly in the board (the horizons recs
   // band lives in a separate #recs element), so this selector only ever matches weekly rows.
-  el.querySelectorAll(".rec .cap button[data-v]").forEach(b => b.addEventListener("click", () => captureWeekly(b)));
+  el.querySelectorAll(".rec .cap button[data-v]").forEach(b => b.addEventListener("click", () => askConfirm(b, captureWeekly)));
   el.querySelectorAll(".rec > .rec-a a[data-ev]").forEach(a => a.addEventListener("click", (e) => { e.preventDefault(); onEvidence(a); }));
   // DEC-1: the outcome-review queue — stamp a realized outcome on a decision that has aged out.
   el.querySelectorAll(".due-sel").forEach(sel => sel.addEventListener("change", (e) =>
@@ -1707,6 +1829,141 @@ function render() {
     else { tdrBtn.textContent = "falha"; }
   });
   renderRecs((p.recommendations || []).filter(inSector));
+}
+
+// --- #166 "Hoje": the phone-first morning brief --------------------------------------
+// A PROJECTION of fields already in the scoped feed — no new data or ranking. Four sections,
+// each deep-linkable (#hoje-alertas / -prioridades / -decisoes / -radar):
+//   1. new since your last visit: alert-class items for this officer (count + top 3 by threat)
+//   2. top 3 priorities: executive.cso.weekly (CSO) / the officer's own recommendations
+//   3. pending decisions: Executive Flow drafts routed to this officer, one-tap (#168)
+//   4. CPO only: the latest product-radar events
+// "Last visit" is per USER (key includes the Cognito sub, prefixed onca_u_ so logout wipes
+// it) and per officer; the baseline is pinned for the page session so a reload keeps it.
+function userKey(k) {
+  const t = Ctx.getIdToken && Ctx.getIdToken(); const sub = t ? ((Ctx.decodeJwt(t) || {}).sub || "") : "";
+  return sub ? `onca_u_${k}_${sub}` : null;
+}
+function hojeBaseline(officer) {
+  const sk = "onca_hoje_base_" + officer;
+  let base = null;
+  try { base = sessionStorage.getItem(sk); } catch (e) {}
+  if (base) return base;
+  const lk = userKey("hoje");
+  let seen = {};
+  try { seen = JSON.parse((lk && localStorage.getItem(lk)) || "{}"); } catch (e) {}
+  base = seen[officer] || new Date(Date.now() - 86400000).toISOString();   // first visit: last 24h
+  seen[officer] = new Date().toISOString();
+  try { sessionStorage.setItem(sk, base); if (lk) localStorage.setItem(lk, JSON.stringify(seen)); } catch (e) {}
+  return base;
+}
+const HOJE_LENSES = { cro: ["regulatory", "dou", "cvm_normas"], cco: ["sanctions", "antitrust", "distress", "reputation"],
+                      cpo: ["ofertas", "entrants", "product"] };
+function cardRow(c) {
+  return { id: c.id, entity_label: c.entity_label || c.subject_label, date: c.date, threat_score: c.threat_score,
+           industries: c.industries, title: String(c.narrative || c.subject_label || "").slice(0, 170) };
+}
+function hojeAlerts(officer, since) {
+  const lenses = HOJE_LENSES[officer];
+  const sinceMs = Date.parse(since);
+  const fresh = (x) => { const t = Date.parse(x.run_at || x.date || ""); return !isNaN(t) && t > sinceMs; };
+  const cards = (DATA.feed || []).filter(c => c.is_alert && inSector(c) && fresh(c) &&
+    (!lenses || (c.lenses || []).some(l => lenses.indexOf(l) !== -1) ||
+     (officer === "cro" && String(c.kind || "").indexOf("regulatory") === 0)));
+  cards.sort((a, b) => (b.threat_score || 0) - (a.threat_score || 0));
+  const sev = (officer === "cso" || officer === "cro")
+    ? (((EX.cro || {}).panels || {}).sector_events || []).filter(e => (e.severity === "critical" || e.severity === "high") && inSectorStrict(e) && String(e.date || "") >= since.slice(0, 10))
+    : [];
+  const radar = (officer === "cso" || officer === "cpo")
+    ? ((DATA.product_radar || {}).alerts || []).filter(r => inSector(r) && String(r.date || "") >= since.slice(0, 10)) : [];
+  return { cards, sev, radar, n: cards.length + sev.length + radar.length };
+}
+function hojePriorities(officer) {
+  if (officer === "cso") {
+    const wk = ((EX.cso || {}).weekly || {}).by_industry || {}, w = wk[SECTOR] || wk.__all__ || {};
+    const seen = new Set();
+    return (w.top_priorities || []).filter(p => !seen.has(p.id) && seen.add(p.id)).slice(0, 3)
+      .map(p => ({ id: p.id, entity_label: p.entity_label, date: p.date, threat_score: p.threat_score,
+                   industries: p.industries, title: (p.decision && p.decision.text) || p.title }));
+  }
+  return (((EX[officer] || {}).panels || {}).recommendations || []).filter(inSector).slice(0, 3)
+    .map(r => ({ id: r.evidence_id, title: r.text, industries: r.industries, date: null, entity_label: r.horizon }));
+}
+function hojeSec(id, title, n, sub, body) {
+  return `<section class="hoje-sec" id="${id}"><div class="hoje-hd"><h2>${U.esc(title)}</h2>` +
+    `${n != null ? `<span class="n">${n}</span>` : ""}<span class="sub hd-note">${U.esc(sub || "")}</span></div>${body}</section>`;
+}
+function renderHoje(el) {
+  const since = hojeBaseline(OFFICER);
+  const al = hojeAlerts(OFFICER, since);
+  const top = al.cards.slice(0, 3).map(cardRow);
+  const alertsBody = (al.n ? (top.length ? `<div class="panel__bd--flush">${rowsCard(top)}</div>` : "") +
+      (al.sev.length ? rowsSectorEvents(al.sev.slice(0, 2)) : "") +
+      (al.radar.length ? rowsRadar({ events: al.radar.slice(0, 2), as_of: 1 }) : "")
+    : U.empty("Nada novo desde a sua última visita.", "", "✓"));
+  const pri = hojePriorities(OFFICER);
+  FLOW = (EX.flow || []).filter(t => (OFFICER === "cso" || t.officer === OFFICER || t.handoff === OFFICER) && inSector(t));
+  FLOW.forEach(t => markSeen(t.id));
+  const pend = FLOW.map((t, i) => [t, i]).filter(([t]) => !t.decided).slice(0, 5);
+  const decBody = pend.length ? `<div class="trajs">` + pend.map(([t, i]) => `<div class="traj" data-sev="${U.esc(t.severity)}" data-i="${i}">
+      <div class="traj-hd"><span class="traj-t">${U.esc(t.title)}</span></div>
+      <div class="traj-b">${U.esc(String(t.briefing || "").slice(0, 220))}</div>
+      <div class="traj-f"><span class="hd-note">${U.esc(t.action || "")}</span><span class="spacer" style="flex:1"></span>
+        <span class="nonet">sem conexão</span>
+        <button data-tv="aprovado" data-i="${i}">Aprovar</button><button data-tv="rejeitado" data-i="${i}">Rejeitar</button></div></div>`).join("") + `</div>`
+    : U.empty("Nenhuma decisão pendente.", "", "✓");
+  let html = hojeSec("hoje-alertas", "Novo desde a sua última visita", al.n, "desde " + U.fmtDate(since.slice(0, 10)), alertsBody) +
+    hojeSec("hoje-prioridades", "Top 3 prioridades", null, OFFICER === "cso" ? "briefing semanal" : "recomendações",
+      pri.length ? `<div class="panel__bd--flush">${rowsCard(pri)}</div>` : U.empty("Sem prioridades na janela.", "", "○")) +
+    hojeSec("hoje-decisoes", "Decisões pendentes", pend.length, "rascunhos do fluxo executivo", decBody);
+  if (OFFICER === "cpo") {
+    const ev = ((((EX.cpo || {}).panels || {}).product_radar) || DATA.product_radar || {});
+    html += hojeSec("hoje-radar", "Radar de produto", null, "mais recente", rowsRadar({ ...ev, events: (ev.events || []).slice(0, 3) }));
+  }
+  html += `<a href="#painel" class="btn hoje-act" id="hojeFull">Ver painel completo →</a>`;
+  el.innerHTML = `<div class="hoje">${html}</div>`;
+  engage("hoje", "open", null);
+  el.querySelectorAll(".exrow[data-id]").forEach(row => row.addEventListener("click", () => {
+    const id = row.getAttribute("data-id"); if (BYID[id]) inspect(id); }));
+  el.querySelectorAll(".exrow[data-url],.exrow[data-href]").forEach(row => row.addEventListener("click", () => {
+    const u = row.getAttribute("data-url") || row.getAttribute("data-href"); if (u) window.open(u, "_blank", "noopener"); }));
+  el.querySelectorAll(".traj-f button[data-tv]").forEach(b => b.addEventListener("click", () => askConfirm(b, captureTraj)));
+  document.getElementById("hojeFull").addEventListener("click", (e) => { e.preventDefault(); setView("painel"); render(); window.scrollTo(0, 0); });
+  const m = (location.hash || "").match(/^#(hoje-[a-z]+)/);
+  if (m) { const t = document.getElementById(m[1]); if (t) t.scrollIntoView({ block: "start" }); }
+}
+
+// --- #168 decisions from the phone: a second tap + optional note, idempotent, online-only ---
+// A decision is append-only (irreversible), so every Aprovar/Rejeitar asks for confirmation. The
+// idempotency key is minted at the FIRST tap and reused by every retry of that same choice, so a
+// double tap or a retry after a timeout records ONCE. Offline, nothing is queued: the buttons are
+// disabled ("sem conexão") — a decision must never land hours later.
+function newIdem() {
+  try { return crypto.randomUUID(); } catch (e) { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+}
+function askConfirm(btn, doCapture) {
+  if (!navigator.onLine || OFFLINE) { syncOnline(); return; }
+  const verdict = btn.getAttribute("data-tv") || btn.getAttribute("data-v");
+  const holder = btn.parentElement;
+  const idem = newIdem();
+  const prev = holder.innerHTML;
+  const word = verdict === "aprovado" ? "aprovação" : "rejeição";
+  holder.insertAdjacentHTML("beforeend", `<div class="dconf"><span>Confirmar <b>${word}</b>?</span>
+    <input class="dnote" maxlength="280" placeholder="nota (opcional)" aria-label="Nota da decisão">
+    <button class="dok">Confirmar</button><button class="dcancel">Cancelar</button><span class="nonet">sem conexão</span></div>`);
+  holder.querySelectorAll("button[data-tv],button[data-v]").forEach(b => { b.hidden = true; });
+  const conf = holder.querySelector(".dconf");
+  conf.querySelector(".dcancel").onclick = () => { holder.innerHTML = prev; rewire(holder, doCapture); };
+  conf.querySelector(".dok").onclick = async () => {
+    if (!navigator.onLine || OFFLINE) { syncOnline(); return; }
+    const ok = conf.querySelector(".dok"); ok.disabled = true; ok.textContent = "Registrando…";
+    const note = (conf.querySelector(".dnote").value || "").trim();
+    const done = await doCapture(btn, { idem, note });
+    if (done === false) { ok.disabled = false; ok.textContent = "Tentar de novo"; }   // same idem on retry
+  };
+}
+function rewire(holder, doCapture) {
+  holder.querySelectorAll("button[data-tv],button[data-v]").forEach(b => b.addEventListener("click", () => askConfirm(b, doCapture)));
 }
 
 // --- CSO weekly brief (pilot-persona loop) ----------------------------------
@@ -1742,16 +1999,16 @@ function weeklyBand() {
     <div class="panel" style="margin-top:var(--s3)"><div class="panel__hd"><h2>Top prioridades da semana</h2></div>
     <div class="panel__bd" style="padding:var(--s3)">${rows}</div></div>`);
 }
-async function captureWeekly(btn) {
+async function captureWeekly(btn, extra) {
   const p = WEEKLY_TOP[Number(btn.getAttribute("data-i"))]; if (!p) return;
   const d = p.decision || {}, verdict = btn.getAttribute("data-v"), cap = btn.closest(".cap");
-  cap.querySelectorAll("button").forEach(x => { x.disabled = true; });
+  const x = extra || {};
   const industry = SECTOR !== "__all__" ? SECTOR : (d.industries && d.industries[0]) || null;
-  const res = await postAct({ intent: "record_decision", officer: "cso",
+  const res = await postAct({ intent: "record_decision", officer: "cso", idempotency_key: x.idem,
     args: { officer: "cso", recommendation: d.text, verdict, industry, action_ref: d.action,
       evidence_id: d.evidence_id || p.id, context_id: "weekly:" + (p.id || d.entity),
-      started_at: SEEN["weekly:" + btn.getAttribute("data-i") + ":" + (p.id || "")] } });
-  if (!res || !res.decision_id) { cap.innerHTML = `<span class="done" style="color:var(--t-high)">falha ao registrar</span>`; return; }
+      started_at: SEEN["weekly:" + btn.getAttribute("data-i") + ":" + (p.id || "")], rationale: x.note || null } });
+  if (!res || !res.decision_id) return false;
   const rcard = cap.closest(".rec"); if (rcard) { rcard.dataset.did = res.decision_id; rcard.dataset.off = "cso"; }
   cap.innerHTML = `<span class="done">✓ ${verdict}</span><span class="hd-note">resultado:</span>
     <select data-did="${res.decision_id}" class="ocsel"><option value="pendente">pendente</option>
@@ -1775,16 +2032,17 @@ function renderRecs(recs) {
       : `<div class="hz-empty">—</div>`) + `</div>`;
   }).join("") + `</div>`;
   el.querySelectorAll("a[data-ev]").forEach(a => a.addEventListener("click", (e) => { e.preventDefault(); onEvidence(a); }));
-  el.querySelectorAll(".cap button[data-v]").forEach(b => b.addEventListener("click", () => capture(b)));
+  el.querySelectorAll(".cap button[data-v]").forEach(b => b.addEventListener("click", () => askConfirm(b, capture)));
 }
-async function capture(btn) {
+async function capture(btn, extra) {
   const r = RECS[Number(btn.getAttribute("data-i"))]; if (!r) return;
   const verdict = btn.getAttribute("data-v"), cap = btn.closest(".cap");
-  cap.querySelectorAll("button").forEach(x => { x.disabled = true; });
+  const x = extra || {};
   const industry = SECTOR !== "__all__" ? SECTOR : (r.industries && r.industries[0]) || null;
-  const res = await postAct({ intent: "record_decision", officer: OFFICER,
-    args: { officer: OFFICER, recommendation: r.text, verdict, industry, action_ref: r.action, evidence_id: r.evidence_id, context_id: r.horizon, started_at: SEEN["rec:" + r.horizon + ":" + r.text] } });
-  if (!res || !res.decision_id) { cap.innerHTML = `<span class="done" style="color:var(--t-high)">falha ao registrar</span>`; return; }
+  const res = await postAct({ intent: "record_decision", officer: OFFICER, idempotency_key: x.idem,
+    args: { officer: OFFICER, recommendation: r.text, verdict, industry, action_ref: r.action, evidence_id: r.evidence_id,
+            context_id: r.horizon, started_at: SEEN["rec:" + r.horizon + ":" + r.text], rationale: x.note || null } });
+  if (!res || !res.decision_id) return false;
   const rcard = cap.closest(".rec"); if (rcard) { rcard.dataset.did = res.decision_id; rcard.dataset.off = OFFICER; }
   cap.innerHTML = `<span class="done">✓ ${verdict}</span><span class="hd-note">resultado:</span>
     <select data-did="${res.decision_id}" class="ocsel"><option value="pendente">pendente</option>
@@ -1815,7 +2073,7 @@ function inspectSectorEvent(id) {
     (r.summary ? `<p>${U.esc(r.summary)}</p>` : "") +
     `<p class="hd-note">Severidade ${U.esc(SECTOR_SEV_PT[r.severity] || r.severity || "—")} · ${U.esc(SECTOR_CONF_PT[r.confidence] || r.confidence || "")}` +
     ` · ${r.n_affected || 0} entidades do setor afetadas</p><ol>${src}</ol></div>`;
-  openDrawer();
+  openDrawer(id);
   return true;
 }
 function inspectEnforcement(id) {
@@ -1829,7 +2087,7 @@ function inspectEnforcement(id) {
     `<p>${U.esc(r.title || "")}</p>` + (r.summary && r.summary !== r.title ? `<p>${U.esc(r.summary)}</p>` : "") +
     `<p class="hd-note">${U.esc(r.authority || "")} · severidade ${U.esc(SECTOR_SEV_PT[r.severity] || r.severity || "—")} · ` +
     `${U.esc(ENF_CONF_PT[r.confidence] || r.confidence || "")}${r.entity ? "" : " · instituição fora do roster"}</p><ol>${src}</ol></div>`;
-  openDrawer();
+  openDrawer(id);
   return true;
 }
 function inspect(id) {
@@ -1840,14 +2098,59 @@ function inspect(id) {
   document.getElementById("drBody").innerHTML = c
     ? `<div class="callout">${U.linkifyNarrative(c.narrative || "", U.citationModel(c))}${U.citationFooter(U.citationModel(c))}</div>`
     : U.empty("Sem cartão citável", `id: ${id || "—"}`, "○");
-  openDrawer();
+  openDrawer(c ? id : null);
 }
 // ADR 027 #129 caught this live: these used to toggle a ".on" class that no CSS rule
 // anywhere defines (the shared v2/app.css only has `.drawer.open`/`.scrim.open`) — so
 // aria-hidden and the drawer's content flipped correctly but the slide-in transform
 // never fired; the drawer was functionally open yet stayed fully off-screen. "open" is
 // the class the shared component vocabulary actually styles.
-function openDrawer() { document.getElementById("drawer").setAttribute("aria-hidden", "false");
+// --- #170 share a card without leaking it -----------------------------------------------
+// The link is /exec?c=<first 16 hex of SHA-256(card id)> — card ids name entities
+// ("cand-ent-itau-unibanco"), so the id itself never goes in the URL. The page's OpenGraph
+// tags are generic, the share sheet gets no text, and the recipient must sign in: the hash is
+// resolved against THEIR scoped feed, so a card outside their licence is "sem acesso".
+let SHARE_ID = null;
+async function sha16(v) {
+  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(String(v)));
+  return Array.from(new Uint8Array(d)).map(b => b.toString(16).padStart(2, "0")).join("").slice(0, 16);
+}
+function shareableIds() {
+  const ids = Object.keys(BYID);
+  (((EX.cro || {}).panels || {}).sector_events || []).forEach(e => ids.push(e.id));
+  (((EX.cco || {}).panels || {}).enforcement || []).forEach(e => e && e.id && ids.push(e.id));
+  return ids;
+}
+async function shareCurrent() {
+  if (!SHARE_ID) return;
+  const url = `${location.origin}/exec?c=${await sha16(SHARE_ID)}`;
+  const btn = document.getElementById("drShare");
+  engage("share", "open", BYID[SHARE_ID] ? SHARE_ID : null);   // #165 count
+  try {
+    if (navigator.share) { await navigator.share({ title: "Onça — painel executivo", url }); return; }
+    await navigator.clipboard.writeText(url);
+    btn.textContent = "link copiado ✓"; setTimeout(() => { btn.textContent = "Compartilhar"; }, 2500);
+  } catch (e) { /* the user dismissed the share sheet */ }
+}
+document.getElementById("drShare").addEventListener("click", shareCurrent);
+async function resolveSharedLink() {
+  const c = new URLSearchParams(location.search).get("c");
+  if (!c || !/^[0-9a-f]{16}$/.test(c)) return;
+  const url = new URL(location.href); url.searchParams.delete("c");
+  history.replaceState({}, "", url.pathname + (url.search || "") + url.hash);
+  for (const id of shareableIds()) {
+    if (await sha16(id) === c) { if (VIEW === "hoje") { setView("painel"); render(); } inspect(id); return; }
+  }
+  SHARE_ID = null;
+  document.getElementById("drTitle").textContent = "Sem acesso";
+  document.getElementById("drBody").innerHTML = U.empty("Sem acesso a este conteúdo",
+    "O item compartilhado não está no escopo da sua licença — ou saiu da janela de dados.", "⦸");
+  openDrawer(null);
+}
+function openDrawer(shareId) {
+  SHARE_ID = shareId || null;
+  const sb = document.getElementById("drShare"); if (sb) sb.hidden = !SHARE_ID || ADMIN;
+  document.getElementById("drawer").setAttribute("aria-hidden", "false");
   document.getElementById("scrim").classList.add("open"); document.getElementById("drawer").classList.add("open"); }
 function closeDrawer() { document.getElementById("drawer").setAttribute("aria-hidden", "true");
   document.getElementById("scrim").classList.remove("open"); document.getElementById("drawer").classList.remove("open"); }
