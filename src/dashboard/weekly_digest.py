@@ -101,6 +101,51 @@ def _lines_heading(w: dict[str, Any]) -> str:
     return str(w.get("lines_heading") or "Top prioridades")
 
 
+def _sections(w: dict[str, Any]) -> list[tuple[str, list[str]]]:
+    """Extra (heading, lines) blocks rendered after the main lines — e.g. #177 sector events."""
+    return [(str(h), [str(x) for x in (ls or [])]) for h, ls in (w.get("sections") or []) if ls]
+
+
+_SEV_PT = {"critical": "crítico", "high": "alto", "medium": "médio", "low": "baixo"}
+
+
+def sector_event_lines(feed: dict[str, Any], *, as_of: str | None = None, days: int = 7,
+                       sector: str = "__all__") -> list[str]:
+    """#177: one line per industry-level regulatory event with evidence in the last ``days`` —
+    restated from ``feed.sector_events`` (title + its first source), never embellished."""
+    import datetime as _dt
+
+    try:
+        end = _dt.date.fromisoformat(str(as_of)[:10]) if as_of else _dt.date.today()
+    except ValueError:
+        end = _dt.date.today()
+    start = (end - _dt.timedelta(days=days)).isoformat()
+    labels = {o.get("slug"): o.get("display_name") or o.get("slug")
+              for o in (feed.get("industry_options") or [])}
+    rank = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+    evs = [e for e in (feed.get("sector_events") or [])
+           if (e.get("last_evidence") or e.get("date") or "") >= start
+           and (sector == "__all__" or e.get("industry") == sector)]
+    out = []
+    for e in sorted(evs, key=lambda e: (rank.get(e.get("severity") or "", 9), str(e.get("date") or ""))):
+        src = (e.get("sources") or [{}])[0]
+        where = src.get("organ") or src.get("publisher") or src.get("source") or ""
+        extra = f" (+{len(e.get('sources') or []) - 1} fonte(s))" if len(e.get("sources") or []) > 1 else ""
+        out.append(f"[{_SEV_PT.get(e.get('severity'), e.get('severity') or '—')}] "
+                   f"{labels.get(e.get('industry')) or e.get('industry')} — {e.get('change_label') or 'mudança regulatória'}: "
+                   f"{str(e.get('title') or '')[:140]} · {where}, {e.get('date')}{extra}")
+    return out[:6]
+
+
+def with_sector_events(w: dict[str, Any], feed: dict[str, Any], *, sector: str = "__all__",
+                       as_of: str | None = None) -> dict[str, Any]:
+    """The weekly brief plus a "Eventos setoriais" block (#177) when the week had any."""
+    lines = sector_event_lines(feed, as_of=as_of, sector=sector)
+    if not lines:
+        return w
+    return {**w, "sections": list(w.get("sections") or []) + [("Eventos setoriais", lines)]}
+
+
 def weekly_scope(feed: dict[str, Any], sector: str = "__all__") -> dict[str, Any] | None:
     """Pull the CSO weekly scope from an already-built feed. None if absent (e.g. build failed)."""
     wk = (((feed.get("executive") or {}).get("cso") or {}).get("weekly") or {}).get("by_industry") or {}
@@ -121,6 +166,9 @@ def format_teams(w: dict[str, Any], *, dashboard_url: str | None = None) -> dict
     if lines:
         items.append({"type": "TextBlock", "text": _lines_heading(w), "weight": "Bolder", "spacing": "Medium"})
         items.append({"type": "TextBlock", "text": "\n".join(f"• {l}" for l in lines), "wrap": True})
+    for heading, extra in _sections(w):
+        items.append({"type": "TextBlock", "text": heading, "weight": "Bolder", "spacing": "Medium"})
+        items.append({"type": "TextBlock", "text": "\n".join(f"• {l}" for l in extra), "wrap": True})
     card: dict[str, Any] = {
         "type": "AdaptiveCard", "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
         "version": "1.4", "body": items,
@@ -144,6 +192,9 @@ def format_slack(w: dict[str, Any], *, dashboard_url: str | None = None) -> dict
         blocks.append({"type": "divider"})
         blocks.append({"type": "section", "text": {"type": "mrkdwn",
                        "text": f"*{_lines_heading(w)}*\n" + "\n".join(f"• {l}" for l in lines)}})
+    for heading, extra in _sections(w):
+        blocks.append({"type": "section", "text": {"type": "mrkdwn",
+                       "text": f"*{heading}*\n" + "\n".join(f"• {l}" for l in extra)}})
     if dashboard_url:
         blocks.append({"type": "actions", "elements": [{"type": "button",
                        "text": {"type": "plain_text", "text": "Abrir painel"}, "url": dashboard_url}]})
@@ -159,12 +210,17 @@ def format_email(w: dict[str, Any], *, dashboard_url: str | None = None) -> tupl
     text = (w.get("headline") or "") + ("\n\n" + metric if metric else "")
     if lines:
         text += f"\n\n{_lines_heading(w)}:\n" + "\n".join(f"- {l}" for l in lines)
+    for heading, extra in _sections(w):
+        text += f"\n\n{heading}:\n" + "\n".join(f"- {l}" for l in extra)
     if dashboard_url:
         text += f"\n\nAbrir painel: {dashboard_url}"
     html_lines = "".join(f"<li>{_esc(l)}</li>" for l in lines)
+    html_sections = "".join(f"<h3>{_esc(h)}</h3><ul>" + "".join(f"<li>{_esc(l)}</li>" for l in extra) + "</ul>"
+                            for h, extra in _sections(w))
     html = (f"<h2>{_esc(_title(w))}</h2><p>{_esc(w.get('headline') or '')}</p>"
             + (f"<p style='color:#666'>{_esc(metric)}</p>" if metric else "")
             + (f"<h3>{_esc(_lines_heading(w))}</h3><ul>{html_lines}</ul>" if lines else "")
+            + html_sections
             + (f"<p><a href='{_esc(dashboard_url)}'>Abrir painel</a></p>" if dashboard_url else ""))
     return subject, text, html
 
@@ -248,6 +304,7 @@ def send_weekly_digest(feed: dict[str, Any], *, sector: str = "__all__",
     w = weekly_scope(feed, sector)
     if not w or not w.get("headline"):
         return {"teams": None, "slack": None, "email": None}
+    w = with_sector_events(w, feed, sector=sector)
     return {
         "teams": send_teams(w, dashboard_url=dashboard_url, poster=teams_poster),
         "slack": send_slack(w, dashboard_url=dashboard_url, poster=slack_poster),

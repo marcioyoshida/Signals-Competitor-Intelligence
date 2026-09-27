@@ -3334,6 +3334,12 @@ class OncaPrototypeStack(Stack):
         # someone opened the dashboard; there was no "Phase 3 push" for OPERATIONAL health,
         # only for the CSO content brief.
         alerts_topic = sns.Topic(self, "OncaAlertsTopic")
+        # #178 coverage alarm: synth publishes "possível evento setorial não capturado" to the
+        # operator alert path (same SNS topic -> alert_notifier) when an industry's news breadth
+        # spikes with no matching sector event (#177). Rate-limited per industry in the synth.
+        alerts_topic.grant_publish(synth)
+        synth.add_environment("ONCA_ALERTS_TOPIC_ARN", alerts_topic.topic_arn)
+        synth.add_environment("ONCA_COVERAGE_ALARM_NOTIFY", "true")
         alert_fn = lambda_.Function(
             self,
             "OncaAlertNotifier",

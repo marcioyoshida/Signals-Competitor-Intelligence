@@ -257,8 +257,15 @@
     .exrow .ent { min-width: 76px; }
     /* #159 radar rows carry a source badge + links: wrap so the reason and the
        sources each get a full-width line instead of pushing past the viewport. */
-    .exrow--radar { flex-wrap: wrap; row-gap: 4px; }
-    .exrow--radar .ttl, .exrow--radar .meta { flex-basis: 100%; }
+    /* band headers carry a long provenance badge (and the silence rows a long briefing):
+       wrap them instead of pushing the page wider than the phone (#177 check, 390px). */
+    .band > .band-hd { flex-wrap: wrap; row-gap: 4px; }
+    .band > .band-hd .badge { white-space: normal; }
+    .silrow { flex-wrap: wrap; }
+    .exrow--radar, .exrow--sector { flex-wrap: wrap; row-gap: 4px; }
+    .exrow--radar .ttl, .exrow--radar .meta,
+    .exrow--sector .ttl, .exrow--sector .meta { flex-basis: 100%; }
+    .exrow--sector .ent { flex: 1; max-width: none; white-space: normal; }
     .officer-tabs a { padding: 10px var(--s3); }
     .selwrap select, .authbtn { padding: 9px var(--s2); min-height: 40px; }
   }
@@ -919,6 +926,28 @@ function rowsRadar(pr) {
     <span class="meta"><span class="badge badge--ghost">${src}${r.confidence ? " · " + U.esc(r.confidence) : ""}</span> ${links}</span></div>`;
   }).join("");
 }
+// #177 — industry-level regulatory events (official act first, then independent outlets).
+const SECTOR_SEV = { critical: "crit", high: "high", medium: "med", low: "low" };
+const SECTOR_SEV_PT = { critical: "crítico", high: "alto", medium: "médio", low: "baixo" };
+const SECTOR_CONF_PT = { official: "ato oficial", corroborated: "imprensa · corroborado", reported: "imprensa" };
+function rowsSectorEvents(list) {
+  list = (list || []).filter(inSectorStrict);
+  if (!list.length) return U.empty("Nenhum evento setorial no escopo.", "ato oficial ou ≥2 veículos independentes", "○");
+  const lbl = {}; (EX.sectors || []).forEach(s => { lbl[s.slug] = s.label; });
+  return list.map(r => {
+    const links = (r.sources || []).slice(0, 4).map((s, i) =>
+      `<a href="${U.esc(s.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="${U.esc((s.label || "") + " — " + (s.title || ""))}">[${i + 1}]</a>`).join(" ");
+    const txt = (r.title || "") + (r.summary ? " — " + r.summary : "");
+    const meta = `${U.esc(SECTOR_CONF_PT[r.confidence] || r.confidence || "")}` +
+      (r.n_outlets ? ` · ${r.n_outlets} veículo(s)` : "") + (r.n_affected ? ` · ${r.n_affected} entidades afetadas` : "");
+    return `<div class="exrow exrow--sector" data-id="${U.esc(r.id)}">
+    <span class="dt">${r.date ? U.fmtDate(r.date) : ""}</span>
+    <span class="badge badge--${SECTOR_SEV[r.severity] || "low"}">${U.esc(SECTOR_SEV_PT[r.severity] || r.severity || "")}</span>
+    <span class="ent" title="${U.esc(lbl[r.industry] || r.industry || "")}">${U.esc(lbl[r.industry] || r.industry || "—")} · ${U.esc(r.change_label || "")}</span>
+    <span class="ttl" title="${U.esc(txt)}">${U.esc(txt)}</span>
+    <span class="meta"><span class="badge badge--ghost">${meta}</span> ${links}</span></div>`;
+  }).join("");
+}
 function rowsDiscovery(list) {
   list = (list || []).filter(inSectorStrict);
   if (!list.length) return U.empty("Sem propostas de descoberta no escopo.", "", "○");
@@ -1144,7 +1173,7 @@ function silenceBand() {
   if (!list.length) return "";
   const rows = list.slice(0, 14).map(s => {
     const t = s.silence_tier || 1, tone = t >= 3 ? "high" : t >= 2 ? "warn" : "med";
-    return `<div style="display:flex;gap:var(--s3);align-items:baseline;padding:var(--s2) var(--s3)">
+    return `<div class="silrow" style="display:flex;gap:var(--s3);align-items:baseline;padding:var(--s2) var(--s3)">
       <span class="badge badge--${tone}" title="tier de silêncio">T${t}</span>
       <b style="min-width:120px">${U.esc(s.label || s.entity)}</b>
       <span class="hd-note" style="flex:1">${U.esc(s.briefing || "")}</span>
@@ -1413,11 +1442,15 @@ function render() {
     const [bc, bl] = bandThreat(a.reg_threat || 0, 65, 40);
     board =
       readout(heroGauge("Ameaça regulatória", a.reg_threat, bandBadge(bc, bl), "--" + (bc === "crit" ? "t-crit" : bc === "high" ? "t-high" : "ok"), a.reg_threat),
-        [tile("Cartões regulatórios", a.n_reg, "no escopo"),
+        [tile("Eventos setoriais", a.n_sector_events || 0, a.sector_event_severity ? "máx. " + (SECTOR_SEV_PT[a.sector_event_severity] || a.sector_event_severity) : "ato oficial / ≥2 veículos",
+              a.sector_event_severity === "critical" ? "crit" : a.sector_event_severity === "high" ? "high" : null),
+         tile("Cartões regulatórios", a.n_reg, "no escopo"),
          tile("Atos alterados", a.n_changes, "com mudança enumerada"),
          tile("Maior alcance", a.max_blast, "setores", a.max_blast >= 3 ? "high" : null),
          tile("Solidez sob atenção", a.n_weak_solvency, a.min_basileia != null ? "mín. Basileia " + a.min_basileia + "%" : "prudencial",
               (a.n_weak_solvency || 0) > 0 ? "high" : null)]) +
+      band("Eventos setoriais", "mudança regulatória do setor inteiro · ato oficial primeiro · #177",
+           panel("Eventos setoriais", (p.sector_events || []).filter(inSectorStrict).length, "setor · severidade · fontes", rowsSectorEvents(p.sector_events))) +
       band("Solidez prudencial dos concorrentes", "Basileia + LCR + PDD/mês + inadimplência + fragilidade + tom · ADR 022",
            panel("Solvência, inadimplência, trajetória & tom (mais frágil primeiro)", null, "Basileia · CET1 · PDD/mês · NPL · tom", rowsSolvency(p.solvency))) +
       band("Impacto & alcance", "blast-radius · ADR-009", panel("Mudanças por impacto", null, "banda de alcance · dificuldade", rowsReg(p.impact))) +
@@ -1664,7 +1697,22 @@ async function postAct(body) {
 }
 
 // --- drill-down ------------------------------------------------------------
+function inspectSectorEvent(id) {
+  const r = (((EX.cro || {}).panels || {}).sector_events || []).find(x => x.id === id);
+  if (!r) return false;
+  const src = (r.sources || []).map(s => `<li><a href="${U.esc(s.url)}" target="_blank" rel="noopener">${U.esc(s.title || s.url)}</a>` +
+    ` <span class="hd-note">${U.esc(s.kind === "official" ? "ato oficial" : "imprensa")} · ${U.esc(s.label || "")}` +
+    `${s.section ? " · " + U.esc(s.section) : ""} · ${U.esc(s.date || "")}</span></li>`).join("");
+  document.getElementById("drTitle").textContent = "Evento setorial — " + (r.change_label || "mudança regulatória");
+  document.getElementById("drBody").innerHTML = `<div class="callout"><p><b>${U.esc(r.title || "")}</b></p>` +
+    (r.summary ? `<p>${U.esc(r.summary)}</p>` : "") +
+    `<p class="hd-note">Severidade ${U.esc(SECTOR_SEV_PT[r.severity] || r.severity || "—")} · ${U.esc(SECTOR_CONF_PT[r.confidence] || r.confidence || "")}` +
+    ` · ${r.n_affected || 0} entidades do setor afetadas</p><ol>${src}</ol></div>`;
+  openDrawer();
+  return true;
+}
 function inspect(id) {
+  if (String(id || "").indexOf("sector_event:") === 0 && inspectSectorEvent(id)) return;
   const c = BYID[id];
   document.getElementById("drTitle").textContent = (c && (c.entity_label || c.subject_label || c.entity)) || "Detalhe";
   document.getElementById("drBody").innerHTML = c

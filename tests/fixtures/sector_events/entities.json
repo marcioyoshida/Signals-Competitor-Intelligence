@@ -1,0 +1,1353 @@
+{
+"_note": "Registry rows (entity_id/display_name/industries) from the live feed.json entity_attrs, 2026-09-27: all 83 betting entities + every entity whose news term appears in the history fixture.",
+"entities": [
+{
+"entity_id": "1xbet",
+"display_name": "1XBET",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "4win",
+"display_name": "4WIN",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "7k",
+"display_name": "7K",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "a247",
+"display_name": "A247",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "ademicon",
+"display_name": "ADEMICON",
+"industries": [
+"consorcio"
+]
+},
+{
+"entity_id": "advent",
+"display_name": "Advent International",
+"industries": [
+"private-markets"
+]
+},
+{
+"entity_id": "afun",
+"display_name": "AFUN",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "agibank",
+"display_name": "Agibank",
+"industries": [
+"fintech"
+]
+},
+{
+"entity_id": "alfa-bet",
+"display_name": "ALFA.BET",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "aposta-ganha",
+"display_name": "APOSTA GANHA",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "aposta1",
+"display_name": "APOSTA1",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "apostou",
+"display_name": "APOSTOU",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "arenaplus",
+"display_name": "ARENAPLUS",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "azos",
+"display_name": "Azos",
+"industries": [
+"fintech",
+"insurance"
+]
+},
+{
+"entity_id": "b3",
+"display_name": "B3 (Brasil, Bolsa, Balcão)",
+"industries": [
+"financial-data-analytics"
+]
+},
+{
+"entity_id": "bacanaplay",
+"display_name": "BACANAPLAY",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "banco_bv",
+"display_name": "Banco BV",
+"industries": [
+"banking"
+]
+},
+{
+"entity_id": "banco_master",
+"display_name": "Banco Master",
+"industries": [
+"banking"
+]
+},
+{
+"entity_id": "banco_pan",
+"display_name": "Banco PAN",
+"industries": [
+"banking"
+]
+},
+{
+"entity_id": "banco_pine",
+"display_name": "Banco Pine",
+"industries": [
+"banking"
+]
+},
+{
+"entity_id": "bancorbras",
+"display_name": "Bancorbrás",
+"industries": [
+"consorcio"
+]
+},
+{
+"entity_id": "bandbet",
+"display_name": "BANDBET",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "bateu-bet",
+"display_name": "BATEU BET",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "baú-bingo",
+"display_name": "BAÚ BINGO",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "bb",
+"display_name": "Banco do Brasil",
+"industries": [
+"banking"
+]
+},
+{
+"entity_id": "bb_seguridade",
+"display_name": "BB Seguridade",
+"industries": [
+"insurance"
+]
+},
+{
+"entity_id": "bet-bet",
+"display_name": "BET.BET",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "bet-gorillas",
+"display_name": "BET GORILLAS",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "bet365",
+"display_name": "bet365",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "bet4",
+"display_name": "BET4",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "bet7k",
+"display_name": "Bet7k",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "betano",
+"display_name": "Betano",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "betboom",
+"display_name": "BETBOOM",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "betcaixa",
+"display_name": "BETCAIXA",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "betcopa",
+"display_name": "BETCOPA",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "betesporte",
+"display_name": "BETESPORTE",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "betfair",
+"display_name": "Betfair",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "betfast",
+"display_name": "BETFAST",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "betmgm",
+"display_name": "BETMGM",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "betnacional",
+"display_name": "Betnacional",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "betsson",
+"display_name": "Betsson",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "betwarrior",
+"display_name": "BETWARRIOR",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "big",
+"display_name": "BIG",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "binance",
+"display_name": "Binance",
+"industries": [
+"crypto"
+]
+},
+{
+"entity_id": "bitso",
+"display_name": "Bitso",
+"industries": [
+"crypto"
+]
+},
+{
+"entity_id": "blaze",
+"display_name": "BLAZE",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "bloomberg",
+"display_name": "Bloomberg",
+"industries": [
+"financial-data-analytics"
+]
+},
+{
+"entity_id": "bmg",
+"display_name": "Banco BMG",
+"industries": [
+"banking"
+]
+},
+{
+"entity_id": "br4bet",
+"display_name": "BR4BET",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "br_partners",
+"display_name": "BR Partners",
+"industries": [
+"advisory",
+"investment-banking"
+]
+},
+{
+"entity_id": "bra",
+"display_name": "BRA",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "bradesco",
+"display_name": "Bradesco",
+"industries": [
+"banking"
+]
+},
+{
+"entity_id": "bradesco_seguros",
+"display_name": "Bradesco Seguros",
+"industries": [
+"insurance"
+]
+},
+{
+"entity_id": "bravo",
+"display_name": "BRAVO",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "brazino777",
+"display_name": "BRAZINO777",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "brookfield",
+"display_name": "Brookfield Brasil",
+"industries": [
+"private-markets"
+]
+},
+{
+"entity_id": "btg",
+"display_name": "BTG Pactual",
+"industries": [
+"asset-management",
+"investment-banking",
+"wealth-management"
+]
+},
+{
+"entity_id": "btlg11",
+"display_name": "BTG Pactual Logística",
+"industries": [
+"real-estate-funds"
+]
+},
+{
+"entity_id": "bullsbet",
+"display_name": "BULLSBET",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "c6",
+"display_name": "C6 Bank",
+"industries": [
+"banking"
+]
+},
+{
+"entity_id": "caixa",
+"display_name": "Caixa Econômica Federal",
+"industries": [
+"banking"
+]
+},
+{
+"entity_id": "caixa_seguridade",
+"display_name": "Caixa Seguridade",
+"industries": [
+"insurance"
+]
+},
+{
+"entity_id": "capitania",
+"display_name": "Capitânia",
+"industries": [
+"agri-funds",
+"asset-management",
+"private-markets"
+]
+},
+{
+"entity_id": "carlyle",
+"display_name": "Carlyle",
+"industries": [
+"private-markets"
+]
+},
+{
+"entity_id": "casa-de-apostas",
+"display_name": "CASA DE APOSTAS",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "celcoin",
+"display_name": "Celcoin",
+"industries": [
+"fintech"
+]
+},
+{
+"entity_id": "cielo",
+"display_name": "Cielo",
+"industries": [
+"acquiring"
+]
+},
+{
+"entity_id": "coinbase",
+"display_name": "Coinbase",
+"industries": [
+"crypto"
+]
+},
+{
+"entity_id": "consorcio_magalu",
+"display_name": "Consórcio Magalu",
+"industries": [
+"consorcio"
+]
+},
+{
+"entity_id": "conta_simples",
+"display_name": "Conta Simples",
+"industries": [
+"fintech"
+]
+},
+{
+"entity_id": "contabilizei",
+"display_name": "Contabilizei",
+"industries": [
+"fintech"
+]
+},
+{
+"entity_id": "creditas",
+"display_name": "Creditas",
+"industries": [
+"fintech"
+]
+},
+{
+"entity_id": "crefisa",
+"display_name": "Crefisa",
+"industries": [
+"fintech"
+]
+},
+{
+"entity_id": "daycoval",
+"display_name": "Banco Daycoval",
+"industries": [
+"banking"
+]
+},
+{
+"entity_id": "deloitte",
+"display_name": "Deloitte Brasil",
+"industries": [
+"advisory"
+]
+},
+{
+"entity_id": "digio",
+"display_name": "Digio",
+"industries": [
+"fintech"
+]
+},
+{
+"entity_id": "economatica",
+"display_name": "Economatica",
+"industries": [
+"financial-data-analytics"
+]
+},
+{
+"entity_id": "esporte-365",
+"display_name": "ESPORTE 365",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "esportes_da_sorte",
+"display_name": "Esportes da Sorte",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "esportivavip",
+"display_name": "ESPORTIVAVIP",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "estrela_bet",
+"display_name": "Estrela Bet",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "estrelabet",
+"display_name": "ESTRELABET",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "ey",
+"display_name": "EY Brasil",
+"industries": [
+"advisory"
+]
+},
+{
+"entity_id": "f12-bet",
+"display_name": "F12.BET",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "factset",
+"display_name": "FactSet",
+"industries": [
+"financial-data-analytics"
+]
+},
+{
+"entity_id": "foxbit",
+"display_name": "Foxbit",
+"industries": [
+"crypto"
+]
+},
+{
+"entity_id": "g5_partners",
+"display_name": "G5 Partners",
+"industries": [
+"advisory"
+]
+},
+{
+"entity_id": "galera-bet",
+"display_name": "GALERA.BET",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "general_atlantic",
+"display_name": "General Atlantic",
+"industries": [
+"private-markets"
+]
+},
+{
+"entity_id": "genial",
+"display_name": "Genial Investimentos",
+"industries": [
+"fintech",
+"wealth-management"
+]
+},
+{
+"entity_id": "getnet",
+"display_name": "Getnet",
+"industries": [
+"acquiring"
+]
+},
+{
+"entity_id": "gingabet",
+"display_name": "GINGABET",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "goldman-sachs",
+"display_name": "Goldman Sachs",
+"industries": [
+"banking"
+]
+},
+{
+"entity_id": "hashdex",
+"display_name": "Hashdex",
+"industries": [
+"crypto"
+]
+},
+{
+"entity_id": "hglg11",
+"display_name": "CSHG Logística",
+"industries": [
+"real-estate-funds"
+]
+},
+{
+"entity_id": "hgru11",
+"display_name": "CSHG Renda Urbana",
+"industries": [
+"real-estate-funds"
+]
+},
+{
+"entity_id": "hiperbet",
+"display_name": "HIPERBET",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "hsml11",
+"display_name": "HSI Malls",
+"industries": [
+"real-estate-funds"
+]
+},
+{
+"entity_id": "icatu",
+"display_name": "Icatu Seguros",
+"industries": [
+"insurance"
+]
+},
+{
+"entity_id": "ice",
+"display_name": "ICE",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "ijogo",
+"display_name": "IJOGO",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "infinitepay",
+"display_name": "InfinitePay (CloudWalk)",
+"industries": [
+"acquiring",
+"fintech"
+]
+},
+{
+"entity_id": "inter",
+"display_name": "Inter&Co",
+"industries": [
+"banking",
+"fintech"
+]
+},
+{
+"entity_id": "itau",
+"display_name": "Itaú",
+"industries": [
+"banking"
+]
+},
+{
+"entity_id": "itau-unibanco",
+"display_name": "Itau Unibanco",
+"industries": [
+"banking"
+]
+},
+{
+"entity_id": "joga-junto",
+"display_name": "JOGA JUNTO",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "joga-limpo",
+"display_name": "Responsa Gamming (Joga Limpo)",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "kaszek",
+"display_name": "Kaszek",
+"industries": [
+"private-markets"
+]
+},
+{
+"entity_id": "kbet",
+"display_name": "KBET",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "kinea",
+"display_name": "KINEA",
+"industries": [
+"agri-funds",
+"asset-management"
+]
+},
+{
+"entity_id": "knca11",
+"display_name": "Kinea Crédito Agro",
+"industries": [
+"agri-funds"
+]
+},
+{
+"entity_id": "kncr11",
+"display_name": "Kinea Rendimentos",
+"industries": [
+"real-estate-funds"
+]
+},
+{
+"entity_id": "knri11",
+"display_name": "Kinea Renda Imobiliária",
+"industries": [
+"real-estate-funds"
+]
+},
+{
+"entity_id": "kpmg",
+"display_name": "KPMG Brasil",
+"industries": [
+"advisory"
+]
+},
+{
+"entity_id": "kto",
+"display_name": "KTO",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "lazard",
+"display_name": "Lazard",
+"industries": [
+"advisory",
+"investment-banking"
+]
+},
+{
+"entity_id": "luck-bet",
+"display_name": "LUCK.BET",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "líderbet",
+"display_name": "LÍDERBET",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "matera",
+"display_name": "Matera",
+"industries": [
+"fintech"
+]
+},
+{
+"entity_id": "mcgames",
+"display_name": "MCGAMES",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "mckinsey",
+"display_name": "McKinsey & Company Brasil",
+"industries": [
+"advisory"
+]
+},
+{
+"entity_id": "megaposta",
+"display_name": "MEGAPOSTA",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "mercado_bitcoin",
+"display_name": "Mercado Bitcoin",
+"industries": [
+"crypto"
+]
+},
+{
+"entity_id": "mercado_pago",
+"display_name": "Mercado Pago",
+"industries": [
+"acquiring",
+"fintech"
+]
+},
+{
+"entity_id": "meridian",
+"display_name": "MERIDIAN",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "mma",
+"display_name": "MMA",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "monashees",
+"display_name": "Monashees",
+"industries": [
+"private-markets"
+]
+},
+{
+"entity_id": "multibet",
+"display_name": "MULTIBET",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "mxrf11",
+"display_name": "Maxi Renda",
+"industries": [
+"real-estate-funds"
+]
+},
+{
+"entity_id": "neon",
+"display_name": "Neon",
+"industries": [
+"fintech"
+]
+},
+{
+"entity_id": "neoway",
+"display_name": "Neoway",
+"industries": [
+"financial-data-analytics"
+]
+},
+{
+"entity_id": "nomad",
+"display_name": "Nomad",
+"industries": [
+"fintech"
+]
+},
+{
+"entity_id": "nossabet",
+"display_name": "NOSSABET",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "novadax",
+"display_name": "NovaDAX",
+"industries": [
+"crypto"
+]
+},
+{
+"entity_id": "novibet",
+"display_name": "NOVIBET",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "nubank",
+"display_name": "Nubank / Nu Holdings",
+"industries": [
+"banking",
+"fintech"
+]
+},
+{
+"entity_id": "oleybet",
+"display_name": "OLEYBET",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "omie",
+"display_name": "Omie",
+"industries": [
+"fintech"
+]
+},
+{
+"entity_id": "opea_sec",
+"display_name": "Opea Securitizadora",
+"industries": [
+"securitization"
+]
+},
+{
+"entity_id": "original",
+"display_name": "Banco Original",
+"industries": [
+"banking"
+]
+},
+{
+"entity_id": "pagseguro",
+"display_name": "PagSeguro / PagBank",
+"industries": [
+"acquiring",
+"fintech"
+]
+},
+{
+"entity_id": "patria",
+"display_name": "Pátria Investimentos",
+"industries": [
+"private-markets"
+]
+},
+{
+"entity_id": "picpay",
+"display_name": "PicPay",
+"industries": [
+"fintech"
+]
+},
+{
+"entity_id": "pinnacle",
+"display_name": "PINNACLE",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "pixbet",
+"display_name": "Pixbet",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "pwc",
+"display_name": "PwC Brasil",
+"industries": [
+"advisory"
+]
+},
+{
+"entity_id": "qitech",
+"display_name": "QI Tech",
+"industries": [
+"fintech"
+]
+},
+{
+"entity_id": "quantum_finance",
+"display_name": "Quantum Finance",
+"industries": [
+"financial-data-analytics"
+]
+},
+{
+"entity_id": "quod",
+"display_name": "Quod",
+"industries": [
+"financial-data-analytics"
+]
+},
+{
+"entity_id": "reals",
+"display_name": "REALS",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "recargapay",
+"display_name": "RecargaPay",
+"industries": [
+"fintech"
+]
+},
+{
+"entity_id": "recr11",
+"display_name": "REC Recebíveis",
+"industries": [
+"real-estate-funds"
+]
+},
+{
+"entity_id": "rei-do-pitaco",
+"display_name": "REI DO PITACO",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "ripio",
+"display_name": "Ripio",
+"industries": [
+"crypto"
+]
+},
+{
+"entity_id": "rivalo",
+"display_name": "RIVALO",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "rodobens",
+"display_name": "Rodobens",
+"industries": [
+"banking"
+]
+},
+{
+"entity_id": "rothschild",
+"display_name": "Rothschild & Co",
+"industries": [
+"advisory",
+"investment-banking"
+]
+},
+{
+"entity_id": "rzag11",
+"display_name": "Riza Agro",
+"industries": [
+"agri-funds"
+]
+},
+{
+"entity_id": "santander",
+"display_name": "Santander",
+"industries": [
+"banking"
+]
+},
+{
+"entity_id": "santander-brasil",
+"display_name": "SANTANDER BRASIL",
+"industries": [
+"consorcio"
+]
+},
+{
+"entity_id": "seguro-bet",
+"display_name": "SEGURO BET",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "serasa",
+"display_name": "Serasa Experian",
+"industries": [
+"financial-data-analytics"
+]
+},
+{
+"entity_id": "seubet",
+"display_name": "SEUBET",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "sinqia",
+"display_name": "Sinqia",
+"industries": [
+"financial-data-analytics"
+]
+},
+{
+"entity_id": "sofisa",
+"display_name": "Banco Sofisa",
+"industries": [
+"banking"
+]
+},
+{
+"entity_id": "sorte-online",
+"display_name": "SORTE ONLINE",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "sortenabet",
+"display_name": "SORTENABET",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "sportingbet",
+"display_name": "Sportingbet",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "sportybet",
+"display_name": "SPORTYBET",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "stake",
+"display_name": "STAKE",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "stone",
+"display_name": "Stone / StoneCo",
+"industries": [
+"acquiring",
+"fintech"
+]
+},
+{
+"entity_id": "sulamerica",
+"display_name": "SulAmérica",
+"industries": [
+"insurance"
+]
+},
+{
+"entity_id": "sumup",
+"display_name": "SumUp",
+"industries": [
+"acquiring",
+"fintech"
+]
+},
+{
+"entity_id": "superbet",
+"display_name": "Superbet",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "supremabet",
+"display_name": "SUPREMABET",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "tiger-bet",
+"display_name": "TIGER.BET",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "tokio_marine",
+"display_name": "Tokio Marine",
+"industries": [
+"insurance"
+]
+},
+{
+"entity_id": "tropino",
+"display_name": "TROPINO",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "upbetbr",
+"display_name": "UPBETBR",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "vaidebet",
+"display_name": "VAIDEBET",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "vbet",
+"display_name": "VBET",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "versusbet",
+"display_name": "VERSUSBET",
+"industries": [
+"betting"
+]
+},
+{
+"entity_id": "vgia11",
+"display_name": "Valora Agro",
+"industries": [
+"agri-funds"
+]
+},
+{
+"entity_id": "visc11",
+"display_name": "Vinci Shopping Centers",
+"industries": [
+"real-estate-funds"
+]
+},
+{
+"entity_id": "will_bank",
+"display_name": "Will Bank",
+"industries": [
+"fintech"
+]
+},
+{
+"entity_id": "xp",
+"display_name": "XP",
+"industries": [
+"asset-management",
+"investment-banking"
+]
+},
+{
+"entity_id": "xplg11",
+"display_name": "XP Log",
+"industries": [
+"real-estate-funds"
+]
+},
+{
+"entity_id": "xpml11",
+"display_name": "XP Malls",
+"industries": [
+"real-estate-funds"
+]
+},
+{
+"entity_id": "zoop",
+"display_name": "Zoop",
+"industries": [
+"fintech"
+]
+},
+{
+"entity_id": "zurich_seguros",
+"display_name": "Zurich Seguros",
+"industries": [
+"insurance"
+]
+}
+]
+}

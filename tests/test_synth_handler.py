@@ -188,3 +188,36 @@ def test_handler_no_digest(monkeypatch):
     body = json.loads(resp["body"])
     assert body["status"] == "no_digest"
     assert body["narrative_count"] == 0
+
+
+def test_handler_runs_sector_events_then_coverage_alarm(monkeypatch):
+    """#177/#178: synth folds the run's digest into the sector-event store, then hands those
+    events to the coverage alarm (so an existing event suppresses it). Both best-effort."""
+    from src.synth import coverage_alarm, entity_registry, sector_events
+
+    monkeypatch.setenv("ONCA_SYNTH_USE_LLM", "false")
+    monkeypatch.setenv("ONCA_DIGESTS_BUCKET", "bucket")
+    monkeypatch.setattr(lambda_handler, "_commit_news_seen", lambda d: 0)
+    monkeypatch.setattr(lambda_handler, "_update_distress", lambda d: {"new_events": 0})
+    monkeypatch.setattr(lambda_handler.digest_io, "write_narrative", lambda n, **k: None)
+    monkeypatch.setattr(entity_registry, "list_entities", lambda **k: [{"entity_id": "betano",
+                                                                        "industries": ["betting"]}])
+    ev = {"id": "sector_event:betting:mp-1394", "industry": "betting"}
+    calls = {}
+
+    def fake_update(digest, bucket, *, entities=None, **k):
+        calls["se"] = (bucket, entities)
+        return {"events": 1, "created": [ev["id"]], "store": {"events": [ev]}}
+
+    def fake_run(digest, bucket, *, events, entities=None, **k):
+        calls["ca"] = events
+        return {"alarms": 1, "unsuppressed": 0, "sent": 0, "industries": []}
+
+    monkeypatch.setattr(sector_events, "update_from_digest", fake_update)
+    monkeypatch.setattr(coverage_alarm, "run", fake_run)
+    body = json.loads(lambda_handler.lambda_handler({"digest": {"news": {"items": []}}}, None)["body"])
+    assert calls["se"][0] == "bucket" and calls["se"][1][0]["entity_id"] == "betano"
+    assert calls["ca"] == [ev]
+    assert body["fusion"]["sector_events"]["created"] == [ev["id"]]
+    assert "store" not in body["fusion"]["sector_events"]  # compact SFN payload
+    assert body["fusion"]["coverage_alarm"]["unsuppressed"] == 0

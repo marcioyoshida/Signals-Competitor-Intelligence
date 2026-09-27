@@ -612,7 +612,8 @@ def build_cso(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         return {"climate": _climate_index(sc, len(sdist)), "n_cards": n,
                 "n_alerts": sum(1 for c in sc if c.get("is_alert")),
                 "avg_threat": round(sum(_threat(c) for c in sc) / n, 1) if n else 0.0,
-                "reg_threat": round(sum(_threat(c) for c in sreg) / len(sreg), 1) if sreg else 0.0,
+                "reg_threat": _reg_threat(sreg, _sector_events(feed, slug),
+                                          floor=_floors(slug, ctx["sectors"])),
                 "n_moves": len(smoves), "distress": len(sdist),
                 # #143: how many tracked competitors registered a capital act in the window.
                 "n_capital_moves": sum(1 for r in capital_rows
@@ -843,8 +844,56 @@ def _solvency_rows(feed: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 # --- CRO (regulator) ------------------------------------------------------------------
+# --- #177 industry-level sector events (feed.sector_events) ------------------------------
+# A sector event is a documented regulatory shock to a whole industry (MP 1.394 banning bets).
+# Its severity FLOORS that industry's reg_threat: averaging 8 routine BCB cards at 25 must not
+# outvote a measure that shuts the sector down. Transparent, documented floors — not a model.
+SECTOR_EVENT_FLOOR = {"critical": 90.0, "high": 70.0, "medium": 45.0}
+_SECTOR_SEV_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+
+
+def _sector_events(feed: dict[str, Any], slug: str | None = ALL) -> list[dict[str, Any]]:
+    evs = [e for e in (feed.get("sector_events") or []) if isinstance(e, dict) and e.get("industry")]
+    if slug and slug != ALL:
+        evs = [e for e in evs if e.get("industry") == slug]
+    evs = sorted(evs, key=lambda e: str(e.get("date") or ""), reverse=True)  # newest first …
+    return sorted(evs, key=lambda e: _SECTOR_SEV_RANK.get(e.get("severity") or "", 9))  # … within severity
+
+
+def _sector_floor(events: list[dict[str, Any]]) -> float:
+    return max((SECTOR_EVENT_FLOOR.get(e.get("severity") or "", 0.0) for e in events), default=0.0)
+
+
+def _reg_threat(cards: list[dict[str, Any]], events: list[dict[str, Any]], *, floor: bool = True) -> float:
+    base = round(sum(_threat(c) for c in cards) / len(cards), 1) if cards else 0.0
+    return round(max(base, _sector_floor(events)), 1) if floor else base
+
+
+def _floors(slug: str | None, sectors: list[dict[str, str]]) -> bool:
+    """The floor is a per-SECTOR reading. The cross-sector "todos" aggregate is not floored by
+    one sector's event (a banking+betting tenant's portfolio is not 90 because bets were banned)
+    — unless the scope IS that one sector (a betting-only tenant's "todos")."""
+    return slug not in (ALL, None) or len(sectors) <= 1
+
+
+def _sector_event_row(e: dict[str, Any], labels: dict[str, str] | None = None) -> dict[str, Any]:
+    srcs = []
+    for s in (e.get("sources") or [])[:6]:
+        srcs.append({"kind": s.get("kind"), "title": s.get("title"), "url": s.get("url"),
+                     "date": s.get("date"), "label": s.get("organ") or s.get("publisher") or s.get("source"),
+                     "section": s.get("section")})
+    return {"id": e.get("id"), "industry": e.get("industry"), "industries": [e.get("industry")],
+            "title": e.get("title"), "summary": e.get("summary"), "date": e.get("date"),
+            "severity": e.get("severity"), "confidence": e.get("confidence"),
+            "change_type": e.get("change_type"), "change_label": e.get("change_label"),
+            "n_outlets": e.get("n_outlets") or 0, "n_official": e.get("n_official") or 0,
+            "n_affected": e.get("n_affected") or len(e.get("entities") or []),
+            "sources": srcs}
+
+
 def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     reg = ctx["reg_cards"]
+    sector_events = _sector_events(feed)
     solvency = _solvency_rows(feed)
     weak_solvency = [r for r in solvency if r.get("band") in _WEAK_BANDS]
     # Tier-B slope firing: competitors whose provisions are rising fastest MoM (credit deterioration).
@@ -871,12 +920,17 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
 
     def agg(slug):
         sr = [c for c in reg if _in_industry(c, slug)]
+        sev_events = _sector_events(feed, slug)
         blasts = [len(c.get("affected_industries") or []) for c in sr]
         ss = [r for r in solvency if slug in (r.get("industries") or [])]
         npls = [r["npl_total"] for r in ss if r.get("npl_total") is not None]
         return {"n_reg": len(sr),
-                "reg_threat": round(sum(_threat(c) for c in sr) / len(sr), 1) if sr else 0.0,
-                "n_changes": sum(1 for c in sr if (c.get("n_changes") or 0) > 0),
+                # #177: a sector event floors the average (SECTOR_EVENT_FLOOR by severity).
+                "reg_threat": _reg_threat(sr, sev_events, floor=_floors(slug, ctx["sectors"])),
+                "reg_threat_cards": round(sum(_threat(c) for c in sr) / len(sr), 1) if sr else 0.0,
+                "n_changes": sum(1 for c in sr if (c.get("n_changes") or 0) > 0) + len(sev_events),
+                "n_sector_events": len(sev_events),
+                "sector_event_severity": sev_events[0].get("severity") if sev_events else None,
                 "n_deadlines": sum(1 for c in sr if c.get("days_to_deadline") is not None),
                 "max_blast": max(blasts) if blasts else 0,
                 # ADR 022 Phase 4: prudential solvency of the sector's tracked competitors.
@@ -892,6 +946,13 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
                 "n_fragil": sum(1 for r in ss if (r.get("fragility") or {}).get("band") == "frágil")}
 
     recs = []
+    for ev in [e for e in sector_events if e.get("severity") in ("critical", "high")][:2]:
+        label = {x["slug"]: x["label"] for x in ctx["sectors"]}.get(ev.get("industry")) or ev.get("industry")
+        recs.append(_rec("imediato",
+                         f"Evento setorial ({ev.get('severity')}) — {ev.get('change_label') or 'mudança regulatória'} "
+                         f"no setor {label}: {str(ev.get('title') or '')[:110]}",
+                         "open_watch", officer="cro", evidence_id=ev.get("id"),
+                         industries=[ev.get("industry")]))
     if impact:
         r = impact[0]
         recs.append(_rec("imediato", f"Acompanhar norma de maior alcance — {r.get('domain') or 'regulação'}",
@@ -942,6 +1003,8 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
                          "open_watch", officer="cro", evidence_id=w.get("entity"),
                          industries=w.get("industries") or []))
     return {"by_industry": _by_industry(ctx["sectors"], agg), "panels": {
+        # #177: top of the CRO view — industry-level regulatory events, official act first.
+        "sector_events": [_sector_event_row(e) for e in sector_events[:20]],
         "timeline": [_reg_row(c) for c in timeline[:30]],
         "impact": [_reg_row(c) for c in impact[:20]],
         "deadlines": [_reg_row(c) for c in deadlines[:20]],
@@ -1414,6 +1477,19 @@ def build_flow(feed: dict[str, Any], ctx: dict[str, Any]) -> list[dict[str, Any]
                          handoff=("cco" if band == "market" else None)))
         if len(out) >= 4:
             break
+
+    # #177: an industry-level regulatory event (critical/high) → CRO; a critical one (a sector
+    # shut down / banned) also hands off to CCO. Briefing restates the event's own fields.
+    for ev in [e for e in _sector_events(feed) if e.get("severity") in ("critical", "high")][:3]:
+        n_src = len(ev.get("sources") or [])
+        brief = (f"{ev.get('summary') or ev.get('title') or ''} · {ev.get('n_affected') or 0} entidade(s) "
+                 f"do setor afetada(s) · {n_src} fonte(s) ({ev.get('confidence')}).")
+        out.append(_traj("evento_setorial",
+                         f"Evento setorial — {ev.get('change_label') or 'mudança regulatória'} ({ev.get('industry')})",
+                         "cro", "crit" if ev.get("severity") == "critical" else "high", brief,
+                         industries=[ev.get("industry")], evidence_ids=[ev.get("id")],
+                         action="Avaliar exposição do setor e roteirizar resposta", action_ref="open_watch",
+                         key=ev.get("id") or "", handoff="cco" if ev.get("severity") == "critical" else None))
 
     # Confirmed insolvency on the roster → CCO.
     for d in _trusted_distress(feed):

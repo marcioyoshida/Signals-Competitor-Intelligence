@@ -18,6 +18,7 @@ Two specs, deliberately split (a small refinement of the ADR's single-spec sketc
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Callable
 
 # Verticals (ADR 019). A vertical is the market a deployment serves; the same codebase runs
 # as Onça (financial-services) or as the Anteater sectorial product by setting ONCA_VERTICAL.
@@ -173,3 +174,185 @@ def active(vertical: str | None = None) -> list[SourceSpec]:
     if not vertical:
         return list(SOURCES)
     return [s for s in SOURCES if ALL in s.verticals or vertical in s.verticals]
+
+
+# --- Industry topic registry (#173 / #175 / #176) ---------------------------------------------
+# One declarative place, per COVERED INDUSTRY, for the three things that make a sector-wide
+# measure visible when it names no operator (MP 1.394, the 2026-09-25 online-betting ban, was
+# missed because every query was an ENTITY name):
+#   - ``dou_phrases``    DOU quoted-phrase searches (dou.fetch_dou ``topic_terms``). A hit carries
+#                        ``industries`` and no entity. Scoped to the NORMATIVE issuers below, so a
+#                        phrase like "instituições financeiras" can't flood the DOU lens with
+#                        routine COAF/CVM/SUSEP acts (those still arrive via competitor terms).
+#   - ``news_queries``   Google News RSS queries (trade_press.fetch_sector_news), ≤3 per industry,
+#                        run OUTSIDE ONCA_NEWS_MAX_TERMS. Tuned live 2026-09-27 (see #176): each
+#                        returned sector-level headlines in the last 7 days.
+#   - ``vocabulary``     the terms that say "this text is about this industry" — used by the
+#                        federal-acts classifier (#175) to map an act to industries, and by the
+#                        sector-news relevance filter (a headline must contain one).
+# Vocabulary syntax (matched on accent-folded lowercase text, word-bounded at both ends):
+#   "phrase"   literal phrase;   "stem*"  word-prefix (``seguradora*`` → seguradoras);
+#   "re:<rx>"  a raw regex on the folded text (for the few terms that need a lookahead).
+# Keep phrases SPECIFIC: every DOU phrase is one HTTP per run and returns ≤20 acts.
+
+#: Organs whose topic-phrase hits are kept (substring of DOU ``hierarchyStr``; a trailing ``$``
+#: means the organ must be EXACTLY that — "Presidência da República" alone is the despachos
+#: organ, while "Presidência da República/Casa Civil/ABIN" is not a sector-wide issuer).
+NORMATIVE_ISSUERS: tuple[str, ...] = (
+    "Atos do Poder Executivo",                       # MPs, Decretos, Leis
+    "Presidência da República$",                     # despachos / mensagens / vetos
+    "Ministério da Fazenda/Gabinete do Ministro",    # Portarias MF
+    "Conselho Monetário Nacional",                   # CMN resolutions
+    "Conselho Nacional de Seguros Privados",         # CNSP
+    "Conselho Nacional de Previdência Complementar",  # CNPC
+    "Secretaria de Prêmios e Apostas",               # SPA (betting regulator)
+)
+
+
+@dataclass(frozen=True)
+class IndustryTopicSpec:
+    """Per-industry topic declarations (see the block comment above)."""
+    industry: str                      # entity_registry.INDUSTRIES slug
+    dou_phrases: tuple[str, ...] = ()
+    news_queries: tuple[str, ...] = ()  # ≤ 3
+    vocabulary: tuple[str, ...] = ()
+    env_flag: str | None = None        # extra ONCA_* toggle for this industry's DOU phrases
+
+
+INDUSTRY_TOPICS: list[IndustryTopicSpec] = [
+    IndustryTopicSpec(
+        "betting",
+        # The four pre-#175 betting DOU terms (lambda_port's hard-coded dou_topics), unchanged.
+        # + the singular "aposta de quota fixa" (#175, live 2026-09-27): the in.gov.br search is
+        # not stemmed, and the singular is what SPA's normative Portarias use (2.750, 2.596).
+        # Bare "apostas" was measured and rejected: 20/20 results, the 9 in scope are the same
+        # acts these phrases already catch, the rest is MJSP "JOGOS" rating noise.
+        dou_phrases=("Secretaria de Prêmios e Apostas", "apostas de quota fixa",
+                     "aposta de quota fixa", "Lei nº 14.790", "jogos de azar"),
+        news_queries=("bets proibição", "apostas regulamentação", "Secretaria de Prêmios e Apostas"),
+        vocabulary=("aposta* de quota fixa", "loteria* de aposta*", "quota fixa", "bets", "bet",
+                    "apostas esportivas", "apostas online", "apostas on-line", "apostas virtuais",
+                    "casa* de aposta*", "site* de aposta*", "plataforma* de aposta*",
+                    "mercado de apostas", "setor de apostas", "jogo* de azar", "jogo* on-line",
+                    "jogo* online", "igaming", "cassino* online", "lei 14.790", "lei no 14.790",
+                    "secretaria de premios e apostas", "spa/mf", "sigap", "apostador*"),
+        env_flag="ONCA_DOU_BETTING",
+    ),
+    IndustryTopicSpec(
+        "banking",
+        dou_phrases=("instituições financeiras", "Sistema Financeiro Nacional"),
+        news_queries=("Conselho Monetário Nacional", "bancos Banco Central nova regra"),
+        vocabulary=("instituicoes financeiras", "instituicao financeira", "bancos", "banco multiplo",
+                    "bancos multiplos", "setor bancario", "sistema bancario", "tarifas bancarias",
+                    "sistema financeiro nacional",
+                    # NOT "CMN": the council rules for every FS industry, so naming it says nothing
+                    # about WHICH industry an act touches (a CMN FIDC rule is not a banking act).
+                    "depositos a vista", "recolhimento compulsorio", "compulsorio*", "febraban",
+                    "open finance", "basileia"),
+    ),
+    IndustryTopicSpec(
+        "fintech",
+        dou_phrases=("instituições de pagamento", "arranjos de pagamento"),
+        news_queries=("Pix Banco Central nova regra", "fintechs regulação",
+                      "instituições de pagamento Banco Central"),
+        vocabulary=("instituic* de pagamento", "arranjo* de pagamento", "transac* de pagamento",
+                    "conta* de pagamento", "iniciador* de pagamento", "moeda eletronica", "fintech*",
+                    "pix", "sociedade* de credito direto", "sociedade* de emprestimo entre pessoas",
+                    "banking as a service", "baas"),
+    ),
+    IndustryTopicSpec(
+        "insurance",
+        dou_phrases=("seguros privados", "resseguro"),
+        news_queries=("Susep regras seguros", "seguradoras Susep"),
+        vocabulary=("re:\\bseguros?\\b(?!-desemprego|-defeso| desemprego| defeso)",
+                    "seguradora*", "resseguro*", "resseguradora*", "susep", "cnsp", "seguros privados",
+                    "titulos de capitalizacao", "capitalizacao", "previdencia complementar aberta",
+                    "corretor* de seguros", "mercado segurador"),
+    ),
+    IndustryTopicSpec(
+        # Securitização & Crédito (credit originators, FIDC/CRI/CRA, consignado)
+        "securitization",
+        dou_phrases=("crédito consignado", "securitização"),
+        news_queries=("FIDC regras", "crédito consignado regras"),
+        vocabulary=("credito consignado", "consignado", "consignados", "securitiza*",
+                    "direitos creditorios", "fidc", "fidcs", "certificado* de recebiveis",
+                    "cessao de credito", "credito rotativo", "juros do rotativo", "desenrola",
+                    "cadastro positivo", "superendividamento", "recebiveis",
+                    "renegociacao de dividas", "credito responsavel", "tomadores de credito"),
+    ),
+    IndustryTopicSpec(
+        "asset-management",
+        dou_phrases=("fundos de investimento",),
+        news_queries=("fundos de investimento CVM regras",),
+        vocabulary=("fundo* de investimento*", "gestora* de recursos", "gestao de recursos",
+                    "administracao de carteira*", "administradora* de carteira*", "fundos exclusivos",
+                    "come-cotas", "anbima", "resolucao cvm 175", "industria de fundos", "cotista*"),
+    ),
+    IndustryTopicSpec(
+        "crypto",
+        dou_phrases=("ativos virtuais", "criptoativos"),
+        news_queries=("criptoativos regulação", "criptoativos Banco Central"),
+        vocabulary=("ativo* virtua*", "criptoativo*", "criptomoeda*", "cripto", "stablecoin*",
+                    "bitcoin", "prestadora* de servicos de ativos virtuais", "psav", "psavs",
+                    "exchange* de cripto*", "mercado cripto", "lei 14.478", "lei no 14.478"),
+    ),
+    IndustryTopicSpec(
+        "consorcio",
+        dou_phrases=("administradoras de consórcio", "Lei nº 11.795"),
+        news_queries=("administradoras de consórcio", "consórcio Banco Central regras"),
+        # NOT bare "consórcio": in the DOU it is overwhelmingly the PUBLIC consortium
+        # (Consórcio Interfederativo / intermunicipal) or a bidding consortium (live 2026-09-27).
+        vocabulary=("administradora* de consorcio*", "grupo* de consorcio*", "sistema de consorcio*",
+                    "cota* de consorcio*", "carta* de credito", "lei 11.795", "lei no 11.795", "abac",
+                    "re:\\bconsorcios\\b(?! public\\w*| intermunicip\\w*| interfederativ\\w*)"),
+    ),
+    IndustryTopicSpec(
+        "closed-pension",
+        dou_phrases=("previdência complementar",),
+        news_queries=("fundos de pensão Previc", "previdência complementar Previc"),
+        vocabulary=("previdencia complementar fechada", "re:\\bprevidencia complementar\\b(?! aberta)",
+                    "entidade* fechada* de previdencia", "efpc*", "fundo* de pensao", "previc",
+                    "cnpc", "conselho nacional de previdencia complementar",
+                    "lei complementar 109", "lei complementar no 109"),
+    ),
+]
+
+TOPICS: dict[str, IndustryTopicSpec] = {t.industry: t for t in INDUSTRY_TOPICS}
+MAX_NEWS_QUERIES_PER_INDUSTRY = 3
+
+
+def _topics_for(vertical: str | None) -> list[IndustryTopicSpec]:
+    """Topic specs in scope for ``vertical`` (None / FS = every declared industry)."""
+    scope = vertical_industries(vertical) if vertical else None
+    return [t for t in INDUSTRY_TOPICS if scope is None or t.industry in scope]
+
+
+def dou_topic_terms(vertical: str | None = None,
+                    enabled: "Callable[[IndustryTopicSpec], bool] | None" = None) -> dict[str, list[str]]:
+    """{DOU phrase: [industry slugs]} for dou.fetch_dou(topic_terms=...). A phrase declared by
+    several industries maps to all of them. ``enabled(spec)`` gates an industry (env toggles)."""
+    out: dict[str, list[str]] = {}
+    for t in _topics_for(vertical):
+        if enabled is not None and not enabled(t):
+            continue
+        for p in t.dou_phrases:
+            out.setdefault(p, [])
+            if t.industry not in out[p]:
+                out[p].append(t.industry)
+    return out
+
+
+def dou_topic_organs(vertical: str | None = None) -> dict[str, list[str]]:
+    """{DOU phrase: organ scopes} — every topic phrase is scoped to NORMATIVE_ISSUERS."""
+    return {p: list(NORMATIVE_ISSUERS) for p in dou_topic_terms(vertical)}
+
+
+def news_topic_queries(vertical: str | None = None) -> dict[str, list[str]]:
+    """{industry: [news queries]} (≤ MAX_NEWS_QUERIES_PER_INDUSTRY each)."""
+    return {t.industry: list(t.news_queries[:MAX_NEWS_QUERIES_PER_INDUSTRY])
+            for t in _topics_for(vertical) if t.news_queries}
+
+
+def industry_vocabulary(vertical: str | None = None) -> dict[str, list[str]]:
+    """{industry: [vocabulary terms]} (syntax in the block comment above)."""
+    return {t.industry: list(t.vocabulary) for t in _topics_for(vertical) if t.vocabulary}

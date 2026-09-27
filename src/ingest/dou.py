@@ -64,9 +64,16 @@ RELEVANT_ORGANS = (
 # be able to quote. The rest keep the snippet (DO3 editais, routine despachos).
 FULL_TEXT_ORGANS = (
     "Atos do Poder Executivo",
+    # #175: the Presidência's own despachos/mensagens (exact organ — not ABIN/Casa Civil
+    # sub-organs): short, and the snippet cuts the "Encaminhamento … da Medida Provisória nº"
+    # line that ties them to the act they forward.
+    "Presidência da República$",
     "Ministério da Fazenda/Gabinete do Ministro",
     "Conselho Monetário Nacional",
 )
+# #175: the betting regulator's DO1 acts (normative Portarias SPA/MF) are fetched in full too;
+# its DO2 (personnel) and DO3 (editais de citação) keep the snippet.
+FULL_TEXT_DO1_ORGANS = ("Secretaria de Prêmios e Apostas",)
 FULL_TEXT_MAX_PER_RUN = 12
 _TEXTO_RE = re.compile(r'<div class="texto-dou">(.*?)</div>\s*</div>', re.S)
 
@@ -86,6 +93,11 @@ def fetch_dou(
     max_topic_terms: int = 15,
     full_text: bool = True,
     act_fetcher: Callable[[str], str] | None = None,
+    topic_organs: dict[str, list[str]] | None = None,
+    classify: bool = True,
+    follow_citations: bool = True,
+    max_citation_follow: int = 4,
+    citation_organs: Iterable[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Return recent DOU acts mentioning any of ``terms`` (competitor names, quoted-phrase
     search) or any ``topic_terms`` ({phrase: [industry slugs]}).
@@ -93,44 +105,104 @@ def fetch_dou(
     Topic terms (#174) have their OWN budget and run FIRST, so a growing competitor list can
     never push them past ``max_terms``. A topic-matched act carries ``industries`` and no
     entity (``company``/``name`` None) unless a competitor term also matched it — then it
-    keeps the competitor binding AND gains the industries."""
+    keeps the competitor binding AND gains the industries.
+
+    ``topic_organs`` ({phrase: [organ scopes]}, #175) narrows a topic phrase's hits to the
+    sector-wide issuers (``registry.NORMATIVE_ISSUERS``); a scope ending in ``$`` must equal
+    the organ. ``classify`` (#175) runs ``federal_acts.annotate`` so every act leaving here
+    carries ``severity`` (and ``industries`` when a covered industry applies).
+
+    ``follow_citations`` (#175): for each CRITICAL MP/Lei/Decreto found (≤ ``max_citation_follow``),
+    one more search for the acts citing it ("Medida Provisória nº 1.394"), scoped to
+    ``citation_organs`` (default ``registry.NORMATIVE_ISSUERS``); those acts inherit its
+    industries — the implementing acts of a ban need not repeat the sector's vocabulary."""
     today = today or dt.date.today()
     cutoff = today - dt.timedelta(days=lookback_days)
     fetch = fetcher or _fetch_query
     organ_filters = [o.lower() for o in (organs or [])]
     by_id: dict[str, dict[str, Any]] = {}
     topics = {str(k).strip(): list(v or []) for k, v in (topic_terms or {}).items() if str(k).strip()}
+    scopes = dict(topic_organs or {})
     plan = [(t, True) for t in list(topics)[:max_topic_terms]]
     plan += [(t, False) for t in [t for t in dict.fromkeys(str(t).strip() for t in terms) if t
                                   and t not in topics][:max_terms]]
-    for term, is_topic in plan:
-        for section in sections:
-            for rec in _parse(fetch(term, section, exact_date), term):
-                date = _parse_date(rec.get("date"))
-                if not date or date < cutoff:
-                    continue
-                if organ_filters:
-                    org = (rec.get("organ") or "").lower()
-                    if not any(f in org for f in organ_filters):
+
+    def _run(plan_: list[tuple[str, bool]]) -> None:
+        for term, is_topic in plan_:
+            got = False
+            for section in sections:
+                page = fetch(term, section, exact_date)
+                got = got or bool(page)
+                for rec in _parse(page, term):
+                    date = _parse_date(rec.get("date"))
+                    if not date or date < cutoff:
                         continue
-                if is_topic:
-                    rec.update(company=None, name=None, topic_term=term, industries=list(topics[term]))
-                prev = by_id.get(rec["id"])
-                if prev is None:
-                    by_id[rec["id"]] = rec
-                    continue
-                # merge: keep an entity binding if any term gave one; union industries
-                if not prev.get("company") and rec.get("company"):
-                    prev.update(company=rec["company"], name=rec["name"])
-                if rec.get("industries"):
-                    prev["industries"] = sorted(set(prev.get("industries") or []) | set(rec["industries"]))
-                    prev.setdefault("topic_term", rec.get("topic_term"))
-        if pause_sec:
-            time.sleep(pause_sec)
-    out = sorted(by_id.values(), key=lambda r: r.get("date") or "", reverse=True)
-    if full_text:
-        _attach_full_text(out, act_fetcher or _fetch_act)
+                    if organ_filters:
+                        org = (rec.get("organ") or "").lower()
+                        if not any(f in org for f in organ_filters):
+                            continue
+                    if is_topic and not _organ_in_scope(rec.get("organ"), scopes.get(term)):
+                        continue
+                    if is_topic:
+                        rec.update(company=None, name=None, topic_term=term, industries=list(topics[term]))
+                    prev = by_id.get(rec["id"])
+                    if prev is None:
+                        by_id[rec["id"]] = rec
+                        continue
+                    # merge: keep an entity binding if any term gave one; union industries
+                    if not prev.get("company") and rec.get("company"):
+                        prev.update(company=rec["company"], name=rec["name"])
+                    if rec.get("industries"):
+                        prev["industries"] = sorted(set(prev.get("industries") or []) | set(rec["industries"]))
+                        prev.setdefault("topic_term", rec.get("topic_term"))
+            if pause_sec and got:  # politeness pause after a real response only
+                time.sleep(pause_sec)
+
+    def _finish() -> list[dict[str, Any]]:
+        out_ = sorted(by_id.values(), key=lambda r: r.get("date") or "", reverse=True)
+        if full_text:
+            _attach_full_text(out_, act_fetcher or _fetch_act)
+        if classify:
+            from src.ingest import federal_acts
+
+            federal_acts.annotate(out_)
+        return out_
+
+    _run(plan)
+    out = _finish()
+    if classify and follow_citations:
+        # #175: a critical MP/Lei/Decreto in this batch (MP 1.394) → search the DOU for the acts
+        # that CITE it (the implementing Portaria, the SPA rules, the despacho), scoped to the
+        # normative issuers. They inherit its industries in federal_acts.annotate (citation rule).
+        from src.ingest import federal_acts, registry
+
+        anchors = federal_acts.critical_anchors(out)
+        follow = [(federal_acts.citation_phrase(ref), inds) for ref, inds in anchors.items()]
+        follow = [(p, i) for p, i in follow if p not in topics][:max_citation_follow]
+        if follow:
+            for p, inds in follow:
+                topics[p] = list(inds)
+                scopes[p] = list(citation_organs if citation_organs is not None
+                                 else registry.NORMATIVE_ISSUERS)
+            _run([(p, True) for p, _ in follow])
+            out = _finish()
     return out
+
+
+def _organ_in_scope(organ: str | None, scopes: Iterable[str] | None) -> bool:
+    """True when ``organ`` matches one of ``scopes`` (substring; ``X$`` = exactly X). No scopes =
+    no restriction."""
+    if not scopes:
+        return True
+    org = (organ or "").strip().lower()
+    for sc in scopes:
+        sc = str(sc).strip().lower()
+        if sc.endswith("$"):
+            if org == sc[:-1]:
+                return True
+        elif sc and sc in org:
+            return True
+    return False
 
 
 def _attach_full_text(recs: list[dict[str, Any]], fetch_act: Callable[[str], str]) -> None:
@@ -140,8 +212,12 @@ def _attach_full_text(recs: list[dict[str, Any]], fetch_act: Callable[[str], str
     for r in recs:
         if n >= FULL_TEXT_MAX_PER_RUN:
             break
+        if r.get("full_text"):
+            continue
         org = r.get("organ") or ""
-        if not any(o in org for o in FULL_TEXT_ORGANS):
+        do1 = str(r.get("section") or "").upper().startswith("DO1")
+        if not (_organ_in_scope(org, FULL_TEXT_ORGANS)
+                or (do1 and _organ_in_scope(org, FULL_TEXT_DO1_ORGANS))):
             continue
         body = extract_act_text(fetch_act(r["url"]))
         n += 1
@@ -195,7 +271,9 @@ def _parse(html: str, term: str) -> list[dict[str, Any]]:
         slug = (it.get("urlTitle") or "").strip()
         if not slug:
             continue
-        title = (it.get("title") or "").strip()
+        # the title carries <span class='highlight'> markup when the query hits it (e.g. a
+        # "PORTARIA MF Nº 2.946" search): strip it like the snippet (#175)
+        title = _html.unescape(re.sub(r"<[^>]+>", "", it.get("title") or "")).strip()
         content = (it.get("content") or "").strip()
         out.append(
             {

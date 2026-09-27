@@ -46,6 +46,49 @@ def _update_distress(digest: dict[str, Any]) -> dict[str, Any]:
         return {"new_events": 0, "records": 0}
 
 
+def _registry_entities() -> list[dict[str, Any]]:
+    """Active registry rows (entity → industries) for sector-event rosters and the coverage
+    alarm's term → industry map. [] when the registry is unreachable (both degrade)."""
+    try:
+        from src.synth import entity_registry
+
+        return entity_registry.list_entities()
+    except Exception as exc:  # pragma: no cover - best-effort
+        print(f"Warning: registry read for sector events skipped: {exc}")
+        return []
+
+
+def _update_sector_events(digest: dict[str, Any], entities: list[dict[str, Any]]) -> dict[str, Any]:
+    """#177: fold this run's official acts (DOU / federal acts carrying ``industries``) and
+    sector-change news into the durable ``sector_events/latest.json``. Best-effort."""
+    bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
+    if not bucket:
+        return {"events": 0, "store": {}}
+    try:
+        from src.synth import sector_events
+
+        return sector_events.update_from_digest(digest, bucket, entities=entities)
+    except Exception as exc:  # pragma: no cover - best-effort; never crash synth
+        print(f"Warning: sector events update skipped: {exc}")
+        return {"events": 0, "store": {}}
+
+
+def _run_coverage_alarm(digest: dict[str, Any], events: list[dict[str, Any]],
+                        entities: list[dict[str, Any]]) -> dict[str, Any]:
+    """#178: per-industry news-volume spike with no matching sector event → operator alert
+    (SNS, gated off by default). Best-effort."""
+    bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
+    if not bucket or os.environ.get("ONCA_COVERAGE_ALARM", "true").lower() not in ("1", "true", "yes"):
+        return {"alarms": 0}
+    try:
+        from src.synth import coverage_alarm
+
+        return coverage_alarm.run(digest, bucket, events=events, entities=entities)
+    except Exception as exc:  # pragma: no cover - best-effort; never crash synth
+        print(f"Warning: coverage alarm skipped: {exc}")
+        return {"alarms": 0}
+
+
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """Produce flagged narratives with citation guardrails.
 
@@ -109,6 +152,13 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # didn't clear the fusion floor is still recorded. Best-effort.
     distress_summary = _update_distress(digest)
 
+    # #177 / #178 (incident #173): industry-level regulatory events, then the coverage alarm
+    # that checks every industry's news volume against them. Both best-effort.
+    reg_entities = _registry_entities() if os.environ.get("ONCA_DIGESTS_BUCKET") else []
+    sector = _update_sector_events(digest, reg_entities)
+    coverage = _run_coverage_alarm(digest, (sector.get("store") or {}).get("events") or [],
+                                   reg_entities)
+
     fusion = {
         "entity_fusion": sum(1 for c in cands if c.get("kind") == "entity_fusion"),
         "regulatory_fusion": sum(1 for c in cands if c.get("kind") == "regulatory_fusion"),
@@ -118,6 +168,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         "min_score": float(os.environ.get("ONCA_SYNTH_MIN_SCORE", "0.45")),
         "news_committed": committed,
         "distress": distress_summary,
+        "sector_events": {k: v for k, v in sector.items() if k != "store"},
+        "coverage_alarm": coverage,
     }
     status = "ok" if narratives else "ok_empty"
     # Return a COMPACT result: narratives are persisted to S3 (``keys``) and the

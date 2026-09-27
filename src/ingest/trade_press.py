@@ -218,8 +218,16 @@ def fetch_news(
     outlet_fetcher: Callable[[str], bytes] | None = None,
     pause_sec: float = 0.3,
     max_terms: int = 80,
+    sector_queries: dict[str, list[str]] | None = None,
+    sector_vocab: dict[str, list[str]] | None = None,
+    sector_fetcher: Callable[[str], bytes] | None = None,
 ) -> list[dict[str, Any]]:
-    """Recent headlines mentioning a competitor in the title (higher precision)."""
+    """Recent headlines mentioning a competitor in the title (higher precision).
+
+    #176: ``sector_queries`` ({industry: [queries]}) ALSO runs the per-industry topic queries
+    (:func:`fetch_sector_news`) — OUTSIDE ``max_terms`` — and merges them in with
+    :func:`merge_sector_news`. (The Lambda news slice calls the two halves separately so each
+    gets its own wall-clock budget.)"""
     today = today or dt.date.today()
     cutoff = today - dt.timedelta(days=lookback_days)
     fetch = fetcher or _fetch_rss
@@ -292,8 +300,134 @@ def fetch_news(
                 seen.add(rec["id"])
                 out.append(rec)
 
+    for rec in out:
+        rec.setdefault("query_kind", "entity")
+    out.sort(key=lambda r: r.get("date") or "", reverse=True)
+    if sector_queries:
+        sector = fetch_sector_news(sector_queries, sector_vocab, lookback_days=lookback_days,
+                                   today=today, fetcher=sector_fetcher, pause_sec=pause_sec)
+        out = merge_sector_news(out, sector)
+    return out
+
+
+# --- #176 sector topic queries -----------------------------------------------------------------
+# Entity-name queries can't see a sector-wide measure that names no operator: MP 1.394 (the
+# 2026-09-25 online-betting ban) reached Onça only by accident, as side-notes on B3/Caixa/Serasa
+# searches. Per covered industry, a few topic queries (registry.INDUSTRY_TOPICS.news_queries)
+# fetch the sector's own headlines, tagged to the INDUSTRY (query_kind "sector"), never an entity.
+
+def fetch_sector_news(
+    queries: dict[str, list[str]],
+    vocab: dict[str, list[str]] | None = None,
+    lookback_days: int = DEFAULT_LOOKBACK_DAYS,
+    *,
+    max_per_query: int = 15,
+    max_queries_per_industry: int = 3,
+    today: dt.date | None = None,
+    fetcher: Callable[[str], bytes] | None = None,
+    pause_sec: float = 0.3,
+) -> list[dict[str, Any]]:
+    """Headlines from the per-industry topic queries ({industry: [query, …]}).
+
+    Each kept item carries ``query_kind: "sector"``, ``industries: [slug, …]``, ``sector_query``
+    and NO entity (``company``/``name`` None). Precision: the headline must contain a term of
+    that industry's vocabulary (``vocab``, default the registry's — the same one the #175 act
+    classifier uses), so a loose Google match ("apostas" in a Mega-Sena story for an
+    "apostas regulamentação" query) is dropped. The same headline from several industries'
+    queries is one item with the union of their industries."""
+    from src.ingest import federal_acts  # the shared vocabulary matcher (no I/O)
+
+    today = today or dt.date.today()
+    cutoff = today - dt.timedelta(days=lookback_days)
+    fetch = fetcher or _fetch_rss_query
+    patterns = federal_acts.vocabulary_patterns(vocab)
+    by_key: dict[str, dict[str, Any]] = {}
+    for industry, qs in (queries or {}).items():
+        rx = patterns.get(industry)
+        for q in [str(x).strip() for x in (qs or []) if str(x).strip()][:max_queries_per_industry]:
+            kept = 0
+            content = fetch(q)
+            for rec in _parse(content, q):
+                if kept >= max_per_query:
+                    break
+                date = _parse_date(rec.get("date"))
+                if not date or date < cutoff:
+                    continue
+                if rx is not None and not rx.search(federal_acts.fold(rec.get("title"))):
+                    continue
+                key = _title_key(rec.get("title"))
+                prev = by_key.get(key) or by_key.get(rec["id"])
+                if prev is not None:
+                    if industry not in prev["industries"]:
+                        prev["industries"].append(industry)
+                    continue
+                rec.update(company=None, name=None, query_kind="sector", industries=[industry],
+                           sector_query=q)
+                by_key[key] = rec
+                by_key[rec["id"]] = rec
+                kept += 1
+            if pause_sec and content:  # politeness pause after a real response only
+                time.sleep(pause_sec)
+    out = list({id(r): r for r in by_key.values()}.values())
     out.sort(key=lambda r: r.get("date") or "", reverse=True)
     return out
+
+
+def merge_sector_news(entity_items: list[dict[str, Any]],
+                      sector_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Entity-query items + sector-query items, deduplicated by id / URL / normalized title.
+
+    On a duplicate the ENTITY item is kept (its entity binding is the more specific fact) and
+    gains the sector item's ``industries``; its ``query_kind`` stays "entity". Returns a new
+    list, most recent first."""
+    out = list(entity_items or [])
+    index: dict[str, dict[str, Any]] = {}
+    for r in out:
+        for k in _dedup_keys(r):
+            index.setdefault(k, r)
+    for s in sector_items or []:
+        hit = next((index[k] for k in _dedup_keys(s) if k in index), None)
+        if hit is not None:
+            inds = list(hit.get("industries") or [])
+            hit["industries"] = inds + [i for i in (s.get("industries") or []) if i not in inds]
+            continue
+        out.append(s)
+        for k in _dedup_keys(s):
+            index.setdefault(k, s)
+    out.sort(key=lambda r: r.get("date") or "", reverse=True)
+    return out
+
+
+def _title_key(title: Any) -> str:
+    return "t:" + re.sub(r"[^A-Z0-9]+", "", _fold(title or ""))
+
+
+def _dedup_keys(rec: dict[str, Any]) -> list[str]:
+    keys = []
+    if rec.get("id"):
+        keys.append("i:" + str(rec["id"]))
+    url = str(rec.get("url") or "").strip()
+    if url:
+        keys.append("u:" + re.sub(r"^https?://(www\.)?", "", url.split("#")[0]).rstrip("/").lower())
+    tk = _title_key(rec.get("title"))
+    if len(tk) > 12:  # a near-empty title is not an identity
+        keys.append(tk)
+    return keys
+
+
+def _fetch_rss_query(query: str) -> bytes:
+    """Google News RSS for a free-form topic query (NOT phrase-quoted, unlike entity names)."""
+    try:
+        resp = requests.get(
+            RSS_URL,
+            params={"q": query, "hl": DEFAULT_HL, "gl": DEFAULT_GL, "ceid": DEFAULT_CEID},
+            timeout=25,
+            headers={"User-Agent": "Onca-CI/1.0 (competitive-intelligence)"},
+        )
+        return resp.content if resp.status_code == 200 else b""
+    except Exception as exc:  # pragma: no cover - upstream best-effort
+        print(f"Warning: sector news fetch failed for {query}: {exc}")
+        return b""
 
 
 def _fetch_rss(term: str) -> bytes:

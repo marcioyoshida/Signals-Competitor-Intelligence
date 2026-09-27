@@ -962,6 +962,8 @@ def scope_feed_to_modules(feed: dict[str, Any], modules: Any) -> dict[str, Any]:
             "coverage_gaps": [r for r in (feed.get("coverage_gaps") or []) if row_ok(r)],
             "financials": [r for r in (feed.get("financials") or []) if row_ok(r)],
             "product_radar": scope_product_radar(feed.get("product_radar"), row_ok),  # #159
+            # #177: an industry-level event is visible only to tenants licensed for it.
+            "sector_events": scope_sector_events(feed.get("sector_events"), keep),
             "integrity": {"findings": [], "counts": {}, "total": 0},  # operator-only
             "regulatory_coverage": {},                                # operator-only (#2)
             "source_runs": [],  # operator-only (#139) — raw per-source telemetry incl. error
@@ -1083,6 +1085,7 @@ def derive_entry_feed(
             "coverage_gaps": [r for r in (feed.get("coverage_gaps") or []) if row_ok(r)],
             "financials": [r for r in (feed.get("financials") or []) if row_ok(r)],
             "product_radar": scope_product_radar(feed.get("product_radar"), row_ok),  # #159
+            "sector_events": scope_sector_events(feed.get("sector_events"), keep),  # #177
             "integrity": {"findings": [], "counts": {}, "total": 0},  # operator-only
             "regulatory_coverage": {},                                # operator-only (#2)
             "source_runs": [],  # operator-only (#139) — see scope_feed_to_modules
@@ -1142,7 +1145,7 @@ def derive_sample_feed(
         "sections": sorted(
             k for k in ("distress", "capital_moves", "reputation", "financials", "swot",
                         "tows", "porter", "pestle", "ansoff", "bcg", "four_corners",
-                        "seven_s", "executive", "product_radar")
+                        "seven_s", "executive", "product_radar", "sector_events")
             if out.get(k)
         ),
     }
@@ -1163,7 +1166,7 @@ def derive_sample_feed(
     # not showing. Anything entity-attributed that survives here would also re-expose
     # the roster the cut above just removed.
     for key in ("distress", "capital_moves", "reputation", "financials", "coverage_gaps",
-                "reviews", "swot_proposals", "graph_proposals"):
+                "reviews", "swot_proposals", "graph_proposals", "sector_events"):
         out[key] = []
     for key in ("swot", "tows", "porter", "pestle", "ansoff", "bcg", "four_corners",
                 "seven_s", "groups", "product_radar"):
@@ -1449,6 +1452,30 @@ def scope_product_radar(radar: dict[str, Any] | None, row_ok: Callable[[dict[str
                 events=[e for e in (radar.get("events") or []) if row_ok(e)],
                 alerts=[e for e in (radar.get("alerts") or []) if row_ok(e)],
                 products=[p for p in (radar.get("products") or []) if row_ok(p)])
+
+
+def _load_sector_events(digests_bucket: str | None, entity_attrs: dict[str, Any] | None
+                        ) -> list[dict[str, Any]]:
+    """#177 ``sector_events/latest.json`` (written by synth), best-effort. [] if absent.
+    Affected entities are recomputed from THIS feed's ``entity_attrs`` (active roster)."""
+    if not digests_bucket:
+        return []
+    try:
+        from src.synth import sector_events
+
+        return sector_events.for_feed(sector_events.load_store(digests_bucket),
+                                      entity_attrs=entity_attrs)
+    except Exception as exc:  # pragma: no cover - best-effort, read-only
+        print(f"Warning: load sector events failed: {exc}")
+        return []
+
+
+def scope_sector_events(events: list[dict[str, Any]] | None, industries: Any) -> list[dict[str, Any]]:
+    """Tenant / entry scoping for #177 events: keep an event only when its industry is licensed.
+    Fail closed — an event without an industry is dropped. Its affected-entity ids need no
+    separate filter: they are exactly that (licensed) industry's roster."""
+    keep = {str(i).strip().lower() for i in (industries or [])}
+    return [e for e in (events or []) if str(e.get("industry") or "").strip().lower() in keep]
 
 
 def _load_distress(digests_bucket: str) -> list[dict[str, Any]]:
@@ -1918,6 +1945,9 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # #159: CPO Product Radar (daily cpo_radar ingester) — attached before the executive block
     # so build_cpo can project it. Best-effort: absent store → {} and the panel says so.
     feed["product_radar"] = _load_product_radar(digests_bucket)
+    # #177: industry-level regulatory events (synth → sector_events/latest.json), attached before
+    # the executive block so CRO reg_threat / n_changes / "Eventos setoriais" can project them.
+    feed["sector_events"] = _load_sector_events(digests_bucket, feed.get("entity_attrs"))
     # ADR 021 §D/§G: the per-officer executive block (read-track: CSO), industry-scoped.
     # Derived from the feed above — no new data; best-effort so a failure never blocks publish.
     try:

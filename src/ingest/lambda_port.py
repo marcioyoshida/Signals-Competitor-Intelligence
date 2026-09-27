@@ -136,6 +136,7 @@ from src.ingest import (
     consumidor_gov,
     datajud,
     dou,
+    federal_acts,
     pncp_contratos,
     raw_writer,
     registry,
@@ -439,6 +440,28 @@ def _news_slice(context: Any) -> dict[str, Any]:
     per_source = int(os.environ.get("ONCA_SOURCE_TIMEOUT_SEC", "90"))
     news_items: list[dict[str, Any]] = []
     new_news: list[dict[str, Any]] = []
+
+    # #176 sector topic queries: per covered industry (registry.INDUSTRY_TOPICS, ≤3 each),
+    # OUTSIDE ONCA_NEWS_MAX_TERMS and in their OWN wall-clock budget — the entity loop already
+    # runs close to its per-source cap at registry scale, and a sector-wide measure (MP 1.394)
+    # must not be the thing that gets cut. Items: query_kind "sector", industries, no entity.
+    sector_items: list[dict[str, Any]] = []
+    sector_timing: dict[str, Any] = {}
+    # (Runs whenever the news lens is configured — news_terms non-empty, as in every deployment.)
+    if news_terms and os.environ.get("ONCA_NEWS_SECTOR_QUERIES", "true").lower() in ("1", "true", "yes"):
+        queries = registry.news_topic_queries(_active_vertical())
+        t0 = time.monotonic()
+        try:
+            with _source_budget("Sector news", deadline, per_source):
+                sector_items = trade_press.fetch_sector_news(
+                    queries, registry.industry_vocabulary(_active_vertical()),
+                    lookback_days=news_lookback)
+        except Exception as exc:  # pragma: no cover - best-effort, like every source
+            print(f"Warning: sector news fetch failed: {exc}")
+        sector_timing = {"queries": sum(len(v) for v in queries.values()),
+                         "seconds": round(time.monotonic() - t0, 1), "items": len(sector_items)}
+        print(f"Sector news: {sector_timing}")
+
     if news_terms:
         try:
             with _source_budget("Trade press", deadline, per_source):
@@ -451,17 +474,24 @@ def _news_slice(context: Any) -> dict[str, Any]:
                     # take the whole news lens down, it only loses the veto.
                     excludes=_news_excludes(),
                 )
-                # Deferred commit (issue #23): compute the fresh set but do NOT
-                # mark anything seen here. Synth commits ``fetched_ids`` only
-                # after it has consumed this slice, so a fetch-only run or a
-                # failed/retried synth never burns the news — the items simply
-                # re-surface next run instead of leaving the entity falsely
-                # silent. Seed suppression on a truly-empty state still holds.
-                new_news = _new_since_last_run(
-                    "trade_press", news_items, seed_if_empty=True, commit=False
-                )
         except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
             print(f"Warning: trade-press fetch failed: {exc}")
+    # dedupe sector items against entity items (a duplicate keeps the entity item + gains the
+    # industries), then the deferred seen-set diff over the merged set
+    news_items = trade_press.merge_sector_news(news_items, sector_items)
+    if news_items:
+        try:
+            # Deferred commit (issue #23): compute the fresh set but do NOT
+            # mark anything seen here. Synth commits ``fetched_ids`` only
+            # after it has consumed this slice, so a fetch-only run or a
+            # failed/retried synth never burns the news — the items simply
+            # re-surface next run instead of leaving the entity falsely
+            # silent. Seed suppression on a truly-empty state still holds.
+            new_news = _new_since_last_run(
+                "trade_press", news_items, seed_if_empty=True, commit=False
+            )
+        except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
+            print(f"Warning: trade-press delta failed: {exc}")
     return {
         "count": len(news_items),
         "new_count": len(new_news),
@@ -471,13 +501,26 @@ def _news_slice(context: Any) -> dict[str, Any]:
         # starving low-volume entities (crypto, consórcio, advisory) of synth
         # visibility even when their news clears the corroboration gate. Persist
         # ALL new items (env-tunable) + a broad context sample; rows are compact.
-        "items": _tag_new(new_news[: int(os.environ.get("ONCA_NEWS_DIGEST_ITEMS", "150"))]),
-        "context": _strip_raw(news_items[: int(os.environ.get("ONCA_NEWS_DIGEST_CONTEXT", "60"))]),
+        # #176: sector-query items get their OWN caps on top — measured live 2026-09-27, the
+        # first run returned 147 new sector items and, in one shared cap, crowded 18 of 38 new
+        # entity items out of `items`. Entity items keep exactly their pre-#176 budget.
+        "items": (_tag_new(_entity_rows(new_news)[: int(os.environ.get("ONCA_NEWS_DIGEST_ITEMS", "150"))])
+                  + _tag_new(_sector_rows(new_news)[: int(os.environ.get("ONCA_NEWS_DIGEST_SECTOR_ITEMS", "80"))])),
+        "context": (_strip_raw(_entity_rows(news_items)[: int(os.environ.get("ONCA_NEWS_DIGEST_CONTEXT", "60"))])
+                    + _strip_raw(_sector_rows(news_items)[: int(os.environ.get("ONCA_NEWS_DIGEST_SECTOR_CONTEXT", "30"))])),
         # Every fetched id (not just the capped items/context) so synth commits
         # the exact set it saw to the trade_press seen-set — the second phase of
         # the deferred diff above. Compact: bare id strings.
         "fetched_ids": [d["id"] for d in news_items if isinstance(d, dict) and d.get("id")],
     }
+
+
+def _sector_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [r for r in rows if isinstance(r, dict) and r.get("query_kind") == "sector"]
+
+
+def _entity_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [r for r in rows if isinstance(r, dict) and r.get("query_kind") != "sector"]
 
 
 def _empty_news_slice() -> dict[str, Any]:
@@ -593,20 +636,23 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     dou_terms = _csv_env("ONCA_DOU_WATCHLIST")
     if os.environ.get("ONCA_DOU_USE_COMPETITORS", "true").lower() in ("1", "true", "yes"):
         dou_terms = list(dict.fromkeys(dou_terms + fatos_watch))
-    # Betting/iGaming structured lens: the SPA (Secretaria de Prêmios e Apostas,
-    # Min. Fazenda) publishes NO clean list API — its authorisations/sanctions
-    # are published as SPA/MF acts in the DOU, which we already parse. These
-    # thematic terms surface those acts (the new-authorisation event) and tag an
-    # operator when the act names one. Toggle with ONCA_DOU_BETTING.
-    # #173/#174: these are TOPIC terms (industry-tagged, own budget, searched first), not
-    # competitor names — an act they match carries industries=["betting"] and no entity.
-    # They were dead config until #174: the organ filter dropped every SPA / Presidência /
-    # Poder Executivo act, so MP 1.394 (the 2026-09-25 online-betting ban) never landed.
+    # Sector-wide DOU topics (#173/#175): per-industry phrases from the declarative industry
+    # topic registry (registry.INDUSTRY_TOPICS) — TOPIC terms (industry-tagged, own budget,
+    # searched first, scoped to the normative issuers), not competitor names: an act they match
+    # carries industries=[...] and no entity. Betting's phrases were the pre-#175 hard-coded
+    # set (dead config until #174 fixed the organ filter, which is how MP 1.394 — the
+    # 2026-09-25 online-betting ban — was missed). Per-industry toggles stay env flags
+    # (ONCA_DOU_BETTING); ONCA_DOU_SECTOR_TOPICS=false turns every topic phrase off.
+    def _topic_enabled(spec: "registry.IndustryTopicSpec") -> bool:
+        return not spec.env_flag or os.environ.get(spec.env_flag, "true").lower() in ("1", "true", "yes")
+
     dou_topics: dict[str, list[str]] = {}
-    if os.environ.get("ONCA_DOU_BETTING", "true").lower() in ("1", "true", "yes"):
-        for _t in ("Secretaria de Prêmios e Apostas", "apostas de quota fixa",
-                   "Lei nº 14.790", "jogos de azar"):
-            dou_topics[_t] = ["betting"]
+    dou_topic_organs: dict[str, list[str]] = {}
+    if os.environ.get("ONCA_DOU_SECTOR_TOPICS", "true").lower() in ("1", "true", "yes"):
+        dou_topics = registry.dou_topic_terms(_active_vertical(), enabled=_topic_enabled)
+        dou_topic_organs = {p: o for p, o in registry.dou_topic_organs(_active_vertical()).items()
+                            if p in dou_topics}
+    dou_max_topics = int(os.environ.get("ONCA_DOU_MAX_TOPIC_TERMS", "30"))
 
     # Trade-press news is fetched by _news_slice (its own parallel branch); see
     # the mode dispatch at the top of lambda_handler.
@@ -1403,11 +1449,14 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # below — they have distinct mechanics; migrating them is the tracked follow-on.)
     _cade_lookback = int(os.environ.get("ONCA_CADE_LOOKBACK_DAYS", "45"))
     _FETCHERS: dict[str, Any] = {
-        "regulatory": lambda: bcb_normativos.fetch_recent(days=lookback_days),
+        # #175: every regulatory item leaves ingest with severity (+ industries when a covered
+        # industry applies) — BCB normativos here, DOU inside dou.fetch_dou.
+        "regulatory": lambda: federal_acts.annotate(bcb_normativos.fetch_recent(days=lookback_days)),
         "competitor": lambda: cvm_fundos.fetch_funds(watchlist_admins=competitors),
         "ofertas": lambda: cvm_ofertas.fetch_recent(
             lookback_days=ofertas_lookback, watchlist=ofertas_watch or None),
-        "dou": lambda: (dou.fetch_dou(dou_terms, lookback_days=dou_lookback, topic_terms=dou_topics)
+        "dou": lambda: (dou.fetch_dou(dou_terms, lookback_days=dou_lookback, topic_terms=dou_topics,
+                                      topic_organs=dou_topic_organs, max_topic_terms=dou_max_topics)
                         if (dou_terms or dou_topics) else []),
         "cade": lambda: cade.map_to_entities(
             cade.fetch_atos(lookback_days=_cade_lookback), resolver=_resolve_entities),

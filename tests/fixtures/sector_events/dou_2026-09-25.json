@@ -1,0 +1,46 @@
+{
+ "_note": "Real DOU search results (in.gov.br, s=todos, fetched 2026-09-27) parsed by src.ingest.dou._parse. MP 1.394 ran in DO1_EXTRA_A under 'Atos do Poder Executivo'. `industries`/`severity` are the data-contract fields the #174/#175 producers add; `company` is a topic term, not an entity. NB: Portaria MF 2.946 (DO1_EXTRA_B) is about a subvenção under MP 1.391, NOT betting, so it is deliberately absent.",
+ "dou": {
+  "items": [
+   {
+    "id": "dou:medida-provisoria-n-1.394-de-25-de-setembro-de-2026-734808521",
+    "source": "DOU",
+    "kind": "regulatory",
+    "doc_type": "Medida Provisória",
+    "organ": "Atos do Poder Executivo",
+    "title": "MEDIDA PROVISÓRIA Nº 1.394, DE 25 DE SETEMBRO DE 2026",
+    "subject": "MEDIDA PROVISÓRIA Nº 1.394, DE 25 DE SETEMBRO DE 2026",
+    "text": "MEDIDA PROVISÓRIA Nº 1.394, DE 25 DE SETEMBRO DE 2026 Proíbe a exploração, a oferta, a intermediaçãoíbe a exploração, a oferta, a intermediação e a publicidade de loterias de apostas de quota fixa no território nacional, institui o Comitê Interinstitucional de Fiscalização da Exploração e da Publicidade Ilegal de Apostas de Quota Fixa, e alte...",
+    "company": "apostas de quota fixa",
+    "name": "apostas de quota fixa",
+    "date": "2026-09-25",
+    "section": "DO1_EXTRA_A",
+    "url": "https://www.in.gov.br/web/dou/-/medida-provisoria-n-1.394-de-25-de-setembro-de-2026-734808521",
+    "industries": [
+     "betting"
+    ],
+    "severity": "critical"
+   },
+   {
+    "id": "dou:despachos-do-presidente-da-republica-734808603",
+    "source": "DOU",
+    "kind": "regulatory",
+    "doc_type": "Mensagem",
+    "organ": "Presidência da República",
+    "title": "DESPACHOS DO PRESIDENTE DA REPÚBLICA",
+    "subject": "DESPACHOS DO PRESIDENTE DA REPÚBLICA",
+    "text": "Encaminhamento ao Congresso Nacional do texto da Medida Provisória nº 1.394, de 25 de setembro de 2026DESPACHOS DO PRESIDENTE DA REPÚBLICA MENSAGEM Nº 784, de 25 de setembro de 2026. Encaminhamento ao Congresso Nacional do texto da Medida Provisória nº 1.394, de 25 de setembro de 2026. Nº 785, de 25 de setembro de 2026. Encaminhamento ao Cong...",
+    "company": "apostas de quota fixa",
+    "name": "apostas de quota fixa",
+    "date": "2026-09-25",
+    "section": "DO1_EXTRA_A",
+    "url": "https://www.in.gov.br/web/dou/-/despachos-do-presidente-da-republica-734808603",
+    "industries": [
+     "betting"
+    ],
+    "severity": "medium"
+   }
+  ],
+  "context": []
+ }
+}

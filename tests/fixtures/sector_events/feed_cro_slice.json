@@ -1,0 +1,1140 @@
+{
+"_note": "Live feed.json 2026-09-27 (pre-fix): regulatory cards + industry options; executive.cro.by_industry.betting.reg_threat was 25.0. Plus the real B3 entity narrative (narratives/2026-09-26/cand-ent-b3.json) — the only place the ban surfaced pre-fix.",
+"live_cro_betting": {
+"n_reg": 8,
+"reg_threat": 25.0,
+"n_changes": 7,
+"n_deadlines": 0,
+"max_blast": 3,
+"min_basileia": null,
+"n_weak_solvency": 0,
+"n_slope_warning": 0,
+"max_npl": null,
+"n_npl_elevada": 0,
+"max_fragility": null,
+"n_fragil": 0
+},
+"run_date": "2026-09-26",
+"as_of": "2026-09-26",
+"dates": [
+"2026-09-14",
+"2026-09-15",
+"2026-09-16",
+"2026-09-17",
+"2026-09-18",
+"2026-09-19",
+"2026-09-20",
+"2026-09-21",
+"2026-09-22",
+"2026-09-23",
+"2026-09-24",
+"2026-09-25",
+"2026-09-26"
+],
+"industry_options": [
+{
+"slug": "acquiring",
+"display_name": "Adquirência (Maquininhas)"
+},
+{
+"slug": "advisory",
+"display_name": "Advisory"
+},
+{
+"slug": "agri-funds",
+"display_name": "Fundos do Agro (FIAGRO)"
+},
+{
+"slug": "asset-management",
+"display_name": "Asset Management"
+},
+{
+"slug": "banking",
+"display_name": "Banking"
+},
+{
+"slug": "betting",
+"display_name": "Betting & iGaming"
+},
+{
+"slug": "closed-pension",
+"display_name": "Previdência Fechada (EFPCs)"
+},
+{
+"slug": "consorcio",
+"display_name": "Consórcios"
+},
+{
+"slug": "crypto",
+"display_name": "Crypto & Digital Assets"
+},
+{
+"slug": "financial-data-analytics",
+"display_name": "Financial Data & Analytics"
+},
+{
+"slug": "fintech",
+"display_name": "Fintech"
+},
+{
+"slug": "insurance",
+"display_name": "Insurance"
+},
+{
+"slug": "investment-banking",
+"display_name": "Investment Banking"
+},
+{
+"slug": "private-markets",
+"display_name": "Private Markets (VC/PE)"
+},
+{
+"slug": "real-estate-funds",
+"display_name": "Fundos Imobiliários (FIIs)"
+},
+{
+"slug": "securitization",
+"display_name": "Securitização & Crédito"
+},
+{
+"slug": "wealth-management",
+"display_name": "Wealth Management"
+}
+],
+"feed": [
+{
+"id": "regulatory-res-bcb-588",
+"kind": "regulatory_lifecycle",
+"date": "2026-09-24",
+"entity": null,
+"industries": [
+"acquiring",
+"advisory",
+"agri-funds",
+"asset-management",
+"banking",
+"betting",
+"closed-pension",
+"consorcio",
+"crypto",
+"financial-data-analytics",
+"fintech",
+"insurance",
+"investment-banking",
+"private-markets",
+"real-estate-funds",
+"securitization",
+"wealth-management"
+],
+"affected_industries": [
+"banking",
+"fintech",
+"insurance"
+],
+"threat_score": 0.25,
+"n_changes": 0,
+"changes": [],
+"domain": "Setor financeiro",
+"subject_label": "Regulatório · Resolução BCB 588",
+"narrative": "Radar regulatório — Resolução BCB 588. O Banco Central do Brasil (BCB) publicou a Resolução BCB nº 588, que altera a Circular nº 3.978, estabelecendo novas diretrizes sobre a política, os procedimentos e os controles internos para as instituições autorizadas  Afeta: Setor financeiro (exposição prová",
+"days_to_deadline": null,
+"change_record": null,
+"citations": [
+{
+"url": "https://www.bcb.gov.br/estabilidadefinanceira/exibenormativo?tipo=Resolu%C3%A7%C3%A3o%20BCB&numero=588",
+"source": "BCB",
+"title": "Resolução BCB 588 — norma oficial (BCB)",
+"canonical": true
+}
+],
+"lenses": [
+"regulatory"
+],
+"is_alert": false
+},
+{
+"id": "regulatory-res-cmn-4995",
+"kind": "regulatory_lifecycle",
+"date": "2026-09-18",
+"entity": null,
+"industries": [
+"acquiring",
+"advisory",
+"agri-funds",
+"asset-management",
+"banking",
+"betting",
+"closed-pension",
+"consorcio",
+"crypto",
+"financial-data-analytics",
+"fintech",
+"insurance",
+"investment-banking",
+"private-markets",
+"real-estate-funds",
+"securitization",
+"wealth-management"
+],
+"affected_industries": [
+"banking",
+"fintech",
+"insurance"
+],
+"threat_score": 0.25,
+"n_changes": 2,
+"changes": [
+{
+"relation": "amends",
+"verb": "altera",
+"articles": [
+"anexo d"
+],
+"targets": [],
+"quote": "altera o anexo da Resolução CMN nº 4.995, de 24 de março de 2022, trazendo novas diretrizes para a estabilidade financeira. Essa mudança pod"
+},
+{
+"relation": "amends",
+"verb": "altera",
+"articles": [],
+"targets": [
+{
+"instrument": "res-cmn-5338",
+"label": "Resolução CMN 5338"
+}
+],
+"quote": "alterada pela Resolução CMN nº 5.338, ajusta as regras para os financiamentos sob a Linha Eco Invest Brasil, enquanto a Resolução CMN nº 4.9"
+}
+],
+"domain": "Setor financeiro",
+"subject_label": "Regulatório · Resolução CMN 4995",
+"narrative": "Radar regulatório — Resolução CMN 4995. A Resolução CMN nº 5342, publicada pelo Banco Central do Brasil, altera o anexo da Resolução CMN nº 4.995, de 24 de março de 2022, trazendo novas diretrizes para a estabilidade financeira. Essa mudança pode impactar dire Afeta: Setor financeiro (exposição prov",
+"days_to_deadline": null,
+"change_record": null,
+"citations": [
+{
+"url": "https://www.bcb.gov.br/estabilidadefinanceira/exibenormativo?tipo=Resolu%C3%A7%C3%A3o%20CMN&numero=4995",
+"source": "BCB",
+"title": "Resolução CMN 4995 — norma oficial (BCB)",
+"canonical": true
+}
+],
+"lenses": [
+"regulatory"
+],
+"is_alert": false
+},
+{
+"id": "regulatory-res-cmn-5292",
+"kind": "regulatory_lifecycle",
+"date": "2026-09-18",
+"entity": null,
+"industries": [
+"acquiring",
+"advisory",
+"agri-funds",
+"asset-management",
+"banking",
+"betting",
+"closed-pension",
+"consorcio",
+"crypto",
+"financial-data-analytics",
+"fintech",
+"insurance",
+"investment-banking",
+"private-markets",
+"real-estate-funds",
+"securitization",
+"wealth-management"
+],
+"affected_industries": [
+"banking",
+"fintech",
+"insurance"
+],
+"threat_score": 0.25,
+"n_changes": 1,
+"changes": [
+{
+"relation": "amends",
+"verb": "altera",
+"articles": [],
+"targets": [
+{
+"instrument": "res-cmn-5304",
+"label": "Resolução CMN 5304"
+}
+],
+"quote": "alterou a Resolução CMN nº 5.304 para ampliar o prazo de reembolso e o valor máximo dos automóveis financiáveis [https://www.bcb.gov.br/esta"
+}
+],
+"domain": "Setor financeiro",
+"subject_label": "Regulatório · Resolução CMN 5292",
+"narrative": "Radar regulatório — Resolução CMN 5292. Recentemente, o Banco Central do Brasil (BCB) divulgou novas condições para operações compromissadas com instituições financeiras participantes do módulo Oferta Pública (Ofpub) [https://www.bcb.gov.br/estabilidadefinance Afeta: Setor financeiro (exposição prov",
+"days_to_deadline": null,
+"change_record": null,
+"citations": [
+{
+"url": "https://www.bcb.gov.br/estabilidadefinanceira/exibenormativo?tipo=Resolu%C3%A7%C3%A3o%20CMN&numero=5292",
+"source": "BCB",
+"title": "Resolução CMN 5292 — norma oficial (BCB)",
+"canonical": true
+}
+],
+"lenses": [
+"regulatory"
+],
+"is_alert": false
+},
+{
+"id": "regulatory-res-cmn-5337",
+"kind": "regulatory_lifecycle",
+"date": "2026-09-18",
+"entity": null,
+"industries": [
+"acquiring",
+"advisory",
+"agri-funds",
+"asset-management",
+"banking",
+"betting",
+"closed-pension",
+"consorcio",
+"crypto",
+"financial-data-analytics",
+"fintech",
+"insurance",
+"investment-banking",
+"private-markets",
+"real-estate-funds",
+"securitization",
+"wealth-management"
+],
+"affected_industries": [
+"banking",
+"fintech",
+"insurance"
+],
+"threat_score": 0.25,
+"n_changes": 1,
+"changes": [
+{
+"relation": "amends",
+"verb": "altera",
+"articles": [],
+"targets": [
+{
+"instrument": "res-cmn-5304",
+"label": "Resolução CMN 5304"
+}
+],
+"quote": "alterou a Resolução CMN nº 5.304 para ampliar o prazo de reembolso e o valor máximo dos automóveis financiáveis, conforme a Resolução CMN nº"
+}
+],
+"domain": "Setor financeiro",
+"subject_label": "Regulatório · Resolução CMN 5337",
+"narrative": "Radar regulatório — Resolução CMN 5337. O Banco Central do Brasil (BCB) alterou a Resolução CMN nº 5.304 para ampliar o prazo de reembolso e o valor máximo dos automóveis financiáveis, conforme a Resolução CMN nº 5.337. Além disso, a NovaDAX anunciou a extensã Afeta: Setor financeiro (exposição prov",
+"days_to_deadline": null,
+"change_record": null,
+"citations": [
+{
+"url": "https://www.bcb.gov.br/estabilidadefinanceira/exibenormativo?tipo=Resolu%C3%A7%C3%A3o%20CMN&numero=5337",
+"source": "BCB",
+"title": "Resolução CMN 5337 — norma oficial (BCB)",
+"canonical": true
+}
+],
+"lenses": [
+"regulatory"
+],
+"is_alert": false
+},
+{
+"id": "regulatory-res-cmn-5338",
+"kind": "regulatory_lifecycle",
+"date": "2026-09-18",
+"entity": null,
+"industries": [
+"acquiring",
+"advisory",
+"agri-funds",
+"asset-management",
+"banking",
+"betting",
+"closed-pension",
+"consorcio",
+"crypto",
+"financial-data-analytics",
+"fintech",
+"insurance",
+"investment-banking",
+"private-markets",
+"real-estate-funds",
+"securitization",
+"wealth-management"
+],
+"affected_industries": [
+"banking",
+"fintech",
+"insurance"
+],
+"threat_score": 0.25,
+"n_changes": 1,
+"changes": [
+{
+"relation": "amends",
+"verb": "altera",
+"articles": [],
+"targets": [
+{
+"instrument": "res-cmn-4995",
+"label": "Resolução CMN 4995"
+}
+],
+"quote": "alterada pela Resolução CMN nº 5.338, ajusta as regras para os financiamentos sob a Linha Eco Invest Brasil, enquanto a Resolução CMN nº 4.9"
+}
+],
+"domain": "Setor financeiro",
+"subject_label": "Regulatório · Resolução CMN 5338",
+"narrative": "Radar regulatório — Resolução CMN 5338. Recentes alterações nas Resoluções CMN nº 5.130 e 4.995, publicadas pelo Banco Central do Brasil, impactam diretamente as condições de financiamento e estabilidade financeira. A Resolução CMN nº 5.130, alterada pela Reso Afeta: Setor financeiro (exposição prov",
+"days_to_deadline": null,
+"change_record": null,
+"citations": [
+{
+"url": "https://www.bcb.gov.br/estabilidadefinanceira/exibenormativo?tipo=Resolu%C3%A7%C3%A3o%20CMN&numero=5338",
+"source": "BCB",
+"title": "Resolução CMN 5338 — norma oficial (BCB)",
+"canonical": true
+}
+],
+"lenses": [
+"regulatory"
+],
+"is_alert": false
+},
+{
+"id": "regulatory-res-cmn-5341",
+"kind": "regulatory_lifecycle",
+"date": "2026-09-15",
+"entity": null,
+"industries": [
+"acquiring",
+"advisory",
+"agri-funds",
+"asset-management",
+"banking",
+"betting",
+"closed-pension",
+"consorcio",
+"crypto",
+"financial-data-analytics",
+"fintech",
+"insurance",
+"investment-banking",
+"private-markets",
+"real-estate-funds",
+"securitization",
+"wealth-management"
+],
+"affected_industries": [
+"banking",
+"fintech",
+"insurance"
+],
+"threat_score": 0.25,
+"n_changes": 1,
+"changes": [
+{
+"relation": "amends",
+"verb": "altera",
+"articles": [],
+"targets": [
+{
+"instrument": "res-cmn-5304",
+"label": "Resolução CMN 5304"
+}
+],
+"quote": "altera a Resolução CMN nº 5.304, que trata das linhas de financiamento ant, em virtude da conversão da Medida Provisória nº 1.366 na Lei nº"
+}
+],
+"domain": "Setor financeiro",
+"subject_label": "Regulatório · Resolução CMN 5341",
+"narrative": "Radar regulatório — Resolução CMN 5341. A Resolução CMN nº 5.341, publicada pelo Banco Central do Brasil, altera a Resolução CMN nº 5.304, que trata das linhas de financiamento ant, em virtude da conversão da Medida Provisória nº 1.366 na Lei nº 15.503. Essa a Afeta: Setor financeiro (exposição prov",
+"days_to_deadline": null,
+"change_record": null,
+"citations": [
+{
+"url": "https://www.bcb.gov.br/estabilidadefinanceira/exibenormativo?tipo=Resolu%C3%A7%C3%A3o%20CMN&numero=5341",
+"source": "BCB",
+"title": "Resolução CMN 5341 — norma oficial (BCB)",
+"canonical": true
+}
+],
+"lenses": [
+"regulatory"
+],
+"is_alert": false
+},
+{
+"id": "regulatory-res-cmn-5342",
+"kind": "regulatory_lifecycle",
+"date": "2026-09-15",
+"entity": null,
+"industries": [
+"acquiring",
+"advisory",
+"agri-funds",
+"asset-management",
+"banking",
+"betting",
+"closed-pension",
+"consorcio",
+"crypto",
+"financial-data-analytics",
+"fintech",
+"insurance",
+"investment-banking",
+"private-markets",
+"real-estate-funds",
+"securitization",
+"wealth-management"
+],
+"affected_industries": [
+"banking",
+"fintech",
+"insurance"
+],
+"threat_score": 0.25,
+"n_changes": 1,
+"changes": [
+{
+"relation": "amends",
+"verb": "altera",
+"articles": [
+"anexo d"
+],
+"targets": [
+{
+"instrument": "res-cmn-4995",
+"label": "Resolução CMN 4995"
+}
+],
+"quote": "altera o anexo da Resolução CMN nº 4.995, de 24 de março de 2022, trazendo novas diretrizes para a estabilidade financeira. Essa mudança pod"
+}
+],
+"domain": "Setor financeiro",
+"subject_label": "Regulatório · Resolução CMN 5342",
+"narrative": "Radar regulatório — Resolução CMN 5342. A Resolução CMN nº 5342, publicada pelo Banco Central do Brasil, altera o anexo da Resolução CMN nº 4.995, de 24 de março de 2022, trazendo novas diretrizes para a estabilidade financeira. Essa mudança pode impactar dire Afeta: Setor financeiro (exposição prov",
+"days_to_deadline": null,
+"change_record": null,
+"citations": [
+{
+"url": "https://www.bcb.gov.br/estabilidadefinanceira/exibenormativo?tipo=Resolu%C3%A7%C3%A3o%20CMN&numero=5342",
+"source": "BCB",
+"title": "Resolução CMN 5342 — norma oficial (BCB)",
+"canonical": true
+}
+],
+"lenses": [
+"regulatory"
+],
+"is_alert": false
+},
+{
+"id": "reg-lifecycle-res-cmn-4995",
+"kind": "regulatory_lifecycle",
+"date": "2026-09-15",
+"entity": null,
+"industries": [
+"acquiring",
+"advisory",
+"agri-funds",
+"asset-management",
+"banking",
+"betting",
+"closed-pension",
+"consorcio",
+"crypto",
+"financial-data-analytics",
+"fintech",
+"insurance",
+"investment-banking",
+"private-markets",
+"real-estate-funds",
+"securitization",
+"wealth-management"
+],
+"affected_industries": [
+"banking",
+"fintech",
+"insurance"
+],
+"threat_score": 0.25,
+"n_changes": 2,
+"changes": [
+{
+"relation": "amends",
+"verb": "altera",
+"articles": [],
+"targets": [
+{
+"instrument": "res-cmn-5338",
+"label": "Resolução CMN 5338"
+}
+],
+"quote": "alterada pela Resolução CMN nº 5.338, ajusta as regras para os financiamentos sob a Linha Eco Invest Brasil, enquanto a Resolução CMN nº 4.9"
+},
+{
+"relation": "amends",
+"verb": "altera",
+"articles": [
+"anexo d"
+],
+"targets": [],
+"quote": "altera o anexo da Resolução CMN nº 4.995, de 24 de março de 2022, trazendo novas diretrizes para a estabilidade financeira. Essa mudança pod"
+}
+],
+"domain": "Setor financeiro",
+"subject_label": "Regulatório · Resolução CMN 4995",
+"narrative": "Ciclo regulatório: Resolução CMN 4995 — estágio atual Publicação. Progressão: Publicação (28/08). Afeta: Setor financeiro (exposição provável: Bancos, Fintechs, Seguros). Mudanças: altera Resolução CMN 5338; altera (anexo d). Ciclo derivado do encadeamento de menções ao instrumento na fonte regulado",
+"days_to_deadline": null,
+"change_record": null,
+"citations": [
+{
+"url": "https://www.bcb.gov.br/estabilidadefinanceira/exibenormativo?tipo=Resolu%C3%A7%C3%A3o%20CMN&numero=4995",
+"source": "BCB",
+"title": "Resolução CMN 4995 — norma oficial (BCB)",
+"canonical": true
+}
+],
+"lenses": [
+"regulatory"
+],
+"is_alert": false
+},
+{
+"id": "cand-ent-b3",
+"entity": "b3",
+"kind": "entity_fusion",
+"lenses": [
+"news",
+"fatos",
+"antitrust"
+],
+"threat_score": 0.624,
+"is_alert": true,
+"narrative": "A B3 tem enfrentado diversos desafios e oportunidades no mercado financeiro brasileiro. Recentemente, a empresa divulgou esclarecimentos sobre questionamentos da CVM, conforme comunicado na página da CVM. Além disso, a B3 está envolvida em uma ação antitruste, conforme a ata da 271ª sessão ordinária de julgamento do CADE. No cenário de commodities, o mercado de boi gordo segue em movimento, conforme notícias recentes. Enquanto isso, o mercado de ETFs na B3 continua a crescer, com 862 mil investidores, após um aumento de 34% em um ano. A proibição das bets no Brasil pode impactar as ações da B3, conforme análises recentes. Por fim, o mercado de milho se recupera de uma forte queda em Chicago, mas a B3 fechou no vermelho.",
+"date": "2026-09-26",
+"entity_label": "B3",
+"citations": [
+{
+"url": "https://news.google.com/rss/articles/CBMi2AFBVV95cUxOVVhVVzkzcGZlWXAzN2NfTGxzaTM0cUY4anhqYy12c01SQ1BKRTRVVTJ1X1dQM1ZtUzRwZWg2SFRadzRsblNrOXBaZk9aQVlwT2w2RHFPTE1PMzRZVFo4TWFoZEhOTmZrZUF0UGgzTTJld2RmU3RkSVVVZDZSV1dVRTZ3ajdBVTZqMEY2Rl94bC02Y1F3N01KM3JUMmNpVXVKREowTlF2OG9DTDFLYlltdG8zSmFqeGl6ZW9kaUNsR0RCN2Vqb29DVGZ6ZDZKTEZJcXBQQTJKMFbSAd4BQVVfeXFMTkJqR0hnTEhoMGNxSkM5NF9fcU9xc0pBdWQ3WHlBcWVVMlFiS2lHQ0o2WlRzVHlCdlR3UFdhNzBpQWt6aDFkWUx6VHhKcVZEQVppQjhTbm9QbkVFUFluYVo5MjhxVVBPUE1Lc0ZsemxSdEMxYXJlNHlBR0JjR2VqWDNWUWJOQ29fZ21RQ2lUa25DY2xUdWNCNEpQQWdNVldKc0hsc1hkZ0ZRdDF6Q0Z1WWw5OFVRTU1NdnE0MEs2TmpXNUM4QjBCUjZTUnlETmluUVQxTmxFbzRNUG15czdB?oc=5"
+}
+],
+"industries": [
+"investment-banking"
+]
+}
+],
+"entity_attrs": {
+"1xbet": {
+"label": "1XBET",
+"industries": [
+"betting"
+]
+},
+"4win": {
+"label": "4WIN",
+"industries": [
+"betting"
+]
+},
+"7k": {
+"label": "7K",
+"industries": [
+"betting"
+]
+},
+"a247": {
+"label": "A247",
+"industries": [
+"betting"
+]
+},
+"afun": {
+"label": "AFUN",
+"industries": [
+"betting"
+]
+},
+"alfa-bet": {
+"label": "ALFA.BET",
+"industries": [
+"betting"
+]
+},
+"aposta-ganha": {
+"label": "APOSTA GANHA",
+"industries": [
+"betting"
+]
+},
+"aposta1": {
+"label": "APOSTA1",
+"industries": [
+"betting"
+]
+},
+"apostou": {
+"label": "APOSTOU",
+"industries": [
+"betting"
+]
+},
+"arenaplus": {
+"label": "ARENAPLUS",
+"industries": [
+"betting"
+]
+},
+"bacanaplay": {
+"label": "BACANAPLAY",
+"industries": [
+"betting"
+]
+},
+"bandbet": {
+"label": "BANDBET",
+"industries": [
+"betting"
+]
+},
+"bateu-bet": {
+"label": "BATEU BET",
+"industries": [
+"betting"
+]
+},
+"baú-bingo": {
+"label": "BAÚ BINGO",
+"industries": [
+"betting"
+]
+},
+"bet-bet": {
+"label": "BET.BET",
+"industries": [
+"betting"
+]
+},
+"bet-gorillas": {
+"label": "BET GORILLAS",
+"industries": [
+"betting"
+]
+},
+"bet365": {
+"label": "bet365",
+"industries": [
+"betting"
+]
+},
+"bet4": {
+"label": "BET4",
+"industries": [
+"betting"
+]
+},
+"bet7k": {
+"label": "Bet7k",
+"industries": [
+"betting"
+]
+},
+"betano": {
+"label": "Betano",
+"industries": [
+"betting"
+]
+},
+"betboom": {
+"label": "BETBOOM",
+"industries": [
+"betting"
+]
+},
+"betcaixa": {
+"label": "BETCAIXA",
+"industries": [
+"betting"
+]
+},
+"betcopa": {
+"label": "BETCOPA",
+"industries": [
+"betting"
+]
+},
+"betesporte": {
+"label": "BETESPORTE",
+"industries": [
+"betting"
+]
+},
+"betfair": {
+"label": "Betfair",
+"industries": [
+"betting"
+]
+},
+"betfast": {
+"label": "BETFAST",
+"industries": [
+"betting"
+]
+},
+"betmgm": {
+"label": "BETMGM",
+"industries": [
+"betting"
+]
+},
+"betnacional": {
+"label": "Betnacional",
+"industries": [
+"betting"
+]
+},
+"betsson": {
+"label": "Betsson",
+"industries": [
+"betting"
+]
+},
+"betwarrior": {
+"label": "BETWARRIOR",
+"industries": [
+"betting"
+]
+},
+"big": {
+"label": "BIG",
+"industries": [
+"betting"
+]
+},
+"blaze": {
+"label": "BLAZE",
+"industries": [
+"betting"
+]
+},
+"br4bet": {
+"label": "BR4BET",
+"industries": [
+"betting"
+]
+},
+"bra": {
+"label": "BRA",
+"industries": [
+"betting"
+]
+},
+"bravo": {
+"label": "BRAVO",
+"industries": [
+"betting"
+]
+},
+"brazino777": {
+"label": "BRAZINO777",
+"industries": [
+"betting"
+]
+},
+"bullsbet": {
+"label": "BULLSBET",
+"industries": [
+"betting"
+]
+},
+"casa-de-apostas": {
+"label": "CASA DE APOSTAS",
+"industries": [
+"betting"
+]
+},
+"esporte-365": {
+"label": "ESPORTE 365",
+"industries": [
+"betting"
+]
+},
+"esportes_da_sorte": {
+"label": "Esportes da Sorte",
+"industries": [
+"betting"
+]
+},
+"esportivavip": {
+"label": "ESPORTIVAVIP",
+"industries": [
+"betting"
+]
+},
+"estrela_bet": {
+"label": "Estrela Bet",
+"industries": [
+"betting"
+]
+},
+"estrelabet": {
+"label": "ESTRELABET",
+"industries": [
+"betting"
+]
+},
+"f12-bet": {
+"label": "F12.BET",
+"industries": [
+"betting"
+]
+},
+"galera-bet": {
+"label": "GALERA.BET",
+"industries": [
+"betting"
+]
+},
+"gingabet": {
+"label": "GINGABET",
+"industries": [
+"betting"
+]
+},
+"hiperbet": {
+"label": "HIPERBET",
+"industries": [
+"betting"
+]
+},
+"ice": {
+"label": "ICE",
+"industries": [
+"betting"
+]
+},
+"ijogo": {
+"label": "IJOGO",
+"industries": [
+"betting"
+]
+},
+"joga-junto": {
+"label": "JOGA JUNTO",
+"industries": [
+"betting"
+]
+},
+"joga-limpo": {
+"label": "Responsa Gamming (Joga Limpo)",
+"industries": [
+"betting"
+]
+},
+"kbet": {
+"label": "KBET",
+"industries": [
+"betting"
+]
+},
+"kto": {
+"label": "KTO",
+"industries": [
+"betting"
+]
+},
+"luck-bet": {
+"label": "LUCK.BET",
+"industries": [
+"betting"
+]
+},
+"líderbet": {
+"label": "LÍDERBET",
+"industries": [
+"betting"
+]
+},
+"mcgames": {
+"label": "MCGAMES",
+"industries": [
+"betting"
+]
+},
+"megaposta": {
+"label": "MEGAPOSTA",
+"industries": [
+"betting"
+]
+},
+"meridian": {
+"label": "MERIDIAN",
+"industries": [
+"betting"
+]
+},
+"mma": {
+"label": "MMA",
+"industries": [
+"betting"
+]
+},
+"multibet": {
+"label": "MULTIBET",
+"industries": [
+"betting"
+]
+},
+"nossabet": {
+"label": "NOSSABET",
+"industries": [
+"betting"
+]
+},
+"novibet": {
+"label": "NOVIBET",
+"industries": [
+"betting"
+]
+},
+"oleybet": {
+"label": "OLEYBET",
+"industries": [
+"betting"
+]
+},
+"pinnacle": {
+"label": "PINNACLE",
+"industries": [
+"betting"
+]
+},
+"pixbet": {
+"label": "Pixbet",
+"industries": [
+"betting"
+]
+},
+"reals": {
+"label": "REALS",
+"industries": [
+"betting"
+]
+},
+"rei-do-pitaco": {
+"label": "REI DO PITACO",
+"industries": [
+"betting"
+]
+},
+"rivalo": {
+"label": "RIVALO",
+"industries": [
+"betting"
+]
+},
+"seguro-bet": {
+"label": "SEGURO BET",
+"industries": [
+"betting"
+]
+},
+"seubet": {
+"label": "SEUBET",
+"industries": [
+"betting"
+]
+},
+"sorte-online": {
+"label": "SORTE ONLINE",
+"industries": [
+"betting"
+]
+},
+"sortenabet": {
+"label": "SORTENABET",
+"industries": [
+"betting"
+]
+},
+"sportingbet": {
+"label": "Sportingbet",
+"industries": [
+"betting"
+]
+},
+"sportybet": {
+"label": "SPORTYBET",
+"industries": [
+"betting"
+]
+},
+"stake": {
+"label": "STAKE",
+"industries": [
+"betting"
+]
+},
+"superbet": {
+"label": "Superbet",
+"industries": [
+"betting"
+]
+},
+"supremabet": {
+"label": "SUPREMABET",
+"industries": [
+"betting"
+]
+},
+"tiger-bet": {
+"label": "TIGER.BET",
+"industries": [
+"betting"
+]
+},
+"tropino": {
+"label": "TROPINO",
+"industries": [
+"betting"
+]
+},
+"upbetbr": {
+"label": "UPBETBR",
+"industries": [
+"betting"
+]
+},
+"vaidebet": {
+"label": "VAIDEBET",
+"industries": [
+"betting"
+]
+},
+"vbet": {
+"label": "VBET",
+"industries": [
+"betting"
+]
+},
+"versusbet": {
+"label": "VERSUSBET",
+"industries": [
+"betting"
+]
+}
+}
+}

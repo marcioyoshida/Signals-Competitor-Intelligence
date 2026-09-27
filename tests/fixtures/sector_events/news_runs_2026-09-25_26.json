@@ -1,0 +1,1320 @@
+{
+ "_note": "Real Onca news digests (lambda-digests/news/) from 2026-09-25/26, trimmed to betting/sector-relevant items plus 3 unrelated items per run. Pre-fix: entity-only queries.",
+ "runs": [
+  {
+   "run": "2026-09-25T09-47-18+00-00",
+   "news": {
+    "count": 392,
+    "new_count": 25,
+    "items": [
+     {
+      "id": "news:9852edc99e55c184",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Blog do BG",
+      "title": "PESQUISA ATLAS/BLOOMBERG: 75% defendem proibição das bets e governo Lula é apontado como principal responsável pela expansão",
+      "company": "Bloomberg",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMi5gFBVV95cUxQTkU5M3BqUzRZNkpKaG5zRllXc0pwSnFZWWpzUzktNERGc1pPeXBhbWMzb014QVJub1dWRHlXUjZta1N1aExNNU9hVXJEaUtIRDZoN1c3bzFlMFdVRU9Hd1ZGWWdPRkx3Q2pUUnZ3YnBCSXFtYW5sTF9GWkY1akYtLXl0c3dZWkJQbVlWdGdraDVKUlhPR2tCN0hxeGVpRHJ0cndYbWlQR2xmTk1RZkRYbnZpSGVLYU9fYkpfWmRDNmpfcHVHSlozU0x2M0Qzc0VUZVRhZERIMmxjLWNlNXJBbFhONnZuQQ?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:8e6d743e734e39b3",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Jornal do Comércio",
+      "title": "Gaúcho fundador do Agibank entra em lista dos 100 maiores líderes globais de fintechs",
+      "company": "Agibank",
+      "date": "2026-09-24",
+      "url": "https://news.google.com/rss/articles/CBMi4gFBVV95cUxPRmZMMUNFNXN0WXRQSXRQTHdNa3BCQzhVbmFSekRkZ2MzVjNOckhEVWVSR1ByZ0xRWXVYb25CTU9tMW1qUVpGNVpldjl3WU9LX2kzdzZ0enZrN3F2aEJjYy1kc0t1TFhwSTlzZUVGckVEWFIyOWZBTkdsZm52ODh6WWlmX1lTYWg0S2J0dFh6QlpwU0ZJTi0wTUJoUG1uYjdGRE1NOWtfMGpjdkExWWxxUEtPaU01cGhad281TUlRUENGWEFHYVJ6UFNqMkdpZ0huYzhFb0Nzd1l4dVBPd3E5Mm1R?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:a4c1f2767fca8ef7",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "TradingView",
+      "title": "Bancos melhoram as condições dos empréstimos para o acordo entre a Nestlé e a Platinum sobre a água - Bloomberg News",
+      "company": "Bloomberg",
+      "date": "2026-09-24",
+      "url": "https://news.google.com/rss/articles/CBMid0FVX3lxTE9ZWHJvVWlNVDRUREFvUGltY2JtYXBObV9BdWhzLWxQelVIS0lTSXF6aV95aGlzZ1hNTlFqekVOZXBsMEVNaEtFcjZEaFR1WW94b0xWUkZIN2hVcHpxbmNDNjJRbV9DWVN6dlBTa04tWUhQWXdyYVNZ?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:8d41f1e64f1be5bb",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "BitNotícias",
+      "title": "Ripio anuncia que vai encerrar conta em reais e converter tudo em stablecoin",
+      "company": "Ripio",
+      "date": "2026-09-24",
+      "url": "https://news.google.com/rss/articles/CBMiswFBVV95cUxPNHJuN1A2Q09BVUhaVHhRQkw3NUI5MGhCNUNDOXNUWThCX3llWnl6c252ZXdpdlBOMTJzdU1kU3RmN2E0TUg5TE9sZ1lucExGNWdpeFlIYlJwenRrdTdIU1ZNclAxRXI4NHhFTHdzU2hXc0x0bWlLUkFDMEs3ZDlQbklkMlJyQUJ6c3lVSkFKOERqbjVsRkV6TmhzamJFX3ZQQU5kTXZSWmlfRVpKX1F5YzBoNA?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:25fb6242bb5dd8a7",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Gazeta do Povo",
+      "title": "Alcolumbre nega crimes em mensagens com dono do Banco Master",
+      "company": "Banco Master",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMivgFBVV95cUxNMDB0TUxnd2JSUmdDYUZqc2R3MVN1dTdZSW1PQ3RYWVZoMUpsa1E5OXY5dUlsX0hGRnlaZ0dRekM4Y0dGZW5UVHJtTFdqSjJtTUs5bno2OEUwQjA2dE5mQmp1bWk0Qkl4SjNoOGhSaXhIY1E3RWhRcVdUb2ozWFUzVGljWWRkaFhEc3RCd2NoTTdDaUdZcHlMUEVfTmY0UWM2Wl9XZXp4c3FYdXJVNjR0Y2R2czB0dDh6SmJsS0VR?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:988421c03b72a204",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "UOL",
+      "title": "Rodrigo Mattos: Vasco fez sigilo sobre Crefisa em ação até José Lamacchia deixar Almirante",
+      "company": "Crefisa",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMi5gFBVV95cUxPSFlqZ3VIUi1nUGRaMDBNQnltenlaYzNGS0VyNml0aTQxR2d6TmVaYm5JTnNUVlFLSEF4SW1sQ0NvSmdRUHRqVVRZSWwzZG5OV1VySmhyWnJNUzVzY0ZaTWxCN3lJeWxaUTBVWUxZdDZsc25xdEw5NUhRR0t5d1lHbFR5Q3JZdGFIU2o1OHZqQ0h2QlN0S1hFcXZCY3dYQ2NLVU5MSnlmeDctZlZtb2FpWk9DUWVUdGlJaGtoVHNzYlVtdTNWdW5aOHpRanFod0FQWHdELUl3QWVqbjNPNklBYUhGWlFSUQ?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:f3c8eb08c0cacac2",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "InfoMoney",
+      "title": "Apenas 13 empresas da B3 mantiveram o ROE em alta desde 2022; veja a lista",
+      "company": "B3",
+      "date": "2026-09-24",
+      "url": "https://news.google.com/rss/articles/CBMisgFBVV95cUxPQXM4a0VoZ2p2VXM1NVU0SFdkR1FMMGhWSkdlV3AxdU9COEJTS3duSzdJTlh5eGp4eVNmZEg4SmVUR0hNZXpacUtIS1NqV29fRFdzSlhMMTNEMVVLR0RLbGloN1R4OE9fZ3J2TDJJMG14VkNhMDZzcGR3a09ZeHRaZTFaNER0a0N0UmlSMU01RVctMzBFTVZkaWtGSTlTeDY4WnBOQXJGZ1RjeXpiSGduMjBn0gG3AUFVX3lxTE1zV2hkNk91VjNwODZ3a1pBOXdiajlFVEZTQzVfcWtWQnRxOVdNb3AzNHhhaG1aMW5MVHZRMC1Rd1JwckRHOGo3eUlDUWhOZDJuWGxVSWxVdjJDVE9SSGdGVkNRNDBHaEdYWlpidG15bUVEYTYtcjNMY0ZTMVQ5bnQ4amcwdGcwNFdPSjFfQkJDZHhLemltRTNFbjJIODQxa3hHTXQ1RjhWM0lESE1ZYkJpOFZSOUpyMA?oc=5",
+      "is_new": true
+     }
+    ],
+    "context": [
+     {
+      "id": "news:9852edc99e55c184",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Blog do BG",
+      "title": "PESQUISA ATLAS/BLOOMBERG: 75% defendem proibição das bets e governo Lula é apontado como principal responsável pela expansão",
+      "company": "Bloomberg",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMi5gFBVV95cUxQTkU5M3BqUzRZNkpKaG5zRllXc0pwSnFZWWpzUzktNERGc1pPeXBhbWMzb014QVJub1dWRHlXUjZta1N1aExNNU9hVXJEaUtIRDZoN1c3bzFlMFdVRU9Hd1ZGWWdPRkx3Q2pUUnZ3YnBCSXFtYW5sTF9GWkY1akYtLXl0c3dZWkJQbVlWdGdraDVKUlhPR2tCN0hxeGVpRHJ0cndYbWlQR2xmTk1RZkRYbnZpSGVLYU9fYkpfWmRDNmpfcHVHSlozU0x2M0Qzc0VUZVRhZERIMmxjLWNlNXJBbFhONnZuQQ?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:8e6d743e734e39b3",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Jornal do Comércio",
+      "title": "Gaúcho fundador do Agibank entra em lista dos 100 maiores líderes globais de fintechs",
+      "company": "Agibank",
+      "date": "2026-09-24",
+      "url": "https://news.google.com/rss/articles/CBMi4gFBVV95cUxPRmZMMUNFNXN0WXRQSXRQTHdNa3BCQzhVbmFSekRkZ2MzVjNOckhEVWVSR1ByZ0xRWXVYb25CTU9tMW1qUVpGNVpldjl3WU9LX2kzdzZ0enZrN3F2aEJjYy1kc0t1TFhwSTlzZUVGckVEWFIyOWZBTkdsZm52ODh6WWlmX1lTYWg0S2J0dFh6QlpwU0ZJTi0wTUJoUG1uYjdGRE1NOWtfMGpjdkExWWxxUEtPaU01cGhad281TUlRUENGWEFHYVJ6UFNqMkdpZ0huYzhFb0Nzd1l4dVBPd3E5Mm1R?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:32ae9c7ffab557d2",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "G1",
+      "title": "Delator do Banco Master, Antônio Freixo foi ‘ganhador’ 570 vezes de prêmios e apostas que somam mais de R$ 176 milhões, diz MP",
+      "company": "Banco Master",
+      "date": "2026-09-24",
+      "url": "https://news.google.com/rss/articles/CBMijAJBVV95cUxQbGotZmhMOVhqZ2t5U3VjREVic3dkQ2xsRkItWGFtNm9wVGxVZS1YbGFJN0tSTTF0bW9GWl96c3pJNkY5MXBLZ1ZkM2lDdE4zWlFWTm15NmRQX3NlNTNXUjlLOGl0bUNVcHFrLWdSOXZpMDVMX1dfWUoyVlZPZExLWGZGYlBVX2oxNnFMRlBYcU1mTzJVUEVjWnRLc2Z5Snd3ZWtFX3BNZWlobHV3T3dsVWVPQjJwbHNFT3V6Q3QtWXhUc3hRU25SbF84STdkbkRDNFZpT2k3aEprc1I4d2RkN0hYUi1hYmxjRWp6bVE0RFZxZUk0V0EyZ1lYM3Y0SFJCRTZLUHB1YV9QOUJZ0gGbAkFVX3lxTE1qczN0S1pCZ3JCc09yWUsxYV9ZbGFWaDNySk1RVmFBWFJDamY0UWxPdWhVZEpic1BzNGJSRFZnVko3NXNfQ18xUm1fb0FJRkFVNDFRTlljY2gyd29oYWIwYmRRLVBKZFIxWHNibnVWVU9LYWNRRVdneEJRMWNsT19sNG90cnhPdGpyZ2FVdGxxeUswbmdWaF9mMHprSnBtZ3U3ZWlZVkZXenNXR0xaMGxNbll1ZTJVQnFZY2FFdFU3MTdzbjBVSGxvcERISmhMWkdCWmlNOXN1NEJsWTNFMVhGcGdTbW8wejVjQnRxSVhTVHR5a1drS3I5OTlLWjJTRHNEOHBBWEd3WnRYMFVjS3FvNW1HOFNGV05Kb0k?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:970e0b97a020a929",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Estadão",
+      "title": "Rodobens fecha parceria com Banco PAN e amplia distribuição de consórcios pelo País",
+      "company": "Banco PAN",
+      "date": "2026-09-24",
+      "url": "https://news.google.com/rss/articles/CBMi5wFBVV95cUxNc3JMX3RIVjhFd2Yxc0xpUWU4eVQ5SEw1Q2o5aWgyNXl6Mm5HcDg5VDNyMm1SLU16dFJ2cUUyQi1XNGU5U2hSM29JTUEwc2FHRlFONjRzeC1ZWmYtc213QzdKT2o0X21Ub0d3a0NaQUI0VTJXclhKMmJpWGZTcElFaEFSMnhXbGVBTEdLT3plN1A5YVhIZ21HNEpwRmZad2g1WVVQckJVSmRVckU1R21XSV9qWXdGSHRsUTd0OVd4ak5QVTl5WGNDenY5VmhydnBfY0xMLTRPa25pd1VSUWtNY3ZRM1JFNzA?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:76bdd8778b89d38c",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "NETVASCO",
+      "title": "Como começar a apostar na Betano",
+      "company": "Betano",
+      "date": "2026-09-24",
+      "url": "https://news.google.com/rss/articles/CBMibEFVX3lxTE1lLTVGUFRlSlEzQUF0SjJDSkkwRnhCcFpDeUVBWXJraW9aTDAyNnowUjJ5VW41OUpxdzhCX0d2eDJVa3dSNDlMMV9aQVhxZl9PaFc5VnFDTnlRTmxiTENGdjBKcm4yR1JCQWhmWA?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:cc82ac85360e0509",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "O Dia",
+      "title": "Como Funciona a Bolsa de Apostas Exchange Betfair?",
+      "company": "Betfair",
+      "date": "2026-09-24",
+      "url": "https://news.google.com/rss/articles/CBMibkFVX3lxTFBURkJid0s3NVhfSlg3OXZyV2pic09BSy1oaWp6MHoxZWdTak5xcElHZnQ2MHJxTmNwcTNEUGR5M1hYdnBvWUJQbmxXd2pjRjUzOU50UTFDVnpUZG01Z2dVZlc5NzM0UnBuMDBSOE1R?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:a4c1f2767fca8ef7",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "TradingView",
+      "title": "Bancos melhoram as condições dos empréstimos para o acordo entre a Nestlé e a Platinum sobre a água - Bloomberg News",
+      "company": "Bloomberg",
+      "date": "2026-09-24",
+      "url": "https://news.google.com/rss/articles/CBMid0FVX3lxTE9ZWHJvVWlNVDRUREFvUGltY2JtYXBObV9BdWhzLWxQelVIS0lTSXF6aV95aGlzZ1hNTlFqekVOZXBsMEVNaEtFcjZEaFR1WW94b0xWUkZIN2hVcHpxbmNDNjJRbV9DWVN6dlBTa04tWUhQWXdyYVNZ?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:eb14931e8a303a18",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "TradingView",
+      "title": "EUA avaliam iniciativa no exterior para stablecoins lastreadas em dólar: Bloomberg",
+      "company": "Bloomberg",
+      "date": "2026-09-24",
+      "url": "https://news.google.com/rss/articles/CBMib0FVX3lxTFBlMl80Vm1yT1liLWRrSHZlXzNWLUx1Wl93MGFNNk40TkYzbVF5U1lzMk9FMy1ZOXRYeFpXZFEwc2lFQWhpNDB0QnpJQ1MyYWdURDd6MS10WldCeW1IYVA1TUNzUlFTaGM3QVZ0SXhmcw?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:8d41f1e64f1be5bb",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "BitNotícias",
+      "title": "Ripio anuncia que vai encerrar conta em reais e converter tudo em stablecoin",
+      "company": "Ripio",
+      "date": "2026-09-24",
+      "url": "https://news.google.com/rss/articles/CBMiswFBVV95cUxPNHJuN1A2Q09BVUhaVHhRQkw3NUI5MGhCNUNDOXNUWThCX3llWnl6c252ZXdpdlBOMTJzdU1kU3RmN2E0TUg5TE9sZ1lucExGNWdpeFlIYlJwenRrdTdIU1ZNclAxRXI4NHhFTHdzU2hXc0x0bWlLUkFDMEs3ZDlQbklkMlJyQUJ6c3lVSkFKOERqbjVsRkV6TmhzamJFX3ZQQU5kTXZSWmlfRVpKX1F5YzBoNA?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:3f4e23d007e733e1",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Livecoins",
+      "title": "Binance anuncia listagem da criptomoeda Hyperliquid (HYPE) com três pares de negociação",
+      "company": "Binance",
+      "date": "2026-09-24",
+      "url": "https://livecoins.com.br/binance-anuncia-listagem-da-criptomoeda-hyperliquid-hype-com-tres-pares-de-negociacao/",
+      "is_new": false
+     }
+    ]
+   },
+   "source": "news_ingest"
+  },
+  {
+   "run": "2026-09-25T15-33-18+00-00",
+   "news": {
+    "count": 390,
+    "new_count": 36,
+    "items": [
+     {
+      "id": "news:0e366a2ddb1e08da",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "InfoMoney",
+      "title": "“Novo Mercado” dos FIIs? B3 revela o que vem sendo feito para melhorar governança",
+      "company": "B3",
+      "date": "2026-09-25",
+      "url": "https://www.infomoney.com.br/onde-investir/novo-mercado-dos-fiis-b3-revela-o-que-vem-sendo-feito-para-melhorar-governanca/",
+      "is_new": true
+     },
+     {
+      "id": "news:1733cf9788c9cb3b",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "unesp.br",
+      "title": "aposta de odd 1.30 não contou no rollover da betano",
+      "company": "Betano",
+      "date": "2026-09-18",
+      "url": "https://news.google.com/rss/articles/CBMiTEFVX3lxTE9YTGJEVWdkcmlHWTFzVVZfYTR5WlNxc1NneEVKc2cwcTUxNlhUVVlvSDltd0VWNWtFNWRUSmxmZWZkZF9QX0gxUnp6aGM?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:006050451fd15592",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "unesp.br",
+      "title": "aposta de 1.25 na bet365 contou no bônus ou foi ignorada",
+      "company": "bet365",
+      "date": "2026-09-18",
+      "url": "https://news.google.com/rss/articles/CBMiWEFVX3lxTE5UTURPV0Y5TVVwQ3dHTWR0S0VuLUk5ZTBqY0xKVUpZeTdxd1NMbUFtcVo4Ni1BWHpqWUIxREtwek1rX0FNUG10TGZmTm90eWtwVDFMTGk4SGI?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:495e54c9c76aa1bc",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "superpoker.com.br",
+      "title": "Cassino bet365 2026: como conseguir promoções para jogar",
+      "company": "bet365",
+      "date": "2026-09-14",
+      "url": "https://news.google.com/rss/articles/CBMibkFVX3lxTE52VVo5OWRCVEl5azVMdlpIQ2RNRVpHRW53ZVZ6Z1p5dzhfSnVsRmdNbTBxTGVjQ3RpTE9hNGVHamxqVkFfWFFudWUyT1lwRG9rbjhkMU1BMFZPT0tBYzRXVkd4MUtELXhkV1p0TTVR?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:3d15cef9d20859d1",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "financenews.com.br",
+      "title": "Rápidas: Petrobras, Vale, Weg, Axia, Romi, Banco ABC Brasil, Braskem, Ser, Localiza, Telefônica Brasil",
+      "company": "ABC Brasil",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMixwFBVV95cUxPcUsxdHhXSi1Ec1VDQlU0Rlh1alM5eHYtQVF3bVI1aDZEWEc0MVpWRlZrcFQ1OFVWeVFJRHlSb2hEd09mSWZ2Qm9sNGRXN2V5RURkQXdxM3RvcG5xVVBBcG9HaTRkTTJXTkpTdGNFVDdOWHZqbDAxVkFPRGFxcnhiTThyLVplMmRzR1Nxa01pZWw2TzFRQWxza0ZSeTRYandRZy1tSUZNTW1pMXNfaDAzZTRUbS1la2NUUWhTZDZCQUZ3V0dmTGtB?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:40a5f88e75969b5b",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Movimento Econômico",
+      "title": "Economia nordestina tem potencial, mas indústria preocupa, diz banco ABC Brasil",
+      "company": "ABC Brasil",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMi0wFBVV95cUxOTVNCOFZRY3ROUy1OYjI3T3VQbXhYdTFHUGdhcmlyM2xUbGRHYkg0bFVGcF94YmRvYVkwMjJpVUxWSnBCOC12VTFwdlRqbkRrTmlxeTZEZk9Xd0tfWXEyeFZUbWUtZUloRHBUTlhtMkFJYlp1Sk9iQ2Nhc2ZhQVlaOXZvc056cGxDR2hTZ3NmbGVOZENqNWJtbmxJLUFBV0JSU3FEUEtNYkEySmJQYk1QUDU4a2ppcTE3cVVpWnNXWUpWT011akRGZGpaR3luc1JjTnpN?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:9dbc5c4043abf4db",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "BPMoney",
+      "title": "Banco ABC Brasil (ABCB4) aprova recompra de até 8,3 milhões de ações",
+      "company": "ABC Brasil",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMingFBVV95cUxQYm9ENGhqc2NUYjB2TFU4cGt4R3I1TFFnYjkyWk8zbHBXaUpkbFY2aUhkZWNhRzlNQmNqNFBKR2RfU2RFOU10WWpKdVJrRE1XUER1bWxnaXZYTnVSLTNYdVVmck1NYklhcnpnVnkxNzJKenJpR3lrT0xod0dWWkF4X0o3VEtyUjZ0ZXdTTzJOaGRpOWRmc1VDMEkyMEptZw?oc=5",
+      "is_new": true
+     }
+    ],
+    "context": [
+     {
+      "id": "news:9852edc99e55c184",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Blog do BG",
+      "title": "PESQUISA ATLAS/BLOOMBERG: 75% defendem proibição das bets e governo Lula é apontado como principal responsável pela expansão",
+      "company": "Bloomberg",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMi5gFBVV95cUxQTkU5M3BqUzRZNkpKaG5zRllXc0pwSnFZWWpzUzktNERGc1pPeXBhbWMzb014QVJub1dWRHlXUjZta1N1aExNNU9hVXJEaUtIRDZoN1c3bzFlMFdVRU9Hd1ZGWWdPRkx3Q2pUUnZ3YnBCSXFtYW5sTF9GWkY1akYtLXl0c3dZWkJQbVlWdGdraDVKUlhPR2tCN0hxeGVpRHJ0cndYbWlQR2xmTk1RZkRYbnZpSGVLYU9fYkpfWmRDNmpfcHVHSlozU0x2M0Qzc0VUZVRhZERIMmxjLWNlNXJBbFhONnZuQQ?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:0e366a2ddb1e08da",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "InfoMoney",
+      "title": "“Novo Mercado” dos FIIs? B3 revela o que vem sendo feito para melhorar governança",
+      "company": "B3",
+      "date": "2026-09-25",
+      "url": "https://www.infomoney.com.br/onde-investir/novo-mercado-dos-fiis-b3-revela-o-que-vem-sendo-feito-para-melhorar-governanca/",
+      "is_new": false
+     },
+     {
+      "id": "news:8e6d743e734e39b3",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Jornal do Comércio",
+      "title": "Gaúcho fundador do Agibank entra em lista dos 100 maiores líderes globais de fintechs",
+      "company": "Agibank",
+      "date": "2026-09-24",
+      "url": "https://news.google.com/rss/articles/CBMi4gFBVV95cUxPRmZMMUNFNXN0WXRQSXRQTHdNa3BCQzhVbmFSekRkZ2MzVjNOckhEVWVSR1ByZ0xRWXVYb25CTU9tMW1qUVpGNVpldjl3WU9LX2kzdzZ0enZrN3F2aEJjYy1kc0t1TFhwSTlzZUVGckVEWFIyOWZBTkdsZm52ODh6WWlmX1lTYWg0S2J0dFh6QlpwU0ZJTi0wTUJoUG1uYjdGRE1NOWtfMGpjdkExWWxxUEtPaU01cGhad281TUlRUENGWEFHYVJ6UFNqMkdpZ0huYzhFb0Nzd1l4dVBPd3E5Mm1R?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:32ae9c7ffab557d2",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "G1",
+      "title": "Delator do Banco Master, Antônio Freixo foi ‘ganhador’ 570 vezes de prêmios e apostas que somam mais de R$ 176 milhões, diz MP",
+      "company": "Banco Master",
+      "date": "2026-09-24",
+      "url": "https://news.google.com/rss/articles/CBMijAJBVV95cUxQbGotZmhMOVhqZ2t5U3VjREVic3dkQ2xsRkItWGFtNm9wVGxVZS1YbGFJN0tSTTF0bW9GWl96c3pJNkY5MXBLZ1ZkM2lDdE4zWlFWTm15NmRQX3NlNTNXUjlLOGl0bUNVcHFrLWdSOXZpMDVMX1dfWUoyVlZPZExLWGZGYlBVX2oxNnFMRlBYcU1mTzJVUEVjWnRLc2Z5Snd3ZWtFX3BNZWlobHV3T3dsVWVPQjJwbHNFT3V6Q3QtWXhUc3hRU25SbF84STdkbkRDNFZpT2k3aEprc1I4d2RkN0hYUi1hYmxjRWp6bVE0RFZxZUk0V0EyZ1lYM3Y0SFJCRTZLUHB1YV9QOUJZ0gGbAkFVX3lxTE1qczN0S1pCZ3JCc09yWUsxYV9ZbGFWaDNySk1RVmFBWFJDamY0UWxPdWhVZEpic1BzNGJSRFZnVko3NXNfQ18xUm1fb0FJRkFVNDFRTlljY2gyd29oYWIwYmRRLVBKZFIxWHNibnVWVU9LYWNRRVdneEJRMWNsT19sNG90cnhPdGpyZ2FVdGxxeUswbmdWaF9mMHprSnBtZ3U3ZWlZVkZXenNXR0xaMGxNbll1ZTJVQnFZY2FFdFU3MTdzbjBVSGxvcERISmhMWkdCWmlNOXN1NEJsWTNFMVhGcGdTbW8wejVjQnRxSVhTVHR5a1drS3I5OTlLWjJTRHNEOHBBWEd3WnRYMFVjS3FvNW1HOFNGV05Kb0k?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:970e0b97a020a929",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Estadão",
+      "title": "Rodobens fecha parceria com Banco PAN e amplia distribuição de consórcios pelo País",
+      "company": "Banco PAN",
+      "date": "2026-09-24",
+      "url": "https://news.google.com/rss/articles/CBMi5wFBVV95cUxNc3JMX3RIVjhFd2Yxc0xpUWU4eVQ5SEw1Q2o5aWgyNXl6Mm5HcDg5VDNyMm1SLU16dFJ2cUUyQi1XNGU5U2hSM29JTUEwc2FHRlFONjRzeC1ZWmYtc213QzdKT2o0X21Ub0d3a0NaQUI0VTJXclhKMmJpWGZTcElFaEFSMnhXbGVBTEdLT3plN1A5YVhIZ21HNEpwRmZad2g1WVVQckJVSmRVckU1R21XSV9qWXdGSHRsUTd0OVd4ak5QVTl5WGNDenY5VmhydnBfY0xMLTRPa25pd1VSUWtNY3ZRM1JFNzA?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:dbbb02dd80f5eb11",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Agência GBC",
+      "title": "\"Serei obrigado a pagar então?\" Decisão da justiça autoriza bancos como Nubank, Caixa, Itaú e Banco do Brasil a bloquear contas de clientes endividados",
+      "company": "Banco do Brasil",
+      "date": "2026-09-24",
+      "url": "https://news.google.com/rss/articles/CBMijgJBVV95cUxPRjFWNTB3b0NsbXNDRkZBblF4WVpIaWFfVmJ6dHd1eDZOX09VYkFTTWpndDY4ckNuQjVya2t4c2RfMC1oYjUtNC1talIwUUJ0SXBVa0N1dVpBMG90WHJKQ2llS1o1a0FLdmstRHM1aEptS1AwYUg0dVVoQzRuZ09XY2hTVWFqX09tSHBzQ0xxN1QyTEV3OXlHQm5rcU01Ymp0S2VhbFdqZlhTQUdrb0hzU0xoczVsNnVHZm9LSEZ2aW02Y09PUnFRQ3l1S2liY0Y5VG5ieE5nZEdXX2V3S2RudEUxZHA5eWtUS3Z5OHM0TjB3NW9sU1BRTGEzRnI1bnJoeXRjNlFWOW5VSGdUeWc?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:76bdd8778b89d38c",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "NETVASCO",
+      "title": "Como começar a apostar na Betano",
+      "company": "Betano",
+      "date": "2026-09-24",
+      "url": "https://news.google.com/rss/articles/CBMibEFVX3lxTE1lLTVGUFRlSlEzQUF0SjJDSkkwRnhCcFpDeUVBWXJraW9aTDAyNnowUjJ5VW41OUpxdzhCX0d2eDJVa3dSNDlMMV9aQVhxZl9PaFc5VnFDTnlRTmxiTENGdjBKcm4yR1JCQWhmWA?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:cc82ac85360e0509",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "O Dia",
+      "title": "Como Funciona a Bolsa de Apostas Exchange Betfair?",
+      "company": "Betfair",
+      "date": "2026-09-24",
+      "url": "https://news.google.com/rss/articles/CBMibkFVX3lxTFBURkJid0s3NVhfSlg3OXZyV2pic09BSy1oaWp6MHoxZWdTak5xcElHZnQ2MHJxTmNwcTNEUGR5M1hYdnBvWUJQbmxXd2pjRjUzOU50UTFDVnpUZG01Z2dVZlc5NzM0UnBuMDBSOE1R?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:a4c1f2767fca8ef7",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "TradingView",
+      "title": "Bancos melhoram as condições dos empréstimos para o acordo entre a Nestlé e a Platinum sobre a água - Bloomberg News",
+      "company": "Bloomberg",
+      "date": "2026-09-24",
+      "url": "https://news.google.com/rss/articles/CBMid0FVX3lxTE9ZWHJvVWlNVDRUREFvUGltY2JtYXBObV9BdWhzLWxQelVIS0lTSXF6aV95aGlzZ1hNTlFqekVOZXBsMEVNaEtFcjZEaFR1WW94b0xWUkZIN2hVcHpxbmNDNjJRbV9DWVN6dlBTa04tWUhQWXdyYVNZ?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:eb14931e8a303a18",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "TradingView",
+      "title": "EUA avaliam iniciativa no exterior para stablecoins lastreadas em dólar: Bloomberg",
+      "company": "Bloomberg",
+      "date": "2026-09-24",
+      "url": "https://news.google.com/rss/articles/CBMib0FVX3lxTFBlMl80Vm1yT1liLWRrSHZlXzNWLUx1Wl93MGFNNk40TkYzbVF5U1lzMk9FMy1ZOXRYeFpXZFEwc2lFQWhpNDB0QnpJQ1MyYWdURDd6MS10WldCeW1IYVA1TUNzUlFTaGM3QVZ0SXhmcw?oc=5",
+      "is_new": false
+     }
+    ]
+   },
+   "source": "news_ingest"
+  },
+  {
+   "run": "2026-09-25T20-32-53+00-00",
+   "news": {
+    "count": 407,
+    "new_count": 49,
+    "items": [
+     {
+      "id": "news:91d823953820da1a",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Seu Dinheiro",
+      "title": "XP, Nubank, Itaú, Bradesco, Santander e BTG: dois bancos vão se dar melhor se a Selic cair, segundo o UBS BB",
+      "company": "Bradesco",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMi5AFBVV95cUxNNmdYREtKeXJIaklncEhYNFBSakdXMmhZNHB2T191WGZpWTQ0dkZrSV9zRVhCazhPRHlyMjR5VE5vRlpvT1NrSncxZXBnVXdKOENVMm5FQXQ4M2FWa3oyNDVOQTUzQks4TWd0UlFmOG5kcE9SdnYtMGZYVFp3Z0lLckVyNEZjWlpESjB2NW5qcVE0NExXRjVTcnVLZDhPTmlaSVdtb0psRXRrRGNNeVRLQmh5dnpLcTBqVEt2eUllNVhyVnNEa3FwdW1MMHhldWJGbGNzNEFKbWdBaV92Y1F2V3dLaDM?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:3741a7f7d4988585",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Portal do Bitcoin",
+      "title": "Ripio encerra conta em reais e vai converter depósitos para stablecoin no Brasil",
+      "company": "Ripio",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMitwFBVV95cUxQVE13M092NGJPVmRQX0R2MDFNQm9scll3bzI5VzlXSEFwYkNrSFNnZnI3bnBSU2I0VEdaTEdYY1FhZE9LdHVyQXlVZXRXY0gtRG8xQTlmZ2U0QV9RbHIzX1E5ZVVNZ1c5MnZUSG9pcjFqX19tQl8wNlZ6WmRZNjgyVXcxUzNxTUtCOVdnMmEyT1JkVzlWeHNPMUYwY1dMcGg3c2dkWHozNGtMX2NOTXpyZW51VkZYVUXSAbwBQVVfeXFMTlp4Q0tJUGZELWFaMDBrelRiVm52dUsyeDcwVE5lb3BWNTc4WjUyYjVTcmVscFRvOHQ2VEZDSkFRdFh1REpyUEE1eFkzWVhERzFOaGtCYXk0LW4wb05MZFFOVk8wRXhnODdNSHZvalp2S0ljemM0Uk9GN3lvZ3NzXzlHRU16NGtWU2pHRXlpRGstZFZrcm5OT1o0OU0yNG1JVzJ6aDJHVHRKc2NPZENnRUp6bGRiVGFmVGVRMHg?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:dafe2055af64d01c",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Empiricus",
+      "title": "Fundos imobiliários: TRXF11, PMLL11, XPML11 e outros trazem atualizações aos cotistas; confira",
+      "company": "XPML11",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMi3AFBVV95cUxNY2dVYU10dGFaak0zSXhydFM4MmQxMDZnYVdCZ1hBOWI3eWFQaDIzX2FnV1pkR2REdElNb0RZS1lUYWlIY1RHREpIVW9QLXdJRXpoX0c1YzhIQ1VpN0ljZ3gtR1kyYW05RUJiNUthcVVkcFdHMURXcWFrRGVrSE9tem4yaW51U0JPUGFYb2lZczBYQlRhN0NYSHhxYTcxMHJ6QVhzWU1ORWt4SGJBUzY2QmRHTGo4dkxFZGF1Z2ZHaTZjNExvaURXdW55aDZqVVA0aDU0S1NtZ0taTTNv?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:4089c9c5c477f9c4",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "brasildefato.com.br",
+      "title": "MTST protesta na porta da Betano, em São Paulo, e cobra proibição das apostas online",
+      "company": "Betano",
+      "date": "2026-09-23",
+      "url": "https://news.google.com/rss/articles/CBMixAFBVV95cUxOakJUaE0zek0yUGRJV3FqWEp1TjNlbDd1RlAwcnRJMHRjdXd1LVJfR05HVVgyeERZblV5VzB0WVZ0TVFOSXdiLS1DU3ZUei1KcmFPYlY1XzVFOHNSTDVrcGtwVC1MUkVhZ3g1Y21IMFM3enU0SExBVFVwUXczenNWSFRmQjZvWWRmWVV0M2pmNk1KUHJzRWZOd2I4LVQxTnhTeDRmc2MyejJQQk5pUC1XZEZxOHEtcUVqbWFsM2tzTDlBWEVD?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:65bb1ffd1f6c36c1",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "O Dia",
+      "title": "Betano eSports: como apostar em CS2, Valorant, LoL e Dota",
+      "company": "Betano",
+      "date": "2026-09-23",
+      "url": "https://news.google.com/rss/articles/CBMiY0FVX3lxTE1VYmp5N01JYktSOXFUc0VQTHdjMVVFQUI2bXg2bkVIZ2lzVUhWRDAyUXNIR0Q4b3dxUFRvbHJ1T1F3LTdRclhkMlczUHZrTFFxWkVORTBuVkRuckF1Q2tzNFlLdw?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:85c41fb205664ba4",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Paraíba dia a dia",
+      "title": "Justiça manda suspender plataformas da Pixbet em todo o país e determina multa de R$ 4,7 milhões",
+      "company": "Pixbet",
+      "date": "2026-09-23",
+      "url": "https://news.google.com/rss/articles/CBMiwwFBVV95cUxOaGZIQmNvaGt1UUVKekJCNVNUdVh3N2hSb1pCVllwNk1HdHN2MG5WMWlKUmFUdzJZRGhhd3VlX0Q5aHpUN0tDdTA4amRtVHc3MnhOVWhNWHl0Ni1HRmtWdmM1NGNUN09VMlpPVl9JeVhydXh6aGhCRl90Tl9KbjlZV3Y3TktxODlHeTNIRlR3RUNjLW56aENMWHVmMXhiaDlMdUhjM1gtMWZONFYtanJVOTBlelF2SXQ0SHNSSFRzSjhxLTQ?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:874f6a54b5650e14",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "umdoisesportes.com.br",
+      "title": "Estrela Bet é confiável: cadastro e como apostar (2026)",
+      "company": "Estrela Bet",
+      "date": "2026-09-16",
+      "url": "https://news.google.com/rss/articles/CBMiY0FVX3lxTE9lel9rR1RDNGEzT2JEdXRQanJtV2E1QmN6YmlUUlBQMi1VNVc3WDdNR19HOUpiRVlUTGZiWmdTNE1HS19WOGRJSk5sVUFJUHQ5RW9MdXJMbXhtSVVmSUJOUDZ6UQ?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:a71758f5668fe94e",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Valor Econômico",
+      "title": "ABC Brasil anuncia programa de recompra de até 8,3 milhões de ações PN",
+      "company": "ABC Brasil",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMiwAFBVV95cUxObVhlR2RQQllpU0Vudk9xUVRFTWEtMXZZaXVtYXExTFg2N3VyV2FIN2V2NjZhOW5vcVFnNEEtQXpYeVZmOHRVNlhOcTMtRy1oVTQzMEExY0ZPSFZfMVczNTQ0ZXhHb2RyWkUzcVlMNFl6S0tKYVNBN2piQVZOTFR0ZU1aRG1ES0VSdnRZZFNWTlk3MWZNQllBdjA5bzNnYkNMbnByTE00bTc5TVhEdF9DNDJtczJuY19fWnY1R1RJZ2nSAc8BQVVfeXFMTkVGeXNwRHYtZVdiZ0cyMGx5dU1BYlBDSkxLU01nUUpHT1NTd0pjTWRVeTJYMGxRV1IyMGpFdDBLWHFvU0xxaWx1em94N1REUE96MXBnYk9YSm5PX3Jod2lJd0ZmWUVPNTViVGRFeUNwYWFOLWk3WEFVbmI1d243ZXNuNmRGMjd0NnV6STg2WEZNOHZILWFpdW12bVQ2ZUg5NDA1dHZDUFllUDF2ZGJTdmtBYnFuV1pXVWtVbF9KdmN1bVZHV3Z0NVNsdkFZd2Fv?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:8afd5d6c37dece6d",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "financenews.com.br",
+      "title": "Banco ABC Brasil anuncia recompra de até 8,3 milhões de ações",
+      "company": "ABC Brasil",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMinAFBVV95cUxQeGhLY1pfRlZoaHM1eDQ0X1R4YmpBbG9HbTRNWE5mWVdxRndBSDRWWmdsTFBCTWJnbjlyLVJxTFZhOFBJMzE4LXhETXcxUXNCbjF3a09nSk9JbHVpeVVGbTVwR2R1TjJUWGJFNVFwSGNsVU1UaFlGSGhGMWk4cFBCaktlQk1QN1gxVVFIZkRSaU9KTkQ5WnExSjUtTVg?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:393e67a145441904",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "bpmoney.com.br",
+      "title": "Banco ABC Brasil (ABCB4) aprova recompra de até 8,3 milhões de ações",
+      "company": "ABC Brasil",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMingFBVV95cUxQYm9ENGhqc2NUYjB2TFU4cGt4R3I1TFFnYjkyWk8zbHBXaUpkbFY2aUhkZWNhRzlNQmNqNFBKR2RfU2RFOU10WWpKdVJrRE1XUER1bWxnaXZYTnVSLTNYdVVmck1NYklhcnpnVnkxNzJKenJpR3lrT0xod0dWWkF4X0o3VEtyUjZ0ZXdTTzJOaGRpOWRmc1VDMEkyMEptZw?oc=5",
+      "is_new": true
+     }
+    ],
+    "context": [
+     {
+      "id": "news:0e366a2ddb1e08da",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "InfoMoney",
+      "title": "“Novo Mercado” dos FIIs? B3 revela o que vem sendo feito para melhorar governança",
+      "company": "B3",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMivwFBVV95cUxNSmdwdkdWanFKRE1icC1KS3NwenFSYUN1anhuUmFLV1ZEY285eWdqMUlxM0F5cno2bElSUmlyV3VIMlRUSDFKUVJfVUZvT28xOUY5TVhob1RHelFnT28ycW1ZRmRfWVdVOHFTRHBtMjRweHdXTkg2WVQwbElWUDU5YXZsc1ZOY0tkZmEyNVE1Rm15X3hXWmk0dzRVSVZtdFVXbUl0clhLUm9xRTY1UjZuQzFhQWZfRHE0VWJ6UHJ4Z9IBxAFBVV95cUxQTlRveE5SZEM3aGxwZnZkNWpLNnlKOV8tTU9DYnBRM1lPRkhTWWFQMGUtV0F1YVhpSzRfQWY0dXJMM1FOS3BoZGh5LWM3VjJoaGpVTmcxWFZUZFFhSEY0a1U0ZEFFekRXUUtUakM2aXozN1l2eTdINXRoVHFWNF91Q2NPREN5LU9kMU9NUmtzRE5pcHdKZ0piUzlneERGdDM2MGh6SEZjUTlQV2lxdUwtRXRaSldxSnRTOGp1aC1aLUJVbW5O?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:970e0b97a020a929",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Estadão",
+      "title": "Rodobens fecha parceria com Banco PAN e amplia distribuição de consórcios pelo País",
+      "company": "Banco PAN",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMi5wFBVV95cUxNc3JMX3RIVjhFd2Yxc0xpUWU4eVQ5SEw1Q2o5aWgyNXl6Mm5HcDg5VDNyMm1SLU16dFJ2cUUyQi1XNGU5U2hSM29JTUEwc2FHRlFONjRzeC1ZWmYtc213QzdKT2o0X21Ub0d3a0NaQUI0VTJXclhKMmJpWGZTcElFaEFSMnhXbGVBTEdLT3plN1A5YVhIZ21HNEpwRmZad2g1WVVQckJVSmRVckU1R21XSV9qWXdGSHRsUTd0OVd4ak5QVTl5WGNDenY5VmhydnBfY0xMLTRPa25pd1VSUWtNY3ZRM1JFNzA?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:9852edc99e55c184",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Blog do BG",
+      "title": "PESQUISA ATLAS/BLOOMBERG: 75% defendem proibição das bets e governo Lula é apontado como principal responsável pela expansão",
+      "company": "Bloomberg",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMi5gFBVV95cUxQTkU5M3BqUzRZNkpKaG5zRllXc0pwSnFZWWpzUzktNERGc1pPeXBhbWMzb014QVJub1dWRHlXUjZta1N1aExNNU9hVXJEaUtIRDZoN1c3bzFlMFdVRU9Hd1ZGWWdPRkx3Q2pUUnZ3YnBCSXFtYW5sTF9GWkY1akYtLXl0c3dZWkJQbVlWdGdraDVKUlhPR2tCN0hxeGVpRHJ0cndYbWlQR2xmTk1RZkRYbnZpSGVLYU9fYkpfWmRDNmpfcHVHSlozU0x2M0Qzc0VUZVRhZERIMmxjLWNlNXJBbFhONnZuQQ?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:91d823953820da1a",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Seu Dinheiro",
+      "title": "XP, Nubank, Itaú, Bradesco, Santander e BTG: dois bancos vão se dar melhor se a Selic cair, segundo o UBS BB",
+      "company": "Bradesco",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMi5AFBVV95cUxNNmdYREtKeXJIaklncEhYNFBSakdXMmhZNHB2T191WGZpWTQ0dkZrSV9zRVhCazhPRHlyMjR5VE5vRlpvT1NrSncxZXBnVXdKOENVMm5FQXQ4M2FWa3oyNDVOQTUzQks4TWd0UlFmOG5kcE9SdnYtMGZYVFp3Z0lLckVyNEZjWlpESjB2NW5qcVE0NExXRjVTcnVLZDhPTmlaSVdtb0psRXRrRGNNeVRLQmh5dnpLcTBqVEt2eUllNVhyVnNEa3FwdW1MMHhldWJGbGNzNEFKbWdBaV92Y1F2V3dLaDM?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:3741a7f7d4988585",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Portal do Bitcoin",
+      "title": "Ripio encerra conta em reais e vai converter depósitos para stablecoin no Brasil",
+      "company": "Ripio",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMitwFBVV95cUxQVE13M092NGJPVmRQX0R2MDFNQm9scll3bzI5VzlXSEFwYkNrSFNnZnI3bnBSU2I0VEdaTEdYY1FhZE9LdHVyQXlVZXRXY0gtRG8xQTlmZ2U0QV9RbHIzX1E5ZVVNZ1c5MnZUSG9pcjFqX19tQl8wNlZ6WmRZNjgyVXcxUzNxTUtCOVdnMmEyT1JkVzlWeHNPMUYwY1dMcGg3c2dkWHozNGtMX2NOTXpyZW51VkZYVUXSAbwBQVVfeXFMTlp4Q0tJUGZELWFaMDBrelRiVm52dUsyeDcwVE5lb3BWNTc4WjUyYjVTcmVscFRvOHQ2VEZDSkFRdFh1REpyUEE1eFkzWVhERzFOaGtCYXk0LW4wb05MZFFOVk8wRXhnODdNSHZvalp2S0ljemM0Uk9GN3lvZ3NzXzlHRU16NGtWU2pHRXlpRGstZFZrcm5OT1o0OU0yNG1JVzJ6aDJHVHRKc2NPZENnRUp6bGRiVGFmVGVRMHg?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:dafe2055af64d01c",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Empiricus",
+      "title": "Fundos imobiliários: TRXF11, PMLL11, XPML11 e outros trazem atualizações aos cotistas; confira",
+      "company": "XPML11",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMi3AFBVV95cUxNY2dVYU10dGFaak0zSXhydFM4MmQxMDZnYVdCZ1hBOWI3eWFQaDIzX2FnV1pkR2REdElNb0RZS1lUYWlIY1RHREpIVW9QLXdJRXpoX0c1YzhIQ1VpN0ljZ3gtR1kyYW05RUJiNUthcVVkcFdHMURXcWFrRGVrSE9tem4yaW51U0JPUGFYb2lZczBYQlRhN0NYSHhxYTcxMHJ6QVhzWU1ORWt4SGJBUzY2QmRHTGo4dkxFZGF1Z2ZHaTZjNExvaURXdW55aDZqVVA0aDU0S1NtZ0taTTNv?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:8e6d743e734e39b3",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Jornal do Comércio",
+      "title": "Gaúcho fundador do Agibank entra em lista dos 100 maiores líderes globais de fintechs",
+      "company": "Agibank",
+      "date": "2026-09-24",
+      "url": "https://news.google.com/rss/articles/CBMi4gFBVV95cUxPRmZMMUNFNXN0WXRQSXRQTHdNa3BCQzhVbmFSekRkZ2MzVjNOckhEVWVSR1ByZ0xRWXVYb25CTU9tMW1qUVpGNVpldjl3WU9LX2kzdzZ0enZrN3F2aEJjYy1kc0t1TFhwSTlzZUVGckVEWFIyOWZBTkdsZm52ODh6WWlmX1lTYWg0S2J0dFh6QlpwU0ZJTi0wTUJoUG1uYjdGRE1NOWtfMGpjdkExWWxxUEtPaU01cGhad281TUlRUENGWEFHYVJ6UFNqMkdpZ0huYzhFb0Nzd1l4dVBPd3E5Mm1R?oc=5",
+      "is_new": false
+     }
+    ]
+   },
+   "source": "news_ingest"
+  },
+  {
+   "run": "2026-09-26T09-47-16+00-00",
+   "news": {
+    "count": 391,
+    "new_count": 41,
+    "items": [
+     {
+      "id": "news:92aadad1c5a1e1f2",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Unisba Media",
+      "title": "🔴 CRUZEIRO X ATLÉTICO-MG | 14ª RODADA BRASILEIRO | JORNADA ESPORTIVA KTO CRUZEIRO SPORTS | AO VIVO Andrew Mountbatten Windsor Allegedly Kicked His Dog During A Royal Gathering (UBar3OpsLo)",
+      "company": "KTO",
+      "date": "2026-09-26",
+      "url": "https://news.google.com/rss/articles/CBMikgFBVV95cUxQRkxxNXFWLVBiVTlvTnBSZW1GR1dlMnJxbDBaNXZxNU5GdWI2M2J5eW10cG5hRS1va25GOU41ZFpYb3lzdm1leHFaSXFla2hqY1pibkpHN1VQOXVTbVV2VzBNd1FwOFlfWFQwWDVsMllBVFJ4VjBwUEwyVWVJVklKcjZaSDlOMUdzamxWOXR3UVJkQQ?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:b8e4ca62383c50ed",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "InfoMoney",
+      "title": "Como a proibição das bets no Brasil pode impactar as ações da B3?",
+      "company": "B3",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMipgFBVV95cUxORi1Qd0U4N1dELW5aUTNpLVZMcGFRbXZyZDJpaUFKYWN4N2FlalNrN2pocHZTMHBnUWsyLWRYSFUwQmZSTU00bkdPVTBvUnRDWk1ISWZsemtlWW1RNTJ0ZmNnMGE3Tk9WMkxNdkdaTW9FMnhaLTFPd0g1OUw4OTNlOWFIS3hCbVJMbjF0bndwdHBPVzdQSnV5N2ZVbFFUanlKR016V1hn0gGrAUFVX3lxTE55Z0RmeHVDTE9oRDBBUE9NZUNzTVpKQ2c2ZlVsQ1NJNllNcHh2LUQxRTRyb01rQ2JvckRCcWVYejNZb3lQRzY5Mjc3dlR3VGktb25xVTBBeXBOVkFfLXdWMGlzVUYxZXFlTXpER3BnYXlwdTFfeC1zd2pYSlppaXRkZ3diZzdNclBsNGtLOEM1OXIybW1EcW94T2RwRmI1bjNCWTZMQjJrSGI3aw?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:7fb9e35622f06d08",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "arevista.com.br",
+      "title": "BTLG11, HGBS11 e HGLG11: 3 FIIs com desconto e dividendos",
+      "company": "BTLG11",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMijgFBVV95cUxPbVVqUENnbGVFOXdBcEsyWmxMTmQ1RlFEcmRhRFptQjBLdFNwaGZWUFgwTHNrc0RxVTF1VWRZcmZraUtQQzV1d3QzTzc4NkE0Y2lxV21jVk9qNW9XRWxza3ZRckdvN1Ricl9HSUR1VGY3aWFmZElhZGRKT2hvRWZURm5yVVJFV0NTTWU3bEZ3?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:803de4074425a827",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "sportingnews.com",
+      "title": "Flamengo e Betano: qual pode ser o prejuízo do clube com possível saída da bet?",
+      "company": "Betano",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMiuwFBVV95cUxOX1ZGTTJtYk5JWHBKSFZKYXAyN3pqSlp3SDlSeUFGLUxRd3lxbWlVZEpudWNtYWluTVRqb1dNd0txV1ktZlc3Sm84WmxmbjI5X1J1WUZTeTh3UGZzY1BiZHktMWpwaHFheUtodFRkTGZDVS1lQlNjbzJ6a1dDZC1QbTdqRkZlaXEwSlJWU1JuclIwTmtnd3hfUjAxcVowZl9ISGt6T3BVX19Hc3VmY0tlMXg5NGx1X0FBNXNr?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:07e93ec461f46075",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "ND Mais",
+      "title": "Nova decisão do STJ libera encerramento de contas do Nubank, Itaú, Santander e outros bancos sem aval do cliente",
+      "company": "Nubank",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMisAFBVV95cUxNSVQ2UmRXU052THR3N0FsZTl6bEFnWkFtQmV2Z2E5R2tDNGFUVG5Rek83ZTFCSUYyNURTR181Q2pmUEhoX3JxalRNamFtX1BfUnR6OHc2R3d5eXhXZ0RqTkM3Z1JuVk9tQlA1T3VWSWIwZ2hnZWZfWmlmckpVYUZUUk5OQXhHZ1NBUnlBVjRNNW9haGpzX2swRWpVWmt2R2tOZ2RFQ0F5bURBTHRTZDRQeg?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:3141fbcfc579f39c",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Finsiders Brasil",
+      "title": "PicPay lidera perdas entre fintechs brasileiras em semana de juros altos",
+      "company": "PicPay",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMiywFBVV95cUxOSlRRRlhnSHFjeV9pbFhPdXJhWXZUalRGNzBTY3haQ1B0Ymptek1XbHBEWEp2Q3dTbmQ1X05WZ3c3N3E5WGItbEIzS2ZRQm9jdTVxUXNxVGM1RXpiM2oybkVTVW91WUJReUJsVm01ZjlFUVBjcnBhUEtmTlZPbGJOLXI5Qjh4LVFFVDJuMlBROHJlZElIcHE4ckFrcElOWmMteFIwbXNmOEs2eEhnY1RoWmtfelZmQTR1VklwZ0FSaV80ZGg5eUhaMTdNZw?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:0a86a9f37d516199",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Paraíba dia a dia",
+      "title": "Justiça mantém prisão preventiva de sócio da Pixbet alvo da Operação Arena, na Paraíba",
+      "company": "Pixbet",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMitwFBVV95cUxQUmJDZjBWM1JwUG5lcWMzOTRZd243bm5LQnJyNFpSY0ZJaGJFa25IOWJmNDMzUzNnVlRxRVpBYjN0YUpfMzhaaWJ0SDNuanlNcmx5aGF0bVB3RVFONks0NmV5c1Vyd1hNVHV6RGl3OGlKclRwWW1NQ2NHYUtwSDc0a0tQcjhNUElOTGlEUUlhMUtCeHo1RXFadG40dEEtNk5wWXZsMGJKc3lVbGh0b29tcUZHNUFrcjQ?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:f0dd2c96ffae8dbc",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "jornaldocomercio.com",
+      "title": "Gaúcho fundador do Agibank entra em lista dos 100 maiores líderes globais de fintechs",
+      "company": "Agibank",
+      "date": "2026-09-24",
+      "url": "https://news.google.com/rss/articles/CBMi4gFBVV95cUxPRmZMMUNFNXN0WXRQSXRQTHdNa3BCQzhVbmFSekRkZ2MzVjNOckhEVWVSR1ByZ0xRWXVYb25CTU9tMW1qUVpGNVpldjl3WU9LX2kzdzZ0enZrN3F2aEJjYy1kc0t1TFhwSTlzZUVGckVEWFIyOWZBTkdsZm52ODh6WWlmX1lTYWg0S2J0dFh6QlpwU0ZJTi0wTUJoUG1uYjdGRE1NOWtfMGpjdkExWWxxUEtPaU01cGhad281TUlRUENGWEFHYVJ6UFNqMkdpZ0huYzhFb0Nzd1l4dVBPd3E5Mm1R?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:2ba701bc16de65e6",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "PressGiochi",
+      "title": "Cotações da Betsson para a 1ª rodada da Liga das Nações: estreia da Itália",
+      "company": "Betsson",
+      "date": "2026-09-23",
+      "url": "https://news.google.com/rss/articles/CBMisAFBVV95cUxPR1AxSmNxTklMU1J1SE1GMXlkeTNORm44Y1l6bGYwT0tlS3ZWa0pyZ1lFbXYtMFVtdGZDTXp6aWpXS1pBSWM2bHc0bXJqNnlRckF1bm96cWdDTjlwVGV4dUZfT3NVODJGVUY1cmdockNJVWtrQjFxeWtaTC1IOUNsQi1ITnN1SFZGYUpOZmhkbXFxNDF5dHdyeXQyQUJvTl9rSFZqdDlpWTN1WnVXTE91Qg?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:ae6f7a02a6442b96",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "arevista.com.br",
+      "title": "FIIs de papel como VGIR11, KNCR11 e MXRF11 podem ter dividendos afetados pela queda da Selic",
+      "company": "KNCR11",
+      "date": "2026-09-23",
+      "url": "https://news.google.com/rss/articles/CBMivgFBVV95cUxPWEx4MGtBejZQdjh0YnRCemdjWFdMcUEtTmwwQThRZlMtdmpOdFVuR0tIaURFT1dSQXJYUjdNcTEyZ2xYSFNQZ1J1djh3cWZQMDVZaVZYS0NWYzBZSnFBMF9vaHY0bnpZTFNVaGQ1WmYwSXpwU2RtbmZSbHo2dVNTNk9aUGt2YWU1QkhjME9SaXk4aXh5WDR1Ty10ZV9qbmFrd0xocW1ZOHZza1U2RzJUeENXX1ZLeE96NV9VS2Jn?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:3ebd2514fdb026a6",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "em.com.br",
+      "title": "Bet7k Apostas: Review + R$ 7 mil em Bônus!",
+      "company": "Bet7k",
+      "date": "2026-09-19",
+      "url": "https://news.google.com/rss/articles/CBMiV0FVX3lxTE9IQUJZOU5rdVlDQjhwbUpSRV81TkdqYS1PdE94ZERSbzcwRWhucGlTWk5HZGhpMFhWZ1ZEYnFmdzNJdGN0bURvRHo4VThFaUdrRHg3N0trSQ?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:972b4337a5a71874",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "aciara.com.br",
+      "title": "Diesel EUA: impacto limitado em transportadoras B3",
+      "company": "B3",
+      "date": "2026-09-26",
+      "url": "https://news.google.com/rss/articles/CBMifEFVX3lxTE0wSE5ESHJ0ajhwdUpzb2tNQlhaWFVnU1pnamp3SFFfZy1qX01wd3Vzc0x3M2haTHNrMDR2U0RmdEdOS1ZhOHNvWmZHczRhT2hnOHpOQXY1eFpKUk1JY2ZLU0c1YzduQzlMRHMteVd4VmpTbndpb2xlY0RjY1Y?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:0dbdab9296feee06",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "gazetadopovo.com.br",
+      "title": "PF investiga mensagens do Banco Master sobre advogada e Gilmar Mendes",
+      "company": "Banco Master",
+      "date": "2026-09-26",
+      "url": "https://news.google.com/rss/articles/CBMitAFBVV95cUxPYlV4bUhqMm05ZDVfTkNCODFyNmtwRThCQXpULWVpYnMtemp3Um9vQ1lmVkYweWtaS3V0MHdUalU4TTFPZGRmNTlFdldHOXh2MWlnNWNLWWF4aHBFSnhteHBNWXJlUk55MlBFYXJzR0RRYjF1LU83N1BXTk9fVnJmV240c2JKdkxoSzFZMWRiNFdaZG4zbFVnTWlHZWNZVXFibXJ3a2lJNTFIelh1U1lOamt1dS0?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:efa6b730d0cbc94d",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "G1",
+      "title": "Dívida de aposentada com o Banco Master e outras instituições é suspensa em MG; entenda",
+      "company": "Banco Master",
+      "date": "2026-09-26",
+      "url": "https://news.google.com/rss/articles/CBMi4gFBVV95cUxPZlp1LVJMZGRBSkZlbDZvMExkNlZ1R1BWZlRDS3RlRzdUSUwwanVtNGQ4NWU3a1JJdk9fSE1ndHBLaVk0SXhhSENmMG5YRW1lX2QycUh5SHV4WFl5MkJzYmdoUF9CQUR1OTRua0IxTFY3b1B5eUlIXzdTRTdwZndvSFhkYkdNX3JuY1lFZHB1TWRZMTJIb0wwUzJQNG1xelRJMVN1MGEwTk1YcEtpaGJ3N195LWI5MUNwRzh1WkRIdTd4YkZTbDJXSGJjUm1vR1ZTazJoV2tnWXN0ckdUVVdzTXFB0gHwAUFVX3lxTE5RQ1Eta0JCQm1lUVBBMl91bG91SVJ5OTBkNHlMZnczMVV3RWEwNVRHSDRjQlhIUlFpRWt3ZHR3aWQ1d0p5WW5TRDQ1S0x1U0JGaldCNGYtb3ozOWlnTHBZcjFFM3dCZmtnWTZCUTdkTHpCTVRjNm45SkRFUlpaZF9sX2h1NFBaRmR2UDNYMTl0d3d0ZEFxbjZyNGxUazJMLTdMTUhUdXVoTjhNaVZuYzFIN1R5SDFQRnJaLUtlRW83bGV4UXUzdnc0SmtNT2VmOHhDWC0zSTBxS2hiOGJwYXZiS1JYdllUTjk1YnZOeTVBNQ?oc=5",
+      "is_new": true
+     }
+    ],
+    "context": [
+     {
+      "id": "news:92aadad1c5a1e1f2",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Unisba Media",
+      "title": "🔴 CRUZEIRO X ATLÉTICO-MG | 14ª RODADA BRASILEIRO | JORNADA ESPORTIVA KTO CRUZEIRO SPORTS | AO VIVO Andrew Mountbatten Windsor Allegedly Kicked His Dog During A Royal Gathering (UBar3OpsLo)",
+      "company": "KTO",
+      "date": "2026-09-26",
+      "url": "https://news.google.com/rss/articles/CBMikgFBVV95cUxQRkxxNXFWLVBiVTlvTnBSZW1GR1dlMnJxbDBaNXZxNU5GdWI2M2J5eW10cG5hRS1va25GOU41ZFpYb3lzdm1leHFaSXFla2hqY1pibkpHN1VQOXVTbVV2VzBNd1FwOFlfWFQwWDVsMllBVFJ4VjBwUEwyVWVJVklKcjZaSDlOMUdzamxWOXR3UVJkQQ?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:b8e4ca62383c50ed",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "InfoMoney",
+      "title": "Como a proibição das bets no Brasil pode impactar as ações da B3?",
+      "company": "B3",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMipgFBVV95cUxORi1Qd0U4N1dELW5aUTNpLVZMcGFRbXZyZDJpaUFKYWN4N2FlalNrN2pocHZTMHBnUWsyLWRYSFUwQmZSTU00bkdPVTBvUnRDWk1ISWZsemtlWW1RNTJ0ZmNnMGE3Tk9WMkxNdkdaTW9FMnhaLTFPd0g1OUw4OTNlOWFIS3hCbVJMbjF0bndwdHBPVzdQSnV5N2ZVbFFUanlKR016V1hn0gGrAUFVX3lxTE55Z0RmeHVDTE9oRDBBUE9NZUNzTVpKQ2c2ZlVsQ1NJNllNcHh2LUQxRTRyb01rQ2JvckRCcWVYejNZb3lQRzY5Mjc3dlR3VGktb25xVTBBeXBOVkFfLXdWMGlzVUYxZXFlTXpER3BnYXlwdTFfeC1zd2pYSlppaXRkZ3diZzdNclBsNGtLOEM1OXIybW1EcW94T2RwRmI1bjNCWTZMQjJrSGI3aw?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:7fb9e35622f06d08",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "arevista.com.br",
+      "title": "BTLG11, HGBS11 e HGLG11: 3 FIIs com desconto e dividendos",
+      "company": "BTLG11",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMijgFBVV95cUxPbVVqUENnbGVFOXdBcEsyWmxMTmQ1RlFEcmRhRFptQjBLdFNwaGZWUFgwTHNrc0RxVTF1VWRZcmZraUtQQzV1d3QzTzc4NkE0Y2lxV21jVk9qNW9XRWxza3ZRckdvN1Ricl9HSUR1VGY3aWFmZElhZGRKT2hvRWZURm5yVVJFV0NTTWU3bEZ3?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:970e0b97a020a929",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Estadão",
+      "title": "Rodobens fecha parceria com Banco PAN e amplia distribuição de consórcios pelo País",
+      "company": "Banco PAN",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMi5wFBVV95cUxNc3JMX3RIVjhFd2Yxc0xpUWU4eVQ5SEw1Q2o5aWgyNXl6Mm5HcDg5VDNyMm1SLU16dFJ2cUUyQi1XNGU5U2hSM29JTUEwc2FHRlFONjRzeC1ZWmYtc213QzdKT2o0X21Ub0d3a0NaQUI0VTJXclhKMmJpWGZTcElFaEFSMnhXbGVBTEdLT3plN1A5YVhIZ21HNEpwRmZad2g1WVVQckJVSmRVckU1R21XSV9qWXdGSHRsUTd0OVd4ak5QVTl5WGNDenY5VmhydnBfY0xMLTRPa25pd1VSUWtNY3ZRM1JFNzA?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:803de4074425a827",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "sportingnews.com",
+      "title": "Flamengo e Betano: qual pode ser o prejuízo do clube com possível saída da bet?",
+      "company": "Betano",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMiuwFBVV95cUxOX1ZGTTJtYk5JWHBKSFZKYXAyN3pqSlp3SDlSeUFGLUxRd3lxbWlVZEpudWNtYWluTVRqb1dNd0txV1ktZlc3Sm84WmxmbjI5X1J1WUZTeTh3UGZzY1BiZHktMWpwaHFheUtodFRkTGZDVS1lQlNjbzJ6a1dDZC1QbTdqRkZlaXEwSlJWU1JuclIwTmtnd3hfUjAxcVowZl9ISGt6T3BVX19Hc3VmY0tlMXg5NGx1X0FBNXNr?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:91d823953820da1a",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Seu Dinheiro",
+      "title": "XP, Nubank, Itaú, Bradesco, Santander e BTG: dois bancos vão se dar melhor se a Selic cair, segundo o UBS BB",
+      "company": "Bradesco",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMi5AFBVV95cUxNNmdYREtKeXJIaklncEhYNFBSakdXMmhZNHB2T191WGZpWTQ0dkZrSV9zRVhCazhPRHlyMjR5VE5vRlpvT1NrSncxZXBnVXdKOENVMm5FQXQ4M2FWa3oyNDVOQTUzQks4TWd0UlFmOG5kcE9SdnYtMGZYVFp3Z0lLckVyNEZjWlpESjB2NW5qcVE0NExXRjVTcnVLZDhPTmlaSVdtb0psRXRrRGNNeVRLQmh5dnpLcTBqVEt2eUllNVhyVnNEa3FwdW1MMHhldWJGbGNzNEFKbWdBaV92Y1F2V3dLaDM?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:07e93ec461f46075",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "ND Mais",
+      "title": "Nova decisão do STJ libera encerramento de contas do Nubank, Itaú, Santander e outros bancos sem aval do cliente",
+      "company": "Nubank",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMisAFBVV95cUxNSVQ2UmRXU052THR3N0FsZTl6bEFnWkFtQmV2Z2E5R2tDNGFUVG5Rek83ZTFCSUYyNURTR181Q2pmUEhoX3JxalRNamFtX1BfUnR6OHc2R3d5eXhXZ0RqTkM3Z1JuVk9tQlA1T3VWSWIwZ2hnZWZfWmlmckpVYUZUUk5OQXhHZ1NBUnlBVjRNNW9haGpzX2swRWpVWmt2R2tOZ2RFQ0F5bURBTHRTZDRQeg?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:3141fbcfc579f39c",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Finsiders Brasil",
+      "title": "PicPay lidera perdas entre fintechs brasileiras em semana de juros altos",
+      "company": "PicPay",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMiywFBVV95cUxOSlRRRlhnSHFjeV9pbFhPdXJhWXZUalRGNzBTY3haQ1B0Ymptek1XbHBEWEp2Q3dTbmQ1X05WZ3c3N3E5WGItbEIzS2ZRQm9jdTVxUXNxVGM1RXpiM2oybkVTVW91WUJReUJsVm01ZjlFUVBjcnBhUEtmTlZPbGJOLXI5Qjh4LVFFVDJuMlBROHJlZElIcHE4ckFrcElOWmMteFIwbXNmOEs2eEhnY1RoWmtfelZmQTR1VklwZ0FSaV80ZGg5eUhaMTdNZw?oc=5",
+      "is_new": false
+     }
+    ]
+   },
+   "source": "news_ingest"
+  },
+  {
+   "run": "2026-09-26T15-33-10+00-00",
+   "news": {
+    "count": 412,
+    "new_count": 34,
+    "items": [
+     {
+      "id": "news:19f9cae4ddb43e23",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "CoinDesk",
+      "title": "A parceria da Binance impulsiona a Circle na corrida das stablecoins contra a Tether, dizem analistas",
+      "company": "Binance",
+      "date": "2026-09-26",
+      "url": "https://news.google.com/rss/articles/CBMixwFBVV95cUxQVHBrMEgzZkZPVWkyWldlN2I3NnAwUjhxb0trcndBWkFIT2t5ZE9VTXpERkJrV1VNbTFmX2RfV3h4ZTVGcXhRRWJSWnBiQ0cycXdabnZJa1dRTVc0bDdmVXlZQkp6QnhTQTh3RFQ0NXNWUW1mbldfTDdBOS04NnktX1NWUXc1YmpCOU5jTDZxZXJBRFJvc1VhMkZSdUxKUDZzOFRHVGwxT1hud3VBNmdSUktJLXBnRHpaX2ZqeXdva01wN0dUWkpN?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:d76ab5aed8910344",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "media.unisba.ac.id",
+      "title": "🔴 CRUZEIRO X ATLÉTICO-MG | 14ª RODADA BRASILEIRO | JORNADA ESPORTIVA KTO CRUZEIRO SPORTS | AO VIVO Andrew Mountbatten Windsor Allegedly Kicked His Dog During A Royal Gathering (UBar3OpsLo)",
+      "company": "KTO",
+      "date": "2026-09-26",
+      "url": "https://news.google.com/rss/articles/CBMikgFBVV95cUxQRkxxNXFWLVBiVTlvTnBSZW1GR1dlMnJxbDBaNXZxNU5GdWI2M2J5eW10cG5hRS1va25GOU41ZFpYb3lzdm1leHFaSXFla2hqY1pibkpHN1VQOXVTbVV2VzBNd1FwOFlfWFQwWDVsMllBVFJ4VjBwUEwyVWVJVklKcjZaSDlOMUdzamxWOXR3UVJkQQ?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:5914ec2e6bb0f4e6",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "JC",
+      "title": "Como o governo Lula aprovou a lei das bets, votou contra proibição de apostas a inscritos no Serasa e SPC e CadÚnico até proibi-las agora",
+      "company": "Serasa",
+      "date": "2026-09-26",
+      "url": "https://news.google.com/rss/articles/CBMinwJBVV95cUxPaF9lVGtwY3c1ckRVTWJSZG44N1kwZXRhMGxyTTZSaFQ4Nkk5RjFsbVItYkRQV29RODI5N21KRDFpbXlMMHdZQzNEQWl5MkJqTDZaMDZXN0djelE0TmR2Y1dOVjUxVjVtOXo1NWFfRjhkZ2t5dy11ZllySE1qY1d3TUk1TnZqZlRqanZpVGhSeDdXMVNfNlFqbTJ4cE5JLTFaNWRNTlA4QngxMGllZ1lWZWpPUTVodmh1amo2NjQ3ZDkzS04zbFo4aTFMNTJBc0FlT0l4X1Ntbkk5ZF9CU3AzYVRua3dyUENGdlFuQW9EZ2FITTdmbGhpRHdHd1Y0eUhzendYVVpuQ0dCZG9qYWpHanV6YndyMnJWa0tnd3E2dw?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:7b54b23dabcdea28",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "A Revista",
+      "title": "BTLG11, HGBS11 e HGLG11: 3 FIIs com desconto e dividendos",
+      "company": "BTLG11",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMijgFBVV95cUxPbVVqUENnbGVFOXdBcEsyWmxMTmQ1RlFEcmRhRFptQjBLdFNwaGZWUFgwTHNrc0RxVTF1VWRZcmZraUtQQzV1d3QzTzc4NkE0Y2lxV21jVk9qNW9XRWxza3ZRckdvN1Ricl9HSUR1VGY3aWFmZElhZGRKT2hvRWZURm5yVVJFV0NTTWU3bEZ3?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:94c43967e8c1b23b",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "seudinheiro.com",
+      "title": "XP, Nubank, Itaú, Bradesco, Santander e BTG: dois bancos vão se dar melhor se a Selic cair, segundo o UBS BB",
+      "company": "Bradesco",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMi5AFBVV95cUxNNmdYREtKeXJIaklncEhYNFBSakdXMmhZNHB2T191WGZpWTQ0dkZrSV9zRVhCazhPRHlyMjR5VE5vRlpvT1NrSncxZXBnVXdKOENVMm5FQXQ4M2FWa3oyNDVOQTUzQks4TWd0UlFmOG5kcE9SdnYtMGZYVFp3Z0lLckVyNEZjWlpESjB2NW5qcVE0NExXRjVTcnVLZDhPTmlaSVdtb0psRXRrRGNNeVRLQmh5dnpLcTBqVEt2eUllNVhyVnNEa3FwdW1MMHhldWJGbGNzNEFKbWdBaV92Y1F2V3dLaDM?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:d0c930d6b9e42293",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Terra",
+      "title": "Betnacional cassino: guia completo para jogar em 2026",
+      "company": "Betnacional",
+      "date": "2026-09-22",
+      "url": "https://news.google.com/rss/articles/CBMitgFBVV95cUxPWHRSU2dKMVh0X2NZQnVKR3Jfd2UtODlJUXdsaU5ib2d3MGU2RHpNdFNXaVBPYnpBd3dUV291bmgxLWlPY28xZ1U3cXcxZ2dVTlZ6SDBJQ1AwM1Z6TXpjYmVubzM0SkRjalVHWlBSMTVWYW9ONTlRamdJc29teTNRc2o2SFJqN2hTVHA3VzVDYjQxelZ4OWhQMzVWZE5seXVsUUNHQ3N3LTVkT1hFZHoxQThBbmdpQQ?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:5a56f49f6af31fd4",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "economia.uol.com.br",
+      "title": "Rodobens e Banco Pan fecham parceria para distribuir consórcios em todo o País",
+      "company": "Banco PAN",
+      "date": "2026-09-21",
+      "url": "https://news.google.com/rss/articles/CBMi4AFBVV95cUxPdFcwV1BzNjFpR0Y4Rnc3bTNyQm5HOVlWN2h0RXZmYy12aDdKalRHdXhqNlo5ZFdubnBUSDJ6azlVM01MckVNdGRtV0VkN0dUWjlfU1k0MmFQVnlzMVFzV3Nxc1VVSlBKU25STnJxTDNrQk13WUw4Q1FVYUtuVG54dDd0cGNMbHBRZDlhMnAtVjF6VFE0MnNtWkxuT25YTVRUdHp6MXhkdlZnSEpqXzE1RExwc1c0TEJ0T0k1M19oNzZnVlBCTlRoRlF6RFNDazVGS3ZTN0FGbFJCUUtCVl9uUQ?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:bab40a9fdc695431",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "unesp.br",
+      "title": "pixbet no android go não abre a câmera da selfie",
+      "company": "Pixbet",
+      "date": "2026-09-17",
+      "url": "https://news.google.com/rss/articles/CBMiUEFVX3lxTE5yQ3EyeUVqei1Ca3BOd2hKeGw2aThRNE5EQW5WcDlMOG95eVlVOXNuODU2eThsa2xLSXl3cGREY2VGdkd6U0VoNnBrLWMza1hk?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:8917413d445c706e",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "A Tribuna",
+      "title": "ETFs chegam a 862 mil investidores na B3 após alta de 34% em um ano",
+      "company": "B3",
+      "date": "2026-09-26",
+      "url": "https://news.google.com/rss/articles/CBMixAFBVV95cUxNeWdwVnlySWxxdVlZUmo1bUpqX0Q4MEVjVFV1aGJPODdQS084X01Fd3h6TThGU21UN3JnRjNYN2FlU1FPbDJVNlNOV2Q4N0xfR1hva05vclJLYXAzLTBoU2ZMdHJMNnlSX05xaVJkQ2lXM3dQWFM4WjUyU1UzeWFYb1I0U0hDU0x1RTZNSGlQVTBveXJOVkk4X2o3aWZUaFFWdjYxSHlLTG9zNEc3aUhUMno3MG5qWlBGU3FhNjBHM2hTQmhm?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:d57a8daa7a60dda3",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Estadão",
+      "title": "B3 faz ação com cartões-postais para unir cultura, memória e música em São Paulo",
+      "company": "B3",
+      "date": "2026-09-26",
+      "url": "https://news.google.com/rss/articles/CBMixwFBVV95cUxOdTQ2UmJFUEVVNzQxWTR0VWtqRnM2cnlUUWRuUnZVYVJWZ29YTGliQmxEckh1QkhOX1FTMDBCOE5XeFdUdzZ1MDNRc0RFYzFBYXFMR1dJR01LWWFxT296eGxEemxkZGxwYTRRb3pvS1dqZUg0eUt0eW90WUtMZ2Q1M3hhcFRFTjdDMDFfdGJpZ2VkR0NLTkNvMWhKZVFjcUFkZjM5M2t2MzZ5bUxMYXJQcE9xRzd4eDVLeEp3OUdvWGhFOHBjT0Zz0gHMAUFVX3lxTE5xaFRzT1Z2VnBnSGxqdm0zaG5ZalgzWllTTEcza0lVMVJFZ3VNS1gyMDgwQkNWRmZHUGVQN0ZiaFlFUkgwRzJzMUpZMzJXQ2h5Y2paSEhjOHcxcnY1RXlpcklwRDVOeUJjU0pRQ24tekMyYndxeHlvMzBZYlR6Wk0zRThEX1RlNFA0bjg4QWZ0aGh4QUxpZjB5REFtRkx0bGdrSWplRzM3UnhWY0xPeVhxcFJOM2xZNXBhVC1RR2I1NzBvSTRwRUltdVNsSg?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:c3eac10249f54879",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "A Revista",
+      "title": "BTLG11 propõe emissão de até R$ 1,2 bi com cota a R$ 106,69",
+      "company": "BTLG11",
+      "date": "2026-09-26",
+      "url": "https://news.google.com/rss/articles/CBMijgFBVV95cUxQY3lwZGRPQ1JXWjNFeHgwQ1pyc2U2UnhfZWlILTJVeDNjSG9Xelh0Mk9rMVdJelRZMXd4SFJKVlF1WnlrVWdJby1WVkNNNDVwcnBQaEptbXU4emtROUVjQ3gyV2RvX3BhNFREaEJXeV84UzZ2U0xGVkdtaDIwQW50emtndmU4RlBPWDRiZXN3?oc=5",
+      "is_new": true
+     }
+    ],
+    "context": [
+     {
+      "id": "news:4cb60ba42c1ad6e0",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Goal.com",
+      "title": "Betnacional: análise completa do site de apostas no Brasil em 2026",
+      "company": "Betnacional",
+      "date": "2026-09-26",
+      "url": "https://news.google.com/rss/articles/CBMie0FVX3lxTFBzNFVFTmxvNHNGMXM5U25LTEpOeTEtY2ZRVzB5U2N2NVFXZUg1NWJicy1CUGxXYVd5NXQzNXktNE90a19SQ3dPa3F1Z0UwMk1fTnVqOG51SE9oTHJSS2VERTlXZlJSM2NvckZ5YVM5ZzU2ekp3Vm11bXk5OA?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:19f9cae4ddb43e23",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "CoinDesk",
+      "title": "A parceria da Binance impulsiona a Circle na corrida das stablecoins contra a Tether, dizem analistas",
+      "company": "Binance",
+      "date": "2026-09-26",
+      "url": "https://news.google.com/rss/articles/CBMixwFBVV95cUxQVHBrMEgzZkZPVWkyWldlN2I3NnAwUjhxb0trcndBWkFIT2t5ZE9VTXpERkJrV1VNbTFmX2RfV3h4ZTVGcXhRRWJSWnBiQ0cycXdabnZJa1dRTVc0bDdmVXlZQkp6QnhTQTh3RFQ0NXNWUW1mbldfTDdBOS04NnktX1NWUXc1YmpCOU5jTDZxZXJBRFJvc1VhMkZSdUxKUDZzOFRHVGwxT1hud3VBNmdSUktJLXBnRHpaX2ZqeXdva01wN0dUWkpN?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:d76ab5aed8910344",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "media.unisba.ac.id",
+      "title": "🔴 CRUZEIRO X ATLÉTICO-MG | 14ª RODADA BRASILEIRO | JORNADA ESPORTIVA KTO CRUZEIRO SPORTS | AO VIVO Andrew Mountbatten Windsor Allegedly Kicked His Dog During A Royal Gathering (UBar3OpsLo)",
+      "company": "KTO",
+      "date": "2026-09-26",
+      "url": "https://news.google.com/rss/articles/CBMikgFBVV95cUxQRkxxNXFWLVBiVTlvTnBSZW1GR1dlMnJxbDBaNXZxNU5GdWI2M2J5eW10cG5hRS1va25GOU41ZFpYb3lzdm1leHFaSXFla2hqY1pibkpHN1VQOXVTbVV2VzBNd1FwOFlfWFQwWDVsMllBVFJ4VjBwUEwyVWVJVklKcjZaSDlOMUdzamxWOXR3UVJkQQ?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:5914ec2e6bb0f4e6",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "JC",
+      "title": "Como o governo Lula aprovou a lei das bets, votou contra proibição de apostas a inscritos no Serasa e SPC e CadÚnico até proibi-las agora",
+      "company": "Serasa",
+      "date": "2026-09-26",
+      "url": "https://news.google.com/rss/articles/CBMinwJBVV95cUxPaF9lVGtwY3c1ckRVTWJSZG44N1kwZXRhMGxyTTZSaFQ4Nkk5RjFsbVItYkRQV29RODI5N21KRDFpbXlMMHdZQzNEQWl5MkJqTDZaMDZXN0djelE0TmR2Y1dOVjUxVjVtOXo1NWFfRjhkZ2t5dy11ZllySE1qY1d3TUk1TnZqZlRqanZpVGhSeDdXMVNfNlFqbTJ4cE5JLTFaNWRNTlA4QngxMGllZ1lWZWpPUTVodmh1amo2NjQ3ZDkzS04zbFo4aTFMNTJBc0FlT0l4X1Ntbkk5ZF9CU3AzYVRua3dyUENGdlFuQW9EZ2FITTdmbGhpRHdHd1Y0eUhzendYVVpuQ0dCZG9qYWpHanV6YndyMnJWa0tnd3E2dw?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:b8e4ca62383c50ed",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "InfoMoney",
+      "title": "Como a proibição das bets no Brasil pode impactar as ações da B3?",
+      "company": "B3",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMipgFBVV95cUxORi1Qd0U4N1dELW5aUTNpLVZMcGFRbXZyZDJpaUFKYWN4N2FlalNrN2pocHZTMHBnUWsyLWRYSFUwQmZSTU00bkdPVTBvUnRDWk1ISWZsemtlWW1RNTJ0ZmNnMGE3Tk9WMkxNdkdaTW9FMnhaLTFPd0g1OUw4OTNlOWFIS3hCbVJMbjF0bndwdHBPVzdQSnV5N2ZVbFFUanlKR016V1hn0gGrAUFVX3lxTE55Z0RmeHVDTE9oRDBBUE9NZUNzTVpKQ2c2ZlVsQ1NJNllNcHh2LUQxRTRyb01rQ2JvckRCcWVYejNZb3lQRzY5Mjc3dlR3VGktb25xVTBBeXBOVkFfLXdWMGlzVUYxZXFlTXpER3BnYXlwdTFfeC1zd2pYSlppaXRkZ3diZzdNclBsNGtLOEM1OXIybW1EcW94T2RwRmI1bjNCWTZMQjJrSGI3aw?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:7b54b23dabcdea28",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "A Revista",
+      "title": "BTLG11, HGBS11 e HGLG11: 3 FIIs com desconto e dividendos",
+      "company": "BTLG11",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMijgFBVV95cUxPbVVqUENnbGVFOXdBcEsyWmxMTmQ1RlFEcmRhRFptQjBLdFNwaGZWUFgwTHNrc0RxVTF1VWRZcmZraUtQQzV1d3QzTzc4NkE0Y2lxV21jVk9qNW9XRWxza3ZRckdvN1Ricl9HSUR1VGY3aWFmZElhZGRKT2hvRWZURm5yVVJFV0NTTWU3bEZ3?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:970e0b97a020a929",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Estadão",
+      "title": "Rodobens fecha parceria com Banco PAN e amplia distribuição de consórcios pelo País",
+      "company": "Banco PAN",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMi5wFBVV95cUxNc3JMX3RIVjhFd2Yxc0xpUWU4eVQ5SEw1Q2o5aWgyNXl6Mm5HcDg5VDNyMm1SLU16dFJ2cUUyQi1XNGU5U2hSM29JTUEwc2FHRlFONjRzeC1ZWmYtc213QzdKT2o0X21Ub0d3a0NaQUI0VTJXclhKMmJpWGZTcElFaEFSMnhXbGVBTEdLT3plN1A5YVhIZ21HNEpwRmZad2g1WVVQckJVSmRVckU1R21XSV9qWXdGSHRsUTd0OVd4ak5QVTl5WGNDenY5VmhydnBfY0xMLTRPa25pd1VSUWtNY3ZRM1JFNzA?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:803de4074425a827",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "sportingnews.com",
+      "title": "Flamengo e Betano: qual pode ser o prejuízo do clube com possível saída da bet?",
+      "company": "Betano",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMiuwFBVV95cUxOX1ZGTTJtYk5JWHBKSFZKYXAyN3pqSlp3SDlSeUFGLUxRd3lxbWlVZEpudWNtYWluTVRqb1dNd0txV1ktZlc3Sm84WmxmbjI5X1J1WUZTeTh3UGZzY1BiZHktMWpwaHFheUtodFRkTGZDVS1lQlNjbzJ6a1dDZC1QbTdqRkZlaXEwSlJWU1JuclIwTmtnd3hfUjAxcVowZl9ISGt6T3BVX19Hc3VmY0tlMXg5NGx1X0FBNXNr?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:94c43967e8c1b23b",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "seudinheiro.com",
+      "title": "XP, Nubank, Itaú, Bradesco, Santander e BTG: dois bancos vão se dar melhor se a Selic cair, segundo o UBS BB",
+      "company": "Bradesco",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMi5AFBVV95cUxNNmdYREtKeXJIaklncEhYNFBSakdXMmhZNHB2T191WGZpWTQ0dkZrSV9zRVhCazhPRHlyMjR5VE5vRlpvT1NrSncxZXBnVXdKOENVMm5FQXQ4M2FWa3oyNDVOQTUzQks4TWd0UlFmOG5kcE9SdnYtMGZYVFp3Z0lLckVyNEZjWlpESjB2NW5qcVE0NExXRjVTcnVLZDhPTmlaSVdtb0psRXRrRGNNeVRLQmh5dnpLcTBqVEt2eUllNVhyVnNEa3FwdW1MMHhldWJGbGNzNEFKbWdBaV92Y1F2V3dLaDM?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:fbe358b25a33ede5",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "NETVASCO",
+      "title": "Código Promocional Estrela Bet: ofertas em 2026",
+      "company": "Estrela Bet",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMif0FVX3lxTE1OMDlPalpNQVRVUnNOeVFVZlpWa0xBTERLUjI0MU9FM0tjQ0hSZ243YmgwVEpmdVhIWEY3QnZSYlFrb1gtODlvZFExQzdUOU54cFEyUy1aOVY5bzVhMmYxanVMUDVIV05HN1RKVURnMXVBWWxHR1VDY2tPLXVBV1k?oc=5",
+      "is_new": false
+     }
+    ]
+   },
+   "source": "news_ingest"
+  },
+  {
+   "run": "2026-09-26T20-32-50+00-00",
+   "news": {
+    "count": 410,
+    "new_count": 23,
+    "items": [
+     {
+      "id": "news:8c7f23693cb30e7f",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Maranhão Hoje",
+      "title": "Bets estão proibidas, mas jogatina continua pelas loterias da Caixa Econômica Federal",
+      "company": "Caixa Econômica",
+      "date": "2026-09-26",
+      "url": "https://news.google.com/rss/articles/CBMiqwFBVV95cUxQaHJiQi1ZX256NGNBdUpjaGs2VE1MeTBINmRaQ0gwN1c4ckptYWY4dWNvWmxBdGpUbkt1OGhHYzlWSnptM2RucVhjaHZXNThKQ0h6NU1HNDJpWlM1dy1HN011T3BLX3Z3R01lX05qRTFLeHBWNm8tc0dfZklTWFFMZVRwbTZfWGxPbDRDeGxPQ3Z6VUFRUGt3WkZWVGFTa1pIQ1hpeVFUeHBBM1E?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:27b3e74b8ab3a4fc",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "odia.ig.com.br",
+      "title": "Como Funciona a Bolsa de Apostas Exchange Betfair?",
+      "company": "Betfair",
+      "date": "2026-09-24",
+      "url": "https://news.google.com/rss/articles/CBMibkFVX3lxTFBURkJid0s3NVhfSlg3OXZyV2pic09BSy1oaWp6MHoxZWdTak5xcElHZnQ2MHJxTmNwcTNEUGR5M1hYdnBvWUJQbmxXd2pjRjUzOU50UTFDVnpUZG01Z2dVZlc5NzM0UnBuMDBSOE1R?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:cd768d868b3517f0",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "odia.ig.com.br",
+      "title": "Betano eSports: como apostar em CS2, Valorant, LoL e Dota",
+      "company": "Betano",
+      "date": "2026-09-23",
+      "url": "https://news.google.com/rss/articles/CBMiY0FVX3lxTE1VYmp5N01JYktSOXFUc0VQTHdjMVVFQUI2bXg2bkVIZ2lzVUhWRDAyUXNIR0Q4b3dxUFRvbHJ1T1F3LTdRclhkMlczUHZrTFFxWkVORTBuVkRuckF1Q2tzNFlLdw?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:e952a1e76f33ce58",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "odia.ig.com.br",
+      "title": "Aposta Múltipla na bet365: Como Funciona e Quando Fazer",
+      "company": "bet365",
+      "date": "2026-09-23",
+      "url": "https://news.google.com/rss/articles/CBMibkFVX3lxTE1PdVJ2RTdLMk92RVl5R3h1UUNCdFZFSmdYaFR1UTBiVnMzU05HanpxcFNraUZmUGd4OERSZUVOT0ZRMlVGT0Z6U3U4VlZFbS15Z1ZsNUFsR0xKaVRDOUNiRXpqd0t4b1FHcXd0M3BB?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:307bed10281afbef",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Valor Econômico",
+      "title": "Não investir no Brasil é um erro estrutural, diz CEO do banco Inter",
+      "company": "Banco Inter",
+      "date": "2026-09-26",
+      "url": "https://news.google.com/rss/articles/CBMivgFBVV95cUxPX3RNUmt1SDlpaXE5ZUl6ZjJ1NE91bnBlUVhGRENIYzFaX1FZZmo5eE4xLUhqOFBqdGNDSmRiQ1pWODF1bzJsN1J3MEwtaHF0YUhjbmwtSW1ya0hVVXFGT2xXNjBuZE9oOGZsc0I0MDNpUHJiX1JTM0NhRmhmc09udGFkcWFwcFV5ZDJ3ZU1yX0hvMUMxamZsY0t2RDFHMWpxVm5XTjVFNjJtQ3ByYTM4OUVfWGVPNXQyVEhtSHBR0gHMAUFVX3lxTE0yUWp0cVpJalZZc2diSDc3UmtEcnltX21fSHdQLU9WWE9HTERBUmlaMncwMlRoSUFXeWFyeFVmb2FvY0ppQ0ZNRHhmTkxMSzZybHo0Rm11UnZxbHJ0MjVYRG5oYVVUY2JPbUZPUklfM3FpMzJTMHJKUTZ6eFExTlBQbllvVlNTV1FEMmJia0dDWTBHWnU1NFoyemRYQWJnV0hfWHlEMk5nQzZEeWJya3NFcmRJQ196RENIZ09WbEtuRTFNakNMQnNkVXgwLQ?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:2b547964ca3faef8",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Jornal Brasília Capital",
+      "title": "CEO do Banco Inter: Ignorar Investimentos no Brasil é um Erro",
+      "company": "Banco Inter",
+      "date": "2026-09-26",
+      "url": "https://news.google.com/rss/articles/CBMikAFBVV95cUxPUXdPc3JpZTlkRFcxMFpUVlYyMkxPTkVnUGJtVkFweDVYeHdlVGpHd045WEp6SWVlVmU0NTlRZklWeWNwM3BrU0NfZmxxNGFSN2dkZHljdkNqNFNQSDFaZmJ6TVVudktUbFI4cGhkVUIzM3VYTUwtNWs2ZlpVVzVUb3lqVWdnSUNBNjRMMncyNU8?oc=5",
+      "is_new": true
+     },
+     {
+      "id": "news:f131c23e1b5aeef3",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "VEJA",
+      "title": "Veja o que a PF encontrou na mansão do dono do Banco Master",
+      "company": "Banco Master",
+      "date": "2026-09-26",
+      "url": "https://news.google.com/rss/articles/CBMimwFBVV95cUxPM0lZVDRMaHpGTVJlQkc5Z1NiaTRDd21vZDVUam04QlJmdmk2YV82bVlIcHJmTmVvRlVpbzVMMHE1cmZ1di1iRVNoUTJxdGIxbFJDbzJHbTM0N2pZNF96UzNPVG4wVXBpM2RCN3p2a2JVZmxLeHpVa205SGV2WENyU09KcWFJQ01vTGJ4VVRZQzVqWE1uNVZpVGFuRQ?oc=5",
+      "is_new": true
+     }
+    ],
+    "context": [
+     {
+      "id": "news:2304c3ca37b290b0",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "netvasco.com.br",
+      "title": "Como começar a apostar na Betano",
+      "company": "Betano",
+      "date": "2026-09-26",
+      "url": "https://news.google.com/rss/articles/CBMibEFVX3lxTE1lLTVGUFRlSlEzQUF0SjJDSkkwRnhCcFpDeUVBWXJraW9aTDAyNnowUjJ5VW41OUpxdzhCX0d2eDJVa3dSNDlMMV9aQVhxZl9PaFc5VnFDTnlRTmxiTENGdjBKcm4yR1JCQWhmWA?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:4cb60ba42c1ad6e0",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Goal.com",
+      "title": "Betnacional: análise completa do site de apostas no Brasil em 2026",
+      "company": "Betnacional",
+      "date": "2026-09-26",
+      "url": "https://news.google.com/rss/articles/CBMie0FVX3lxTFBzNFVFTmxvNHNGMXM5U25LTEpOeTEtY2ZRVzB5U2N2NVFXZUg1NWJicy1CUGxXYVd5NXQzNXktNE90a19SQ3dPa3F1Z0UwMk1fTnVqOG51SE9oTHJSS2VERTlXZlJSM2NvckZ5YVM5ZzU2ekp3Vm11bXk5OA?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:19f9cae4ddb43e23",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "CoinDesk",
+      "title": "A parceria da Binance impulsiona a Circle na corrida das stablecoins contra a Tether, dizem analistas",
+      "company": "Binance",
+      "date": "2026-09-26",
+      "url": "https://news.google.com/rss/articles/CBMixwFBVV95cUxQVHBrMEgzZkZPVWkyWldlN2I3NnAwUjhxb0trcndBWkFIT2t5ZE9VTXpERkJrV1VNbTFmX2RfV3h4ZTVGcXhRRWJSWnBiQ0cycXdabnZJa1dRTVc0bDdmVXlZQkp6QnhTQTh3RFQ0NXNWUW1mbldfTDdBOS04NnktX1NWUXc1YmpCOU5jTDZxZXJBRFJvc1VhMkZSdUxKUDZzOFRHVGwxT1hud3VBNmdSUktJLXBnRHpaX2ZqeXdva01wN0dUWkpN?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:8c7f23693cb30e7f",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Maranhão Hoje",
+      "title": "Bets estão proibidas, mas jogatina continua pelas loterias da Caixa Econômica Federal",
+      "company": "Caixa Econômica",
+      "date": "2026-09-26",
+      "url": "https://news.google.com/rss/articles/CBMiqwFBVV95cUxQaHJiQi1ZX256NGNBdUpjaGs2VE1MeTBINmRaQ0gwN1c4ckptYWY4dWNvWmxBdGpUbkt1OGhHYzlWSnptM2RucVhjaHZXNThKQ0h6NU1HNDJpWlM1dy1HN011T3BLX3Z3R01lX05qRTFLeHBWNm8tc0dfZklTWFFMZVRwbTZfWGxPbDRDeGxPQ3Z6VUFRUGt3WkZWVGFTa1pIQ1hpeVFUeHBBM1E?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:92aadad1c5a1e1f2",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Unisba Media",
+      "title": "🔴 CRUZEIRO X ATLÉTICO-MG | 14ª RODADA BRASILEIRO | JORNADA ESPORTIVA KTO CRUZEIRO SPORTS | AO VIVO Andrew Mountbatten Windsor Allegedly Kicked His Dog During A Royal Gathering (UBar3OpsLo)",
+      "company": "KTO",
+      "date": "2026-09-26",
+      "url": "https://news.google.com/rss/articles/CBMikgFBVV95cUxQRkxxNXFWLVBiVTlvTnBSZW1GR1dlMnJxbDBaNXZxNU5GdWI2M2J5eW10cG5hRS1va25GOU41ZFpYb3lzdm1leHFaSXFla2hqY1pibkpHN1VQOXVTbVV2VzBNd1FwOFlfWFQwWDVsMllBVFJ4VjBwUEwyVWVJVklKcjZaSDlOMUdzamxWOXR3UVJkQQ?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:5914ec2e6bb0f4e6",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "JC",
+      "title": "Como o governo Lula aprovou a lei das bets, votou contra proibição de apostas a inscritos no Serasa e SPC e CadÚnico até proibi-las agora",
+      "company": "Serasa",
+      "date": "2026-09-26",
+      "url": "https://news.google.com/rss/articles/CBMinwJBVV95cUxPaF9lVGtwY3c1ckRVTWJSZG44N1kwZXRhMGxyTTZSaFQ4Nkk5RjFsbVItYkRQV29RODI5N21KRDFpbXlMMHdZQzNEQWl5MkJqTDZaMDZXN0djelE0TmR2Y1dOVjUxVjVtOXo1NWFfRjhkZ2t5dy11ZllySE1qY1d3TUk1TnZqZlRqanZpVGhSeDdXMVNfNlFqbTJ4cE5JLTFaNWRNTlA4QngxMGllZ1lWZWpPUTVodmh1amo2NjQ3ZDkzS04zbFo4aTFMNTJBc0FlT0l4X1Ntbkk5ZF9CU3AzYVRua3dyUENGdlFuQW9EZ2FITTdmbGhpRHdHd1Y0eUhzendYVVpuQ0dCZG9qYWpHanV6YndyMnJWa0tnd3E2dw?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:b8e4ca62383c50ed",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "InfoMoney",
+      "title": "Como a proibição das bets no Brasil pode impactar as ações da B3?",
+      "company": "B3",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMipgFBVV95cUxORi1Qd0U4N1dELW5aUTNpLVZMcGFRbXZyZDJpaUFKYWN4N2FlalNrN2pocHZTMHBnUWsyLWRYSFUwQmZSTU00bkdPVTBvUnRDWk1ISWZsemtlWW1RNTJ0ZmNnMGE3Tk9WMkxNdkdaTW9FMnhaLTFPd0g1OUw4OTNlOWFIS3hCbVJMbjF0bndwdHBPVzdQSnV5N2ZVbFFUanlKR016V1hn0gGrAUFVX3lxTE55Z0RmeHVDTE9oRDBBUE9NZUNzTVpKQ2c2ZlVsQ1NJNllNcHh2LUQxRTRyb01rQ2JvckRCcWVYejNZb3lQRzY5Mjc3dlR3VGktb25xVTBBeXBOVkFfLXdWMGlzVUYxZXFlTXpER3BnYXlwdTFfeC1zd2pYSlppaXRkZ3diZzdNclBsNGtLOEM1OXIybW1EcW94T2RwRmI1bjNCWTZMQjJrSGI3aw?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:7b54b23dabcdea28",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "A Revista",
+      "title": "BTLG11, HGBS11 e HGLG11: 3 FIIs com desconto e dividendos",
+      "company": "BTLG11",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMijgFBVV95cUxPbVVqUENnbGVFOXdBcEsyWmxMTmQ1RlFEcmRhRFptQjBLdFNwaGZWUFgwTHNrc0RxVTF1VWRZcmZraUtQQzV1d3QzTzc4NkE0Y2lxV21jVk9qNW9XRWxza3ZRckdvN1Ricl9HSUR1VGY3aWFmZElhZGRKT2hvRWZURm5yVVJFV0NTTWU3bEZ3?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:970e0b97a020a929",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Estadão",
+      "title": "Rodobens fecha parceria com Banco PAN e amplia distribuição de consórcios pelo País",
+      "company": "Banco PAN",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMi5wFBVV95cUxNc3JMX3RIVjhFd2Yxc0xpUWU4eVQ5SEw1Q2o5aWgyNXl6Mm5HcDg5VDNyMm1SLU16dFJ2cUUyQi1XNGU5U2hSM29JTUEwc2FHRlFONjRzeC1ZWmYtc213QzdKT2o0X21Ub0d3a0NaQUI0VTJXclhKMmJpWGZTcElFaEFSMnhXbGVBTEdLT3plN1A5YVhIZ21HNEpwRmZad2g1WVVQckJVSmRVckU1R21XSV9qWXdGSHRsUTd0OVd4ak5QVTl5WGNDenY5VmhydnBfY0xMLTRPa25pd1VSUWtNY3ZRM1JFNzA?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:803de4074425a827",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "sportingnews.com",
+      "title": "Flamengo e Betano: qual pode ser o prejuízo do clube com possível saída da bet?",
+      "company": "Betano",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMiuwFBVV95cUxOX1ZGTTJtYk5JWHBKSFZKYXAyN3pqSlp3SDlSeUFGLUxRd3lxbWlVZEpudWNtYWluTVRqb1dNd0txV1ktZlc3Sm84WmxmbjI5X1J1WUZTeTh3UGZzY1BiZHktMWpwaHFheUtodFRkTGZDVS1lQlNjbzJ6a1dDZC1QbTdqRkZlaXEwSlJWU1JuclIwTmtnd3hfUjAxcVowZl9ISGt6T3BVX19Hc3VmY0tlMXg5NGx1X0FBNXNr?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:2b5f345041ce8394",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Goal.com",
+      "title": "Betsson cadastro: como abrir conta e fazer apostas",
+      "company": "Betsson",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMid0FVX3lxTFBvQW1obFM4dTVkVEo4aDl2d3NGamRsTGo4NFlIaHRNQVZ5ZVh3WXZoVFJlcklPM1hMVmRmekg0ZVQ2RWpvSFBsMnY2MUhjX2gtV1ZGcEVLQlNGLW53ci1oak9NSl8tdXBlbXQ4UTVleTVtaHcwaXRv?oc=5",
+      "is_new": false
+     },
+     {
+      "id": "news:91d823953820da1a",
+      "source": "News",
+      "kind": "competitor",
+      "publisher": "Seu Dinheiro",
+      "title": "XP, Nubank, Itaú, Bradesco, Santander e BTG: dois bancos vão se dar melhor se a Selic cair, segundo o UBS BB",
+      "company": "Bradesco",
+      "date": "2026-09-25",
+      "url": "https://news.google.com/rss/articles/CBMi5AFBVV95cUxNNmdYREtKeXJIaklncEhYNFBSakdXMmhZNHB2T191WGZpWTQ0dkZrSV9zRVhCazhPRHlyMjR5VE5vRlpvT1NrSncxZXBnVXdKOENVMm5FQXQ4M2FWa3oyNDVOQTUzQks4TWd0UlFmOG5kcE9SdnYtMGZYVFp3Z0lLckVyNEZjWlpESjB2NW5qcVE0NExXRjVTcnVLZDhPTmlaSVdtb0psRXRrRGNNeVRLQmh5dnpLcTBqVEt2eUllNVhyVnNEa3FwdW1MMHhldWJGbGNzNEFKbWdBaV92Y1F2V3dLaDM?oc=5",
+      "is_new": false
+     }
+    ]
+   },
+   "source": "news_ingest"
+  }
+ ]
+}

@@ -117,6 +117,9 @@ _DOMAIN_CUES = {
     # consumer reputation (Reclame Aqui, #31).
     "reclamacao", "reclamacoes", "reclame", "reputacao", "nota", "atendimento",
     "cliente", "clientes", "consumidor", "satisfacao", "resolvidas",
+    # #177 industry-level regulatory events ("houve mudança regulatória no setor de apostas?").
+    "setorial", "apostas", "bets", "proibicao", "proibidas", "proibida", "proibe", "proibiu",
+    "banimento", "suspensao", "medida", "provisoria", "mudanca",
     # CPO product radar (#159): app quality + product changes.
     "aplicativo", "produto", "produtos", "lancamento", "lancamentos", "instabilidade",
     "cashback", "beneficio", "beneficios", "tarifa", "tarifas",
@@ -302,6 +305,11 @@ def select_grounding(
             score += 1.0
         if q_topics and q_topics & set(card.get("topics") or []):
             score += 1.5
+        # #177: a question that names a SECTOR ("setor de apostas", "as bets") lifts that
+        # sector's event card above entity narratives that merely mention the same words.
+        if card.get("sector_terms") and q_toks & set(_tokens(" ".join(card["sector_terms"]))):
+            score += 6.0
+            relevant = True
         if not relevant:
             continue
         if card.get("is_alert"):
@@ -363,7 +371,8 @@ def build_messages(
             f" · score={c.get('threat_score')}{alert}\n{c.get('narrative')}{note_line}"
         )
     for s in (kb_snippets or []):
-        lines.append(f"[{s.get('id')}] (KB) {s.get('subject')}")
+        head = kb_header(s)
+        lines.append(f"[{s.get('id')}] (KB{' · ' + head if head else ''}) {s.get('subject')}")
     if macro:
         selic = (macro.get("selic") or {}).get("value") if isinstance(macro.get("selic"), dict) else None
         if selic is not None:
@@ -402,7 +411,7 @@ def validate_citations(
     """Return citation objects for ids the model referenced that we actually
     supplied — grounding guard against invented citations."""
     supplied = {str(c.get("id")): c for c in cards}
-    kb_ids = {str(s.get("id")) for s in (kb_snippets or [])}
+    kb_by_id = {str(s.get("id")): s for s in (kb_snippets or [])}
     out: list[dict[str, Any]] = []
     seen: set[str] = set()
     for m in _CITE_RE.findall(answer_text):
@@ -418,9 +427,13 @@ def validate_citations(
                 "date": c.get("date"),
                 "sources": c.get("citations") or [],
             })
-        elif m in kb_ids:
+        elif m in kb_by_id:
             seen.add(m)
-            out.append({"id": m, "kb": True})
+            k = kb_by_id[m]
+            # A KB citation resolves to its DOCUMENT (the DOU act), not an opaque chunk id.
+            out.append({"id": m, "kb": True, "entity_label": k.get("title"), "date": k.get("date"),
+                        "source": k.get("source"), "doc_type": k.get("doc_type"), "url": k.get("url"),
+                        "sources": [{"url": k["url"]}] if k.get("url") else []})
     return out
 
 
@@ -663,6 +676,56 @@ def product_radar_cards(feed: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
+def sector_event_cards(feed: dict[str, Any]) -> list[dict[str, Any]]:
+    """#177 — project feed.json.sector_events (industry-level regulatory events: an official act
+    and/or ≥2 independent outlets) into citable cards, so "Houve mudança regulatória no setor de
+    apostas?" grounds on MP 1.394 instead of on whichever entity narrative happened to mention
+    it. The narrative restates only the event's own stored fields; citations are its sources
+    (official act first)."""
+    from src.synth.sector_events import INDUSTRY_WORDS
+
+    labels = {o.get("slug"): o.get("display_name") or o.get("label") or o.get("slug")
+              for o in (feed.get("industry_options") or []) if o.get("slug")}
+    out: list[dict[str, Any]] = []
+    for e in (feed.get("sector_events") or []):
+        ind, eid = e.get("industry"), e.get("id")
+        if not ind or not eid:
+            continue
+        label = labels.get(ind) or ind
+        words = INDUSTRY_WORDS.get(ind, label)
+        official = [s for s in (e.get("sources") or []) if s.get("kind") == "official"]
+        news = [s for s in (e.get("sources") or []) if s.get("kind") == "news"]
+        bits = [f"Evento setorial — mudança regulatória no setor {label} ({words}), "
+                f"{e.get('change_label') or 'mudança regulatória'}, em {e.get('date')}: {e.get('title') or ''}"]
+        if e.get("summary"):
+            bits.append(str(e["summary"]))
+        if official:
+            bits.append("Ato oficial: " + "; ".join(
+                f"{s.get('title')} ({s.get('source') or 'DOU'}"
+                f"{', ' + s['section'] if s.get('section') else ''}"
+                f"{', ' + s['organ'] if s.get('organ') else ''}, {s.get('date')})" for s in official[:3]))
+        if news:
+            bits.append(f"Imprensa ({len({s.get('publisher_key') or s.get('publisher') for s in news})} "
+                        f"veículo(s)): " + "; ".join(
+                            f"\"{s.get('title')}\" — {s.get('publisher')}" for s in news[:4]))
+        bits.append(f"Severidade {e.get('severity')}; confiança {e.get('confidence')}; "
+                    f"afeta as {e.get('n_affected') or len(e.get('entities') or [])} entidades acompanhadas do setor")
+        urls = [s.get("url") for s in official + news if s.get("url")]
+        out.append({
+            "id": eid, "date": e.get("date"), "entity": None,
+            "entity_label": f"Setor · {label}", "subject_label": f"Setor · {label}",
+            "entities": [], "industries": [ind],
+            "lenses": ["regulatorio", "evento_setorial"],
+            "topics": ["regulacao"],
+            "is_alert": e.get("severity") in ("critical", "high"),
+            "threat_score": None,
+            "narrative": ". ".join(b.rstrip(".") for b in bits if b) + ".",
+            "citations": [{"url": u} for u in urls[:6]],
+            "sector_terms": [label, words, ind],
+        })
+    return out
+
+
 # --- orchestrator (DI) ----------------------------------------------------
 
 def _scope_cards_to_modules(
@@ -715,7 +778,8 @@ def answer(
     # per-entity classification facts (ADR-013: ownership/certifications).
     feed_cards = (list(feed.get("feed") or []) + distress_cards(feed)
                   + entity_fact_cards(feed) + reputation_cards(feed)
-                  + financials_cards(feed) + product_radar_cards(feed))
+                  + financials_cards(feed) + product_radar_cards(feed)
+                  + sector_event_cards(feed))
     if modules is not None:
         feed_cards = _scope_cards_to_modules(feed_cards, feed, modules)
     entity_vocab = set()
@@ -785,7 +849,64 @@ def _load_feed(bucket: str, key: str = "feed.json") -> dict[str, Any]:
     return data
 
 
-def _kb_retrieve(q: str, *, max_results: int = 4) -> list[dict[str, Any]]:
+#: KB chunk text handed to the model. 500 chars of a mid-document chunk (an article about
+#: returning balances) read as nothing without its act; ~1,200 keeps a full article.
+KB_CHUNK_CHARS = 1200
+KB_MAX_RESULTS = 6
+KB_CHUNKS_PER_DOC = 2
+
+
+def _kb_meta_value(meta: dict[str, Any], key: str) -> str | None:
+    v = meta.get(key)
+    if isinstance(v, list):
+        v = ",".join(str(x) for x in v if x)
+    v = str(v).strip() if v is not None else ""
+    return v or None
+
+
+def kb_snippets_from_results(results: list[dict[str, Any]], *, max_chars: int = KB_CHUNK_CHARS,
+                             per_doc: int = KB_CHUNKS_PER_DOC, id_prefix: str = "kb") -> list[dict[str, Any]]:
+    """Bedrock ``retrievalResults`` → citable KB snippets that KEEP their provenance.
+
+    #173 (live, 2026-09-27): MP 1.394 chunks ranked #1–#3 for "houve mudança regulatória no setor
+    de apostas?", yet /api/ask declined — each snippet was ``content[:500]`` with the source
+    dropped, so a mid-act chunk reached the model with no sign it was a Medida Provisória. Now
+    each snippet carries the raw_writer sidecar metadata (source, doc_type, date, title/name, url,
+    industries) and the S3 uri; results arrive ranked, so the best ``per_doc`` chunks of each
+    document are kept."""
+    out: list[dict[str, Any]] = []
+    per: dict[str, int] = {}
+    for r in results or []:
+        text = ((r.get("content") or {}).get("text") or "").strip()
+        if not text:
+            continue
+        meta = r.get("metadata") or {}
+        uri = ((r.get("location") or {}).get("s3Location") or {}).get("uri") \
+            or _kb_meta_value(meta, "x-amz-bedrock-kb-source-uri")
+        url = _kb_meta_value(meta, "url")
+        doc = uri or url or text[:80]
+        if per.get(doc, 0) >= per_doc:
+            continue
+        per[doc] = per.get(doc, 0) + 1
+        title = _kb_meta_value(meta, "title") or _kb_meta_value(meta, "name")
+        out.append({
+            "id": f"{id_prefix}:{len(out)}", "subject": text[:max_chars],
+            "source": _kb_meta_value(meta, "source"), "doc_type": _kb_meta_value(meta, "doc_type"),
+            "date": (_kb_meta_value(meta, "date") or "")[:10] or None, "title": title,
+            "url": url, "industries": _kb_meta_value(meta, "industries"), "uri": uri,
+            "score": r.get("score"),
+        })
+    return out
+
+
+def kb_header(s: dict[str, Any]) -> str:
+    """"DOU · Medida Provisória · 2026-09-25 · MEDIDA PROVISÓRIA Nº 1.394… · <url>" — whatever
+    provenance the snippet has, in that order; empty when it has none."""
+    return " · ".join(str(x) for x in (s.get("source"), s.get("doc_type"), s.get("date"),
+                                         s.get("title"), s.get("url")) if x)
+
+
+def _kb_retrieve(q: str, *, max_results: int = KB_MAX_RESULTS) -> list[dict[str, Any]]:
     kb_id = os.environ.get("ONCA_KB_ID")
     if not kb_id:
         return []
@@ -796,12 +917,7 @@ def _kb_retrieve(q: str, *, max_results: int = 4) -> list[dict[str, Any]]:
         retrievalQuery={"text": q[:1000]},
         retrievalConfiguration={"vectorSearchConfiguration": {"numberOfResults": max_results}},
     )
-    out: list[dict[str, Any]] = []
-    for i, r in enumerate(resp.get("retrievalResults") or []):
-        content = (r.get("content") or {}).get("text") or ""
-        if content:
-            out.append({"id": f"kb:{i}", "subject": content[:500]})
-    return out
+    return kb_snippets_from_results(resp.get("retrievalResults") or [])
 
 
 # DEC-4 (#97): a good precedent is similar AND recent AND has a known-good outcome. Bedrock ranks
