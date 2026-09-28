@@ -1038,3 +1038,19 @@ def test_reassign_deletes_a_key_the_target_does_not_carry():
     er.reassign_alias("vcrr11", "PATRIA INVESTIMENTOS", "patria", table=t)
     assert er.resolve_by_alias("PATRIA INVESTIMENTOS", table=t) == "patria"
     assert "PATRIA" not in er.get_entity("patria", table=t)["aliases"]
+
+
+def test_misheld_skips_the_funds_own_ticker_and_legal_name_and_picks_the_top_level_owner():
+    t = _itau_world()
+    er.put_entity("itau-consorcio", "Itaú Consórcio", ["ITAU", "ITAU CONSORCIO"],
+                  industries=["consorcio"], parent="itau", source="curated", table=t)
+    er.put_entity("sparta", "Sparta", ["SPARTA", "CRAA11", "SPARTA FIAGRO FUNDO DE I"],
+                  industries=["asset-management"], source="curated", table=t)
+    er.put_entity("craa11", "SPARTA CRAA11", ["SPARTA FIAGRO FUNDO DE I", "CRAA11", "SPARTA"],
+                  industries=["agri-funds"], source="curated", table=t)
+    _polluted(t)
+    found = {(m["holder"], m["key"], m["target"])
+             for m in er.find_misheld_aliases(er._scan_type(t, "entity"))}
+    assert ("icdi11", "ITAU", "itau") in found
+    assert ("craa11", "SPARTA", "sparta") in found
+    assert not {f for f in found if f[0] == "craa11" and f[1] != "SPARTA"}

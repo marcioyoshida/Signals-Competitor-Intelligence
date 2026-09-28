@@ -1286,6 +1286,7 @@ def strip_aliases(
 #: ("ITAÚ ICDI11"), so discovery handed it the manager's bare brand as an alias.
 _VEHICLE_INDUSTRIES = frozenset({"agri-funds", "real-estate-funds"})
 _LEGAL_SUFFIX = re.compile(r"(?:\s+(?:LTDA|S A|SA|ME|EIRELI))+$")
+_FUND_WORDS = re.compile(r"\b(?:FUNDO|FII|FIAGRO|FIDC|FIP)\b")
 
 
 def _is_vehicle(ent: dict[str, Any]) -> bool:
@@ -1305,23 +1306,35 @@ def find_misheld_aliases(entities: Iterable[dict[str, Any]]) -> list[dict[str, A
     (display name, id or alias): the manager/bank brand a fund was named after. Returns
     ``{holder, key, forms, target}`` per (fund, name); ticker forms are never flagged."""
     ents = [e for e in entities if e.get("entity_id")]
-    owners: dict[str, str] = {}
+    cands: dict[str, list[dict[str, Any]]] = {}
     for e in ents:
         if _is_vehicle(e):
             continue
-        for v in [e.get("display_name"), e["entity_id"], *(e.get("aliases") or [])]:
-            k = _name_key(v)
+        for k in {_name_key(v) for v in [e.get("display_name"), e["entity_id"],
+                                          *(e.get("aliases") or [])]}:
             if len(k) >= 2:
-                owners.setdefault(k, e["entity_id"])
+                cands.setdefault(k, []).append(e)
+
+    def own_name(e: dict[str, Any], k: str) -> bool:
+        return k in (_name_key(e.get("display_name")), _name_key(e["entity_id"]))
+
+    # Several entities can share a name (itau, itau-consorcio): the key belongs to the
+    # top-level one: no parent, then curated, then the one whose own name it is.
+    owners = {k: min(es, key=lambda e: (bool(e.get("parent")), e.get("confidence") != "curated",
+                                        not own_name(e, k), e["entity_id"]))["entity_id"]
+              for k, es in cands.items()}
     out: list[dict[str, Any]] = []
     for e in ents:
         if not _is_vehicle(e):
             continue
         by_key: dict[str, list[str]] = {}
         for f in e.get("alias_forms") or e.get("aliases") or []:
-            if str(f).upper().startswith("TICKER:"):
-                continue
             k = _name_key(f)
+            # the fund's own ticker or legal name is ITS identity, even when an institution
+            # wrongly carries it too (that is the reverse, #52, pollution)
+            if str(f).upper().startswith("TICKER:") or _TICKER_ALIAS.match(k) \
+                    or _FUND_WORDS.search(k):
+                continue
             if owners.get(k) not in (None, e["entity_id"]):
                 by_key.setdefault(k, []).append(str(f))
         out.extend({"holder": e["entity_id"], "key": k, "forms": fs, "target": owners[k]}
