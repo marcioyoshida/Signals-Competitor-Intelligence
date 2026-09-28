@@ -72,6 +72,14 @@ python scripts/provision_tenant.py put <tenant-id> saas <module1> <module2> \
   modules=[...]` followed by `OK  cognito  <email>  created  tenant=<tenant-id>
   tier=saas`.
 
+## 3b. Offer the precedent-sharing annex (DEC-7, #100)
+
+Offer the opt-in annex [docs/trust/precedent-sharing-annex.md](trust/precedent-sharing-annex.md)
+with the contract. It's optional and off by default, with **contribute** and **consume** as
+separate choices. Record the answer in the onboarding notes. Nothing is shared until the pool's
+activation gate opens (≥5 opted-in institutions; ADR DEC-7 §6), so asking now costs the buyer
+nothing, and it is what makes that gate reachable.
+
 ## 4. First login at `/exec`
 
 - Have the buyer complete the Cognito invite-email flow (set password) and log in

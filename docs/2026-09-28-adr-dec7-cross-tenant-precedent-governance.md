@@ -1,7 +1,8 @@
 # ADR — DEC-7: cross-tenant anonymized precedent: consent and governance (#100)
 
-- **Status:** Proposed (2026-09-28). Nothing is built. This ADR is the prerequisite #100 names:
-  "consent/governance design first". Every decision below is the owner's to accept.
+- **Status:** **Accepted** (owner, 2026-09-28): §7 (a)–(d) as proposed. Building remains gated on §6 (data), not on design.
+  This ADR is the "consent/governance design first" that #100 names. Proposed 2026-09-28. The contract clause is
+  `docs/trust/precedent-sharing-annex.md`.
 - **Extends:** ADR-021 §F (the decision corpus: "tenant experience is isolated by default ... with
   cross-tenant learning only on explicit, anonymised opt-in"), DEC-1..DEC-6 (#94–#99, closed),
   ADR 015/016 (telemetry is the axis: Portal on, Marketplace/Sovereign **off**), ADR-018 (governance).
