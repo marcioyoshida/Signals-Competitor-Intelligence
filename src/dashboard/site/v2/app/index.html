@@ -126,7 +126,7 @@
     Ctx.renderAuthBox("authBox");
     const res = await Ctx.loadScopedFeed({});
     if (res.needAuth) { Ctx.mountGate(dash, "needAuth", "seu painel"); return; }
-    if (res.noAccess) { Ctx.mountGate(dash, "noAccess", "seu painel"); return; }
+    if (res.noAccess) { Ctx.mountGate(dash, "noAccess", "seu painel", res); return; }
     if (res.error) { Ctx.mountGate(dash, res.error, "seu painel"); return; }
     window.DATA = res.data; Ctx.setData(window.DATA); Ctx.setAsOf(window.DATA);
     LICENSED = Ind.licensedIndustries(window.DATA);
