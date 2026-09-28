@@ -742,3 +742,14 @@ def test_a_bare_livestream_title_is_never_a_dated_change():
     m = {"source": "youtube", "title": "Ao vivo: Nubank lança Pix parcelado no crédito"}
     cr.apply_result(m, {"relevant": True, "event": "launch", "is_new_change": True, "pt_br": True})
     assert m["is_new_change"] is True
+
+
+def test_digest_drops_an_english_reason_already_stored():
+    radar = {"events": [{"type": "complaint", "type_label": "reclamação", "product_label": "C6 Bank",
+                         "date": "2026-09-27", "title": "irregularidades em contratos",
+                         "reason": "C6 Bank suspended by INSS", "url": "https://youtu.be/x"},
+                        {"type": "feature", "type_label": "funcionalidade", "product_label": "Bradesco",
+                         "date": "2026-09-25", "title": "b.ia evoluindo", "reason": "b.ia's evolution"}]}
+    lines = cr.render_weekly_digest(radar, as_of="2026-09-28")["lines"]
+    assert "suspended" not in " ".join(lines) and "evolution" not in " ".join(lines)
+    assert any("irregularidades em contratos (https://youtu.be/x)" in l for l in lines)

@@ -512,7 +512,8 @@ def build_prompt(s: dict[str, Any], batch: list[dict[str, Any]]) -> str:
 # Nova Lite sometimes answers "why" in English despite the prompt (live 2026-09-27: "Mercado Pago
 # is live.", "Card approval and high initial limit."). The digest goes to a Brazilian CPO.
 _EN_WORDS = frozenset("the is are and of with for about this new live improvements approval "
-                      "announcement users many".split())
+                      "announcement users many by has have was its s update updates launches "
+                      "evolution suspended banned card offers".split())
 _PT_WORDS = frozenset("de da do das dos com para no na em que um uma os as ao pelo pela nova novo "
                       "sobre".split())
 # A generic "<brand> está ao vivo" livestream title reports nothing dated.
@@ -722,7 +723,9 @@ def cluster_to_event(subject: dict[str, Any], group: list[dict[str, Any]]) -> di
         "entity": (subject.get("onca_entities") or [None])[0],
         "source": "youtube", "type": etype, "type_label": TYPE_LABEL.get(etype, etype),
         "date": dates[0], "last_seen": dates[-1], "title": str(title)[:120],
-        "reason": lead.get("why") or lead.get("title"),
+        # a mention scored before the English guard can still carry an English "why"
+        "reason": (lead.get("why") if not _looks_english(lead.get("why") or "") else "")
+                  or lead.get("title"),
         "confidence": confidence, "official": official, "n_sources": len(group), "n_channels": n_ch,
         "url": lead.get("url"),
         "sources": [{"url": m.get("url"), "title": m.get("title"), "channel": m.get("channel"),
@@ -1155,7 +1158,9 @@ def render_weekly_digest(radar: dict[str, Any] | None, *, as_of: str | None = No
     order = {"outage": 0, "complaint": 1, "price": 2, "launch": 3, "feature": 4}
     evs = sorted(evs, key=lambda e: (order.get(e.get("type"), 9), str(e.get("date") or "")))
     lines = [f"[{e.get('type_label') or e.get('type')}] {e.get('product_label')} — {e.get('date')}: "
-             f"{e.get('title')} — {e.get('reason')}" + (f" ({e['url']})" if e.get("url") else "")
+             f"{e.get('title')}"
+             + ("" if _looks_english(e.get("reason") or "") else f" — {e.get('reason')}")
+             + (f" ({e['url']})" if e.get("url") else "")
              for e in evs[:limit]]
     text = f"Radar de produto do CPO — {start} a {end}\n{headline}\n" + "\n".join(f"- {l}" for l in lines)
     return {"title": "Radar de produto semanal do CPO", "headline": headline, "period": [start, end],
