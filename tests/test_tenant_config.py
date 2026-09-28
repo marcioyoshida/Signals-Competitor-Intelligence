@@ -231,25 +231,73 @@ def test_map_federated_email_rejects_blank_email():
         tc.map_federated_email("   ", "acme", "saas", table=t)
 
 
-def test_self_register_entry_tenant_creates_scoped_tenant_and_federated_mapping():
+def test_self_register_starts_a_14_day_trial_of_one_sector_and_maps_the_email():
     t, ft = _FakeTable(), _FakeFederatedTable()
     cfg = tc.self_register_entry_tenant(
-        "New.User@Example.com", ["Crypto", "betting", "not-a-real-industry"],
-        table=t, federated_table=ft)
-    assert cfg["tier"] == "entry"
-    assert cfg["modules"] == ["betting", "crypto"]  # unknown industry silently dropped
+        "New.User@Example.com", ["Crypto", "not-a-real-industry"], table=t, federated_table=ft)
+    assert cfg["tier"] == "entry" and cfg["modules"] == ["crypto"]  # unknown dropped
     assert cfg["tenant_id"].startswith("entry-new-user-")
-    assert t.items[cfg["tenant_id"]] == cfg
+    assert cfg["billing"]["state"] == "trial"
+    live = tc.get_tenant_config(cfg["tenant_id"], table=t)
+    assert live["modules"] == ["crypto"] and live["billing"]["state"] == "trial"
+    assert t.items[cfg["tenant_id"]]["modules"] == []  # entitlement comes from the trial only
     assert ft.items["new.user@example.com"] == {
         "email": "new.user@example.com", "tenant_id": cfg["tenant_id"], "tier": "entry"}
 
 
-def test_self_register_entry_tenant_rejects_no_valid_industries():
+def test_self_register_requires_exactly_one_entry_sector():
     t, ft = _FakeTable(), _FakeFederatedTable()
-    with pytest.raises(ValueError, match="pick at least one"):
-        tc.self_register_entry_tenant("a@b.com", ["banking"], table=t, federated_table=ft)
-    with pytest.raises(ValueError, match="pick at least one"):
-        tc.self_register_entry_tenant("a@b.com", [], table=t, federated_table=ft)
+    for picks in (["banking"], [], ["crypto", "betting"]):
+        with pytest.raises(ValueError, match="exactly one"):
+            tc.self_register_entry_tenant("a@b.com", picks, table=t, federated_table=ft)
+
+
+def _at(days):
+    import datetime as dt
+    return dt.datetime(2026, 10, 1, tzinfo=dt.timezone.utc) + dt.timedelta(days=days)
+
+
+def test_trial_expires_then_a_purchase_restores_then_a_lapse_removes():
+    item = {"tenant_id": "e1", "tier": "entry", "modules": [], "billing_managed": True,
+            "trial_until": _at(14).isoformat(), "trial_modules": ["crypto"]}
+    assert tc.effective_entitlement(item, _at(13))["modules"] == ["crypto"]
+    gone = tc.effective_entitlement(item, _at(15))
+    assert gone["modules"] == [] and gone["billing"]["state"] == "trial_expired"
+    t = _FakeTable(); t.items["e1"] = dict(item)
+    tc.apply_purchase("e1", "entry", "crypto", "grant", event_id="evt_1", table=t)
+    paid = tc.effective_entitlement(t.items["e1"], _at(30))
+    assert paid["modules"] == ["crypto"] and paid["tier"] == "entry"
+    assert paid["billing"]["state"] == "active"
+    tc.apply_purchase("e1", "saas_premium", "banking", "grant", event_id="evt_2", table=t)
+    up = tc.effective_entitlement(t.items["e1"], _at(30))
+    assert up["tier"] == "saas" and up["modules"] == ["banking", "crypto"]
+    tc.apply_purchase("e1", "saas_premium", "banking", "revoke", event_id="evt_3", table=t)
+    tc.apply_purchase("e1", "entry", "crypto", "revoke", event_id="evt_4", table=t)
+    end = tc.effective_entitlement(t.items["e1"], _at(30))
+    assert end["modules"] == [] and end["billing"]["state"] == "lapsed"
+
+
+def test_a_band_only_covers_its_own_modules():
+    assert tc.module_allowed("saas_premium", "banking")
+    assert not tc.module_allowed("saas_entry", "banking")      # never banking at the 2.900 price
+    assert not tc.module_allowed("entry", "insurance")
+    assert not tc.module_allowed("saas_premium", "private-markets")  # not launch-ready (#119)
+    t = _FakeTable(); t.items["e1"] = {"tenant_id": "e1", "tier": "entry", "modules": []}
+    with pytest.raises(ValueError):
+        tc.apply_purchase("e1", "saas_entry", "banking", "grant", event_id="evt_x", table=t)
+    with pytest.raises(KeyError):
+        tc.apply_purchase("nope", "entry", "crypto", "grant", event_id="evt_y", table=t)
+
+
+def test_operator_tenants_are_unchanged_and_a_reput_keeps_paid_subscriptions():
+    t = _FakeTable()
+    tc.put_tenant_config("acme", "saas", ["insurance"], table=t)
+    cfg = tc.get_tenant_config("acme", table=t)
+    assert cfg["modules"] == ["insurance"] and cfg["billing"] is None
+    tc.apply_purchase("acme", "saas_mid", "acquiring", "grant", event_id="evt_5", table=t)
+    tc.put_tenant_config("acme", "saas", ["insurance", "banking"], table=t)  # operator edit
+    cfg = tc.get_tenant_config("acme", table=t)
+    assert cfg["modules"] == ["acquiring", "banking", "insurance"]
 
 
 def test_self_register_entry_tenant_rejects_blank_email():

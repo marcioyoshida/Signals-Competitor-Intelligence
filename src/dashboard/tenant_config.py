@@ -34,6 +34,77 @@ def allowed_industries_for_tier(tier: str) -> frozenset[str] | None:
 NOT_READY_INDUSTRIES = ("closed-pension", "securitization", "private-markets")
 
 
+# #187 (owner decisions 2026-09-28): Entry is PAID with a 14-day trial (self-registration
+# starts the trial); SaaS is sold per module, one storefront price per ADR 024 band. A
+# storefront-managed tenant's entitlement is DERIVED at read time from {trial window, paid
+# module subscriptions, operator base}, so an expired trial or a lapsed subscription takes
+# effect without a job. Operator-provisioned tenants (no `billing_managed`) are unchanged.
+TRIAL_DAYS = 14
+SAAS_BANDS = {  # ADR 024 SaaS price bands → the modules each band's price covers
+    "saas_premium": ("banking", "investment-banking", "private-markets"),
+    "saas_mid": ("insurance", "asset-management", "wealth-management",
+                 "financial-data-analytics", "acquiring", "agri-funds"),
+    "saas_entry": ("fintech", "advisory", "betting", "crypto", "consorcio", "real-estate-funds"),
+}
+STOREFRONT_TIERS = ("entry",) + tuple(SAAS_BANDS)
+
+
+def module_allowed(storefront_tier: str, module: str) -> bool:
+    """May a purchase at ``storefront_tier`` license ``module``? The buyer picks the module at
+    checkout, so the band's price must actually cover it (never banking at the 2.900 price)."""
+    module = str(module or "").strip().lower()
+    if module in NOT_READY_INDUSTRIES:
+        return False
+    if storefront_tier == "entry":
+        return module in ENTRY_INDUSTRIES
+    return module in SAAS_BANDS.get(storefront_tier, ())
+
+
+def _now() -> "Any":
+    import datetime as _dt
+    return _dt.datetime.now(_dt.timezone.utc)
+
+
+def effective_entitlement(item: dict[str, Any], now: Any = None) -> dict[str, Any]:
+    """Pure: the tier/modules a storefront-managed tenant holds at ``now``, plus a ``billing``
+    summary for the UI. Base (operator) modules always count; a paid module counts while its
+    subscription is active; trial modules count until ``trial_until``. Fails closed: a trial
+    date that doesn't parse has ended."""
+    import datetime as _dt
+
+    now = now or _now()
+    base = [str(m).strip().lower() for m in (item.get("modules") or []) if str(m).strip()]
+    subs = item.get("subs") or {}
+    active = {m: s for m, s in subs.items() if (s or {}).get("status") == "active"}
+    trial_until = str(item.get("trial_until") or "")
+    try:
+        trial_on = bool(trial_until) and now < _dt.datetime.fromisoformat(trial_until)
+    except ValueError:
+        trial_on = False
+    trial_mods = [str(m) for m in (item.get("trial_modules") or [])] if trial_on else []
+    mods = sorted(set(base) | set(active) | set(trial_mods))
+    base_tier = str(item.get("tier") or "entry")
+    tier = ("saas" if any((s or {}).get("tier") == "saas" for s in active.values())
+            and base_tier == "entry" else base_tier)
+    if active:
+        state = "active"
+    elif trial_on:
+        state = "trial"
+    elif subs:
+        state = "lapsed"
+    elif trial_until:
+        state = "trial_expired"
+    else:
+        state = "none"
+    return {"tier": tier, "modules": mods,
+            "billing": {"state": state, "trial_until": trial_until or None,
+                        "trial_modules": [str(m) for m in (item.get("trial_modules") or [])],
+                        "paid_modules": sorted(active), "base_modules": sorted(base),
+                        "lapsed_modules": sorted(m for m, s in subs.items()
+                                                 if (s or {}).get("status") != "active"),
+                        "bands": {m: (s or {}).get("band") for m, s in subs.items()}}}
+
+
 def _table(table: Any | None = None) -> Any:
     if table is not None:
         return table
@@ -55,14 +126,20 @@ def get_tenant_config(tenant_id: str | None, *, table: Any | None = None) -> dic
     if not item:
         return None
     tier = str(item.get("tier") or "saas")
+    modules = [str(m).strip().lower() for m in (item.get("modules") or []) if str(m).strip()]
+    billing = None
+    if item.get("billing_managed"):  # #187: trial window + paid modules, derived now
+        eff = effective_entitlement(item)
+        tier, modules, billing = eff["tier"], eff["modules"], eff["billing"]
     return {
         "tenant_id": str(tenant_id),
         "tier": tier,
-        "modules": [str(m).strip().lower() for m in (item.get("modules") or []) if str(m).strip()],
+        "modules": modules,
+        "billing": billing,
         # ADR 016 delivery plane: portal (Entry static) | saas (shared multi-tenant) |
         # marketplace (the SAME product in the tenant's own AWS account). tier-1 is SaaS
         # OR Marketplace — same per-tenant read boundary either way.
-        "plane": str(item.get("plane") or _default_plane(tier)),
+        "plane": str(item.get("plane") or _default_plane(str(item.get("tier") or "saas"))),
         # ADR 016 addendum Decision 3: the IAM role ARN this marketplace-plane
         # tenant's synth Lambda calls POST /resolve as — the trust-policy
         # artifact exchanged during onboarding (infra/tenant_stack.py's
@@ -131,8 +208,45 @@ def put_tenant_config(
     # this module already follows for optional fields.
     if resolve_caller_role_arn:
         item["resolve_caller_role_arn"] = str(resolve_caller_role_arn)
+    # #187: an operator re-put replaces the whole item. It must not wipe what the storefront
+    # manages (paid subscriptions, the trial), or a paying customer silently loses access.
+    try:
+        prior = _table(table).get_item(Key={"tenant_id": str(tenant_id)}).get("Item") or {}
+    except Exception:  # pragma: no cover - a read failure must not block provisioning
+        prior = {}
+    for k in _BILLING_FIELDS:
+        if k in prior and k not in item:
+            item[k] = prior[k]
     _table(table).put_item(Item=item)
     return dict(item)
+
+
+_BILLING_FIELDS = ("billing_managed", "subs", "trial_until", "trial_modules")
+
+
+def apply_purchase(tenant_id: str, storefront_tier: str, module: str, action: str, *,
+                   event_id: str, table: Any | None = None) -> dict[str, Any]:
+    """Grant or revoke ONE paid module subscription on an existing tenant (#187, called by the
+    storefront dispatch via ``src.dashboard.upgrade``). ``action`` is "grant" or "revoke". A
+    revoke marks the module lapsed rather than deleting it (history stays; re-buying restores).
+    Raises KeyError for an unknown tenant, ValueError for a module the tier doesn't cover."""
+    if action not in ("grant", "revoke"):
+        raise ValueError("action must be grant or revoke")
+    if storefront_tier not in STOREFRONT_TIERS or not module_allowed(storefront_tier, module):
+        raise ValueError(f"{storefront_tier!r} does not cover module {module!r}")
+    t = _table(table)
+    item = t.get_item(Key={"tenant_id": str(tenant_id)}).get("Item")
+    if not item or str(tenant_id).startswith("BILLING#"):
+        raise KeyError("no such tenant")
+    module = str(module).strip().lower()
+    subs = dict(item.get("subs") or {})
+    subs[module] = {"tier": "entry" if storefront_tier == "entry" else "saas",
+                    "band": storefront_tier, "status": "active" if action == "grant" else "lapsed",
+                    "event_id": str(event_id), "updated_at": _now().isoformat(timespec="seconds")}
+    item["subs"] = subs
+    item["billing_managed"] = True
+    t.put_item(Item=item)
+    return effective_entitlement(item)
 
 
 def cognito_upsert_user(
@@ -239,16 +353,15 @@ def self_register_entry_tenant(
     email: str, industries: list[str], *, table: Any | None = None,
     federated_table: Any | None = None,
 ) -> dict[str, Any]:
-    """Lazy self-registration for a first-time Google login: the ONE write path
-    where an UNPROVISIONED identity creates its own tenant, scoped to entry-tier
-    industries it explicitly picks. Everything else in this Google OAuth port
-    (`lambda_pretoken.py`, `map_federated_email`) only ever RESOLVES a mapping an
-    operator already created — this is deliberately the one exception, and it
-    still cannot escalate past the entry tier: `put_tenant_config`'s own
-    `allowed_industries_for_tier` allow-list rejects anything outside
-    `ENTRY_INDUSTRIES` server-side regardless of what the caller sends, and the
-    tenant_id is freshly allocated here, never caller-supplied, so this can't be
-    used to attach to (or overwrite) an existing tenant."""
+    """Lazy self-registration for a first-time Google login: the ONE write path where an
+    UNPROVISIONED identity creates its own tenant. #187 (owner, 2026-09-28): Entry is paid, so
+    this starts a **14-day trial** of exactly **one** entry-tier sector (ADR 024: Entry is one
+    vertical per tenant); after the trial, access needs an Entry subscription bought on the
+    storefront (`apply_purchase`). It still cannot escalate past the entry tier: the pick is
+    checked against `ENTRY_INDUSTRIES` server-side, and the tenant_id is freshly allocated,
+    never caller-supplied, so this can't attach to (or overwrite) an existing tenant."""
+    import datetime as _dt
+
     email = (email or "").strip().lower()
     if not email:
         raise ValueError("email is required")
@@ -256,12 +369,16 @@ def self_register_entry_tenant(
         str(i).strip().lower() for i in (industries or [])
         if str(i).strip().lower() in ENTRY_INDUSTRIES
     })
-    if not picked:
-        raise ValueError(f"pick at least one entry-tier industry: {sorted(ENTRY_INDUSTRIES)}")
+    if len(picked) != 1:
+        raise ValueError(f"pick exactly one entry-tier sector: {sorted(ENTRY_INDUSTRIES)}")
     tenant_id = _allocate_entry_tenant_id(email, table=table)
-    cfg = put_tenant_config(tenant_id, "entry", picked, table=table)
+    until = (_now() + _dt.timedelta(days=TRIAL_DAYS)).isoformat(timespec="seconds")
+    item = {"tenant_id": tenant_id, "tier": "entry", "modules": [], "plane": "portal",
+            "billing_managed": True, "trial_until": until, "trial_modules": picked}
+    _table(table).put_item(Item=item)
     map_federated_email(email, tenant_id, "entry", table=federated_table)
-    return cfg
+    return {"tenant_id": tenant_id, "tier": "entry", "modules": picked, "plane": "portal",
+            "billing": effective_entitlement(item)["billing"]}
 
 
 def cognito_grant_industry_group(

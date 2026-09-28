@@ -2768,59 +2768,10 @@ class OncaPrototypeStack(Stack):
                 authorizer=jwt_authorizer,
             )
 
-            # E1 (#115): Stripe checkout webhook — the PAID counterpart of the lazy
-            # self-registration above. Same `if google_idp:` block on purpose: the payer
-            # logs in with Google, and entitling someone who then has no way to sign in
-            # is worse than having no funnel at all.
-            #
-            # Routed through the HTTP API (auth_api) WITHOUT an authorizer, not through
-            # a CloudFront/function-URL behavior like the other dashboard endpoints.
-            # Two reasons, both load-bearing:
-            #  - Stripe cannot present basic auth or a Cognito JWT, so the webhook
-            #    SIGNATURE is the authentication. billing_webhook.verify_signature is
-            #    fail-closed: an unset ONCA_STRIPE_WEBHOOK_SECRET rejects everything
-            #    rather than waving it through. Same pattern as /api/v1/agent/ask,
-            #    which also carries its own in-code credential check.
-            #  - A bodied POST through the CloudFront -> function-URL OAC path requires
-            #    the VIEWER to send the SHA-256 of the body in `x-amz-content-sha256`:
-            #    Lambda function URLs reject UNSIGNED-PAYLOAD and CloudFront will not
-            #    hash the body for us (AWS documents this explicitly). Our own clients
-            #    do it in `oacFetch`; Stripe never will, because that header is an AWS
-            #    signing detail no webhook sender knows about. Measured live 2026-09-21:
-            #    without the header a bodied POST dies at the function URL's SigV4 layer
-            #    ("signature we calculated does not match"); with it, the same POST
-            #    reaches the handler. So the function-URL route was never viable here.
-            #
-            # ONCA_BILLING_PRICES maps price_id -> {tier, modules} SERVER-SIDE, so the
-            # buyer never chooses their own entitlement; put_tenant_config's entry-tier
-            # allow-list is an independent second check. Both default EMPTY: the Stripe
-            # rails are still in TEST mode, so supplying them is the go-live switch and
-            # belongs with the live keys, not in this repo.
-            billing_fn = lambda_.Function(
-                self,
-                "OncaBillingWebhook",
-                runtime=LAMBDA_RUNTIME,
-                handler="src.dashboard.billing_webhook.lambda_handler",
-                code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
-                timeout=Duration.seconds(30),
-                memory_size=256,
-                environment={
-                    "PYTHONPATH": "/var/task",
-                    "ONCA_TENANT_CONFIG_TABLE": tenant_config_table.table_name,
-                    "ONCA_FEDERATED_MAP_TABLE": federated_map_table.table_name,
-                    "ONCA_BILLING_PRICES": os.environ.get("ONCA_BILLING_PRICES", "{}"),
-                    "ONCA_STRIPE_WEBHOOK_SECRET": os.environ.get(
-                        "ONCA_STRIPE_WEBHOOK_SECRET", ""),
-                },
-            )
-            tenant_config_table.grant_read_write_data(billing_fn)
-            federated_map_table.grant_write_data(billing_fn)
-            auth_api.add_routes(
-                path="/api/billing/stripe",
-                methods=[apigwv2.HttpMethod.POST],
-                integration=apigwv2_int.HttpLambdaIntegration(
-                    "BillingWebhookInteg", billing_fn),
-            )
+            # #187 (owner, 2026-09-28): Onça's own Stripe webhook (/api/billing/stripe, E1 #115)
+            # is RETIRED in favour of the storefront's shared dispatch contract: the storefront
+            # webhook verifies Stripe and invokes OncaUpgrade (below, next to the alarms). One
+            # webhook for every product means one purchase can never provision twice.
 
         # E3 (#155): the public contact channel — `contato@onssa.org` — so the
         # pricing/sample pages never have to show a personal inbox as the company's
@@ -3663,6 +3614,37 @@ class OncaPrototypeStack(Stack):
             iam.PolicyStatement(actions=["ses:SendEmail", "ses:SendRawEmail"], resources=["*"])
         )
         alerts_topic.add_subscription(sns_subs.LambdaSubscription(alert_fn))
+
+        # #187: the storefront dispatch target (Signals-Storefront #7 contract, as Tarantula's
+        # TarantulaUpgrade). Invoked async over IAM by the storefront webhook's role ONLY; a paid
+        # purchase that can't attach to a tenant raises, and the error alarm pages.
+        upgrade_fn = lambda_.Function(
+            self, "OncaUpgrade",
+            runtime=LAMBDA_RUNTIME,
+            handler="src.dashboard.upgrade.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.seconds(30),
+            memory_size=256,
+            reserved_concurrent_executions=2,
+            environment={"PYTHONPATH": "/var/task",
+                         "ONCA_TENANT_CONFIG_TABLE": tenant_config_table.table_name},
+        )
+        tenant_config_table.grant_read_write_data(upgrade_fn)
+        storefront_role = self.node.try_get_context("storefrontWebhookRoleArn") or (
+            "arn:aws:iam::668449743071:role/StorefrontStack-WebhookFnServiceRole261427C9-ArSkDimPkmHr")
+        upgrade_fn.add_permission(
+            "StorefrontWebhookInvoke", principal=iam.ArnPrincipal(storefront_role),
+            action="lambda:InvokeFunction")
+        cloudwatch.Alarm(
+            self, "OncaUpgradeErrorAlarm",
+            alarm_description="A storefront purchase failed to apply to an Onça tenant (#187): "
+                              "paid but not provisioned. See the OncaUpgrade log.",
+            metric=upgrade_fn.metric_errors(period=Duration.minutes(5), statistic="Sum"),
+            threshold=1, evaluation_periods=1,
+            comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+            treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
+        ).add_alarm_action(cw_actions.SnsAction(alerts_topic))
+        CfnOutput(self, "UpgradeFunctionName", value=upgrade_fn.function_name)
 
         # Pipeline health: CDK's built-in State Machine metrics. `evaluation_periods=1` over a
         # 1-day period means ANY failed/timed-out execution in a day fires once — this is a

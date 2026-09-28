@@ -271,7 +271,10 @@
       const r = await fetch("/api/feed", { cache: "no-store",
         headers: { authorization: `Bearer ${getIdToken()}` } });
       if (r.status === 401) { try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) {} return { needAuth: true }; }
-      if (r.status === 403) return { noAccess: true };
+      if (r.status === 403) {
+        const j = await r.json().catch(() => ({}));
+        return { noAccess: true, billing: j.billing || null, upgrade: j.upgrade || null };
+      }
       if (!r.ok) return { error: "feed indisponível (HTTP " + r.status + ")" };
       const data = await r.json();
       writeUserFeed(data);
@@ -344,8 +347,50 @@
     await login("Google");
   }
 
+  /* ---- #187 upgrade path -------------------------------------------------------
+     Entry is a paid plan with a 14-day trial; SaaS is sold per module (ADR 024 bands). A CTA
+     links to the storefront ONLY when the server says the storefront can fulfil it
+     (`upgrade.live`, ONCA_UPGRADE_LIVE on /api/feed) — before that a checkout can't attach to
+     the tenant and the customer would pay for nothing, so the CTA is a contact e-mail instead.
+     `ref` is the opaque tenant id from the token, never an e-mail. */
+  const SAAS_BANDS = {
+    saas_premium: ["banking", "investment-banking"],
+    saas_mid: ["insurance", "asset-management", "wealth-management", "financial-data-analytics",
+               "acquiring", "agri-funds"],
+    saas_entry: ["fintech", "advisory", "betting", "crypto", "consorcio", "real-estate-funds"],
+  };
+  function bandOf(module) {
+    return Object.keys(SAAS_BANDS).find((b) => SAAS_BANDS[b].indexOf(module) >= 0) || null;
+  }
+  function tenantRef() {
+    const p = decodeJwt(getIdToken()) || {};
+    return String(p["custom:tenant"] || "");
+  }
+  function upgradeHref(tier, module, upgrade, ref) {
+    ref = ref || tenantRef();
+    const ok = upgrade && upgrade.live && /^[A-Za-z0-9_-]{1,64}$/.test(ref) && module
+      && (tier === "entry" ? ENTRY_INDUSTRIES.indexOf(module) >= 0 : (SAAS_BANDS[tier] || []).indexOf(module) >= 0);
+    if (!ok) {
+      const subj = `Assinar Onça — ${tier === "entry" ? "Entry" : "SaaS"}${module ? " · " + indLabel(module) : ""}`;
+      return "mailto:contato@onssa.org?subject=" + encodeURIComponent(subj);
+    }
+    const q = new URLSearchParams({ product: "onca", tier, module, ref,
+      return: location.origin + "/exec?upgraded=1" });
+    return String(upgrade.storefront || "https://signals-llc.store").replace(/\/$/, "") + "/?" + q;
+  }
+  // "Teste grátis: N dias restantes · Assinar" — only for a storefront-managed tenant in trial.
+  function billingBannerHTML(data) {
+    const b = (data && data.billing) || null;
+    if (!b || b.state !== "trial" || !b.trial_until) return "";
+    const days = Math.max(0, Math.ceil((new Date(b.trial_until) - Date.now()) / 86400000));
+    const mod = (b.trial_modules || [])[0] || "";
+    return `<div class="trialbar" role="status"><span>Teste grátis: <b>${days}</b> ${days === 1 ? "dia restante" : "dias restantes"}
+      ${mod ? "· " + esc(indLabel(mod)) : ""}</span>
+      <a class="btn btn--primary btn--sm" href="${esc(upgradeHref("entry", mod, data.upgrade))}">Assinar Entry · R$ 490/mês</a></div>`;
+  }
+
   // A full-panel login/no-access gate (honest, never a silent empty grid).
-  function gateHTML(kind, ctxLabel) {
+  function gateHTML(kind, ctxLabel, res) {
     if (kind === "needAuth") {
       return `<div class="empty"><div class="em-ico" aria-hidden="true">◐</div>
         <div class="em-t">Entre para ver ${esc(ctxLabel)}</div>
@@ -353,16 +398,32 @@
         <div style="margin-top:var(--s3)"><button class="btn btn--primary" id="__gateLogin">Entrar</button></div></div>`;
     }
     if (kind === "noAccess") {
+      const bill = (res && res.billing) || null;
+      if (bill && (bill.state === "trial_expired" || bill.state === "lapsed")) {
+        const ended = bill.state === "trial_expired";
+        const mods = ended ? (bill.trial_modules || []) : (bill.lapsed_modules || []);
+        const ctas = (mods.length ? mods : [""]).map((m) => {
+          const band = (bill.bands || {})[m];
+          const tier = ended || !band ? "entry" : band;
+          return `<a class="btn btn--primary" href="${esc(upgradeHref(tier, m, res.upgrade))}">Assinar${m ? " " + esc(indLabel(m)) : ""}</a>`;
+        }).join(" ");
+        return `<div class="empty"><div class="em-ico" aria-hidden="true">◐</div>
+          <div class="em-t">${ended ? "Seu teste grátis terminou" : "Sua assinatura não está ativa"}</div>
+          <div class="em-d">${ended ? "Os 14 dias de teste acabaram." : "O pagamento da assinatura foi encerrado."}
+            Assine para voltar a ver ${esc(ctxLabel)}. Nada do seu histórico foi apagado.</div>
+          <div style="margin-top:var(--s3)">${ctas}</div>
+          <div class="em-d" style="margin-top:var(--s2)"><a href="/pricing.html">Ver planos</a></div></div>`;
+      }
       if (isFederated()) {
         return `<div class="empty"><div class="em-ico" aria-hidden="true">◐</div>
-          <div class="em-t">Complete seu cadastro</div>
-          <div class="em-d">Sua conta Google ainda não está vinculada a um plano. Escolha os
-            setores que quer acompanhar (tier de entrada) para liberar o acesso — sem custo.</div>
+          <div class="em-t">Comece seu teste grátis de 14 dias</div>
+          <div class="em-d">Sua conta Google ainda não está vinculada a um plano. Escolha o setor que
+            quer acompanhar no plano Entry (R$ 490/mês depois do teste, um setor). Não pedimos cartão agora.</div>
           <form id="__regForm" style="margin-top:var(--s3);text-align:left;max-width:340px;margin-inline:auto">
             ${ENTRY_INDUSTRIES.map((s) => `<label class="cvsub" style="display:block;margin:6px 0">
-              <input type="checkbox" name="ind" value="${esc(s)}"> ${esc(indLabel(s))}</label>`).join("")}
+              <input type="radio" name="ind" value="${esc(s)}"> ${esc(indLabel(s))}</label>`).join("")}
             <div id="__regErr" class="badge badge--crit" style="display:none;margin-top:var(--s2)"></div>
-            <button type="submit" class="btn btn--primary" style="margin-top:var(--s3)">Ativar acesso</button>
+            <button type="submit" class="btn btn--primary" style="margin-top:var(--s3)">Começar teste grátis</button>
           </form></div>`;
       }
       return `<div class="empty"><div class="em-ico" aria-hidden="true">⦸</div>
@@ -372,8 +433,8 @@
     }
     return U.empty("Feed indisponível", kind || "Não foi possível carregar o feed.", "!");
   }
-  function mountGate(el, kind, ctxLabel) {
-    el.innerHTML = gateHTML(kind, ctxLabel);
+  function mountGate(el, kind, ctxLabel, res) {
+    el.innerHTML = gateHTML(kind, ctxLabel, res);
     const b = el.querySelector("#__gateLogin");
     if (b) b.onclick = login;
     const f = el.querySelector("#__regForm");
@@ -382,12 +443,12 @@
       const picked = Array.from(f.querySelectorAll('input[name="ind"]:checked')).map((i) => i.value);
       const err = f.querySelector("#__regErr");
       const btn = f.querySelector('button[type="submit"]');
-      if (!picked.length) { err.textContent = "Escolha ao menos um setor."; err.style.display = ""; return; }
+      if (picked.length !== 1) { err.textContent = "Escolha um setor."; err.style.display = ""; return; }
       err.style.display = "none"; btn.disabled = true; btn.textContent = "Ativando…";
       try { await completeRegistration(picked); }
       catch (ex) {
         err.textContent = ex.message || "Falha ao registrar.";
-        err.style.display = ""; btn.disabled = false; btn.textContent = "Ativar acesso";
+        err.style.display = ""; btn.disabled = false; btn.textContent = "Começar teste grátis";
       }
     });
   }
@@ -1071,7 +1132,7 @@
       const first = leadEls()[0] || document.querySelector(".panel__bd");
       const res = await loadScopedFeed({});
       if (res.needAuth) { if (first) mountGate(first, "needAuth", cfg.ctxLabel); return; }
-      if (res.noAccess) { if (first) mountGate(first, "noAccess", cfg.ctxLabel); return; }
+      if (res.noAccess) { if (first) mountGate(first, "noAccess", cfg.ctxLabel, res); return; }
       if (res.error) { if (first) mountGate(first, res.error, cfg.ctxLabel); return; }
       global.DATA = res.data; setData(global.DATA); setAsOf(global.DATA);
       cfg.render(global.DATA);
@@ -1087,7 +1148,7 @@
     ensureSession, clearUserData, decodeJwt, readCachedFeed: readUserFeed,
     bootSaaS,
     // feed
-    loadScopedFeed, mountGate, setData,
+    loadScopedFeed, mountGate, setData, indLabel, upgradeHref, billingBannerHTML, bandOf, SAAS_BANDS,
     // drawer
     wireDrawer, openCard, closeDrawer,
     // panels

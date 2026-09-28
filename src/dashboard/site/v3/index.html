@@ -355,6 +355,8 @@
   body.is-offline .cap button, body.is-offline .traj-f button, body.is-offline .dconf .dok { pointer-events:none; opacity:.45; }
   .nonet { display:none; color:var(--warn); font-size:var(--fs-micro); font-weight:600; }
   body.is-offline .nonet { display:inline; }
+  .trialbar { display:flex; flex-wrap:wrap; gap:var(--s2); align-items:center; justify-content:space-between;
+    padding:var(--s2) var(--s4); background:var(--info-fill); border-bottom:1px solid var(--border); font-size:13px; }
   .offline-bar { background: var(--warn-fill); color: var(--warn); border-bottom: 1px solid var(--warn);
     padding: var(--s2) var(--s4); font-size: 13px; text-align: center; }
   [hidden] { display: none !important; }
@@ -375,6 +377,7 @@
 </header>
 
 <div class="offline-bar" id="offlineBar" role="status" hidden></div>
+<div id="trialBar" hidden></div>
 <main class="wrap">
   <div class="pagehead"><h1 id="pgTitle">Sala executiva</h1><p class="lede" id="pgLede"></p></div>
   <div id="macroStrip" class="macro-strip"></div>
@@ -656,7 +659,11 @@ async function loadFeed() {
   }
   const res = await Ctx.loadScopedFeed({});
   if (res.needAuth || res.noAccess || (res.error && !painted)) {
-    Ctx.mountGate(document.getElementById("board"), res.error || (res.needAuth ? "needAuth" : "noAccess"), "seu painel executivo");
+    Ctx.mountGate(document.getElementById("board"), res.error || (res.needAuth ? "needAuth" : "noAccess"), "seu painel executivo", res);
+    // #187: no entitlement (e.g. a trial that ended) is a paywall, not a half-live page. Hide the
+    // surfaces that a warm cached paint may have filled (ask, macro strip, recommended actions).
+    if (res.noAccess) ["askPanel", "macroStrip", "recsBand"].forEach((id) => {
+      const el = document.getElementById(id); if (el) el.hidden = true; });
     return;
   }
   if (res.error) { OFFLINE = true; STALE = false; boot(); return; }   // keep the painted copy, flagged
@@ -667,6 +674,21 @@ async function loadFeed() {
 }
 let STALE = false, BOOTED = false, QUOTES_TIMER = null, SESSION_LOGGED = false;
 let OFFLINE = false;
+// #187: /exec?assinar=<module> (from /pricing.html) — confirm the SaaS module and its price,
+// then hand off to the storefront (or the contact e-mail while the storefront can't fulfil yet).
+const BAND_PRICE = { saas_premium: "8.900", saas_mid: "4.900", saas_entry: "2.900" };
+function assinarHTML(D) {
+  const m = new URLSearchParams(location.search).get("assinar") || "";
+  const band = Ctx.bandOf(m);
+  if (!band) return "";
+  const label = U.esc(Ctx.indLabel(m));
+  const have = D.scoped_modules || [];
+  if (have.indexOf(m) >= 0)
+    return `<div class="trialbar" role="status"><span>Seu plano já inclui <b>${label}</b>.</span></div>`;
+  return `<div class="trialbar" role="status"><span>Assinar o módulo <b>${label}</b> — R$ ${BAND_PRICE[band]}/mês</span>
+    <a class="btn btn--primary btn--sm" href="${U.esc(Ctx.upgradeHref(band, m, D.upgrade))}">${D.upgrade && D.upgrade.live ? "Continuar para pagamento" : "Falar com a Onça para assinar"}</a></div>`;
+}
+
 // #162: an offline render is the LAST feed this user loaded — say so, visibly.
 window.addEventListener("online", () => { if (OFFLINE) location.reload(); });
 
@@ -676,6 +698,9 @@ function boot() {
   document.getElementById("asof").textContent = DATA.as_of ? `dados de ${U.fmtDate(DATA.as_of)}${OFFLINE ? " · offline" : STALE ? " · atualizando…" : ""}` : "";
   const ob = document.getElementById("offlineBar");
   if (ob) { ob.hidden = !OFFLINE; ob.textContent = OFFLINE ? `Sem conexão — exibindo dados de ${DATA.as_of ? U.fmtDate(DATA.as_of) : "—"} · offline` : ""; }
+  // #187: a storefront tenant in its 14-day Entry trial sees the days left and how to subscribe
+  const tb = document.getElementById("trialBar");
+  if (tb) { const h = assinarHTML(DATA) || Ctx.billingBannerHTML(DATA); tb.innerHTML = h; tb.hidden = !h; }
   document.getElementById("macroStrip").innerHTML = macroStrip(DATA.macro);  // shared header
   if (!QUOTES_TIMER) QUOTES_TIMER = setInterval(() => { if (OFFICER === "cso" && VIEW === "painel") loadQuotes(); }, 60000);  // B3 quotes refresh
   const sel = document.getElementById("sectorSel");

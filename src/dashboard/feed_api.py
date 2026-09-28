@@ -25,6 +25,15 @@ def _resp(status: int, body: Any) -> dict[str, Any]:
     }
 
 
+def upgrade_info() -> dict[str, Any]:
+    """#187: may the dashboard send buyers to the storefront yet? OFF until Signals-Storefront
+    #6/#7/#8 ship: before that a checkout can't attach to the tenant, and the customer would pay
+    and get nothing. Flipping it is one env var (ONCA_UPGRADE_LIVE) on this Lambda."""
+    live = os.environ.get("ONCA_UPGRADE_LIVE", "false").lower() in ("1", "true", "yes")
+    return {"live": live,
+            "storefront": os.environ.get("ONCA_STOREFRONT_URL", "https://signals-llc.store")}
+
+
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     from src.dashboard.auth import identity_from_event, industry_groups
 
@@ -41,16 +50,19 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     tenant_id = identity.tenant
     tier = None
     modules: list[str] = []
+    billing = None
     if tenant_id:
         cfg = get_tenant_config(tenant_id)
         modules = list((cfg or {}).get("modules") or [])
         tier = (cfg or {}).get("tier")
+        billing = (cfg or {}).get("billing")  # #187: trial / paid / lapsed (storefront tenants)
     if not modules:
         groups = industry_groups(identity)
         if groups:
             modules, tenant_id, tier = groups, None, "group"
     if not modules:  # fail closed — unprovisioned / no entitlement ⇒ nothing
-        return _resp(403, {"error": "no entitlement", "tenant": identity.tenant})
+        return _resp(403, {"error": "no entitlement", "tenant": identity.tenant, "billing": billing,
+                           "upgrade": upgrade_info()})
 
     bucket = os.environ.get("ONCA_SITE_BUCKET")
     if not bucket:
@@ -64,6 +76,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         scoped = scope_feed_to_modules(json.loads(raw), modules)
         scoped["tenant"] = tenant_id
         scoped["tier"] = tier
+        scoped["billing"] = billing
+        scoped["upgrade"] = upgrade_info()
         return _resp(200, scoped)
     except Exception as exc:  # pragma: no cover - read-only, best-effort
         print(f"feed_api error: {exc}")

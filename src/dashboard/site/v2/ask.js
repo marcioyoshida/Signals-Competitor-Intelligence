@@ -198,7 +198,7 @@
           <span class="badge badge--ghost"><span class="g" aria-hidden="true">◐</span>plano SaaS</span>
           <span>O assistente fundamentado (resposta só com fonte citada, escopada à sua licença)
             faz parte do plano SaaS. No tier de entrada, explore os painéis de novos entrantes e
-            regulatório acima.</span>
+            regulatório acima. <a href="/pricing.html#saas">Fazer upgrade para o SaaS</a></span>
         </div>`;
       return;
     }
