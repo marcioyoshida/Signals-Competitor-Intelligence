@@ -45,12 +45,13 @@ The alias index `ALIAS#ITAU` points at the real-estate fund `icdi11` ("ITAÚ ICD
 | MCP ops tools (#182) | **Live**, not referenced by any listing |
 | Official MCP Registry, Smithery, Glama, PulseMCP, Claude directory, APIs.guru, Postman (#183) | **Kit ready** (`server.json`, legal pages, `docs/agent-discovery/listings.md`); submissions need the owner's logins |
 | Microsoft Copilot Studio (#184) | **Kit ready** (`docs/agent-discovery/copilot-studio.md` + connector spec); install needs an M365 test tenant |
-| AWS Marketplace (#185) | **Decision needed + blocked** — §6 |
+| AWS Marketplace (#185) | **Decided (a), 2026-09-28**: list the Sovereign in-account product; blocked on the legal entity. Kit: `docs/agent-discovery/aws-marketplace.md` |
 | Gemini Enterprise / A2A (#186) | **Live** card + endpoint; admin guide `docs/agent-discovery/gemini-enterprise.md`; Google Cloud Marketplace listing needs a partner account |
 
 ## 6. Open owner decisions
 
 1. **AWS Marketplace (#185) contradicts ADR 015/016 as written.** They define the Marketplace SKU as **Sovereign** — an in-account stack, telemetry off — and explicitly dropped "Marketplace as an orthogonal billing rail" over the shared Portal. An "AI agents & tools" SaaS listing whose product surface is the shared `/mcp` endpoint is exactly that dropped rail. Options:
+   - **Owner decision 2026-09-28: (a).**
    - **(a) Keep ADR 015/016.** The Marketplace listing stays the Sovereign in-account product (a CloudFormation/AMI delivery plus the resolve API). #185 becomes "list the Sovereign product in the AI agents category", and the remote MCP is not its surface.
    - **(b) Amend ADR 015.** Allow a SaaS listing for the shared MCP/API: Marketplace subscription → SNS → `OncaTenantConfig` provisioning, billed by Marketplace metering, **replacing** Stripe for those buyers (never both — one invoice per buyer).
 
