@@ -719,3 +719,26 @@ def test_second_app_backfills_its_own_window(tmp_path, monkeypatch):
     assert seen_since["222"] == seen_since["111"]
     cov = out["radar"]["coverage"]["bank"]
     assert cov["appstore"]["app_id"] == "111" and set(cov["appstore_by_app"]) == {"111", "222"}
+
+
+def test_english_why_falls_back_to_the_portuguese_change_or_title():
+    m = {"source": "youtube", "title": "Cartão aprovando demais!"}
+    cr.apply_result(m, {"relevant": True, "event": "price", "is_new_change": True, "pt_br": True,
+                        "change": "cartão aprovando demais",
+                        "why": "Card approval and high initial limit."})
+    assert m["why"] == "cartão aprovando demais"
+    m = {"source": "youtube", "title": "Nubank lança conta pra menores"}
+    cr.apply_result(m, {"relevant": True, "event": "launch", "is_new_change": True, "pt_br": True,
+                        "change": "conta pra menores", "why": "Nubank lança conta para menores"})
+    assert m["why"] == "Nubank lança conta para menores"
+
+
+def test_a_bare_livestream_title_is_never_a_dated_change():
+    for title in ("Mercado Pago está ao vivo", "PicPay ao vivo!"):
+        m = {"source": "youtube", "title": title}
+        cr.apply_result(m, {"relevant": True, "event": "launch", "is_new_change": True,
+                            "pt_br": True, "why": "Mercado Pago is live."})
+        assert m["is_new_change"] is False and not cr.surfaceable(m)
+    m = {"source": "youtube", "title": "Ao vivo: Nubank lança Pix parcelado no crédito"}
+    cr.apply_result(m, {"relevant": True, "event": "launch", "is_new_change": True, "pt_br": True})
+    assert m["is_new_change"] is True

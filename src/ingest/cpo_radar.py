@@ -499,13 +499,29 @@ def build_prompt(s: dict[str, Any], batch: list[dict[str, Any]]) -> str:
         '"is_new_change" (true ONLY if the item reports a specific, recent, dated change by the SUBJECT: '
         "a launch, a new/removed feature, a fee/rate/benefit/limit-policy change, or a current outage. "
         "false for evergreen how-to/tutorials (\"como aumentar limite\", \"como pagar boleto\"), reviews of "
-        "a product that has not changed, brand ads, sponsorships, speculation and general opinion), "
+        "a product that has not changed, brand ads, sponsorships, speculation and general opinion, "
+        "and for livestreams or event invitations whose title only says the channel is live), "
         '"change" (if is_new_change: a short canonical Portuguese name for the change, e.g. '
         '"fim do Priority Pass", "Central de Cashback"; else ""), '
         '"pt_br" (true if the item is in Portuguese and aimed at Brazil; false for Spanish or '
         "Mexico/Argentina content), "
-        '"why" (<=15 words, Brazilian Portuguese, what happened).'
+        '"why" (<=15 words, IN BRAZILIAN PORTUGUESE even when the item is in English, what happened).'
     )
+
+
+# Nova Lite sometimes answers "why" in English despite the prompt (live 2026-09-27: "Mercado Pago
+# is live.", "Card approval and high initial limit."). The digest goes to a Brazilian CPO.
+_EN_WORDS = frozenset("the is are and of with for about this new live improvements approval "
+                      "announcement users many".split())
+_PT_WORDS = frozenset("de da do das dos com para no na em que um uma os as ao pelo pela nova novo "
+                      "sobre".split())
+# A generic "<brand> está ao vivo" livestream title reports nothing dated.
+_LIVE_ONLY = re.compile(r"^\W*[\w\s.&'-]{0,40}?\b(?:est[aá]\s+)?ao\s+vivo\W*$", re.I)
+
+
+def _looks_english(text: str) -> bool:
+    toks = re.findall(r"[a-záéíóúâêôãõç]+", str(text or "").lower())
+    return bool(toks) and bool(_EN_WORDS.intersection(toks)) and not _PT_WORDS.intersection(toks)
 
 
 def parse_response(text: str | None) -> list[dict[str, Any]]:
@@ -552,6 +568,10 @@ def apply_result(m: dict[str, Any], x: dict[str, Any] | None) -> None:
              feature=str(x.get("feature") or "")[:80], why=str(x.get("why") or "")[:160],
              is_new_change=bool(_as_bool(x.get("is_new_change"))),
              pt_br=_as_bool(x.get("pt_br")), change=str(x.get("change") or "")[:80])
+    if _looks_english(m["why"]):
+        m["why"] = (m["change"] or str(m.get("title") or ""))[:160]
+    if m.get("source") == "youtube" and _LIVE_ONLY.match(str(m.get("title") or "")):
+        m["is_new_change"] = False
 
 
 Converser = Callable[[str, int], "tuple[str | None, dict[str, int]]"]
