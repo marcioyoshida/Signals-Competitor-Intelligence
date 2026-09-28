@@ -1159,10 +1159,12 @@ def discover_fiagro(
                     id_collision = profile["entity_id"] in existing_ids
                     parent_id = _parent_of(brand)
                     if parent_id and not id_collision and new_budget > 0:
+                        # #201: the brand IS the parent's name ("ITAÚ" on ITAÚ ICDI11). The
+                        # fund keeps its legal name and ticker, never the bare brand.
                         entity_registry.put_entity(
                             profile["entity_id"],
                             f"{brand} {ticker}".strip() if ticker else profile["display_name"],
-                            profile.get("aliases") or [],
+                            [a for a in profile.get("aliases") or [] if _norm(a) != nb],
                             cnpj_roots=profile.get("cnpj_roots") or [],
                             industries=[industry], ticker=ticker, confidence="cnpj",
                             parent=parent_id, source="discovery", table=table,
@@ -1187,15 +1189,17 @@ def discover_fiagro(
                     )
                     report["proposed"].append(pid or brand)
                     continue
+                parent_id = _parent_of(profile.get("display_name"))
                 entity_registry.put_entity(
                     profile["entity_id"],
                     profile["display_name"],
-                    profile.get("aliases") or [],
+                    # #201: a linked fund's brand is its parent's name; don't index it on the fund
+                    [a for a in profile.get("aliases") or [] if not parent_id or _norm(a) != nb],
                     cnpj_roots=profile.get("cnpj_roots") or [],
                     industries=[industry],
                     ticker=ticker,
                     confidence="cnpj",
-                    parent=_parent_of(profile.get("display_name")),  # ADR 017 sub-entity link
+                    parent=parent_id,  # ADR 017 sub-entity link
                     source="discovery",  # ADR 018
                     table=table,
                 )

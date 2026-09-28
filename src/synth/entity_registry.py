@@ -287,6 +287,18 @@ def put_entity(
     norm = sorted(
         {normalize_alias(a) for a in aliases if str(a).strip() and not str(a).upper().startswith("TICKER:")}
     )
+    # #201: an automated write never takes over an ALIAS# key another entity owns (a fund
+    # created as "ITAÚ ICDI11" had taken ALIAS#ITAU from the bank). A fund vehicle drops such
+    # a name outright, since resolve_entities would otherwise match every "Itaú" to the fund.
+    foreign: set[str] = set()
+    if _is_automated(source):
+        for na in norm:
+            owner = t.get_item(Key={"pk": f"ALIAS#{na}"}).get("Item")
+            if owner and owner.get("entity_id") not in (None, entity_id):
+                foreign.add(na)
+        if foreign and _is_vehicle({"industries": list(industries or ())}):
+            raw = [a for a in raw if normalize_alias(a) not in foreign]
+            norm = [na for na in norm if na not in foreign]
     roots = sorted({str(r)[:8] for r in cnpj_roots if str(r).strip()})
     entity = {
         "pk": f"ENT#{entity_id}",
@@ -385,7 +397,8 @@ def put_entity(
                         if k in entity], source, confidence)
     t.put_item(Item=entity)
     for na in norm:
-        t.put_item(Item={"pk": f"ALIAS#{na}", "type": "alias", "entity_id": entity_id})
+        if na not in foreign:
+            t.put_item(Item={"pk": f"ALIAS#{na}", "type": "alias", "entity_id": entity_id})
     for r in roots:
         t.put_item(Item={"pk": f"CNPJ#{r}", "type": "cnpj", "entity_id": entity_id})
     _index_display_name(t, entity_id, display_name)  # #14: keep resolve_by_name O(1)
@@ -1184,10 +1197,16 @@ def accumulate_aliases(
 
     added: list[str] = []
     new_norm: list[str] = []
+    vehicle = _is_vehicle(ent)
     for raw in forms:
         f = str(raw or "").strip()
         if len(f) < 4:  # too short to be a safe substring key for resolve_entities
             continue
+        if vehicle:  # #201: a fund never picks up a name another entity owns, even as a form
+            na0 = normalize_alias(f)
+            owner0 = t.get_item(Key={"pk": f"ALIAS#{na0}"}).get("Item") if na0 else None
+            if owner0 and owner0.get("entity_id") not in (None, entity_id):
+                continue
         if f.upper() not in forms_upper:
             cur_forms.append(f)
             forms_upper.add(f.upper())
@@ -1261,6 +1280,116 @@ def strip_aliases(
         if item and item.get("entity_id") == entity_id:
             t.delete_item(Key={"pk": f"ALIAS#{na}"})
     return removed
+
+
+#: #201: fund VEHICLES only (not every leaf industry). A FII/FIAGRO is named after its manager
+#: ("ITAÚ ICDI11"), so discovery handed it the manager's bare brand as an alias.
+_VEHICLE_INDUSTRIES = frozenset({"agri-funds", "real-estate-funds"})
+_LEGAL_SUFFIX = re.compile(r"(?:\s+(?:LTDA|S A|SA|ME|EIRELI))+$")
+
+
+def _is_vehicle(ent: dict[str, Any]) -> bool:
+    inds = set(ent.get("industries") or [])
+    return bool(inds) and not (inds - _VEHICLE_INDUSTRIES)
+
+
+def _name_key(value: Any) -> str:
+    """Punctuation- and legal-suffix-free name key: "PÁTRIA INVESTIMENTOS LTDA." and
+    "PATRIA INVESTIMENTOS" collide."""
+    k = " ".join(re.sub(r"[^A-Z0-9 ]+", " ", normalize_alias(str(value or ""))).split())
+    return _LEGAL_SUFFIX.sub("", k)
+
+
+def find_misheld_aliases(entities: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    """#201 audit (pure): every name a fund vehicle holds that is a non-fund entity's own name
+    (display name, id or alias): the manager/bank brand a fund was named after. Returns
+    ``{holder, key, forms, target}`` per (fund, name); ticker forms are never flagged."""
+    ents = [e for e in entities if e.get("entity_id")]
+    owners: dict[str, str] = {}
+    for e in ents:
+        if _is_vehicle(e):
+            continue
+        for v in [e.get("display_name"), e["entity_id"], *(e.get("aliases") or [])]:
+            k = _name_key(v)
+            if len(k) >= 2:
+                owners.setdefault(k, e["entity_id"])
+    out: list[dict[str, Any]] = []
+    for e in ents:
+        if not _is_vehicle(e):
+            continue
+        by_key: dict[str, list[str]] = {}
+        for f in e.get("alias_forms") or e.get("aliases") or []:
+            if str(f).upper().startswith("TICKER:"):
+                continue
+            k = _name_key(f)
+            if owners.get(k) not in (None, e["entity_id"]):
+                by_key.setdefault(k, []).append(str(f))
+        out.extend({"holder": e["entity_id"], "key": k, "forms": fs, "target": owners[k]}
+                   for k, fs in sorted(by_key.items()))
+    return out
+
+
+def propose_alias_reassignments(table: Any | None = None) -> list[str]:
+    """Queue one ``alias_reassign`` review per finding of ``find_misheld_aliases`` (#201).
+    Idempotent: a decided review is never reopened. Returns the newly queued ids."""
+    t = _table(table)
+    queued: list[str] = []
+    for m in find_misheld_aliases(_scan_type(t, "entity")):
+        rid = propose_review(
+            "alias_reassign", key=f"{m['holder']}:{m['key']}", entity_id=m["holder"],
+            target_id=m["target"], proposed=m["forms"][0],
+            reason="fund_holds_institution_name",
+            hint=f"{m['holder']} holds {m['forms']} — the own name of {m['target']}",
+            confidence="curated", payload={"key": m["key"], "forms": m["forms"]}, table=t)
+        if rid:
+            queued.append(rid)
+    return queued
+
+
+def reassign_alias(holder_id: str, key: str, target_id: str, *, source: str = "curated",
+                   table: Any | None = None) -> dict[str, Any]:
+    """Take a name away from a fund and give its ALIAS# key back to its real owner (#201).
+
+    Removes every raw form of ``key`` from the holder. An ALIAS# key goes to the target only
+    if the target already carries that alias (a bare "PATRIA" is NOT added to Pátria
+    Investimentos, where it would start matching the common word). Otherwise the key is
+    deleted. A holder whose display name IS the name gets its ticker appended."""
+    t = _table(table)
+    holder, target = get_entity(holder_id, table=t), get_entity(target_id, table=t)
+    if not holder or not target:
+        return {}
+    forms = [str(f) for f in holder.get("alias_forms") or []
+             if not str(f).upper().startswith("TICKER:") and _name_key(f) == key]
+    removed = strip_aliases(holder_id, forms, table=t)
+    tgt_norms = set(target.get("aliases") or [])
+    indexed = []
+    for na in sorted({normalize_alias(f) for f in forms}):
+        if na in tgt_norms:
+            t.put_item(Item={"pk": f"ALIAS#{na}", "type": "alias", "entity_id": target_id})
+            indexed.append(na)
+        else:
+            item = t.get_item(Key={"pk": f"ALIAS#{na}"}).get("Item")
+            if item and item.get("entity_id") == holder_id:
+                t.delete_item(Key={"pk": f"ALIAS#{na}"})
+    holder = get_entity(holder_id, table=t) or holder
+    renamed = None
+    if _name_key(holder.get("display_name")) == key and holder.get("ticker"):
+        old_na = normalize_alias(holder.get("display_name") or "")
+        renamed = f"{holder['display_name']} {holder['ticker']}"
+        holder["display_name"] = renamed
+        name_item = t.get_item(Key={"pk": f"NAME#{old_na}"}).get("Item")
+        if name_item and holder_id in (name_item.get("entity_ids") or []):
+            name_item["entity_ids"] = [x for x in name_item["entity_ids"] if x != holder_id]
+            t.put_item(Item=name_item)
+    _stamp(holder, ["aliases"], source)
+    t.put_item(Item=holder)
+    if renamed:
+        _index_display_name(t, holder_id, renamed)
+    detail = {"key": key, "removed": removed, "to": target_id, "indexed": indexed,
+              "renamed": renamed}
+    _log(holder_id, "reassign_alias", source, detail)
+    _log(target_id, "reassign_alias", source, {**detail, "from": holder_id})
+    return detail
 
 
 def add_cnpj_roots(
@@ -1404,6 +1533,10 @@ def _apply_review(
             table.put_item(Item=ent)
     elif kind in ("fuzzy_alias", "nickname") and item.get("entity_id") and item.get("proposed"):
         accumulate_aliases(item["entity_id"], [item["proposed"]], table=table)
+    elif kind == "alias_reassign" and item.get("entity_id") and item.get("target_id"):
+        # #201: move a manager/bank name off a fund, back to the institution that owns it
+        key = str((item.get("payload") or {}).get("key") or _name_key(item.get("proposed")))
+        reassign_alias(item["entity_id"], key, item["target_id"], table=table)
     elif kind == "news_safe" and item.get("entity_id"):
         # promote a vetted new entity so its bare brand resolves from news/DOU
         set_news_safe(item["entity_id"], True, table=table)

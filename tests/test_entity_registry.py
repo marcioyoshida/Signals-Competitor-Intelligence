@@ -954,3 +954,87 @@ def test_set_ambiguous_tokens_is_idempotent_and_normalizes():
 
 def test_set_ambiguous_tokens_missing_entity_is_noop():
     assert er.set_ambiguous_tokens("ghost", ["X"], table=FakeTable()) is False
+
+
+# ---- #201: a fund vehicle must not hold (or take over) an institution's own name ----
+
+def _itau_world():
+    t = FakeTable()
+    er.put_entity("itau", "Itaú", ["ITAU", "ITAÚ", "ITAU UNIBANCO"], industries=["banking"],
+                  confidence="curated", table=t)
+    er.put_entity("patria", "Pátria Investimentos", ["PATRIA INVESTIMENTOS"],
+                  industries=["private-markets"], confidence="curated", table=t)
+    return t
+
+
+def test_discovery_put_of_a_fund_cannot_take_the_banks_alias_key():
+    t = _itau_world()
+    er.put_entity("icdi11", "ITAÚ ICDI11", ["ITAÚ CRÉDITO IMOBILIÁRIO CDI FII", "ICDI11",
+                                             "TICKER:ICDI11", "ITAÚ"],
+                  industries=["real-estate-funds"], ticker="ICDI11", source="discovery", table=t)
+    assert er.resolve_by_alias("Itaú", table=t) == "itau"
+    fund = er.get_entity("icdi11", table=t)
+    assert "ITAÚ" not in fund["alias_forms"] and "ITAU" not in fund["aliases"]
+    assert er.resolve_by_alias("ICDI11", table=t) == "icdi11"
+
+
+def test_curated_put_still_may_claim_an_alias():
+    t = _itau_world()
+    er.put_entity("itau2", "Itaú 2", ["ITAU"], industries=["banking"], source="curated", table=t)
+    assert er.resolve_by_alias("ITAU", table=t) == "itau2"
+
+
+def test_accumulate_on_a_fund_skips_a_name_another_entity_owns():
+    t = _itau_world()
+    er.put_entity("icdi11", "ITAÚ ICDI11", ["ICDI11"], industries=["real-estate-funds"],
+                  source="discovery", table=t)
+    assert er.accumulate_aliases("icdi11", ["ITAU UNIBANCO", "ITAÚ CRÉDITO CDI"], table=t) == [
+        "ITAÚ CRÉDITO CDI"]
+    assert "ITAU UNIBANCO" not in er.get_entity("icdi11", table=t)["alias_forms"]
+
+
+def _polluted(t):
+    """The live state before #201: the fund took ALIAS#ITAU; another holds a bare 'PÁTRIA'."""
+    er.put_entity("icdi11", "ITAÚ ICDI11", ["ICDI11", "TICKER:ICDI11", "ITAÚ"],
+                  industries=["real-estate-funds"], ticker="ICDI11", source="curated", table=t)
+    er.put_entity("paag11", "PÁTRIA", ["PAAG11", "PÁTRIA", "PÁTRIA INVESTIMENTOS LTDA."],
+                  industries=["agri-funds"], ticker="PAAG11", source="curated", table=t)
+    assert er.resolve_by_alias("ITAU", table=t) == "icdi11"
+
+
+def test_find_misheld_aliases_flags_manager_names_on_funds_only():
+    t = _itau_world()
+    _polluted(t)
+    found = {(m["holder"], m["key"], m["target"])
+             for m in er.find_misheld_aliases(er._scan_type(t, "entity"))}
+    assert found == {("icdi11", "ITAU", "itau"), ("paag11", "PATRIA", "patria"),
+                     ("paag11", "PATRIA INVESTIMENTOS", "patria")}
+
+
+def test_alias_reassign_review_moves_the_key_back_and_renames_a_bare_display():
+    t = _itau_world()
+    _polluted(t)
+    er.put_entity("patria", "Pátria Investimentos", ["PATRIA INVESTIMENTOS", "PATRIA"],
+                  industries=["private-markets"], confidence="curated", table=t)
+    ids = er.propose_alias_reassignments(table=t)
+    assert len(ids) == 3  # ITAU on icdi11; PATRIA + PATRIA INVESTIMENTOS on paag11
+    assert er.propose_alias_reassignments(table=t) == []  # idempotent
+    for rid in ids:
+        er.resolve_review(rid, "approved", table=t)
+    assert er.resolve_by_alias("ITAU", table=t) == "itau"
+    assert er.resolve_by_alias("PATRIA", table=t) == "patria"
+    icdi = er.get_entity("icdi11", table=t)
+    assert "ITAÚ" not in icdi["alias_forms"] and "ICDI11" in icdi["alias_forms"]
+    paag = er.get_entity("paag11", table=t)
+    assert paag["display_name"] == "PÁTRIA PAAG11"
+    assert "paag11" not in (t.items.get("NAME#PATRIA") or {}).get("entity_ids", [])
+    assert er.find_misheld_aliases(er._scan_type(t, "entity")) == []
+
+
+def test_reassign_deletes_a_key_the_target_does_not_carry():
+    t = _itau_world()  # patria carries PATRIA INVESTIMENTOS but NOT a bare PATRIA
+    er.put_entity("vcrr11", "PATRIA VCRR11", ["VCRR11", "PATRIA INVESTIMENTOS"],
+                  industries=["real-estate-funds"], source="curated", table=t)
+    er.reassign_alias("vcrr11", "PATRIA INVESTIMENTOS", "patria", table=t)
+    assert er.resolve_by_alias("PATRIA INVESTIMENTOS", table=t) == "patria"
+    assert "PATRIA" not in er.get_entity("patria", table=t)["aliases"]

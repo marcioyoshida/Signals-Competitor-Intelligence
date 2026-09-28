@@ -70,6 +70,12 @@ def audit_registry(entities: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 out.append(_finding("parent_inversion", "med",
                                     f"{eid}.parent={p} is a leaf/fund, not a tier-1 institution",
                                     entity_id=eid))
+    # #201: a fund vehicle holding a bank/manager's own name ("ITAU" on ITAÚ ICDI11).
+    from src.synth.entity_registry import find_misheld_aliases
+    for m in find_misheld_aliases(entities):
+        out.append(_finding("fund_holds_institution_name", "high",
+                            f"{m['holder']} holds {m['forms']}, the own name of {m['target']}",
+                            entity_id=m["holder"], safe_fix=True))
     return out
 
 

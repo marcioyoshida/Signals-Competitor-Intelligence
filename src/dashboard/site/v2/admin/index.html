@@ -509,6 +509,8 @@ function queueItems() {
       title = `Agrupar <b>${U.esc(r.member_label || r.member)}</b> sob <b>${U.esc(r.leader_label || r.leader)}</b>`;
     else if (r.kind === "news_safe")
       title = `Liberar marca <b>${U.esc(r.proposed || r.member_label)}</b> em notícias/DOU`;
+    else if (r.kind === "alias_reassign")
+      title = `Tirar o nome <b>${U.esc(r.proposed || "?")}</b> de <b>${U.esc(r.member_label || r.member)}</b> e devolver a <b>${U.esc(r.leader_label || r.leader)}</b>`;
     else if (r.kind === "industry")
       title = `Atribuir indústria <b>${U.esc(r.proposed || "?")}</b> a <b>${U.esc(r.member_label || r.member)}</b>`;
     else
@@ -638,6 +640,7 @@ const SEV_BADGE = {
 const INTEG_KIND_PT = {
   institution_leaf_pollution: "Indústria de fundo em instituição",
   fund_alias_on_institution: "Ticker de fundo como alias",
+  fund_holds_institution_name: "Fundo com o nome da instituição",
   unbacked_cnpj: "CNPJ sem raiz",
   parent_inversion: "Matriz invertida",
   card_primary_absent: "Atribuição sem menção",

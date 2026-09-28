@@ -143,6 +143,16 @@ def cmd_audit(args) -> int:
     return 0
 
 
+def cmd_propose_alias_fixes(args) -> int:
+    from src.synth import entity_registry as er
+
+    ids = er.propose_alias_reassignments()
+    print(f"queued {len(ids)} alias_reassign review(s) (#201)")
+    for rid in ids:
+        print("  " + rid)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--profile", default=None, help="AWS profile (sets AWS_PROFILE)")
@@ -188,6 +198,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     a = sub.add_parser("audit", help="run the integrity audit against live registry + feed")
     a.set_defaults(func=cmd_audit)
+
+    pa = sub.add_parser("propose-alias-fixes",
+                        help="queue alias_reassign reviews for funds holding an institution's name (#201)")
+    pa.set_defaults(func=cmd_propose_alias_fixes)
     return p
 
 
