@@ -1,0 +1,34 @@
+# Microsoft Copilot Studio custom connector for Onça's MCP server (#184) — Streamable transport.
+# Import in Power Apps → Custom connectors → "Import an OpenAPI file" (Option 2), or use the MCP
+# onboarding wizard directly (Option 1, recommended) with the values in copilot-studio.md.
+swagger: '2.0'
+info:
+  title: Onça
+  description: >-
+    Inteligência competitiva e regulatória sobre instituições financeiras brasileiras
+    (CVM, BCB, CADE, DOU, CEIS/CNEP…), restrita às indústrias licenciadas da sua organização.
+  version: 1.0.0
+host: onssa.org
+basePath: /
+schemes:
+  - https
+paths:
+  /mcp:
+    post:
+      summary: Onça MCP server (read tools)
+      x-ms-agentic-protocol: mcp-streamable-1.0
+      operationId: InvokeMCP
+      responses:
+        '200':
+          description: Success
+securityDefinitions:
+  oauth2:
+    type: oauth2
+    flow: accessCode
+    authorizationUrl: https://onssa.org/oauth/authorize
+    tokenUrl: https://onssa.org/oauth/token
+    scopes:
+      onca:read: Ler os dados licenciados e perguntar à Onça
+security:
+  - oauth2:
+      - onca:read

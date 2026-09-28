@@ -113,7 +113,9 @@ class AuthServer:
             "response_types_supported": ["code"],
             "grant_types_supported": ["authorization_code", "refresh_token"],
             "code_challenge_methods_supported": ["S256"],          # T1: S256 only
-            "token_endpoint_auth_methods_supported": ["none"],
+            # "none" for public (CIMD) clients; a secret only for PRE-REGISTERED confidential
+            # clients (e.g. a Copilot Studio connector, #184 — its "Manual" OAuth mode)
+            "token_endpoint_auth_methods_supported": ["none", "client_secret_post", "client_secret_basic"],
             "revocation_endpoint_auth_methods_supported": ["none"],
             "client_id_metadata_document_supported": True,         # D3: CIMD, no DCR
             "authorization_response_iss_parameter_supported": True,  # T6: RFC 9207
@@ -163,9 +165,15 @@ class AuthServer:
 
         if q.get("response_type") != "code":
             return fail("unsupported_response_type", "response_type must be code")
-        if not q.get("code_challenge") or q.get("code_challenge_method") != "S256":
-            return fail("invalid_request", "PKCE with S256 is required")   # T1
-        rpath = self.s.resource_path(q.get("resource")) if q.get("resource") else "/mcp"
+        # T1: PKCE S256 is required — except for a pre-registered CONFIDENTIAL client, which
+        # proves itself with its secret at /token instead (connectors that don't send PKCE)
+        if q.get("code_challenge") or not client.get("confidential"):
+            if not q.get("code_challenge") or q.get("code_challenge_method") != "S256":
+                return fail("invalid_request", "PKCE with S256 is required")
+        # no `resource` param (RFC 8707 is optional for some platform clients, e.g. Gemini
+        # Enterprise): a pre-registered client's own default resource, else /mcp
+        rpath = (self.s.resource_path(q.get("resource")) if q.get("resource")
+                 else client.get("default_resource") or "/mcp")
         if rpath is None:
             return fail("invalid_target", "unknown resource")
         allowed = config.RESOURCES[rpath]
@@ -177,7 +185,7 @@ class AuthServer:
         cverifier, nonce = tokens.random_token(48), tokens.random_token(16)
         self.store.put("req#" + req_id, "-", {
             "client_id": client_id, "client_name": client["client_name"],
-            "redirect_uri": redirect_uri, "code_challenge": q["code_challenge"],
+            "redirect_uri": redirect_uri, "code_challenge": q.get("code_challenge") or "",
             "state": state, "scope": allowed, "resource": self.s.resource_uri(rpath),
             "doc_hash": client.get("doc_hash", ""), "cstate": cstate,
             "cverifier": cverifier, "nonce": nonce,
@@ -331,8 +339,10 @@ class AuthServer:
             return self._terr("invalid_target", "unknown resource")
         grant = f.get("grant_type")
         if grant == "authorization_code":
-            return self._code_grant(f)
+            return self._code_grant(f, req.get("headers"))
         if grant == "refresh_token":
+            if not self.client_auth_ok(f, req.get("headers")):
+                return self._terr("invalid_client", "client authentication failed", 401)
             return self._refresh_grant(f)
         return self._terr("unsupported_grant_type", "authorization_code or refresh_token")
 
@@ -340,18 +350,45 @@ class AuthServer:
     def _terr(code: str, desc: str, status: int = 400) -> dict:
         return _json(status, {"error": code, "error_description": desc})
 
-    def _code_grant(self, f: dict) -> dict:
+    def client_auth_ok(self, f: dict, headers: dict | None) -> bool:
+        """A pre-registered CONFIDENTIAL client must present its secret (post or HTTP Basic),
+        checked against the stored SHA-256; a public client needs none. Constant-time."""
+        cid = f.get("client_id") or ""
+        secret = f.get("client_secret") or ""
+        auth = (headers or {}).get("authorization") or ""
+        if auth.lower().startswith("basic "):
+            import base64 as _b64
+            from urllib.parse import unquote
+            try:
+                bid, _, bsec = _b64.b64decode(auth[6:].strip()).decode().partition(":")
+                cid, secret = cid or unquote(bid), unquote(bsec)
+                f["client_id"] = cid
+            except Exception:  # noqa: BLE001
+                return False
+        reg = self.store.get("client#" + cid) if cid and not cimd.is_cimd_client_id(cid) else None
+        if not reg or not reg.get("confidential"):
+            return not secret                      # public client: nothing to check
+        return bool(secret) and hmac.compare_digest(tokens.sha256_hex(secret), str(reg.get("secret_sha256") or ""))
+
+    def _code_grant(self, f: dict, headers: dict | None = None) -> dict:
         code, verifier = f.get("code") or "", f.get("code_verifier") or ""
-        if not code or not verifier or not f.get("client_id") or not f.get("redirect_uri"):
-            return self._terr("invalid_request",
-                              "code, code_verifier, client_id and redirect_uri are required")
+        if not self.client_auth_ok(f, headers):
+            return self._terr("invalid_client", "client authentication failed", 401)
+        if not code or not f.get("client_id") or not f.get("redirect_uri"):
+            return self._terr("invalid_request", "code, client_id and redirect_uri are required")
         item = self.store.take("code#" + tokens.sha256_hex(code))     # T1: single use
         now = int(self.now())
+        challenge = str((item or {}).get("code_challenge") or "")
+        if challenge:
+            pkce_ok = bool(verifier) and hmac.compare_digest(tokens.pkce_s256(verifier), challenge)
+        else:   # PKCE-less only ever issued to a confidential client, which just authenticated
+            reg = self.store.get("client#" + f["client_id"]) or {}
+            pkce_ok = bool(reg.get("confidential"))
         if (not item or now - int(item["created"]) > config.CODE_TTL_S
                 or item["client_id"] != f["client_id"]
                 or item["redirect_uri"] != f["redirect_uri"]
                 or (f.get("resource") and f["resource"].rstrip("/") != item["resource"])
-                or not hmac.compare_digest(tokens.pkce_s256(verifier), item["code_challenge"])):
+                or not pkce_ok):
             return self._terr("invalid_grant", "invalid, expired or already used code")
         fid = tokens.random_token(16)
         self.store.put("usr#" + item["org"], "fam#" + fid, {

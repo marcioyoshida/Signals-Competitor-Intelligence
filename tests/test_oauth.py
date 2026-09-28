@@ -573,3 +573,74 @@ def test_every_resource_has_metadata(env):
         m = json.loads(env.srv.protected_resource_metadata(path)["body"])
         assert m["resource"] == "https://onssa.org" + path and m["scopes_supported"] == [scope]
     assert env.srv.protected_resource_metadata("/nope")["status"] == 404
+
+
+# ---- #184 pre-registered confidential clients (Copilot Studio "Manual" OAuth) -------------------
+
+COPILOT = "copilot-acme"
+COPILOT_CB = "https://global.consent.azure-apim.net/redirect/onca-acme"
+
+
+def _register_copilot(env, secret="s3cret-value"):
+    env.store.put("client#" + COPILOT, "-", {"client_id": COPILOT, "client_name": "Copilot Studio (Acme)",
+                                             "redirect_uris": [COPILOT_CB], "confidential": True,
+                                             "secret_sha256": tokens.sha256_hex(secret)})
+
+
+def _copilot_code(env):
+    r = authz(env, client_id=COPILOT, redirect_uri=COPILOT_CB, code_challenge=None, code_challenge_method=None)
+    assert r["status"] == 302
+    r = env.srv.callback({"query": {"code": "cog", "state": env.seen["state"]}})
+    r = r if r["status"] == 302 else allow(env, r)
+    return parse_qs(urlsplit(r["headers"]["Location"]).query)["code"][0]
+
+
+def test_confidential_client_without_pkce_must_authenticate(env):
+    _register_copilot(env)
+    code = _copilot_code(env)
+    base = dict(grant_type="authorization_code", code=code, client_id=COPILOT, redirect_uri=COPILOT_CB,
+                resource=S.resource_uri("/mcp"))
+    assert token(env, **base)["status"] == 401                                     # no secret
+    code = _copilot_code(env)
+    assert token(env, **dict(base, code=code, client_secret="wrong"))["status"] == 401
+    code = _copilot_code(env)
+    ok = token(env, **dict(base, code=code, client_secret="s3cret-value"))
+    assert ok["status"] == 200 and json.loads(ok["body"])["access_token"]
+
+
+def test_confidential_client_basic_auth_and_refresh_needs_the_secret(env):
+    _register_copilot(env)
+    code = _copilot_code(env)
+    basic = "Basic " + base64.b64encode(("%s:%s" % (COPILOT, "s3cret-value")).encode()).decode()
+    r = env.srv.token({"method": "POST", "headers": {"authorization": basic}, "form": dict(
+        grant_type="authorization_code", code=code, redirect_uri=COPILOT_CB)})
+    tok = json.loads(r["body"])
+    assert r["status"] == 200
+    bad = token(env, grant_type="refresh_token", refresh_token=tok["refresh_token"], client_id=COPILOT)
+    assert bad["status"] == 401
+    good = token(env, grant_type="refresh_token", refresh_token=tok["refresh_token"], client_id=COPILOT,
+                 client_secret="s3cret-value")
+    assert good["status"] == 200
+
+
+def test_public_clients_still_need_pkce(env):
+    q = parse_qs(urlsplit(authz(env, code_challenge=None, code_challenge_method=None)["headers"]["Location"]).query)
+    assert q["error"] == ["invalid_request"]
+
+
+def test_preregistered_client_default_resource_when_the_platform_omits_it(env):
+    # Gemini Enterprise registers an A2A agent with client id/secret + auth/token URIs, no `resource`
+    env.store.put("client#gemini", "-", {"client_id": "gemini", "client_name": "Gemini Enterprise",
+                                          "redirect_uris": ["https://vertexaisearch.cloud.google.com/static/oauth/oauth.html"],
+                                          "confidential": True, "secret_sha256": tokens.sha256_hex("g"),
+                                          "default_resource": "/a2a"})
+    r = authz(env, client_id="gemini", redirect_uri="https://vertexaisearch.cloud.google.com/static/oauth/oauth.html",
+              resource=None, scope=None, code_challenge=None, code_challenge_method=None)
+    r = env.srv.callback({"query": {"code": "cog", "state": env.seen["state"]}})
+    r = r if r["status"] == 302 else allow(env, r)
+    code = parse_qs(urlsplit(r["headers"]["Location"]).query)["code"][0]
+    tok = json.loads(token(env, grant_type="authorization_code", code=code, client_id="gemini", client_secret="g",
+                           redirect_uri="https://vertexaisearch.cloud.google.com/static/oauth/oauth.html")["body"])
+    p, why = resource.principal({"authorization": "Bearer " + tok["access_token"]}, path="/a2a", settings=S,
+                                public_keys=keys(), family_lookup=env.store.get)
+    assert why == "" and p["sub"] == "sub-1"
