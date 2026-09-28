@@ -16,6 +16,7 @@ import hashlib
 import json
 import secrets
 import sys
+import os
 import time
 import urllib.error
 import urllib.parse
@@ -24,7 +25,9 @@ import urllib.request
 sys.path.insert(0, __file__.rsplit("/scripts/", 1)[0])
 
 BASE = "https://onssa.org"
-CLIENT_ID = BASE + "/docs/qa/oauth-test-client.json"
+# ONCA_E2E_CLIENT_ID=https://claude.ai/oauth/claude-code-client-metadata runs the same flow as
+# Claude Code identifies itself (#181): its document allows http://127.0.0.1/callback, any port.
+CLIENT_ID = os.environ.get("ONCA_E2E_CLIENT_ID") or BASE + "/docs/qa/oauth-test-client.json"
 PORT = 8977
 REDIRECT = "http://127.0.0.1:%d/callback" % PORT
 RESULTS: list[tuple[str, bool, str]] = []
