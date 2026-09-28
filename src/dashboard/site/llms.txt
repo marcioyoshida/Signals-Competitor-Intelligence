@@ -1,0 +1,53 @@
+# Onça — Brazilian financial-sector competitive & regulatory intelligence
+
+> Competitive and regulatory intelligence on Brazilian financial institutions, built from public records (CVM, BCB, CADE, DOU, CEIS/CNEP, PNCP, Receita) and specialist press, resolved to a curated entity registry. Every row links to its primary source.
+
+Inteligência competitiva e regulatória sobre instituições financeiras brasileiras, a partir de registros públicos (CVM, BCB, CADE, DOU, CEIS/CNEP, PNCP, Receita) e imprensa especializada, resolvidos a um registro curado de entidades. Toda linha aponta para a fonte primária.
+
+Onça serves strategy, regulatory, compliance and product officers at Brazilian banks, insurers, fintechs and asset managers: who moved, which rule changed, who was sanctioned, which competitor launched what — for their licensed industries, with a link to the primary source on every row.
+
+## Coverage
+
+Industries: Banking, Investment Banking, Insurance, Asset Management, Wealth Management, Private Markets (VC/PE), Fintech, Financial Data & Analytics, Advisory, Crypto & Digital Assets, Consórcios, Betting & iGaming, Fundos Imobiliários (FIIs), Fundos do Agro (FIAGRO), Adquirência (Maquininhas), Previdência Fechada (EFPCs), Securitização & Crédito.
+
+Sources: CVM (fatos relevantes, ofertas, informes, normas, PAS); Banco Central (normativos, IF.data, balancetes, Pix); CADE (atos de concentração); Diário Oficial da União; CEIS/CNEP (sanções); PNCP (compras públicas); Receita Federal (QSA); SUSEP, PREVIC, ANS; App Store / YouTube (radar de produto); imprensa especializada.
+
+## Access
+
+Onça is a licensed product: every interface requires an Onça account (provisioned per organization) or a tenant API key. Plans and a public sample: https://onssa.org/pricing.html · https://onssa.org/sample/
+
+## Choosing an interface
+
+### MCP server — `https://onssa.org/mcp` (streamable HTTP, JSON-RPC 2.0, OAuth sign-in)
+
+Connect any MCP client (e.g. `claude mcp add --transport http onca https://onssa.org/mcp`). The client opens an Onça sign-in; only provisioned Onça accounts are admitted, and every tool is limited to the account's licensed industries.
+
+- `lookup_entity` — Resolve a Brazilian institution by name, alias or CNPJ to the curated registry.
+- `entity_signals` — Dated regulatory, sanction, product and distress signals for one institution, each linked to its primary source.
+- `regulatory_events` — Sector-wide regulatory changes (official act first) for your licensed industries.
+- `ask` — A grounded, cited answer from your licensed data (a language model — can be wrong).
+
+### REST
+
+- `POST https://onssa.org/api/v1/agent/ask` — Grounded question-answering for a tenant's own agents (API key). Answers ONLY from the tenant's licensed Onça data, with citations to primary sources; declines when the data doesn't support an answer. A language-model call — it can be wrong; check `citations`. Metered per tenant.
+- `POST https://onssa.org/api/ask` — The same grounded Q&A for a signed-in Onça user (dashboard session token). Same contract as /api/v1/agent/ask, authenticated with the user's Onça sign-in (Cognito ID token).
+- `GET https://onssa.org/api/feed` — The caller's licensed feed: cards, entities, regulatory and sector events. Server-scoped to the caller's licensed industries (never filtered in the client). Each card carries its date, entity, threat score and citations to primary sources.
+
+### A2A agent — `https://onssa.org/a2a` (card: https://onssa.org/.well-known/agent-card.json)
+
+## Honesty posture
+
+- Every row carries `as_of`, `source` and a URL to the primary record (CVM, BCB, DOU…). Cite it.
+- `lookup_entity`, `entity_signals` and `regulatory_events` are deterministic retrieval. `ask` is a language model grounded ONLY in the licensed data; it returns citations and declines rather than guess.
+- Absence of a signal is reported as absence, never as "no risk".
+
+## Machine-readable
+
+- OpenAPI 3.1: https://onssa.org/openapi.json
+- Terms for AI systems: https://onssa.org/ai.txt
+- OAuth authorization server: https://onssa.org/.well-known/oauth-authorization-server/oauth
+- Privacy: https://onssa.org/docs/privacy.html · Terms: https://onssa.org/docs/terms.html
+
+## Attribution
+
+Cite as **Onça (onssa.org)** plus the primary source of each fact.

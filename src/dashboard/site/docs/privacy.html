@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Onça — Privacidade / Privacy</title>
+<style>
+  /* same tokens as /docs, /pricing.html, /sample — one visual system for every public page */
+  :root { --bg:#0e1116; --panel:#161b22; --border:#2a313b; --ink:#e6e9ee; --ink2:#aeb6c2; --muted:#79818c; --accent:#3fbdb6; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+  a { color:var(--accent); }
+  .wrap { max-width:760px; margin:0 auto; padding:28px 22px 60px; }
+  h1 { font-size:22px; margin:0 0 6px; } h2 { font-size:16px; margin:28px 0 8px; color:var(--ink2); }
+  .meta { color:var(--muted); font-size:13.5px; }
+  li { margin-bottom:6px; color:var(--ink2); } p { color:var(--ink2); }
+  hr { border:0; border-top:1px solid var(--border); margin:36px 0; }
+  code { background:var(--panel); border-radius:4px; padding:1px 5px; font-size:13px; }
+</style>
+</head>
+<body><div class="wrap">
+
+<h1>Política de Privacidade — Onça (onssa.org)</h1>
+<p class="meta"><b>Operador:</b> Smart Signals LLC, sociedade de responsabilidade limitada do Wyoming (EUA). <b>Contato:</b> <a href="mailto:contato@onssa.org">contato@onssa.org</a>. <b>Vigência:</b> 28 de setembro de 2026.</p>
+<p>A Onça é um produto licenciado de inteligência competitiva e regulatória para instituições financeiras brasileiras. Coletamos o mínimo necessário para operar o serviço e esta política lista tudo o que coletamos.</p>
+
+<h2>Conta e acesso</h2>
+<ul>
+<li><b>Login.</b> Amazon Cognito (e-mail e senha, ou Google quando habilitado). Guardamos o seu e-mail, a organização (tenant) e os grupos de acesso. A Onça nunca recebe a sua senha.</li>
+<li><b>Sessão.</b> Um token de 1 hora na memória da aba (<code>sessionStorage</code>) e um token de renovação em cookie <code>HttpOnly; Secure; SameSite=Strict</code> restrito a <code>/api/session</code>, que expira após o período de inatividade da sua organização (padrão 7 dias; máximo 30).</li>
+<li><b>Apps conectados (MCP / A2A).</b> Se você conectar um app de IA (ex.: Claude) à sua conta, guardamos qual app você autorizou, quando e quando ele usou o acesso pela última vez. Os tokens ficam do nosso lado só como hash; o acesso expira em 1 hora e a renovação em 30 dias (ou 7 dias sem uso). Um cookie de 10 minutos (<code>__Host-oauth_csrf</code>) protege o botão “Permitir”. Para desconectar, escreva para contato@onssa.org.</li>
+<li><b>Chaves de API.</b> Guardamos só o hash de cada chave, o rótulo, os 4 últimos caracteres e as datas de criação e último uso; o uso é medido por organização para cobrança.</li>
+</ul>
+
+<h2>Uso do produto</h2>
+<ul>
+<li><b>Perguntas à Onça.</b> As perguntas vão para o Amazon Bedrock (AWS) para gerar a resposta, fundamentada apenas nos dados licenciados. Não usamos as suas perguntas para treinar modelos.</li>
+<li><b>Decisões.</b> As decisões que você registra (aprovar/rejeitar, nota opcional, resultado) ficam no registro de decisões da sua organização, com a classe do dispositivo.</li>
+<li><b>Engajamento.</b> Aberturas do painel e de cartões, com o oficial, o setor e a <b>classe</b> do dispositivo (celular, tablet ou computador — nunca user-agent, modelo ou localização).</li>
+<li><b>No celular.</b> O app guarda no próprio aparelho a última versão do seu painel (para leitura sem conexão) e marcadores de sessão; tudo é apagado ao “Sair” ou quando a sessão termina.</li>
+<li><b>Alertas (opcional).</b> O endereço de push do navegador, as suas preferências e os ids dos eventos já avisados. As notificações não têm conteúdo (“Novo alerta no seu painel Onça”).</li>
+<li><b>Resumo semanal (opcional).</b> O e-mail de destino, enviado pelo Amazon SES.</li>
+</ul>
+
+<h2>Dados de terceiros no conteúdo</h2>
+<p>O conteúdo da Onça vem de registros públicos (CVM, BCB, CADE, DOU, CEIS/CNEP, PNCP, Receita) e imprensa. Nomes de pessoas aparecem apenas quando constam de atos oficiais sobre instituições (ex.: quadro societário, decisões sancionadoras). Pedidos sobre esses dados podem ser feitos pelo contato abaixo.</p>
+
+<h2>Terceiros</h2>
+<ul>
+<li><b>Amazon Web Services</b> (EUA, us-east-1): hospedagem, login, e-mail e modelos de IA.</li>
+<li><b>Google</b>: somente se você entrar com Google.</li>
+<li><b>Serviços de push do navegador</b> (Apple, Google, Mozilla): recebem só uma notificação sem conteúdo, se você ativar alertas.</li>
+<li><b>Não vendemos nem compartilhamos dados pessoais para publicidade.</b></li>
+</ul>
+
+<h2>Registros e retenção</h2>
+<p>Os servidores registram erros e contadores, nunca o texto das suas perguntas, tokens ou senhas. Detalhes de armazenamento e retenção estão no nosso inventário de dados, disponível sob pedido.</p>
+
+<h2>Seus direitos</h2>
+<p>Você pode pedir acesso, correção ou exclusão dos seus dados escrevendo para <a href="mailto:contato@onssa.org">contato@onssa.org</a>; respondemos em até 15 dias. Titulares no Brasil têm os direitos da LGPD (Lei 13.709/2018), incluindo reclamar à ANPD; na UE/Reino Unido, os do GDPR.</p>
+
+<hr>
+<h1>Privacy Policy — Onça (onssa.org)</h1>
+<p class="meta"><b>Operator:</b> Smart Signals LLC, a Wyoming limited liability company. <b>Contact:</b> contato@onssa.org. <b>Effective:</b> 28 September 2026. The Portuguese text above prevails for users in Brazil.</p>
+<ul>
+<li><b>Account:</b> Amazon Cognito sign-in (email/password or Google). We keep your email, organization (tenant) and access groups — never your password.</li>
+<li><b>Session:</b> a 1-hour token in the tab's <code>sessionStorage</code>; a refresh token in an HttpOnly, Secure, SameSite=Strict cookie scoped to <code>/api/session</code>, expiring after your organization's idle limit (default 7 days, max 30).</li>
+<li><b>Connected apps (MCP/A2A):</b> which app you approved, when, and last use. Tokens are stored hashed; access lasts 1 hour, renewal 30 days (7 days unused). A 10-minute <code>__Host-oauth_csrf</code> cookie protects the Allow button.</li>
+<li><b>API keys:</b> only a hash, label, last 4 characters, created/last-used dates; usage metered per organization.</li>
+<li><b>Questions</b> go to Amazon Bedrock to generate grounded answers; not used to train models. <b>Decisions</b> you record, <b>engagement</b> (with a device <i>class</i> only), optional <b>push</b> subscriptions (content-free notifications) and optional <b>weekly digest</b> email (Amazon SES).</li>
+<li><b>On your phone:</b> your last loaded dashboard (offline reading) and session markers, wiped on sign-out or when the session ends.</li>
+<li><b>Third parties:</b> AWS (US), Google (if you sign in with it), browser push services (content-free). No sale or advertising use of personal data.</li>
+<li><b>Rights:</b> access, correction, deletion via contato@onssa.org; LGPD (Brazil) and GDPR/UK GDPR rights apply.</li>
+</ul>
+</div></body></html>

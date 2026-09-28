@@ -1,0 +1,1 @@
+{"client_id": "https://onssa.org/docs/qa/oauth-test-client.json", "client_name": "Onça QA test client", "redirect_uris": ["http://127.0.0.1:8977/callback"]}

@@ -27,6 +27,8 @@ from aws_cdk import aws_dynamodb as dynamodb
 from aws_cdk import aws_events as events
 from aws_cdk import aws_events_targets as targets
 from aws_cdk import aws_iam as iam
+from aws_cdk import aws_kms as kms
+from aws_cdk import aws_ssm as ssm
 from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_s3 as s3
 from aws_cdk import aws_s3_deployment as s3deploy
@@ -810,6 +812,15 @@ class OncaPrototypeStack(Stack):
             cache_policy=cloudfront.CachePolicy.CACHING_DISABLED,
         )
 
+        # #180: the machine-readable front door — /llms.txt, /ai.txt (one "/*.txt" behavior: the
+        # site holds no other .txt, test-enforced) and /openapi.json. Public, describe-only.
+        for _disc in ("/*.txt", "/openapi.json"):
+            distribution.add_behavior(
+                _disc,
+                site_origin,
+                viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+            )
+
         # E3 (#155): the Entry getting-started guide — same public, credential-free
         # class as /pricing.html and /sample/*. Static content, no feed to leak, so
         # there is no derive_*-style scoping concern here; the only thing this page
@@ -1241,6 +1252,11 @@ class OncaPrototypeStack(Stack):
                 "/sample/index.html",  # E2 (#154): public conversion sample
                 "/docs/index.html",  # E3 (#155): public Entry getting-started guide
                 "/docs/celular-seguranca.html",  # #164: public mobile security answers
+                "/docs/privacy.html",  # #183: privacy policy (directories + OAuth op_policy_uri)
+                "/docs/terms.html",
+                "/llms.txt",  # #180 discovery
+                "/ai.txt",
+                "/openapi.json",
                 # v2 multi-context dashboards (six clean routes + shared assets).
                 "/v2/admin/index.html",
                 "/v2/newentry/index.html",
@@ -2597,6 +2613,125 @@ class OncaPrototypeStack(Stack):
         feed_fn.add_environment("ONCA_PUSH_TABLE", push_table.table_name)
         push_table.grant_read_data(feed_fn)   # #167 operator counters in feed.mobile_usage.push
 
+        # #181/#182/#186 agent discovery: an OAuth 2.1 authorization server in front of Cognito
+        # (the fleet pattern from Tarantula #99 — own pool, own KMS key, own table) and the remote
+        # MCP (/mcp read, /mcp/ops operators) + A2A (/a2a) resource servers. Both Lambdas sit on
+        # the HTTP API WITHOUT the JWT authorizer: the AS is public by nature, and the resource
+        # servers validate their OWN audience-bound tokens and answer 401 + WWW-Authenticate
+        # themselves (no edge gate above them — the "unreachable handshake" trap).
+        oauth_table = dynamodb.Table(
+            self,
+            "OncaOAuthTable",
+            partition_key=dynamodb.Attribute(name="pk", type=dynamodb.AttributeType.STRING),
+            sort_key=dynamodb.Attribute(name="sk", type=dynamodb.AttributeType.STRING),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            time_to_live_attribute="ttl",
+            removal_policy=RemovalPolicy.RETAIN,   # consents + grants: never lost by a deploy
+        )
+        oauth_key = kms.Key(
+            self,
+            "OncaOAuthSigningKey",
+            key_spec=kms.KeySpec.ECC_NIST_P256,
+            key_usage=kms.KeyUsage.SIGN_VERIFY,
+            alias="alias/onca-oauth-signing",
+            removal_policy=RemovalPolicy.RETAIN,
+            description="onssa.org OAuth access-token signing key (#181)",
+        )
+        oauth_kill = ssm.StringParameter(
+            self,
+            "OncaOAuthKillSwitch",
+            parameter_name="/onca/oauth/disabled",
+            string_value="false",
+            description="true = the OAuth server refuses all flows and /mcp,/mcp/ops,/a2a all tokens",
+        )
+        # a PUBLIC client (PKCE, no secret) whose only callback is the AS's own — the static
+        # upstream client of the MCP spec's confused-deputy rule, hence the per-client consent page
+        oauth_cognito_client = user_pool.add_client(
+            "OncaOAuthFacadeClient",
+            generate_secret=False,
+            auth_flows=cognito.AuthFlow(user_srp=True),
+            o_auth=cognito.OAuthSettings(
+                flows=cognito.OAuthFlows(authorization_code_grant=True),
+                scopes=[cognito.OAuthScope.OPENID, cognito.OAuthScope.EMAIL, cognito.OAuthScope.PROFILE],
+                callback_urls=["https://onssa.org/oauth/callback"],
+                logout_urls=["https://onssa.org/"],
+            ),
+            supported_identity_providers=[
+                cognito.UserPoolClientIdentityProvider.COGNITO,
+                *([cognito.UserPoolClientIdentityProvider.GOOGLE] if google_idp else []),
+            ],
+            id_token_validity=Duration.hours(1),
+            access_token_validity=Duration.hours(1),
+            refresh_token_validity=Duration.days(1),
+            prevent_user_existence_errors=True,
+        )
+        if google_idp:
+            oauth_cognito_client.node.add_dependency(google_idp)
+        _oauth_env = {
+            "PYTHONPATH": "/var/task",
+            "ONCA_OAUTH_ISSUER": "https://onssa.org/oauth",
+            "ONCA_OAUTH_TABLE": oauth_table.table_name,
+            "ONCA_OAUTH_KMS_KEY": oauth_key.key_arn,
+            "ONCA_OAUTH_KILL_PARAM": oauth_kill.parameter_name,
+            "ONCA_TENANT_CONFIG_TABLE": tenant_config_table.table_name,
+        }
+        oauth_fn = lambda_.Function(
+            self,
+            "OncaOAuth",
+            runtime=LAMBDA_RUNTIME,
+            handler="src.dashboard.oauth.handler.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.seconds(15),
+            memory_size=256,
+            environment={
+                **_oauth_env,
+                "ONCA_OAUTH_COGNITO_BASE_URL": user_pool_domain.base_url(),
+                "ONCA_OAUTH_COGNITO_CLIENT_ID": oauth_cognito_client.user_pool_client_id,
+                "ONCA_OAUTH_VERIFIED_HOSTS": "",   # D6: empty until the owner names hosts
+                "ONCA_USER_POOL_ID": user_pool.user_pool_id,
+            },
+        )
+        oauth_table.grant_read_write_data(oauth_fn)
+        oauth_key.grant(oauth_fn, "kms:Sign", "kms:GetPublicKey")
+        oauth_kill.grant_read(oauth_fn)
+        tenant_config_table.grant_read_data(oauth_fn)
+        oauth_fn.add_to_role_policy(iam.PolicyStatement(
+            actions=["cognito-idp:ListUsers", "cognito-idp:AdminListGroupsForUser"],  # live entitlement
+            resources=[user_pool.user_pool_arn]))
+        mcp_fn = lambda_.Function(
+            self,
+            "OncaMcp",
+            runtime=LAMBDA_RUNTIME,
+            handler="src.dashboard.mcp_server.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.seconds(30),       # the HTTP API integration cap; `ask` fits inside it
+            memory_size=1024,
+            environment={
+                **_oauth_env,
+                "ONCA_SITE_BUCKET": site_bucket.bucket_name,
+                "ONCA_ENTITIES_TABLE": entities_table.table_name,
+                "ONCA_AGENT_FN": agent_fn.function_name,
+                "ONCA_ACT_FN": act_fn.function_name,
+            },
+        )
+        oauth_key.grant(mcp_fn, "kms:GetPublicKey")
+        oauth_kill.grant_read(mcp_fn)
+        oauth_table.grant(mcp_fn, "dynamodb:GetItem")   # refresh-family revocation check only
+        site_bucket.grant_read(mcp_fn)
+        entities_table.grant_read_data(mcp_fn)
+        tenant_config_table.grant_read_data(mcp_fn)
+        agent_fn.grant_invoke(mcp_fn)    # `ask` / A2A → the same grounded, tenant-scoped /api/ask
+        act_fn.grant_invoke(mcp_fn)      # /mcp/ops → the same authorized, journaled /api/act
+        _oauth_integ = apigwv2_int.HttpLambdaIntegration("OAuthInteg", oauth_fn)
+        for _opath in ("/oauth/{proxy+}", "/.well-known/{proxy+}"):
+            auth_api.add_routes(path=_opath, methods=[apigwv2.HttpMethod.GET, apigwv2.HttpMethod.POST],
+                                integration=_oauth_integ)
+        _mcp_integ = apigwv2_int.HttpLambdaIntegration("McpInteg", mcp_fn)
+        for _mpath in ("/mcp", "/mcp/ops", "/a2a"):
+            auth_api.add_routes(path=_mpath, methods=[apigwv2.HttpMethod.GET, apigwv2.HttpMethod.POST],
+                                integration=_mcp_integ)
+        CfnOutput(self, "OAuthIssuer", value="https://onssa.org/oauth")
+
         # #164 remote sign-out: the operator act `revoke_user_sessions`
         act_fn.add_environment("ONCA_USER_POOL_ID", user_pool.user_pool_id)
         act_fn.add_to_role_policy(iam.PolicyStatement(
@@ -2840,7 +2975,9 @@ class OncaPrototypeStack(Stack):
         # losing this position would silently route curation calls to the review action.
         _api_patterns = ["/api/ask*", "/api/gaps*", "/api/feed*", "/api/registry*",
                           "/api/v1/agent*", "/api/keys*", "/api/me/*", "/api/session/*",
-                          "/api/push/*"]
+                          "/api/push/*",
+                          # #181/#182/#186 — OAuth AS + MCP/A2A resource servers (no edge gate)
+                          "/oauth/*", "/.well-known/*", "/mcp*", "/a2a"]
         if google_idp:
             _api_patterns.append("/api/register*")
         for _pat in _api_patterns:

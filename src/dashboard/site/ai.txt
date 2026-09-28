@@ -1,0 +1,26 @@
+# ai.txt — terms for AI crawlers, answer engines and agents · onssa.org (Onça)
+
+User-Agent: *
+
+# Public pages you may read, index and quote (with attribution):
+Allow: /llms.txt
+Allow: /ai.txt
+Allow: /openapi.json
+Allow: /.well-known/agent-card.json
+Allow: /pricing.html
+Allow: /sample/
+Allow: /docs/
+
+# Licensed data: only through an authorized interface (MCP with sign-in, the tenant API),
+# within the licensing organization. Do not scrape, cache or redistribute it outside that organization.
+Disallow: /exec
+Disallow: /app
+Disallow: /api/
+Disallow: /feed
+
+# Attribution: cite "Onça (onssa.org)" and the primary source each row links to (CVM, BCB, DOU…).
+# Carry the qualifications through: `ask` answers come from a model and cite their sources.
+
+Contact: contato@onssa.org
+Manifest: https://onssa.org/llms.txt
+OpenAPI: https://onssa.org/openapi.json

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.marcioyoshida/onca",
+  "title": "Onça — Brazil financial competitive & regulatory intelligence",
+  "description": "Brazilian financial institutions: entity registry, sourced regulatory signals, cited Q&A",
+  "version": "1.0.0",
+  "websiteUrl": "https://onssa.org",
+  "icons": [
+    {
+      "src": "https://onssa.org/v3/icons/icon-512.png",
+      "mimeType": "image/png",
+      "sizes": [
+        "512x512"
+      ]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://onssa.org/mcp"
+    }
+  ]
+}

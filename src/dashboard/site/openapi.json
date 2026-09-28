@@ -1,0 +1,363 @@
+{
+ "openapi": "3.1.0",
+ "info": {
+  "title": "Onça API",
+  "version": "1.0.0",
+  "summary": "Competitive and regulatory intelligence on Brazilian financial institutions, built from public records (CVM, BCB, CADE, DOU, CEIS/CNEP, PNCP, Receita) and specialist press, resolved to a curated entity registry. Every row links to its primary source.",
+  "description": "Competitive and regulatory intelligence on Brazilian financial institutions, built from public records (CVM, BCB, CADE, DOU, CEIS/CNEP, PNCP, Receita) and specialist press, resolved to a curated entity registry. Every row links to its primary source. See /llms.txt for orientation and /ai.txt for terms. The MCP server at /mcp exposes the same data as tools (OAuth sign-in).",
+  "termsOfService": "https://onssa.org/docs/terms.html",
+  "contact": {
+   "name": "Onça (Smart Signals LLC)",
+   "url": "https://onssa.org",
+   "email": "contato@onssa.org"
+  },
+  "license": {
+   "name": "Licensed data — see the terms",
+   "url": "https://onssa.org/docs/terms.html"
+  },
+  "x-logo": {
+   "url": "https://onssa.org/v3/icons/icon-512.png",
+   "backgroundColor": "#0e1214"
+  }
+ },
+ "externalDocs": {
+  "description": "Orientation for AI agents (llms.txt)",
+  "url": "https://onssa.org/llms.txt"
+ },
+ "servers": [
+  {
+   "url": "https://onssa.org"
+  }
+ ],
+ "components": {
+  "securitySchemes": {
+   "tenantApiKey": {
+    "type": "http",
+    "scheme": "bearer",
+    "description": "A tenant API key (sk_onca_…) issued in the tenant's admin panel."
+   },
+   "onssaSignIn": {
+    "type": "http",
+    "scheme": "bearer",
+    "bearerFormat": "JWT",
+    "description": "An Onça sign-in ID token (Cognito)."
+   }
+  }
+ },
+ "paths": {
+  "/api/v1/agent/ask": {
+   "post": {
+    "summary": "Grounded question-answering for a tenant's own agents (API key).",
+    "description": "Answers ONLY from the tenant's licensed Onça data, with citations to primary sources; declines when the data doesn't support an answer. A language-model call — it can be wrong; check `citations`. Metered per tenant.",
+    "operationId": "v1_agent_ask",
+    "security": [
+     {
+      "tenantApiKey": []
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "OK",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "answer"
+         ],
+         "properties": {
+          "answer": {
+           "type": "string"
+          },
+          "refused": {
+           "type": "boolean"
+          },
+          "grounded": {
+           "type": "boolean"
+          },
+          "citations": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "id": {
+              "type": "string"
+             },
+             "entity_label": {
+              "type": "string"
+             },
+             "date": {
+              "type": "string"
+             },
+             "sources": {
+              "type": "array",
+              "items": {
+               "type": "object",
+               "properties": {
+                "url": {
+                 "type": "string"
+                }
+               }
+              }
+             }
+            }
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "Missing or invalid credentials"
+     },
+     "403": {
+      "description": "No active licence for this account/key"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "q"
+        ],
+        "properties": {
+         "q": {
+          "type": "string",
+          "maxLength": 800,
+          "description": "The question (PT or EN)."
+         },
+         "scope": {
+          "type": "object",
+          "properties": {
+           "industry": {
+            "type": "string"
+           }
+          }
+         },
+         "officer": {
+          "type": "string",
+          "enum": [
+           "cso",
+           "cro",
+           "cco",
+           "cpo",
+           "auto"
+          ]
+         }
+        }
+       },
+       "example": {
+        "q": "Quais mudanças regulatórias recentes afetam bancos?",
+        "scope": {
+         "industry": "banking"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/ask": {
+   "post": {
+    "summary": "The same grounded Q&A for a signed-in Onça user (dashboard session token).",
+    "description": "Same contract as /api/v1/agent/ask, authenticated with the user's Onça sign-in (Cognito ID token).",
+    "operationId": "ask",
+    "security": [
+     {
+      "onssaSignIn": []
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "OK",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "answer"
+         ],
+         "properties": {
+          "answer": {
+           "type": "string"
+          },
+          "refused": {
+           "type": "boolean"
+          },
+          "grounded": {
+           "type": "boolean"
+          },
+          "citations": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "id": {
+              "type": "string"
+             },
+             "entity_label": {
+              "type": "string"
+             },
+             "date": {
+              "type": "string"
+             },
+             "sources": {
+              "type": "array",
+              "items": {
+               "type": "object",
+               "properties": {
+                "url": {
+                 "type": "string"
+                }
+               }
+              }
+             }
+            }
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "Missing or invalid credentials"
+     },
+     "403": {
+      "description": "No active licence for this account/key"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "q"
+        ],
+        "properties": {
+         "q": {
+          "type": "string",
+          "maxLength": 800,
+          "description": "The question (PT or EN)."
+         },
+         "scope": {
+          "type": "object",
+          "properties": {
+           "industry": {
+            "type": "string"
+           }
+          }
+         },
+         "officer": {
+          "type": "string",
+          "enum": [
+           "cso",
+           "cro",
+           "cco",
+           "cpo",
+           "auto"
+          ]
+         }
+        }
+       },
+       "example": {
+        "q": "Quem está em alerta agora?",
+        "officer": "cso"
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/feed": {
+   "get": {
+    "summary": "The caller's licensed feed: cards, entities, regulatory and sector events.",
+    "description": "Server-scoped to the caller's licensed industries (never filtered in the client). Each card carries its date, entity, threat score and citations to primary sources.",
+    "operationId": "feed",
+    "security": [
+     {
+      "onssaSignIn": []
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "OK",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "as_of": {
+           "type": "string"
+          },
+          "scoped_modules": {
+           "type": "array",
+           "items": {
+            "type": "string"
+           }
+          },
+          "feed": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "id": {
+              "type": "string"
+             },
+             "date": {
+              "type": "string"
+             },
+             "entity": {
+              "type": [
+               "string",
+               "null"
+              ]
+             },
+             "narrative": {
+              "type": "string"
+             },
+             "threat_score": {
+              "type": "number"
+             },
+             "citations": {
+              "type": "array",
+              "items": {
+               "type": "object",
+               "properties": {
+                "url": {
+                 "type": "string"
+                }
+               }
+              }
+             }
+            }
+           }
+          },
+          "sector_events": {
+           "type": "array",
+           "items": {
+            "type": "object"
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "Missing or invalid credentials"
+     },
+     "403": {
+      "description": "No active licence for this account/key"
+     }
+    }
+   }
+  }
+ }
+}
