@@ -25,6 +25,18 @@ _JOB_KINDS = {"session": "abrir painel", "hoje": "abrir Hoje", "ask": "perguntar
               "share": "compartilhar", "headline": "ler manchete", "install": "instalar"}
 
 
+# Our own sessions are not demand evidence: the OncaQaPipeline phone gate (#163) signs in as the
+# QA personas at 390/412px on every run, and the operator is us. Live 2026-09-29: 134 of 135
+# sessions since 09-21 were qa-internal-* — the gate read 43% phone in W39 from automation alone.
+INTERNAL_TENANT_PREFIXES = ("qa-internal-",)
+INTERNAL_TENANTS = {"operator"}
+
+
+def is_internal(e: dict[str, Any]) -> bool:
+    t = str(e.get("tenant") or "")
+    return t in INTERNAL_TENANTS or t.startswith(INTERNAL_TENANT_PREFIXES)
+
+
 def _week(ts: str) -> str | None:
     try:
         d = dt.datetime.fromisoformat(str(ts).replace("Z", "+00:00")).date()
@@ -39,6 +51,9 @@ def build(events: list[dict[str, Any]], decisions: list[dict[str, Any]] | None =
     """Weekly sessions by device class (overall and per officer), installs, installed-app
     sessions, the top jobs done on a phone, and the M2 gate reading."""
     events = [e for e in (events or []) if isinstance(e, dict)]
+    internal = sum(1 for e in events if is_internal(e) and e.get("kind") == "session")
+    events = [e for e in events if not is_internal(e)]
+    decisions = [d for d in (decisions or []) if isinstance(d, dict) and not is_internal(d)]
     sess: dict[str, Counter] = defaultdict(Counter)
     sess_off: dict[str, dict[str, Counter]] = defaultdict(lambda: defaultdict(Counter))
     standalone: Counter = Counter()
@@ -87,6 +102,7 @@ def build(events: list[dict[str, Any]], decisions: list[dict[str, Any]] | None =
     return {
         "weeks": rows,
         "installs_total": sum(installs.values()),
+        "internal_sessions_excluded": internal,
         "phone_jobs": [{"job": k, "count": v} for k, v in phone_jobs.most_common(8)],
         "gate": {"phone_share_min": GATE_PHONE_SHARE, "weeks_required": GATE_WEEKS,
                  "weeks_met": streak, "usage_condition_met": streak >= GATE_WEEKS,

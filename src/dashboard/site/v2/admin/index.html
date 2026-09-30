@@ -267,7 +267,9 @@ function renderMobileUsage() {
   const g = mu.gate || {};
   document.getElementById("muGate").textContent = g.weeks_required
     ? `gate M2: ${g.weeks_met || 0}/${g.weeks_required} semanas ≥ ${Math.round((g.phone_share_min || 0) * 100)}% no celular` : "";
-  if (!weeks.length) { el.innerHTML = U.empty("Sem sessões registradas", "Nenhum evento de sessão com classe de dispositivo ainda.", "○"); return; }
+  const excl = mu.internal_sessions_excluded
+    ? `<p class="sub" style="margin-top:var(--s2)">${mu.internal_sessions_excluded} sessão(ões) de QA/operador excluída(s): automação não é demanda.</p>` : "";
+  if (!weeks.length) { el.innerHTML = U.empty("Sem sessões de clientes", "Nenhuma sessão de cliente com classe de dispositivo ainda.", "○") + excl; return; }
   const pct = (v) => v == null ? "—" : `${Math.round(v * 100)}%`;
   const rows = weeks.map(w => {
     const d = w.by_device || {};
@@ -281,7 +283,7 @@ function renderMobileUsage() {
     `<th>tablet</th><th>desktop</th><th>% celular</th><th>app instalado</th><th>instalações</th><th>por oficial (cel/total)</th></tr></thead>` +
     `<tbody>${rows}</tbody></table></div>` +
     `<div style="margin-top:var(--s3)"><span class="overline">No celular</span> ${jobs || '<span class="sub">—</span>'}</div>` +
-    `<p class="sub" style="margin-top:var(--s2)">${U.esc(g.note || "")}</p>` + pushStats(mu.push);
+    `<p class="sub" style="margin-top:var(--s2)">${U.esc(g.note || "")}</p>` + excl + pushStats(mu.push);
 }
 // #167: push delivery is reported honestly — sent / accepted by the push service / failed /
 // pruned (expired subscription) / opened, per day.

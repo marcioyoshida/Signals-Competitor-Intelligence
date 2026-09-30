@@ -28,6 +28,20 @@ def test_weekly_sessions_by_device_and_gate_streak():
     assert jobs["perguntar"] == 1 and jobs["aprovar/rejeitar"] == 1 and jobs["abrir painel"] == 4
 
 
+def test_qa_and_operator_sessions_never_count_toward_the_gate():
+    # the QA phone gate signs in as qa-internal-* on every pipeline run: automation is not demand
+    ev = []
+    for wk_day in ("09-07", "09-14", "09-21", "09-28"):
+        ev += [dict(_s(wk_day, "phone"), tenant="qa-internal-admin"),
+               dict(_s(wk_day, "phone"), tenant="operator"),
+               dict(_s(wk_day, "desktop"), tenant="acme-bank")]
+    ev.append(dict(_s("09-28", "phone", kind="ask"), tenant="qa-internal-test"))
+    out = mu.build(ev, [{"device": "phone", "tenant": "operator"}])
+    assert out["gate"]["weeks_met"] == 0 and out["gate"]["usage_condition_met"] is False
+    assert out["weeks"][0]["by_device"] == {"desktop": 1} and out["internal_sessions_excluded"] == 8
+    assert out["phone_jobs"] == []
+
+
 def test_a_gap_week_breaks_the_streak():
     ev = [_s("09-28", "phone"), _s("09-14", "phone")]      # W40 and W38: not consecutive
     assert mu.build(ev)["gate"]["weeks_met"] == 1
