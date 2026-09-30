@@ -24,7 +24,7 @@ import time
 from playwright.sync_api import sync_playwright
 
 from qa_pipeline.lib import auth, config
-from qa_pipeline.lib.browser import ARTIFACTS_BUCKET, CHROMIUM_LAUNCH_ARGS, upload_artifact
+from qa_pipeline.lib.browser import ARTIFACTS_BUCKET, engine, launch_args, upload_artifact
 from qa_pipeline.lib.checklist import Checklist
 
 PHONES = {"390": {"width": 390, "height": 844}, "412": {"width": 412, "height": 915}}
@@ -112,12 +112,16 @@ def run(event: dict) -> dict:
     c = Checklist()
     shots: list[str] = []
 
+    # the Lambda runs Chromium; "webkit" is the local Safari-engine proxy for #200 (Linux WebKit
+    # needs GTK/GStreamer libraries the Lambda image doesn't carry)
+    name = event.get("browser", "chromium")
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True, args=CHROMIUM_LAUNCH_ARGS)
+        browser = engine(p, name).launch(headless=True, args=launch_args(name))
         # basic auth for /v2/admin and /entry; /exec itself no longer needs it (#161)
+        mobile = {"is_mobile": True} if name != "firefox" else {}   # Firefox has no is_mobile
         ctx = browser.new_context(http_credentials={"username": user, "password": pw},
-                                  viewport=PHONES["390"], is_mobile=True, has_touch=True,
-                                  device_scale_factor=2)
+                                  viewport=PHONES["390"], has_touch=True,
+                                  device_scale_factor=2, **mobile)
         page = ctx.new_page()
         try:
             storage = auth.login_with_password(page, f"{site}/exec", creds["username"], creds["password"])
@@ -137,7 +141,7 @@ def run(event: dict) -> dict:
                         _settle(page)
                         _measure(page, f"/exec#{view}[{officer}]@{wkey}/{theme}", c, taps=True)
                         if theme == "dark" and wkey == "390":
-                            path = f"/tmp/phone-exec-{view}-{officer}.png"
+                            path = f"/tmp/phone-{name}-exec-{view}-{officer}.png"
                             page.screenshot(path=path)
                             shots.append(path)
                 # /v2/admin in its real operator view (?admin=1&opkey=) — that's where the badge
