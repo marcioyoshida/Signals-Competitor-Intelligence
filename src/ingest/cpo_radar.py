@@ -92,6 +92,7 @@ REVIEW_KEEP_DAYS = 35         # baseline (30) + evaluation lookback slack
 YT_KEEP_DAYS = 30             # YouTube API Services Terms: delete stored API data within 30 days
 EVENT_WINDOW_DAYS = 14        # events/alerts carried in latest.json
 CLUSTER_SPAN_DAYS = 10
+STORY_SPAN_DAYS = 2
 
 BRT = dt.timezone(dt.timedelta(hours=-3))   # Brazil has had no DST since 2019
 
@@ -492,7 +493,8 @@ def build_prompt(s: dict[str, Any], batch: list[dict[str, Any]]) -> str:
         '"event" ("launch" new product customers can now use | "feature" new/changed feature | '
         '"price" fee/rate/cashback/limit/benefit change | "outage" app/service failure | '
         '"complaint" user problem | "praise" | "corporate" company news that is not a customer-facing '
-        'product change: M&A, acquisition talks or rumours, funding, earnings, executives, lawsuits | '
+        'product change: M&A, acquisition talks or rumours, funding, earnings, dividends/JCP, share '
+        'price, executives, lawsuits | '
         '"other"), '
         '"sentiment" ("positive"|"neutral"|"negative"), '
         '"feature" (the specific product or feature named, e.g. "Pix parcelado", else ""), '
@@ -662,18 +664,83 @@ def _cluster_tokens(m: dict[str, Any], subject: dict[str, Any]) -> set[str]:
             if len(t) >= 3 and t not in _CLUSTER_STOP and t not in brand}
 
 
+# Deterministic backstops for what Nova Lite marks ``is_new_change`` anyway (first live digest,
+# 2026-09-28: ~10 of 54 week events were how-tos, "Tutorial sobre novo recurso"; Bradesco
+# dividends came through as a "price" change). Matched on folded (accent-free, lower) text.
+_HOWTO_LEAD = re.compile(r"^\W*(como|tutorial|passo a passo|dicas?|aprenda|veja como|saiba como"
+                         r"|how[\s-]to|explica(ndo)? como)\b")
+_HOWTO_ANY = re.compile(r"\b(tutorial|passo a passo|how[\s-]to)\b")
+_CORPORATE = re.compile(r"\b(dividendos?|jcp|juros sobre (o )?capital( proprio)?|recompra de acoes"
+                        r"|lucro liquido|balanco|resultado trimestral|ipo|acoes (do|da|de)|cotacao)\b")
+# a change name made only of these (after stop words and the brand) says nothing: "mudança que
+# teve", "Atualização sobre o plano Bradesco"
+_VAGUE = {
+    "atualizacao", "atualizacoes", "sobre", "plano", "planos", "noticia", "noticias", "comentario",
+    "comentarios", "recente", "recentes", "teve", "novidade", "novidades", "anuncio", "informacao",
+    "informacoes", "politica", "alteracao", "alteracoes", "servico", "servicos", "produto",
+    "produtos", "opcao", "opcoes", "aviso", "importante", "urgente", "atencao", "recurso",
+    "recursos", "funcao", "funcionalidade", "video", "hoje", "ontem", "semana",
+}
+
+
+# a creator filming a how-to of something NEW still reports the change ("LEIA QUALQUER CHAVE PIX
+# COM A CÂMERA (NOVA FUNÇÃO)", "ITAÚ LIBERA O CARTÃO THE ESSENTIAL")
+_NEWS_TITLE = re.compile(r"\b(nova funcao|novo recurso|novidade|lancou|lanca|lancamento|chegou"
+                         r"|libera|liberou|acabou|acaba|fim d[oa])\b")
+
+
+def is_howto(m: dict[str, Any]) -> bool:
+    """Evergreen how-to: a change named "como …", or a how-to reason/title with no news signal."""
+    change, why, title = (fold(m.get(k)) for k in ("change", "why", "title"))
+    if _HOWTO_LEAD.match(change):
+        return True
+    howto = bool(_HOWTO_LEAD.match(why) or _HOWTO_LEAD.match(title) or _HOWTO_ANY.search(f"{change} {why}"))
+    return howto and not _NEWS_TITLE.search(title)
+
+
+def is_corporate(m: dict[str, Any]) -> bool:
+    return bool(_CORPORATE.search(fold(f"{m.get('change') or ''} {m.get('feature') or ''} {m.get('title') or ''}")))
+
+
 def surfaceable(m: dict[str, Any]) -> bool:
     """The card gate: relevant, pt-BR, a DATED change (not evergreen), and a change-type event."""
     return (m.get("provenance") == "llm" and bool(m.get("relevant")) and m.get("pt_br") is not False
             and bool(m.get("is_new_change")) and m.get("event") in SURFACE_EVENTS
-            and language_gate(m)[0])
+            and language_gate(m)[0] and not is_howto(m) and not is_corporate(m))
+
+
+def is_specific(m: dict[str, Any], subject: dict[str, Any]) -> bool:
+    """The change name carries at least one token beyond the brand, stop words and filler."""
+    return bool(_cluster_tokens(m, subject) - _VAGUE)
+
+
+def event_candidates(subject: dict[str, Any], videos: list[dict[str, Any]], start: str) -> list[dict[str, Any]]:
+    return [v for v in videos if surfaceable(v) and is_specific(v, subject) and (v.get("date") or "") >= start]
+
+
+_STORY_STOP = _CLUSTER_STOP | _VAGUE | {"fazer", "milhoes", "bilhoes", "reais", "voce", "voces",
+                                         "urgente", "agora", "pessoal", "galera", "banco", "bancos"}
+
+
+def _story_tokens(m: dict[str, Any], subject: dict[str, Any]) -> set[str]:
+    brand = set()
+    for a in [subject.get("name", ""), *(subject.get("aliases") or [])]:
+        brand |= set(re.findall(r"[a-z0-9]+", fold(a)))
+    text = fold(f"{m.get('change') or ''} {m.get('feature') or ''} {m.get('title') or ''}")
+    return {t for t in re.findall(r"[a-z0-9]+", text)
+            if len(t) >= 5 and t not in _STORY_STOP and t not in brand}
 
 
 def cluster_mentions(subject: dict[str, Any], mentions: list[dict[str, Any]],
-                     *, span_days: int = CLUSTER_SPAN_DAYS) -> list[list[dict[str, Any]]]:
+                     *, span_days: int = CLUSTER_SPAN_DAYS, story_days: int = STORY_SPAN_DAYS
+                     ) -> list[list[dict[str, Any]]]:
     """Single-link clustering on the change/feature name: two mentions join when their
-    distinctive tokens overlap by ≥50% of the smaller set and they are ≤``span_days`` apart."""
+    distinctive tokens overlap by ≥50% of the smaller set and they are ≤``span_days`` apart.
+    Creators name the same story differently ("irregularidades em contratos" / "C6 Bank proibido
+    de fazer consignado"), so two mentions of the same event type ≤``story_days`` apart also join
+    when change+title share ≥2 distinctive words of 5+ letters."""
     toks = [_cluster_tokens(m, subject) for m in mentions]
+    story = [_story_tokens(m, subject) for m in mentions]
     parent = list(range(len(mentions)))
 
     def find(i: int) -> int:
@@ -685,16 +752,15 @@ def cluster_mentions(subject: dict[str, Any], mentions: list[dict[str, Any]],
     for i in range(len(mentions)):
         for j in range(i + 1, len(mentions)):
             a, b = toks[i], toks[j]
-            if not a or not b:
-                continue
-            if len(a & b) / min(len(a), len(b)) < 0.5:
-                continue
             try:
                 gap = abs((dt.date.fromisoformat(mentions[i]["date"])
                            - dt.date.fromisoformat(mentions[j]["date"])).days)
             except (KeyError, ValueError):
                 gap = 0
-            if gap <= span_days:
+            by_name = bool(a and b) and len(a & b) / min(len(a), len(b)) >= 0.5 and gap <= span_days
+            by_story = (len(story[i] & story[j]) >= 2 and gap <= story_days
+                        and mentions[i].get("event") == mentions[j].get("event"))
+            if by_name or by_story:
                 parent[find(i)] = find(j)
     groups: dict[int, list[dict[str, Any]]] = {}
     for i, m in enumerate(mentions):
@@ -1089,7 +1155,7 @@ def run(store: Any | None, *, today: dt.date | None = None, subjects: list[dict[
         st_reviews[pid] = {"coverage_since": cov_since, "reviews": reviews}
         st_videos[pid] = videos
         # --- events ---------------------------------------------------------------------------
-        cand = [v for v in videos if surfaceable(v) and (v.get("date") or "") >= eval_days[0]]
+        cand = event_candidates(s, videos, eval_days[0])
         events += [cluster_to_event(s, g) for g in cluster_mentions(s, cand)]
         pa = detect_alerts(s, reviews, eval_days=eval_days, coverage_since=cov_since, app=app_meta)
         alerts += pa

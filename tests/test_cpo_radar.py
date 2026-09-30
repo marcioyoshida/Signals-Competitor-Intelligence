@@ -323,6 +323,51 @@ def test_unrelated_changes_do_not_merge_and_far_apart_dates_split():
     assert len(cr.cluster_mentions(SUBJ["picpay"], [d, e])) == 2
 
 
+def test_same_story_different_change_names_merge_by_title_words():
+    # live 2026-09-27: 9 creators named it "irregularidades em contratos", one "C6 Bank proibido de
+    # fazer consignado"; the digest listed the INSS ban twice
+    a = {"change": "irregularidades em contratos", "event": "complaint", "date": "2026-09-27",
+         "title": "BANCO PROIBIDO de fazer CONSIGNADO: R$ 300 MILHÕES de VOLTA aos APOSENTADOS!"}
+    b = {"change": "C6 Bank proibido de fazer consignado", "event": "complaint", "date": "2026-09-28",
+         "title": "C6 Bank é punido pelo INSS"}
+    assert len(cr.cluster_mentions(SUBJ["c6"], [a, b])) == 1
+    # one shared word, another event type, or days apart: separate stories
+    c = dict(b, title="C6 Bank consignado", change="novo consignado privado", event="launch")
+    assert len(cr.cluster_mentions(SUBJ["c6"], [a, c])) == 2
+    assert len(cr.cluster_mentions(SUBJ["c6"], [a, dict(b, date="2026-09-20")])) == 2
+
+
+def _scored(**kw):
+    m = {"provenance": "llm", "relevant": True, "pt_br": True, "is_new_change": True,
+         "event": "feature", "why": "Nova função no app", "title": "Novidade no app", "change": "x"}
+    m.update(kw)
+    return m
+
+
+def test_howto_corporate_and_vague_items_never_surface():
+    # live 2026-09-28 digest: the model flagged these as dated changes
+    assert not cr.surfaceable(_scored(change="Como zerar a anuidade pelo capital investido"))
+    assert not cr.surfaceable(_scored(change="simular e contratar empréstimo", why="Tutorial sobre novo recurso",
+                                      title="SIMULANDO E CONTRATANDO EMPRÉSTIMO"))
+    assert not cr.surfaceable(_scored(change="Pular compra do mês", why="Explica como usar a função",
+                                      title="PicPay Card: Como Pular a Compra do Mês"))
+    assert not cr.surfaceable(_scored(event="price", change="novos valores de dividendos",
+                                      title="BRADESCO: NOVOS VALORES DE DIVIDENDOS E PREÇO TETO!"))
+    # a how-to of something NEW still reports the change
+    assert cr.surfaceable(_scored(change="ler chave pix com a câmera", why="Tutorial sobre novo recurso",
+                                  title="LEIA QUALQUER CHAVE PIX COM A CÂMERA NO MERCADO PAGO (NOVA FUNÇÃO)"))
+    assert cr.surfaceable(_scored(change="fim dos benefícios Priority Pass"))
+    # vague names carry nothing beyond the brand and filler
+    bra = {"id": "bradesco", "name": "Bradesco", "aliases": []}
+    assert not cr.is_specific(_scored(change="Atualização sobre o plano Bradesco"), bra)
+    assert not cr.is_specific(_scored(change="mudança que teve"), bra)
+    assert cr.is_specific(_scored(change="mudança na opção de aumento de limite"), bra)
+    vs = [_scored(change="Atualização sobre o plano Bradesco", date="2026-09-26"),
+          _scored(change="Lançamento do Efetivo Plus", date="2026-09-25"),
+          _scored(change="Lançamento do Efetivo Plus", date="2026-09-01")]
+    assert [v["change"] for v in cr.event_candidates(bra, vs, "2026-09-22")] == ["Lançamento do Efetivo Plus"]
+
+
 # --- baseline alert: the Inter 2026-09-23 v26.16 login outage --------------------------------
 
 def _inter_reviews():
