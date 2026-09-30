@@ -78,6 +78,11 @@ STORE_URL = "https://apps.apple.com/br/app/id{app}?see-all=reviews"
 RSS_MAX_PAGES = 10            # Apple's hard cap: 10 x 50 = the 500 most recent reviews
 EMPTY_FIRST_PAGE_RETRIES = 2
 EMPTY_RETRY_PAUSE_S = 3.0
+# Scheduled runs (08:30 UTC) got an empty page 1 on EVERY URL form for 9 of 10 apps on 09-29 and
+# 09-30, while an on-demand run minutes later answered for all: a window, not a per-app fault that
+# seconds of retry can outlast. Apps still empty after the whole first pass are retried once more
+# this long after it.
+DEFERRED_RETRY_S = 150.0
 YT_API = "https://www.googleapis.com/youtube/v3"
 YT_COST = {"playlistItems": 1, "search": 100, "videos": 1}
 
@@ -308,7 +313,7 @@ def pull_reviews(app_id: str, *, seen: set[str], since: str, fetch: Fetch | None
     fetch = fetch or (lambda u, p=None: get_json(u, p, pace=1.0))
     url, via, nonce = RSS_URL, 0, int(time.time())
     new: list[dict[str, Any]] = []
-    pages, stop_reason, error = 0, None, None
+    pages, stop_reason, error, empty_shape = 0, None, None, None
     for page in range(1, max_pages + 1):
         try:
             doc = fetch(url.format(page=page, app=app_id, nonce=nonce), None)
@@ -340,6 +345,10 @@ def pull_reviews(app_id: str, *, seen: set[str], since: str, fetch: Fetch | None
                     break
             if not rows:
                 stop_reason = "empty_first_page"
+                feed = (doc or {}).get("feed") if isinstance(doc, dict) else None
+                empty_shape = {"feed_keys": sorted(feed)[:8] if isinstance(feed, dict) else None,
+                               "updated": ((feed or {}).get("updated") or {}).get("label")
+                               if isinstance(feed, dict) else None}
                 break
         if not rows:
             stop_reason = "empty"
@@ -362,7 +371,47 @@ def pull_reviews(app_id: str, *, seen: set[str], since: str, fetch: Fetch | None
     dates = sorted(r["date"] for r in new)
     return new, {"pages": pages, "new": len(new), "stop": stop_reason or ("cap" if cap_hit else None),
                  "cap_hit": cap_hit, "oldest_new": dates[0] if dates else None,
-                 "newest_new": dates[-1] if dates else None, "error": error, "via": via}
+                 "newest_new": dates[-1] if dates else None, "error": error, "via": via,
+                 **({"empty_shape": empty_shape} if empty_shape else {})}
+
+
+def _review_since(s: dict[str, Any], app_id: str, reviews: list[dict[str, Any]], review_cut: str) -> str:
+    # `since` is PER APP: a product with two apps (Bradesco + next) must not cut the quieter app's
+    # backfill at the busier app's newest review (live 2026-09-26: next got 2 reviews instead of
+    # 30 days). Rows stored before app_id existed belong to the first (primary) app.
+    mine = [r for r in reviews if (r.get("app_id") or (s["apple_app_ids"][0]["id"])) == app_id]
+    since = max((r["date"] for r in mine), default=None)
+    return _days_back(dt.date.fromisoformat(since), 1) if since else review_cut
+
+
+def pull_all_reviews(subjects: list[dict[str, Any]], held: dict[str, list[dict[str, Any]]],
+                     review_cut: str, *, fetch: Fetch | None = None,
+                     deferred_retry_s: float | None = None) -> dict[tuple[str, str], tuple[list, dict]]:
+    """Every (product, app) pulled up front, then ONE deferred round for the apps whose page 1
+    stayed empty on every URL form: ``deferred_retry_s`` after the first pass. ``held`` = the
+    product's stored, in-window reviews (dedup + ``since``)."""
+    wait = DEFERRED_RETRY_S if deferred_retry_s is None else deferred_retry_s
+    out: dict[tuple[str, str], tuple[list, dict]] = {}
+    for s in subjects:
+        for app in s.get("apple_app_ids") or []:
+            reviews = held.get(s["id"]) or []
+            out[(s["id"], app["id"])] = pull_reviews(
+                app["id"], seen={r["id"] for r in reviews},
+                since=_review_since(s, app["id"], reviews, review_cut), fetch=fetch)
+    empty = [k for k, (_, c) in out.items() if c.get("stop") == "empty_first_page"]
+    if empty and wait >= 0:
+        print(f"cpo_radar: {len(empty)} app(s) empty on every RSS URL; retrying in {wait:.0f}s")
+        time.sleep(wait)
+        subj = {s["id"]: s for s in subjects}
+        for pid, app_id in empty:
+            reviews = held.get(pid) or []
+            new, c = pull_reviews(app_id, seen={r["id"] for r in reviews},
+                                  since=_review_since(subj[pid], app_id, reviews, review_cut), fetch=fetch)
+            c["deferred_retry"] = True
+            if c.get("stop") != "empty_first_page":
+                print(f"cpo_radar: app {app_id} answered on the deferred retry")
+            out[(pid, app_id)] = (new, c)
+    return out
 
 
 def app_lookup(app_id: str, *, fetch: Fetch | None = None) -> dict[str, Any]:
@@ -1076,8 +1125,11 @@ def _subject_youtube(subject: dict[str, Any], yt: YouTubeClient, *, since: str, 
 def run(store: Any | None, *, today: dt.date | None = None, subjects: list[dict[str, Any]] | None = None,
         products: list[str] | None = None, fetch: Fetch | None = None,
         converse: Converser | None = None, yt_key: str | None | bool = None,
-        youtube: bool = True, reclassify_youtube: bool = False) -> dict[str, Any]:
+        youtube: bool = True, reclassify_youtube: bool = False,
+        deferred_retry_s: float = -1.0) -> dict[str, Any]:
     """One daily radar run. ``store`` None = compute only (no persistence).
+    ``deferred_retry_s``: pause before re-asking apps whose RSS stayed empty (the Lambda passes
+    ``DEFERRED_RETRY_S``; negative, the default, = no deferred round).
     ``yt_key``: None → resolve (env/secret); False/"" → treat as absent.
     ``reclassify_youtube``: re-score every STORED video (after a prompt/taxonomy change) — they
     re-enter the classify step as unscored; reviews are untouched (they drive the baseline)."""
@@ -1115,6 +1167,10 @@ def run(store: Any | None, *, today: dt.date | None = None, subjects: list[dict[
     products_out, events, alerts = [], [], []
     eval_days = [_days_back(today, k) for k in range(EVENT_WINDOW_DAYS - 1, -1, -1)]
 
+    held = {s["id"]: [r for r in (st_reviews.get(s["id"]) or {}).get("reviews") or []
+                      if (r.get("date") or "") >= review_cut] for s in subjects}
+    pulled = pull_all_reviews(subjects, held, review_cut, fetch=fetch, deferred_retry_s=deferred_retry_s)
+
     for s in subjects:
         pid = s["id"]
         cov: dict[str, Any] = {}
@@ -1126,14 +1182,8 @@ def run(store: Any | None, *, today: dt.date | None = None, subjects: list[dict[
         app_meta: dict[str, Any] = {}
         by_app: dict[str, Any] = {}
         for i, app in enumerate(s.get("apple_app_ids") or []):
-            # `since` is PER APP: a product with two apps (Bradesco + next) must not cut the
-            # quieter app's backfill at the busier app's newest review (live 2026-09-26: next
-            # got 2 reviews instead of 30 days). Rows stored before app_id existed belong to
-            # the first (primary) app.
-            mine = [r for r in reviews if (r.get("app_id") or (s["apple_app_ids"][0]["id"])) == app["id"]]
-            since = max((r["date"] for r in mine), default=None)
-            since = _days_back(dt.date.fromisoformat(since), 1) if since else review_cut
-            new, c = pull_reviews(app["id"], seen=seen, since=since, fetch=fetch)
+            new, c = pulled[(pid, app["id"])]
+            new = [r for r in new if r["id"] not in seen]
             for r in new:
                 r.update(source="appstore", product=pid, app_id=app["id"])
             reviews += new
@@ -1274,7 +1324,8 @@ def lambda_handler(event: dict[str, Any] | None, context: Any) -> dict[str, Any]
         store = S3Store(bucket) if bucket else None
     today = dt.date.fromisoformat(event["today"]) if event.get("today") else None
     out = run(store, today=today, products=event.get("products"), youtube=event.get("youtube", True) is not False,
-              reclassify_youtube=bool(event.get("reclassify_youtube")))
+              reclassify_youtube=bool(event.get("reclassify_youtube")),
+              deferred_retry_s=float(event.get("deferred_retry_s", DEFERRED_RETRY_S)))
     out.pop("radar", None)
     return {"statusCode": 200, "body": json.dumps(out, ensure_ascii=False)}
 

@@ -848,3 +848,51 @@ def test_digest_drops_an_english_reason_already_stored():
     lines = cr.render_weekly_digest(radar, as_of="2026-09-28")["lines"]
     assert "suspended" not in " ".join(lines) and "evolution" not in " ".join(lines)
     assert any("irregularidades em contratos (https://youtu.be/x)" in l for l in lines)
+
+
+# --- 2026-09-30: scheduled runs empty on every URL form for 9/10 apps; on-demand fine ---------
+
+def test_apps_empty_after_the_first_pass_get_one_deferred_retry(monkeypatch):
+    monkeypatch.setattr(cr, "EMPTY_RETRY_PAUSE_S", 0)
+    sleeps: list[float] = []
+    monkeypatch.setattr(cr.time, "sleep", lambda s: sleeps.append(s))
+    page = _load("appstore_rss_inter_page1.json")
+    state = {"round": 1}
+
+    def fetch(url, params=None):
+        # app 222 answers only once the first pass is over; app 333 never does
+        if "page=1/" in url and ("id=111/" in url or ("id=222/" in url and state["round"] == 2)):
+            return page
+        if "page=1/" in url and "id=333/" in url:
+            return {"feed": {"updated": {"label": "2026-09-30T01:30:00-07:00"}, "author": {}}}
+        return {"feed": {}}
+
+    subj = lambda pid, aid: {"id": pid, "name": pid, "apple_app_ids": [{"id": aid}]}  # noqa: E731
+    subjects = [subj("a", "111"), subj("b", "222"), subj("c", "333")]
+    real_pull = cr.pull_reviews
+
+    def pull(app_id, **kw):
+        out = real_pull(app_id, **kw)
+        if app_id == "333":
+            state["round"] = 2          # the first pass is done once the last app was asked
+        return out
+
+    monkeypatch.setattr(cr, "pull_reviews", pull)
+    got = cr.pull_all_reviews(subjects, {}, "2026-01-01", fetch=fetch, deferred_retry_s=150)
+    assert 150 in sleeps
+    assert got[("a", "111")][0] and "deferred_retry" not in got[("a", "111")][1]
+    assert got[("b", "222")][0] and got[("b", "222")][1]["deferred_retry"] is True
+    new, c = got[("c", "333")]
+    assert new == [] and c["stop"] == "empty_first_page" and c["deferred_retry"] is True
+    # what Apple sent is kept for diagnosis: a feed with metadata but no entries
+    assert c["empty_shape"] == {"feed_keys": ["author", "updated"], "updated": "2026-09-30T01:30:00-07:00"}
+
+
+def test_a_negative_deferred_retry_disables_the_second_round(monkeypatch):
+    monkeypatch.setattr(cr, "EMPTY_RETRY_PAUSE_S", 0)
+    sleeps: list[float] = []
+    monkeypatch.setattr(cr.time, "sleep", lambda s: sleeps.append(s))
+    got = cr.pull_all_reviews([{"id": "a", "name": "a", "apple_app_ids": [{"id": "1"}]}], {}, "2026-01-01",
+                              fetch=lambda u, p=None: {"feed": {}}, deferred_retry_s=-1)
+    assert got[("a", "1")][1]["stop"] == "empty_first_page" and "deferred_retry" not in got[("a", "1")][1]
+    assert all(s == 0 for s in sleeps)
