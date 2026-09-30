@@ -66,6 +66,13 @@ _SECRET_ID = "signalscompetitor/onca/api-key"
 UA = "onca-cpo-radar/1.0 (competitor product monitoring; read-only)"
 
 RSS_URL = "https://itunes.apple.com/br/rss/customerreviews/page={page}/id={app}/sortby=mostrecent/json"
+# Fallbacks when page 1 stays empty after retries. From the Lambda, Apple's edge served Neon an
+# EMPTY page 1 on every run 09-27..09-29 (Santander 09-28/29) while the same URL returned 50
+# reviews from elsewhere: a stale edge answer, so ask for the same feed under another cache key.
+RSS_URL_FALLBACKS = (
+    RSS_URL + "?nc={nonce}",
+    "https://itunes.apple.com/rss/customerreviews/page={page}/id={app}/sortby=mostrecent/json?cc=br&nc={nonce}",
+)
 LOOKUP_URL = "https://itunes.apple.com/lookup"
 STORE_URL = "https://apps.apple.com/br/app/id{app}?see-all=reviews"
 RSS_MAX_PAGES = 10            # Apple's hard cap: 10 x 50 = the 500 most recent reviews
@@ -286,6 +293,12 @@ def parse_rss_page(doc: dict[str, Any]) -> list[dict[str, Any]]:
     return rows
 
 
+def _flag(sources: dict[str, str], key: str, msg: str) -> None:
+    """Accumulate "partial: a; b" instead of overwriting the previous app's problem."""
+    cur = sources.get(key) or "ok"
+    sources[key] = ("partial: " + msg) if cur == "ok" else (cur + "; " + msg if msg not in cur else cur)
+
+
 def pull_reviews(app_id: str, *, seen: set[str], since: str, fetch: Fetch | None = None,
                  max_pages: int = RSS_MAX_PAGES) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Newest-first pagination that stops as soon as it reaches what we already hold:
@@ -293,11 +306,12 @@ def pull_reviews(app_id: str, *, seen: set[str], since: str, fetch: Fetch | None
     predates ``since``. Returns (new rows, coverage). ``cap_hit`` = page ``max_pages`` was
     consumed without reaching the overlap, i.e. reviews between runs were lost to Apple's cap."""
     fetch = fetch or (lambda u, p=None: get_json(u, p, pace=1.0))
+    url, via, nonce = RSS_URL, 0, int(time.time())
     new: list[dict[str, Any]] = []
     pages, stop_reason, error = 0, None, None
     for page in range(1, max_pages + 1):
         try:
-            doc = fetch(RSS_URL.format(page=page, app=app_id), None)
+            doc = fetch(url.format(page=page, app=app_id, nonce=nonce), None)
         except Exception as exc:  # noqa: BLE001 — a dead page ends the pull, never the run
             error = str(exc)[:160]
             stop_reason = "error"
@@ -310,10 +324,19 @@ def pull_reviews(app_id: str, *, seen: set[str], since: str, fetch: Fetch | None
             for _ in range(EMPTY_FIRST_PAGE_RETRIES):
                 time.sleep(EMPTY_RETRY_PAUSE_S)
                 try:
-                    rows = parse_rss_page(fetch(RSS_URL.format(page=page, app=app_id), None))
+                    rows = parse_rss_page(fetch(url.format(page=page, app=app_id, nonce=nonce), None))
                 except Exception:  # noqa: BLE001
                     rows = []
                 if rows:
+                    break
+            for i, alt in enumerate(RSS_URL_FALLBACKS if not rows else ()):
+                try:
+                    rows = parse_rss_page(fetch(alt.format(page=page, app=app_id, nonce=nonce), None))
+                except Exception:  # noqa: BLE001
+                    rows = []
+                if rows:
+                    url, via = alt, i + 1        # keep paginating on the variant that answered
+                    print(f"cpo_radar: app {app_id} page 1 empty on the primary RSS URL; fallback {via} answered")
                     break
             if not rows:
                 stop_reason = "empty_first_page"
@@ -339,7 +362,7 @@ def pull_reviews(app_id: str, *, seen: set[str], since: str, fetch: Fetch | None
     dates = sorted(r["date"] for r in new)
     return new, {"pages": pages, "new": len(new), "stop": stop_reason or ("cap" if cap_hit else None),
                  "cap_hit": cap_hit, "oldest_new": dates[0] if dates else None,
-                 "newest_new": dates[-1] if dates else None, "error": error}
+                 "newest_new": dates[-1] if dates else None, "error": error, "via": via}
 
 
 def app_lookup(app_id: str, *, fetch: Fetch | None = None) -> dict[str, Any]:
@@ -1121,15 +1144,16 @@ def run(store: Any | None, *, today: dt.date | None = None, subjects: list[dict[
             if i == 0:
                 cov["appstore"] = dict(c, app_id=app["id"])
             if c.get("error"):
-                sources["appstore"] = "partial: RSS error"
+                _flag(sources, "appstore", "RSS error")
             if c.get("stop") == "empty_first_page":
-                sources["appstore"] = f"partial: empty RSS for app {app['id']}"
+                # every affected app is named: one overwritten string hid Neon's 3-day outage
+                _flag(sources, "appstore", f"empty RSS for app {app['id']}")
             if not cov_since and new:
                 # cold start: the oldest fetched day is partial unless we stopped on `since`
                 oldest = min(r["date"] for r in new)
                 cov_since = oldest if c.get("stop") == "since" else _days_back(dt.date.fromisoformat(oldest), -1)
             if c.get("cap_hit"):
-                sources["appstore"] = "partial: 500-review cap hit"
+                _flag(sources, "appstore", "500-review cap hit")
         cov_since = max(cov_since or review_cut, review_cut)
         # --- YouTube ---------------------------------------------------------------------------
         videos = [v for v in st_videos.get(pid) or [] if (v.get("date") or "") >= yt_cut]
@@ -1157,7 +1181,12 @@ def run(store: Any | None, *, today: dt.date | None = None, subjects: list[dict[
         # --- events ---------------------------------------------------------------------------
         cand = event_candidates(s, videos, eval_days[0])
         events += [cluster_to_event(s, g) for g in cluster_mentions(s, cand)]
-        pa = detect_alerts(s, reviews, eval_days=eval_days, coverage_since=cov_since, app=app_meta)
+        # no app answered today: yesterday's zero-review days are a GAP, not a quiet day, so a
+        # z-score over them means nothing (Santander 09-28/29 kept stale reviews and read "quiet")
+        stale = bool(by_app) and all(c.get("stop") == "empty_first_page" for c in by_app.values())
+        pa = [] if stale else detect_alerts(s, reviews, eval_days=eval_days, coverage_since=cov_since, app=app_meta)
+        if stale:
+            cov["appstore_stale"] = True
         alerts += pa
         if len(by_app) > 1:
             cov["appstore_by_app"] = by_app

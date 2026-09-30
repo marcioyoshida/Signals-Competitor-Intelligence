@@ -734,6 +734,35 @@ def test_empty_first_page_is_retried_before_concluding_no_reviews(monkeypatch):
     assert new == [] and cov["stop"] == "empty_first_page"          # persistent → flagged, not "none"
 
 
+def test_a_stale_empty_edge_answer_falls_back_to_another_cache_key(monkeypatch):
+    # live 09-27..09-29: the Lambda got an EMPTY page 1 for Neon on every run (3 tries), while the
+    # same feed under another URL form answered with 50 reviews
+    monkeypatch.setattr(cr, "EMPTY_RETRY_PAUSE_S", 0)
+    seen_urls = []
+
+    def edge(url, params=None):
+        seen_urls.append(url)
+        if "cc=br" in url and "page=1/" in url:
+            return _load("appstore_rss_inter_page1.json")
+        return {"feed": {}}
+
+    new, cov = cr.pull_reviews("1127996388", seen=set(), since="2026-01-01", fetch=edge)
+    assert new and cov["via"] == 2 and cov["stop"] == "empty"
+    # page 2 is asked on the variant that answered, not the stale primary
+    assert "page=2/" in seen_urls[-1] and "cc=br" in seen_urls[-1]
+    new, cov = cr.pull_reviews("1127996388", seen=set(), since="2026-01-01",
+                               fetch=lambda u, p=None: _load("appstore_rss_inter_page1.json") if "page=1/" in u else {"feed": {}})
+    assert cov["via"] == 0                                           # primary fine → no fallback
+
+
+def test_source_flags_accumulate_instead_of_overwriting():
+    src = {"appstore": "ok"}
+    cr._flag(src, "appstore", "empty RSS for app 1127996388")
+    cr._flag(src, "appstore", "empty RSS for app 613365711")
+    cr._flag(src, "appstore", "empty RSS for app 613365711")
+    assert src["appstore"] == "partial: empty RSS for app 1127996388; empty RSS for app 613365711"
+
+
 def test_second_app_backfills_its_own_window(tmp_path, monkeypatch):
     import datetime as dt
 
@@ -764,6 +793,27 @@ def test_second_app_backfills_its_own_window(tmp_path, monkeypatch):
     assert seen_since["222"] == seen_since["111"]
     cov = out["radar"]["coverage"]["bank"]
     assert cov["appstore"]["app_id"] == "111" and set(cov["appstore_by_app"]) == {"111", "222"}
+
+
+def test_no_app_answering_means_no_alerts_and_a_stale_flag(tmp_path, monkeypatch):
+    # stored reviews + an all-empty pull must not read as a quiet day (Santander 09-28/29)
+    import datetime as dt
+
+    monkeypatch.setattr(cr, "EMPTY_RETRY_PAUSE_S", 0)
+    called = {"alerts": 0}
+    monkeypatch.setattr(cr, "detect_alerts", lambda *a, **k: called.__setitem__("alerts", called["alerts"] + 1) or [])
+
+    def fetch(url, params=None):
+        if "customerreviews" in url:
+            return {"feed": {}}
+        return {"results": [{"version": "1.0", "currentVersionReleaseDate": "2026-09-01T00:00:00Z"}]}
+
+    subj = {"id": "bank", "name": "Bank", "aliases": ["Bank"], "search_query": "Bank", "namesake_risk": "",
+            "apple_app_ids": [{"id": "111", "name": "Main"}], "youtube_channels": [], "onca_entities": ["bank"]}
+    out = cr.run(cr.LocalStore(tmp_path), today=dt.date(2026, 9, 25), subjects=[subj], fetch=fetch,
+                 yt_key=False, converse=lambda p, n: (None, {}))
+    assert called["alerts"] == 0 and out["radar"]["coverage"]["bank"]["appstore_stale"] is True
+    assert out["radar"]["sources"]["appstore"] == "partial: empty RSS for app 111"
 
 
 def test_english_why_falls_back_to_the_portuguese_change_or_title():
