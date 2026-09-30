@@ -29,9 +29,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 def _table():
     import boto3
 
-    cf = boto3.client("cloudformation")
-    res = cf.describe_stack_resources(StackName="OncaPrototypeStack")["StackResources"]
-    name = next(r["PhysicalResourceId"] for r in res
+    # list_stack_resources, paginated: describe_stack_resources stops at 100 and this stack has more
+    pages = boto3.client("cloudformation").get_paginator("list_stack_resources").paginate(StackName="OncaPrototypeStack")
+    name = next(r["PhysicalResourceId"] for pg in pages for r in pg["StackResourceSummaries"]
                 if r["ResourceType"] == "AWS::DynamoDB::Table" and r["LogicalResourceId"].startswith("OncaOAuthTable"))
     return boto3.resource("dynamodb").Table(name)
 
