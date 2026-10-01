@@ -81,7 +81,7 @@ EMPTY_RETRY_PAUSE_S = 3.0
 # Scheduled runs (08:30 UTC) got an empty page 1 on EVERY URL form for 9 of 10 apps on 09-29 and
 # 09-30, while an on-demand run minutes later answered for all: a window, not a per-app fault that
 # seconds of retry can outlast. Apps still empty after the whole first pass are retried once more
-# this long after it.
+# this long after it. The window sat around 01:30 Pacific, so the schedule moved to 06:15 UTC.
 DEFERRED_RETRY_S = 150.0
 YT_API = "https://www.googleapis.com/youtube/v3"
 YT_COST = {"playlistItems": 1, "search": 100, "videos": 1}

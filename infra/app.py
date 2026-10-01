@@ -3822,13 +3822,15 @@ class OncaPrototypeStack(Stack):
                        ":secret:signalscompetitor/onca/api-key-*"],
         ))
         # Own daily schedule, NOT the pipeline: OncaPipeline runs 3×/day, which would triple the
-        # YouTube quota and Nova spend for no new data. 08:30 UTC = 05:30 BRT, so the next
+        # YouTube quota and Nova spend for no new data. 06:15 UTC = 03:15 BRT, so the 09:45
         # pipeline run's feed_builder picks up the fresh latest.json; a failure just leaves the
-        # previous latest.json in place.
+        # previous latest.json in place. NOT 08:30 (#159): that is 01:30 Pacific, when Apple's
+        # review RSS hands out empty pages (5-10 of 10 apps empty every day, 09-28..10-01, even
+        # after the deferred retry); the same Lambda fetched them all at 22:45 UTC.
         events.Rule(
             self,
             "OncaCpoRadarDaily",
-            schedule=events.Schedule.cron(minute="30", hour="8"),
+            schedule=events.Schedule.cron(minute="15", hour="6"),
         ).add_target(targets.LambdaFunction(cpo_radar_fn, retry_attempts=1))
 
         soundness_task = sfn_tasks.LambdaInvoke(
