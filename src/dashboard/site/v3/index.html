@@ -716,7 +716,7 @@ function boot() {
   // #187: a storefront tenant in its 14-day Entry trial sees the days left and how to subscribe
   const tb = document.getElementById("trialBar");
   if (tb) { const h = assinarHTML(DATA) || Ctx.billingBannerHTML(DATA); tb.innerHTML = h; tb.hidden = !h; }
-  if (!ADMIN && Ctx.isEntryTier(DATA)) { Ctx.mountEntryBoard(DATA); return; }  // ADR 016: Entry has no officer suite
+  if (!ADMIN && Ctx.isEntryTier(DATA)) { mountEntry(); return; }  // ADR 016: Entry has no officer suite
   document.getElementById("macroStrip").innerHTML = macroStrip(DATA.macro);  // shared header
   if (!QUOTES_TIMER) QUOTES_TIMER = setInterval(() => { if (OFFICER === "cso" && VIEW === "painel") loadQuotes(); }, 60000);  // B3 quotes refresh
   const sel = document.getElementById("sectorSel");
@@ -1677,9 +1677,18 @@ function pricingBadge(p) {
   return `<span class="badge badge--${cls}">pressão ${U.esc(p.pressure)}</span> <span class="hd-note">${p.recent} sinais recentes · inferência</span>`;
 }
 
+// Entry (ADR 016) gets no officer suite, but the Monday digest for its sector is part of the plan
+// (docs/index.html), so the opt-in box rides along under the Entry board.
+function mountEntry() {
+  Ctx.mountEntryBoard(DATA);
+  const board = document.getElementById("board"); if (!board) return;
+  board.insertAdjacentHTML("beforeend", hojeSec("hoje-resumo", "Resumo semanal por e-mail", null, "segunda-feira, por setor",
+    `<div class="pushbox" id="digestBox"><span class="hd-note">verificando…</span></div>`));
+  renderDigestBox();
+}
 // --- board (per officer) ---------------------------------------------------
 function render() {
-  if (!ADMIN && Ctx.isEntryTier(DATA)) { Ctx.mountEntryBoard(DATA); return; }
+  if (!ADMIN && Ctx.isEntryTier(DATA)) { mountEntry(); return; }
   document.querySelectorAll("#officerTabs a").forEach(a =>
     a.setAttribute("aria-current", a.getAttribute("data-officer") === OFFICER ? "page" : "false"));
   const meta = OFFICERS[OFFICER];
