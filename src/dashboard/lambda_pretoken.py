@@ -77,7 +77,9 @@ def lambda_handler(event, context):
         TableName=FEDERATED_TABLE, Key={"email": {"S": email}}
     ).get("Item")
     if not item:
-        print(f"[pretoken] no federated tenant mapping for {email}; issuing token with no tenant claim")
+        # The domain only: logs must never hold a user's email (privacy policy).
+        print(f"[pretoken] no federated tenant mapping for a user at "
+              f"{email.rpartition('@')[2] or '?'}; issuing token with no tenant claim")
         return event
 
     event.setdefault("response", {})

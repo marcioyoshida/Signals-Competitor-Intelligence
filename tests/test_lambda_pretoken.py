@@ -90,3 +90,15 @@ def test_federated_table_not_configured_is_a_noop_not_a_crash():
         out = lambda_pretoken.lambda_handler(ev, None)
     bc.assert_not_called()
     assert "claimsOverrideDetails" not in out["response"]
+
+
+def test_unmapped_login_never_logs_the_email(capsys):
+    """Privacy policy: logs never hold a user's email — the domain is enough to debug."""
+    ev = _event({"email": "stranger@gmail.com"})
+    ddb = mock.Mock()
+    ddb.get_item.return_value = {}
+    with mock.patch("boto3.client", return_value=ddb), \
+         mock.patch.object(lambda_pretoken, "FEDERATED_TABLE", "onca-federated-tenant-map"):
+        lambda_pretoken.lambda_handler(ev, None)
+    out = capsys.readouterr().out
+    assert "stranger" not in out and "gmail.com" in out

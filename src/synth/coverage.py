@@ -41,6 +41,9 @@ STATUS_AUTO_FIXED = "auto_fixed"
 STATUS_PROPOSED = "proposed"     # issue opened, awaits human implementation
 STATUS_RESOLVED = "resolved"
 STATUS_WONT_FIX = "wont_fix"
+# Privacy policy promise (onssa.org/docs/privacy.html): an unanswered question's text is
+# kept at most this long after it was last asked. Pruned on every write.
+GAP_RETENTION_DAYS = 365
 
 
 def _norm(text: Any) -> str:
@@ -163,6 +166,8 @@ def merge_gap(
         # a resolved gap that recurs re-opens
         if rec.get("status") == STATUS_RESOLVED:
             rec["status"] = STATUS_OPEN
+    cutoff = (today - dt.timedelta(days=GAP_RETENTION_DAYS)).isoformat()
+    records = {k: r for k, r in records.items() if str(r.get("last_seen") or now) >= cutoff}
     return {"as_of": now, "count": len(records), "records": records}
 
 

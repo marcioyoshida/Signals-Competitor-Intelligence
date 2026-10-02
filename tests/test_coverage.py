@@ -59,6 +59,18 @@ def test_resolved_gap_reopens_on_recurrence():
     assert idx2["records"][gid]["status"] == cov.STATUS_OPEN
 
 
+
+def test_gap_text_pruned_after_retention():
+    """Privacy policy: a question's text is kept at most GAP_RETENTION_DAYS after last asked."""
+    old = cov.merge_gap(None, "pergunta antiga?", today=dt.date(2025, 9, 1))
+    idx = cov.merge_gap(old, "pergunta nova?", today=dt.date(2026, 10, 1))
+    questions = {r["question"] for r in idx["records"].values()}
+    assert questions == {"pergunta nova?"}
+    assert idx["count"] == 1
+    kept = cov.merge_gap(cov.merge_gap(None, "recente?", today=dt.date(2025, 10, 2)),
+                         "outra?", today=dt.date(2026, 10, 1))
+    assert len(kept["records"]) == 2
+
 # --- fake S3 --------------------------------------------------------------
 class FakeS3:
     def __init__(self): self.store = {}

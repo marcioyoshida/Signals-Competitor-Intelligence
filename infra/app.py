@@ -2791,9 +2791,12 @@ class OncaPrototypeStack(Stack):
         contact_bucket = s3.Bucket(
             self,
             "OncaContactMailBucket",
-            removal_policy=RemovalPolicy.RETAIN,  # inbound mail; never auto-delete
+            removal_policy=RemovalPolicy.RETAIN,  # inbound mail; never lost by a deploy
             block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
             enforce_ssl=True,
+            # Privacy policy (onssa.org/docs/privacy.html): inbound mail is kept 12 months.
+            lifecycle_rules=[s3.LifecycleRule(
+                id="privacy-contato-365d", prefix="contato/", expiration=Duration.days(365))],
         )
         # SES's receipt-rule S3 action writes as the SES service principal, not as an
         # IAM identity in this account — grant_put() (bucket-owner grant) can't cover
