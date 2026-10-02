@@ -366,16 +366,29 @@
     const p = decodeJwt(getIdToken()) || {};
     return String(p["custom:tenant"] || "");
   }
+  // Curated combos (ADR 024 amendment 2026-10-02) come from the server (`upgrade.combos`, built
+  // from tenant_config.COMBOS) — the page keeps no copy. For tier "saas_combo", `module` is the
+  // combo id and the link carries `combo=` instead of `module=`.
+  function combosOf(upgrade) { return (upgrade && upgrade.combos) || {}; }
+  function comboOf(module, upgrade) {
+    const all = combosOf(upgrade);
+    const id = Object.keys(all).find((c) => (all[c].modules || []).indexOf(module) >= 0);
+    return id ? Object.assign({ id }, all[id]) : null;
+  }
   function upgradeHref(tier, module, upgrade, ref) {
     ref = ref || tenantRef();
+    const combo = tier === "saas_combo" ? combosOf(upgrade)[module] : null;
     const ok = upgrade && upgrade.live && /^[A-Za-z0-9_-]{1,64}$/.test(ref) && module
-      && (tier === "entry" ? ENTRY_INDUSTRIES.indexOf(module) >= 0 : (SAAS_BANDS[tier] || []).indexOf(module) >= 0);
+      && (tier === "saas_combo" ? !!combo
+        : tier === "entry" ? ENTRY_INDUSTRIES.indexOf(module) >= 0 : (SAAS_BANDS[tier] || []).indexOf(module) >= 0);
     if (!ok) {
-      const subj = `Assinar Onça — ${tier === "entry" ? "Entry" : "SaaS"}${module ? " · " + indLabel(module) : ""}`;
-      return "mailto:contato@onssa.org?subject=" + encodeURIComponent(subj);
+      const what = tier === "saas_combo" ? "Combo " + (combo ? combo.name : module)
+        : (tier === "entry" ? "Entry" : "SaaS") + (module ? " · " + indLabel(module) : "");
+      return "mailto:contato@onssa.org?subject=" + encodeURIComponent(`Assinar Onça — ${what}`);
     }
-    const q = new URLSearchParams({ product: "onca", tier, module, ref,
-      return: location.origin + "/exec?upgraded=1" });
+    const q = new URLSearchParams(Object.assign({ product: "onca", tier },
+      tier === "saas_combo" ? { combo: module } : { module },
+      { ref, return: location.origin + "/exec?upgraded=1" }));
     return String(upgrade.storefront || "https://signals-llc.store").replace(/\/$/, "") + "/?" + q;
   }
   // "Teste grátis: N dias restantes · Assinar" — only for a storefront-managed tenant in trial.
@@ -402,11 +415,15 @@
       if (bill && (bill.state === "trial_expired" || bill.state === "lapsed")) {
         const ended = bill.state === "trial_expired";
         const mods = ended ? (bill.trial_modules || []) : (bill.lapsed_modules || []);
-        const ctas = (mods.length ? mods : [""]).map((m) => {
+        const combos = ended ? [] : (bill.lapsed_combos || []);
+        const ctas = (mods.length || combos.length ? mods : [""]).map((m) => {
           const band = (bill.bands || {})[m];
           const tier = ended || !band ? "entry" : band;
           return `<a class="btn btn--primary" href="${esc(upgradeHref(tier, m, res.upgrade))}">Assinar${m ? " " + esc(indLabel(m)) : ""}</a>`;
-        }).join(" ");
+        }).concat(combos.map((c) => {
+          const co = combosOf(res.upgrade)[c];
+          return `<a class="btn btn--primary" href="${esc(upgradeHref("saas_combo", c, res.upgrade))}">Assinar combo ${esc(co ? co.name : c)}</a>`;
+        })).join(" ");
         return `<div class="empty"><div class="em-ico" aria-hidden="true">◐</div>
           <div class="em-t">${ended ? "Seu teste grátis terminou" : "Sua assinatura não está ativa"}</div>
           <div class="em-d">${ended ? "Os 14 dias de teste acabaram." : "O pagamento da assinatura foi encerrado."}
@@ -1148,7 +1165,7 @@
     ensureSession, clearUserData, decodeJwt, readCachedFeed: readUserFeed,
     bootSaaS,
     // feed
-    loadScopedFeed, mountGate, setData, indLabel, upgradeHref, billingBannerHTML, bandOf, SAAS_BANDS,
+    loadScopedFeed, mountGate, setData, indLabel, upgradeHref, billingBannerHTML, bandOf, SAAS_BANDS, comboOf, combosOf,
     // drawer
     wireDrawer, openCard, closeDrawer,
     // panels

@@ -8,13 +8,24 @@ Onça's per-module extension).
 email. No link is produced for an invalid tenant id or a module the band doesn't cover: a checkout
 the storefront can't attach to an account is how a customer pays for nothing.
 
+**Combos** (ADR 024 amendment 2026-10-02): ``…/?product=onca&tier=saas_combo&combo=<id>&ref=<tenant>&return=…``
+— no ``module`` param. ``<id>`` is a key of ``tenant_config.COMBOS``, the single source of truth for
+which modules a combo licenses; the storefront never sends a module list. No link for an unknown
+combo.
+
 **The Lambda.** Input, from the storefront's webhook, async over IAM::
 
     {"product": "onca", "tenant_ref": "<tenant>", "tier": "entry|saas_*", "module": "<sector>",
      "event": "...", "status": "active|trialing|past_due|canceled|unpaid|...",
      "stripe_event_id": "evt_..."}
+    {"product": "onca", "tenant_ref": "<tenant>", "tier": "saas_combo", "combo": "<combo id>",
+     "event": "...", "status": "...", "stripe_event_id": "evt_..."}
 
-One subscription = one module. An active status grants that module; ``subscription.deleted`` or a
+One subscription = one module, or one combo: for ``"tier": "saas_combo"`` the payload carries
+``"combo": "<id>"`` (instead of ``module``) on EVERY event of that subscription, and Onça resolves
+the id to its modules. Same semantics either way. An active status grants that module (or every
+module of the combo; it is stored as its own ``combo:<id>`` subscription, so revoking it never
+removes a module still paid separately); ``subscription.deleted`` or a
 terminal status lapses it; ``past_due`` changes nothing (grace, Stripe retries the card). Nothing
 is deleted on a lapse, and re-buying restores it.
 
@@ -41,16 +52,24 @@ EVENT_PK = "BILLING#"
 DEFAULT_RETURN = "https://onssa.org/exec?upgraded=1"
 
 
-def upgrade_url(tenant: str | None, tier: str, module: str, return_url: str = "") -> str | None:
-    """The storefront deep link, or None when no link may be shown."""
+def upgrade_url(tenant: str | None, tier: str, module: str | None = None, return_url: str = "",
+                *, combo: str | None = None) -> str | None:
+    """The storefront deep link, or None when no link may be shown. Pass ``module`` for a
+    per-module subscription, or ``combo`` (with ``tier="saas_combo"``) for a combo — never both."""
     tenant = str(tenant or "")
     if not TENANT_REF_RE.match(tenant) or tenant.startswith(EVENT_PK.rstrip("#")):
         return None
-    if tier not in tc.STOREFRONT_TIERS or not tc.module_allowed(tier, module):
+    if combo is not None or tier == tc.COMBO_TIER:
+        if module or tier != tc.COMBO_TIER or combo not in tc.COMBOS:
+            return None
+        what = {"combo": combo}
+    elif tier not in tc.STOREFRONT_TIERS or not tc.module_allowed(tier, module):
         return None
+    else:
+        what = {"module": module}
     base = os.environ.get("ONCA_STOREFRONT_URL", "https://signals-llc.store").rstrip("/")
     return "%s/?%s" % (base, urllib.parse.urlencode({
-        "product": PRODUCT, "tier": tier, "module": module, "ref": tenant,
+        "product": PRODUCT, "tier": tier, **what, "ref": tenant,
         "return": return_url or DEFAULT_RETURN}))
 
 
@@ -66,7 +85,7 @@ def decide(event: dict[str, Any]) -> str | None:
 
 
 class UnknownTenant(Exception):
-    """Paid, but no such tenant (or a module the price doesn't cover). Raised, not swallowed, so
+    """Paid, but no such tenant (or a module the price doesn't cover, or an unknown combo). Raised, not swallowed, so
     the invocation errors and OncaUpgradeErrorAlarm fires: a paid-but-unprovisioned customer
     must be found in minutes (Storefront #7 §3)."""
 
@@ -91,16 +110,20 @@ def handle(event: dict[str, Any], table: Any) -> dict[str, Any]:
         return {"ok": True, "replay": True}
     action = decide(event)
     tier, module = str(event.get("tier") or ""), str(event.get("module") or "")
+    combo = str(event.get("combo") or "")
     if action:
         try:
-            eff = tc.apply_purchase(ref, tier, module, action, event_id=evt, table=table)
+            if tier == tc.COMBO_TIER:
+                eff = tc.apply_combo_purchase(ref, combo, action, event_id=evt, table=table)
+            else:
+                eff = tc.apply_purchase(ref, tier, module, action, event_id=evt, table=table)
         except (KeyError, ValueError) as exc:
             raise UnknownTenant(type(exc).__name__) from exc
         state = eff["billing"]["state"]
     else:
         state = None
     table.put_item(Item={"tenant_id": EVENT_PK + evt, "tenant": ref, "action": action or "none",
-                         "tier": tier, "module": module, "event": str(event.get("event") or ""),
+                         "tier": tier, "module": module, "combo": combo, "event": str(event.get("event") or ""),
                          "status": str(event.get("status") or ""), "processed_at": int(time.time())})
     # enums only in the log (T16): no tenant id beyond the opaque event id
     print("upgrade: %s applied (%s/%s, %s), billing=%s"

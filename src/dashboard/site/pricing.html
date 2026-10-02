@@ -47,6 +47,15 @@
   .pbtn { display: inline-block; margin-top: 12px; background: var(--accent); color: #06211f; font-weight: 650;
     padding: 8px 18px; border-radius: 10px; font-size: 14px; text-decoration: none; }
   .mlink { color: inherit; text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 3px; }
+  .combos { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; margin-top: 12px; }
+  .combo { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px;
+    display: flex; flex-direction: column; gap: 4px; }
+  .combo h4 { margin: 0; font-size: 15px; }
+  .combo .secs { color: var(--ink2); font-size: 13px; }
+  .combo .price { font-size: 20px; font-weight: 650; margin-top: 4px; }
+  .combo .price small { font-size: 12px; font-weight: 500; color: var(--muted); }
+  .combo .save { color: var(--accent); font-size: 12.5px; margin-bottom: 8px; }
+  .combo .pbtn { align-self: flex-start; margin-top: auto; }
   .cta a.btn {
     display: inline-block; background: var(--accent); color: #06211f; font-weight: 650;
     padding: 10px 22px; border-radius: 10px; font-size: 14px;
@@ -75,8 +84,8 @@
       <span class="badge">Mais popular</span>
       <h2 id="saas">SaaS</h2>
       <div class="price">a partir de R$ 2.900<small>/módulo/mês</small></div>
-      <div class="note">Preço por setor (módulo) licenciado, mensal. A partir do 3º módulo, 15% de desconto sobre os
-        módulos adicionais.</div>
+      <div class="note">Preço por setor (módulo) licenciado, mensal. Setores vizinhos saem mais em conta nos
+        <a href="#combos">combos</a>.</div>
       <table>
         <tr><th>Faixa</th><th>Setores</th><th>R$/módulo/mês</th></tr>
         <tr><td>Premium</td><td><a class="mlink" href="/exec?assinar=banking">banking</a>, <a class="mlink" href="/exec?assinar=investment-banking">investment-banking</a></td><td>8.900</td></tr>
@@ -97,6 +106,37 @@
       <div class="note">O cliente paga sua própria fatura AWS diretamente — sem repasse, sem margem sobre
         infraestrutura.</div>
     </div>
+  </div>
+
+  <!-- Curated combos (ADR 024 amendment 2026-10-02): one subscription per combo, SaaS depth.
+       Mirrors src/dashboard/tenant_config.py COMBOS — tests/test_combos.py keeps them equal. -->
+  <div class="section" id="combos">
+    <h3>Combos SaaS</h3>
+    <div class="note">Dois setores vizinhos numa só assinatura mensal, com a mesma profundidade SaaS de cada módulo.</div>
+    <div class="combos">
+      <div class="combo" data-combo="bancos-completo" data-price="14900" data-modules="banking investment-banking">
+        <h4>Bancos Completo</h4><div class="secs">Bancos + Banco de investimento</div>
+        <div class="price">R$ 14.900<small>/mês</small></div><div class="save">economize R$ 2.900/mês</div>
+        <a class="pbtn" href="/exec?assinar=combo:bancos-completo">Assinar combo</a></div>
+      <div class="combo" data-combo="pagamentos" data-price="6600" data-modules="fintech acquiring">
+        <h4>Pagamentos</h4><div class="secs">Fintechs + Adquirência</div>
+        <div class="price">R$ 6.600<small>/mês</small></div><div class="save">economize R$ 1.200/mês</div>
+        <a class="pbtn" href="/exec?assinar=combo:pagamentos">Assinar combo</a></div>
+      <div class="combo" data-combo="patrimonio" data-price="8300" data-modules="wealth-management asset-management">
+        <h4>Patrimônio</h4><div class="secs">Wealth + Gestão de ativos</div>
+        <div class="price">R$ 8.300<small>/mês</small></div><div class="save">economize R$ 1.500/mês</div>
+        <a class="pbtn" href="/exec?assinar=combo:patrimonio">Assinar combo</a></div>
+      <div class="combo" data-combo="ativos-digitais-apostas" data-price="4900" data-modules="crypto betting">
+        <h4>Ativos Digitais &amp; Apostas</h4><div class="secs">Cripto + Apostas</div>
+        <div class="price">R$ 4.900<small>/mês</small></div><div class="save">economize R$ 900/mês</div>
+        <a class="pbtn" href="/exec?assinar=combo:ativos-digitais-apostas">Assinar combo</a></div>
+      <div class="combo" data-combo="fundos-imobiliario-agro" data-price="6600" data-modules="real-estate-funds agri-funds">
+        <h4>Fundos Imobiliário &amp; Agro</h4><div class="secs">FIIs + FIAGRO</div>
+        <div class="price">R$ 6.600<small>/mês</small></div><div class="save">economize R$ 1.200/mês</div>
+        <a class="pbtn" href="/exec?assinar=combo:fundos-imobiliario-agro">Assinar combo</a></div>
+    </div>
+    <div class="note" style="margin-top:10px">Economia calculada sobre a soma dos dois módulos avulsos. Cada combo é uma
+      assinatura mensal; entre com a sua conta Onça para assinar.</div>
   </div>
 
   <div class="section">

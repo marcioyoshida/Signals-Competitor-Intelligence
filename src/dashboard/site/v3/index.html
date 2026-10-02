@@ -676,17 +676,32 @@ let STALE = false, BOOTED = false, QUOTES_TIMER = null, SESSION_LOGGED = false;
 let OFFLINE = false;
 // #187: /exec?assinar=<module> (from /pricing.html) — confirm the SaaS module and its price,
 // then hand off to the storefront (or the contact e-mail while the storefront can't fulfil yet).
+// /exec?assinar=combo:<id> does the same for a curated combo (ADR 024 amendment 2026-10-02).
 const BAND_PRICE = { saas_premium: "8.900", saas_mid: "4.900", saas_entry: "2.900" };
+const brl = (n) => Number(n).toLocaleString("pt-BR");
 function assinarHTML(D) {
   const m = new URLSearchParams(location.search).get("assinar") || "";
+  const cta = (tier, id) => `<a class="btn btn--primary btn--sm" href="${U.esc(Ctx.upgradeHref(tier, id, D.upgrade))}">${D.upgrade && D.upgrade.live ? "Continuar para pagamento" : "Falar com a Onça para assinar"}</a>`;
+  const have = D.scoped_modules || [];
+  if (m.indexOf("combo:") === 0) {
+    const id = m.slice(6), c = Ctx.combosOf(D.upgrade)[id];
+    if (!c) return "";
+    const secs = c.modules.map((x) => U.esc(Ctx.indLabel(x))).join(" + ");
+    if (c.modules.every((x) => have.indexOf(x) >= 0))
+      return `<div class="trialbar" role="status"><span>Seu plano já inclui o combo <b>${U.esc(c.name)}</b> (${secs}).</span></div>`;
+    return `<div class="trialbar" role="status"><span>Assinar o combo <b>${U.esc(c.name)}</b> — ${secs} — R$ ${brl(c.price_brl)}/mês
+      (economize R$ ${brl(c.list_price_brl - c.price_brl)}/mês)</span>${cta("saas_combo", id)}</div>`;
+  }
   const band = Ctx.bandOf(m);
   if (!band) return "";
   const label = U.esc(Ctx.indLabel(m));
-  const have = D.scoped_modules || [];
   if (have.indexOf(m) >= 0)
     return `<div class="trialbar" role="status"><span>Seu plano já inclui <b>${label}</b>.</span></div>`;
-  return `<div class="trialbar" role="status"><span>Assinar o módulo <b>${label}</b> — R$ ${BAND_PRICE[band]}/mês</span>
-    <a class="btn btn--primary btn--sm" href="${U.esc(Ctx.upgradeHref(band, m, D.upgrade))}">${D.upgrade && D.upgrade.live ? "Continuar para pagamento" : "Falar com a Onça para assinar"}</a></div>`;
+  const co = Ctx.comboOf(m, D.upgrade);
+  const alt = co ? ` <span>ou no combo <a href="?assinar=combo:${U.esc(co.id)}">${U.esc(co.name)}</a>
+    (${co.modules.map((x) => U.esc(Ctx.indLabel(x))).join(" + ")}) por R$ ${brl(co.price_brl)}/mês</span>` : "";
+  return `<div class="trialbar" role="status"><span>Assinar o módulo <b>${label}</b> — R$ ${BAND_PRICE[band]}/mês</span>${alt}
+    ${cta(band, m)}</div>`;
 }
 
 // #162: an offline render is the LAST feed this user loaded — say so, visibly.

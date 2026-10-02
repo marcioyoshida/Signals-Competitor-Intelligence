@@ -47,6 +47,57 @@ SAAS_BANDS = {  # ADR 024 SaaS price bands → the modules each band's price cov
     "saas_entry": ("fintech", "advisory", "betting", "crypto", "consorcio", "real-estate-funds"),
 }
 STOREFRONT_TIERS = ("entry",) + tuple(SAAS_BANDS)
+SAAS_BAND_PRICE_BRL = {"saas_premium": 8900, "saas_mid": 4900, "saas_entry": 2900}  # R$/module/month
+
+# Curated segment combos (owner decisions 2026-10-02, ADR 024 amendment): SaaS depth, ONE
+# storefront subscription per combo, a fixed R$/month below the per-module sum. They replace
+# the never-implemented "15% off from the 3rd module". This table is the single source of truth:
+# the storefront sends only the combo id (tier ``saas_combo``), never a module list.
+COMBO_TIER = "saas_combo"
+COMBOS = {
+    "bancos-completo": {"name": "Bancos Completo",
+                        "modules": ("banking", "investment-banking"), "price_brl": 14900},
+    "pagamentos": {"name": "Pagamentos", "modules": ("fintech", "acquiring"), "price_brl": 6600},
+    "patrimonio": {"name": "Patrimônio",
+                   "modules": ("wealth-management", "asset-management"), "price_brl": 8300},
+    "ativos-digitais-apostas": {"name": "Ativos Digitais & Apostas",
+                                "modules": ("crypto", "betting"), "price_brl": 4900},
+    "fundos-imobiliario-agro": {"name": "Fundos Imobiliário & Agro",
+                                "modules": ("real-estate-funds", "agri-funds"), "price_brl": 6600},
+}
+
+
+def band_of(module: str) -> str | None:
+    """The ADR 024 SaaS band whose price covers ``module`` (None if unsold)."""
+    return next((b for b, mods in SAAS_BANDS.items() if module in mods), None)
+
+
+def combo_list_price(combo_id: str) -> int:
+    """What the combo's modules cost bought one by one (the "economize" baseline)."""
+    return sum(SAAS_BAND_PRICE_BRL[band_of(m)] for m in COMBOS[combo_id]["modules"])
+
+
+def _validate_combos() -> None:
+    """Import-time guard: a combo may only bundle sellable SaaS modules, priced below the sum."""
+    for cid, c in COMBOS.items():
+        mods = c["modules"]
+        if not mods or len(set(mods)) != len(mods):
+            raise ValueError(f"combo {cid!r}: empty or duplicated modules")
+        for m in mods:
+            if m in NOT_READY_INDUSTRIES or band_of(m) is None:
+                raise ValueError(f"combo {cid!r}: {m!r} is not a sellable SaaS module")
+        if not 0 < c["price_brl"] < combo_list_price(cid):
+            raise ValueError(f"combo {cid!r}: price must be below the per-module sum")
+
+
+_validate_combos()
+
+
+def combos_payload() -> dict[str, dict[str, Any]]:
+    """COMBOS as the dashboard receives it (on /api/feed's ``upgrade``), so the page never
+    keeps its own copy of the combo table."""
+    return {cid: {"name": c["name"], "modules": list(c["modules"]), "price_brl": c["price_brl"],
+                  "list_price_brl": combo_list_price(cid)} for cid, c in COMBOS.items()}
 
 
 def module_allowed(storefront_tier: str, module: str) -> bool:
@@ -76,15 +127,17 @@ def effective_entitlement(item: dict[str, Any], now: Any = None) -> dict[str, An
     base = [str(m).strip().lower() for m in (item.get("modules") or []) if str(m).strip()]
     subs = item.get("subs") or {}
     active = {m: s for m, s in subs.items() if (s or {}).get("status") == "active"}
+    # A combo subscription (key ``combo:<id>``) licenses several modules; a per-module one, its key.
+    paid = {m for k, s in active.items() for m in _sub_modules(k, s)}
     trial_until = str(item.get("trial_until") or "")
     try:
         trial_on = bool(trial_until) and now < _dt.datetime.fromisoformat(trial_until)
     except ValueError:
         trial_on = False
     trial_mods = [str(m) for m in (item.get("trial_modules") or [])] if trial_on else []
-    mods = sorted(set(base) | set(active) | set(trial_mods))
+    mods = sorted(set(base) | paid | set(trial_mods))
     base_tier = str(item.get("tier") or "entry")
-    tier = ("saas" if any((s or {}).get("tier") == "saas" for s in active.values())
+    tier = ("saas" if any((s or {}).get("tier") in ("saas", COMBO_TIER) for s in active.values())
             and base_tier == "entry" else base_tier)
     if active:
         state = "active"
@@ -99,10 +152,29 @@ def effective_entitlement(item: dict[str, Any], now: Any = None) -> dict[str, An
     return {"tier": tier, "modules": mods,
             "billing": {"state": state, "trial_until": trial_until or None,
                         "trial_modules": [str(m) for m in (item.get("trial_modules") or [])],
-                        "paid_modules": sorted(active), "base_modules": sorted(base),
+                        "paid_modules": sorted(paid), "base_modules": sorted(base),
                         "lapsed_modules": sorted(m for m, s in subs.items()
-                                                 if (s or {}).get("status") != "active"),
-                        "bands": {m: (s or {}).get("band") for m, s in subs.items()}}}
+                                                 if (s or {}).get("status") != "active"
+                                                 and not m.startswith(_COMBO_KEY)),
+                        "bands": {m: (s or {}).get("band") for m, s in subs.items()
+                                  if not m.startswith(_COMBO_KEY)},
+                        "combos": sorted(k[len(_COMBO_KEY):] for k in active
+                                         if k.startswith(_COMBO_KEY)),
+                        "lapsed_combos": sorted(k[len(_COMBO_KEY):] for k, s in subs.items()
+                                                if k.startswith(_COMBO_KEY)
+                                                and (s or {}).get("status") != "active")}}
+
+
+_COMBO_KEY = "combo:"
+
+
+def _sub_modules(key: str, sub: Any) -> list[str]:
+    """The modules one subscription licenses: a combo's stored module list (what was bought;
+    falls back to COMBOS for a record without one), else the per-module key itself."""
+    if not key.startswith(_COMBO_KEY):
+        return [key]
+    mods = (sub or {}).get("modules") or COMBOS.get(key[len(_COMBO_KEY):], {}).get("modules") or ()
+    return [str(m) for m in mods]
 
 
 def _table(table: Any | None = None) -> Any:
@@ -234,15 +306,37 @@ def apply_purchase(tenant_id: str, storefront_tier: str, module: str, action: st
         raise ValueError("action must be grant or revoke")
     if storefront_tier not in STOREFRONT_TIERS or not module_allowed(storefront_tier, module):
         raise ValueError(f"{storefront_tier!r} does not cover module {module!r}")
+    module = str(module).strip().lower()
+    return _put_sub(tenant_id, module, {"tier": "entry" if storefront_tier == "entry" else "saas",
+                                        "band": storefront_tier}, action, event_id, table)
+
+
+def apply_combo_purchase(tenant_id: str, combo: str, action: str, *, event_id: str,
+                         table: Any | None = None) -> dict[str, Any]:
+    """Grant or revoke ONE combo subscription (``subs["combo:<id>"]``), sibling of
+    ``apply_purchase``. The modules come from COMBOS, never from the caller. A combo is its own
+    subscription entry, so revoking it removes only modules no other active subscription, base
+    module or trial still covers. Raises KeyError for an unknown tenant, ValueError for an
+    unknown combo."""
+    if action not in ("grant", "revoke"):
+        raise ValueError("action must be grant or revoke")
+    combo = str(combo or "").strip().lower()
+    if combo not in COMBOS:
+        raise ValueError(f"unknown combo {combo!r}")
+    return _put_sub(tenant_id, _COMBO_KEY + combo,
+                    {"tier": COMBO_TIER, "combo": combo, "modules": list(COMBOS[combo]["modules"])},
+                    action, event_id, table)
+
+
+def _put_sub(tenant_id: str, key: str, fields: dict[str, Any], action: str, event_id: str,
+             table: Any | None) -> dict[str, Any]:
     t = _table(table)
     item = t.get_item(Key={"tenant_id": str(tenant_id)}).get("Item")
     if not item or str(tenant_id).startswith("BILLING#"):
         raise KeyError("no such tenant")
-    module = str(module).strip().lower()
     subs = dict(item.get("subs") or {})
-    subs[module] = {"tier": "entry" if storefront_tier == "entry" else "saas",
-                    "band": storefront_tier, "status": "active" if action == "grant" else "lapsed",
-                    "event_id": str(event_id), "updated_at": _now().isoformat(timespec="seconds")}
+    subs[key] = {**fields, "status": "active" if action == "grant" else "lapsed",
+                 "event_id": str(event_id), "updated_at": _now().isoformat(timespec="seconds")}
     item["subs"] = subs
     item["billing_managed"] = True
     t.put_item(Item=item)

@@ -29,9 +29,13 @@ def upgrade_info() -> dict[str, Any]:
     """#187: may the dashboard send buyers to the storefront yet? OFF until Signals-Storefront
     #6/#7/#8 ship: before that a checkout can't attach to the tenant, and the customer would pay
     and get nothing. Flipping it is one env var (ONCA_UPGRADE_LIVE) on this Lambda."""
+    from src.dashboard.tenant_config import combos_payload
+
     live = os.environ.get("ONCA_UPGRADE_LIVE", "false").lower() in ("1", "true", "yes")
     return {"live": live,
-            "storefront": os.environ.get("ONCA_STOREFRONT_URL", "https://signals-llc.store")}
+            "storefront": os.environ.get("ONCA_STOREFRONT_URL", "https://signals-llc.store"),
+            # curated combos (ADR 024 amendment 2026-10-02) — the page reads them from here
+            "combos": combos_payload()}
 
 
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
