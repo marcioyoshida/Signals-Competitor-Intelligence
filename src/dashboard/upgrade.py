@@ -31,8 +31,11 @@ is deleted on a lapse, and re-buying restores it.
 
 **Replays.** Each applied ``stripe_event_id`` is recorded (``BILLING#<evt>`` in the tenant-config
 table, the marker the retired own-webhook used). A replay is a no-op, so a replayed
-``checkout.session.completed`` after a cancellation can't re-grant for free. The record is written
-only AFTER the grant/revoke took effect, so a failure leaves it retryable.
+``checkout.session.completed`` after a cancellation can't re-grant for free. The marker is CLAIMED
+with one conditional write before anything is applied (storefront #11: two copies of one event can
+arrive together, and a read-then-write guard let both apply). A failed apply releases the claim, so
+the event stays retryable; a claim left ``pending`` by a crashed run is taken over after
+``CLAIM_STALE_S``.
 """
 from __future__ import annotations
 
@@ -49,6 +52,7 @@ TENANT_REF_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")   # the storefront's own va
 _ACTIVE = {"active", "trialing"}
 _TERMINAL = {"canceled", "unpaid", "incomplete_expired"}
 EVENT_PK = "BILLING#"
+CLAIM_STALE_S = 300
 DEFAULT_RETURN = "https://onssa.org/exec?upgraded=1"
 
 
@@ -95,6 +99,35 @@ def _table():
     return boto3.resource("dynamodb").Table(os.environ["ONCA_TENANT_CONFIG_TABLE"])
 
 
+def _claim(table: Any, evt: str, ref: str) -> bool:
+    """Atomically claim ``BILLING#<evt>``: True for the first (or a stale-pending) claimant, False
+    for a replay or a concurrent duplicate already holding it."""
+    from botocore.exceptions import ClientError
+
+    now = int(time.time())
+    try:
+        table.put_item(
+            Item={"tenant_id": EVENT_PK + evt, "tenant": ref, "action": "pending",
+                  "claimed_at": now},
+            ConditionExpression="attribute_not_exists(tenant_id) OR "
+                                "(#a = :pending AND claimed_at < :stale)",
+            ExpressionAttributeNames={"#a": "action"},
+            ExpressionAttributeValues={":pending": "pending", ":stale": now - CLAIM_STALE_S})
+        return True
+    except ClientError as exc:
+        if exc.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+            return False
+        raise
+
+
+def _release(table: Any, evt: str) -> None:
+    """Drop a claim whose apply failed, so the retried event is applied rather than skipped."""
+    try:
+        table.delete_item(Key={"tenant_id": EVENT_PK + evt})
+    except Exception as exc:  # noqa: BLE001 - a stuck claim still expires after CLAIM_STALE_S
+        print(f"upgrade: could not release claim ({type(exc).__name__})")
+
+
 def handle(event: dict[str, Any], table: Any) -> dict[str, Any]:
     if str(event.get("product") or "") != PRODUCT:
         print("upgrade: ignored event for another product")
@@ -105,7 +138,7 @@ def handle(event: dict[str, Any], table: Any) -> dict[str, Any]:
         return {"ok": False, "reason": "event_id"}
     if not TENANT_REF_RE.match(ref):
         raise UnknownTenant("invalid tenant_ref")
-    if table.get_item(Key={"tenant_id": EVENT_PK + evt}).get("Item"):
+    if not _claim(table, evt, ref):
         print("upgrade: replay of an already-applied event, no-op")
         return {"ok": True, "replay": True}
     action = decide(event)
@@ -118,7 +151,11 @@ def handle(event: dict[str, Any], table: Any) -> dict[str, Any]:
             else:
                 eff = tc.apply_purchase(ref, tier, module, action, event_id=evt, table=table)
         except (KeyError, ValueError) as exc:
+            _release(table, evt)
             raise UnknownTenant(type(exc).__name__) from exc
+        except Exception:
+            _release(table, evt)
+            raise
         state = eff["billing"]["state"]
     else:
         state = None

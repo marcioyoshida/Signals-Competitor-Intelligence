@@ -17,16 +17,7 @@ SITE = Path(__file__).resolve().parents[1] / "src" / "dashboard" / "site"
 REF = "entry-0a1b2c3d4e5f"
 
 
-class _T:
-    def __init__(self):
-        self.items = {}
-
-    def get_item(self, Key):
-        it = self.items.get(Key["tenant_id"])
-        return {"Item": it} if it else {}
-
-    def put_item(self, Item):
-        self.items[Item["tenant_id"]] = dict(Item)
+from tests.test_upgrade import _T  # noqa: E402  (conditional-put aware, #11)
 
 
 def _world():
