@@ -48,6 +48,8 @@ ENTRY_FEED_KEY = "feed.entry.json"
 # E2 (#154) — the PUBLIC conversion sample. Credential-free, so it is a strict subset
 # of the entry slice, not a second projection of the full feed. See derive_sample_feed.
 SAMPLE_FEED_KEY = "feed.sample.json"
+# #203: the BCB IF.data system ranking (ifdata_market) is banking-sector intelligence.
+IFDATA_MARKET_SECTORS = frozenset({"banking", "investment-banking"})
 # real-estate-funds is the one entry vertical that is BOTH ga_ready and not CCO-thin
 # under the #117 sales-tier gate, so the sample can show real depth rather than a
 # vertical we would not yet pitch. Overridable, but changing it should follow that
@@ -884,6 +886,24 @@ def build_feed(
     }
 
 
+def _scope_sector_blocks(feed: dict[str, Any], keep: set[str], row_ok: Any) -> dict[str, Any]:
+    """#203: top-level blocks keyed or tagged by SECTOR that a tenant may see only for its
+    licensed sectors. ``silence`` rows are entity-bound (same test as the other entity lists);
+    ``market_structure`` / ``pricing`` are keyed by industry slug; ``ifdata_market`` is the BCB
+    IF.data banking-system ranking, so it belongs to the banking licences only. Market-wide
+    context (``macro``, ``source_health``, ``coverage_confidence``) stays shared on purpose.
+    ``executive`` is rebuilt from the scoped feed afterwards, so its copies follow."""
+    def by_slug(d: Any) -> dict[str, Any]:
+        return {k: v for k, v in (d or {}).items() if str(k).strip().lower() in keep}
+    return {
+        "silence": [r for r in (feed.get("silence") or []) if row_ok(r)],
+        "market_structure": by_slug(feed.get("market_structure")),
+        "pricing": by_slug(feed.get("pricing")),
+        "ifdata_market": (feed.get("ifdata_market") or {})
+        if keep & IFDATA_MARKET_SECTORS else {},
+    }
+
+
 def scope_feed_to_modules(feed: dict[str, Any], modules: Any) -> dict[str, Any]:
     """Server-authoritative per-tenant projection (issue #48 / ADR 016 SaaS): the full
     feed scoped to a tenant's licensed ``modules`` (industries). Unlike the Entry fork it
@@ -977,6 +997,7 @@ def scope_feed_to_modules(feed: dict[str, Any], modules: Any) -> dict[str, Any]:
             # #177: an industry-level event is visible only to tenants licensed for it.
             "sector_events": scope_sector_events(feed.get("sector_events"), keep),
             "enforcement": _scope_enforcement(feed.get("enforcement"), keep, row_ok),  # #193
+            **_scope_sector_blocks(feed, keep, row_ok),  # #203
             "integrity": {"findings": [], "counts": {}, "total": 0},  # operator-only
             "regulatory_coverage": {},                                # operator-only (#2)
             "mobile_usage": {},  # operator-only (#165) — per-officer device usage
@@ -1101,6 +1122,7 @@ def derive_entry_feed(
             "product_radar": scope_product_radar(feed.get("product_radar"), row_ok),  # #159
             "sector_events": scope_sector_events(feed.get("sector_events"), keep),  # #177
             "enforcement": _scope_enforcement(feed.get("enforcement"), keep, row_ok),  # #193
+            **_scope_sector_blocks(feed, keep, row_ok),  # #203
             "integrity": {"findings": [], "counts": {}, "total": 0},  # operator-only
             "regulatory_coverage": {},                                # operator-only (#2)
             "source_runs": [],  # operator-only (#139) — see scope_feed_to_modules
