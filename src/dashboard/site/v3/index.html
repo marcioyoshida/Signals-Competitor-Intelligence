@@ -1965,6 +1965,8 @@ function renderHoje(el) {
   }
   html += hojeSec("hoje-alertas-cel", "Alertas no celular", null, "sem conteúdo na tela bloqueada",
     `<div class="pushbox" id="pushBox"><span class="hd-note">verificando…</span></div>`);
+  if (!ADMIN) html += hojeSec("hoje-resumo", "Resumo semanal por e-mail", null, "segunda-feira, por setor",
+    `<div class="pushbox" id="digestBox"><span class="hd-note">verificando…</span></div>`);
   html += `<a href="#painel" class="btn hoje-act" id="hojeFull">Ver painel completo →</a>`;
   el.innerHTML = `<div class="hoje">${html}</div>`;
   if (!STALE) engage("hoje", "open", null);   // not for the cached pre-paint (it re-renders)
@@ -1975,6 +1977,7 @@ function renderHoje(el) {
   el.querySelectorAll(".traj-f button[data-tv]").forEach(b => b.addEventListener("click", () => askConfirm(b, captureTraj)));
   document.getElementById("hojeFull").addEventListener("click", (e) => { e.preventDefault(); setView("painel"); render(); window.scrollTo(0, 0); });
   renderPushBox();
+  renderDigestBox();
   const m = (location.hash || "").match(/^#(hoje-[a-z]+)/);
   if (m) { const t = document.getElementById(m[1]); if (t) t.scrollIntoView({ block: "start" }); }
 }
@@ -2042,6 +2045,32 @@ async function renderPushBox(note) {
   if (save) save.onclick = async () => {
     try { await pushApi("/api/me/push/subscribe", { subscription: sub.toJSON(), officer: OFFICER, prefs: { types: chosen() } }); msg("tipos salvos"); }
     catch (e) { msg("falha ao salvar"); }
+  };
+}
+// --- weekly digest per sector (owner 2026-10-02): explicit, stored, withdrawable consent ----------
+// One checkbox per sector the organization licenses TODAY; sent to the login email. Every email
+// carries a one-click unsubscribe; saving with nothing checked withdraws consent here too.
+async function renderDigestBox(note) {
+  const box = document.getElementById("digestBox"); if (!box || ADMIN) { if (box) box.innerHTML = ""; return; }
+  let st;
+  try { st = await pushApi("/api/me/digest", null, "GET"); }
+  catch (e) { box.innerHTML = `<p class="hd-note" style="padding:0 var(--s3) var(--s3)">Preferências indisponíveis agora.</p>`; return; }
+  const avail = st.available || [], mine = st.sectors || [];
+  if (!avail.length) { box.innerHTML = `<p class="hd-note" style="padding:0 var(--s3) var(--s3)">Nenhum setor licenciado.</p>`; return; }
+  box.innerHTML = `<div style="padding:0 var(--s3) var(--s3)">
+    ${avail.map(s => `<label class="cvsub" style="display:flex;gap:var(--s2);align-items:center;min-height:44px">
+      <input type="checkbox" class="dsec" value="${U.esc(s)}" ${mine.indexOf(s) !== -1 ? "checked" : ""}> ${U.esc(Ctx.indLabel(s))}</label>`).join("")}
+    <p class="hd-note">Enviado toda segunda-feira para <b>${U.esc(st.email || "o e-mail do seu login")}</b>. Ao salvar, você consente com esse envio
+      (<a href="/docs/privacy.html">política de privacidade</a>); cancele a qualquer momento aqui ou pelo link em cada e-mail.</p>
+    <button class="btn btn--primary hoje-act" id="digestSave" type="button">Salvar preferências</button>
+    <span class="hd-note" id="digestMsg">${U.esc(note || "")}</span></div>`;
+  document.getElementById("digestSave").onclick = async () => {
+    const sectors = [...box.querySelectorAll(".dsec:checked")].map(x => x.value);
+    let n = "";
+    try { await pushApi("/api/me/digest", { sectors, consent: sectors.length > 0 }, "PUT");
+          n = sectors.length ? "preferências salvas" : "resumo semanal desativado"; }
+    catch (e) { n = "falha ao salvar"; }
+    renderDigestBox(n);
   };
 }
 async function disablePush() {
