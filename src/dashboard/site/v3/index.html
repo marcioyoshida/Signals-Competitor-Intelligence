@@ -716,6 +716,7 @@ function boot() {
   // #187: a storefront tenant in its 14-day Entry trial sees the days left and how to subscribe
   const tb = document.getElementById("trialBar");
   if (tb) { const h = assinarHTML(DATA) || Ctx.billingBannerHTML(DATA); tb.innerHTML = h; tb.hidden = !h; }
+  if (!ADMIN && Ctx.isEntryTier(DATA)) { Ctx.mountEntryBoard(DATA); return; }  // ADR 016: Entry has no officer suite
   document.getElementById("macroStrip").innerHTML = macroStrip(DATA.macro);  // shared header
   if (!QUOTES_TIMER) QUOTES_TIMER = setInterval(() => { if (OFFICER === "cso" && VIEW === "painel") loadQuotes(); }, 60000);  // B3 quotes refresh
   const sel = document.getElementById("sectorSel");
@@ -1678,6 +1679,7 @@ function pricingBadge(p) {
 
 // --- board (per officer) ---------------------------------------------------
 function render() {
+  if (!ADMIN && Ctx.isEntryTier(DATA)) { Ctx.mountEntryBoard(DATA); return; }
   document.querySelectorAll("#officerTabs a").forEach(a =>
     a.setAttribute("aria-current", a.getAttribute("data-officer") === OFFICER ? "page" : "false"));
   const meta = OFFICERS[OFFICER];

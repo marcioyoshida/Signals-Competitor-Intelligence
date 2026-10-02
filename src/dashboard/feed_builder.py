@@ -1112,6 +1112,40 @@ def derive_entry_feed(
     return out
 
 
+# ADR 016 / ADR 024: the SaaS-only depth an Entry plan does NOT include — the list the
+# Entry guide promises (site/docs/index.html "O que não está incluído no Entry"): distress/RJ,
+# capital moves, reputation/conduct, structured financials, the per-officer executive
+# dashboards (incl. the CPO product radar), and the per-entity framework stores.
+ENTRY_TENANT_WITHHELD_LISTS = (
+    "distress", "capital_moves", "reputation", "reviews", "financials",
+    "swot_proposals", "graph_proposals", "silence",
+)
+ENTRY_TENANT_WITHHELD_STORES = (
+    "swot", "tows", "porter", "pestle", "ansoff", "bcg", "four_corners", "seven_s",
+    "product_radar",
+)
+
+
+def scope_feed_for_entry_tenant(feed: dict[str, Any], modules: Any) -> dict[str, Any]:
+    """`GET /api/feed` for a tenant whose effective tier is ``entry`` (paid Entry or the
+    14-day trial): the SAME ADR 016 entry slice the static Entry portal is built from
+    (`derive_entry_feed` — entry-tier industries, shallow public-filing cards only),
+    narrowed to the tenant's own modules, with the SaaS-only depth emptied. Fail closed: a
+    module outside ENTRY_INDUSTRIES is dropped, never served at Entry depth or full depth."""
+    entry = {str(i).strip().lower() for i in ENTRY_INDUSTRIES}
+    mods = sorted({str(m).strip().lower() for m in (modules or [])} & entry)
+    out = derive_entry_feed(feed, industries=tuple(mods))
+    for key in ENTRY_TENANT_WITHHELD_LISTS:
+        out[key] = []
+    for key in ENTRY_TENANT_WITHHELD_STORES:
+        out[key] = {}
+    out["executive"] = {"officers": [], "cso": {}}  # absent, not filtered (see sample)
+    out["scoped_modules"] = mods
+    out["entry_withheld"] = sorted(
+        ENTRY_TENANT_WITHHELD_LISTS + ENTRY_TENANT_WITHHELD_STORES + ("executive",))
+    return out
+
+
 def derive_sample_feed(
     feed: dict[str, Any], *, industry: str = SAMPLE_INDUSTRY,
     limit: int = SAMPLE_CARD_LIMIT,

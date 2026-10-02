@@ -72,5 +72,21 @@ if (acq.kpis.narratives_total!==2 || acq.kpis.narratives_latest!==2 || acq.kpis.
 if (acq.entities.map(e=>e.entity).join()!=="stone"){ console.error("acq entities wrong",acq.entities); fail++; }
 if (JSON.stringify(acq.scoped_modules)!==JSON.stringify(["acquiring"])){ console.error("scoped_modules wrong"); fail++; }
 
+// 6) fixed segment pages (/fintech, /seguros, /adquirencia, /wealth): a page renders ONLY when
+//    its industry is in the server-scoped entitlement; an insurance-only tenant on /fintech is
+//    gated (never insurance data under Fintech framing), and the slice keeps only that industry.
+const insOnly = Object.assign({}, Dmix, { scoped_modules:["insurance"],
+  entity_attrs:{ porto:{industries:["insurance"]} }, entities:[{entity:"porto"}],
+  feed:[{ id:"i1", entity:"porto", industries:["insurance"], date:"2026-08-31", citations:[] }] });
+const fin = Ind.segmentAccess(insOnly, "fintech");
+if (fin.ok || JSON.stringify(fin.licensed)!=='["insurance"]'){ console.error("segment gate wrong:",fin); fail++; }
+const seg = Ind.segmentAccess(insOnly, "insurance");
+if (!seg.ok){ console.error("licensed segment refused:",seg); fail++; }
+if (Ind.segmentAccess({}, "fintech").ok){ console.error("empty entitlement admitted"); fail++; }
+const multi = Object.assign({}, Dmix, { scoped_modules:["acquiring","banking"] });
+if (!Ind.segmentAccess(multi, "acquiring").ok){ console.error("multi-module acquiring refused"); fail++; }
+if (Ind.sliceToIndustry(multi, "acquiring").feed.some(c => (c.industries||[]).indexOf("acquiring")<0)){
+  console.error("segment slice leaked another industry"); fail++; }
+
 console.log(fail===0 ? "VALIDATION OK — all industries render, all kinds valid, per-industry slice filters" : ("FAIL: "+fail));
 process.exit(fail?1:0);

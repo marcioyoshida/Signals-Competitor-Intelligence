@@ -1130,6 +1130,77 @@
     el.textContent = parts.join(" · ");
   }
 
+  /* ---- ADR 016/024 Entry plan on /exec -----------------------------------------
+     An Entry tenant (paid Entry or its trial) is served the Entry slice by /api/feed: its one
+     sector, shallow public-filing cards only, no officer dashboards. /exec is where Entry
+     lands (pricing CTA, post-registration re-auth — the Cognito callback, and the one page
+     outside the shared basic-auth), so it renders this Entry board instead of the officer
+     suite, with the officer views stated as "Disponível no SaaS" + an assinar CTA. */
+  function isEntryTier(D) { return !!D && D.tier === "entry"; }
+  function mountEntryBoard(D) {
+    const $ = (id) => document.getElementById(id);
+    ["askPanel", "recsBand", "officerTabs", "viewTabs"].forEach((id) => { const el = $(id); if (el) el.hidden = true; });
+    const sel = $("sectorSel");
+    if (sel && sel.parentElement) sel.parentElement.hidden = true;
+    const mods = D.scoped_modules || [];
+    const sector = mods.map(indLabel).join(", ") || "—";
+    if ($("pgTitle")) $("pgTitle").textContent = "Plano Entry — " + sector;
+    if ($("pgLede")) $("pgLede").textContent = "Fatos públicos do seu setor — registros, normativos, "
+      + "ofertas — cada um com a fonte clicável. Os painéis executivos fazem parte do plano SaaS.";
+    const board = $("board");
+    if (!board) return;
+    const cards = feed(D).slice().sort(byDateThreat);
+    const ctas = mods.filter((m) => bandOf(m)).map((m) =>
+      `<a class="btn btn--primary" href="${esc(upgradeHref(bandOf(m), m, D.upgrade))}">Assinar SaaS · ${esc(indLabel(m))}</a>`).join(" ");
+    board.innerHTML = `<div class="tiles" id="entryKpis" style="margin-bottom:var(--s4)"></div>
+      <section class="band"><div class="band-hd"><span class="overline">Sinais do setor · ${esc(sector)}</span>
+        <span class="rule"></span><span class="badge badge--ghost">Entry</span></div>
+        <div class="panel"><div class="panel__hd"><h2>Fatos públicos recentes</h2><span class="count">${cards.length}</span></div>
+          <div class="panel__bd panel__bd--flush panel__bd--scroll" id="entryCards"></div></div></section>
+      <section class="band" id="entrySaas"><div class="band-hd"><span class="overline">Painéis executivos</span>
+        <span class="rule"></span><span class="badge badge--ghost">SaaS</span></div>
+        <div class="panel"><div class="panel__bd"><div class="empty"><div class="em-ico" aria-hidden="true">◐</div>
+          <div class="em-t">Disponível no SaaS</div>
+          <div class="em-d">Painéis por diretoria (CSO, CRO, CCO, CPO), estresse e recuperação judicial, movimentos
+            de capital, reputação, demonstrações financeiras, frameworks por entidade e Pergunte à Onça fazem
+            parte do plano SaaS, licenciado por setor.</div>
+          <div style="margin-top:var(--s3)">${ctas}</div>
+          <div class="em-d" style="margin-top:var(--s2)"><a href="/pricing.html">Ver planos</a> ·
+            <a href="/docs/">Guia do plano Entry</a></div></div></div></div></section>`;
+    const k = D.kpis || {};
+    renderKpis($("entryKpis"), [["Sinais hoje", k.narratives_latest], ["Alertas hoje", k.alerts_latest],
+      ["Entidades", k.entities_tracked], ["Fontes distintas", k.sources]]);
+    setData(D);
+    renderCards($("entryCards"), cards, { t: "Sem sinais na janela",
+      d: "Nenhum fato público do seu setor na janela atual." });
+  }
+
+  /* ---- fixed segment pages (/fintech, /seguros, /adquirencia, /wealth) ----------
+     Each page frames ONE industry. Unlicensed ⇒ say so, point to the tenant's own sectors, and
+     offer that segment's subscription — never another sector's data under this framing. */
+  function segmentGateHTML(D, acc) {
+    const home = isEntryTier(D) ? "/exec" : "/app";
+    const band = bandOf(acc.slug);
+    const mine = (acc.licensed || []).map((s) =>
+      `<a href="${home}#${esc(encodeURIComponent(s))}">${esc(indLabel(s))}</a>`).join(", ");
+    return `<div class="empty"><div class="em-ico" aria-hidden="true">⦸</div>
+      <div class="em-t">${esc(indLabel(acc.slug))} não está na sua licença</div>
+      <div class="em-d">Esta página mostra apenas ${esc(indLabel(acc.slug))}; dados de outros setores não
+        aparecem sob este enquadramento.${mine ? " Seus setores: " + mine + "." : ""}</div>
+      <div style="margin-top:var(--s3)"><a class="btn" href="${home}">Abrir meus setores</a>
+        ${band ? `<a class="btn btn--primary" href="${esc(upgradeHref(band, acc.slug, D.upgrade))}">Assinar ${esc(indLabel(acc.slug))}</a>` : ""}</div></div>`;
+  }
+  function mountSegmentGate(D, acc) {
+    const main = document.querySelector("main") || document.body;
+    const prev = document.getElementById("segmentGate"); if (prev) prev.remove();
+    main.querySelectorAll("section.band, #kpis").forEach((el) => { el.style.display = "none"; });
+    const box = document.createElement("div");
+    box.className = "panel"; box.id = "segmentGate";
+    box.innerHTML = `<div class="panel__bd">${segmentGateHTML(D, acc)}</div>`;
+    const head = main.querySelector(".pagehead");
+    if (head && head.nextSibling) main.insertBefore(box, head.nextSibling); else main.appendChild(box);
+  }
+
   /* ======================================================================
      SHARED BOOT — a SaaS context screen. Handles theme, drawer, the Cognito
      redirect callback, the auth box, the scoped-feed load, and honest gating
@@ -1151,7 +1222,17 @@
       if (res.needAuth) { if (first) mountGate(first, "needAuth", cfg.ctxLabel); return; }
       if (res.noAccess) { if (first) mountGate(first, "noAccess", cfg.ctxLabel, res); return; }
       if (res.error) { if (first) mountGate(first, res.error, cfg.ctxLabel); return; }
-      global.DATA = res.data; setData(global.DATA); setAsOf(global.DATA);
+      let D = res.data;
+      // cfg.segment: a fixed segment page — slice to that industry within the entitlement
+      // (industries.js), or gate it when the tenant doesn't license it.
+      const Ind = global.OncaIndustries;
+      if (cfg.segment) {
+        if (!Ind) { if (first) mountGate(first, "segmento indisponível", cfg.ctxLabel); return; }  // fail closed
+        const acc = Ind.segmentAccess(D, cfg.segment);
+        if (!acc.ok) { mountSegmentGate(D, acc); return; }
+        D = Ind.sliceToIndustry(D, acc.slug);
+      }
+      global.DATA = D; setData(global.DATA); setAsOf(global.DATA);
       cfg.render(global.DATA);
     }
     // Re-render on login/logout without a full reload where possible.
@@ -1166,6 +1247,7 @@
     bootSaaS,
     // feed
     loadScopedFeed, mountGate, setData, indLabel, upgradeHref, billingBannerHTML, bandOf, SAAS_BANDS, comboOf, combosOf,
+    isEntryTier, mountEntryBoard, segmentGateHTML,
     // drawer
     wireDrawer, openCard, closeDrawer,
     // panels
