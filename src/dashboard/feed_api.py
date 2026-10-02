@@ -70,10 +70,14 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     try:
         import boto3
 
-        from src.dashboard.feed_builder import scope_feed_to_modules
+        from src.dashboard.feed_builder import scope_feed_for_entry_tenant, scope_feed_to_modules
 
         raw = boto3.client("s3").get_object(Bucket=bucket, Key="feed.json")["Body"].read()
-        scoped = scope_feed_to_modules(json.loads(raw), modules)
+        # ADR 016/024: an Entry tenant (paid Entry or its trial — effective tier "entry"; an
+        # active SaaS sub lifts it to "saas" in tenant_config.effective_entitlement) gets the
+        # Entry slice at Entry depth, never the full SaaS projection of its module.
+        project = scope_feed_for_entry_tenant if tier == "entry" else scope_feed_to_modules
+        scoped = project(json.loads(raw), modules)
         scoped["tenant"] = tenant_id
         scoped["tier"] = tier
         scoped["billing"] = billing

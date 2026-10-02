@@ -272,6 +272,16 @@
   }
   function labelFor(slug) { return (REGISTRY[slug] && REGISTRY[slug].label) || slug; }
 
+  // A fixed segment page (/fintech, /seguros, /adquirencia, /wealth) frames ONE industry. Pure
+  // decision: is that industry inside the tenant's server-scoped entitlement? `licensed` lists
+  // the tenant's own sectors so an unlicensed page can point to them (/app) instead of showing
+  // another sector's data under this page's framing.
+  function segmentAccess(D, slug) {
+    const lic = licensedIndustries(D);
+    const s = _norm(slug);
+    return { slug: s, ok: !!s && lic.indexOf(s) !== -1, licensed: lic };
+  }
+
   // --- The render engine: a config + scoped feed -> the screen ---------------
   let _uid = 0;
   function panelHTML(item, tasks, D) {
@@ -328,5 +338,6 @@
 
   global.OncaIndustries = {
     REGISTRY, configFor, licensedIndustries, labelFor, renderDashboard, sliceToIndustry,
+    segmentAccess,
   };
 })(window);
