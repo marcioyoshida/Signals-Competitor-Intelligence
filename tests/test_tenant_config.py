@@ -1,6 +1,7 @@
 """Phase D — per-tenant entitlement store + read-boundary scoping."""
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import pytest
@@ -236,7 +237,8 @@ def test_self_register_starts_a_14_day_trial_of_one_sector_and_maps_the_email():
     cfg = tc.self_register_entry_tenant(
         "New.User@Example.com", ["Crypto", "not-a-real-industry"], table=t, federated_table=ft)
     assert cfg["tier"] == "entry" and cfg["modules"] == ["crypto"]  # unknown dropped
-    assert cfg["tenant_id"].startswith("entry-new-user-")
+    assert re.fullmatch(r"entry-[0-9a-f]{12}", cfg["tenant_id"])
+    assert "new" not in cfg["tenant_id"] and "user" not in cfg["tenant_id"]  # #202: opaque
     assert cfg["billing"]["state"] == "trial"
     live = tc.get_tenant_config(cfg["tenant_id"], table=t)
     assert live["modules"] == ["crypto"] and live["billing"]["state"] == "trial"

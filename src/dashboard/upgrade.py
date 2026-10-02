@@ -4,7 +4,7 @@ Onça's per-module extension).
 
 **The link.** ``https://signals-llc.store/?product=onca&tier=<t>&module=<m>&ref=<tenant>&return=…``.
 ``tier`` is ``entry`` or an ADR 024 SaaS band (``saas_premium``/``saas_mid``/``saas_entry``);
-``module`` is the one sector that subscription licenses. ``ref`` is the opaque tenant id, never an
+``module`` is the one sector that subscription licenses. ``ref`` is the opaque tenant id (random hex for Entry, #202), never an
 email. No link is produced for an invalid tenant id or a module the band doesn't cover: a checkout
 the storefront can't attach to an account is how a customer pays for nothing.
 

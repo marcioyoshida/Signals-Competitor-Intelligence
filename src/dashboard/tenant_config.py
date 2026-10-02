@@ -337,13 +337,13 @@ def map_federated_email(
     return {"email": email, "tenant_id": str(tenant_id), "tier": tier}
 
 
-def _allocate_entry_tenant_id(email: str, *, table: Any | None = None) -> str:
-    import re
+def _allocate_entry_tenant_id(*, table: Any | None = None) -> str:
+    """An OPAQUE id (#202): the tenant id is a key in usage/billing rows, the Stripe ``ref``,
+    logs and URLs, so it must never carry any part of the user's email."""
     import secrets
 
-    local = re.sub(r"[^a-z0-9]+", "-", email.split("@")[0].lower()).strip("-") or "user"
     for _ in range(6):
-        candidate = f"entry-{local}-{secrets.token_hex(2)}"
+        candidate = f"entry-{secrets.token_hex(6)}"
         if get_tenant_config(candidate, table=table) is None:
             return candidate
     raise RuntimeError("could not allocate a unique entry tenant id")  # pragma: no cover
@@ -371,7 +371,7 @@ def self_register_entry_tenant(
     })
     if len(picked) != 1:
         raise ValueError(f"pick exactly one entry-tier sector: {sorted(ENTRY_INDUSTRIES)}")
-    tenant_id = _allocate_entry_tenant_id(email, table=table)
+    tenant_id = _allocate_entry_tenant_id(table=table)
     until = (_now() + _dt.timedelta(days=TRIAL_DAYS)).isoformat(timespec="seconds")
     item = {"tenant_id": tenant_id, "tier": "entry", "modules": [], "plane": "portal",
             "billing_managed": True, "trial_until": until, "trial_modules": picked}
