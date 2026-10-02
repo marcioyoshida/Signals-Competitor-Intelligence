@@ -225,6 +225,36 @@ def format_email(w: dict[str, Any], *, dashboard_url: str | None = None) -> tupl
     return subject, text, html
 
 
+def format_sector_email(parts: list[tuple[str, dict[str, Any]]], *, unsub_url: str,
+                        manage_url: str) -> tuple[str, str, str]:
+    """Per-user sector digest: ONE email, one section per opted sector — ``parts`` is
+    [(sector label, weekly scope)]. Carries a visible unsubscribe link + a manage link (the
+    List-Unsubscribe headers are added by the MIME builder). Returns (subject, text, html)."""
+    labels = [label for label, _ in parts]
+    subject = "Resumo semanal Onça — " + ", ".join(labels)
+    text, html = "", ""
+    for label, w in parts:
+        lines, metric = _lines(w), ("" if "lines" in w else _metric_line(w.get("metrics") or {}))
+        text += f"== {label} ==\n{w.get('headline') or ''}" + (f"\n{metric}" if metric else "")
+        if lines:
+            text += f"\n\n{_lines_heading(w)}:\n" + "\n".join(f"- {l}" for l in lines)
+        for heading, extra in _sections(w):
+            text += f"\n\n{heading}:\n" + "\n".join(f"- {l}" for l in extra)
+        text += "\n\n"
+        html += (f"<h2>{_esc(label)}</h2><p>{_esc(w.get('headline') or '')}</p>"
+                 + (f"<p style='color:#666'>{_esc(metric)}</p>" if metric else "")
+                 + (f"<h3>{_esc(_lines_heading(w))}</h3><ul>"
+                    + "".join(f"<li>{_esc(l)}</li>" for l in lines) + "</ul>" if lines else "")
+                 + "".join(f"<h3>{_esc(h)}</h3><ul>" + "".join(f"<li>{_esc(l)}</li>" for l in extra)
+                           + "</ul>" for h, extra in _sections(w)))
+    foot = ("Você recebe este resumo porque ativou o resumo semanal por setor no painel Onça.")
+    text += f"{foot}\nGerenciar preferências: {manage_url}\nCancelar inscrição: {unsub_url}\n"
+    html += (f"<hr><p style='color:#666;font-size:13px'>{_esc(foot)}<br>"
+             f"<a href='{_esc(manage_url)}'>Gerenciar preferências</a> · "
+             f"<a href='{_esc(unsub_url)}'>Cancelar inscrição</a></p>")
+    return subject, text, html
+
+
 def _esc(s: str) -> str:
     return (str(s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
 

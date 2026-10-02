@@ -2610,8 +2610,24 @@ class OncaPrototypeStack(Stack):
             "OncaPushNotifierHourly",
             schedule=events.Schedule.cron(minute="5", hour="10-23"),
         ).add_target(targets.LambdaFunction(push_notifier_fn, retry_attempts=0))
+        # Per-sector weekly digest opt-in (owner 2026-10-02): DIGEST#<sub> prefs rows live in this
+        # SAME table, served by OncaPushApi (routes below). The Monday feed-builder run READS the
+        # rows, WRITES one hashed unsubscribe-token row per email + the per-user `last_sent`, and
+        # reads tenant config to send only sectors still licensed at send time. SES
+        # SendRawEmail (List-Unsubscribe headers) is already on feed_fn's role.
         feed_fn.add_environment("ONCA_PUSH_TABLE", push_table.table_name)
-        push_table.grant_read_data(feed_fn)   # #167 operator counters in feed.mobile_usage.push
+        feed_fn.add_environment("ONCA_TENANT_CONFIG_TABLE", tenant_config_table.table_name)
+        feed_fn.add_environment("ONCA_SECTOR_DIGEST", "true")
+        push_table.grant_read_write_data(feed_fn)   # #167 counters (read) + digest tokens/last_sent
+        tenant_config_table.grant_read_data(feed_fn)
+        auth_api.add_routes(path="/api/me/digest",
+                            methods=[apigwv2.HttpMethod.GET, apigwv2.HttpMethod.PUT],
+                            integration=_push_integ, authorizer=jwt_authorizer)
+        # one-click unsubscribe from the email (RFC 8058): no JWT — the token is the capability.
+        # Under /api/push/* so the existing CloudFront behavior carries it (no new behavior).
+        auth_api.add_routes(path="/api/push/digest/unsubscribe",
+                            methods=[apigwv2.HttpMethod.GET, apigwv2.HttpMethod.POST],
+                            integration=_push_integ)
 
         # #181/#182/#186 agent discovery: an OAuth 2.1 authorization server in front of Cognito
         # (the fleet pattern from Tarantula #99 — own pool, own KMS key, own table) and the remote

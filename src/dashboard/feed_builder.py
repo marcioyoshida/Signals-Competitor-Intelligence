@@ -2042,6 +2042,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # Gated OFF by default; fail-closed per channel (weekly_digest degrades to None when a
     # channel's webhook/email isn't configured — nothing sent, nothing fabricated). Runs only
     # on the configured weekday so a once-daily pipeline doesn't re-send every day.
+    _sector_report = None
     if os.environ.get("ONCA_WEEKLY_DIGEST", "false").lower() in ("1", "true", "yes"):
         try:
             import datetime as _dt
@@ -2082,6 +2083,20 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                                                 key=weekly_digest.CPO_SENT_KEY)
                 except Exception as exc:  # pragma: no cover - best-effort
                     print(f"Warning: CPO radar digest skipped: {exc}")
+            # Per-sector opt-in digest (owner 2026-10-02): one email per opted-in user to their
+            # own login email, one section per opted sector still licensed today. Same weekday
+            # gate; de-duplicated PER USER (`last_sent` on the opt-in row), so the day's later
+            # runs only retry users that failed.
+            if os.environ.get("ONCA_SECTOR_DIGEST", "false").lower() in ("1", "true", "yes") \
+                    and os.environ.get("ONCA_PUSH_TABLE") \
+                    and weekly_digest.should_send(_as_of.isoformat(), weekday=_wd_day):
+                try:
+                    from src.dashboard import digest_optin
+
+                    _sector_report = digest_optin.send_sector_digests(feed, today=_as_of.isoformat())
+                    print(f"Weekly sector digests ({_as_of}): {_sector_report}")
+                except Exception as exc:  # pragma: no cover - best-effort
+                    print(f"Warning: sector digests skipped: {exc}")
         except Exception as exc:  # pragma: no cover - best-effort, never blocks publish
             print(f"Warning: weekly digest skipped: {exc}")
     # ADR 019 Phase 3b — vertical feed scoping: a sectorial deployment publishes ONLY its
@@ -2168,6 +2183,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 ],
                 "reviews_pending": len(feed["reviews"]),
                 "published": published,
+                "sector_digest": _sector_report,
             }
         ),
     }

@@ -187,8 +187,12 @@ def api_handler(event: dict[str, Any], context: Any, *, table: Any | None = None
 
     path = str(event.get("rawPath") or "").rstrip("/")
     method = str(((event.get("requestContext") or {}).get("http") or {}).get("method") or "POST").upper()
-    body = _body(event)
     t = _table(table)
+    if "/digest" in path:   # per-sector weekly digest opt-in shares this Lambda + table
+        from src.dashboard import digest_optin
+
+        return digest_optin.api_handler(event, context, table=t)
+    body = _body(event)
 
     # --- service-worker routes (no JWT: the endpoint URL is the capability) ---
     if path.endswith("/api/push/pending") or path.endswith("/api/push/opened"):
