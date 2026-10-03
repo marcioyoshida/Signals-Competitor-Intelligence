@@ -30,6 +30,7 @@ from aws_cdk import aws_iam as iam
 from aws_cdk import aws_kms as kms
 from aws_cdk import aws_ssm as ssm
 from aws_cdk import aws_lambda as lambda_
+from aws_cdk import aws_lambda_destinations as lambda_dest
 from aws_cdk import aws_s3 as s3
 from aws_cdk import aws_s3_deployment as s3deploy
 from aws_cdk import aws_s3_notifications as s3n
@@ -37,6 +38,7 @@ from aws_cdk import aws_s3vectors as s3vectors
 from aws_cdk import aws_ses as ses
 from aws_cdk import aws_sns as sns
 from aws_cdk import aws_sns_subscriptions as sns_subs
+from aws_cdk import aws_sqs as sqs
 from aws_cdk import aws_stepfunctions as sfn
 from aws_cdk import aws_stepfunctions_tasks as sfn_tasks
 
@@ -3637,6 +3639,15 @@ class OncaPrototypeStack(Stack):
         # #187: the storefront dispatch target (Signals-Storefront #7 contract, as Tarantula's
         # TarantulaUpgrade). Invoked async over IAM by the storefront webhook's role ONLY; a paid
         # purchase that can't attach to a tenant raises, and the error alarm pages.
+        # Storefront #7 item 1: an event that still fails after Lambda's async retries is KEPT
+        # (the dispatch payload: tenant_ref, tier, module/combo, stripe_event_id; no email) in
+        # this queue for reconciliation, instead of vanishing. 14 days is the SQS maximum.
+        upgrade_failed_q = sqs.Queue(
+            self, "OncaUpgradeFailedQueue",
+            retention_period=Duration.days(14),
+            encryption=sqs.QueueEncryption.SQS_MANAGED,
+            enforce_ssl=True,
+        )
         upgrade_fn = lambda_.Function(
             self, "OncaUpgrade",
             runtime=LAMBDA_RUNTIME,
@@ -3647,6 +3658,8 @@ class OncaPrototypeStack(Stack):
             reserved_concurrent_executions=2,
             environment={"PYTHONPATH": "/var/task",
                          "ONCA_TENANT_CONFIG_TABLE": tenant_config_table.table_name},
+            retry_attempts=2,
+            on_failure=lambda_dest.SqsDestination(upgrade_failed_q),
         )
         tenant_config_table.grant_read_write_data(upgrade_fn)
         storefront_role = self.node.try_get_context("storefrontWebhookRoleArn") or (
@@ -3663,7 +3676,19 @@ class OncaPrototypeStack(Stack):
             comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
             treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
         ).add_alarm_action(cw_actions.SnsAction(alerts_topic))
+        cloudwatch.Alarm(
+            self, "OncaUpgradeFailedQueueAlarm",
+            alarm_description="A paid storefront event exhausted OncaUpgrade's retries and is parked "
+                              "in OncaUpgradeFailedQueue (Signals-Storefront #7): reconcile it "
+                              "within 14 days (the queue's retention).",
+            metric=upgrade_failed_q.metric_approximate_number_of_messages_visible(
+                period=Duration.minutes(5), statistic="Maximum"),
+            threshold=1, evaluation_periods=1,
+            comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+            treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
+        ).add_alarm_action(cw_actions.SnsAction(alerts_topic))
         CfnOutput(self, "UpgradeFunctionName", value=upgrade_fn.function_name)
+        CfnOutput(self, "UpgradeFailedQueueUrl", value=upgrade_failed_q.queue_url)
 
         # Pipeline health: CDK's built-in State Machine metrics. `evaluation_periods=1` over a
         # 1-day period means ANY failed/timed-out execution in a day fires once — this is a
