@@ -2452,6 +2452,9 @@ class OncaPrototypeStack(Stack):
                 "PYTHONPATH": "/var/task",
                 "ONCA_SITE_BUCKET": site_bucket.bucket_name,
                 "ONCA_TENANT_CONFIG_TABLE": tenant_config_table.table_name,
+                # #187: dashboard upgrade CTAs link to the storefront (Signals-Storefront
+                # #6/#7/#8/#10 closed 2026-10-03; checkout attaches to the tenant).
+                "ONCA_UPGRADE_LIVE": "true",
             },
         )
         site_bucket.grant_read(feed_api_fn)  # reads feed.json
