@@ -328,3 +328,54 @@ def test_unrelated_acts_and_headlines_do_not_merge_into_an_event_by_window():
     assert ban["date"] == "2026-09-25" and not any(s.get("id") == "dou:edital" for s in ban["sources"])
     des = next(e for e in store["events"] if e["id"].endswith("mp-1393"))
     assert not any(s.get("id") == "n-fidc" for s in des["sources"])     # a different measure
+
+
+# --- 10-04: BCB normativos copies (no title) duplicated per run and beside their DOU copy ------
+_BCB_597 = {"id": "bcb:Resolução BCB:597", "source": "BCB", "kind": "regulatory",
+            "doc_type": "Resolução BCB", "number": "597", "date": "2026-09-30",
+            "subject": "Altera o regulamento do Pix para vedar transações com bets.",
+            "url": "https://www.bcb.gov.br/estabilidadefinanceira/exibenormativo?tipo=Resolu%C3%A7%C3%A3o+BCB&numero=597",
+            "industries": ["fintech"], "severity": "critical"}
+_DOU_597 = {"id": "dou:597", "source": "DOU", "kind": "regulatory", "date": "2026-10-02",
+            "title": "RESOLUÇÃO BCB Nº 597, DE 30 DE SETEMBRO DE 2026",
+            "text": "RESOLUÇÃO BCB Nº 597, DE 30 DE SETEMBRO DE 2026 Altera o regulamento anexo à Resolução BCB nº 1. Mais.",
+            "url": "https://www.in.gov.br/web/dou/-/resolucao-bcb-n-597", "organ": "Banco Central do Brasil",
+            "industries": ["fintech"], "severity": "critical"}
+_COMUNICADO = {"id": "bcb:Comunicado:46045", "source": "BCB", "kind": "regulatory",
+               "doc_type": "Comunicado", "number": "46045", "date": "2026-09-30",
+               "subject": "Divulga orientações sobre a vedação.", "industries": ["fintech"],
+               "url": "https://www.bcb.gov.br/estabilidadefinanceira/exibenormativo?tipo=Comunicado&numero=46045",
+               "severity": "critical"}
+
+
+def test_untitled_bcb_act_is_named_and_joins_its_dou_copy():
+    store, _ = se.build_events({}, [_BCB_597], [], today=dt.date(2026, 9, 30))
+    assert store["events"][0]["title"] == "Resolução BCB nº 597"
+    assert store["events"][0]["summary"].startswith("Altera o regulamento do Pix")
+    store, _ = se.build_events(store, [_DOU_597], [], today=dt.date(2026, 10, 2))
+    [ev] = store["events"]
+    assert ev["n_official"] == 2 and ev["title"].startswith("RESOLUÇÃO BCB Nº 597")
+
+
+def test_an_act_without_an_instrument_ref_is_not_duplicated_each_run():
+    store = {}
+    for day in (30, 1, 2):
+        store, _ = se.build_events(store, [_COMUNICADO], [], today=dt.date(2026, 10 if day < 30 else 9, day))
+    [ev] = store["events"]
+    assert ev["id"] == "sector_event:fintech:bcb-comunicado-46045"
+    assert ev["title"] == "Comunicado nº 46045" and ev["n_official"] == 1
+
+
+def test_repair_merges_stored_duplicates_and_names_untitled_acts():
+    blank = {"kind": "official", "id": "bcb:Resolução BCB:597", "title": "", "summary": "",
+             "url": _BCB_597["url"], "date": "2026-09-30", "doc_type": "Resolução BCB", "severity": "critical"}
+    dou = se._official_source(_DOU_597)
+    stored = [se._new_event("fintech", "resolucao-bcb-597", [dou], "2026-10-02", anchor_refs=["resolucao-bcb-597"])]
+    stored += [se._new_event("fintech", "bcb:Resolução BCB:597", [dict(blank)], d) for d in ("2026-09-30", "2026-10-01")]
+    assert len({e["id"] for e in stored}) == 2 and not stored[1]["title"]
+    out = se.repair_events(stored)
+    [ev] = out
+    assert ev["id"] == "sector_event:fintech:resolucao-bcb-597"
+    assert ev["title"].startswith("RESOLUÇÃO BCB Nº 597") and ev["n_official"] == 2
+    assert ev["first_seen"] == "2026-09-30"
+    assert [e["id"] for e in se.repair_events(out)] == [ev["id"]]  # idempotent

@@ -362,12 +362,28 @@ def _ementa(item: dict[str, Any]) -> str:
     return (m.group(1) if m else text[:320]).strip()
 
 
+def _act_name(item: dict[str, Any]) -> str:
+    """A title for an act that arrives without one: the BCB normativos search gives
+    ``doc_type`` + ``number`` (id ``bcb:<tipo>:<número>``) and no title. "Resolução BCB nº 597"
+    is what the act is called, and it carries the instrument ref that joins the DOU copy."""
+    doc_type, number = item.get("doc_type"), item.get("number")
+    if not (doc_type and number):
+        parts = str(item.get("id") or "").split(":")
+        if len(parts) == 3 and parts[0] == "bcb":
+            doc_type, number = doc_type or parts[1], number or parts[2]
+    if not (doc_type and number) or str(number) == "None":
+        return ""
+    return f"{doc_type} nº {number}"
+
+
 def _official_source(item: dict[str, Any]) -> dict[str, Any]:
-    return {"kind": "official", "id": item.get("id"), "title": _strip_html(item.get("title")),
+    title = _strip_html(item.get("title")) or _act_name(item)
+    summary = _ementa(item) if item.get("title") else ""
+    return {"kind": "official", "id": item.get("id"), "title": title,
             "url": item.get("url"), "date": str(item.get("date") or "")[:10],
             "source": item.get("source"), "organ": item.get("organ"), "section": item.get("section"),
             "doc_type": item.get("doc_type"), "severity": _sev(item.get("severity")),
-            "summary": _ementa(item)}
+            "summary": summary or _strip_html(item.get("subject"))[:320]}
 
 
 def _news_source(item: dict[str, Any], assessment: dict[str, Any]) -> dict[str, Any]:
@@ -408,7 +424,9 @@ def _refresh(ev: dict[str, Any]) -> dict[str, Any]:
                                                     else "reported")
     ctypes = Counter(s.get("change_type") for s in news if s.get("change_type"))
     if official:
-        lead = official[0]
+        # the DOU publication leads (full title + ementa), then any summarised act; the BCB
+        # normativos copy of the same act is a bare "Resolução BCB nº N" + subject line
+        lead = min(official, key=lambda s: (not s.get("summary"), str(s.get("id") or "").startswith("bcb:")))
         ev["title"] = lead["title"]
         ev["summary"] = lead.get("summary") or ""
         ev["severity"] = _max_sev(*[s.get("severity") or "medium" for s in official])
@@ -468,13 +486,53 @@ def _find_event(events: list[dict[str, Any]], industry: str, *, date: str,
 
 
 def _attach(ev: dict[str, Any], src: dict[str, Any], run_date: str) -> bool:
-    if any((s.get("id") and s.get("id") == src.get("id")) or
-           (s.get("url") and s.get("url") == src.get("url")) for s in ev.get("sources") or []):
+    same = next((s for s in ev.get("sources") or []
+                 if (s.get("id") and s.get("id") == src.get("id"))
+                 or (s.get("url") and s.get("url") == src.get("url"))), None)
+    if same is not None:
+        # already attached; a stored copy saved without title/summary takes them from this run
+        if any(not same.get(k) and src.get(k) for k in ("title", "summary")):
+            for k in ("title", "summary"):
+                same[k] = same.get(k) or src.get(k)
+            _refresh(ev)
         return False
     ev.setdefault("sources", []).append(src)
     ev["last_seen"] = run_date
     _refresh(ev)
     return True
+
+
+def repair_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Undo two store defects (10-04: 30 of 46 live events): BCB acts saved without a title,
+    and the same event id stored once per run. Names untitled acts, then merges events of one
+    industry that share an id or an instrument ref (the DOU-titled one leads). Idempotent."""
+    for ev in events:
+        for s in ev.get("sources") or []:
+            if s.get("kind") == "official" and not s.get("title"):
+                s["title"] = _act_name(s)
+        refs = [r for s in ev.get("sources") or [] if s.get("kind") == "official"
+                for r in instrument_refs(s.get("title"))]
+        ev["anchor_refs"] = list(dict.fromkeys((ev.get("anchor_refs") or []) + refs))
+    # an event whose sources carry real ementas leads (DOU copy) — then the oldest
+    order = sorted(events, key=lambda e: (not any(s.get("summary") for s in e.get("sources") or []),
+                                          e.get("first_seen") or "9999"))
+    kept: list[dict[str, Any]] = []
+    for ev in order:
+        host = next((k for k in kept if k.get("industry") == ev.get("industry") and (
+            k.get("id") == ev.get("id")
+            or set(k.get("anchor_refs") or []) & set(ev.get("anchor_refs") or []))), None)
+        if host is None:
+            kept.append(ev)
+            continue
+        for s in ev.get("sources") or []:
+            if not any((x.get("id") and x.get("id") == s.get("id"))
+                       or (x.get("url") and x.get("url") == s.get("url"))
+                       for x in host.get("sources") or []):
+                host["sources"].append(s)
+        host["anchor_refs"] = list(dict.fromkeys(host["anchor_refs"] + ev["anchor_refs"]))
+        host["first_seen"] = min(host.get("first_seen") or "9999", ev.get("first_seen") or "9999")
+        host["last_seen"] = max(host.get("last_seen") or "", ev.get("last_seen") or "")
+    return [_refresh(e) for e in kept]
 
 
 def build_events(
@@ -493,7 +551,7 @@ def build_events(
     run_date = today.isoformat()
     covered = {str(i) for i in industries} if industries is not None else None
     store = json.loads(json.dumps(store or {}))  # never mutate the caller's copy
-    events: list[dict[str, Any]] = list(store.get("events") or [])
+    events: list[dict[str, Any]] = repair_events(list(store.get("events") or []))
     pending: list[dict[str, Any]] = list(store.get("pending") or [])
     report: dict[str, Any] = {"official": 0, "reports": [], "rejected": [], "created": [],
                               "updated": []}
@@ -559,6 +617,11 @@ def build_events(
                 continue
             anchor = title_refs[0] if title_refs else (it.get("id") or src["title"])
             ev = _new_event(ind, anchor, [src], run_date, anchor_refs=title_refs)
+            stored = next((e for e in events if e["id"] == ev["id"]), None)
+            if stored is not None:  # an act with no instrument ref (Comunicado) seen last run
+                if _attach(stored, src, run_date):
+                    _mark(stored, False)
+                continue
             events.append(ev)
             _mark(ev, True)
 
