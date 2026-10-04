@@ -310,3 +310,32 @@ def test_news_exclude_is_accent_and_case_insensitive_and_optional():
     assert not _excluded("Neon", _fold("Neon capta R$ 300 mi"), None)
     assert not _excluded("Neon", _fold("Neon capta R$ 300 mi"), {})
     assert not _excluded("Neon", _fold("Neon capta R$ 300 mi"), {"outra": ["x"]})
+
+
+def test_google_news_item_upgraded_to_direct_outlet_link():
+    # 10-04: when Google News and a direct outlet feed carried the same headline, the outlet
+    # item had the same id, was skipped as "seen", and the opaque redirect won.
+    import datetime as _dt
+    gn = (b'<rss><channel><item><title>BTG Pactual compra fatia do banco X - NeoFeed</title>'
+          b'<link>https://news.google.com/rss/articles/CBMiABC?oc=5</link>'
+          b'<pubDate>Fri, 03 Oct 2026 10:00:00 GMT</pubDate>'
+          b'<source url="https://neofeed.com.br">NeoFeed</source></item></channel></rss>')
+    outlet = (b'<rss><channel><item><title>BTG Pactual compra fatia do banco X</title>'
+              b'<link>https://neofeed.com.br/negocios/btg-compra-fatia</link>'
+              b'<pubDate>Fri, 03 Oct 2026 10:00:00 GMT</pubDate></item></channel></rss>')
+    items = trade_press.fetch_news(["BTG Pactual"], today=_dt.date(2026, 10, 4), pause_sec=0,
+                                   require_finance_context=False, fetcher=lambda t: gn,
+                                   outlet_feeds=[("NeoFeed", "u")], outlet_fetcher=lambda u: outlet)
+    assert len(items) == 1
+    assert items[0]["url"] == "https://neofeed.com.br/negocios/btg-compra-fatia"
+    assert "via" not in items[0] and items[0]["company"] == "BTG Pactual"
+
+
+def test_google_news_item_keeps_publisher_homepage():
+    gn = (b'<rss><channel><item><title>Nubank lucra R$ 1 bi - Estad\xc3\xa3o</title>'
+          b'<link>https://news.google.com/rss/articles/CBMiXYZ?oc=5</link>'
+          b'<pubDate>Fri, 03 Oct 2026 10:00:00 GMT</pubDate>'
+          b'<source url="https://www.estadao.com.br">Estad\xc3\xa3o</source></item></channel></rss>')
+    (it,) = trade_press._parse(gn, "Nubank")
+    assert it["via"] == "google_news" and it["publisher"] == "Estadão"
+    assert it["publisher_url"] == "https://www.estadao.com.br"

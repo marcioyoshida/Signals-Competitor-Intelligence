@@ -79,3 +79,11 @@ def test_enforce_strips_fake_url_then_cites_from_sources():
     assert result["ok"]
     assert "URL:" not in result["narrative"]
     assert any(c.get("url") == "https://dados.cvm.gov.br/oferta" for c in result["citations"])
+
+
+def test_news_citation_carries_publisher_label():
+    gn = "https://news.google.com/rss/articles/CBMiXYZ?oc=5"
+    srcs = [{"url": gn, "publisher": "Estadão"}, {"url": "https://www.gov.br/x"}]
+    out = enforce_citations(f"Nubank lucrou R$ 1 bi {gn} . Regra nova https://www.gov.br/x .", srcs)
+    assert out["citations"][0] == {"url": gn, "label": "Estadão", "via": "Google Notícias"}
+    assert out["citations"][1] == {"url": "https://www.gov.br/x"}

@@ -147,7 +147,7 @@
         const srcs = (c.sources || []).filter((s) => s && /^https?:\/\//i.test(s.url || ""));
         const refs = srcs.map((s) =>
           `<a class="refnum" href="${esc(s.url)}" target="_blank" rel="noopener"
-             title="${esc(U.sourceLabel(s.url))}">↗</a>`).join(" ");
+             title="${esc(s.label ? s.label + (s.via ? " · via " + s.via : "") : U.sourceLabel(s.url))}">↗</a>`).join(" ");
         const ent = c.kb ? "" : (c.entity || "");
         return `<span class="cite-grp"><span class="ask-cite src" data-entity="${esc(ent)}"
           role="button" tabindex="0">[${i + 1}] ${esc(label)}</span> ${refs}</span>`;

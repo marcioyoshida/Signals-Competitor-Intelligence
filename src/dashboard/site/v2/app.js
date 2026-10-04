@@ -59,15 +59,17 @@
     const isHttp = (u) => typeof u === "string" && /^https?:\/\//i.test(u);
     const entries = [];
     const numByUrl = new Map();
-    const add = (url) => {
+    // A citation may carry its publisher (`label`): a Google News redirect then shows as
+    // "Estadão" (via Google Notícias in the tooltip) instead of one opaque "Google Notícias" pile.
+    const add = (url, label, via) => {
       const k = strip(url);
       if (numByUrl.has(k)) return numByUrl.get(k);
       const n = entries.length + 1;
       numByUrl.set(k, n);
-      entries.push({ n, url, label: sourceLabel(url) });
+      entries.push({ n, url, label: label || sourceLabel(url), via: via || "" });
       return n;
     };
-    (f.citations || []).forEach((c) => { if (isHttp(c.url)) add(c.url); });
+    (f.citations || []).forEach((c) => { if (isHttp(c.url)) add(c.url, c.label, c.via); });
     return { entries, numByUrl, strip, add, isHttp };
   }
   const URL_RE = /https?:\/\/[^\s<>]+/g;
@@ -96,7 +98,7 @@
     });
     return `<div class="cites">` + [...groups.values()].map((g) => {
       const refs = g.refs.map((e) => e.url
-        ? `<a class="refnum" href="${esc(e.url)}" target="_blank" rel="noopener">[${e.n}]</a>`
+        ? `<a class="refnum" href="${esc(e.url)}" target="_blank" rel="noopener"${e.via ? ` title="via ${esc(e.via)}"` : ""}>[${e.n}]</a>`
         : `<span class="refnum dead">[${e.n}]</span>`).join(" ");
       return `<span class="cite-grp"><span class="src">${esc(g.label)}</span> ${refs}</span>`;
     }).join("") + `</div>`;

@@ -271,8 +271,10 @@ def fetch_news(
     if include_outlets:
         ofetch = outlet_fetcher or _fetch_url
         term_folded = {t: _fold(t) for t in uniq_all}
+        direct_all: list[dict[str, Any]] = []
         for publisher, feed_url in (outlet_feeds if outlet_feeds is not None else OUTLET_FEEDS):
             for rec in _parse_feed(ofetch(feed_url), publisher):
+                direct_all.append(rec)
                 title_f = _fold(rec.get("title") or "")
                 matched = next(
                     (
@@ -299,6 +301,9 @@ def fetch_news(
                 rec["name"] = matched
                 seen.add(rec["id"])
                 out.append(rec)
+        # the same headline via Google News (kept first, above) gets the direct link — before,
+        # an outlet item with the same id was skipped as seen and the redirect won
+        prefer_direct_links(out, direct_all)
 
     for rec in out:
         rec.setdefault("query_kind", "entity")
@@ -500,6 +505,7 @@ def _parse(content: bytes, term: str) -> list[dict[str, Any]]:
             continue
         src_el = it.find("source")
         publisher = (src_el.text.strip() if src_el is not None and src_el.text else None)
+        publisher_url = (src_el.get("url") or "").strip() if src_el is not None else ""
         # Google News often appends " - Publisher" to the title; trim it.
         if publisher and title.endswith(f" - {publisher}"):
             title = title[: -(len(publisher) + 3)].strip()
@@ -517,9 +523,34 @@ def _parse(content: bytes, term: str) -> list[dict[str, Any]]:
                 "name": term,
                 "date": _iso(it.findtext("pubDate")),
                 "url": link,
+                "via": "google_news",
+                **({"publisher_url": publisher_url} if publisher_url.startswith("http") else {}),
             }
         )
     return out
+
+
+def prefer_direct_links(items: list[dict[str, Any]], direct: list[dict[str, Any]]) -> int:
+    """Swap a Google News redirect for the publisher's own link when a direct outlet feed
+    carries the same headline. Google News ids are opaque since 2024 (no offline decode) and
+    resolving them means calling an undocumented Google endpoint, which we don't. The item
+    keeps its id (the seen-set key) and entity binding. Returns how many were upgraded."""
+    by_title = {}
+    for d in direct or []:
+        tk = _title_key(d.get("title"))
+        if len(tk) > 12 and d.get("url"):
+            by_title.setdefault(tk, d)
+    n = 0
+    for it in items or []:
+        if it.get("via") != "google_news":
+            continue
+        d = by_title.get(_title_key(it.get("title")))
+        if d is None:
+            continue
+        it["url"], it["publisher"] = d["url"], d.get("publisher") or it.get("publisher")
+        it.pop("via", None)
+        n += 1
+    return n
 
 
 def _iso(pubdate: Any) -> str:

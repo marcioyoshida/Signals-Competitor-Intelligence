@@ -105,7 +105,7 @@ def enforce_citations(
     if cleaned and not used and allowed:
         used = sorted(allowed)[:5]
 
-    citations = [{"url": u} for u in used]
+    citations = [_url_citation(u, sources) for u in used]
     # Also allow sources without URLs to appear as id-only citations.
     for src in sources:
         if src.get("url"):
@@ -121,6 +121,19 @@ def enforce_citations(
         "dropped_urls": sorted(set(dropped)),
         "ok": ok,
     }
+
+
+def _url_citation(url: str, sources: list[dict[str, Any]]) -> dict[str, Any]:
+    """{"url"} plus, for news, the publisher as ``label`` — a Google News redirect alone says
+    nothing about who published the story (49% of feed links were opaque redirects, 10-04)."""
+    out: dict[str, Any] = {"url": url}
+    src = next((s for s in sources or [] if s.get("publisher")
+                and _normalize_url(str(s.get("url") or "")) == url), None)
+    if src is not None:
+        out["label"] = str(src["publisher"])
+        if "news.google.com" in url:
+            out["via"] = "Google Notícias"
+    return out
 
 
 def _split_sentences(text: str) -> list[str]:
