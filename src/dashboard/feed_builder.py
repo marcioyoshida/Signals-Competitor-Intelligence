@@ -793,7 +793,7 @@ def build_feed(
     built_macro = build_macro(macro, gdelt_macro)
     feed_items = macro_correlate.annotate_feed_items(feed_items, built_macro)
 
-    return {
+    feed = {
         "generated_at": generated_at
         or dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
         "as_of": data_as_of,
@@ -884,6 +884,10 @@ def build_feed(
         # Keyed grounding for the agent + a financial lens on the frameworks.
         "financials": financials or [],
     }
+    # one display name per news outlet across every citation/source in the feed
+    from src.synth import outlets
+    outlets.name_in_place(feed)
+    return feed
 
 
 def _scope_sector_blocks(feed: dict[str, Any], keep: set[str], row_ok: Any) -> dict[str, Any]:

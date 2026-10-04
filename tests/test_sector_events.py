@@ -379,3 +379,14 @@ def test_repair_merges_stored_duplicates_and_names_untitled_acts():
     assert ev["title"].startswith("RESOLUÇÃO BCB Nº 597") and ev["n_official"] == 2
     assert ev["first_seen"] == "2026-09-30"
     assert [e["id"] for e in se.repair_events(out)] == [ev["id"]]  # idempotent
+
+
+def test_store_keeps_one_name_per_outlet():
+    srcs = [{"kind": "news", "id": f"n{i}", "url": f"https://news.google.com/{i}", "date": "2026-09-28",
+             "publisher": p, "publisher_key": se.publisher_key({"publisher": p}), "change_type": "ban"}
+            for i, p in enumerate(["O GLOBO", "oglobo.globo.com", "Poder360"])]
+    ev = se._new_event("betting", "ban-2026-09-28", srcs, "2026-09-28")
+    store, _ = se.build_events({"events": [ev]}, [], [], today=dt.date(2026, 9, 29))
+    [out] = store["events"]
+    assert {s["publisher"] for s in out["sources"]} == {"O GLOBO", "Poder360"}
+    assert out["n_outlets"] == 2 and sorted(out["outlets"]) == ["O GLOBO", "Poder360"]

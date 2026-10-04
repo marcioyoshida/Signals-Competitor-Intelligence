@@ -264,14 +264,9 @@ def assess_headline(title: Any, *, industries: Iterable[str] | None = None,
 def publisher_key(item: dict[str, Any]) -> str:
     """Coarse outlet identity for independence counting. Google-News URLs all share one host,
     so the item's ``publisher`` wins; "O Dia" and "odia.ig.com.br" collapse to ``odia``."""
-    pub = _fold(item.get("publisher") or "")
-    if not pub:
-        m = re.search(r"https?://([^/]+)/?", str(item.get("url") or ""))
-        pub = (m.group(1) if m else "").lower()
-    pub = re.sub(r"^www\.", "", pub.strip())
-    if re.fullmatch(r"[a-z0-9.-]+\.[a-z]{2,}", pub):
-        pub = pub.split(".")[0]
-    return re.sub(r"[^a-z0-9]+", "", pub) or "?"
+    from src.synth.outlets import outlet_key
+
+    return outlet_key(item.get("publisher"), item.get("url"))
 
 
 # --- digest extraction ------------------------------------------------------------------
@@ -680,6 +675,10 @@ def build_events(
     keep_after = (today - dt.timedelta(days=RETENTION_DAYS)).isoformat()
     events = [e for e in events if (e.get("last_evidence") or e.get("date") or "") >= keep_after]
     events.sort(key=lambda e: e.get("date") or "", reverse=True)
+    # one name per outlet ("O GLOBO", not also "oglobo.globo.com"), learned from the store
+    from src.synth import outlets
+    outlets.name_in_place({"events": events, "pending": pending})
+    events = [_refresh(e) for e in events]
     store = {"as_of": run_date, "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
              "events": events, "pending": pending, "window_days": MERGE_WINDOW_DAYS}
     return store, report
