@@ -1194,7 +1194,7 @@ function rowsSectorEvents(list) {
   const lbl = {}; (EX.sectors || []).forEach(s => { lbl[s.slug] = s.label; });
   return list.map(r => {
     const links = (r.sources || []).slice(0, 4).map((s, i) =>
-      `<a href="${U.esc(s.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="${U.esc((s.label || "") + " — " + (s.title || ""))}">[${i + 1}]</a>`).join(" ");
+      `<a href="${U.esc(s.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="${U.esc((s.label || "") + (s.via ? " (via " + s.via + ")" : "") + " — " + (s.title || ""))}">[${i + 1}]</a>`).join(" ");
     const txt = (r.title || "") + (r.summary ? " — " + r.summary : "");
     const meta = `${U.esc(SECTOR_CONF_PT[r.confidence] || r.confidence || "")}` +
       (r.n_outlets ? ` · ${r.n_outlets} veículo(s)` : "") + (r.n_affected ? ` · ${r.n_affected} entidades afetadas` : "");
@@ -1215,7 +1215,7 @@ function rowsEnforcement(list) {
   if (!list.length) return U.empty("Nenhuma ação de enforcement no escopo.", "BCB · SPA · COAF · CVM · CEIS/CNEP · MPF", "○");
   return list.slice(0, 30).map(r => {
     const links = (r.sources || []).slice(0, 4).map((s, i) =>
-      `<a href="${U.esc(s.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="${U.esc((s.label || "") + " — " + (s.title || ""))}">[${i + 1}]</a>`).join(" ");
+      `<a href="${U.esc(s.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="${U.esc((s.label || "") + (s.via ? " (via " + s.via + ")" : "") + " — " + (s.title || ""))}">[${i + 1}]</a>`).join(" ");
     const txt = (r.title || "") + (r.summary && r.summary !== r.title ? " — " + r.summary : "");
     const meta = `${U.esc(r.authority || "")} · ${U.esc(ENF_CONF_PT[r.confidence] || r.confidence || "")}` +
       (r.n_sources > 1 ? ` · ${r.n_sources} fontes` : "");
@@ -2243,7 +2243,7 @@ function inspectSectorEvent(id) {
   const r = (((EX.cro || {}).panels || {}).sector_events || []).find(x => x.id === id);
   if (!r) return false;
   const src = (r.sources || []).map(s => `<li><a href="${U.esc(s.url)}" target="_blank" rel="noopener">${U.esc(s.title || s.url)}</a>` +
-    ` <span class="hd-note">${U.esc(s.kind === "official" ? "ato oficial" : "imprensa")} · ${U.esc(s.label || "")}` +
+    ` <span class="hd-note">${U.esc(s.kind === "official" ? "ato oficial" : "imprensa")} · ${U.esc(s.label || "")}${s.via ? " · via " + U.esc(s.via) : ""}` +
     `${s.section ? " · " + U.esc(s.section) : ""} · ${U.esc(s.date || "")}</span></li>`).join("");
   document.getElementById("drTitle").textContent = "Evento setorial — " + (r.change_label || "mudança regulatória");
   document.getElementById("drBody").innerHTML = `<div class="callout"><p><b>${U.esc(r.title || "")}</b></p>` +

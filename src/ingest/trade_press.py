@@ -221,8 +221,12 @@ def fetch_news(
     sector_queries: dict[str, list[str]] | None = None,
     sector_vocab: dict[str, list[str]] | None = None,
     sector_fetcher: Callable[[str], bytes] | None = None,
+    direct_sink: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Recent headlines mentioning a competitor in the title (higher precision).
+
+    ``direct_sink`` (a list) receives every parsed outlet-feed item, matched or not, so a caller
+    that fetches sector news separately can run :func:`prefer_direct_links` over it too.
 
     #176: ``sector_queries`` ({industry: [queries]}) ALSO runs the per-industry topic queries
     (:func:`fetch_sector_news`) — OUTSIDE ``max_terms`` — and merges them in with
@@ -304,6 +308,8 @@ def fetch_news(
         # the same headline via Google News (kept first, above) gets the direct link — before,
         # an outlet item with the same id was skipped as seen and the redirect won
         prefer_direct_links(out, direct_all)
+        if direct_sink is not None:
+            direct_sink.extend(direct_all)
 
     for rec in out:
         rec.setdefault("query_kind", "entity")
@@ -311,6 +317,8 @@ def fetch_news(
     if sector_queries:
         sector = fetch_sector_news(sector_queries, sector_vocab, lookback_days=lookback_days,
                                    today=today, fetcher=sector_fetcher, pause_sec=pause_sec)
+        if include_outlets:
+            prefer_direct_links(sector, direct_all)
         out = merge_sector_news(out, sector)
     return out
 

@@ -879,9 +879,12 @@ def _floors(slug: str | None, sectors: list[dict[str, str]]) -> bool:
 def _sector_event_row(e: dict[str, Any], labels: dict[str, str] | None = None) -> dict[str, Any]:
     srcs = []
     for s in (e.get("sources") or [])[:6]:
-        srcs.append({"kind": s.get("kind"), "title": s.get("title"), "url": s.get("url"),
-                     "date": s.get("date"), "label": s.get("organ") or s.get("publisher") or s.get("source"),
-                     "section": s.get("section")})
+        row = {"kind": s.get("kind"), "title": s.get("title"), "url": s.get("url"),
+               "date": s.get("date"), "label": s.get("organ") or s.get("publisher") or s.get("source"),
+               "section": s.get("section")}
+        if "news.google.com" in str(s.get("url") or ""):
+            row["via"] = "Google Notícias"  # the link is a redirect; label names the outlet
+        srcs.append(row)
     return {"id": e.get("id"), "industry": e.get("industry"), "industries": [e.get("industry")],
             "title": e.get("title"), "summary": e.get("summary"), "date": e.get("date"),
             "severity": e.get("severity"), "confidence": e.get("confidence"),

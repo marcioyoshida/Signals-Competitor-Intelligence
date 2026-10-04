@@ -339,3 +339,23 @@ def test_google_news_item_keeps_publisher_homepage():
     (it,) = trade_press._parse(gn, "Nubank")
     assert it["via"] == "google_news" and it["publisher"] == "Estadão"
     assert it["publisher_url"] == "https://www.estadao.com.br"
+
+
+def test_direct_sink_lets_sector_items_take_the_outlet_link():
+    # Sector news is fetched in its own half of the Lambda slice; the outlet items fetch_news
+    # parsed (matched to an entity or not) come back through direct_sink so the sector item's
+    # Google News redirect can be swapped too.
+    outlet = [("Governo proíbe apostas esportivas por medida provisória", "https://oglobo/bets",
+               "Thu, 14 Aug 2026 10:00:00 GMT", "")]
+    sink: list = []
+    trade_press.fetch_news(
+        ["Nubank"], lookback_days=30, today=dt.date(2026, 8, 16), fetcher=lambda t: b"<rss/>",
+        include_outlets=True, outlet_feeds=[("O Globo", "http://feed")],
+        outlet_fetcher=lambda url: _rss(outlet), pause_sec=0, direct_sink=sink)
+    assert [s["url"] for s in sink] == ["https://oglobo/bets"]       # unmatched, still collected
+    sector = [{"id": "news:s1", "title": "Governo proíbe apostas esportivas por medida provisória",
+               "url": "https://news.google.com/rss/articles/abc", "publisher": "O GLOBO",
+               "via": "google_news", "query_kind": "sector", "industries": ["betting"]}]
+    assert trade_press.prefer_direct_links(sector, sink) == 1
+    assert sector[0]["url"] == "https://oglobo/bets" and "via" not in sector[0]
+    assert sector[0]["id"] == "news:s1" and sector[0]["query_kind"] == "sector"

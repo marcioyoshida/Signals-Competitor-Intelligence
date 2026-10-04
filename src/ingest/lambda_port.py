@@ -479,6 +479,7 @@ def _news_slice(context: Any) -> dict[str, Any]:
     per_source = int(os.environ.get("ONCA_SOURCE_TIMEOUT_SEC", "90"))
     news_items: list[dict[str, Any]] = []
     new_news: list[dict[str, Any]] = []
+    outlet_items: list[dict[str, Any]] = []
 
     # #176 sector topic queries: per covered industry (registry.INDUSTRY_TOPICS, ≤3 each),
     # OUTSIDE ONCA_NEWS_MAX_TERMS and in their OWN wall-clock budget — the entity loop already
@@ -512,11 +513,15 @@ def _news_slice(context: Any) -> dict[str, Any]:
                     # true homonyms. Best-effort — a registry hiccup must not
                     # take the whole news lens down, it only loses the veto.
                     excludes=_news_excludes(),
+                    direct_sink=outlet_items,
                 )
         except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
             print(f"Warning: trade-press fetch failed: {exc}")
     # dedupe sector items against entity items (a duplicate keeps the entity item + gains the
     # industries), then the deferred seen-set diff over the merged set
+    if sector_items and outlet_items:
+        n = trade_press.prefer_direct_links(sector_items, outlet_items)
+        print(f"Sector news: {n} Google News link(s) swapped for the outlet's own")
     news_items = trade_press.merge_sector_news(news_items, sector_items)
     if news_items:
         try:

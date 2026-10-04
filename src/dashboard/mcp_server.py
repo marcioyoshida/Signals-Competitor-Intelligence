@@ -215,6 +215,16 @@ def entity_signals(scoped: dict[str, Any], ref: str, days: int, limit: int, *,
                      window_days=days)
 
 
+def _event_source(s: dict[str, Any]) -> dict[str, Any]:
+    """A sector-event source as cited to the agent: who published it (the stored source has
+    organ/publisher, never ``label``), and ``via`` when the link is a Google News redirect."""
+    out = {"url": s["url"], "kind": s.get("kind"),
+           "label": s.get("label") or s.get("organ") or s.get("publisher") or s.get("source")}
+    if "news.google.com" in str(s["url"]):
+        out["via"] = "Google Notícias"
+    return out
+
+
 def regulatory_events(scoped: dict[str, Any], industry: str | None, days: int,
                       today: dt.date | None = None) -> dict[str, Any]:
     floor = ((today or dt.date.today()) - dt.timedelta(days=days)).isoformat()
@@ -230,7 +240,7 @@ def regulatory_events(scoped: dict[str, Any], industry: str | None, days: int,
                      "summary": str(e.get("summary") or "")[:420], "change": e.get("change_label"),
                      "severity": e.get("severity"), "affected_entities": e.get("n_affected"),
                      "url": (official or srcs or [{}])[0].get("url"),
-                     "sources": [{"url": s["url"], "kind": s.get("kind"), "label": s.get("label")} for s in srcs[:6]]})
+                     "sources": [_event_source(s) for s in srcs[:6]]})
     rows.sort(key=lambda r: (str(r.get("date") or ""), r.get("severity") == "critical"), reverse=True)
     return _envelope("events", rows, scoped.get("as_of"), SOURCE_FEED + " Ato oficial (DOU) primeiro.",
                      window_days=days, industries=scoped.get("scoped_modules"))

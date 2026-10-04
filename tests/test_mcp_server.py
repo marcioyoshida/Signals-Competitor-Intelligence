@@ -29,7 +29,8 @@ FEED = {
     "sector_events": [
         {"id": "se1", "industries": ["banking"], "industry": "banking", "date": "2026-09-25", "title": "MP 1.393",
          "severity": "high", "change_label": "novo marco", "n_affected": 4,
-         "sources": [{"url": "https://press/x", "kind": "press"}, {"url": "https://www.in.gov.br/mp", "kind": "official"}]},
+         "sources": [{"url": "https://press/x", "kind": "press"}, {"url": "https://www.in.gov.br/mp", "kind": "official", "organ": "Presidência"},
+                     {"url": "https://news.google.com/rss/articles/abc", "kind": "news", "publisher": "O GLOBO"}]},
         {"id": "se2", "industries": ["betting"], "industry": "betting", "date": "2026-09-25", "title": "MP 1.394",
          "severity": "critical", "sources": [{"url": "https://www.in.gov.br/b", "kind": "official"}]}],
     "enforcement": [{"id": "enf1", "entity": None, "entities": ["itau"], "kind": "sancao", "authority": "CVM",
@@ -94,6 +95,11 @@ def test_regulatory_events_are_scoped_and_official_act_first():
     p = payload(m.call_read_tool("regulatory_events", {}, ctx()))
     assert [e["title"] for e in p["events"]] == ["MP 1.393"]            # betting event not licensed
     assert p["events"][0]["url"] == "https://www.in.gov.br/mp"          # official before press
+    by_url = {s["url"]: s for s in p["events"][0]["sources"]}
+    assert by_url["https://www.in.gov.br/mp"]["label"] == "Presidência"
+    gn = by_url["https://news.google.com/rss/articles/abc"]
+    assert gn["label"] == "O GLOBO" and gn["via"] == "Google Notícias"
+    assert "via" not in by_url["https://www.in.gov.br/mp"]
 
 
 def test_ask_passes_scope_and_validates_length():

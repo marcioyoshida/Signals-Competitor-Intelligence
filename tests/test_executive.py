@@ -698,3 +698,14 @@ def test_cso_capital_panel_is_empty_without_the_section():
     cso = executive.build_executive(_feed())["cso"]
     assert cso["panels"]["capital_moves"] == []
     assert cso["by_industry"]["__all__"]["n_capital_moves"] == 0
+
+
+def test_sector_event_row_names_the_outlet_behind_a_google_news_link():
+    from src.synth.executive import _sector_event_row
+
+    row = _sector_event_row({"id": "se", "industry": "betting", "sources": [
+        {"kind": "official", "url": "https://www.in.gov.br/mp", "organ": "Presidência"},
+        {"kind": "news", "url": "https://news.google.com/rss/articles/abc", "publisher": "O GLOBO"}]})
+    off, gn = row["sources"]
+    assert off["label"] == "Presidência" and "via" not in off
+    assert gn["label"] == "O GLOBO" and gn["via"] == "Google Notícias"
