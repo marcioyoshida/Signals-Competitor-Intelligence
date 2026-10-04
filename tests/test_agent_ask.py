@@ -592,3 +592,47 @@ def test_liquidacao_extrajudicial_question_keeps_kb():
     kb_calls.clear()
     aa.answer("quem está em recuperação extrajudicial?", feed=_feed(), converser=conv, kb_retrieve=kb)
     assert kb_calls == []
+
+
+def test_bare_decline_with_citations_is_not_grounded():
+    # live 2026-10-04: "Não tenho esse dado… [kb:0], [kb:1]" went out grounded:true, 6 citations
+    kb = [{"id": "kb:0", "title": "RESOLUÇÃO BCB Nº 594"}, {"id": "kb:1", "title": "RESOLUÇÃO BCB Nº 589"}]
+
+    def conv(user, system=None, max_tokens=700):
+        return "Não tenho esse dado na base da Onça. [kb:0], [kb:1]"
+    r = aa.answer("quais bancos digitais tiveram eventos regulatórios?", feed=_feed(),
+                  converser=conv, kb_retrieve=lambda q: kb)
+    assert r["grounded"] is False and r["citations"] == [] and r["reason"] == "model-declined"
+    assert r["answer"] == aa.NO_GROUND_TEXT
+
+
+def test_partial_decline_with_substance_is_kept():
+    assert not aa.is_bare_decline(
+        "Não tenho esse dado para bancos digitais especificamente. Porém, o BCB publicou a "
+        "Resolução 594, que altera as regras de gestores de fundos [kb:0].")
+    assert aa.is_bare_decline("Não tenho esse dado na base da Onça.")
+    assert not aa.is_bare_decline("O BCB publicou a Resolução 594 [kb:0].")
+
+
+def test_kb_citations_merged_per_act():
+    dou594 = "https://www.in.gov.br/web/dou/-/resolucao-bcb-n-594-de-30-de-setembro-de-2026-736040653"
+    dou589 = "https://www.in.gov.br/web/dou/-/resolucao-bcb-n-589-de-23-de-setembro-de-2026-734471404"
+    kb = [
+        {"id": "kb:0", "title": "RESOLUÇÃO BCB Nº 594, DE 30 DE SETEMBRO DE 2026", "url": dou594},
+        {"id": "kb:1", "title": "RESOLUÇÃO BCB Nº 589, DE 23 DE SETEMBRO DE 2026", "url": dou589},
+        {"id": "kb:2", "title": "RESOLUÇÃO BCB Nº 594, DE 30 DE SETEMBRO DE 2026", "url": dou594},
+        {"id": "kb:3", "title": "MEDIDA PROVISÓRIA Nº 1.394, DE 25 DE SETEMBRO DE 2026"},
+        {"id": "kb:4", "title": None, "doc_type": "Resolução BCB",
+         "url": "https://www.bcb.gov.br/estabilidadefinanceira/exibenormativo?tipo=Resolu%C3%A7%C3%A3o+BCB&numero=589"},
+        {"id": "kb:5", "title": "RESOLUÇÃO BCB Nº 589, DE 23 DE SETEMBRO DE 2026", "url": dou589},
+        {"id": "kb:6", "title": "RESOLUÇÃO CMN Nº 589"},  # same number, other issuer
+    ]
+    assert aa.kb_aliases(kb) == {"kb:2": "kb:0", "kb:4": "kb:1", "kb:5": "kb:1"}
+
+    def conv(user, system=None, max_tokens=700):
+        return ("A Resolução 594 altera a gestão de fundos [kb:0][kb:2]; a 589 veda X [kb:1], [kb:4], [kb:5] "
+                "e a MP 1.394 trata de Y [kb:3]; o CMN também [kb:6].")
+    r = aa.answer("o que o BCB mudou na regulação de bancos?", feed=_feed(), converser=conv,
+                  kb_retrieve=lambda q: kb)
+    assert [c["id"] for c in r["citations"]] == ["kb:0", "kb:1", "kb:3", "kb:6"]
+    assert "[kb:2]" not in r["answer"] and r["answer"].count("[kb:1]") == 1

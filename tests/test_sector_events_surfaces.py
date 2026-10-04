@@ -211,6 +211,8 @@ def test_kb_prompt_names_the_act_and_citation_resolves_to_the_dou_url():
     line = next(ln for ln in seen["user"].splitlines() if ln.startswith("[kb:0]"))
     assert "MEDIDA PROVISÓRIA Nº 1.394" in line and "2026-09-25" in line and MP_URL in line
     assert "DOU · Medida Provisória" in line
-    cite = next(c for c in r["citations"] if c["id"] == "kb:1")
+    # kb:1 is another chunk of the same MP → merged into its first citation (one per act)
+    assert [c["id"] for c in r["citations"]] == ["kb:0"]
+    cite = r["citations"][0]
     assert cite["kb"] and cite["url"] == MP_URL and cite["sources"] == [{"url": MP_URL}]
     assert cite["entity_label"].startswith("MEDIDA PROVISÓRIA Nº 1.394")

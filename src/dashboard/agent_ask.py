@@ -31,6 +31,7 @@ import json
 import os
 import re
 import unicodedata
+from urllib.parse import unquote_plus
 from typing import Any, Callable
 
 from src.dashboard.topics import question_topics
@@ -397,7 +398,7 @@ def build_messages(
 
 
 _CITE_RE = re.compile(r"\[([A-Za-z0-9:_\-]+)\]")
-_RUN_RE = re.compile(r"(\[[A-Za-z0-9:_\-]+\])(?:\s*\1)+")
+_RUN_RE = re.compile(r"(\[[A-Za-z0-9:_\-]+\])(?:[\s,;]*\1)+")
 
 
 # #190: the model sometimes echoes the prompt's "[card_id]" placeholder literally —
@@ -433,6 +434,65 @@ def tidy_citations(text: str) -> str:
     """Collapse runs of the same repeated inline citation (models often stack the
     same [id] after every clause) so the answer reads cleanly."""
     return _RUN_RE.sub(r"\1", normalize_citations(text or ""))
+
+
+# Live 2026-10-04 (MCP ask, tenant not licensed for the asked industry): the model answered
+# "Não tenho esse dado na base da Onça. [kb:0], [kb:1], …" — the decline rule followed by every
+# id it was shown, so a non-answer went out grounded:true with 6 citations. A decline with no
+# substance left once its sentence and the citations are removed is a decline, nothing more.
+_DECLINE_RE = re.compile(r"nao tenho (?:esse|este|o) dado[^.!?\n]*[.!?]?")
+_DECLINE_MIN_REST = 40  # letters of real content needed to treat the reply as a partial answer
+
+
+def is_bare_decline(text: str) -> bool:
+    t = _fold(_CITE_RE.sub(" ", text or ""))
+    if not _DECLINE_RE.search(t):
+        return False
+    rest = _DECLINE_RE.sub(" ", t)
+    return len(re.findall(r"[a-z]", rest)) < _DECLINE_MIN_REST
+
+
+# KB retrieval keeps up to KB_CHUNKS_PER_DOC chunks of one document (#173), and the same act
+# arrives from both the DOU and the regulator's own site — each a separate kb:n. Cited
+# together they listed Resolução BCB 589 three times. One citation per act.
+_ACT_RE = re.compile(
+    r"(resolucao(?: conjunta)?|instrucao normativa|medida provisoria|circular|comunicado|portaria"
+    r"|deliberacao|lei complementar|lei|decreto)[\s-]*(bcb|cmn|cvm|susep|anpd|cade)?[\s-]*n?[\s-]*[o.:\u00ba\u00b0]*[\s-]*"
+    r"(\d[\d.]*)")
+
+
+def _kb_doc_keys(s: dict[str, Any]) -> list[str]:
+    keys = [k for k in (s.get("url"), s.get("uri")) if k]
+    blob = _fold(" ".join(str(x) for x in (s.get("title"), s.get("doc_type"),
+                                            unquote_plus(str(s.get("url") or ""))) if x))
+    blob = re.sub(r"tipo=([^&]*)&numero=", r"\1 n ", blob)
+    m = _ACT_RE.search(blob)
+    if m:
+        keys.append("act:%s:%s:%s" % (m.group(1), m.group(2) or "", m.group(3).replace(".", "").lstrip("0")))
+    return keys
+
+
+def kb_aliases(kb_snippets: list[dict[str, Any]] | None) -> dict[str, str]:
+    """kb id → the first kb id of the same document/act (only ids that are duplicates)."""
+    first: dict[str, str] = {}
+    out: dict[str, str] = {}
+    for s in kb_snippets or []:
+        sid = str(s.get("id"))
+        keys = _kb_doc_keys(s)
+        canon = next((first[k] for k in keys if k in first), None)
+        if canon:
+            out[sid] = canon
+        for k in keys:
+            first.setdefault(k, canon or sid)
+    return out
+
+
+def merge_duplicate_citations(text: str, kb_snippets: list[dict[str, Any]] | None) -> str:
+    aliases = kb_aliases(kb_snippets)
+    if not aliases:
+        return text
+    text = _CITE_RE.sub(lambda m: "[%s]" % aliases.get(m.group(1), m.group(1)), text or "")
+    return _RUN_RE.sub(r"\1", text)
 
 
 def validate_citations(
@@ -891,7 +951,11 @@ def answer(
         return {"answer": NO_GROUND_TEXT, "refused": False, "grounded": False,
                 "reason": "no-model", "citations": []}
 
-    text = tidy_citations(text)
+    if is_bare_decline(text):
+        return {"answer": NO_GROUND_TEXT, "refused": False, "grounded": False,
+                "reason": "model-declined", "citations": [],
+                "considered": [c.get("id") for c in cards]}
+    text = merge_duplicate_citations(tidy_citations(text), kb_snippets)
     citations = validate_citations(text, cards, kb_snippets)
     return {
         "answer": text,
