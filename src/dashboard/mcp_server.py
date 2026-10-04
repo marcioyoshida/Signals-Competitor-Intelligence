@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import base64
 import datetime as dt
+import hashlib
 import json
 import os
 import time
@@ -463,7 +464,8 @@ def lambda_handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]
         p, why = resource.principal(headers, path=path, settings=s, public_keys=_public_keys(),
                                     family_lookup=store.get)
     if p is None:
-        print("mcp: " + json.dumps({"path": path, "status": 401, "reason": why}))
+        print("mcp: " + json.dumps({"path": path, "status": 401, "reason": why,
+                                    **request_log_fields(parsed, headers, None)}, ensure_ascii=False))
         return _json_resp(401, _err(None, -32001, "Sign in to Onça to use this server (OAuth)."),
                           {"www-authenticate": resource.challenge(s, path, None if why == "missing" else "invalid_token")})
     from src.dashboard.push import modules_for
@@ -509,5 +511,33 @@ def lambda_handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]
         resp = _json_resp(202, None) if r is None else _json_resp(200, r)
     print("mcp: " + json.dumps({"path": path, "status": resp["statusCode"],
                                 "method": parsed.get("method") if isinstance(parsed, dict) else "batch",
-                                "tool": ((parsed.get("params") or {}).get("name") if isinstance(parsed, dict) else None)}))
+                                "tool": ((parsed.get("params") or {}).get("name") if isinstance(parsed, dict) else None),
+                                **request_log_fields(parsed, headers, p)}, ensure_ascii=False))
     return resp
+
+
+def _short_hash(v: Any) -> str | None:
+    return hashlib.sha256(str(v).encode()).hexdigest()[:12] if v else None
+
+
+def request_log_fields(parsed: Any, headers: dict[str, Any], principal: dict[str, Any] | None) -> dict[str, Any]:
+    """Who is calling and how — 2026-10-04 claude.ai looped initialize→tools/list ~150× in 23 min
+    and the log line couldn't tell one client/conversation from another. The user is a hash
+    (privacy policy: logs carry no direct identifiers); client_id is a public CIMD URL."""
+    msg = parsed if isinstance(parsed, dict) else {}
+    params = msg.get("params") if isinstance(msg.get("params"), dict) else {}
+    out: dict[str, Any] = {
+        "rpc_id": msg.get("id") if isinstance(msg.get("id"), (str, int)) else None,
+        "proto_hdr": headers.get("mcp-protocol-version"),
+        "ua": str(headers.get("user-agent") or "")[:120] or None,
+        "client_id": (principal or {}).get("client_id"),
+        "user": _short_hash((principal or {}).get("sub")),
+        "session": headers.get("mcp-session-id"),
+    }
+    if msg.get("method") == "initialize":
+        ci = params.get("clientInfo") if isinstance(params.get("clientInfo"), dict) else {}
+        out["proto_req"] = params.get("protocolVersion")
+        out["client"] = "%s/%s" % (str(ci.get("name") or "?")[:60], str(ci.get("version") or "?")[:30])
+    if isinstance(parsed, list):
+        out["batch"] = len(parsed)
+    return {k: v for k, v in out.items() if v is not None}

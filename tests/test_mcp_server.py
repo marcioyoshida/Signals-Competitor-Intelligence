@@ -196,3 +196,18 @@ def test_certifications_as_strings_and_tool_errors_become_is_error_results():
     r = m.handle_rpc({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
                       "params": {"name": "regulatory_events", "arguments": {}}}, path="/mcp", ctx=boom)
     assert r["result"]["isError"] is True
+
+
+def test_request_log_fields_identify_client_without_raw_user():
+    from src.dashboard.mcp_server import request_log_fields
+    init = {"jsonrpc": "2.0", "id": 7, "method": "initialize",
+            "params": {"protocolVersion": "2025-06-18", "clientInfo": {"name": "claude-ai", "version": "0.1.0"}}}
+    hdr = {"user-agent": "Claude-User", "mcp-protocol-version": "2025-06-18"}
+    p = {"sub": "abc-123", "client_id": "https://claude.ai/oauth/mcp-oauth-client-metadata"}
+    f = request_log_fields(init, hdr, p)
+    assert f["rpc_id"] == 7 and f["proto_req"] == "2025-06-18" and f["client"] == "claude-ai/0.1.0"
+    assert f["ua"] == "Claude-User" and f["client_id"].startswith("https://claude.ai/")
+    assert f["user"] and "abc-123" not in str(f)
+    # notifications / unauthenticated: no id, no principal → keys omitted, never raises
+    assert request_log_fields({"method": "notifications/initialized"}, {}, None) == {}
+    assert request_log_fields([init, init], {}, None) == {"batch": 2}
