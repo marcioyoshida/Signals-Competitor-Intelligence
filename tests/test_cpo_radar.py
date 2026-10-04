@@ -896,3 +896,89 @@ def test_a_negative_deferred_retry_disables_the_second_round(monkeypatch):
                               fetch=lambda u, p=None: {"feed": {}}, deferred_retry_s=-1)
     assert got[("a", "1")][1]["stop"] == "empty_first_page" and "deferred_retry" not in got[("a", "1")][1]
     assert all(s == 0 for s in sleeps)
+
+
+# --- 2026-10-03: Apple's RSS is intermittent at every hour → same-day refill of empty apps -----
+
+def _refill_world(tmp_path, monkeypatch):
+    """A daily run where product `a` answers on both apps except 222, and `b` (app 333) is empty."""
+    import datetime as dt
+
+    monkeypatch.setattr(cr, "EMPTY_RETRY_PAUSE_S", 0)
+    up = {"apps": {"111"}}
+
+    def fetch(url, params=None):
+        if "customerreviews" in url:
+            if "page=1/" not in url:
+                return {"feed": {}}
+            app = next((a for a in up["apps"] if f"id={a}/" in url), None)
+            return _page(_entries(int(app) * 1000, 5, "2026-10-02T10:00:00-07:00")) if app else {"feed": {}}
+        return {"results": [{"version": "1.0", "currentVersionReleaseDate": "2026-09-01T00:00:00Z"}]}
+
+    subj = lambda pid, apps: {"id": pid, "name": pid.upper(), "aliases": [pid], "search_query": pid,  # noqa: E731
+                              "namesake_risk": "", "apple_app_ids": [{"id": a, "name": "App " + a} for a in apps],
+                              "youtube_channels": [], "onca_entities": [pid]}
+    subjects = [subj("a", ["111", "222"]), subj("b", ["333"]), subj("c", ["444"])]
+    up["apps"] = {"111", "444"}
+    store = cr.LocalStore(tmp_path)
+    today = dt.date(2026, 10, 3)
+    cr.run(store, today=today, subjects=subjects, fetch=fetch, yt_key=False, converse=lambda p, n: (None, {}))
+    return store, today, subjects, fetch, up
+
+
+def test_refill_reasks_only_empty_apps_and_keeps_what_answered(tmp_path, monkeypatch):
+    store, today, subjects, fetch, up = _refill_world(tmp_path, monkeypatch)
+    before = store.get(cr.LATEST_KEY)
+    assert before["coverage"]["b"]["appstore_stale"] is True
+    morning_111 = before["coverage"]["a"]["appstore_by_app"]["111"]
+    asked: list[str] = []
+    real_pull = cr.pull_reviews
+    monkeypatch.setattr(cr, "pull_reviews", lambda app_id, **kw: asked.append(app_id) or real_pull(app_id, **kw))
+
+    up["apps"] = {"111", "222", "333", "444"}           # Apple answers everyone this afternoon
+    out = cr.refill_appstore(store, today=today, subjects=subjects, fetch=fetch, converse=lambda p, n: (None, {}))
+    assert out["refill"] == "done" and out["products"] == ["a", "b"] and sorted(out["answered"]) == ["222", "333"]
+    assert "444" not in asked                            # c answered in the morning: not asked again
+    after = store.get(cr.LATEST_KEY)
+    by_a = after["coverage"]["a"]["appstore_by_app"]
+    assert by_a["111"] == morning_111                    # the morning count survives
+    assert by_a["222"]["refill"] is True and by_a["222"]["new"] > 0
+    assert "appstore_stale" not in after["coverage"]["b"] and after["coverage"]["b"]["appstore"]["new"] > 0
+    assert after["coverage"]["c"] == before["coverage"]["c"]
+    assert after["sources"]["appstore"] == "ok"
+    assert after["appstore_refills"][-1]["answered"] == out["answered"]
+    assert store.get(f"product_radar/{today}.json") == after
+    st = store.get(cr.STATE_KEY)["appstore"]
+    assert {r["app_id"] for r in st["b"]["reviews"]} == {"333"}
+    assert {r["app_id"] for r in st["a"]["reviews"]} == {"111", "222"}
+    # a second refill finds nothing left to ask and writes nothing
+    assert cr.refill_appstore(store, today=today, subjects=subjects, fetch=fetch)["refill"] == "skipped"
+
+
+def test_refill_still_empty_keeps_the_stale_flag_and_names_the_app(tmp_path, monkeypatch):
+    store, today, subjects, fetch, up = _refill_world(tmp_path, monkeypatch)
+    out = cr.refill_appstore(store, today=today, subjects=subjects, fetch=fetch, converse=lambda p, n: (None, {}))
+    after = store.get(cr.LATEST_KEY)
+    assert out["answered"] == [] and after["coverage"]["b"]["appstore_stale"] is True
+    assert after["sources"]["appstore"] == "partial: empty RSS for app 222; empty RSS for app 333"
+    assert after["coverage"]["b"]["appstore"]["refill"] is True
+
+
+def test_refill_never_runs_a_radar_for_a_day_the_daily_run_has_not_written(tmp_path, monkeypatch):
+    import datetime as dt
+
+    store, today, subjects, fetch, up = _refill_world(tmp_path, monkeypatch)
+    called = []
+    monkeypatch.setattr(cr, "run", lambda *a, **k: called.append(1))
+    out = cr.refill_appstore(store, today=today + dt.timedelta(days=1), subjects=subjects, fetch=fetch)
+    assert out["refill"] == "skipped" and called == []
+    assert cr.refill_appstore(cr.LocalStore(tmp_path / "empty"), today=today)["refill"] == "skipped"
+
+
+def test_lambda_handler_routes_the_refill_payload(tmp_path, monkeypatch):
+    seen = {}
+    monkeypatch.setattr(cr, "refill_appstore", lambda store, today=None: seen.update(store=type(store).__name__)
+                        or {"refill": "skipped", "reason": "x"})
+    monkeypatch.setattr(cr, "run", lambda *a, **k: (_ for _ in ()).throw(AssertionError("daily run")))
+    res = cr.lambda_handler({"appstore_refill": True, "local_out": str(tmp_path)}, None)
+    assert json.loads(res["body"])["refill"] == "skipped" and seen["store"] == "LocalStore"

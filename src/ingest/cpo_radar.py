@@ -37,10 +37,12 @@ Store (digests bucket)::
 
 Standard library + boto3 only. ``lambda_handler`` event options (all optional):
 ``{"products": ["inter"], "local_out": "/path", "youtube": false, "today": "2026-09-26"}``.
+``{"appstore_refill": true}`` re-asks only the apps today's run left empty (see ``refill_appstore``).
 """
 from __future__ import annotations
 
 import concurrent.futures as cf
+import copy
 import datetime as dt
 import hashlib
 import json
@@ -1275,6 +1277,117 @@ def run(store: Any | None, *, today: dt.date | None = None, subjects: list[dict[
 
 
 # ---------------------------------------------------------------------------------------------
+# App Store refill — later same-day passes over the apps the daily run left empty
+# ---------------------------------------------------------------------------------------------
+# 2026-10-03: Apple's legacy reviews RSS answers intermittently for every app, from AWS and from a
+# workstation alike (daily runs 09-27..10-02 got 4,0,1,1,5,2 of 10 apps; Neon none). No hour is
+# reliably good, so instead of moving the schedule again, a few later passes re-ask only the
+# empty apps. App Store only: no YouTube units are spent and stored videos are left as they are.
+
+def _by_app(cov: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    if cov.get("appstore_by_app"):
+        return dict(cov["appstore_by_app"])
+    a = cov.get("appstore")
+    return {a["app_id"]: a} if a and a.get("app_id") else {}
+
+
+def _empty_apps(cov: dict[str, Any]) -> list[str]:
+    return [a for a, c in _by_app(cov).items() if c.get("stop") == "empty_first_page"]
+
+
+def _appstore_status(coverage: dict[str, Any]) -> str:
+    """The run's ``sources.appstore`` string, rebuilt from per-app coverage."""
+    sources: dict[str, Any] = {"appstore": "ok"}
+    for cov in coverage.values():
+        for app_id, c in _by_app(cov).items():
+            if c.get("error"):
+                _flag(sources, "appstore", "RSS error")
+            if c.get("stop") == "empty_first_page":
+                _flag(sources, "appstore", f"empty RSS for app {app_id}")
+            if c.get("cap_hit"):
+                _flag(sources, "appstore", "500-review cap hit")
+    return sources["appstore"]
+
+
+class _CaptureStore:
+    """Reads from the real store; holds writes back so the refill can merge before persisting."""
+
+    def __init__(self, store: Any):
+        self.store, self.puts = store, {}
+
+    def get(self, key: str) -> Any:
+        return self.store.get(key)
+
+    def put(self, key: str, obj: Any) -> str:
+        self.puts[key] = obj
+        return key
+
+    def keys(self, prefix: str) -> list[str]:
+        return []
+
+    def delete(self, key: str) -> None:
+        pass
+
+
+def refill_appstore(store: Any, *, today: dt.date | None = None, subjects: list[dict[str, Any]] | None = None,
+                    fetch: Fetch | None = None, converse: Converser | None = None) -> dict[str, Any]:
+    """Re-ask the apps whose page 1 was empty in TODAY's ``latest.json`` and merge what answers.
+    Products with no empty app, and apps that did answer, are carried over unchanged (an app's
+    morning ``new`` count survives). Does nothing if ``latest.json`` is not today's: the daily run
+    owns the day, so a refill never runs a radar from scratch."""
+    today = today or dt.datetime.now(BRT).date()
+    latest = store.get(LATEST_KEY) or {}
+    if latest.get("as_of") != today.isoformat():
+        return {"refill": "skipped", "reason": f"latest.json is {latest.get('as_of')}, not {today}"}
+    todo = sorted(pid for pid, cov in (latest.get("coverage") or {}).items() if _empty_apps(cov))
+    if not todo:
+        return {"refill": "skipped", "reason": "no empty app today"}
+
+    cap = _CaptureStore(store)
+    run(cap, today=today, subjects=subjects, products=todo, fetch=fetch, converse=converse,
+        youtube=False, deferred_retry_s=-1.0)
+    sub = cap.puts[LATEST_KEY]
+    merged = copy.deepcopy(latest)
+    answered: list[str] = []
+    for pid in todo:
+        old, new = latest["coverage"][pid], sub["coverage"].get(pid) or {}
+        new_by = _by_app(new)
+        by: dict[str, dict[str, Any]] = {}
+        for app_id, c in _by_app(old).items():
+            if c.get("stop") == "empty_first_page" and app_id in new_by:
+                c = dict(new_by[app_id], refill=True)
+                if c.get("stop") != "empty_first_page":
+                    answered.append(app_id)
+            by[app_id] = c
+        cov = {k: v for k, v in old.items() if k not in ("appstore", "appstore_by_app", "appstore_stale")}
+        cov["appstore"] = by[old["appstore"]["app_id"]]
+        if len(by) > 1:
+            cov["appstore_by_app"] = by
+        if all(c.get("stop") == "empty_first_page" for c in by.values()):
+            cov["appstore_stale"] = True
+        merged["coverage"][pid] = cov
+    # events/alerts/products for the refilled products come from the refill (same stored videos,
+    # fuller reviews), the rest from the morning run
+    keep = lambda rows: [r for r in rows or [] if r.get("product", r.get("id")) not in todo]  # noqa: E731
+    take = lambda rows: [r for r in rows or [] if r.get("product", r.get("id")) in todo]  # noqa: E731
+    merged["alerts"] = keep(latest.get("alerts")) + take(sub.get("alerts"))
+    merged["events"] = sorted(keep(latest.get("events")) + take(sub.get("events")),
+                              key=lambda e: (e.get("date") or "", e.get("source") == "appstore"), reverse=True)
+    by_pid = {p["id"]: p for p in take(sub.get("products"))}
+    merged["products"] = [by_pid.get(p["id"], p) for p in latest.get("products") or []]
+    merged["sources"]["appstore"] = _appstore_status(merged["coverage"])
+    refill = {"at": _now(), "products": todo, "answered": answered, "nova": sub.get("nova")}
+    merged["appstore_refills"] = list(latest.get("appstore_refills") or []) + [refill]
+
+    store.put(STATE_KEY, cap.puts[STATE_KEY])
+    store.put(f"{PREFIX}{merged['as_of']}.json", merged)
+    store.put(LATEST_KEY, merged)
+    print(f"cpo_radar: refill asked {len(todo)} product(s); {len(answered)} app(s) answered")
+    return {"refill": "done", "as_of": merged["as_of"], "products": todo, "answered": answered,
+            "sources": merged["sources"], "alerts": len(merged["alerts"]), "events": len(merged["events"])}
+
+
+# ---------------------------------------------------------------------------------------------
 # weekly CPO digest (pure) — delivered by src.dashboard.weekly_digest.send_cpo_digest
 # ---------------------------------------------------------------------------------------------
 
@@ -1323,6 +1436,10 @@ def lambda_handler(event: dict[str, Any] | None, context: Any) -> dict[str, Any]
         bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
         store = S3Store(bucket) if bucket else None
     today = dt.date.fromisoformat(event["today"]) if event.get("today") else None
+    if event.get("appstore_refill"):
+        if store is None:
+            return {"statusCode": 200, "body": json.dumps({"refill": "skipped", "reason": "no store"})}
+        return {"statusCode": 200, "body": json.dumps(refill_appstore(store, today=today), ensure_ascii=False)}
     out = run(store, today=today, products=event.get("products"), youtube=event.get("youtube", True) is not False,
               reclassify_youtube=bool(event.get("reclassify_youtube")),
               deferred_retry_s=float(event.get("deferred_retry_s", DEFERRED_RETRY_S)))

@@ -3879,6 +3879,18 @@ class OncaPrototypeStack(Stack):
             "OncaCpoRadarDaily",
             schedule=events.Schedule.cron(minute="15", hour="6"),
         ).add_target(targets.LambdaFunction(cpo_radar_fn, retry_attempts=1))
+        # 2026-10-03: the "01:30 Pacific window" was wrong: Apple's legacy RSS is intermittent at
+        # every hour, from AWS and from a workstation alike. Later same-day passes re-ask ONLY the
+        # apps today's run left empty (App Store only, no YouTube units) and merge into today's
+        # latest.json. 08:15 lands before the 09:45 pipeline; the rest feed the next pipeline runs
+        # and tomorrow's baseline. All four stay on the same BRT day as the 06:15 run.
+        events.Rule(
+            self,
+            "OncaCpoRadarAppstoreRefill",
+            schedule=events.Schedule.cron(minute="15", hour="8,12,16,20"),
+        ).add_target(targets.LambdaFunction(
+            cpo_radar_fn, retry_attempts=0,
+            event=events.RuleTargetInput.from_object({"appstore_refill": True})))
 
         soundness_task = sfn_tasks.LambdaInvoke(
             self,
