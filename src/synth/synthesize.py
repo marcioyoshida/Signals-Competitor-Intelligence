@@ -4,7 +4,7 @@ from __future__ import annotations
 import datetime as dt
 from typing import Any
 
-from src.synth import bedrock_llm, citations
+from src.synth import bedrock_llm, citations, narrative_guards
 from src.synth.entities import known_parents
 
 # Brazil runs UTC-3 year-round (no DST since 2019). The pipeline fires a few
@@ -37,6 +37,10 @@ SYSTEM = (
     "'Além disso', 'Ademais', 'Também' or 'Por fim' — there is no prior text. "
     "Return only the briefing prose — no title, heading, or markdown."
 )
+# 2026-10-04: date/regulator/SEC rules were tried here and measured on live candidates (3 runs
+# each): any addition — even just "Today:" plus per-source dates — cut the URLs the model pastes
+# on BCB-comunicado briefings from ~4-5 to ~1. Those failure shapes are caught by
+# narrative_guards instead, so the prompt stays as it was.
 
 # pt-BR discourse connectors that presume preceding text. When the LLM opens a
 # (often single-signal) narrative with one of these, the card reads as truncated
@@ -133,6 +137,15 @@ def synthesize_candidate(
         if raw_text:
             mode = "llm"
 
+    guards: dict[str, Any] = {}
+    if raw_text and mode == "llm":
+        g = narrative_guards.apply(raw_text, sources, run_date_today())
+        if g["dropped_regulator"] or g["dropped_stale_future"] or g["sec_fixed"]:
+            guards = {k: v for k, v in g.items() if k != "text" and v}
+            print(f"synthesize: guards on {candidate.get('id')}: "
+                  f"{ {k: (len(v) if isinstance(v, list) else v) for k, v in guards.items()} }")
+        raw_text = g["text"] or None
+
     if not raw_text:
         raw_text = _heuristic_narrative(candidate)
         mode = "heuristic"
@@ -159,6 +172,8 @@ def synthesize_candidate(
         "citations": guarded["citations"],
         "dropped_urls": guarded["dropped_urls"],
         "mode": mode,
+        # sentences the deterministic guards removed/changed (narrative_guards), for audit
+        **({"guards": guards} if guards else {}),
         # run_date = when Onça surfaced it (partitions S3 + drives the feed
         # window/timeline); as_of = age of the underlying source data ("dados de").
         # These diverge when a source lags (e.g. CVM Informe Diário over a weekend).
