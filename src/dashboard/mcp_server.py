@@ -78,6 +78,26 @@ def _urls(c: dict[str, Any], n: int = 5) -> list[str]:
     return out[:n]
 
 
+def _sources(c: dict[str, Any], n: int = 5, *, default_label: Any = None) -> list[dict[str, Any]]:
+    """The card's citations as the agent should cite them: url + who published it (``label``)
+    + ``via`` when the link is a Google News redirect, which on its own names no outlet."""
+    out: list[dict[str, Any]] = []
+    for cit in c.get("citations") or c.get("sources") or []:
+        cit = cit if isinstance(cit, dict) else {"url": cit}
+        u = cit.get("url")
+        if not u or any(o["url"] == u for o in out):
+            continue
+        row: dict[str, Any] = {"url": u}
+        label = (cit.get("label") or cit.get("organ") or cit.get("publisher")
+                 or cit.get("source") or default_label)
+        if label:
+            row["label"] = label
+        if "news.google.com" in str(u):
+            row["via"] = "Google Notícias"
+        out.append(row)
+    return out[:n]
+
+
 # ---- read tools ---------------------------------------------------------------------------
 def read_tools() -> list[dict[str, Any]]:
     return [
@@ -195,7 +215,8 @@ def entity_signals(scoped: dict[str, Any], ref: str, days: int, limit: int, *,
         rows.append({"date": c.get("date"), "kind": c.get("kind"), "lenses": c.get("lenses") or [],
                      "summary": str(c.get("narrative") or "")[:420],
                      "threat": round(float(ts) * 100) if isinstance(ts, (int, float)) and ts <= 1 else ts,
-                     "alert": bool(c.get("is_alert")), "urls": _urls(c), "url": (_urls(c) or [None])[0]})
+                     "alert": bool(c.get("is_alert")), "urls": _urls(c), "url": (_urls(c) or [None])[0],
+                     "sources": _sources(c)})
     enf = scoped.get("enforcement") or []
     for r in (enf.get("rows") or []) if isinstance(enf, dict) else enf:
         if (r.get("entity") == eid or eid in (r.get("entities") or [])) and str(r.get("date") or "") >= floor:
@@ -203,12 +224,15 @@ def entity_signals(scoped: dict[str, Any], ref: str, days: int, limit: int, *,
             rows.append({"date": r.get("date"), "kind": "enforcement:" + str(r.get("kind") or ""),
                          "lenses": ["sanctions"], "summary": str(r.get("title") or "")[:420],
                          "authority": r.get("authority"), "severity": r.get("severity"),
-                         "url": (urls or [None])[0], "urls": urls})
+                         "url": (urls or [None])[0], "urls": urls,
+                         "sources": _sources(r, default_label=r.get("authority"))
+                         or [{"url": u, "label": r.get("authority")} for u in urls if u]})
     for d in scoped.get("distress") or []:
         if d.get("entity") == eid and str(d.get("date") or "") >= floor:
             rows.append({"date": d.get("date"), "kind": "distress", "lenses": ["distress"],
                          "summary": str(d.get("title") or d.get("label") or "")[:420],
-                         "url": d.get("url"), "urls": [d.get("url")] if d.get("url") else []})
+                         "url": d.get("url"), "urls": [d.get("url")] if d.get("url") else [],
+                         "sources": _sources(d) or ([{"url": d["url"]}] if d.get("url") else [])})
     rows.sort(key=lambda r: str(r.get("date") or ""), reverse=True)
     label = ((scoped.get("entity_attrs") or {}).get(eid) or {}).get("label") or eid
     return _envelope("signals", rows[:limit], scoped.get("as_of"), SOURCE_FEED, entity=eid, entity_name=label,

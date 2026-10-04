@@ -20,7 +20,9 @@ FEED = {
     "feed": [
         {"id": "c1", "date": "2026-09-27", "entity": "itau", "industries": ["banking"], "kind": "entity_fusion",
          "lenses": ["ofertas"], "narrative": "Itaú lançou um fundo.", "threat_score": 0.72, "is_alert": True,
-         "citations": [{"url": "https://cvm.gov.br/x"}]},
+         "citations": [{"url": "https://cvm.gov.br/x"},
+                       {"url": "https://news.google.com/rss/articles/xyz", "label": "Valor Econômico",
+                        "via": "Google Notícias"}]},
         {"id": "c2", "date": "2026-09-27", "entity": "betano", "industries": ["betting"], "kind": "entity_fusion",
          "narrative": "Betano.", "citations": [{"url": "https://a.b/c"}]},
         {"id": "c3", "date": "2026-07-01", "entity": "itau", "industries": ["banking"], "narrative": "old",
@@ -87,6 +89,12 @@ def test_entity_signals_are_dated_sourced_and_windowed():
     assert kinds == ["entity_fusion", "enforcement:sancao"]            # c3 is outside 30 days
     assert all(r["url"] and r["date"] for r in p["signals"])
     assert p["signals"][0]["threat"] == 72
+    srcs = p["signals"][0]["sources"]
+    assert srcs[0] == {"url": "https://cvm.gov.br/x"}                  # no invented label
+    assert srcs[1] == {"url": "https://news.google.com/rss/articles/xyz", "label": "Valor Econômico",
+                       "via": "Google Notícias"}
+    assert p["signals"][0]["urls"] == [s["url"] for s in srcs]         # urls kept for old clients
+    assert p["signals"][1]["sources"][0]["label"] == "CVM"             # enforcement: the authority
     err = m.call_read_tool("entity_signals", {"entity": "betano"}, ctx())
     assert err["isError"]                                              # unlicensed entity
 
