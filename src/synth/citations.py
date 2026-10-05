@@ -157,7 +157,8 @@ _LEAD_IN = {"conforme", "segundo", "acordo", "com", "divulgado", "divulgada", "d
             "fonte", "fontes", "fonte:", "fontes:", "source", "source:", "sources:", "link",
             "link:", "notícia", "notícias", "noticias", "diversas", "várias", "veja", "ver",
             "mais", "informações", "detalhes", "disponível", "disponíveis", "aqui", "site",
-            "como", "pode", "ser", "visto", "vista", "vistos"}
+            "como", "pode", "ser", "visto", "vista", "vistos", "mencionado", "mencionada",
+            "citado", "citada", "indicado", "reportado", "relatado", "anunciado", "comunicado:"}
 
 
 def plain_text(text: Any) -> str:

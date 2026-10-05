@@ -109,6 +109,7 @@ from src.synth.citations import plain_text
      "rolagem. Além disso"),
     ("R$ 1.234,56, https://x/y, enquanto 3,5% subiu.", "R$ 1.234,56, enquanto 3,5% subiu."),
     ("relatórios nos EUA https:", "relatórios nos EUA"),                 # URL cut by truncation
+    ("potencial transação, conforme mencionado em https://www.sec.gov/x.", "potencial transação."),
     ("Sem links aqui.", "Sem links aqui."),
 ])
 def test_plain_text_drops_urls_and_the_phrase_that_pointed_at_them(raw, clean):
