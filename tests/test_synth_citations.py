@@ -87,3 +87,29 @@ def test_news_citation_carries_publisher_label():
     out = enforce_citations(f"Nubank lucrou R$ 1 bi {gn} . Regra nova https://www.gov.br/x .", srcs)
     assert out["citations"][0] == {"url": gn, "label": "Estadão", "via": "Google Notícias"}
     assert out["citations"][1] == {"url": "https://www.gov.br/x"}
+
+
+# --- plain_text: narratives shown as plain prose (exec titles, MCP summaries) -----------------
+import pytest
+from src.synth.citations import plain_text
+
+
+@pytest.mark.parametrize("raw,clean", [
+    ("Nubank anunciou parceria com a Uber, conforme divulgado em https://news.google.com/rss/articles/X?oc=5. "
+     "Além disso, a Nu Holdings", "Nubank anunciou parceria com a Uber. Além disso, a Nu Holdings"),
+    ("TR para 24 de setembro de 2026 https://www.bcb.gov.br/x Afeta: fintechs",
+     "TR para 24 de setembro de 2026. Afeta: fintechs"),
+    ("em 31 de outubro, conforme destacado em diversas fontes de notícias, incluindo https://news.google.com/a "
+     "Padrão derivado", "em 31 de outubro. Padrão derivado"),
+    ("caso envolvendo a TC S.A. [https://www.gov.br/cvm/x]", "caso envolvendo a TC S.A."),
+    ("Saiba mais. https://news.google.com/a Source: https://news.google.com/b", "Saiba mais."),
+    ("registrado na CVM-Ofertas (https://dados.cvm.gov.br/a e https://dados.cvm.gov.br/b), com taxa",
+     "registrado na CVM-Ofertas, com taxa"),
+    ("rolagem, como pode ser visto em https://a/x https://b/y, https://c/z. Além disso",
+     "rolagem. Além disso"),
+    ("R$ 1.234,56, https://x/y, enquanto 3,5% subiu.", "R$ 1.234,56, enquanto 3,5% subiu."),
+    ("relatórios nos EUA https:", "relatórios nos EUA"),                 # URL cut by truncation
+    ("Sem links aqui.", "Sem links aqui."),
+])
+def test_plain_text_drops_urls_and_the_phrase_that_pointed_at_them(raw, clean):
+    assert plain_text(raw) == clean

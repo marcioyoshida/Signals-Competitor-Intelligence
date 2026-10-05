@@ -203,6 +203,8 @@ def _entity_id(scoped: dict[str, Any], ref: str, resolve: Callable[[str], list[s
 
 def entity_signals(scoped: dict[str, Any], ref: str, days: int, limit: int, *,
                    resolve: Callable[[str], list[str]], today: dt.date | None = None) -> dict[str, Any]:
+    from src.synth.citations import plain_text
+
     eid = _entity_id(scoped, ref, resolve)
     if not eid:
         return {"isError": True, "message": "Entidade não encontrada nas indústrias da sua licença — use lookup_entity."}
@@ -213,7 +215,7 @@ def entity_signals(scoped: dict[str, Any], ref: str, days: int, limit: int, *,
             continue
         ts = c.get("threat_score")
         rows.append({"date": c.get("date"), "kind": c.get("kind"), "lenses": c.get("lenses") or [],
-                     "summary": str(c.get("narrative") or "")[:420],
+                     "summary": plain_text(c.get("narrative"))[:420],  # links are in sources
                      "threat": round(float(ts) * 100) if isinstance(ts, (int, float)) and ts <= 1 else ts,
                      "alert": bool(c.get("is_alert")), "urls": _urls(c), "url": (_urls(c) or [None])[0],
                      "sources": _sources(c)})

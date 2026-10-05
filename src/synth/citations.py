@@ -140,3 +140,56 @@ def _split_sentences(text: str) -> list[str]:
     """Lightweight sentence split on .!? followed by space/end."""
     parts = re.split(r"(?<=[.!?])\s+", text.strip())
     return [p for p in parts if p.strip()]
+
+
+# --- plain-text surfaces ----------------------------------------------------------------------
+# A narrative keeps its inline URLs: the dashboards turn each one into a numbered citation
+# link. Where the same text is shown as PLAIN prose (an /exec panel title, an MCP summary, a
+# digest line) a raw Google News redirect is noise — 875 inline URLs in 301 narratives on
+# 10-04 — and the links are already in the card's citations. plain_text() drops each URL with
+# the attribution phrase that only pointed at it ("conforme divulgado em <url>", "Source: <url>").
+_PLAIN_URL = re.compile(r"https?://[^\s<>]+")
+# a run of URLs (", " / " e " / bare-space separated); "https:" alone = a URL cut by truncation
+_URL_RUN = re.compile(r"https?:(?://[^\s<>]*)?(?:\s*(?:,|;|\be\b|\band\b)?\s*https?:(?://[^\s<>]*)?)*")
+_LEAD_IN = {"conforme", "segundo", "acordo", "com", "divulgado", "divulgada", "divulgados",
+            "publicado", "publicada", "noticiado", "informado", "destacado", "registrado",
+            "em", "no", "na", "nos", "nas", "pelo", "pela", "por", "via", "de", "incluindo",
+            "fonte", "fontes", "fonte:", "fontes:", "source", "source:", "sources:", "link",
+            "link:", "notícia", "notícias", "noticias", "diversas", "várias", "veja", "ver",
+            "mais", "informações", "detalhes", "disponível", "disponíveis", "aqui", "site",
+            "como", "pode", "ser", "visto", "vista", "vistos"}
+
+
+def plain_text(text: Any) -> str:
+    s = str(text or "")
+    if "http" not in s:
+        return s
+    # brackets/parens that hold nothing but URLs go entirely
+    s = re.sub(r"[\(\[]\s*" + _URL_RUN.pattern + r"\s*[\)\]]", "", s)
+    out, last = [], 0
+    for m in _URL_RUN.finditer(s):
+        run = m.group()
+        trail = re.search(r"[)\].,;:!?]+$", run)
+        keep = trail.group() if trail else ""
+        head = s[last:m.start()]
+        words = head.rstrip().split(" ")
+        while words and words[-1].lower().strip(",") in _LEAD_IN:
+            words.pop()
+        head = " ".join(words)
+        # the URL often ended the sentence: "… de 2026 https://… Afeta:" keeps its full stop
+        nxt = s[m.end():].lstrip()
+        if not keep and nxt[:1].isupper() and head.strip() and not re.search(r"[.!?:]\s*$", head):
+            head, keep = head.rstrip(" ,;"), "."
+        out.append(head)
+        out.append(keep)
+        last = m.end()
+    out.append(s[last:])
+    s = "".join(out)
+    s = re.sub(r"[\(\[]\s*(?:,|;|\be\b)\s+", lambda x: x.group()[0], s)   # "( e a CBA" -> "(a CBA"
+    s = re.sub(r"[\(\[]\s*[\)\]]", "", s)
+    s = re.sub(r"\s+([.,;:!?)\]])", r"\1", s)
+    s = re.sub(r"([,;:])\s*([.!?])", r"\2", s)
+    s = re.sub(r"\.{2,}", ".", s)
+    s = re.sub(r",(?:\s*,)+", ",", s)
+    s = re.sub(r"\s{2,}", " ", s)
+    return s.strip(" ,;:").lstrip(".! ")

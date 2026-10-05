@@ -19,7 +19,8 @@ FEED = {
     "entities": [{"entity": "itau"}, {"entity": "betano"}],
     "feed": [
         {"id": "c1", "date": "2026-09-27", "entity": "itau", "industries": ["banking"], "kind": "entity_fusion",
-         "lenses": ["ofertas"], "narrative": "Itaú lançou um fundo.", "threat_score": 0.72, "is_alert": True,
+         "lenses": ["ofertas"], "narrative": "Itaú lançou um fundo, conforme https://cvm.gov.br/x.",
+         "threat_score": 0.72, "is_alert": True,
          "citations": [{"url": "https://cvm.gov.br/x"},
                        {"url": "https://news.google.com/rss/articles/xyz", "label": "Valor Econômico",
                         "via": "Google Notícias"}]},
@@ -89,6 +90,7 @@ def test_entity_signals_are_dated_sourced_and_windowed():
     assert kinds == ["entity_fusion", "enforcement:sancao"]            # c3 is outside 30 days
     assert all(r["url"] and r["date"] for r in p["signals"])
     assert p["signals"][0]["threat"] == 72
+    assert p["signals"][0]["summary"] == "Itaú lançou um fundo."            # url lives in sources
     srcs = p["signals"][0]["sources"]
     assert srcs[0] == {"url": "https://cvm.gov.br/x"}                  # no invented label
     assert srcs[1] == {"url": "https://news.google.com/rss/articles/xyz", "label": "Valor Econômico",

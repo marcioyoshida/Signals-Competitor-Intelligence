@@ -709,3 +709,11 @@ def test_sector_event_row_names_the_outlet_behind_a_google_news_link():
     off, gn = row["sources"]
     assert off["label"] == "Presidência" and "via" not in off
     assert gn["label"] == "O GLOBO" and gn["via"] == "Google Notícias"
+
+
+def test_exec_panel_text_carries_no_inline_urls():
+    out = {"cso": {"panels": {"headlines": [{"title": "Itaú lançou fundo https://news.google.com/a",
+                                              "url": "https://news.google.com/a"}]}}}
+    executive._plain_titles(out)
+    row = out["cso"]["panels"]["headlines"][0]
+    assert row["title"] == "Itaú lançou fundo" and row["url"] == "https://news.google.com/a"

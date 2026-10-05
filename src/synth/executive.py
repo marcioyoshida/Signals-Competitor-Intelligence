@@ -1686,7 +1686,7 @@ def build_executive(feed: dict[str, Any], *, decisions: list[dict[str, Any]] | N
             n_drafts += 1
     if isinstance(metrics, dict):
         metrics["n_drafts"] = n_drafts
-    return {
+    out = {
         "officers": list(OFFICERS),
         "generated_at": feed.get("generated_at"),
         "as_of": feed.get("as_of"),
@@ -1703,3 +1703,24 @@ def build_executive(feed: dict[str, Any], *, decisions: list[dict[str, Any]] | N
         "cco": build_cco(feed, ctx),
         "cpo": build_cpo(feed, ctx),
     }
+    _plain_titles(out)
+    return out
+
+
+_PLAIN_KEYS = ("title", "summary", "headline", "detail", "text")
+
+
+def _plain_titles(o: Any) -> None:
+    """Panel rows are plain text cut from narratives; drop the inline URLs (and the "conforme
+    divulgado em" that pointed at them) — each row keeps its links in url/sources."""
+    from src.synth.citations import plain_text
+
+    if isinstance(o, dict):
+        for k, v in o.items():
+            if k in _PLAIN_KEYS and isinstance(v, str) and "http" in v:
+                o[k] = plain_text(v)
+            else:
+                _plain_titles(v)
+    elif isinstance(o, list):
+        for v in o:
+            _plain_titles(v)
