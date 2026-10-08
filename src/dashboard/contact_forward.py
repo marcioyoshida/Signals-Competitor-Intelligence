@@ -23,9 +23,12 @@ fresh message FROM our own DKIM-verified domain, with the original sender preser
 `Reply-To` and the original body quoted, keeps the reply path intact without inheriting
 someone else's authentication failure.
 
-The forwarding address lives in `ONCA_CONTACT_FORWARD_TO` (env, not hardcoded) — this
-module has no business knowing whose inbox that is; that's operator configuration, not
-a wired-in address.
+The forwarding address is operator configuration, not a wired-in address. It lives in the
+SSM parameter named by `ONCA_CONTACT_FORWARD_PARAM`, read at send time, so the operator's
+inbox is never in the repo and no deploy can blank it. The earlier synth-time
+`ONCA_CONTACT_FORWARD_TO` env var did exactly that: every deploy from a shell without it
+reset the live value to empty, and contato@ silently forwarded nowhere. The env var still
+wins when set (tests, local runs).
 """
 from __future__ import annotations
 
@@ -51,6 +54,20 @@ def _s3_client(client: Any | None = None) -> Any:
     import boto3
 
     return boto3.client("s3")
+
+
+def _forward_to(ssm: Any | None = None) -> str:
+    direct = os.environ.get("ONCA_CONTACT_FORWARD_TO")
+    if direct:
+        return direct
+    name = os.environ.get("ONCA_CONTACT_FORWARD_PARAM")
+    if not name:
+        return ""
+    if ssm is None:
+        import boto3
+
+        ssm = boto3.client("ssm")
+    return (ssm.get_parameter(Name=name)["Parameter"]["Value"] or "").strip()
 
 
 def build_forward(raw_mime: bytes, forward_to: str) -> dict[str, str]:
@@ -92,13 +109,14 @@ def build_forward(raw_mime: bytes, forward_to: str) -> dict[str, str]:
 
 
 def forward_object(bucket: str, key: str, *, s3: Any | None = None,
-                   ses: Any | None = None) -> dict[str, Any]:
+                   ses: Any | None = None, ssm: Any | None = None) -> dict[str, Any]:
     """Fetch the stored inbound message and forward it. Returns a small report."""
-    forward_to = os.environ.get("ONCA_CONTACT_FORWARD_TO")
+    forward_to = _forward_to(ssm)
     if not forward_to:
         # Fail closed: forwarding nowhere silently drops a real prospect's message
         # with no trace. Refuse instead, so a misconfiguration is loud, not lossy.
-        raise RuntimeError("ONCA_CONTACT_FORWARD_TO is not configured")
+        raise RuntimeError("contact forward address is not configured "
+                           "(ONCA_CONTACT_FORWARD_PARAM / ONCA_CONTACT_FORWARD_TO)")
 
     raw = _s3_client(s3).get_object(Bucket=bucket, Key=key)["Body"].read()
     parts = build_forward(raw, forward_to)

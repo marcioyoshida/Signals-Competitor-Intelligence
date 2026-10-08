@@ -2808,6 +2808,7 @@ class OncaPrototypeStack(Stack):
         # the coupling is visible in the diff, not discovered by an outage.
         SHARED_RECEIPT_RULE_SET = os.environ.get(
             "ONCA_SES_RULE_SET_NAME", "bluefin-inbound")
+        CONTACT_FORWARD_PARAM = "/onca/contact/forward-to"
 
         contact_bucket = s3.Bucket(
             self,
@@ -2847,13 +2848,23 @@ class OncaPrototypeStack(Stack):
             environment={
                 "PYTHONPATH": "/var/task",
                 # The operator's own inbox, kept out of this file on purpose — the
-                # forwarder has no business knowing whose address that is; it is
-                # configuration, not a wired-in destination. Empty ⇒ fails closed
-                # (contact_forward.forward_object refuses to forward nowhere).
-                "ONCA_CONTACT_FORWARD_TO": os.environ.get("ONCA_CONTACT_FORWARD_TO", ""),
+                # forwarder has no business knowing whose address that is. It is an
+                # SSM parameter read at send time, created by hand (not by this
+                # stack), so no deploy can blank it — the synth-time env var this
+                # replaced was reset to "" by every deploy from a shell without it.
+                # Missing ⇒ fails closed (forward_object refuses to forward nowhere).
+                "ONCA_CONTACT_FORWARD_PARAM": CONTACT_FORWARD_PARAM,
             },
         )
         contact_bucket.grant_read(contact_forward_fn)
+        contact_forward_fn.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["ssm:GetParameter"],
+                resources=[self.format_arn(
+                    service="ssm", resource="parameter",
+                    resource_name=CONTACT_FORWARD_PARAM.lstrip("/"))],
+            )
+        )
         contact_forward_fn.add_to_role_policy(
             iam.PolicyStatement(actions=["ses:SendEmail", "ses:SendRawEmail"],
                                 resources=["*"])

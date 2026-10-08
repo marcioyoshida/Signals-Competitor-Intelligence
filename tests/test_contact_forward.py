@@ -170,3 +170,34 @@ def test_handler_one_bad_record_does_not_block_the_others(monkeypatch):
 def test_handler_ignores_malformed_records():
     out = cf.lambda_handler({"Records": [{"s3": {}}, {}]})
     assert out["forwarded"] == []
+
+
+class _FakeSSM:
+    def __init__(self, value):
+        self.value, self.names = value, []
+
+    def get_parameter(self, Name):
+        self.names.append(Name)
+        return {"Parameter": {"Value": self.value}}
+
+
+def test_forward_to_reads_the_ssm_parameter_when_no_env_override(monkeypatch):
+    monkeypatch.delenv("ONCA_CONTACT_FORWARD_TO", raising=False)
+    monkeypatch.setenv("ONCA_CONTACT_FORWARD_PARAM", "/onca/contact/forward-to")
+    ssm = _FakeSSM(" ops@example.com\n")
+    assert cf._forward_to(ssm) == "ops@example.com"
+    assert ssm.names == ["/onca/contact/forward-to"]
+
+
+def test_forward_to_env_override_wins_over_ssm(monkeypatch):
+    monkeypatch.setenv("ONCA_CONTACT_FORWARD_TO", "env@example.com")
+    monkeypatch.setenv("ONCA_CONTACT_FORWARD_PARAM", "/onca/contact/forward-to")
+    ssm = _FakeSSM("ssm@example.com")
+    assert cf._forward_to(ssm) == "env@example.com"
+    assert ssm.names == []
+
+
+def test_forward_to_is_empty_with_neither_configured(monkeypatch):
+    monkeypatch.delenv("ONCA_CONTACT_FORWARD_TO", raising=False)
+    monkeypatch.delenv("ONCA_CONTACT_FORWARD_PARAM", raising=False)
+    assert cf._forward_to(_FakeSSM("x@example.com")) == ""
