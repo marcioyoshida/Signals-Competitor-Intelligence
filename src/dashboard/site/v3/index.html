@@ -2091,7 +2091,10 @@ async function renderDigestBox(note) {
   const box = document.getElementById("digestBox"); if (!box || ADMIN) { if (box) box.innerHTML = ""; return; }
   let st;
   try { st = await pushApi("/api/me/digest", null, "GET"); }
-  catch (e) { box.innerHTML = `<p class="hd-note" style="padding:0 var(--s3) var(--s3)">Preferências indisponíveis agora.</p>`; return; }
+  catch (e) { if (box.isConnected) box.innerHTML = `<p class="hd-note" style="padding:0 var(--s3) var(--s3)">Preferências indisponíveis agora.</p>`; return; }
+  // The view/sector/officer may have re-rendered during the await: this box is then detached
+  // and its #digestSave never reaches the document (null.onclick). The fresh render has its own call.
+  if (!box.isConnected) return;
   const avail = st.available || [], mine = st.sectors || [];
   if (!avail.length) { box.innerHTML = `<p class="hd-note" style="padding:0 var(--s3) var(--s3)">Nenhum setor licenciado.</p>`; return; }
   box.innerHTML = `<div style="padding:0 var(--s3) var(--s3)">
@@ -2101,7 +2104,7 @@ async function renderDigestBox(note) {
       (<a href="/docs/privacy.html">política de privacidade</a>); cancele a qualquer momento aqui ou pelo link em cada e-mail.</p>
     <button class="btn btn--primary hoje-act" id="digestSave" type="button">Salvar preferências</button>
     <span class="hd-note" id="digestMsg">${U.esc(note || "")}</span></div>`;
-  document.getElementById("digestSave").onclick = async () => {
+  box.querySelector("#digestSave").onclick = async () => {
     const sectors = [...box.querySelectorAll(".dsec:checked")].map(x => x.value);
     let n = "";
     try { await pushApi("/api/me/digest", { sectors, consent: sectors.length > 0 }, "PUT");
