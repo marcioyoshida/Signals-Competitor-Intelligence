@@ -1759,14 +1759,20 @@ function render() {
                             panel("Atos com mudanças enumeradas", ofN(p.changes, a.n_acts_changed), "amending acts", rowsReg(p.changes))])) +
       band("Calendário de conformidade", "", panel("Prazos", null, "dias até o prazo", rowsReg(p.deadlines, "Nenhum prazo de conformidade nos itens do escopo.")));
   } else if (OFFICER === "cco") {
-    const risk = (a.n_high || 0), rc = risk > 3 ? ["crit", "Crítico"] : risk > 0 ? ["high", "Atenção"] : ["ok", "Controlado"];
+    // #211: client feeds withhold the operator-only integrity audit — the hero then reads the
+    // client-visible severe signal (critical/high enforcement) instead of a fake "0 · Controlado".
+    const iw = !!p.integrity_withheld;
+    const risk = iw ? (a.n_enforcement_severe || 0) : (a.n_high || 0),
+      rc = risk > 3 ? ["crit", "Crítico"] : risk > 0 ? ["high", "Atenção"] : ["ok", "Controlado"];
     // #118: a zero integrity/reputation count reads as "controlado" (green) unless we know the
     // sector actually HAS enough compliance signal to earn that reading — otherwise it's "no
     // signal", not "clean", and must not be colored the same as a real clean audit.
     const sigOk = a.signal_state !== "insufficient";
     board =
-      readout(heroCount("Achados graves", a.n_high, bandBadge(rc[0], rc[1]), "severidade alta na auditoria"),
-        [tile("Achados de integridade", a.n_integrity, "registro", a.n_integrity > 0 ? "warn" : (sigOk ? "ok" : null)),
+      readout(iw ? heroCount("Ações graves", risk, bandBadge(rc[0], rc[1]), "enforcement crítico/alto no escopo")
+                 : heroCount("Achados graves", a.n_high, bandBadge(rc[0], rc[1]), "severidade alta na auditoria"),
+        [tile("Achados de integridade", iw ? null : a.n_integrity, iw ? "auditoria do operador" : "registro",
+              iw ? null : a.n_integrity > 0 ? "warn" : (sigOk ? "ok" : null)),
          tile("Distress (confirmado)", a.n_distress, "insolvência", a.n_distress > 0 ? "crit" : "ok"),
          tile("Reputação", a.n_rep, "rankings BCB"),
          tile("Enforcement", a.n_enforcement || 0, (a.n_enforcement_severe || 0) + " crítico/alto",
@@ -1780,8 +1786,9 @@ function render() {
            panel("Ações de supervisores contra operadores", (p.enforcement || []).filter(inSector).length,
              "mais grave primeiro · fontes linkadas", rowsEnforcement(p.enforcement))) +
       band("Registro de risco", "", panel("Enforcement · distress · reputação · integridade", null, "prioridade", rowsRisk(p.risk_register))) +
-      band("Integridade & reputação", "",
-        grid("1fr 1fr", [panel("Auditoria de integridade", null, "achados do registro", rowsIntegrity(p.integrity)),
+      band(iw ? "Reputação" : "Integridade & reputação", "",
+        iw ? panel("Reputação (reclamações)", null, "pior ranking primeiro", rowsRep(p.reputation))
+           : grid("1fr 1fr", [panel("Auditoria de integridade", null, "achados do registro", rowsIntegrity(p.integrity)),
                         panel("Reputação (reclamações)", null, "pior ranking primeiro", rowsRep(p.reputation))]));
   } else if (OFFICER === "cpo") {
     const port = p.portfolio || [];

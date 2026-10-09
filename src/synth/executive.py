@@ -1084,6 +1084,9 @@ def build_cco(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     labels = ctx["labels"]
     enforcement = [_enforcement_row(a, labels) for a in _enforcement(feed)]
     findings = list((feed.get("integrity") or {}).get("findings") or [])
+    # #211: client feeds blank the operator-only integrity audit. Report it as unknown (None),
+    # never as a "0 findings" result, and don't offer the client an operator action.
+    withheld = bool((feed.get("integrity") or {}).get("withheld"))
     distress = _trusted_distress(feed)
     # #140: the store now holds two scales that do NOT compare — BCB publishes a positional
     # rank (1 = worst), ANS an IGR rate (higher = worse, and withheld on a small book). A
@@ -1145,16 +1148,16 @@ def build_cco(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         # never fed this store — it is default-off and its source host is now dead.
         insufficient = len(si) == 0 and len(sr) < _CCO_MIN_REPUTATION_SIGNAL
         se = [r for r in enforcement if _in_scope_or_market(r, slug)]
-        return {"n_integrity": len(si), "n_distress": len(sd), "n_rep": len(sr),
+        return {"n_integrity": None if withheld else len(si), "n_distress": len(sd), "n_rep": len(sr),
                 "n_enforcement": len(se),
                 "n_enforcement_severe": sum(1 for r in se if r.get("severity") in ("critical", "high")),
                 "enforcement_severity": se[0].get("severity") if se else None,
-                "n_high": sum(1 for i in si if i.get("severity") == "high"),
+                "n_high": None if withheld else sum(1 for i in si if i.get("severity") == "high"),
                 "worst_rank": min([r["rank"] for r in sr if r.get("rank")], default=None),
                 "signal_state": "insufficient" if insufficient else "sufficient"}
 
-    recs = [_rec("imediato", "Rodar auditoria de integridade do registro", "run_integrity_audit",
-                 officer="cco")]
+    recs = [] if withheld else [_rec("imediato", "Rodar auditoria de integridade do registro",
+                                     "run_integrity_audit", officer="cco")]
     high = [i for i in integrity_rows if i.get("severity") == "high"]
     if high:
         i = high[0]
@@ -1170,6 +1173,7 @@ def build_cco(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         # #193: supervisor actions against one operator — most severe, then newest, first.
         "enforcement": enforcement[:40],
         "integrity": integrity_rows[:40],
+        "integrity_withheld": withheld,
         "risk_register": risk_register[:30],
         "reputation": rep_rows[:30],
         # SURF-3: PESTLE macro/regulatory environment routed to the CCO (7S dropped — internal,

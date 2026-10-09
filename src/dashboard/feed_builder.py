@@ -1002,7 +1002,7 @@ def scope_feed_to_modules(feed: dict[str, Any], modules: Any) -> dict[str, Any]:
             "sector_events": scope_sector_events(feed.get("sector_events"), keep),
             "enforcement": _scope_enforcement(feed.get("enforcement"), keep, row_ok),  # #193
             **_scope_sector_blocks(feed, keep, row_ok),  # #203
-            "integrity": {"findings": [], "counts": {}, "total": 0},  # operator-only
+            "integrity": {"findings": [], "counts": {}, "total": 0, "withheld": True},  # operator-only; #211 "withheld" ≠ "audited clean"
             "regulatory_coverage": {},                                # operator-only (#2)
             "mobile_usage": {},  # operator-only (#165) — per-officer device usage
             "source_runs": [],  # operator-only (#139) — raw per-source telemetry incl. error
@@ -1127,7 +1127,7 @@ def derive_entry_feed(
             "sector_events": scope_sector_events(feed.get("sector_events"), keep),  # #177
             "enforcement": _scope_enforcement(feed.get("enforcement"), keep, row_ok),  # #193
             **_scope_sector_blocks(feed, keep, row_ok),  # #203
-            "integrity": {"findings": [], "counts": {}, "total": 0},  # operator-only
+            "integrity": {"findings": [], "counts": {}, "total": 0, "withheld": True},  # operator-only; #211 "withheld" ≠ "audited clean"
             "regulatory_coverage": {},                                # operator-only (#2)
             "source_runs": [],  # operator-only (#139) — see scope_feed_to_modules
             "mobile_usage": {},  # operator-only (#165)

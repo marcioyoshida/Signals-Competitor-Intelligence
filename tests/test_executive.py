@@ -741,3 +741,18 @@ def test_cro_impact_ranks_by_reach_without_change_records():
     assert blasts == sorted(blasts, reverse=True)
     for slug, a in cro["by_industry"].items():
         assert a["n_acts_changed"] == a["n_changes"] - a["n_sector_events"]
+
+
+def test_cco_withheld_integrity_is_unknown_not_zero():
+    """#211: a client feed blanks the operator-only integrity audit — CCO must report it as
+    unknown (None), flag it, and not offer the client the operator's run_integrity_audit."""
+    f = _feed()
+    f["integrity"] = {"findings": [], "counts": {}, "total": 0, "withheld": True}
+    cco = executive.build_executive(f)["cco"]
+    assert cco["panels"]["integrity_withheld"] is True
+    for a in cco["by_industry"].values():
+        assert a["n_integrity"] is None and a["n_high"] is None
+    assert all(r["action"] != "run_integrity_audit" for r in cco["panels"]["recommendations"])
+    op = executive.build_executive(_feed())["cco"]
+    assert op["panels"]["integrity_withheld"] is False
+    assert any(r["action"] == "run_integrity_audit" for r in op["panels"]["recommendations"])
