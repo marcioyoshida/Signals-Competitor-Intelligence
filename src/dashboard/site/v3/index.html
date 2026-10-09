@@ -1177,7 +1177,9 @@ function rowsRadar(pr) {
     return U.empty(pr.as_of ? "Sem eventos de produto no escopo." : "Radar de produto ainda sem execução.",
       yt && yt.indexOf("disabled") === 0 ? "YouTube desativado (sem chave) — só App Store" : "", "○");
   }
-  return list.slice(0, 20).map(r => {
+  // #209: no client cap — the badge counts every in-scope event (server ships ≤40) and the
+  // panel scrolls; Hoje callers pass their own short slices.
+  return list.map(r => {
     const src = r.source === "appstore" ? "App Store" : "YouTube";
     const links = (r.sources || []).slice(0, 3).map((s, i) =>
       `<a href="${U.esc(s.url)}" target="_blank" rel="noopener" title="${U.esc(s.label || s.url)}">[${i + 1}]</a>`).join(" ");
@@ -1980,7 +1982,8 @@ function renderHoje(el) {
   const pri = hojePriorities(OFFICER);
   FLOW = (EX.flow || []).filter(t => (OFFICER === "cso" || t.officer === OFFICER || t.handoff === OFFICER) && inSector(t));
   FLOW.forEach(t => markSeen(t.id));
-  const pend = FLOW.map((t, i) => [t, i]).filter(([t]) => !t.decided).slice(0, 5);
+  const pendAll = FLOW.map((t, i) => [t, i]).filter(([t]) => !t.decided);
+  const pend = pendAll.slice(0, 5);  // #209: list 5, but count them all ("5 de 6")
   const decBody = pend.length ? `<div class="trajs">` + pend.map(([t, i]) => `<div class="traj" data-sev="${U.esc(t.severity)}" data-i="${i}">
       <div class="traj-hd"><span class="traj-t">${U.esc(t.title)}</span></div>
       <div class="traj-b">${U.esc(String(t.briefing || "").slice(0, 220))}</div>
@@ -1991,7 +1994,8 @@ function renderHoje(el) {
   let html = hojeSec("hoje-alertas", "Novo desde a sua última visita", al.n, "desde " + U.fmtDate(since.slice(0, 10)), alertsBody) +
     hojeSec("hoje-prioridades", "Top 3 prioridades", null, OFFICER === "cso" ? "briefing semanal" : "recomendações",
       pri.length ? `<div class="panel__bd--flush">${rowsCard(pri)}</div>` : U.empty("Sem prioridades na janela.", "", "○")) +
-    hojeSec("hoje-decisoes", "Decisões pendentes", pend.length, "rascunhos do fluxo executivo", decBody);
+    hojeSec("hoje-decisoes", "Decisões pendentes", pendAll.length > pend.length ? `${pend.length} de ${pendAll.length}` : pend.length,
+      "rascunhos do fluxo executivo" + (pendAll.length > pend.length ? " · demais no Painel" : ""), decBody);
   if (OFFICER === "cpo") {
     const ev = ((((EX.cpo || {}).panels || {}).product_radar) || DATA.product_radar || {});
     html += hojeSec("hoje-radar", "Radar de produto", null, "mais recente", rowsRadar({ ...ev, events: (ev.events || []).slice(0, 3) }));
