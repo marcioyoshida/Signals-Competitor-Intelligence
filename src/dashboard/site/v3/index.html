@@ -1785,7 +1785,7 @@ function render() {
       band("Enforcement & sanções", "liquidação · intervenção · RAET · cassação · sanções · CEIS/CNEP · #193",
            panel("Ações de supervisores contra operadores", (p.enforcement || []).filter(inSector).length,
              "mais grave primeiro · fontes linkadas", rowsEnforcement(p.enforcement))) +
-      band("Registro de risco", "", panel("Enforcement · distress · reputação · integridade", null, "prioridade", rowsRisk(p.risk_register))) +
+      band("Registro de risco", "", panel(iw ? "Enforcement · distress · reputação" : "Enforcement · distress · reputação · integridade", null, "prioridade", rowsRisk(p.risk_register))) +
       band(iw ? "Reputação" : "Integridade & reputação", "",
         iw ? panel("Reputação (reclamações)", null, "pior ranking primeiro", rowsRep(p.reputation))
            : grid("1fr 1fr", [panel("Auditoria de integridade", null, "achados do registro", rowsIntegrity(p.integrity)),
