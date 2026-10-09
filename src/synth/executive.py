@@ -621,10 +621,13 @@ def build_cso(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         sdist = [d for d in distress if slug in (ALL, None)
                  or slug in _industries_of(feed, d.get("entity"))]
         smoves = [c for c in moves if _in_industry(c, slug)]
-        sfin = [r for r in financials if slug in (r.get("industries") or [])]
+        # #214: `__all__` is in no row's industries — the all-sectors bucket must be the union.
+        sfin = [r for r in financials if slug in (ALL, None) or slug in (r.get("industries") or [])]
         roes = [r["roe_pct"] for r in sfin if r.get("roe_pct") is not None]
         n = len(sc)
         return {"climate": _climate_index(sc, len(sdist)), "n_cards": n,
+                # #215: the M in "Mudanças por alcance · N de M".
+                "n_reg": len(sreg),
                 "n_alerts": sum(1 for c in sc if c.get("is_alert")),
                 "avg_threat": round(sum(_threat(c) for c in sc) / n, 1) if n else 0.0,
                 "reg_threat": _reg_threat(sreg, _sector_events(feed, slug),
@@ -694,7 +697,7 @@ def build_cso(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         # #143: capital-social moves — the expansion read that sits next to entrants/ofertas.
         "capital_moves": capital_rows[:20],
         "momentum": _momentum_for_panel(momentum, ctx["sectors"]),
-        "regulatory": [_reg_row(c) for c in reg_sorted[:20]],
+        "regulatory": [_reg_row(c) for c in _sector_fair(reg_sorted, ctx["sectors"], 20)],
         # ADR 022 Tier-1: competitor financial strength (ROE/ROA/leverage/headroom/share), inference.
         "financials": financials[:25],
         # SURF-1: strategic posture — SWOT beliefs + TOWS postures routed to the CSO.
@@ -945,7 +948,9 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         sr = [c for c in reg if _in_industry(c, slug)]
         sev_events = _sector_events(feed, slug)
         blasts = [len(c.get("affected_industries") or []) for c in sr]
-        ss = [r for r in solvency if slug in (r.get("industries") or [])]
+        # #214: `__all__` is in no row's industries, so the all-sectors tile read 0 while each
+        # sector read 1 — the all-sectors bucket is the union of the (tenant-scoped) rows.
+        ss = [r for r in solvency if slug in (ALL, None) or slug in (r.get("industries") or [])]
         npls = [r["npl_total"] for r in ss if r.get("npl_total") is not None]
         return {"n_reg": len(sr),
                 # #177: a sector event floors the average (SECTOR_EVENT_FLOOR by severity).

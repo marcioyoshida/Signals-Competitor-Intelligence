@@ -1269,7 +1269,7 @@ function rowsDiscovery(list) {
 function rowsPosture(list) {
   const rows = (list || []).filter(inSector);
   if (!rows.length) return U.empty("Sem postura estratégica no escopo.", "requer beliefs SWOT/TOWS", "○");
-  return `<div class="chart">` + rows.slice(0, 18).map(r => {
+  return `<div class="chart">` + rows.map(r => {
     const c = r.counts || {};
     const chips = [["S", c.S, "ok"], ["W", c.W, "high"], ["O", c.O, "med"], ["T", c.T, "warn"]]
       .map(([k, v, tone]) => `<span class="badge badge--${tone}" title="${k}">${U.esc(k)} ${v || 0}</span>`).join(" ");
@@ -1285,7 +1285,7 @@ function prettyDim(d) { return String(d || "").replace(/_/g, " ").replace(/\b\w/
 function rowsFramework(list) {
   const rows = (list || []).filter(inSector);
   if (!rows.length) return U.empty("Sem framework no escopo.", "beliefs vetados (ADR-006)", "○");
-  return `<div class="chart">` + rows.slice(0, 16).map(r =>
+  return `<div class="chart">` + rows.map(r =>
     `<div style="padding:var(--s2) var(--s3)"><b>${U.esc(r.label)}</b>` +
     (r.bullets || []).slice(0, 4).map(b =>
       `<div class="hd-note" style="margin-top:2px"><b>${U.esc(prettyDim(b.dimension))}</b> — ${U.esc(b.text || "")}</div>`).join("") +
@@ -1295,7 +1295,7 @@ function rowsFramework(list) {
 function rowsChangeDiff(list) {
   const rows = (list || []).filter(inSector);
   if (!rows.length) return U.empty("Sem mudanças enumeradas no escopo.", "", "○");
-  return rows.slice(0, 16).map(r => {
+  return rows.map(r => {
     const arts = (r.changes || []).map(ch => `${U.esc(ch.art || "?")} ${U.esc(ch.verb || "")}`).join(" · ");
     const dl = r.days_to_deadline != null ? `<span class="badge badge--${r.days_to_deadline <= 30 ? "high" : "med"}">prazo ${r.days_to_deadline}d</span>` : "";
     return `<div class="exrow" data-id="${U.esc(r.id || "")}" style="padding:var(--s2) var(--s3)">
@@ -1308,7 +1308,7 @@ function rowsChangeDiff(list) {
 function rowsAxis(list) {
   const rows = (list || []).filter(inSector);
   if (!rows.length) return U.empty("Sem sinais no escopo.", "", "○");
-  return rows.slice(0, 14).map(r => {
+  return rows.map(r => {
     const meta = [];
     if (r.horizon_days != null) meta.push("horizonte " + r.horizon_days + "d");
     if (r.hub) meta.push("hub " + U.esc(r.hub) + (r.n_dependents != null ? " · " + r.n_dependents + " expostos" : ""));
@@ -1686,7 +1686,7 @@ function marketDetail(m) {
 function sourceHealthChart(list) {
   if (!(list || []).length) return U.empty("Sem sinais de fontes.", "", "○");
   const bmap = { ok: "ok", warn: "warn", stale: "gap" };
-  return `<div class="chart">` + list.slice(0, 14).map(s => `<div class="cov" style="padding:5px 0">
+  return `<div class="chart">` + list.map(s => `<div class="cov" style="padding:5px 0">
     <span class="dot ${bmap[s.band]}"></span><span class="cl" style="min-width:120px" title="${U.esc(s.lens)}">${U.esc(s.lens)}</span>
     <span class="meta" style="flex:1">${s.docs} docs</span>
     <span class="cv">${s.staleness_days == null ? "—" : s.staleness_days + "d"}</span></div>`).join("") + `</div>`;
@@ -1743,11 +1743,11 @@ function render() {
       band("Situação", "índice de clima · inferência",
         grid("1.4fr .9fr", [panel("Manchetes executivas", null, "maior ameaça · recente", rowsCard(p.headlines)),
                             panel("Sinais emergentes", null, "janela recente", rowsCard(p.emerging))])) +
-      band("Riscos & Oportunidades", "", grid("1fr 1fr", [panel("Radar de risco", null, "alertas", rowsCard(p.risks)),
+      band("Riscos & Oportunidades", "", grid("1fr 1fr", [panel("Radar de risco", ofN(p.risks, a.n_alerts), "alertas", rowsCard(p.risks)),
                             panel("Radar de oportunidade", null, "fraqueza do concorrente", rowsCard(p.opportunities))])) +
       band("Inteligência competitiva", "momentum na janela · inferência",
         grid("1fr 1fr", [panel("Momentum do concorrente", null, "↑ ganha · ↓ recua", rowsMomentum(p.momentum)),
-                        panel("Movimentos estratégicos", null, "entrada·oferta·M&A", rowsCard(p.moves))])) +
+                        panel("Movimentos estratégicos", ofN(p.moves, a.n_moves), "entrada·oferta·M&A", rowsCard(p.moves))])) +
       band("Capital social", "ato societário registrado em junta comercial · Receita Federal · o ato em si não é público (#26)",
         panel("Movimentos de capital social", null, "valor anterior → atual", rowsCapital(p.capital_moves))) +
       band("Trajetória de ameaça", "linha do tempo · ameaça média diária por concorrente · inferência",
@@ -1758,7 +1758,7 @@ function render() {
         panel("Rentabilidade & eficiência (maior ROE primeiro)", null, "ROE anual · ROA · alav · opex/ativo · headroom · share", rowsFinancials(p.financials))) +
       band("Mercado · Cotações B3", "concorrentes listados no escopo · Yahoo Finance · ~60s",
         `<div class="panel"><div class="panel__bd panel__bd--flush"><div id="b3ticker" class="b3wrap">${U.empty("Carregando cotações…", "", "○")}</div></div></div>`) +
-      band("Inteligência regulatória (resumo)", "", panel("Mudanças por alcance", null, "domínio·setores·prazo", rowsReg(p.regulatory)));
+      band("Inteligência regulatória (resumo)", "", panel("Mudanças por alcance", ofN(p.regulatory, a.n_reg), "domínio·setores·prazo", rowsReg(p.regulatory)));
   } else if (OFFICER === "cro") {
     const [bc, bl] = bandThreat(a.reg_threat || 0, 65, 40);
     board =
@@ -2019,7 +2019,10 @@ function renderHoje(el) {
         <span class="nonet">sem conexão</span>
         <button data-tv="aprovado" data-i="${i}">Aprovar</button><button data-tv="rejeitado" data-i="${i}">Rejeitar</button></div></div>`).join("") + `</div>`
     : U.empty("Nenhuma decisão pendente.", "", "✓");
-  let html = hojeSec("hoje-alertas", "Novo desde a sua última visita", al.n, "desde " + U.fmtDate(since.slice(0, 10)), alertsBody) +
+  // #215: the section lists a few highlights but counted everything — say "3 de 17".
+  const alShown = top.length + Math.min(al.sev.length, 2) + Math.min(al.radar.length, 2);
+  let html = hojeSec("hoje-alertas", "Novo desde a sua última visita", alShown < al.n ? `${alShown} de ${al.n}` : al.n,
+      "desde " + U.fmtDate(since.slice(0, 10)) + (alShown < al.n ? " · demais no Painel" : ""), alertsBody) +
     hojeSec("hoje-prioridades", "Top 3 prioridades", null, OFFICER === "cso" ? "briefing semanal" : "recomendações",
       pri.length ? `<div class="panel__bd--flush">${rowsCard(pri)}</div>` : U.empty("Sem prioridades na janela.", "", "○")) +
     hojeSec("hoje-decisoes", "Decisões pendentes", pendAll.length > pend.length ? `${pend.length} de ${pendAll.length}` : pend.length,

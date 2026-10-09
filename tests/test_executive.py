@@ -756,3 +756,18 @@ def test_cco_withheld_integrity_is_unknown_not_zero():
     op = executive.build_executive(_feed())["cco"]
     assert op["panels"]["integrity_withheld"] is False
     assert any(r["action"] == "run_integrity_audit" for r in op["panels"]["recommendations"])
+
+
+def test_all_sectors_solvency_and_roe_are_the_union():
+    """#214: the __all__ bucket of CRO solvency / CSO financial aggregates must cover every row
+    (it is in no row's `industries`), never read 0 while a sector reads >0."""
+    ex = executive.build_executive(_feed())
+    cro = ex["cro"]["by_industry"]
+    secs = [k for k in cro if k != executive.ALL]
+    assert cro[executive.ALL]["n_weak_solvency"] >= max(cro[s]["n_weak_solvency"] for s in secs)
+    mins = [cro[s]["min_basileia"] for s in secs if cro[s]["min_basileia"] is not None]
+    if mins:
+        assert cro[executive.ALL]["min_basileia"] == min(mins)
+    cso = ex["cso"]["by_industry"]
+    if any(cso[s]["avg_roe"] is not None for s in secs):
+        assert cso[executive.ALL]["avg_roe"] is not None
