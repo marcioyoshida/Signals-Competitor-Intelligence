@@ -729,3 +729,15 @@ def test_sector_fair_keeps_every_sectors_head():
     assert sum(1 for c in out if "banking" in c["industries"]) == 30
     assert out == [c for c in items if c in out]  # input (rank) order preserved
     assert executive._sector_fair(items, [], 30) == items[:30]
+
+
+def test_cro_impact_ranks_by_reach_without_change_records():
+    """#208: with the LLM change record gated off, "Mudanças por impacto" must still list the
+    in-scope reg cards (by sector reach) instead of rendering empty under a non-zero tile."""
+    cro = executive.build_executive(_feed())["cro"]
+    imp = cro["panels"]["impact"]
+    assert imp, "impact panel empty"
+    blasts = [r["blast"] for r in imp]
+    assert blasts == sorted(blasts, reverse=True)
+    for slug, a in cro["by_industry"].items():
+        assert a["n_acts_changed"] == a["n_changes"] - a["n_sector_events"]

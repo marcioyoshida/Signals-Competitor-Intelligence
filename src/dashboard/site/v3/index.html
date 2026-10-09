@@ -755,6 +755,11 @@ function inSectorStrict(item) {
 function block() { return EX[OFFICER] || {}; }
 function agg() { const bi = block().by_industry || {}; return bi[SECTOR] || bi.__all__ || {}; }
 
+// #208: a panel header count that admits a server cap — "30 de 36" instead of a silent 30.
+function ofN(list, total) {
+  const shown = (list || []).filter(inSector).length;
+  return total != null && shown < total ? `${shown} de ${total}` : shown;
+}
 function panel(title, count, note, body) {
   const c = count == null ? "" : `<span class="count${count === 0 ? " count--zero" : ""}">${count}</span>`;
   return `<div class="panel"><div class="panel__hd"><h2>${U.esc(title)}</h2>${c}` +
@@ -813,9 +818,9 @@ function rowsCard(list) {
     ${r.macro_note && r.macro_note.text ? `<span class="macro-note-dot" title="${U.esc(r.macro_note.text)}">◐</span>` : ""}
     ${r.threat_score != null ? threatChip(r.threat_score) : ""}</div>`).join("");
 }
-function rowsReg(list) {
+function rowsReg(list, emptyMsg) {
   list = (list || []).filter(inSector);
-  if (!list.length) return U.empty("Sem itens regulatórios no escopo.", "", "○");
+  if (!list.length) return U.empty(emptyMsg || "Sem itens regulatórios no escopo.", "", "○");
   return list.map(r => { const txt = r.title || r.change || (r.affected_industries || []).join(", ") || "";
     return `<div class="exrow" data-id="${U.esc(r.id)}">
     <span class="ent" style="min-width:150px" title="${U.esc(r.domain || "Regulação")}">${U.esc(r.domain || "Regulação")}</span>
@@ -1738,7 +1743,8 @@ function render() {
         [tile("Eventos setoriais", a.n_sector_events || 0, a.sector_event_severity ? "máx. " + (SECTOR_SEV_PT[a.sector_event_severity] || a.sector_event_severity) : "ato oficial / ≥2 veículos",
               a.sector_event_severity === "critical" ? "crit" : a.sector_event_severity === "high" ? "high" : null),
          tile("Cartões regulatórios", a.n_reg, "no escopo"),
-         tile("Atos alterados", a.n_changes, "com mudança enumerada"),
+         tile("Atos alterados", a.n_changes, a.n_acts_changed != null && (a.n_sector_events || 0) > 0
+              ? `${a.n_acts_changed} atos + ${a.n_sector_events} eventos setoriais` : "com mudança enumerada"),
          tile("Maior alcance", a.max_blast, "setores", a.max_blast >= 3 ? "high" : null),
          tile("Solidez sob atenção", a.n_weak_solvency, a.min_basileia != null ? "mín. Basileia " + a.min_basileia + "%" : "prudencial",
               (a.n_weak_solvency || 0) > 0 ? "high" : null)]) +
@@ -1746,10 +1752,10 @@ function render() {
            panel("Eventos setoriais", (p.sector_events || []).filter(inSectorStrict).length, "setor · severidade · fontes", rowsSectorEvents(p.sector_events))) +
       band("Solidez prudencial dos concorrentes", "Basileia + LCR + PDD/mês + inadimplência + fragilidade + tom · ADR 022",
            panel("Solvência, inadimplência, trajetória & tom (mais frágil primeiro)", null, "Basileia · CET1 · PDD/mês · NPL · tom", rowsSolvency(p.solvency))) +
-      band("Impacto & alcance", "blast-radius · ADR-009", panel("Mudanças por impacto", null, "banda de alcance · dificuldade", rowsReg(p.impact))) +
-      band("Linha do tempo regulatória", "", grid("1fr 1fr", [panel("Consulta → norma → fiscalização", null, "recente", rowsReg(p.timeline)),
-                            panel("Atos com mudanças enumeradas", null, "amending acts", rowsReg(p.changes))])) +
-      band("Calendário de conformidade", "", panel("Prazos", null, "dias até o prazo", rowsReg(p.deadlines)));
+      band("Impacto & alcance", "blast-radius · ADR-009", panel("Mudanças por impacto", ofN(p.impact, a.n_reg), "banda de alcance · dificuldade", rowsReg(p.impact))) +
+      band("Linha do tempo regulatória", "", grid("1fr 1fr", [panel("Consulta → norma → fiscalização", ofN(p.timeline, a.n_reg), "recente", rowsReg(p.timeline)),
+                            panel("Atos com mudanças enumeradas", ofN(p.changes, a.n_acts_changed), "amending acts", rowsReg(p.changes))])) +
+      band("Calendário de conformidade", "", panel("Prazos", null, "dias até o prazo", rowsReg(p.deadlines, "Nenhum prazo de conformidade nos itens do escopo.")));
   } else if (OFFICER === "cco") {
     const risk = (a.n_high || 0), rc = risk > 3 ? ["crit", "Crítico"] : risk > 0 ? ["high", "Atenção"] : ["ok", "Controlado"];
     // #118: a zero integrity/reputation count reads as "controlado" (green) unless we know the

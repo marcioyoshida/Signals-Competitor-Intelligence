@@ -929,8 +929,13 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     lcr_low = sorted((r for r in solvency if r.get("lcr_band") in ("crítica", "atenção")),
                      key=lambda r: r.get("lcr_pct") or 999)
     timeline = sorted(reg, key=lambda c: str(c.get("date") or ""), reverse=True)
-    impact = sorted((c for c in reg if c.get("change_record")),
-                    key=lambda c: (c.get("change_record") or {}).get("blast_radius", {}).get("score", 0),
+    # #208: the LLM change record is gated off by default (ONCA_REG_LLM, Bedrock cost), so
+    # ranking ONLY cards that carry one left "Mudanças por impacto" permanently empty under a
+    # non-zero "Maior alcance" tile. Rank every reg card: the rated blast score when present,
+    # then the sector reach the tile itself counts (len(affected_industries)).
+    impact = sorted((c for c in reg if c.get("change_record") or c.get("affected_industries")),
+                    key=lambda c: ((c.get("change_record") or {}).get("blast_radius", {}).get("score", 0),
+                                   len(c.get("affected_industries") or [])),
                     reverse=True)
     deadlines = sorted((c for c in reg if c.get("days_to_deadline") is not None),
                        key=lambda c: c.get("days_to_deadline"))
@@ -947,6 +952,8 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
                 "reg_threat": _reg_threat(sr, sev_events, floor=_floors(slug, ctx["sectors"])),
                 "reg_threat_cards": round(sum(_threat(c) for c in sr) / len(sr), 1) if sr else 0.0,
                 "n_changes": sum(1 for c in sr if (c.get("n_changes") or 0) > 0) + len(sev_events),
+                # #208: the acts-only part, so the tile can say "N atos + M eventos" honestly.
+                "n_acts_changed": sum(1 for c in sr if (c.get("n_changes") or 0) > 0),
                 "n_sector_events": len(sev_events),
                 "sector_event_severity": sev_events[0].get("severity") if sev_events else None,
                 "n_deadlines": sum(1 for c in sr if c.get("days_to_deadline") is not None),
@@ -1023,10 +1030,11 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     return {"by_industry": _by_industry(ctx["sectors"], agg), "panels": {
         # #177: top of the CRO view — industry-level regulatory events, official act first.
         "sector_events": [_sector_event_row(e) for e in sector_events[:20]],
-        "timeline": [_reg_row(c) for c in timeline[:30]],
-        "impact": [_reg_row(c) for c in impact[:20]],
-        "deadlines": [_reg_row(c) for c in deadlines[:20]],
-        "changes": [{**_reg_row(c), "changes": (c.get("changes") or [])[:6]} for c in changes[:20]],
+        "timeline": [_reg_row(c) for c in _sector_fair(timeline, ctx["sectors"], 50)],
+        "impact": [_reg_row(c) for c in _sector_fair(impact, ctx["sectors"], 20)],
+        "deadlines": [_reg_row(c) for c in _sector_fair(deadlines, ctx["sectors"], 20)],
+        "changes": [{**_reg_row(c), "changes": (c.get("changes") or [])[:6]}
+                    for c in _sector_fair(changes, ctx["sectors"], 20)],
         # ADR 022 Phase 4: prudential solvency (Índice de Basileia et al.), weakest first.
         "solvency": solvency[:25],
         "recommendations": recs,
