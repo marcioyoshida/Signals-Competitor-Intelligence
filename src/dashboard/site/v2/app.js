@@ -187,8 +187,16 @@
   // fetch() for a function-URL-backed path. Falls back to a plain fetch where
   // crypto.subtle is missing (a non-secure context, e.g. the file opened locally) —
   // there is no CloudFront on that path either, so there is nothing to sign for.
+  // #213: operator control-plane paths (/api/act, /api/run, /api/review) need the operator
+  // secret at the edge, not just the shared basic-auth. Operator pages carry it as ?opkey=;
+  // forward it as a header (CloudFront checks then strips it). Tenant pages have no ?opkey.
+  function opkeyHeader() {
+    try { const k = new URLSearchParams(global.location.search).get("opkey");
+          return k ? { "x-onca-opkey": k } : {}; } catch (e) { return {}; }
+  }
   async function oacFetch(path, opts) {
     const o = Object.assign({}, opts || {});
+    o.headers = Object.assign({}, o.headers, opkeyHeader());
     if (!(global.crypto && global.crypto.subtle)) return fetch(path, o);
     o.headers = Object.assign({}, o.headers,
       { "x-amz-content-sha256": await sha256Hex(o.body) });

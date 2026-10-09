@@ -711,6 +711,28 @@ class OncaPrototypeStack(Stack):
                 "      return { statusCode: 403, statusDescription: 'Forbidden' };\n"
                 "    }\n"
                 "  }\n"
+                "  // #213: the same shared-password gap on the operator control plane. These\n"
+                "  // paths reach origin-secret Lambdas that treat a JWT-less caller as the\n"
+                "  // OPERATOR (act_api._authorize -> elevated), so basic-auth alone let any\n"
+                "  // tenant list/edit radar subjects, roll back fields, revoke sessions, run\n"
+                "  // the pipeline. Require the operator secret: as ?opkey on the admin PAGE\n"
+                "  // (a navigation can't set headers) and as x-onca-opkey on the APIs (sent by\n"
+                "  // oacFetch from the page's ?opkey). Tenants write via /api/me/act (Cognito\n"
+                "  // JWT, untouched here). The header is stripped before the origin.\n"
+                '  var u = r.uri;\n'
+                '  if (u.indexOf("/v2/admin/") === 0) {\n'
+                "    var qa = r.querystring || {};\n"
+                f'    if (!qa.opkey || qa.opkey.value !== "{operator_secret()}") {{\n'
+                "      return { statusCode: 403, statusDescription: 'Forbidden' };\n"
+                "    }\n"
+                "  }\n"
+                '  if (u.indexOf("/api/act") === 0 || u.indexOf("/api/run") === 0 || u.indexOf("/api/review") === 0) {\n'
+                '    var ok = h["x-onca-opkey"];\n'
+                f'    if (!ok || ok.value !== "{operator_secret()}") {{\n'
+                "      return { statusCode: 403, statusDescription: 'Forbidden' };\n"
+                "    }\n"
+                '    delete h["x-onca-opkey"];\n'
+                "  }\n"
                 "  return r;\n"
                 "}\n"
             ),

@@ -865,6 +865,9 @@ async function sha256Hex(body) {
 // locally) — there is no CloudFront in that case either, so nothing to sign for.
 async function oacFetch(path, opts) {
   const o = Object.assign({}, opts || {});
+  // #213: operator paths need the operator secret at the edge — forward the page's ?opkey.
+  const opk = new URLSearchParams(location.search).get("opkey");
+  if (opk) o.headers = Object.assign({}, o.headers, { "x-onca-opkey": opk });
   if (!(self.crypto && crypto.subtle)) return fetch(path, o);
   o.headers = Object.assign({}, o.headers,
     { "x-amz-content-sha256": await sha256Hex(o.body) });
