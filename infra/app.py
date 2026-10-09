@@ -726,7 +726,10 @@ class OncaPrototypeStack(Stack):
                 '  if (u.indexOf("/v2/admin/") === 0) {\n'
                 "    var qa = r.querystring || {};\n"
                 f'    if (!qa.opkey || qa.opkey.value !== "{operator_secret()}") {{\n'
-                "      return { statusCode: 403, statusDescription: 'Forbidden' };\n"
+                "      // a PAGE: send the person to the branded 403 (JS 1.0 functions can't return a\n"
+                "      // body). The API/feed gates keep a bare 403 — their callers read the status.\n"
+                "      return { statusCode: 302, statusDescription: 'Found',\n"
+                "        headers: { location: { value: '/403.html' } } };\n"
                 "    }\n"
                 "  }\n"
                 '  if (u.indexOf("/api/act") === 0 || u.indexOf("/api/run") === 0 || u.indexOf("/api/review") === 0) {\n'

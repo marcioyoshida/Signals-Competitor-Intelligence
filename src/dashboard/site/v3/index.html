@@ -1741,10 +1741,10 @@ function render() {
       band("Mapa Competitivo · Ameaça × Momentum", "posição competitiva · ameaça atual × aceleração na janela · inferência",
         `<div class="panel"><div class="panel__bd panel__bd--flush">${scatterMap(p.momentum)}</div></div>`) +
       band("Situação", "índice de clima · inferência",
-        grid("1.4fr .9fr", [panel("Manchetes executivas", null, "maior ameaça · recente", rowsCard(p.headlines)),
-                            panel("Sinais emergentes", null, "janela recente", rowsCard(p.emerging))])) +
+        grid("1.4fr .9fr", [panel("Manchetes executivas", ofN(p.headlines, a.n_headlines), "maior ameaça · recente", rowsCard(p.headlines)),
+                            panel("Sinais emergentes", ofN(p.emerging, a.n_emerging), "janela recente", rowsCard(p.emerging))])) +
       band("Riscos & Oportunidades", "", grid("1fr 1fr", [panel("Radar de risco", ofN(p.risks, a.n_alerts), "alertas", rowsCard(p.risks)),
-                            panel("Radar de oportunidade", null, "fraqueza do concorrente", rowsCard(p.opportunities))])) +
+                            panel("Radar de oportunidade", ofN(p.opportunities, a.n_opportunities), "fraqueza do concorrente", rowsCard(p.opportunities))])) +
       band("Inteligência competitiva", "momentum na janela · inferência",
         grid("1fr 1fr", [panel("Momentum do concorrente", null, "↑ ganha · ↓ recua", rowsMomentum(p.momentum)),
                         panel("Movimentos estratégicos", ofN(p.moves, a.n_moves), "entrada·oferta·M&A", rowsCard(p.moves))])) +

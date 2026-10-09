@@ -628,6 +628,10 @@ def build_cso(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         return {"climate": _climate_index(sc, len(sdist)), "n_cards": n,
                 # #215: the M in "Mudanças por alcance · N de M".
                 "n_reg": len(sreg),
+                # the M for Manchetes / Sinais emergentes / Radar de oportunidade (sector-fair caps).
+                "n_headlines": sum(1 for c in news if _in_industry(c, slug)),
+                "n_emerging": sum(1 for c in emerging if _in_industry(c, slug)),
+                "n_opportunities": sum(1 for c in opps if _in_industry(c, slug)),
                 "n_alerts": sum(1 for c in sc if c.get("is_alert")),
                 "avg_threat": round(sum(_threat(c) for c in sc) / n, 1) if n else 0.0,
                 "reg_threat": _reg_threat(sreg, _sector_events(feed, slug),

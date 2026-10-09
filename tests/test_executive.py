@@ -771,3 +771,15 @@ def test_all_sectors_solvency_and_roe_are_the_union():
     cso = ex["cso"]["by_industry"]
     if any(cso[s]["avg_roe"] is not None for s in secs):
         assert cso[executive.ALL]["avg_roe"] is not None
+
+
+def test_cso_capped_panels_ship_their_totals():
+    """Manchetes / Sinais emergentes / Radar de oportunidade: the page shows "N de M", so each
+    sector bucket must carry M, and M can never be below the rows shipped for that sector."""
+    cso = executive.build_executive(_feed())["cso"]
+    P = cso["panels"]
+    for slug, a in cso["by_industry"].items():
+        for key, panel in (("n_headlines", "headlines"), ("n_emerging", "emerging"),
+                           ("n_opportunities", "opportunities")):
+            shipped = [r for r in P[panel] if slug == executive.ALL or executive._in_industry(r, slug)]
+            assert a[key] >= len(shipped), (slug, key)
