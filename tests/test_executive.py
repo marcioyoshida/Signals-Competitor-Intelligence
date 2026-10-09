@@ -717,3 +717,15 @@ def test_exec_panel_text_carries_no_inline_urls():
     executive._plain_titles(out)
     row = out["cso"]["panels"]["headlines"][0]
     assert row["title"] == "Itaú lançou fundo" and row["url"] == "https://news.google.com/a"
+
+
+def test_sector_fair_keeps_every_sectors_head():
+    """#207: a busy sector filling the global top-N must not leave another sector's panel empty."""
+    items = ([{"id": f"b{i}", "industries": ["banking"]} for i in range(40)]
+             + [{"id": f"f{i}", "industries": ["fintech"]} for i in range(5)])
+    sectors = [{"slug": "banking"}, {"slug": "fintech"}]
+    out = executive._sector_fair(items, sectors, 30)
+    assert [c["id"] for c in out if "fintech" in c["industries"]] == [f"f{i}" for i in range(5)]
+    assert sum(1 for c in out if "banking" in c["industries"]) == 30
+    assert out == [c for c in items if c in out]  # input (rank) order preserved
+    assert executive._sector_fair(items, [], 30) == items[:30]

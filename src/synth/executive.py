@@ -289,6 +289,21 @@ def _momentum_for_panel(rows: list[dict[str, Any]], sectors: list[dict[str, str]
     return [r for r in ranked if r.get("entity") in keep]
 
 
+def _sector_fair(items: list[dict[str, Any]], sectors: list[dict[str, str]], n: int) -> list[dict[str, Any]]:
+    """Cap a ranked card list at `n` overall AND `n` per sector, keeping the input order (#207).
+
+    Same reason as `_momentum_for_panel`: the client filters these panels per sector, so a blind
+    global `items[:n]` let one busy sector fill every slot — fintech's RADAR DE RISCO rendered
+    0 rows under a "63 alertas" tile. Ship the union of the global head and each sector's head.
+    """
+    keep = {id(c) for c in items[:n]}
+    for s in sectors or []:
+        slug = s.get("slug")
+        if slug:
+            keep.update(id(c) for c in [c for c in items if _in_industry(c, slug)][:n])
+    return [c for c in items if id(c) in keep]
+
+
 def _by_industry(sectors: list[dict[str, str]], fn) -> dict[str, Any]:
     """Apply an aggregate builder `fn(slug)` for every sector + __all__."""
     return {slug: fn(slug) for slug in [ALL] + [s["slug"] for s in sectors]}
@@ -671,11 +686,11 @@ def build_cso(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
             # pilot-persona loop: the delta-framed weekly brief that turns the CSO board into a
             # ritual (what changed this week + the decision each invites).
             "weekly": build_cso_weekly(feed, ctx), "panels": {
-        "headlines": [_headline_cso(c) for c in headlines[:30]],
-        "emerging": [_headline_cso(c) for c in emerging[:20]],
-        "risks": [_headline_cso(c) for c in risks[:30]],
-        "opportunities": [_headline_cso(c) for c in opps[:20]],
-        "moves": [_headline_cso(c) for c in moves[:20]],
+        "headlines": [_headline_cso(c) for c in _sector_fair(headlines, ctx["sectors"], 30)],
+        "emerging": [_headline_cso(c) for c in _sector_fair(emerging, ctx["sectors"], 20)],
+        "risks": [_headline_cso(c) for c in _sector_fair(risks, ctx["sectors"], 30)],
+        "opportunities": [_headline_cso(c) for c in _sector_fair(opps, ctx["sectors"], 20)],
+        "moves": [_headline_cso(c) for c in _sector_fair(moves, ctx["sectors"], 20)],
         # #143: capital-social moves — the expansion read that sits next to entrants/ofertas.
         "capital_moves": capital_rows[:20],
         "momentum": _momentum_for_panel(momentum, ctx["sectors"]),
