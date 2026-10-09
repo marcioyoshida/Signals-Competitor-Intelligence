@@ -931,11 +931,12 @@ function declutterLabels(cands) {
   const placed = [];
   cands.forEach(c => {
     let y = c.y;
-    let moved = true;
-    while (moved) {
+    let moved = true, guard = placed.length + 1;
+    // EPS: after y = p.py + GAP, float rounding can leave |p.py - y| at 12.999… (< GAP) and loop forever (#206).
+    while (moved && guard-- > 0) {
       moved = false;
       for (const p of placed) {
-        if (Math.abs(p.x - c.x) < XR && Math.abs(p.py - y) < GAP) { y = p.py + GAP; moved = true; }
+        if (Math.abs(p.x - c.x) < XR && Math.abs(p.py - y) < GAP - 1e-6) { y = p.py + GAP; moved = true; }
       }
     }
     placed.push({ ...c, py: y });
