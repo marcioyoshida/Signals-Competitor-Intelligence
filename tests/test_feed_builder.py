@@ -976,3 +976,30 @@ def test_an_empty_vertical_yields_an_empty_sample_not_a_crash():
     assert sample["feed"] == [] and sample["entities"] == []
     assert sample["sample_of"] == "consorcio"
     assert sample["kpis"]["narratives_total"] == 0
+
+
+def test_entry_industry_summary_counts_the_entry_slice():
+    """#222: the Entry Cobertura drawer must summarise the slice the tenant receives, not the
+    full store ("57 narr · 174 ent" against a page showing 36 cards / 20 entities)."""
+    feed = {
+        "run_date": "2026-10-09",
+        "feed": [
+            {"id": "a", "entity": "e1", "industries": ["agri-funds"], "date": "2026-10-09",
+             "is_alert": True, "threat_score": 0.7},
+            {"id": "b", "entity": "e2", "industries": ["agri-funds"], "date": "2026-10-08",
+             "threat_score": 0.2},
+        ],
+        "entities": [{"entity": "e1", "industries": ["agri-funds"]},
+                     {"entity": "e2", "industries": ["agri-funds"]}],
+        "entity_attrs": {"e1": {"industries": ["agri-funds"]}, "e2": {"industries": ["agri-funds"]}},
+        "industries": [{"slug": "agri-funds", "narratives": 57, "entities": 174, "alerts": 34,
+                        "narratives_latest": 2, "active_entities": 30, "covered": True}],
+    }
+    entry = feed_builder.derive_entry_feed(feed, industries=("agri-funds",))
+    row = entry["industries"][0]
+    shown = len(entry["feed"])
+    assert row["narratives"] == shown == entry["kpis"]["narratives_total"]
+    assert row["entities"] == len(entry["entities"]) == entry["kpis"]["entities_tracked"]
+    assert row["narratives_latest"] == entry["kpis"]["narratives_latest"]
+    assert row["alerts"] == sum(1 for c in entry["feed"] if c.get("is_alert"))
+    assert row["covered"] is True  # coverage flags are pipeline facts, kept

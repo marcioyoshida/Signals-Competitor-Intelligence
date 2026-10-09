@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 
 import yaml
-from edge_policy import exec_exemption_js, site_paths_js
+from edge_policy import exec_exemption_js, public_paths_js, site_paths_js
 from aws_cdk import App, ArnFormat, CfnOutput, Duration, RemovalPolicy, SecretValue, Size, Stack, Tags
 from aws_cdk import aws_bedrock as bedrock
 from aws_cdk import aws_apigatewayv2 as apigwv2
@@ -817,6 +817,7 @@ class OncaPrototypeStack(Stack):
                 '                 "/docs": "/docs/index.html",\n'
                 '                 "/docs/": "/docs/index.html" };\n'
                 "  if (routes[r.uri]) { r.uri = routes[r.uri]; }\n"
+                + public_paths_js(SITE_ASSET) +
                 "  return r;\n"
                 "}\n"
             ),

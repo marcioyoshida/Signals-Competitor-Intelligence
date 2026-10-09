@@ -24,6 +24,10 @@ EXEC_PUBLIC_URIS: tuple[str, ...] = (
     "/v3/icons/icon-maskable-512.png",
     "/v3/icons/apple-touch-icon.png",
     "/v3/og.png",                     # #170 generic share preview image
+    # #221: the branded error pages (static, no data) — the public /docs and /sample behaviors
+    # redirect unknown paths to /404.html, and a visitor there has no shared password.
+    "/404.html",
+    "/403.html",
 )
 
 
@@ -100,5 +104,27 @@ def site_paths_js(site_root) -> str:
         '    } else if (!siteFiles[ru] && last.substring(last.lastIndexOf(".")) !== ".json") {\n'
         f'      redir = "{NOT_FOUND_PAGE}";\n'
         "    }\n"
+        "  }\n"
+    )
+
+
+def public_paths_js(site_root, prefixes=("/docs", "/sample")) -> str:
+    """#221: the auth-free public function (/docs*, /sample*) had only the index rewrite, so an
+    unknown public path got S3's raw AccessDenied XML. Same rule as site_paths_js, scoped to the
+    public prefixes: a real file passes; an extensionless path whose `.html` exists gets a 301 to
+    it (/docs/privacy -> /docs/privacy.html); anything else under the prefixes -> /404.html.
+    Needs `r` in scope; returns early with the redirect itself (no auth step on this side)."""
+    pre = tuple(prefixes)
+    files = [f for f in site_files(site_root) if f.startswith(tuple(p + "/" for p in pre))]
+    entries = ", ".join(f'"{f}": 1' for f in files)
+    conds = " || ".join(f'u === "{p}" || u.indexOf("{p}/") === 0' for p in pre)
+    return (
+        "  // #221: unknown public paths -> branded 404 (infra/edge_policy.py public_paths_js).\n"
+        f"  var pubFiles = {{ {entries} }};\n"
+        "  var u = r.uri;\n"
+        f"  if (({conds}) && !pubFiles[u]) {{\n"
+        '    var loc = pubFiles[u + ".html"] ? u + ".html" : "' + NOT_FOUND_PAGE + '";\n'
+        "    return { statusCode: loc === \"" + NOT_FOUND_PAGE + "\" ? 302 : 301, statusDescription: 'Redirect',\n"
+        "      headers: { location: { value: loc } } };\n"
         "  }\n"
     )

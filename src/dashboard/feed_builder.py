@@ -1017,6 +1017,31 @@ def scope_feed_to_modules(feed: dict[str, Any], modules: Any) -> dict[str, Any]:
     return out
 
 
+def _entry_industry_row(
+    row: dict[str, Any], feed_items: list[dict[str, Any]], latest_items: list[dict[str, Any]],
+    entities: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """#222: the Entry page's Cobertura drawer read the FULL pipeline's industry summary (every
+    narrative in the store, the registry's entity universe: "57 narr · 174 ent · 34 alrt") while
+    the page itself shows the Entry slice (36 shallow cards, 20 monitored entities). Recompute the
+    counts on the slice the tenant actually receives, so the drawer and the header agree. Coverage
+    flags (covered/low_volume/coverage_gap/sales tier) are pipeline facts and are kept."""
+    slug = row.get("slug")
+    cards = [c for c in feed_items if slug in (c.get("industries") or [])]
+    ents = [e for e in entities if slug in (e.get("industries") or [])]
+    active = {c.get("entity") for c in cards if c.get("entity")}
+    scores = [float(c.get("threat_score") or 0) for c in cards]
+    return {
+        **row,
+        "narratives": len(cards),
+        "narratives_latest": sum(1 for c in latest_items if slug in (c.get("industries") or [])),
+        "alerts": sum(1 for c in cards if c.get("is_alert")),
+        "entities": len(ents),
+        "active_entities": len(active),
+        "peak_score": round(max(scores), 2) if scores else 0.0,
+    }
+
+
 def derive_entry_feed(
     feed: dict[str, Any], *, industries: Any = ENTRY_INDUSTRIES
 ) -> dict[str, Any]:
@@ -1100,7 +1125,11 @@ def derive_entry_feed(
                 "sources": len(sources),
                 "narratives_total": len(feed_items),
             },
-            "industries": [i for i in (feed.get("industries") or []) if i.get("slug") in keep],
+            # #222: counts recomputed on the slice the Entry tenant receives (see helper).
+            "industries": [
+                _entry_industry_row(i, feed_items, latest_items, entities)
+                for i in (feed.get("industries") or []) if i.get("slug") in keep
+            ],
             "industry_options": [
                 o for o in (feed.get("industry_options") or []) if o.get("slug") in keep
             ],
