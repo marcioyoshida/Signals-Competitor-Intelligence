@@ -234,6 +234,18 @@
   /* CPO charts (inline, token-based, dual-theme) */
   .chart { padding:var(--s3) var(--s4); }
   .crow { display:grid; grid-template-columns:150px 1fr 92px; align-items:center; gap:var(--s3); padding:5px 0; }
+  /* #210: a value + badge wider than the 92px column ("R$1191bi" + "N emissor(es)") wraps to
+     two lines inside it instead of overflowing leftward onto the bar fill. Growing the column
+     instead squeezed the bar track to a stub. */
+  .crow .cv { flex-wrap: wrap; row-gap: 2px; min-width: 0; }
+  /* #210: a side-by-side band no longer stretches a 2-row panel to its tallest neighbour
+     (504px for 83px of content), and a panel whose body is only an empty state collapses to a
+     one-line "sem dados" strip instead of a 145–504px box. */
+  #board .grid { align-items: start; }
+  #board .panel .empty:only-child { flex-direction: row; justify-content: flex-start; gap: var(--s2);
+    padding: var(--s2) var(--s4); text-align: left; flex-wrap: wrap; }
+  #board .panel .empty:only-child .em-ico { font-size: 14px; }
+  #board .panel .empty:only-child .em-d::before { content: "· "; }
   .crow .cl { font-size:var(--fs-sm); color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .crow .cv { text-align:right; font-variant-numeric:tabular-nums; font-size:var(--fs-meta); color:var(--ink-2); display:flex; gap:var(--s2); justify-content:flex-end; align-items:center; }
   .bar { height:14px; border-radius:var(--r-sm); background:var(--surface-3); overflow:hidden; }
