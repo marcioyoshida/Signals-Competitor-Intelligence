@@ -304,6 +304,15 @@ def _sector_fair(items: list[dict[str, Any]], sectors: list[dict[str, str]], n: 
     return [c for c in items if id(c) in keep]
 
 
+def _fair_totals(rows: list[dict[str, Any]], sectors: list[dict[str, str]], n: int,
+                 totals: dict[str, Any], key: str) -> list[dict[str, Any]]:
+    """`_sector_fair` + record the panel's true per-sector size in `totals[key]` (#218), so the
+    page can say "N de M" instead of silently showing the first N (and no sector is starved)."""
+    totals[key] = {slug: sum(1 for r in rows if _in_industry(r, slug))
+                   for slug in [ALL] + [s["slug"] for s in sectors or [] if s.get("slug")]}
+    return _sector_fair(rows, sectors, n)
+
+
 def _by_industry(sectors: list[dict[str, str]], fn) -> dict[str, Any]:
     """Apply an aggregate builder `fn(slug)` for every sector + __all__."""
     return {slug: fn(slug) for slug in [ALL] + [s["slug"] for s in sectors]}
@@ -701,18 +710,21 @@ def build_cso(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         # #143: capital-social moves — the expansion read that sits next to entrants/ofertas.
         "capital_moves": capital_rows[:20],
         "momentum": _momentum_for_panel(momentum, ctx["sectors"]),
+        # #218: true per-sector sizes of the capped panels ("N de M" on the page).
+        "totals": (tot := {"momentum": {slug: sum(1 for m in momentum if slug == ALL or slug in (m.get("industries") or []))
+                                         for slug in [ALL] + [x["slug"] for x in ctx["sectors"]]}}),
         "regulatory": [_reg_row(c) for c in _sector_fair(reg_sorted, ctx["sectors"], 20)],
         # ADR 022 Tier-1: competitor financial strength (ROE/ROA/leverage/headroom/share), inference.
         "financials": financials[:25],
         # SURF-1: strategic posture — SWOT beliefs + TOWS postures routed to the CSO.
-        "posture": _posture_rows(feed)[:24],
+        "posture": _fair_totals(_posture_rows(feed), ctx["sectors"], 24, tot, "posture"),
         # SURF-2: competitive frameworks (Porter five-forces + Four Corners) routed to the CSO.
-        "porter": _framework_rows(feed, "porter")[:20],
-        "four_corners": _framework_rows(feed, "four_corners")[:20],
+        "porter": _fair_totals(_framework_rows(feed, "porter"), ctx["sectors"], 20, tot, "porter"),
+        "four_corners": _fair_totals(_framework_rows(feed, "four_corners"), ctx["sectors"], 20, tot, "four_corners"),
         # SURF-7: forward-look — predictive (horizon) + ecosystem (infrastructure hubs), inference.
         "forward_look": _axis_rows(feed, "horizon_days", "hub")[:24],
         # SURF-11: behavioral patterns (drumbeat / multi-front) — peer-cohort read.
-        "behavioral": _axis_rows(feed, "pattern")[:20],
+        "behavioral": _fair_totals(_axis_rows(feed, "pattern"), ctx["sectors"], 20, tot, "behavioral"),
         # SURF-6: relational graph (co-mention / convergence / dispute), review-gated upstream.
         "relational": _axis_rows(feed, "relation")[:20],
         "recommendations": recs,
@@ -1187,9 +1199,10 @@ def build_cco(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         "reputation": rep_rows[:30],
         # SURF-3: PESTLE macro/regulatory environment routed to the CCO (7S dropped — internal,
         # no external signal to ground it).
-        "pestle": _framework_rows(feed, "pestle")[:20],
+        "totals": (tot := {}),  # #218
+        "pestle": _fair_totals(_framework_rows(feed, "pestle"), ctx["sectors"], 20, tot, "pestle"),
         # SURF-10: compliance change-diff — enumerated article changes + deadlines.
-        "change_diff": _change_diff_rows(feed, ctx["reg_cards"])[:24],
+        "change_diff": _fair_totals(_change_diff_rows(feed, ctx["reg_cards"]), ctx["sectors"], 24, tot, "change_diff"),
         "recommendations": recs,
     }}
 
@@ -1498,12 +1511,13 @@ def build_cpo(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         "discovery": disc_rows[:40],
         "field_completeness": field_completeness,
         # SURF-4: growth/portfolio frameworks (Ansoff vectors + BCG quadrant) routed to the CPO.
-        "ansoff": _framework_rows(feed, "ansoff")[:20],
-        "bcg": _framework_rows(feed, "bcg")[:20],
+        "totals": (tot := {}),  # #218
+        "ansoff": _fair_totals(_framework_rows(feed, "ansoff"), ctx["sectors"], 20, tot, "ansoff"),
+        "bcg": _fair_totals(_framework_rows(feed, "bcg"), ctx["sectors"], 20, tot, "bcg"),
         # SURF-5: product-move feed — launches/offers (ofertas/produto lens) for the CPO.
-        "product_moves": [_headline(c) for c in sorted(
+        "product_moves": [_headline(c) for c in _fair_totals(sorted(
             (c for c in ctx["cards"] if set(c.get("lenses") or []) & {"ofertas", "produto"}),
-            key=lambda c: str(c.get("date") or ""), reverse=True)[:24]],
+            key=lambda c: str(c.get("date") or ""), reverse=True), ctx["sectors"], 24, tot, "product_moves")],
         # #159: CPO Product Radar — App Store baseline alerts + dated product changes (YouTube).
         "product_radar": _product_radar(feed),
         "soundness_coverage": soundness_coverage,               # ADR 022 (CPO instrumentation angle)

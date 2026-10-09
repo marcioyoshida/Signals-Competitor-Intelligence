@@ -221,6 +221,10 @@
   .traj[data-sev="high"] { border-left-color:var(--t-high); }
   .traj[data-sev="med"]  { border-left-color:var(--warn); }
   .traj-hd { display:flex; align-items:center; gap:var(--s2); margin-bottom:var(--s2); }
+  /* #219: a long provenance badge in a band header ("Telemetria bruta por fonte · erro/defasagem…",
+     operator view) pushed the page 34px wider at 1280 — wrap at every width, not only on phones. */
+  .band > .band-hd { flex-wrap: wrap; row-gap: 4px; }
+  .band > .band-hd .badge { white-space: normal; overflow-wrap: anywhere; max-width: 100%; }
   .traj-t { font-weight:600; font-size:var(--fs-sm); color:var(--ink); flex:1; line-height:1.3; }
   .traj-b { font-size:var(--fs-meta); color:var(--ink-2); line-height:1.45; }
   .traj-f { display:flex; align-items:center; gap:var(--s2); margin-top:var(--s3); font-size:var(--fs-micro); flex-wrap:wrap; }
@@ -304,6 +308,16 @@
     /* #212: the sector-event meta badge ("ato oficial · 3 veículo(s) · 125 entidades afetadas")
        is nowrap and 319px wide — wrap it inside the 350px panel body. */
     .exrow--sector .meta .badge { white-space: normal; overflow-wrap: anywhere; max-width: 100%; }
+    /* #219 (operator view at 375): decision-card headers and the outcome-review "due" rows
+       (badge · text · verdict · select · checkbox) are single flex lines — wrap them. */
+    /* #218 follow-up: panel headers now carry an "N de M" count, which left the long note
+       ("penetração·desenvolvimento·diversificação") 3px past a 375px screen — let it shrink/wrap. */
+    .panel__hd { flex-wrap: wrap; row-gap: 2px; }
+    .panel__hd .hd-note { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+    .traj-hd { flex-wrap: wrap; }
+    .traj-hd > * { min-width: 0; overflow-wrap: anywhere; }
+    .due-row { flex-wrap: wrap; row-gap: 4px; }
+    .due-row > span[style*="flex:1"] { flex-basis: 100% !important; }
     /* #212: single long words inside a row title ("INSTRUMENTAÇÃO", "tom↑vs números↓") overran
        the panel by 3-13px; let them break on a phone. */
     .exrow .ttl { overflow-wrap: anywhere; }
@@ -777,6 +791,8 @@ function block() { return EX[OFFICER] || {}; }
 function agg() { const bi = block().by_industry || {}; return bi[SECTOR] || bi.__all__ || {}; }
 
 // #208: a panel header count that admits a server cap — "30 de 36" instead of a silent 30.
+// #218: a server-capped panel's true size for the current sector (panels.totals[key][SECTOR]).
+function totN(p, key) { const t = ((p || {}).totals || {})[key]; return t ? t[SECTOR] : null; }
 function ofN(list, total) {
   const shown = (list || []).filter(inSector).length;
   return total != null && shown < total ? `${shown} de ${total}` : shown;
@@ -1134,7 +1150,7 @@ function rowsMomentum(list) {
   list = (list || []).filter(inSector);
   if (!list.length) return U.empty("Sem momentum na janela.", "", "○");
   const max = Math.max(1, ...list.map(r => Math.abs(r.momentum)));
-  return list.slice(0, 25).map(r => {
+  return list.map(r => {  // #218: no client cap; the server ships a sector-fair list
     const up = r.momentum >= 0, w = Math.round(Math.abs(r.momentum) / max * 48) + 1;
     return `<div class="mom"><span class="lbl" title="${U.esc(r.label)}">${U.esc(r.label)}</span>
       <span class="track"><i class="${up ? "up" : "down"}" style="width:${w}%"></i></span>
@@ -1746,14 +1762,14 @@ function render() {
       band("Riscos & Oportunidades", "", grid("1fr 1fr", [panel("Radar de risco", ofN(p.risks, a.n_alerts), "alertas", rowsCard(p.risks)),
                             panel("Radar de oportunidade", ofN(p.opportunities, a.n_opportunities), "fraqueza do concorrente", rowsCard(p.opportunities))])) +
       band("Inteligência competitiva", "momentum na janela · inferência",
-        grid("1fr 1fr", [panel("Momentum do concorrente", null, "↑ ganha · ↓ recua", rowsMomentum(p.momentum)),
+        grid("1fr 1fr", [panel("Momentum do concorrente", ofN(p.momentum, totN(p, "momentum")), "↑ ganha · ↓ recua", rowsMomentum(p.momentum)),
                         panel("Movimentos estratégicos", ofN(p.moves, a.n_moves), "entrada·oferta·M&A", rowsCard(p.moves))])) +
       band("Capital social", "ato societário registrado em junta comercial · Receita Federal · o ato em si não é público (#26)",
         panel("Movimentos de capital social", null, "valor anterior → atual", rowsCapital(p.capital_moves))) +
       band("Trajetória de ameaça", "linha do tempo · ameaça média diária por concorrente · inferência",
         `<div class="panel"><div class="panel__bd panel__bd--flush">${threatTimeline(p.momentum)}</div></div>`) +
       band("Postura estratégica", "SWOT + TOWS · beliefs vetados (ADR-006)",
-        panel("Concorrentes por postura", null, "S·W·O·T + postura TOWS", rowsPosture(p.posture))) +
+        panel("Concorrentes por postura", ofN(p.posture, totN(p, "posture")), "S·W·O·T + postura TOWS", rowsPosture(p.posture))) +
       band("Força financeira dos concorrentes", "ROE·ROA·alavancagem·eficiência·share de lucro · IF.data + balancete · inferência",
         panel("Rentabilidade & eficiência (maior ROE primeiro)", null, "ROE anual · ROA · alav · opex/ativo · headroom · share", rowsFinancials(p.financials))) +
       band("Mercado · Cotações B3", "concorrentes listados no escopo · Yahoo Finance · ~60s",
@@ -1880,28 +1896,28 @@ function render() {
   // SURF-2/3/4: framework belief bands routed per officer (ADR-006 curated, evidence-linked).
   if (OFFICER === "cso") board +=
     band("Cinco forças de Porter", "rivalidade·entrantes·substitutos·poder · beliefs vetados",
-      panel("Concorrentes por força", null, "dimensão · avaliação", rowsFramework(p.porter))) +
+      panel("Concorrentes por força", ofN(p.porter, totN(p, "porter")), "dimensão · avaliação", rowsFramework(p.porter))) +
     band("Quatro Cantos (Four Corners)", "motivação·premissas·estratégia·capacidades",
-      panel("Concorrentes por canto", null, "dimensão · avaliação", rowsFramework(p.four_corners))) +
+      panel("Concorrentes por canto", ofN(p.four_corners, totN(p, "four_corners")), "dimensão · avaliação", rowsFramework(p.four_corners))) +
     band("Visão prospectiva", "previsão (horizonte) + ecossistema (hubs) · inferência",
       panel("Sinais prospectivos", null, "horizonte · hub · expostos", rowsAxis(p.forward_look))) +
     band("Padrões & relações", "comportamento (drumbeat/multi-frente) + rede de controle",
-      grid("1fr 1fr", [panel("Padrões comportamentais", null, "cadência de sinal", rowsAxis(p.behavioral)),
+      grid("1fr 1fr", [panel("Padrões comportamentais", ofN(p.behavioral, totN(p, "behavioral")), "cadência de sinal", rowsAxis(p.behavioral)),
                        panel("Rede de controle", null, "concorrentes sob controle comum · QSA · toda a base", controlNetwork(DATA.graph_proposals, DATA.entities))]));
   else if (OFFICER === "cco") board +=
     band("Diff de conformidade", "o que mudou (artigos) + prazo · reg_change/reg_diff",
-      panel("Mudanças enumeradas por norma", null, "artigos alterados · prazo", rowsChangeDiff(p.change_diff))) +
+      panel("Mudanças enumeradas por norma", ofN(p.change_diff, totN(p, "change_diff")), "artigos alterados · prazo", rowsChangeDiff(p.change_diff))) +
     band("Ambiente PESTLE", "político·econômico·social·tecnológico·legal·ambiental · beliefs vetados",
-      panel("Entidades por dimensão", null, "dimensão · avaliação", rowsFramework(p.pestle)));
+      panel("Entidades por dimensão", ofN(p.pestle, totN(p, "pestle")), "dimensão · avaliação", rowsFramework(p.pestle)));
   else if (OFFICER === "cpo") board +=
     band("Radar de produto", "App Store vs linha de base (≥10/dia, z ≥3) · mudanças datadas em vídeos",
       panel("Eventos de produto dos concorrentes", ((p.product_radar || {}).events || []).filter(inSector).length,
         "mais recente primeiro · fontes linkadas", rowsRadar(p.product_radar))) +
     band("Movimentos de produto", "lançamentos & ofertas · lente ofertas/produto",
-      panel("Feed de produto", null, "mais recente primeiro", rowsCard(p.product_moves))) +
+      panel("Feed de produto", ofN(p.product_moves, totN(p, "product_moves")), "mais recente primeiro", rowsCard(p.product_moves))) +
     band("Crescimento (Ansoff) & portfólio (BCG)", "vetores de crescimento · quadrante · beliefs vetados",
-      grid("1fr 1fr", [panel("Ansoff", null, "penetração·desenvolvimento·diversificação", rowsFramework(p.ansoff)),
-                       panel("BCG", null, "estrela·vaca·interrogação·abacaxi", rowsFramework(p.bcg))]));
+      grid("1fr 1fr", [panel("Ansoff", ofN(p.ansoff, totN(p, "ansoff")), "penetração·desenvolvimento·diversificação", rowsFramework(p.ansoff)),
+                       panel("BCG", ofN(p.bcg, totN(p, "bcg")), "estrela·vaca·interrogação·abacaxi", rowsFramework(p.bcg))]));
   el.innerHTML = flowBand() + board + silenceBand() + outcomesDueBand() + metricsBand() + referenceBand();
   if (OFFICER === "cso") loadQuotes();  // async B3 market pulse (fills #b3ticker post-render)
   // Click the headline to expand/collapse it inline (doesn't open the drawer); an expand is
@@ -2082,6 +2098,9 @@ async function renderPushBox(note) {
   const sub = await pushSub().catch(() => null);
   let state = null;
   if (sub) { try { state = await pushApi(`/api/me/push?endpoint=${encodeURIComponent(sub.endpoint)}`, null, "GET"); } catch (e) {} }
+  // #217: same race as renderDigestBox (9ba0e41) — a view/officer switch during the awaits
+  // detaches this box; the fresh render has its own call.
+  if (!box.isConnected) return;
   const on = !!(sub && state && state.subscribed);
   const types = (on && state.prefs && state.prefs.types) || PUSH_DEFAULT[OFFICER] || PUSH_DEFAULT.cso;
   box.innerHTML = `<div style="padding:0 var(--s3) var(--s3)">
@@ -2091,9 +2110,9 @@ async function renderPushBox(note) {
     <button class="btn ${on ? "" : "btn--primary"} hoje-act" id="pushToggle" type="button">${on ? "Desativar alertas neste aparelho" : "Ativar alertas neste aparelho"}</button>
     ${on ? `<button class="btn hoje-act" id="pushSave" type="button">Salvar tipos</button>` : ""}
     <span class="hd-note" id="pushMsg">${U.esc(note || "")}</span></div>`;
-  const msg = (t) => { const e = document.getElementById("pushMsg"); if (e) e.textContent = t; };
+  const msg = (t) => { const e = box.querySelector("#pushMsg"); if (e) e.textContent = t; };
   const chosen = () => [...box.querySelectorAll(".ptype:checked")].map(x => x.value);
-  document.getElementById("pushToggle").onclick = async () => {
+  box.querySelector("#pushToggle").onclick = async () => {
     let note = "";
     try {
       if (on) { await disablePush(); note = "alertas desativados"; }
@@ -2109,7 +2128,7 @@ async function renderPushBox(note) {
     } catch (e) { note = "não foi possível ativar neste navegador (" + (e.message || e) + ")"; }
     renderPushBox(note);
   };
-  const save = document.getElementById("pushSave");
+  const save = box.querySelector("#pushSave");
   if (save) save.onclick = async () => {
     try { await pushApi("/api/me/push/subscribe", { subscription: sub.toJSON(), officer: OFFICER, prefs: { types: chosen() } }); msg("tipos salvos"); }
     catch (e) { msg("falha ao salvar"); }

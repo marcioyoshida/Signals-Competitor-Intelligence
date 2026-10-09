@@ -61,15 +61,31 @@ def site_index_dirs(site_root) -> list[str]:
     return out
 
 
+def site_files(site_root) -> list[str]:
+    """Every static file the site deploys, as '/path' (#220). The bucket holds exactly these plus
+    the pipeline-written feed*.json, which is why .json is exempt from the unknown-file rule."""
+    from pathlib import Path
+
+    root = Path(site_root)
+    return sorted("/" + p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file())
+
+
+FAVICON_TARGET = "/v3/icons/icon-192.png"
+
+
 def site_paths_js(site_root) -> str:
     """Snippet: sets `redir` (a Location) for a directory-without-slash or an unknown path.
     Needs `r`, `key` and `routes` in scope; must run on the RAW uri, BEFORE the clean-route and
     trailing-slash rewrites (clean routes and /exec are skipped); the caller returns the
     redirect only after basic auth, so an unauthenticated probe still gets the 401."""
     entries = ", ".join(f'"{d}": 1' for d in site_index_dirs(site_root))
+    files = ", ".join(f'"{f}": 1' for f in site_files(site_root))
     return (
         "  // #216: directory redirects + branded 404 (infra/edge_policy.py site_paths_js).\n"
         f"  var siteDirs = {{ {entries} }};\n"
+        "  // #220: the real static files; any other path WITH an extension (not .json — the\n"
+        "  // pipeline writes feed*.json) used to get S3's raw AccessDenied XML.\n"
+        f"  var siteFiles = {{ {files} }};\n"
         "  var redir = null;\n"
         "  function qs(q) { var o = []; for (var k in q) { o.push(k + (q[k].value !== '' ? '=' + q[k].value : '')); }\n"
         "    return o.length ? '?' + o.join('&') : ''; }\n"
@@ -80,6 +96,9 @@ def site_paths_js(site_root) -> str:
         f'      if (!siteDirs[ru]) {{ redir = "{NOT_FOUND_PAGE}"; }}\n'
         '    } else if (last.indexOf(".") === -1) {\n'
         f'      redir = siteDirs[ru + "/"] ? ru + "/" + qs(r.querystring || {{}}) : "{NOT_FOUND_PAGE}";\n'
+        f'    }} else if (ru === "/favicon.ico") {{ redir = "{FAVICON_TARGET}";\n'
+        '    } else if (!siteFiles[ru] && last.substring(last.lastIndexOf(".")) !== ".json") {\n'
+        f'      redir = "{NOT_FOUND_PAGE}";\n'
         "    }\n"
         "  }\n"
     )

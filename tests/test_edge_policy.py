@@ -53,3 +53,18 @@ def test_site_paths_redirects_dirs_and_unknown_paths():
     for ok in ("/", "/v2/app/", "/index.html", "/feed.json", "/app", "/admin", "/exec",
                "/api/act", "/api/run/", "/v3/index.html", "/404.html"):
         assert _run_fn(ok) is None, ok
+
+
+def test_unknown_files_go_to_404_and_favicon_to_the_icon():
+    """#220: a missing path WITH an extension got S3's raw AccessDenied XML."""
+    import shutil
+    if not shutil.which("node"):
+        import pytest
+        pytest.skip("node not installed")
+    assert _run_fn("/favicon.ico") == edge_policy.FAVICON_TARGET
+    for missing in ("/robots.txt", "/x.js", "/missing.html", "/v2/nope.css"):
+        assert _run_fn(missing) == "/404.html", missing
+    for ok in ("/v2/app.js", "/v2/app.css", "/v3/manifest.webmanifest", "/exec-sw.js",
+               "/feed.json", "/feed.entry.json", "/anything.json", "/403.html", "/404.html",
+               edge_policy.FAVICON_TARGET):
+        assert _run_fn(ok) is None, ok
