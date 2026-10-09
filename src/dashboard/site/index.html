@@ -38,6 +38,7 @@
   header h1 { font-size: 17px; margin: 0; letter-spacing: .2px; }
   header .sub { color: var(--muted); font-size: 12px; }
   header .spacer { flex: 1; }
+  [hidden] { display: none !important; }
   .btn {
     border: 1px solid var(--border); background: var(--panel); color: var(--ink2);
     border-radius: 8px; padding: 6px 10px; font-size: 12px; cursor: pointer;
@@ -863,6 +864,9 @@ async function sha256Hex(body) {
 // fetch() for a function-URL-backed path. Falls back to a plain fetch when
 // crypto.subtle is unavailable (a non-secure context, e.g. opening the file
 // locally) — there is no CloudFront in that case either, so nothing to sign for.
+// #213: pipeline runs (/api/run/) and review decisions (/api/review) are operator-only at the
+// edge (x-onca-opkey). A tenant page has no ?opkey, so it must not poll/offer them (403 noise).
+const OPERATOR = !!new URLSearchParams(location.search).get("opkey");
 async function oacFetch(path, opts) {
   const o = Object.assign({}, opts || {});
   // #213: operator paths need the operator secret at the edge — forward the page's ?opkey.
@@ -936,7 +940,8 @@ async function boot() {
   await handleAuthCallback();  // consume ?code=... from the Hosted-UI redirect, if present
   renderAuthUI();               // reflect the just-exchanged token (or logged-out state)
   await loadFeed(true);
-  pollRunStatus();          // start following the pipeline (reflects any in-flight run)
+  if (OPERATOR) pollRunStatus();   // start following the pipeline (reflects any in-flight run)
+  else { const rb = document.getElementById("runBtn"); if (rb) rb.hidden = true; }
   loadTicker();
   setInterval(loadTicker, 60000);
 }
@@ -1932,11 +1937,11 @@ function renderReviews() {
     return `<div class="review" data-rid="${esc(r.review_id)}" data-kind="${esc(r.kind || "")}">
       <div>${desc}</div>
       <div class="rmeta">${esc(r.reason || r.hint || "")} · <span class="chip">${esc(r.confidence || "")}</span> · <span class="date">${esc(when)}</span></div>
-      <div class="ractions">
+      ${OPERATOR ? `<div class="ractions">
         ${pick}
         <button class="btn rbtn" data-id="${esc(r.review_id)}" data-dec="approved">Aprovar</button>
         <button class="btn rbtn" data-id="${esc(r.review_id)}" data-dec="rejected">Rejeitar</button>
-      </div>
+      </div>` : `<div class="rmeta">decisão pelo operador</div>`}
     </div>`;
   }).join("");
 }
