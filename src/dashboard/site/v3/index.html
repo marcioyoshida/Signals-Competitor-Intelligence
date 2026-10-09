@@ -301,6 +301,15 @@
     .exrow--radar .ttl, .exrow--radar .meta,
     .exrow--sector .ttl, .exrow--sector .meta { flex-basis: 100%; }
     .exrow--sector .ent { flex: 1; max-width: none; white-space: normal; }
+    /* #212: the sector-event meta badge ("ato oficial · 3 veículo(s) · 125 entidades afetadas")
+       is nowrap and 319px wide — wrap it inside the 350px panel body. */
+    .exrow--sector .meta .badge { white-space: normal; overflow-wrap: anywhere; max-width: 100%; }
+    /* #212: single long words inside a row title ("INSTRUMENTAÇÃO", "tom↑vs números↓") overran
+       the panel by 3-13px; let them break on a phone. */
+    .exrow .ttl { overflow-wrap: anywhere; }
+    /* #212: the Ask input's intrinsic min-width (min-width:auto on a flex item) pushed the
+       "Perguntar" button 6px past the viewport, so EVERY board scrolled sideways at 375px. */
+    .askrow > input, #askInput { min-width: 0; }
     /* #193 enforcement rows: the institution name ("Trustee Distribuidora de Títulos e Valores
        Mobiliários Ltda.") and the authority·confidence badge are long — wrap, never overflow. */
     .exrow--enf { flex-wrap: wrap; row-gap: 4px; }
