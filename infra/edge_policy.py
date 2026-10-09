@@ -37,3 +37,49 @@ def exec_exemption_js() -> str:
         f"  var execPublic = {{ {entries} }};\n"
         "  if (execPublic[r.uri] === 1) { return r; }\n"
     )
+
+
+# --- #216: directory redirects + branded 404 (default behavior only) --------------------------
+# S3 behind OAC answers a missing key with a raw `<Error><Code>AccessDenied</Code>` XML 403. A
+# distribution-wide custom error response would also rewrite the /api/* Lambdas' own 403/404
+# JSON, so this is handled in the viewer-request function instead, from the site's real layout
+# (computed at synth): an extensionless path that names a directory with an index.html gets a
+# 301 to its trailing-slash form; any other extensionless path, or a directory without an index
+# (`/v2/`), goes to /404.html. Paths with a file extension are left to S3.
+NOT_FOUND_PAGE = "/404.html"
+
+
+def site_index_dirs(site_root) -> list[str]:
+    """Every directory (as '/a/b/') under the site that serves an index.html, root included."""
+    from pathlib import Path
+
+    root = Path(site_root)
+    out = []
+    for p in sorted(root.rglob("index.html")):
+        rel = p.parent.relative_to(root).as_posix()
+        out.append("/" if rel == "." else f"/{rel}/")
+    return out
+
+
+def site_paths_js(site_root) -> str:
+    """Snippet: sets `redir` (a Location) for a directory-without-slash or an unknown path.
+    Needs `r`, `key` and `routes` in scope; must run on the RAW uri, BEFORE the clean-route and
+    trailing-slash rewrites (clean routes and /exec are skipped); the caller returns the
+    redirect only after basic auth, so an unauthenticated probe still gets the 401."""
+    entries = ", ".join(f'"{d}": 1' for d in site_index_dirs(site_root))
+    return (
+        "  // #216: directory redirects + branded 404 (infra/edge_policy.py site_paths_js).\n"
+        f"  var siteDirs = {{ {entries} }};\n"
+        "  var redir = null;\n"
+        "  function qs(q) { var o = []; for (var k in q) { o.push(k + (q[k].value !== '' ? '=' + q[k].value : '')); }\n"
+        "    return o.length ? '?' + o.join('&') : ''; }\n"
+        "  var ru = r.uri;\n"
+        '  if (ru.indexOf("/api/") !== 0 && !routes[key] && key !== "/exec" && key !== "/executivo") {\n'
+        '    var last = ru.substring(ru.lastIndexOf("/") + 1);\n'
+        '    if (ru.charAt(ru.length - 1) === "/") {\n'
+        f'      if (!siteDirs[ru]) {{ redir = "{NOT_FOUND_PAGE}"; }}\n'
+        '    } else if (last.indexOf(".") === -1) {\n'
+        f'      redir = siteDirs[ru + "/"] ? ru + "/" + qs(r.querystring || {{}}) : "{NOT_FOUND_PAGE}";\n'
+        "    }\n"
+        "  }\n"
+    )

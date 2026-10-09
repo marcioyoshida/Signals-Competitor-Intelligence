@@ -24,3 +24,32 @@ def test_no_data_or_api_or_other_surface_is_exempt():
 def test_js_is_exact_match_not_prefix():
     js = edge_policy.exec_exemption_js()
     assert "execPublic[r.uri] === 1" in js and "indexOf" not in js and "startsWith" not in js
+
+
+# --- #216 directory redirects + branded 404 --------------------------------------------------
+def _run_fn(uri, qs=None):
+    """Execute the site_paths_js snippet in node against a fake request; return redir."""
+    import json, subprocess
+    from edge_policy import site_paths_js
+    site = Path(__file__).resolve().parents[1] / "src" / "dashboard" / "site"
+    js = ("var r = " + json.dumps({"uri": uri, "querystring": qs or {}}) + ";\n"
+          'var routes = { "/app": "app", "/admin": "admin" };\n'
+          'var key = r.uri; if (key.length > 1 && key.charAt(key.length - 1) === "/") key = key.substring(0, key.length - 1);\n'
+          + site_paths_js(site) + "console.log(JSON.stringify(redir));\n")
+    out = subprocess.run(["node", "-e", js], capture_output=True, text=True, check=True).stdout
+    return json.loads(out)
+
+
+def test_site_paths_redirects_dirs_and_unknown_paths():
+    import shutil
+    if not shutil.which("node"):
+        import pytest
+        pytest.skip("node not installed")
+    assert _run_fn("/v2/app") == "/v2/app/"
+    assert _run_fn("/v2/admin", {"opkey": {"value": "k"}}) == "/v2/admin/?opkey=k"
+    assert _run_fn("/entry") == "/entry/"
+    assert _run_fn("/nonexistent-page-xyz") == "/404.html"
+    assert _run_fn("/v2/") == "/404.html"
+    for ok in ("/", "/v2/app/", "/index.html", "/feed.json", "/app", "/admin", "/exec",
+               "/api/act", "/api/run/", "/v3/index.html", "/404.html"):
+        assert _run_fn(ok) is None, ok

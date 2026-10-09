@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 
 import yaml
-from edge_policy import exec_exemption_js
+from edge_policy import exec_exemption_js, site_paths_js
 from aws_cdk import App, ArnFormat, CfnOutput, Duration, RemovalPolicy, SecretValue, Size, Stack, Tags
 from aws_cdk import aws_bedrock as bedrock
 from aws_cdk import aws_apigatewayv2 as apigwv2
@@ -682,6 +682,7 @@ class OncaPrototypeStack(Stack):
                 '  if (key.length > 1 && key.charAt(key.length - 1) === "/") {\n'
                 "    key = key.substring(0, key.length - 1);\n"
                 "  }\n"
+                + site_paths_js(SITE_ASSET) +
                 '  if (key === "/exec" || key === "/executivo") { r.uri = "/v3/index.html"; }\n'
                 '  else if (routes[key]) { r.uri = "/v2/" + routes[key] + "/index.html"; }\n'
                 "  // Generic directory-index for S3-served paths so a raw trailing-slash URL\n"
@@ -697,6 +698,8 @@ class OncaPrototypeStack(Stack):
                 "    return { statusCode: 401, statusDescription: 'Unauthorized',\n"
                 "      headers: { 'www-authenticate': { value: 'Basic realm=\"Onca Warroom\"' } } };\n"
                 "  }\n"
+                "  if (redir) { return { statusCode: redir === '/404.html' ? 302 : 301, statusDescription: 'Redirect',\n"
+                "    headers: { location: { value: redir } } }; }\n"
                 "  // #122: the shared tenant basic-auth password above is NOT an operator\n"
                 "  // credential — every SaaS tenant needs it just to reach the Cognito login\n"
                 "  // screen, so it must never be sufficient on its own to read the full,\n"
