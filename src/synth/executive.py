@@ -1656,10 +1656,10 @@ REFERENCE: dict[str, Any] = {
             "Quatro Cantos (Four Corners)", "McKinsey 7S"]},
         {"h": "Eixos de posição", "items": [
             "Ameaça (0–100) × Expansão — o mapa de posição competitiva",
-            "Momentum na janela (média recente − anterior)", "Grupos econômicos (feed.groups)"]}]},
+            "Momentum na janela (média recente − anterior)", "Grupos econômicos (controle comum)"]}]},
     "cro": {"title": "Referência regulatória", "sections": [
         {"h": "Ciclo do ato normativo", "items": [
-            "Consulta pública → norma → fiscalização", "Blast-radius (alcance) × dificuldade",
+            "Consulta pública → norma → fiscalização", "Alcance (setores afetados) × dificuldade",
             "Prazos de vigência e de adequação"]},
         {"h": "Reguladores e instrumentos (BR-FS)", "items": [
             "CVM — Resolução / Instrução / Deliberação",
@@ -1673,23 +1673,23 @@ REFERENCE: dict[str, Any] = {
             # panel has never been fed. BCB is the only reputation store actually loaded.
             "Antitruste — CADE", "Reputação-como-risco — ranking de reclamações do BCB",
             "Integridade do registro (anomalias / atribuição)"]},
-        {"h": "Modelo de governança (ADR-018)", "items": [
+        {"h": "Modelo de governança", "items": [
             "Proveniência por campo (inferido < enrich < descoberta < estruturado < curado < fixture)",
             "Precedência de escrita — automação não rebaixa o curado",
             "Auditoria contínua + rollback sobre o journal"]},
         {"h": "Guardrails", "items": [
             "LGPD — pessoas só como figuras públicas em papel público",
             "Difamação — não atribuir insolvência à contraparte citada numa notícia",
-            "attribution_role — observadores (B3 / Serasa / reguladores) não são sujeitos"]}]},
+            "Papel na notícia — observadores (B3 / Serasa / reguladores) não são sujeitos"]}]},
     "cpo": {"title": "Referência de produto & cobertura", "sections": [
         {"h": "Cobertura", "items": [
             "Mapa CVM / BCB — segmentos regulados (roster / sinal / lacuna)",
             "Radar de proveniência por tier (official / structured / registry / identified)",
             "Pontos cegos — perguntas sem resposta (loop de cobertura)"]},
         {"h": "Descoberta & fontes", "items": [
-            "Propostas de descoberta (review-gated)", "Registro de fontes por vertical (ADR-019)",
+            "Propostas de descoberta (com revisão humana)", "Registro de fontes por vertical",
             "JTBD — quais tarefas do comprador a base atende"]},
-        {"h": "Radar de produto (#159)", "items": [
+        {"h": "Radar de produto", "items": [
             "Avaliações da App Store vs a própria linha de base (≥10/dia e z ≥3)",
             "Mudanças datadas em vídeos oficiais e de criadores (tutorial perene não conta)"]}]},
 }

@@ -783,3 +783,11 @@ def test_cso_capped_panels_ship_their_totals():
                            ("n_opportunities", "opportunities")):
             shipped = [r for r in P[panel] if slug == executive.ALL or executive._in_industry(r, slug)]
             assert a[key] >= len(shipped), (slug, key)
+
+
+def test_reference_columns_have_no_internal_identifiers():
+    """#228 follow-up: the reference columns render on every client board — no ADR / issue
+    numbers, field names or code identifiers."""
+    import re
+    txt = str(executive.build_reference())
+    assert not re.search(r"ADR[ -]?\d|\(#\d+\)|feed\.|attribution_role|[Bb]last-radius|review-gated", txt)
