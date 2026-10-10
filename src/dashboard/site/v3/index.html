@@ -373,6 +373,12 @@
   body.view-hoje #macroStrip, body.view-hoje #askPanel, body.view-hoje #recsBand { display:none; }
   .hoje { display:flex; flex-direction:column; gap:var(--s3); }
   .hoje-sec { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md, 10px); overflow:hidden; }
+  /* #210 follow-up (smoke 10-09): an empty Hoje section ("Decisões pendentes 0") was a 148px box
+     while empty Painel panels are one-line strips — same strip here. */
+  .hoje-sec > .empty { flex-direction: row; justify-content: flex-start; gap: var(--s2);
+    padding: var(--s2) var(--s4); text-align: left; flex-wrap: wrap; }
+  .hoje-sec > .empty .em-ico { font-size: 14px; }
+  .hoje-sec > .empty .em-d::before { content: "· "; }
   .hoje-hd { display:flex; align-items:baseline; gap:var(--s2); padding:var(--s3) var(--s3) var(--s2); }
   .hoje-hd h2 { font-size:var(--fs-md); margin:0; }
   .hoje-hd .n { font-weight:800; color:var(--primary); }

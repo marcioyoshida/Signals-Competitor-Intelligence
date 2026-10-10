@@ -837,7 +837,7 @@ const state = { industry: "", entity: "", topic: "", lens: "", date: "", alert: 
 function applyFeed(initial) {
   const checked = DATA.generated_at ? ` · verificado ${fmtDateTime(DATA.generated_at)}` : "";
   document.getElementById("asof").textContent =
-    `dados de ${fmtDate(DATA.as_of)}${checked} · ${DATA.feed.length} narrativas · janela de ${DATA.dates.length} dias`;
+    `dados de ${fmtDate(DATA.as_of)}${checked} · ${DATA.feed.length} narrativas${distinctNote()} · janela de ${DATA.dates.length} dias`;
   renderKpis(); renderLegend();
   if (initial) populateFilters();   // populateFilters appends options — run once
   renderIndustryMonitor(); renderLower(); render();
@@ -2262,6 +2262,13 @@ function signature(f) {
   return [...new Set(ids)].sort().join("|") || f.id;
 }
 
+// #223: the flat feed merges cards whose signal set is identical (the same event re-reported on
+// later days), so "392 narrativas" in the header rendered 325 cards with no explanation. Keep the
+// total (the Cobertura drawer counts it too, #222) and say how many distinct events it holds.
+function distinctNote() {
+  const n = dedupBySignature(DATA.feed || []).length, t = (DATA.feed || []).length;
+  return n < t ? ` (${n} eventos distintos · repetições agrupadas)` : "";
+}
 function dedupBySignature(rows) {
   // Merge only genuinely identical signal sets (true repeats) — keep distinct events.
   const seen = new Set();
