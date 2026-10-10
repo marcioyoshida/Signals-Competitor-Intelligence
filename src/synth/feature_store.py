@@ -217,6 +217,14 @@ def _recent_dates(window_days: int, as_of: dt.date | None = None) -> set[str]:
     return {(today - dt.timedelta(days=i)).isoformat() for i in range(window_days)}
 
 
+# Pipeline smoke 10-10: the framework Lambdas (Porter/PESTLE/7S/...) spent most of their 180s in
+# this loader — it LISTED every narrative ever written, then GOT the in-window ones one by one
+# (3,050 sequential GETs at 10-09, growing ~4s/day until the midday run timed out). List only the
+# window's date prefixes and fetch with a small bounded pool (I/O-bound; boto3 clients are
+# thread-safe). Same objects, same (key) order as before.
+_HISTORY_WORKERS = int(os.environ.get("ONCA_HISTORY_LOAD_WORKERS", "16"))
+
+
 def load_history(
     bucket: str, window_days: int = 90, *, s3: Any | None = None
 ) -> list[dict[str, Any]]:
@@ -224,24 +232,34 @@ def load_history(
 
     Longer window than the dashboard feed (baselines need history); still bounded
     so the scan stays cheap. Same durable digests store — never raw."""
+    from concurrent.futures import ThreadPoolExecutor
+
     s3 = s3 or boto3.client("s3")
-    wanted = _recent_dates(window_days)
-    out: list[dict[str, Any]] = []
-    paginator = s3.get_paginator("list_objects_v2")
-    for page in paginator.paginate(Bucket=bucket, Prefix=NARRATIVES_PREFIX):
-        for obj in page.get("Contents") or []:
-            key = obj["Key"]
-            parts = key.split("/")
-            if len(parts) < 3 or not key.endswith(".json"):
-                continue
-            if parts[1] not in wanted:
-                continue
-            try:
-                body = s3.get_object(Bucket=bucket, Key=key)["Body"].read()
-                out.append(json.loads(body.decode("utf-8")))
-            except Exception as exc:  # pragma: no cover - skip unreadable objects
-                print(f"Warning: skip narrative {key}: {exc}")
-    return out
+    days = sorted(_recent_dates(window_days))
+
+    def list_day(day: str) -> list[str]:
+        keys: list[str] = []
+        paginator = s3.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=bucket, Prefix=f"{NARRATIVES_PREFIX}{day}/"):
+            for obj in page.get("Contents") or []:
+                key = obj["Key"]
+                if len(key.split("/")) >= 3 and key.endswith(".json"):
+                    keys.append(key)
+        return sorted(keys)
+
+    def get(key: str) -> dict[str, Any] | None:
+        try:
+            body = s3.get_object(Bucket=bucket, Key=key)["Body"].read()
+            return json.loads(body.decode("utf-8"))
+        except Exception as exc:  # pragma: no cover - skip unreadable objects
+            print(f"Warning: skip narrative {key}: {exc}")
+            return None
+
+    workers = max(1, _HISTORY_WORKERS)
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        keys = [k for day_keys in pool.map(list_day, days) for k in day_keys]
+        bodies = list(pool.map(get, keys))
+    return [b for b in bodies if b is not None]
 
 
 def load_industry_map() -> dict[str, list[str]]:
