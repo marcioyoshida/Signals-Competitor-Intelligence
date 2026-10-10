@@ -153,11 +153,15 @@ def coverage_confidence(rows: list[dict[str, Any]]) -> dict[str, Any]:
     `last_error` text, those stay operator-only (see `scope_feed_to_modules`). Weighted by
     reliability band so one erroring source among many doesn't read as "everything's fine"."""
     if not rows:
-        return {"score": None, "n_sources": 0, "n_healthy": 0, "n_attention": 0}
+        return {"score": None, "n_sources": 0, "n_healthy": 0, "n_attention": 0, "n_lagging": 0}
     score = round(sum(_CONFIDENCE_WEIGHT.get(r.get("band"), 0) for r in rows) / len(rows))
     n_healthy = sum(1 for r in rows if r.get("band") == "ok")
     n_attention = sum(1 for r in rows if r.get("band") in ("error", "never_ok"))
-    return {"score": score, "n_sources": len(rows), "n_healthy": n_healthy, "n_attention": n_attention}
+    # warn/stale: succeeding, but late. Without it the CPO tile read "0/36 em atenção" over 34
+    # healthy, and 2 sources were in neither bucket.
+    n_lagging = sum(1 for r in rows if r.get("band") in ("warn", "stale"))
+    return {"score": score, "n_sources": len(rows), "n_healthy": n_healthy,
+            "n_attention": n_attention, "n_lagging": n_lagging}
 
 
 def combine(parts: list[dict[str, Any]]) -> dict[str, Any]:

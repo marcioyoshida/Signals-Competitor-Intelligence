@@ -54,13 +54,13 @@ def test_as_rows_bands_and_orders_worst_first():
 
 
 def test_coverage_confidence_empty_is_safe():
-    assert sh.coverage_confidence([]) == {"score": None, "n_sources": 0, "n_healthy": 0, "n_attention": 0}
+    assert sh.coverage_confidence([]) == {"score": None, "n_sources": 0, "n_healthy": 0, "n_attention": 0, "n_lagging": 0}
 
 
 def test_coverage_confidence_all_ok_scores_100():
     rows = [{"band": "ok"}, {"band": "ok"}]
     out = sh.coverage_confidence(rows)
-    assert out == {"score": 100, "n_sources": 2, "n_healthy": 2, "n_attention": 0}
+    assert out == {"score": 100, "n_sources": 2, "n_healthy": 2, "n_attention": 0, "n_lagging": 0}
 
 
 def test_coverage_confidence_weights_bands_and_counts_attention():
@@ -77,7 +77,7 @@ def test_coverage_confidence_never_leaks_source_names():
     rows = [{"source": "BCB Pix", "band": "error", "last_error": "HTTP 500 boom"}]
     out = sh.coverage_confidence(rows)
     assert "source" not in out and "last_error" not in out
-    assert set(out.keys()) == {"score", "n_sources", "n_healthy", "n_attention"}
+    assert set(out.keys()) == {"score", "n_sources", "n_healthy", "n_attention", "n_lagging"}  # counts only
 
 
 # --- sharded store: the parallel ingest branches must not clobber each other ----------
@@ -212,3 +212,12 @@ def test_warning_bands_warn_not_error():
     assert sh._band(rec) == "warn"
     sh.record("DOU saturation", ok=True)
     assert sh._band(sh.ledger()["DOU saturation"]) == "ok"
+
+
+def test_coverage_confidence_every_source_is_in_a_bucket():
+    """CPO tile: ok + em erro (error/never_ok) + defasadas (warn/stale) must cover every source —
+    it read "0/36 em atenção" over 34 healthy, with 2 stale sources in neither bucket."""
+    rows = [{"band": b} for b in ("ok", "ok", "warn", "stale", "error", "never_ok")]
+    out = sh.coverage_confidence(rows)
+    assert out["n_healthy"] + out["n_attention"] + out["n_lagging"] == out["n_sources"] == 6
+    assert (out["n_attention"], out["n_lagging"]) == (2, 2)

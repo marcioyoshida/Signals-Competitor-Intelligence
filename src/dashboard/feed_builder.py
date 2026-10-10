@@ -2050,7 +2050,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     except Exception as exc:  # pragma: no cover - best-effort, read-only
         print(f"Warning: source_runs load skipped: {exc}")
         feed["source_runs"] = []
-        feed["coverage_confidence"] = {"score": None, "n_sources": 0, "n_healthy": 0, "n_attention": 0}
+        feed["coverage_confidence"] = {"score": None, "n_sources": 0, "n_healthy": 0, "n_attention": 0, "n_lagging": 0}
     # Source-coverage roadmap ("Fontes" rail tab): every acquisition route, live or
     # rejected, with its number measured off this feed rather than asserted.
     # MUST run after source_health/source_runs are attached above — it joins to both,

@@ -798,6 +798,8 @@ function agg() { const bi = block().by_industry || {}; return bi[SECTOR] || bi._
 
 // #208: a panel header count that admits a server cap — "30 de 36" instead of a silent 30.
 // #218: a server-capped panel's true size for the current sector (panels.totals[key][SECTOR]).
+// Portuguese count + noun: pl(1, "rascunho") → "1 rascunho"; pl(3, "rascunho") → "3 rascunhos".
+function pl(n, one, many) { return `${n} ${n === 1 ? one : (many || one + "s")}`; }
 function totN(p, key) { const t = ((p || {}).totals || {})[key]; return t ? t[SECTOR] : null; }
 function ofN(list, total) {
   const shown = (list || []).filter(inSector).length;
@@ -868,7 +870,7 @@ function rowsReg(list, emptyMsg) {
     return `<div class="exrow" data-id="${U.esc(r.id)}">
     <span class="ent" style="min-width:150px" title="${U.esc(r.domain || "Regulação")}">${U.esc(r.domain || "Regulação")}</span>
     <span class="ttl" title="${U.esc(txt)}">${U.esc(txt)}</span>
-    ${r.blast_band ? sevBadge(r.blast_band) : (r.blast ? `<span class="meta">${r.blast} setor(es)</span>` : "")}
+    ${r.blast_band ? sevBadge(r.blast_band) : (r.blast ? `<span class="meta">${pl(r.blast, "setor", "setores")}</span>` : "")}
     ${r.difficulty_band ? sevBadge(r.difficulty_band) : ""}
     ${r.days_to_deadline != null ? `<span class="dt">${r.days_to_deadline}d</span>` : ""}
     ${r.threat_score != null ? threatChip(r.threat_score) : ""}</div>`; }).join("");
@@ -1248,7 +1250,7 @@ function rowsSectorEvents(list) {
       `<a href="${U.esc(s.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="${U.esc((s.label || "") + (s.via ? " (via " + s.via + ")" : "") + " — " + (s.title || ""))}">[${i + 1}]</a>`).join(" ");
     const txt = (r.title || "") + (r.summary ? " — " + r.summary : "");
     const meta = `${U.esc(SECTOR_CONF_PT[r.confidence] || r.confidence || "")}` +
-      (r.n_outlets ? ` · ${r.n_outlets} veículo(s)` : "") + (r.n_affected ? ` · ${r.n_affected} entidades afetadas` : "");
+      (r.n_outlets ? ` · ${pl(r.n_outlets, "veículo")}` : "") + (r.n_affected ? ` · ${r.n_affected} entidades afetadas` : "");
     return `<div class="exrow exrow--sector" data-id="${U.esc(r.id)}">
     <span class="dt">${r.date ? U.fmtDate(r.date) : ""}</span>
     <span class="badge badge--${SECTOR_SEV[r.severity] || "low"}">${U.esc(SECTOR_SEV_PT[r.severity] || r.severity || "")}</span>
@@ -1322,7 +1324,7 @@ function rowsChangeDiff(list) {
     const dl = r.days_to_deadline != null ? `<span class="badge badge--${r.days_to_deadline <= 30 ? "high" : "med"}">prazo ${r.days_to_deadline}d</span>` : "";
     return `<div class="exrow" data-id="${U.esc(r.id || "")}" style="padding:var(--s2) var(--s3)">
       <div style="display:flex;gap:var(--s2);align-items:baseline"><b style="flex:1;min-width:0">${U.esc(r.domain || r.title || "—")}</b>
-        <span class="badge badge--low">${r.n_changes || 0} mudança(s)</span>${dl}</div>
+        <span class="badge badge--low">${pl(r.n_changes || 0, "mudança")}</span>${dl}</div>
       <div class="hd-note" style="margin-top:2px">${arts || U.esc((r.title || "").slice(0, 160))}</div></div>`;
   }).join("");
 }
@@ -1467,7 +1469,7 @@ function flowBand() {
       <span class="hd-note">${U.esc(t.action || "")}</span><span class="spacer" style="flex:1"></span>
       ${t.decided ? "" : `<button data-tv="aprovado" data-i="${i}">Aprovar</button><button data-tv="rejeitado" data-i="${i}">Rejeitar</button>`}</div></div>`).join("");
   const nd = FLOW.filter(t => !t.decided).length;
-  return band("Fluxo executivo", `incidente → decisão · ${nd} rascunho(s) pendente(s)`, `<div class="trajs">${cards}</div>`);
+  return band("Fluxo executivo", `incidente → decisão · ${pl(nd, "rascunho pendente", "rascunhos pendentes")}`, `<div class="trajs">${cards}</div>`);
 }
 async function captureTraj(btn, extra) {
   const t = FLOW[Number(btn.getAttribute("data-i"))]; if (!t) return;
@@ -1681,7 +1683,7 @@ function marketSizeChart(ms, sectors) {
   const max = Math.max(...rows.map(x => x.m.size_revenue));
   rows.sort((a, b) => b.m.size_revenue - a.m.size_revenue);
   return hbars(rows.map(x => ({ label: label(x.slug), value: fmtBi(x.m.size_revenue), bar: x.m.size_revenue / max * 100,
-    colorTok: "var(--cat-gold)", badge: `<span class="badge badge--ghost">${x.m.issuers} emissor(es)</span>` })));
+    colorTok: "var(--cat-gold)", badge: `<span class="badge badge--ghost">${pl(x.m.issuers, "emissor", "emissores")}</span>` })));
 }
 // #75 — IF.data system-wide asset base (SFN) + leaders; NOT per-sector (whole-system, honest)
 function ifdataMarketBlock(m) {
@@ -1846,7 +1848,10 @@ function render() {
       // #139: coverage-confidence is the CLIENT-safe reduction of raw per-source ingestion
       // telemetry (source_runs) — a single score, no source names/errors. Those stay operator-only.
       const cc = a.coverage_confidence || {};
-      const ccSub = cc.n_sources ? `${cc.n_attention || 0}/${cc.n_sources} fontes em atenção` : "ingestão";
+      // every source in a bucket: em erro (error/never-ok) · defasadas (warn/stale) · the rest are ok.
+      const ccSub = !cc.n_sources ? "ingestão" : cc.n_lagging == null
+        ? `${cc.n_attention || 0}/${cc.n_sources} fontes em atenção`
+        : `${cc.n_attention || 0} em erro · ${cc.n_lagging} defasada${cc.n_lagging === 1 ? "" : "s"} · de ${cc.n_sources} fontes`;
       const ccCls = cc.score == null ? null : cc.score < 60 ? "high" : cc.score < 85 ? "warn" : "ok";
       board =
         readout(heroGauge("Maturidade da cobertura", avgMat, bandBadge(bc, bl), "--" + (bc === "crit" ? "t-crit" : bc === "warn" ? "warn" : "ok"), avgMat),
@@ -2048,7 +2053,7 @@ function renderHoje(el) {
     hojeSec("hoje-prioridades", "Top 3 prioridades", null, OFFICER === "cso" ? "briefing semanal" : "recomendações",
       pri.length ? `<div class="panel__bd--flush">${rowsCard(pri)}</div>` : U.empty("Sem prioridades na janela.", "", "○")) +
     hojeSec("hoje-decisoes", "Decisões pendentes", pendAll.length > pend.length ? `${pend.length} de ${pendAll.length}` : pend.length,
-      "rascunhos do fluxo executivo" + (pendAll.length > pend.length ? " · demais no Painel" : ""), decBody);
+      (pendAll.length === 1 ? "rascunho do fluxo executivo" : "rascunhos do fluxo executivo") + (pendAll.length > pend.length ? " · demais no Painel" : ""), decBody);
   if (OFFICER === "cpo") {
     const ev = ((((EX.cpo || {}).panels || {}).product_radar) || DATA.product_radar || {});
     html += hojeSec("hoje-radar", "Radar de produto", null, "mais recente", rowsRadar({ ...ev, events: (ev.events || []).slice(0, 3) }));
