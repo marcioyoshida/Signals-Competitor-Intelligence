@@ -40,6 +40,8 @@ import re
 import unicodedata
 from typing import Any, Callable, Iterable
 
+from src.synth.text_pt import pt_count
+
 STORE_KEY = "enforcement/latest.json"
 
 #: Actions stay in the store this long after their last evidence.
@@ -283,7 +285,7 @@ def sanction_actions(records: Iterable[dict[str, Any]], *, today: dt.date | None
         act = _new_action(kind, f"CGU/{cad}", company, eid, run_date=today.isoformat(),
                           origin="sanctions_registry")
         act.update({
-            "title": f"{company} — {len(rows)} sanção(ões) vigente(s) no {cad}: {'; '.join(cats)}",
+            "title": f"{company} — {pt_count(len(rows), 'sanção vigente', 'sanções vigentes')} no {cad}: {'; '.join(cats)}",
             "summary": "Órgãos sancionadores: " + ", ".join(
                 dict.fromkeys(str(r.get("orgao")) for r in rows if r.get("orgao"))),
             "date": rows[0].get("start") or today.isoformat(),  # the newest sanction

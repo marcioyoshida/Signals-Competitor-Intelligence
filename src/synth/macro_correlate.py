@@ -37,6 +37,8 @@ from __future__ import annotations
 import datetime as dt
 from typing import Any
 
+from src.synth.text_pt import pt_count
+
 DEFAULT_WINDOW_DAYS = 3
 
 
@@ -104,7 +106,7 @@ def annotate_feed_items(
         # gap = item_date - event_date: positive means the narrative landed AFTER
         # the macro event ("depois"), negative means it landed BEFORE it ("antes").
         when = "no mesmo dia" if gap == 0 else (
-            f"{abs(gap)} dia(s) {'depois' if gap > 0 else 'antes'}"
+            f"{pt_count(abs(gap), 'dia', 'dias')} {'depois' if gap > 0 else 'antes'}"
         )
         note = {
             "gap_days": gap,

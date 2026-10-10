@@ -39,7 +39,7 @@ def test_annotate_attaches_note_within_window():
     out = mc.annotate_feed_items(items, _macro(selic_date="2026-09-15"))
     assert out[0]["macro_note"]["kind"] == "selic"
     assert out[0]["macro_note"]["gap_days"] == 1  # item is 1 day AFTER the event
-    assert "1 dia(s) depois" in out[0]["macro_note"]["text"]
+    assert "1 dia depois" in out[0]["macro_note"]["text"]
     assert out[0]["macro_note"]["text"].startswith("inferência:")
     # original item fields preserved
     assert out[0]["entity"] == "itau"

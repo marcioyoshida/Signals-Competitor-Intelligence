@@ -197,8 +197,11 @@ def _tdr(decisions: list[dict[str, Any]], baseline_hours: float | None) -> dict[
     after_avg = round(sum(afters) / len(afters), 2) if afters else None
     if not baseline_hours:
         return {"tdr": None, "tdr_after_hours": after_avg, "tdr_baseline_hours": None,
-                "tdr_note": "requer baseline de tempo-para-decisão por tenant (registrado, "
-                            "não assumido) — defina ONCA_TDR_BASELINE_HOURS."}
+                # #224: client-facing copy — say how the baseline gets set (recorded with the
+                # client via set_tdr_baseline), never a server env var name.
+                "tdr_note": "aguardando o baseline de tempo-para-decisão da sua equipe "
+                            "(registrado com você, nunca assumido) — fale com a equipe Onça "
+                            "para registrá-lo."}
     if after_avg is None:
         return {"tdr": None, "tdr_after_hours": None, "tdr_baseline_hours": baseline_hours,
                 "tdr_note": f"baseline {baseline_hours}h registrada; medindo o tempo real de "

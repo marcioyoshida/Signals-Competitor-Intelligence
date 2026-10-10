@@ -30,6 +30,8 @@ import json
 import os
 from typing import Any
 
+from src.synth.text_pt import pt_count
+
 import boto3
 
 from src.synth import feature_store
@@ -300,7 +302,7 @@ def build_narrative(cand: dict[str, Any]) -> dict[str, Any]:
             f"(z={z:+.1f}, {n_mem} players)."
         )
     if n_new:
-        head += f" Inclui {n_new} novo(s) entrante(s) no período."
+        head += f" Inclui {pt_count(n_new, 'novo entrante', 'novos entrantes')} no período."
     lead = (drivers[0].get("narrative") or "").strip() if drivers else ""
     if lead:
         head += f" Puxando o movimento: {lead[:200]}"

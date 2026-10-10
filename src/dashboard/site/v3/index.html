@@ -801,8 +801,8 @@ function agg() { const bi = block().by_industry || {}; return bi[SECTOR] || bi._
 // Portuguese count + noun: pl(1, "rascunho") → "1 rascunho"; pl(3, "rascunho") → "3 rascunhos".
 function pl(n, one, many) { return `${n} ${n === 1 ? one : (many || one + "s")}`; }
 function totN(p, key) { const t = ((p || {}).totals || {})[key]; return t ? t[SECTOR] : null; }
-function ofN(list, total) {
-  const shown = (list || []).filter(inSector).length;
+function ofN(list, total, flt) {
+  const shown = (list || []).filter(flt || inSector).length;
   return total != null && shown < total ? `${shown} de ${total}` : shown;
 }
 function panel(title, count, note, body) {
@@ -1173,7 +1173,10 @@ function rowsRisk(list) {
     <span class="ttl" title="${U.esc(r.detail || "")}">${U.esc(r.detail || "")}</span></div>`).join("");
 }
 function rowsIntegrity(list) {
-  list = (list || []).filter(inSector);
+  // #226 (operator view): most findings sit on untracked fund entities with NO industry, and the
+  // lenient inSector() showed all of them under every sector (34 rows under a "0" tile). The tile
+  // counts strictly; so does the panel — an unattributed finding shows under Todos os setores only.
+  list = (list || []).filter(inSectorStrict);
   // #118: an empty list here is almost always "no compliance signal was ingested for this
   // sector", not "audited and found clean" — those must never read the same to a buyer.
   if (!list.length) return U.empty("Sem achados de integridade no escopo.", "não confundir com \"auditado e limpo\"", "○");
@@ -1833,7 +1836,7 @@ function render() {
       band("Registro de risco", "", panel(iw ? "Enforcement · distress · reputação" : "Enforcement · distress · reputação · integridade", null, "prioridade", rowsRisk(p.risk_register))) +
       band(iw ? "Reputação" : "Integridade & reputação", "",
         iw ? panel("Reputação (reclamações)", null, "pior ranking primeiro", rowsRep(p.reputation))
-           : grid("1fr 1fr", [panel("Auditoria de integridade", null, "achados do registro", rowsIntegrity(p.integrity)),
+           : grid("1fr 1fr", [panel("Auditoria de integridade", ofN(p.integrity, a.n_integrity, inSectorStrict), "achados do registro", rowsIntegrity(p.integrity)),
                         panel("Reputação (reclamações)", null, "pior ranking primeiro", rowsRep(p.reputation))]));
   } else if (OFFICER === "cpo") {
     const port = p.portfolio || [];

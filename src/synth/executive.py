@@ -17,6 +17,8 @@ from __future__ import annotations
 from itertools import zip_longest
 from typing import Any
 
+from src.synth.text_pt import pt_count
+
 ALL = "__all__"
 OFFICERS = ("cso", "cro", "cco", "cpo")
 
@@ -443,9 +445,9 @@ def _weekly_headline(m: dict[str, Any], top: list[dict[str, Any]]) -> str:
     def _d(k: str) -> str:
         d = m[k]["delta"]
         return f" ({d:+d} vs. semana anterior)" if d else ""
-    parts = [f"{m['moves']['now']} movimento(s) de concorrentes{_d('moves')}",
-             f"{m['entrants']['now']} novo(s) entrante(s){_d('entrants')}",
-             f"{m['regulatory']['now']} mudança(s) regulatória(s){_d('regulatory')}"]
+    parts = [pt_count(m['moves']['now'], "movimento de concorrentes", "movimentos de concorrentes") + _d('moves'),
+             pt_count(m['entrants']['now'], "novo entrante", "novos entrantes") + _d('entrants'),
+             pt_count(m['regulatory']['now'], "mudança regulatória", "mudanças regulatórias") + _d('regulatory')]
     lead = "Semana calma no cenário competitivo." if not top else \
         f"Prioridade: {top[0]['title'][:120]}"
     return f"Nesta semana: {', '.join(parts)}. {lead}"
@@ -1193,7 +1195,8 @@ def build_cco(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     return {"by_industry": _by_industry(ctx["sectors"], agg), "panels": {
         # #193: supervisor actions against one operator — most severe, then newest, first.
         "enforcement": enforcement[:40],
-        "integrity": integrity_rows[:40],
+        # #226: sector-fair, so a sector's own findings are never crowded out of the 40.
+        "integrity": _sector_fair(integrity_rows, ctx["sectors"], 40),
         "integrity_withheld": withheld,
         "risk_register": risk_register[:30],
         "reputation": rep_rows[:30],
@@ -1571,7 +1574,7 @@ def build_flow(feed: dict[str, Any], ctx: dict[str, Any]) -> list[dict[str, Any]
             continue
         sev = "crit" if band == "market" else "high"
         n_ind = len(c.get("affected_industries") or [])
-        brief = (cr.get("impact") or f"Alcance {band}: afeta {n_ind} setor(es); "
+        brief = (cr.get("impact") or f"Alcance {band}: afeta {pt_count(n_ind, 'setor', 'setores')}; "
                  f"dificuldade {(cr.get('difficulty') or {}).get('band') or 'n/d'}.")
         out.append(_traj("mudanca_regulatoria", f"Mudança regulatória — {c.get('domain') or 'regulação'}",
                          "cro", sev, brief, industries=c.get("affected_industries") or [],
@@ -1585,8 +1588,9 @@ def build_flow(feed: dict[str, Any], ctx: dict[str, Any]) -> list[dict[str, Any]
     # shut down / banned) also hands off to CCO. Briefing restates the event's own fields.
     for ev in [e for e in _sector_events(feed) if e.get("severity") in ("critical", "high")][:3]:
         n_src = len(ev.get("sources") or [])
-        brief = (f"{ev.get('summary') or ev.get('title') or ''} · {ev.get('n_affected') or 0} entidade(s) "
-                 f"do setor afetada(s) · {n_src} fonte(s) ({ev.get('confidence')}).")
+        brief = (f"{ev.get('summary') or ev.get('title') or ''} · "
+                 f"{pt_count(ev.get('n_affected'), 'entidade do setor afetada', 'entidades do setor afetadas')} · "
+                 f"{pt_count(n_src, 'fonte', 'fontes')} ({ev.get('confidence')}).")
         out.append(_traj("evento_setorial",
                          f"Evento setorial — {ev.get('change_label') or 'mudança regulatória'} ({ev.get('industry')})",
                          "cro", "crit" if ev.get("severity") == "critical" else "high", brief,
@@ -1606,8 +1610,8 @@ def build_flow(feed: dict[str, Any], ctx: dict[str, Any]) -> list[dict[str, Any]
     for a in [x for x in _enforcement(feed)
               if x.get("severity") == "critical" and x.get("confidence") == "official"][:3]:
         who = labels.get(a.get("entity")) if a.get("entity") else (a.get("target") or "instituição")
-        brief = (f"{a.get('title') or ''} · {a.get('authority')} · {len(a.get('sources') or [])} fonte(s) "
-                 f"oficial(is), {a.get('date')}.")
+        brief = (f"{a.get('title') or ''} · {a.get('authority')} · "
+                 f"{pt_count(len(a.get('sources') or []), 'fonte oficial', 'fontes oficiais')}, {a.get('date')}.")
         out.append(_traj("enforcement", f"Enforcement — {a.get('kind_label')} ({who})", "cco", "crit", brief,
                          industries=list(a.get("industries") or []), evidence_ids=[a.get("id")],
                          action="Avaliar exposição de contraparte",

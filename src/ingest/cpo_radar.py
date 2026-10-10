@@ -59,6 +59,8 @@ import urllib.request
 from collections import Counter
 from typing import Any, Callable
 
+from src.synth.text_pt import pt_count
+
 PREFIX = "product_radar/"
 LATEST_KEY = PREFIX + "latest.json"
 STATE_KEY = PREFIX + "state.json"
@@ -1409,8 +1411,9 @@ def render_weekly_digest(radar: dict[str, Any] | None, *, as_of: str | None = No
     n_alerts = sum(1 for e in evs if e.get("source") == "appstore")
     prods = sorted({e.get("product_label") or e.get("product") for e in evs})
     if evs:
-        headline = (f"{len(evs)} evento(s) de produto em {len(prods)} concorrente(s) "
-                    f"({', '.join(prods)})" + (f" · {n_alerts} alerta(s) de app" if n_alerts else ""))
+        headline = (f"{pt_count(len(evs), 'evento de produto', 'eventos de produto')} em "
+                    f"{pt_count(len(prods), 'concorrente', 'concorrentes')} ({', '.join(prods)})"
+                    + (f" · {pt_count(n_alerts, 'alerta de app', 'alertas de app')}" if n_alerts else ""))
     else:
         headline = "Sem mudanças de produto ou alertas de app detectados na semana."
     order = {"outage": 0, "complaint": 1, "price": 2, "launch": 3, "feature": 4}

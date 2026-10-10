@@ -150,3 +150,10 @@ def test_compute_metrics_carries_decision_integrity():
           {"context_id": "c", "verdict": "rejeitado", "outcome": "neutro"}]
     m = dm.compute_metrics(ds)
     assert any(x["kind"] == "decision_contradictory" for x in m["decision_integrity"])
+
+
+def test_tdr_note_never_names_a_server_setting():
+    """#224: the note renders on the client's CONFIANÇA & DECISÃO band — no env var names."""
+    from src.synth import decision_metrics as dm
+    for m in (dm._tdr([], None), dm._tdr([], 4.0)):
+        assert "ONCA_" not in m["tdr_note"] and "baseline" in m["tdr_note"]

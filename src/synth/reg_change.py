@@ -21,6 +21,8 @@ import re
 import unicodedata
 from typing import Any
 
+from src.synth.text_pt import pt_count
+
 
 def _norm(text: str) -> str:
     t = unicodedata.normalize("NFKD", str(text or ""))
@@ -150,5 +152,5 @@ def summarize_changes(changes: list[dict[str, Any]], *, limit: int = 4) -> str:
         parts.append(seg)
     more = len(changes) - limit
     if more > 0:
-        parts.append(f"+{more} mudança(s)")
+        parts.append("+" + pt_count(more, "mudança", "mudanças"))
     return "; ".join(parts)

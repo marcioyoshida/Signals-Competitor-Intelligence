@@ -43,6 +43,8 @@ import unicodedata
 from collections import Counter
 from typing import Any, Iterable
 
+from src.synth.text_pt import pt_count
+
 STORE_KEY = "sector_events/latest.json"
 
 #: Pending single-outlet reports wait this long for a second, independent outlet.
@@ -436,7 +438,7 @@ def _refresh(ev: dict[str, Any]) -> dict[str, Any]:
         ev["severity"] = "high" if ctype in ("ban", "suspension", "illegal") else "medium"
         lead = news[0] if news else {}
         ev["title"] = lead.get("title") or ""
-        ev["summary"] = (f"{len(outlets)} veículo(s) independente(s) relatam "
+        ev["summary"] = (f"{pt_count(len(outlets), 'veículo independente relata', 'veículos independentes relatam')} "
                          f"{CHANGE_LABEL.get(ctype, 'mudança regulatória')} no setor — "
                          f"relato de imprensa, sem ato oficial ingerido.")
         ev["date"] = min((s.get("date") or "9999" for s in news), default=ev.get("date"))
