@@ -216,3 +216,19 @@ def test_kb_prompt_names_the_act_and_citation_resolves_to_the_dou_url():
     cite = r["citations"][0]
     assert cite["kb"] and cite["url"] == MP_URL and cite["sources"] == [{"url": MP_URL}]
     assert cite["entity_label"].startswith("MEDIDA PROVISÓRIA Nº 1.394")
+
+
+def test_ementa_first_sentence_does_not_stop_at_legal_abbreviations():
+    """#233: three critical BCB resolutions were cut off at "art." mid-sentence."""
+    from src.synth import sector_events as se
+    full = ("Dispõe sobre a vedação de processar, liquidar ou viabilizar transações destinadas a "
+            "loterias de aposta de quota fixa estabelecida pelo art. 14 da Medida Provisória nº 1.394, "
+            "de 25 de setembro de 2026. O Banco Central decide.")
+    assert se._first_sentence(full).endswith("de 25 de setembro de 2026.")
+    amend = 'Altera a Lei nº 7.689, de 1988, passa a vigorar com a seguinte redação: "Art. 3º ..........'
+    assert se._first_sentence(amend).endswith("seguinte redação:")
+    assert se._first_sentence("Comunica o cancelamento da Eagle Instituição de Pagamento Ltda.") \
+        == "Comunica o cancelamento da Eagle Instituição de Pagamento Ltda."
+    long = "Texto " + "palavra " * 200
+    out = se._first_sentence(long)
+    assert out.endswith("…") and len(out) <= se._EMENTA_MAX + 1

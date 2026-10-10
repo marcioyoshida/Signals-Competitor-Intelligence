@@ -355,8 +355,42 @@ def _ementa(item: dict[str, Any]) -> str:
     if title and text.upper().startswith(title.upper()):
         text = text[len(title):].strip()
     text = _unsplice(text)
-    m = re.match(r"(.{20,320}?[.;])(\s|$)", text)
-    return (m.group(1) if m else text[:320]).strip()
+    return _first_sentence(text)
+
+
+# #233: legal ementas cite articles mid-sentence ("...estabelecida pelo art. 29 da Lei nº 14.790"),
+# and ending at the first "." cut three critical BCB resolutions off at "art.". A period after
+# one of these abbreviations (or a single letter / ordinal) is not a sentence end.
+_EMENTA_ABBR = {"art", "arts", "inc", "incs", "al", "par", "cap", "n", "nº", "no", "nos", "núm",
+                "res", "dec", "lc", "mp", "sr", "sra", "dr", "dra", "ltda", "s.a", "cia", "p", "pág",
+                "fl", "fls", "obs", "ex", "etc"}
+_EMENTA_MAX = 480
+
+
+def _first_sentence(text: str) -> str:
+    """The first full sentence of `text` (at least 20 chars), never ending on an abbreviation;
+    clipped at a word boundary with "…" when no sentence end appears within _EMENTA_MAX.
+    An amending act's ementa stops before the quoted new wording (': "Art. 3º ....')."""
+    text = re.sub(r"\.{3,}", "…", text)              # dotted leaders / ellipses are not ends
+    q = re.search(r':\s*["“]', text)
+    if q and 20 <= q.start() < _EMENTA_MAX:
+        text = text[:q.start() + 1]                   # keep the colon, drop the quoted article
+    for m in re.finditer(r"[.;](?=\s|$)", text):
+        end = m.end()
+        if end < 20:
+            continue
+        if end > _EMENTA_MAX:
+            break
+        if m.group(0) == ".":
+            prev = re.search(r"([\wº.]+)\.$", text[:end])
+            word = (prev.group(1) if prev else "").lower()
+            if word in _EMENTA_ABBR or len(word) == 1:
+                continue
+        return text[:end].strip()
+    if len(text) <= _EMENTA_MAX:
+        return text.strip()
+    cut = text[:_EMENTA_MAX].rsplit(" ", 1)[0]
+    return cut.rstrip(",;:") + "…"
 
 
 def _act_name(item: dict[str, Any]) -> str:
@@ -425,7 +459,8 @@ def _refresh(ev: dict[str, Any]) -> dict[str, Any]:
         # normativos copy of the same act is a bare "Resolução BCB nº N" + subject line
         lead = min(official, key=lambda s: (not s.get("summary"), str(s.get("id") or "").startswith("bcb:")))
         ev["title"] = lead["title"]
-        ev["summary"] = lead.get("summary") or ""
+        # #233: a BCB Comunicado can arrive with no ementa at all — say so instead of a blank.
+        ev["summary"] = lead.get("summary") or "Ementa não publicada pela fonte — consulte o ato oficial."
         ev["severity"] = _max_sev(*[s.get("severity") or "medium" for s in official])
         ev["change_type"] = change_type_of(f"{lead['title']} {lead.get('summary')}") or \
             (ctypes.most_common(1)[0][0] if ctypes else "act")

@@ -1067,20 +1067,41 @@
         fill="var(--muted)" font-size="10">${v}</text>`;
     }
     // dots + labels; label anchors flip near the right edge to avoid clipping.
+    // #232: labels used to sit beside every dot regardless of neighbours (15 overlapping pairs on
+    // /v2/app). Greedy placement in relevance order (ents is pre-sorted): try a few vertical
+    // offsets on the preferred side, then the other side; if none is free, omit the label (the
+    // dot keeps its <title> tooltip). Finite candidate list — no open-ended loop (cf. #206).
+    const placed = [];
+    const boxOf = (lx, ly, anc, w) => ({ x0: anc === "end" ? lx - w : lx, x1: anc === "end" ? lx : lx + w,
+      y0: ly - 10, y1: ly + 3 });
+    const hits = (b) => placed.some((q) => b.x0 < q.x1 && q.x0 < b.x1 && b.y0 < q.y1 && q.y0 < b.y1);
+    const inPlot = (b) => b.x0 >= ML && b.x1 <= ML + pW && b.y0 >= MT && b.y1 <= MT + pH;
+    const labelPos = ents.map((p) => {
+      const cx = X(p.mom), cy = Y(p.thr);
+      const r = 5 + Math.sqrt(p.total / maxTot) * 7;
+      const w = String(p.e.label || "").length * 6.4;
+      const pref = cx > ML + pW * 0.8 ? "end" : "start";
+      for (const anc of [pref, pref === "end" ? "start" : "end"]) {
+        const lx = anc === "end" ? cx - r - 5 : cx + r + 5;
+        for (const dy of [0, -13, 13, -26, 26, -39, 39]) {
+          const ly = cy + 3.5 + dy, b = boxOf(lx, ly, anc, w);
+          if (inPlot(b) && !hits(b)) { placed.push(b); return { lx, ly, anc }; }
+        }
+      }
+      return null;
+    });
     const dots = ents.map((p, i) => {
       const t = U.tierOf(p.thr);
       const cx = X(p.mom), cy = Y(p.thr);
       const r = 5 + Math.sqrt(p.total / maxTot) * 7;
-      const flip = cx > ML + pW * 0.8;
-      const lx = flip ? cx - r - 5 : cx + r + 5;
-      const anc = flip ? "end" : "start";
+      const lp = labelPos[i];
       return `<g class="quad-pt" data-ent="${esc(p.e.entity)}" role="button" tabindex="0"
           aria-label="${esc(p.e.label)}: ameaça ${p.thr.toFixed(2)}, expansão ${p.mom}">
         <title>${esc(p.e.label)} — ameaça ${p.thr.toFixed(2)} · expansão ${p.mom} · ${p.total} sinais</title>
         <circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(1)}"
           fill="var(--t-${t.key}-fill)" stroke="var(--t-${t.key})" stroke-width="1.75"/>
-        <text x="${lx.toFixed(1)}" y="${(cy + 3.5).toFixed(1)}" text-anchor="${anc}"
-          fill="var(--ink-2)" font-size="11" font-weight="600">${esc(p.e.label)}</text>
+        ${lp ? `<text x="${lp.lx.toFixed(1)}" y="${lp.ly.toFixed(1)}" text-anchor="${lp.anc}"
+          fill="var(--ink-2)" font-size="11" font-weight="600">${esc(p.e.label)}</text>` : ""}
       </g>`;
     }).join("");
     el.innerHTML = `<div class="chartcanvas quadwrap">
