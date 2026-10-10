@@ -1311,7 +1311,7 @@ function rowsPosture(list) {
 function prettyDim(d) { return String(d || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()); }
 function rowsFramework(list) {
   const rows = (list || []).filter(inSector);
-  if (!rows.length) return U.empty("Sem framework no escopo.", "beliefs vetados (ADR-006)", "○");
+  if (!rows.length) return U.empty("Sem framework no escopo.", "beliefs vetados", "○");
   return `<div class="chart">` + rows.map(r =>
     `<div style="padding:var(--s2) var(--s3)"><b>${U.esc(r.label)}</b>` +
     (r.bullets || []).slice(0, 4).map(b =>
@@ -1775,11 +1775,11 @@ function render() {
       band("Inteligência competitiva", "momentum na janela · inferência",
         grid("1fr 1fr", [panel("Momentum do concorrente", ofN(p.momentum, totN(p, "momentum")), "↑ ganha · ↓ recua", rowsMomentum(p.momentum)),
                         panel("Movimentos estratégicos", ofN(p.moves, a.n_moves), "entrada·oferta·M&A", rowsCard(p.moves))])) +
-      band("Capital social", "ato societário registrado em junta comercial · Receita Federal · o ato em si não é público (#26)",
+      band("Capital social", "ato societário registrado em junta comercial · Receita Federal · o ato em si não é público",
         panel("Movimentos de capital social", null, "valor anterior → atual", rowsCapital(p.capital_moves))) +
       band("Trajetória de ameaça", "linha do tempo · ameaça média diária por concorrente · inferência",
         `<div class="panel"><div class="panel__bd panel__bd--flush">${threatTimeline(p.momentum)}</div></div>`) +
-      band("Postura estratégica", "SWOT + TOWS · beliefs vetados (ADR-006)",
+      band("Postura estratégica", "SWOT + TOWS · beliefs vetados",
         panel("Concorrentes por postura", ofN(p.posture, totN(p, "posture")), "S·W·O·T + postura TOWS", rowsPosture(p.posture))) +
       band("Força financeira dos concorrentes", "ROE·ROA·alavancagem·eficiência·share de lucro · IF.data + balancete · inferência",
         panel("Rentabilidade & eficiência (maior ROE primeiro)", null, "ROE anual · ROA · alav · opex/ativo · headroom · share", rowsFinancials(p.financials))) +
@@ -1798,11 +1798,11 @@ function render() {
          tile("Maior alcance", a.max_blast, "setores", a.max_blast >= 3 ? "high" : null),
          tile("Solidez sob atenção", a.n_weak_solvency, a.min_basileia != null ? "mín. Basileia " + a.min_basileia + "%" : "prudencial",
               (a.n_weak_solvency || 0) > 0 ? "high" : null)]) +
-      band("Eventos setoriais", "mudança regulatória do setor inteiro · ato oficial primeiro · #177",
+      band("Eventos setoriais", "mudança regulatória do setor inteiro · ato oficial primeiro",
            panel("Eventos setoriais", (p.sector_events || []).filter(inSectorStrict).length, "setor · severidade · fontes", rowsSectorEvents(p.sector_events))) +
-      band("Solidez prudencial dos concorrentes", "Basileia + LCR + PDD/mês + inadimplência + fragilidade + tom · ADR 022",
+      band("Solidez prudencial dos concorrentes", "Basileia + LCR + PDD/mês + inadimplência + fragilidade + tom",
            panel("Solvência, inadimplência, trajetória & tom (mais frágil primeiro)", null, "Basileia · CET1 · PDD/mês · NPL · tom", rowsSolvency(p.solvency))) +
-      band("Impacto & alcance", "blast-radius · ADR-009", panel("Mudanças por impacto", ofN(p.impact, a.n_reg), "banda de alcance · dificuldade", rowsReg(p.impact))) +
+      band("Impacto & alcance", "alcance · quantos setores cada norma afeta", panel("Mudanças por impacto", ofN(p.impact, a.n_reg), "banda de alcance · dificuldade", rowsReg(p.impact))) +
       band("Linha do tempo regulatória", "", grid("1fr 1fr", [panel("Consulta → norma → fiscalização", ofN(p.timeline, a.n_reg), "recente", rowsReg(p.timeline)),
                             panel("Atos com mudanças enumeradas", ofN(p.changes, a.n_acts_changed), "amending acts", rowsReg(p.changes))])) +
       band("Calendário de conformidade", "", panel("Prazos", null, "dias até o prazo", rowsReg(p.deadlines, "Nenhum prazo de conformidade nos itens do escopo.")));
@@ -1830,7 +1830,7 @@ function render() {
         `Cobertura de integridade/reputação para este setor é insuficiente para uma leitura de compliance — ` +
         `os zeros acima significam "sem sinal ingerido", não "auditado e limpo". Hoje o sinal robusto está ` +
         `concentrado em banking e fintech (ranking de reclamações do BCB).</div></div>`) : "") +
-      band("Enforcement & sanções", "liquidação · intervenção · RAET · cassação · sanções · CEIS/CNEP · #193",
+      band("Enforcement & sanções", "liquidação · intervenção · RAET · cassação · sanções · CEIS/CNEP",
            panel("Ações de supervisores contra operadores", (p.enforcement || []).filter(inSector).length,
              "mais grave primeiro · fontes linkadas", rowsEnforcement(p.enforcement))) +
       band("Registro de risco", "", panel(iw ? "Enforcement · distress · reputação" : "Enforcement · distress · reputação · integridade", null, "prioridade", rowsRisk(p.risk_register))) +
@@ -1877,7 +1877,7 @@ function render() {
             panel("Saúde das fontes", null, "frescor · volume · defasagem", `<div class="panel__bd--flush">${sourceHealthChart(p.source_health)}</div>`)])) +
         (ADMIN ? band("Confiabilidade da ingestão (operador)", "telemetria BRUTA por fonte · erro/defasagem que o proxy de frescor não vê (#76) · só operador, ver tile \"Confiança de cobertura\" na visão do cliente",
           panel("Execução das fontes (pior primeiro)", null, "última execução ok · erro · defasagem", `<div class="panel__bd--flush">${sourceRunsChart(p.source_runs)}</div>`)) : "") +
-        band("Instrumentação de solidez prudencial", "cobertura de Basileia + tom Pilar 3 por setor · ADR 022",
+        band("Instrumentação de solidez prudencial", "cobertura de Basileia + tom Pilar 3 por setor",
           panel("Cobertura de solidez (menor primeiro)", null, "% do portfólio com dado prudencial", rowsSoundnessCov(p.soundness_coverage)));
     } else {
       // Deep per-sector Product profile.
@@ -1919,7 +1919,7 @@ function render() {
       grid("1fr 1fr", [panel("Padrões comportamentais", ofN(p.behavioral, totN(p, "behavioral")), "cadência de sinal", rowsAxis(p.behavioral)),
                        panel("Rede de controle", null, "concorrentes sob controle comum · QSA · toda a base", controlNetwork(DATA.graph_proposals, DATA.entities))]));
   else if (OFFICER === "cco") board +=
-    band("Diff de conformidade", "o que mudou (artigos) + prazo · reg_change/reg_diff",
+    band("Diff de conformidade", "o que mudou (artigos) + prazo",
       panel("Mudanças enumeradas por norma", ofN(p.change_diff, totN(p, "change_diff")), "artigos alterados · prazo", rowsChangeDiff(p.change_diff))) +
     band("Ambiente PESTLE", "político·econômico·social·tecnológico·legal·ambiental · beliefs vetados",
       panel("Entidades por dimensão", ofN(p.pestle, totN(p, "pestle")), "dimensão · avaliação", rowsFramework(p.pestle)));

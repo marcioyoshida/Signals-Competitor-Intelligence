@@ -546,7 +546,7 @@
     }
     const n = c.n_changes || changes.length || 0;
     return `<details class="fold chg"><summary><span class="tw" aria-hidden="true">▸</span> Mudança regulatória` +
-      `<span class="demoted">— ${n} alteração(ões)${rec ? " · impacto avaliado (inferência)" : ""}</span></summary>` +
+      `<span class="demoted">— ${n} ${n === 1 ? "alteração" : "alterações"}${rec ? " · impacto avaliado (inferência)" : ""}</span></summary>` +
       `<div class="chg-bd">${chips}${list}${rated}</div></details>`;
   }
 

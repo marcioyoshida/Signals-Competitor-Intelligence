@@ -660,7 +660,7 @@
   <button class="railtab" id="srcTab" style="display:none" title="Roteiro de fontes: o que está no ar, desligado, planejado e o que foi avaliado e recusado">
     <span class="rtlabel">Fontes</span><span class="rtbadge" id="srcCount"></span>
   </button>
-  <button class="railtab" id="integTab" style="display:none" title="Auditoria de integridade do registro (ADR 018)">
+  <button class="railtab" id="integTab" style="display:none" title="Auditoria de integridade do registro">
     <span class="rtlabel">Integridade</span><span class="rtbadge" id="integCount"></span>
   </button>
 </div>
@@ -1490,7 +1490,7 @@ function renderMapa() {
     ? " Bolhas muito próximas são afastadas levemente para ficarem distinguíveis — a posição exata de cada uma está sempre no tooltip."
     : "";
   document.getElementById("mapaCaption").textContent =
-    `Momentum conta sinais de novos entrantes, ofertas de distribuição, novas classes de fundos e movimentação Pix na janela de ${days} dia(s) — não inclui contratação (sem fonte de RH licenciada ainda). Cobertura de participação de mercado (IF.data) é parcial: bolhas tracejadas indicam entidade ainda sem correspondência.${dodgeNote}`;
+    `Momentum conta sinais de novos entrantes, ofertas de distribuição, novas classes de fundos e movimentação Pix na janela de ${days} ${days === 1 ? "dia" : "dias"} — não inclui contratação (sem fonte de RH licenciada ainda). Cobertura de participação de mercado (IF.data) é parcial: bolhas tracejadas indicam entidade ainda sem correspondência.${dodgeNote}`;
 }
 // NULL_SHARE_R: fixed radius for entities with no resolved IF.data share — a
 // deliberately small, hollow placeholder, never a guessed size.
@@ -1675,7 +1675,7 @@ function renderMapaChart(rows) {
     </g>`;
   }).join("");
   svg += bubbles;
-  svg += `<text class="mapaaxis" x="${(m.l + plotW / 2).toFixed(1)}" y="${H - 8}" text-anchor="middle">sinais de expansão · janela de ${(DATA.dates || []).length} dia(s)</text>`;
+  svg += `<text class="mapaaxis" x="${(m.l + plotW / 2).toFixed(1)}" y="${H - 8}" text-anchor="middle">sinais de expansão · janela de ${(DATA.dates || []).length} ${(DATA.dates || []).length === 1 ? "dia" : "dias"}</text>`;
   svg += `<text class="mapaaxis" x="14" y="${(m.t + plotH / 2).toFixed(1)}" text-anchor="middle" transform="rotate(-90 14 ${(m.t + plotH / 2).toFixed(1)})">ameaça (pico do período)</text>`;
   svg += `</svg>`;
   wrap.innerHTML = svg;
@@ -2262,6 +2262,8 @@ function signature(f) {
   return [...new Set(ids)].sort().join("|") || f.id;
 }
 
+// Portuguese count + noun with agreement: plPT(1, "proposta", "propostas") -> "1 proposta".
+function plPT(n, one, many) { return `${n} ${n === 1 ? one : many}`; }
 // #223: the flat feed merges cards whose signal set is identical (the same event re-reported on
 // later days), so "392 narrativas" in the header rendered 325 cards with no explanation. Keep the
 // total (the Cobertura drawer counts it too, #222) and say how many distinct events it holds.
@@ -2342,7 +2344,7 @@ function _fwSwotBullet(b) {
   const news = (b.news_evidence || 0) > 0
     ? ` · <span class="corrob" title="Corroborada por ${b.news_evidence} sinal(is) de notícia via reconciliação (LLM)">✔ notícias ${b.news_evidence}</span>` : "";
   return `<div class="swot-b ${b.status === 'challenged' ? 'chal' : ''}">${esc(b.text)}
-    <span class="meta">confiança ${_confHeat(b.confidence)}${b.evidence_count ? ` · ${b.evidence_count} evidência(s)` : ""}${news}${b.status === 'challenged' ? ' · contestada' : ''}</span></div>`;
+    <span class="meta">confiança ${_confHeat(b.confidence)}${b.evidence_count ? ` · ${plPT(b.evidence_count, "evidência", "evidências")}` : ""}${news}${b.status === 'challenged' ? ' · contestada' : ''}</span></div>`;
 }
 
 function _fwChips(dimLabels, counts) {
@@ -2402,7 +2404,7 @@ function renderFrameworks() {
           <span class="pmeta">${esc((p.themes || []).join(', '))}${p.n_dates ? ` · ${p.n_dates} dias` : ""}</span>
           ${propActions(p.id, 'graph')}</div>`).join("") + `</div>`;
     }
-    const pcount = swotProps.length ? `<span class="fw-pcount">${swotProps.length} proposta(s)</span>` : "";
+    const pcount = swotProps.length ? `<span class="fw-pcount">${plPT(swotProps.length, "proposta", "propostas")}</span>` : "";
     cards.push({fw: "swot", html: `<div class="fw-card" data-fw="swot">
       <div class="fw-hdr"><span class="fw-tog">▸</span><span class="fw-name">SWOT</span>
         <span class="fw-chips">${_fwChips(SWOT_LABELS, counts)}</span>${pcount}
@@ -2425,7 +2427,7 @@ function renderFrameworks() {
         : `<div class="none">—</div>`;
       return `<div class="swot-q ${dim}"><div class="qh">${TOWS_LABELS[dim]}</div>${body}</div>`;
     }).join("");
-    const pcount = towsProps.length ? `<span class="fw-pcount">${towsProps.length} proposta(s)</span>` : "";
+    const pcount = towsProps.length ? `<span class="fw-pcount">${plPT(towsProps.length, "proposta", "propostas")}</span>` : "";
     cards.push({fw: "tows", html: `<div class="fw-card" data-fw="tows">
       <div class="fw-hdr"><span class="fw-tog">▸</span><span class="fw-name">TOWS</span>
         <span class="fw-chips">${_fwChips(TOWS_LABELS, towsCounts)}</span>${pcount}
@@ -2448,7 +2450,7 @@ function renderFrameworks() {
         : `<div class="none">—</div>`;
       return `<div class="swot-q ${dim}"><div class="qh">${PORTER_LABELS[dim]}</div>${body}</div>`;
     }).join("");
-    const pcount = porterProps.length ? `<span class="fw-pcount">${porterProps.length} proposta(s)</span>` : "";
+    const pcount = porterProps.length ? `<span class="fw-pcount">${plPT(porterProps.length, "proposta", "propostas")}</span>` : "";
     cards.push({fw: "porter", html: `<div class="fw-card" data-fw="porter">
       <div class="fw-hdr"><span class="fw-tog">▸</span><span class="fw-name">Porter</span>
         <span class="fw-chips">${_fwChips(PORTER_LABELS, porterCounts)}</span>${pcount}
@@ -2478,7 +2480,7 @@ function renderFrameworks() {
           : `<div class="none">—</div>`;
         return `<div class="swot-q ${dim}"><div class="qh">${fwLabels[dim]}</div>${body}</div>`;
       }).join("");
-      const pcount = fwProps.length ? `<span class="fw-pcount">${fwProps.length} proposta(s)</span>` : "";
+      const pcount = fwProps.length ? `<span class="fw-pcount">${plPT(fwProps.length, "proposta", "propostas")}</span>` : "";
       cards.push({fw: fwKey, html: `<div class="fw-card" data-fw="${fwKey}">
         <div class="fw-hdr"><span class="fw-tog">▸</span><span class="fw-name">${fwName}</span>
           <span class="fw-chips">${_fwChips(fwLabels, fwCounts)}</span>${pcount}
