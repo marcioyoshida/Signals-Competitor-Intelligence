@@ -30,6 +30,7 @@ import datetime as dt
 import hashlib
 import json
 import os
+import re
 from typing import Any
 
 TYPES = ("radar", "distress", "regulatory")
@@ -39,6 +40,45 @@ DEFAULT_DAILY_CAP = 3
 MAX_FAILS = 3
 BRT = dt.timezone(dt.timedelta(hours=-3))
 TARGET = "/exec#hoje-alertas"
+# #256 (ADR 029): a store-app device subscribes with its Expo push token as the "endpoint"; Expo's
+# push service relays to APNs/FCM. Same table, prefs, scoping, quiet hours and cap as web push.
+_EXPO_EP = re.compile(r"expo:ExponentPushToken\[[A-Za-z0-9_-]{10,64}\]")
+EXPO_SEND_URL = "https://exp.host/--/api/v2/push/send"
+NATIVE_TITLE = "Novo alerta no seu painel Onça"
+
+
+def ok_endpoint(ep: str) -> bool:
+    """A web-push endpoint (https capability URL) or a store-app Expo token — nothing else."""
+    return ep.startswith("https://") or bool(_EXPO_EP.fullmatch(ep))
+
+
+def native_message(ep: str, count: int) -> dict[str, Any]:
+    """The whole native payload. Content-free by policy: a fixed title and a COUNT, never a finding."""
+    n = max(1, int(count or 0))
+    return {"to": ep[len("expo:"):], "title": NATIVE_TITLE,
+            "body": f"{n} {'novo alerta' if n == 1 else 'novos alertas'}",
+            "data": {"target": TARGET}, "sound": "default", "priority": "high", "channelId": "alerts"}
+
+
+def expo_send(ep: str, count: int, *, post: Any = None) -> int:
+    """Send one native push through Expo. Maps Expo's ticket onto web-push status codes so
+    ``notify`` treats both alike: DeviceNotRegistered -> 410 (prune), other errors -> 500."""
+    if post is None:
+        import requests
+
+        def post(url: str, payload: Any) -> Any:
+            return requests.post(url, json=payload, timeout=15,
+                                 headers={"accept": "application/json", "content-type": "application/json"})
+    r = post(EXPO_SEND_URL, [native_message(ep, count)])
+    if not 200 <= int(getattr(r, "status_code", 500)) < 300:
+        return int(getattr(r, "status_code", 500))
+    try:
+        ticket = (r.json().get("data") or [{}])[0]
+    except Exception:
+        return 500
+    if ticket.get("status") == "ok":
+        return 201
+    return 410 if (ticket.get("details") or {}).get("error") == "DeviceNotRegistered" else 500
 
 
 # ---- store ----------------------------------------------------------------------------------
@@ -197,7 +237,7 @@ def api_handler(event: dict[str, Any], context: Any, *, table: Any | None = None
     # --- service-worker routes (no JWT: the endpoint URL is the capability) ---
     if path.endswith("/api/push/pending") or path.endswith("/api/push/opened"):
         ep = str(body.get("endpoint") or "")
-        if not ep.startswith("https://"):
+        if not ok_endpoint(ep):
             return _resp(400, {"error": "endpoint required"})
         key = {"pk": sub_key(ep)}
         if path.endswith("/opened"):
@@ -224,7 +264,7 @@ def api_handler(event: dict[str, Any], context: Any, *, table: Any | None = None
                            "subscribed": bool(mine), "prefs": (mine or {}).get("prefs")})
 
     ep = str(((body.get("subscription") or {}).get("endpoint")) or body.get("endpoint") or "")
-    if not ep.startswith("https://"):
+    if not ok_endpoint(ep):
         return _resp(400, {"error": "subscription endpoint required"})
     key = {"pk": sub_key(ep)}
     if path.endswith("/unsubscribe"):
@@ -283,7 +323,7 @@ def notify(feed: dict[str, Any], subs: list[dict[str, Any]], *, now: dt.datetime
         if int(s.get("sent_today") or 0) >= int(prefs.get("daily_cap") or DEFAULT_DAILY_CAP):
             save(s); tally["capped"] += 1               # rolls into tomorrow's first push
             continue
-        status = send(s["endpoint"])
+        status = send(s["endpoint"], s["pending"])
         bump("sent")
         if status in (404, 410):
             drop(s); tally["pruned"] += 1; bump("pruned")
@@ -331,8 +371,10 @@ def notifier_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             cache[k] = modules_for(tenant, list(groups or []))
         return cache[k]
 
-    def send(ep: str) -> int:
+    def send(ep: str, count: int = 0) -> int:
         try:
+            if ep.startswith("expo:"):
+                return expo_send(ep, count)
             return webpush.send(ep, d, subject=subject)
         except Exception as exc:
             print(f"push: send error {type(exc).__name__}")

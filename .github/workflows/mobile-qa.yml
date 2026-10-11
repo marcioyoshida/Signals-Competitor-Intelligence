@@ -1,0 +1,81 @@
+# #259 (ADR 029): QA for the store app. Builds a release APK (debug-signed) in CI (no EAS quota, no secrets) and runs
+# Maestro flows on an Android emulator. The sign-in flow runs only when the QA_EMAIL/QA_PASSWORD
+# repository secrets exist (a qa-internal-* persona; never a real client).
+name: mobile-qa
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "mobile/**"
+      - "src/dashboard/site/v2/context.js"
+      - ".github/workflows/mobile-qa.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-qa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults: { run: { working-directory: mobile/apps/onca } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: npm, cache-dependency-path: mobile/apps/onca/package-lock.json }
+      - run: npm ci --no-audit --no-fund
+      - run: npx tsc --noEmit
+      - run: node --test "src/*.test.ts"
+      - run: npx expo-doctor
+
+  emulator:
+    needs: unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      QA_EMAIL: ${{ secrets.QA_EMAIL }}
+      QA_PASSWORD: ${{ secrets.QA_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: npm, cache-dependency-path: mobile/apps/onca/package-lock.json }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - name: Build release APK (debug-signed)
+        working-directory: mobile/apps/onca
+        run: |
+          npm ci --no-audit --no-fund
+          npx expo prebuild -p android --no-install --clean
+          cd android && ./gradlew assembleRelease -PreactNativeArchitectures=x86_64 --no-daemon -q   # release = JS bundled (debug needs Metro); signed with the template debug key
+      - name: Install Maestro
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+      - name: Run flows on the emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          script: |
+            adb install -r mobile/apps/onca/android/app/build/outputs/apk/release/app-release.apk
+            maestro test mobile/apps/onca/maestro/launch.yaml --format junit --output maestro-launch.xml
+            if [ -n "$QA_EMAIL" ] && [ -n "$QA_PASSWORD" ]; then maestro test mobile/apps/onca/maestro/login.yaml -e QA_EMAIL="$QA_EMAIL" -e QA_PASSWORD="$QA_PASSWORD" --format junit --output maestro-login.xml; else echo "::notice::QA_EMAIL/QA_PASSWORD not set — sign-in flow skipped"; fi
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: maestro
+          path: |
+            maestro-*.xml
+            ~/.maestro/tests/**
+          if-no-files-found: ignore

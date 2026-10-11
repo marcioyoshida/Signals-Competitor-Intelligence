@@ -26,7 +26,7 @@ def _sub(**kw):
 
 def _run(subs, *, now=NOON, status=201, mods=("banking",), feed=FEED):
     sent, saved, dropped, stats = [], [], [], []
-    tally = push.notify(feed, subs, now=now, send=lambda ep: sent.append(ep) or status,
+    tally = push.notify(feed, subs, now=now, send=lambda ep, count=0: sent.append(ep) or status,
                         save=saved.append, drop=dropped.append, bump=stats.append,
                         scope=lambda f, m: f if "banking" in m else {}, modules=lambda t, g: list(mods))
     return tally, sent, saved, dropped, stats
@@ -134,3 +134,50 @@ def test_subscribe_without_entitlement_is_refused(monkeypatch):
     monkeypatch.setattr(push, "modules_for", lambda tenant, groups: [])
     r = push.api_handler(_ev("/api/me/push/subscribe", {"endpoint": "https://p.example/1"}, {"sub": "u"}), None, table=_T())
     assert r["statusCode"] == 403
+
+
+# ---- #256 native (store app) push via Expo --------------------------------------------------
+TOKEN = "expo:ExponentPushToken[AbCdEf0123456789xyz]"
+
+
+def test_native_endpoint_is_accepted_only_in_expo_token_form():
+    assert push.ok_endpoint(TOKEN) and push.ok_endpoint("https://fcm.googleapis.com/x")
+    for bad in ("expo:ExponentPushToken[]", "expo:foo", "ExponentPushToken[AbCdEf0123456789]",
+                "expo:ExponentPushToken[a<b>c0123456789]", "http://x", ""):
+        assert not push.ok_endpoint(bad), bad
+
+
+def test_native_payload_is_content_free():
+    m = push.native_message(TOKEN, 3)
+    assert m["to"] == "ExponentPushToken[AbCdEf0123456789xyz]"
+    assert m["title"] == "Novo alerta no seu painel Onça" and m["body"] == "3 novos alertas"
+    assert push.native_message(TOKEN, 1)["body"] == "1 novo alerta"
+    assert set(m) == {"to", "title", "body", "data", "sound", "priority", "channelId"}
+    assert m["data"] == {"target": push.TARGET}       # no event, entity, card or sector field
+
+
+class _R:
+    def __init__(self, status, body):
+        self.status_code, self._b = status, body
+
+    def json(self):
+        return self._b
+
+
+def test_expo_ticket_maps_onto_web_push_statuses():
+    ok = push.expo_send(TOKEN, 2, post=lambda u, p: _R(200, {"data": [{"status": "ok", "id": "x"}]}))
+    gone = push.expo_send(TOKEN, 2, post=lambda u, p: _R(200, {"data": [
+        {"status": "error", "details": {"error": "DeviceNotRegistered"}}]}))
+    other = push.expo_send(TOKEN, 2, post=lambda u, p: _R(200, {"data": [
+        {"status": "error", "details": {"error": "MessageRateExceeded"}}]}))
+    assert (ok, gone, other) == (201, 410, 500)
+    assert push.expo_send(TOKEN, 2, post=lambda u, p: _R(503, {})) == 503
+
+
+def test_notify_passes_the_count_and_prunes_an_unregistered_device():
+    s = _sub(endpoint=TOKEN, pk="SUB#n")
+    got = []
+    tally = push.notify(FEED, [s], now=NOON, send=lambda ep, count=0: got.append((ep, count)) or 410,
+                        save=lambda x: None, drop=lambda x: None, bump=lambda k: None,
+                        scope=lambda f, m: f, modules=lambda t, g: ["banking"])
+    assert got and got[0][0] == TOKEN and got[0][1] >= 1 and tally["pruned"] == 1

@@ -71,13 +71,40 @@ export function isShareUrl(url: unknown): url is string {
   return typeof url === "string" && /^https:\/\/(www\.)?onssa\.org\/exec\?c=[0-9a-f]{16}$/.test(url);
 }
 
-/** A message posted by context.js through window.ReactNativeWebView. */
-export type PageMessage = { type: "auth" | "logout" | "share"; url: string };
+/** A message posted by context.js through window.ReactNativeWebView. Requests that expect an
+ *  answer carry an integer `id`; the shell replies with window.__oncaShell.reply(id, value). */
+export type PageMessage =
+  | { type: "auth" | "logout" | "share"; url: string }
+  | { type: "push:token"; id: number; request: boolean }
+  | { type: "lock:get"; id: number }
+  | { type: "lock:set"; id: number; enabled: boolean; minutes: number };
+
+export const LOCK_MINUTES = [1, 5, 15] as const;
+
 export function parseMessage(data: string): PageMessage | null {
   try {
     const m = JSON.parse(data);
     if ((m?.type === "auth" || m?.type === "logout") && isHostedUiUrl(m.url)) return { type: m.type, url: m.url };
     if (m?.type === "share" && isShareUrl(m.url)) return { type: "share", url: m.url };
+    const id = Number.isInteger(m?.id) && m.id > 0 ? m.id as number : 0;
+    if (!id) return null;
+    if (m.type === "push:token") return { type: "push:token", id, request: m.request === true };
+    if (m.type === "lock:get") return { type: "lock:get", id };
+    if (m.type === "lock:set" && typeof m.enabled === "boolean")
+      return { type: "lock:set", id, enabled: m.enabled,
+               minutes: (LOCK_MINUTES as readonly number[]).includes(m.minutes) ? m.minutes : 5 };
   } catch { /* not ours */ }
   return null;
+}
+
+/** The JS that answers a page request (value is JSON-encoded; id is an integer we parsed). */
+export function replyScript(id: number, value: unknown): string {
+  return `window.__oncaShell && window.__oncaShell.reply(${Math.trunc(id)}, ${JSON.stringify(value ?? null)}); true;`;
+}
+
+/** #257: lock again after `minutes` in the background; a cold start with the lock on is locked. */
+export function shouldLock(enabled: boolean, minutes: number, backgroundedAt: number | null, now: number): boolean {
+  if (!enabled) return false;
+  if (backgroundedAt === null) return true;
+  return now - backgroundedAt >= minutes * 60_000;
 }

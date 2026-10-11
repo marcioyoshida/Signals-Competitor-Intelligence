@@ -54,3 +54,27 @@ test("#258: only /exec?c=<16 hex> card links are shared natively", () => {
     assert.ok(!isShareUrl(u), String(u));
   }
 });
+
+import { replyScript, shouldLock } from "./bridge.ts";
+
+test("#256/#257: request messages need an integer id; minutes are clamped to the offered set", () => {
+  assert.deepEqual(parseMessage(JSON.stringify({ type: "push:token", id: 3, request: true })), { type: "push:token", id: 3, request: true });
+  assert.deepEqual(parseMessage(JSON.stringify({ type: "push:token", id: 3, request: "yes" })), { type: "push:token", id: 3, request: false });
+  assert.equal(parseMessage(JSON.stringify({ type: "push:token", id: "3" })), null);
+  assert.equal(parseMessage(JSON.stringify({ type: "lock:get", id: 0 })), null);
+  assert.deepEqual(parseMessage(JSON.stringify({ type: "lock:set", id: 2, enabled: true, minutes: 999 })),
+    { type: "lock:set", id: 2, enabled: true, minutes: 5 });
+  assert.equal(parseMessage(JSON.stringify({ type: "lock:set", id: 2, enabled: "true" })), null);
+});
+
+test("#256: reply script JSON-encodes the value (no injection through a token or reason)", () => {
+  assert.equal(replyScript(4, { token: 'x");alert(1);("' }),
+    'window.__oncaShell && window.__oncaShell.reply(4, {"token":"x\\");alert(1);(\\""}); true;');
+});
+
+test("#257: lock timing", () => {
+  assert.equal(shouldLock(false, 5, null, 0), false);
+  assert.equal(shouldLock(true, 5, null, 0), true);                 // cold start
+  assert.equal(shouldLock(true, 5, 0, 4 * 60_000), false);
+  assert.equal(shouldLock(true, 5, 0, 5 * 60_000), true);
+});

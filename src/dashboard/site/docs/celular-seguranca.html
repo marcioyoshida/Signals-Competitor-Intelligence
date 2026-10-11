@@ -89,6 +89,8 @@
         <tr><td>Último painel carregado <b>pelo próprio usuário</b> (para leitura sem conexão)</td><td>Cache do navegador, chaveado pelo usuário</td><td>Até o próximo carregamento, “Sair” ou fim da sessão; nunca é mostrado a outro usuário</td></tr>
         <tr><td>Marcador de sessão (id do usuário, último acesso — sem token)</td><td><code>localStorage</code></td><td>Até “Sair” ou fim da sessão</td></tr>
         <tr><td>“Última visita” por oficial (para o resumo Hoje)</td><td><code>localStorage</code>, chaveado pelo usuário</td><td>Até “Sair”</td></tr>
+        <tr><td><b>App da loja:</b> token de notificação do aparelho (só se os alertas forem ativados)</td><td>Sistema operacional; cópia no servidor ligada à sua conta</td><td>Até desativar os alertas, “Sair” ou excluir a conta</td></tr>
+        <tr><td><b>App da loja:</b> preferência de bloqueio (ligado/desligado e minutos) — sem biometria</td><td>Armazenamento seguro do sistema (Keychain / Keystore)</td><td>Até desinstalar o app</td></tr>
       </table>
       <p style="color:var(--ink2)">O painel de operação (<code>?opkey</code>), respostas de API e telas de curadoria
         <b>nunca</b> são guardados no aparelho.</p>
@@ -101,7 +103,8 @@
       <ul>
         <li><b>Nenhum conteúdo na tela bloqueada.</b> O texto é sempre “Novo alerta no seu painel Onça” e,
           no máximo, a quantidade. O fato em si só aparece depois que o app abre — ou seja, depois do login.
-          A mensagem de push não tem corpo.</li>
+          No navegador, a mensagem de push não tem corpo; no app da loja, o corpo é só a contagem
+          (“2 novos alertas”).</li>
         <li>Opcional, por aparelho e por tipo de alerta; silêncio padrão das 21h às 7h e no máximo 3 por dia.</li>
         <li>Disparados só pelo que já está no escopo licenciado do usuário, com o mesmo filtro do painel.</li>
         <li>Inscrições expiradas são removidas; envios, entregas e aberturas são contados.</li>
@@ -128,10 +131,24 @@
   </section>
 
   <section>
+    <h2>App da loja (em teste)</h2>
+    <div class="card">
+      <ul>
+        <li>É o mesmo painel da web dentro do app. O login acontece no navegador do sistema, nunca dentro do app.</li>
+        <li><b>Bloqueio opcional</b> com Face ID, digital ou a senha do aparelho, após 1, 5 ou 15 minutos fora do
+          app. A biometria fica no aparelho; o Onça só recebe “desbloqueado” ou “não”.</li>
+        <li>Com o bloqueio ativo, a miniatura na troca de apps é neutra e capturas de tela são bloqueadas.</li>
+        <li>Nenhuma compra dentro do app; o plano é gerenciado em onssa.org.</li>
+        <li>Um administrador pode encerrar remotamente todas as sessões de um usuário.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
     <h2>Fora do escopo hoje</h2>
     <div class="card">
-      Distribuição por App Store / Google Play ou MDM gerenciado. Se a sua política exigir, fale com a
-      gente — é uma etapa planejada, disparada por demanda.
+      Publicação na App Store / Google Play ou MDM gerenciado: o app está em teste interno. Se a sua política
+      exigir distribuição por loja, fale com a gente — a publicação é disparada por demanda.
     </div>
   </section>
 

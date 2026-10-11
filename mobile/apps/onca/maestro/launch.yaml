@@ -1,0 +1,12 @@
+# #259: no credentials needed. The app opens /exec, shows the sign-in gate, and (app mode) never
+# shows a purchase call to action.
+appId: org.onssa.onca
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "Entrar"
+    timeout: 45000
+- assertNotVisible: "Assinar.*"
+- assertNotVisible: ".*R\\$ .*"
+- takeScreenshot: launch-gate

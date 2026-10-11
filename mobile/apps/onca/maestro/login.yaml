@@ -1,0 +1,45 @@
+# #259: needs QA_EMAIL / QA_PASSWORD (a qa-internal-* persona, excluded from usage metrics).
+# Sign-in runs in the system browser (Custom Tab), comes back on onca://auth, and /exec in the
+# WebView finishes the exchange.
+appId: org.onssa.onca
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "Entrar"
+    timeout: 45000
+- tapOn: "Entrar"
+- extendedWaitUntil:
+    visible: ".*[Ss]enha.*|.*[Pp]assword.*"
+    timeout: 45000
+- tapOn:
+    text: ".*[Ee]-?mail.*|.*[Uu]sername.*|.*[Uu]suário.*"
+    optional: true
+- inputText: ${QA_EMAIL}
+- tapOn: ".*[Ss]enha.*|.*[Pp]assword.*"
+- inputText: ${QA_PASSWORD}
+- pressKey: Enter
+- extendedWaitUntil:
+    visible: "Sair"
+    timeout: 60000
+- assertNotVisible: "Assinar.*"
+- takeScreenshot: signed-in
+# offline relaunch: the last feed of THIS user, labelled offline
+- setAirplaneMode: enabled
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible: ".*offline.*|.*Sem conexão.*"
+    timeout: 30000
+- takeScreenshot: offline
+- setAirplaneMode: disabled
+# logout returns to the gate
+- launchApp
+- extendedWaitUntil:
+    visible: "Sair"
+    timeout: 45000
+- tapOn: "Sair"
+- extendedWaitUntil:
+    visible: "Entrar"
+    timeout: 45000
+- takeScreenshot: signed-out

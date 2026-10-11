@@ -27,7 +27,21 @@
       }
     },
     "plugins": [
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "color": "#3ec39a",
+          "defaultChannel": "alerts"
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "O Onça usa o Face ID para desbloquear o app quando você ativa o bloqueio."
+        }
+      ]
     ],
     "extra": {
       "eas": {

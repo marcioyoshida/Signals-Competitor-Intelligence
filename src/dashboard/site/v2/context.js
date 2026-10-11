@@ -56,6 +56,20 @@
   function inApp() { return !!APP; }
   // #258: a #170 card link goes to the native share sheet (Android's WebView has no navigator.share)
   function shareViaShell(url) { if (APP) toShell({ type: "share", url }); }
+  // #256/#257: request/reply with the shell (native push token, app lock). The shell answers by
+  // calling window.__oncaShell.reply(id, value); no answer within the timeout resolves null.
+  let shellSeq = 0;
+  const shellWait = {};
+  if (APP) global.__oncaShell = { reply(id, value) { const f = shellWait[id]; if (f) { delete shellWait[id]; f(value); } } };
+  function askShell(type, data, timeoutMs) {
+    if (!APP) return Promise.resolve(null);
+    const id = ++shellSeq;
+    return new Promise((resolve) => {
+      shellWait[id] = resolve;
+      toShell(Object.assign({}, data || {}, { type, id }));
+      setTimeout(() => { if (shellWait[id]) { delete shellWait[id]; resolve(null); } }, timeoutMs || 30000);
+    });
+  }
   const PLAN_NOTE = "Gerencie seu plano em onssa.org.";
   if (APP && global.document) global.document.documentElement.classList.add("onca-app");
   const RETURN_PATH_KEY = "onca_return_path";
@@ -1338,7 +1352,7 @@
     bootSaaS,
     // feed
     loadScopedFeed, mountGate, setData, indLabel, upgradeHref, billingBannerHTML, bandOf, SAAS_BANDS, comboOf, combosOf,
-    isEntryTier, mountEntryBoard, segmentGateHTML, ENTRY_INDUSTRIES, inApp, PLAN_NOTE, shareViaShell,
+    isEntryTier, mountEntryBoard, segmentGateHTML, ENTRY_INDUSTRIES, inApp, PLAN_NOTE, shareViaShell, askShell,
     // drawer
     wireDrawer, openCard, closeDrawer,
     // panels

@@ -2106,6 +2106,8 @@ function renderHoje(el) {
   }
   html += hojeSec("hoje-alertas-cel", "Alertas no celular", null, "sem conteúdo na tela bloqueada",
     `<div class="pushbox" id="pushBox"><span class="hd-note">verificando…</span></div>`);
+  if (Ctx.inApp()) html += hojeSec("hoje-bloqueio", "Bloqueio do app", null, "Face ID / digital / senha do aparelho",
+    `<div class="pushbox" id="lockBox"><span class="hd-note">verificando…</span></div>`);
   if (!ADMIN) html += hojeSec("hoje-resumo", "Resumo semanal por e-mail", null, "segunda-feira, por setor",
     `<div class="pushbox" id="digestBox"><span class="hd-note">verificando…</span></div>`);
   html += `<a href="#painel" class="btn hoje-act" id="hojeFull">Ver painel completo →</a>`;
@@ -2116,6 +2118,7 @@ function renderHoje(el) {
   document.getElementById("hojeFull").addEventListener("click", (e) => { e.preventDefault(); writeHash({ view: "painel" }); window.scrollTo(0, 0); });
   renderPushBox();
   renderDigestBox();
+  renderLockBox();
   const sec = hashTokens().find(t => /^hoje-[a-z]+$/.test(t));
   if (sec) { const t = document.getElementById(sec); if (t) t.scrollIntoView({ block: "start" }); }
 }
@@ -2126,12 +2129,24 @@ function renderHoje(el) {
 const PUSH_TYPE_PT = { radar: "radar de produto (instabilidade/reclamações)", distress: "estresse financeiro / RJ",
                        regulatory: "mudança regulatória material" };
 const PUSH_DEFAULT = { cso: ["radar", "distress", "regulatory"], cpo: ["radar"], cco: ["distress"], cro: ["regulatory"] };
-function pushSupported() { return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window; }
+function pushSupported() {
+  if (Ctx.inApp()) return true;   // #256: the store app pushes natively (APNs/FCM via the shell)
+  return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+}
+// #256: in the store app the device's Expo push token is the subscription "endpoint"; the shell
+// asks the OS for permission only when `request` is true. Same shape as a web PushSubscription.
+async function nativeSub(request) {
+  const r = await Ctx.askShell("push:token", { request: !!request });
+  if (!r || !r.token) return request ? Promise.reject(new Error((r && r.reason) || "permissão negada no aparelho")) : null;
+  const endpoint = "expo:" + r.token;
+  return { endpoint, toJSON: () => ({ endpoint }), unsubscribe: async () => true };
+}
 function b64uBytes(s) {
   const b = atob((s + "=".repeat((4 - s.length % 4) % 4)).replace(/-/g, "+").replace(/_/g, "/"));
   return Uint8Array.from(b, c => c.charCodeAt(0));
 }
 async function pushSub() {
+  if (Ctx.inApp()) return nativeSub(false);
   const reg = await navigator.serviceWorker.getRegistration("/exec");
   return reg ? reg.pushManager.getSubscription() : null;
 }
@@ -2171,10 +2186,14 @@ async function renderPushBox(note) {
     try {
       if (on) { await disablePush(); note = "alertas desativados"; }
       else {
-        if (await Notification.requestPermission() !== "granted") { msg("permissão negada no aparelho"); return; }
-        const reg = await navigator.serviceWorker.ready;
-        const cfg = await pushApi("/api/me/push", null, "GET");
-        const ps = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uBytes(cfg.public_key) });
+        let ps;
+        if (Ctx.inApp()) ps = await nativeSub(true);
+        else {
+          if (await Notification.requestPermission() !== "granted") { msg("permissão negada no aparelho"); return; }
+          const reg = await navigator.serviceWorker.ready;
+          const cfg = await pushApi("/api/me/push", null, "GET");
+          ps = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uBytes(cfg.public_key) });
+        }
         await pushApi("/api/me/push/subscribe", { subscription: ps.toJSON(), officer: OFFICER, prefs: { types: chosen() } });
         engage("push", "open", null);
         note = "alertas ativados";
@@ -2216,6 +2235,32 @@ async function renderDigestBox(note) {
     catch (e) { n = "falha ao salvar"; }
     renderDigestBox(n);
   };
+}
+// #257: the store app's lock lives in the shell (biometrics / device passcode, SecureStore);
+// this box only shows and changes it. Changing it asks for the biometric/passcode first.
+async function renderLockBox(note) {
+  const box = document.getElementById("lockBox"); if (!box) return;
+  const st = await Ctx.askShell("lock:get");
+  if (!box.isConnected) return;
+  if (!st) { box.innerHTML = `<p class="hd-note">indisponível nesta versão do app</p>`; return; }
+  if (!st.available) {
+    box.innerHTML = `<p class="hd-note">Defina um bloqueio de tela (Face ID, digital ou senha) no aparelho para usar o bloqueio do app.</p>`;
+    return;
+  }
+  box.innerHTML = `<div style="padding:0 var(--s3) var(--s3)">
+    <label class="cvsub" style="display:flex;gap:var(--s2);align-items:center;min-height:44px">Bloquear após
+      <select id="lockMin">${[1, 5, 15].map(m => `<option value="${m}" ${m === st.minutes ? "selected" : ""}>${m} min</option>`).join("")}</select>
+      fora do app</label>
+    <p class="hd-note">Com o bloqueio ativo, o app também esconde o conteúdo na troca de apps e impede capturas de tela.</p>
+    <button class="btn ${st.enabled ? "" : "btn--primary"} hoje-act" id="lockToggle" type="button">${st.enabled ? "Desativar bloqueio" : "Ativar bloqueio"}</button>
+    ${st.enabled ? `<button class="btn hoje-act" id="lockSave" type="button">Salvar tempo</button>` : ""}
+    <span class="hd-note" id="lockMsg">${U.esc(note || "")}</span></div>`;
+  const set = async (enabled) => {
+    const r = await Ctx.askShell("lock:set", { enabled, minutes: Number(box.querySelector("#lockMin").value) }, 120000);
+    renderLockBox(r && r.ok ? (enabled ? "bloqueio ativo" : "bloqueio desativado") : ((r && r.reason) || "não foi possível alterar"));
+  };
+  box.querySelector("#lockToggle").onclick = () => set(!st.enabled);
+  const save = box.querySelector("#lockSave"); if (save) save.onclick = () => set(true);
 }
 async function disablePush() {
   const sub = await pushSub().catch(() => null);

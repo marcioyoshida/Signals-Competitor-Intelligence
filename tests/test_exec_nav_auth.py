@@ -64,3 +64,14 @@ def test_app_mode_shows_no_purchase_call_to_action():
     assert "if (Ctx.inApp()) { Ctx.shareViaShell(url); return; }" in EXEC                  # share sheet
     ne = (SITE / "v2" / "newentry" / "index.html").read_text(encoding="utf-8")
     assert "const links = C.inApp()" in ne
+
+
+def test_native_push_and_app_lock_bridge():
+    # #256: the page asks the shell for an Expo token and subscribes it like a web endpoint
+    assert "function askShell(type, data, timeoutMs)" in CTX and "global.__oncaShell = { reply(id, value)" in CTX
+    assert 'const r = await Ctx.askShell("push:token", { request: !!request });' in EXEC
+    assert 'const endpoint = "expo:" + r.token;' in EXEC
+    assert "if (Ctx.inApp()) return nativeSub(false);" in EXEC
+    # #257: lock settings shown only in the app, changed through the shell
+    assert 'if (Ctx.inApp()) html += hojeSec("hoje-bloqueio"' in EXEC
+    assert 'Ctx.askShell("lock:set", { enabled, minutes:' in EXEC
