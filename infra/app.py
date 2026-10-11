@@ -850,6 +850,13 @@ class OncaPrototypeStack(Stack):
                 _disc,
                 site_origin,
                 viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+                # an unknown *.txt got S3's raw 403: the public function sends it to /404.html
+                function_associations=[
+                    cloudfront.FunctionAssociation(
+                        function=public_rewrite_fn,
+                        event_type=cloudfront.FunctionEventType.VIEWER_REQUEST,
+                    )
+                ] if _disc == "/*.txt" else None,
             )
 
         # E3 (#155): the Entry getting-started guide — same public, credential-free

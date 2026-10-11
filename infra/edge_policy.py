@@ -96,7 +96,9 @@ def site_paths_js(site_root) -> str:
         "  var ru = r.uri;\n"
         '  if (ru.indexOf("/api/") !== 0 && !routes[key] && key !== "/exec" && key !== "/executivo") {\n'
         '    var last = ru.substring(ru.lastIndexOf("/") + 1);\n'
-        '    if (ru.charAt(ru.length - 1) === "/") {\n'
+        "    // /v2 has no index of its own: send it to the profile-driven router, not the 404.\n"
+        '    if (ru === "/v2" || ru === "/v2/") { redir = "/v2/app/" + qs(r.querystring || {}); }\n'
+        '    else if (ru.charAt(ru.length - 1) === "/") {\n'
         f'      if (!siteDirs[ru]) {{ redir = "{NOT_FOUND_PAGE}"; }}\n'
         '    } else if (last.indexOf(".") === -1) {\n'
         f'      redir = siteDirs[ru + "/"] ? ru + "/" + qs(r.querystring || {{}}) : "{NOT_FOUND_PAGE}";\n'
@@ -115,9 +117,13 @@ def public_paths_js(site_root, prefixes=("/docs", "/sample")) -> str:
     it (/docs/privacy -> /docs/privacy.html); anything else under the prefixes -> /404.html.
     Needs `r` in scope; returns early with the redirect itself (no auth step on this side)."""
     pre = tuple(prefixes)
-    files = [f for f in site_files(site_root) if f.startswith(tuple(p + "/" for p in pre))]
+    # the root discovery .txt files ride the same function on the public "/*.txt" behavior:
+    # a real one passes, any other *.txt gets the branded 404 instead of S3's raw 403.
+    files = [f for f in site_files(site_root)
+             if f.startswith(tuple(p + "/" for p in pre)) or f.endswith(".txt")]
     entries = ", ".join(f'"{f}": 1' for f in files)
-    conds = " || ".join(f'u === "{p}" || u.indexOf("{p}/") === 0' for p in pre)
+    conds = " || ".join([f'u === "{p}" || u.indexOf("{p}/") === 0' for p in pre]
+                        + ['u.slice(-4) === ".txt"'])
     return (
         "  // #221: unknown public paths -> branded 404 (infra/edge_policy.py public_paths_js).\n"
         f"  var pubFiles = {{ {entries} }};\n"

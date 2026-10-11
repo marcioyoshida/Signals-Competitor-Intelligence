@@ -50,7 +50,9 @@ def test_site_paths_redirects_dirs_and_unknown_paths():
     assert _run_fn("/v2/admin", {"opkey": {"value": "k"}}) == "/v2/admin/?opkey=k"
     assert _run_fn("/entry") == "/entry/"
     assert _run_fn("/nonexistent-page-xyz") == "/404.html"
-    assert _run_fn("/v2/") == "/404.html"
+    # /v2 has no index: it goes to the profile-driven router, query kept
+    assert _run_fn("/v2/") == "/v2/app/" and _run_fn("/v2") == "/v2/app/"
+    assert _run_fn("/v2", {"x": {"value": "1"}}) == "/v2/app/?x=1"
     for ok in ("/", "/v2/app/", "/index.html", "/feed.json", "/app", "/admin", "/exec",
                "/api/act", "/api/run/", "/v3/index.html", "/404.html"):
         assert _run_fn(ok) is None, ok
@@ -96,3 +98,15 @@ def test_public_docs_sample_unknown_paths_go_to_404():
     for ok in ("/docs", "/docs/", "/sample", "/sample/", "/docs/privacy.html", "/docs/terms.html",
                "/docs/qa/oauth-test-client.json", "/sample/index.html", "/pricing.html"):
         assert isinstance(_run_public(ok), str), ok
+
+
+def test_public_txt_unknown_goes_to_404():
+    """An unknown *.txt on the public "/*.txt" behavior got S3's raw 403."""
+    import shutil
+    if not shutil.which("node"):
+        import pytest
+        pytest.skip("node not installed")
+    for missing in ("/nope.txt", "/docs/x.txt", "/a/b.txt"):
+        assert _run_public(missing) == [302, "/404.html"], missing
+    for ok in ("/llms.txt", "/ai.txt", "/robots.txt", "/sitemap.txt"):
+        assert _run_public(ok) == ok, ok
