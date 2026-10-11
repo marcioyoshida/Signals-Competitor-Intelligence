@@ -503,10 +503,26 @@
           <div class="em-d" style="margin-top:var(--s2)"><a href="/pricing.html">Ver planos</a></div>`}</div>`;
       }
       if (isFederated()) {
+        // #248/#249: Apple or Google — and a Hide-My-Email relay address can never match the
+        // corporate email an operator mapped, so say so BEFORE offering a new individual account.
+        const claims = decodeJwt(getIdToken() || "") || {};
+        let idp = "";
+        try { idp = String((JSON.parse(claims.identities || "[]")[0] || {}).providerName || ""); }
+        catch (e) { idp = String(((claims.identities || [])[0] || {}).providerName || ""); }
+        const who = /apple/i.test(idp) ? "Apple" : "Google";
+        const relay = /@privaterelay\.appleid\.com$/i.test(String(claims.email || ""));
+        const company = relay
+          ? `<div class="em-d" style="margin-top:var(--s2)"><b>Você ocultou seu e-mail na Apple.</b> Se a sua
+              empresa já usa o Onça, saia e entre de novo escolhendo <b>Compartilhar meu e-mail</b> (o
+              corporativo) — com o e-mail oculto não conseguimos encontrar a conta dela.
+              <div style="margin-top:var(--s2)"><button type="button" class="btn" id="__gateLogout">Sair</button></div></div>`
+          : `<div class="em-d" style="margin-top:var(--s2)">Se a sua empresa já usa o Onça, entre com o e-mail
+              que ela cadastrou — o formulário abaixo cria uma <b>conta individual nova</b>.</div>`;
         return `<div class="empty"><div class="em-ico" aria-hidden="true">◐</div>
           <div class="em-t">Comece seu teste grátis de 14 dias</div>
-          <div class="em-d">Sua conta Google ainda não está vinculada a um plano. Escolha o setor que
-            quer acompanhar no plano Entry (R$ 490/mês depois do teste, um setor). Não pedimos cartão agora.</div>
+          <div class="em-d">Sua conta ${who} ainda não está vinculada a um plano. Escolha o setor que
+            quer acompanhar no plano Entry${APP ? "" : " (R$ 490/mês depois do teste, um setor)"}. Não pedimos cartão agora.</div>
+          ${company}
           <form id="__regForm" style="margin-top:var(--s3);text-align:left;max-width:340px;margin-inline:auto">
             ${ENTRY_INDUSTRIES.map((s) => `<label class="cvsub" style="display:block;margin:6px 0">
               <input type="radio" name="ind" value="${esc(s)}"> ${esc(indLabel(s))}</label>`).join("")}
@@ -525,6 +541,8 @@
     el.innerHTML = gateHTML(kind, ctxLabel, res);
     const b = el.querySelector("#__gateLogin");
     if (b) b.onclick = login;
+    const lo = el.querySelector("#__gateLogout");
+    if (lo) lo.onclick = logout;
     const f = el.querySelector("#__regForm");
     if (f) f.addEventListener("submit", async (e) => {
       e.preventDefault();

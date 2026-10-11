@@ -929,6 +929,34 @@ class OncaPrototypeStack(Stack):
                 ),
             )
 
+        # #248 (ADR 029): Sign in with Apple, same pattern as Google — gated on context persisted in
+        # infra/cdk.json (Services ID, team ID and key ID are not secrets; NEVER pass them as -c
+        # flags only: an unrelated deploy without the flag would silently destroy the IdP, the
+        # 2026-09-15 Google incident). The .p8 key lives only in Secrets Manager. Its own Onça App ID
+        # / Services ID / key under team AWSP6DBQ68 — not grouped with Bluefin's (shared user ids
+        # and consent branding). Federated users resolve by EMAIL exactly like Google
+        # (lambda_pretoken / map_federated_email); a Hide-My-Email relay address won't match an
+        # operator mapping — the no-access gate says so (#249 adds invite codes).
+        _apple = {k: self.node.try_get_context(f"apple_{k}") or "" for k in ("services_id", "team_id", "key_id")}
+        apple_idp = None
+        if all(_apple.values()):
+            apple_idp = cognito.UserPoolIdentityProviderApple(
+                self, "OncaAppleIdp",
+                user_pool=user_pool,
+                client_id=_apple["services_id"],
+                team_id=_apple["team_id"],
+                key_id=_apple["key_id"],
+                private_key_value=SecretValue.secrets_manager(
+                    "signalscompetitor/onca/apple-oauth", json_field="private_key"),
+                scopes=["email", "name"],
+                attribute_mapping=cognito.AttributeMapping(
+                    email=cognito.ProviderAttribute.APPLE_EMAIL,
+                    email_verified=cognito.ProviderAttribute.APPLE_EMAIL_VERIFIED,
+                ),
+            )
+        _federated = [p for p, idp in ((cognito.UserPoolClientIdentityProvider.GOOGLE, google_idp),
+                                       (cognito.UserPoolClientIdentityProvider.APPLE, apple_idp)) if idp]
+
         _client_kwargs = dict(
             # user_srp: the browser/dashboard login flow (PKCE Hosted UI + SRP).
             # admin_user_password: ADDITIVE — enables AdminInitiateAuth with
@@ -979,15 +1007,14 @@ class OncaPrototypeStack(Stack):
             refresh_token_validity=Duration.days(30),
             enable_token_revocation=True,
         )
-        if google_idp:
+        if _federated:
             _client_kwargs["supported_identity_providers"] = [
-                cognito.UserPoolClientIdentityProvider.COGNITO,
-                cognito.UserPoolClientIdentityProvider.GOOGLE,
-            ]
+                cognito.UserPoolClientIdentityProvider.COGNITO, *_federated]
         user_pool_client = user_pool.add_client("OncaWarroomClient", **_client_kwargs)
-        if google_idp:
-            # The client's supported IDP must exist before the client does.
-            user_pool_client.node.add_dependency(google_idp)
+        for _idp in (google_idp, apple_idp):
+            if _idp:
+                # The client's supported IDP must exist before the client does.
+                user_pool_client.node.add_dependency(_idp)
         user_pool_domain = user_pool.add_domain(
             "OncaHostedUi",
             cognito_domain=cognito.CognitoDomainOptions(domain_prefix=f"onca-{_acct}"),
@@ -2730,17 +2757,15 @@ class OncaPrototypeStack(Stack):
                 callback_urls=["https://onssa.org/oauth/callback"],
                 logout_urls=["https://onssa.org/"],
             ),
-            supported_identity_providers=[
-                cognito.UserPoolClientIdentityProvider.COGNITO,
-                *([cognito.UserPoolClientIdentityProvider.GOOGLE] if google_idp else []),
-            ],
+            supported_identity_providers=[cognito.UserPoolClientIdentityProvider.COGNITO, *_federated],
             id_token_validity=Duration.hours(1),
             access_token_validity=Duration.hours(1),
             refresh_token_validity=Duration.days(1),
             prevent_user_existence_errors=True,
         )
-        if google_idp:
-            oauth_cognito_client.node.add_dependency(google_idp)
+        for _idp in (google_idp, apple_idp):
+            if _idp:
+                oauth_cognito_client.node.add_dependency(_idp)
         _oauth_env = {
             "PYTHONPATH": "/var/task",
             "ONCA_OAUTH_ISSUER": "https://onssa.org/oauth",

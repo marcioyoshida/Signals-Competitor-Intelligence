@@ -75,3 +75,19 @@ def test_native_push_and_app_lock_bridge():
     # #257: lock settings shown only in the app, changed through the shell
     assert 'if (Ctx.inApp()) html += hojeSec("hoje-bloqueio"' in EXEC
     assert 'Ctx.askShell("lock:set", { enabled, minutes:' in EXEC
+
+
+def test_apple_idp_is_context_gated_and_on_both_clients():
+    # #248: like Google — only with all three IDs in infra/cdk.json context; key only in Secrets Manager
+    assert 'self.node.try_get_context(f"apple_{k}")' in APP and "if all(_apple.values()):" in APP
+    assert '"signalscompetitor/onca/apple-oauth", json_field="private_key"' in APP
+    assert "cognito.ProviderAttribute.APPLE_EMAIL_VERIFIED" in APP
+    assert APP.count("cognito.UserPoolClientIdentityProvider.COGNITO, *_federated") == 2
+    assert "for _idp in (google_idp, apple_idp):" in APP
+
+
+def test_federated_gate_warns_about_hidden_apple_email():
+    assert r"/@privaterelay\.appleid\.com$/i" in CTX and "Compartilhar meu e-mail" in CTX
+    assert 'const who = /apple/i.test(idp) ? "Apple" : "Google";' in CTX
+    assert "conta individual nova" in CTX
+    assert 'quer acompanhar no plano Entry${APP ? "" : " (R$ 490/mês' in CTX   # no price in the app
