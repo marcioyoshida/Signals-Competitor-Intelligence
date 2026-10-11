@@ -7,6 +7,9 @@
   "context": {
     "@aws-cdk/core:bootstrapQualifier": "hnb659fds",
     "google_client_id": "1053992821922-8j5rtck0ttjfn1s3g7cp09a6964ktpbp.apps.googleusercontent.com",
+    "apple_services_id": "org.onssa.signin",
+    "apple_team_id": "AWSP6DBQ68",
+    "apple_key_id": "PGYSQBKG75",
     "qa_pipeline_image_tag": "latest",
     "alertEmail": "marcioyoshida@gmail.com",
     "gdelt_bridge_ready": "1",
