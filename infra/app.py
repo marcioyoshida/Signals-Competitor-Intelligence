@@ -705,10 +705,10 @@ class OncaPrototypeStack(Stack):
                 "  // screen, so it must never be sufficient on its own to read the full,\n"
                 "  // unscoped feed.json (every tenant's data, not just the caller's own). A\n"
                 "  // second, narrower secret is required for this one path; curation tooling\n"
-                "  // (?admin=1) passes it as ?opkey=. feed.entry.json is NOT gated here — it is\n"
-                "  // the deliberately shared, entry-tier-only slice the Entry Portal design\n"
-                "  // already intends to be public within basic-auth (ADR 016).\n"
-                '  if (key === "/feed.json") {\n'
+                "  // (?admin=1) passes it as ?opkey=. #237: feed.entry.json carries EVERY Entry\n"
+                "  // vertical, but Entry is now sold per module — clients read their own scope\n"
+                "  // via /api/feed, so the static slice is operator-only too.\n"
+                '  if (key === "/feed.json" || key === "/feed.entry.json") {\n'
                 "    var q = r.querystring || {};\n"
                 f'    if (!q.opkey || q.opkey.value !== "{operator_secret()}") {{\n'
                 "      return { statusCode: 403, statusDescription: 'Forbidden' };\n"
@@ -1274,8 +1274,8 @@ class OncaPrototypeStack(Stack):
             sources=[s3deploy.Source.asset(str(SITE_ASSET))],
             destination_bucket=site_bucket,
             distribution=distribution,
-            # /entry/index.html = the ADR 016 Entry Portal (thin shared static site
-            # that serves ONLY feed.entry.json — no higher-tier industry can leak).
+            # /entry/index.html = the retired ADR 016 Entry Portal, now a redirect to /exec
+            # (#237: Entry is per-module, so clients read their own scope via /api/feed).
             distribution_paths=[
                 "/index.html",
                 "/entry/index.html",

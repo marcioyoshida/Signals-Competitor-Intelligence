@@ -215,11 +215,13 @@
   const _norm = (x) => String(x == null ? "" : x).toLowerCase();
   function _host(url) { try { return new URL(url).host.replace(/^www\./, ""); } catch (e) { return ""; } }
 
+  // `slug` may be one industry or a list (#237: /v2/newentry slices to the licensed Entry set).
   function sliceToIndustry(D, slug) {
-    if (!D || !slug) return D;
+    const want = [].concat(slug || []).map(_norm).filter(Boolean);
+    if (!D || !want.length) return D;
+    const hit = (arr) => (arr || []).map(_norm).some((x) => want.indexOf(x) !== -1);
     const attrs = D.entity_attrs || {};
-    const scoped = new Set(Object.keys(attrs).filter(
-      (e) => (attrs[e].industries || []).map(_norm).indexOf(slug) !== -1));
+    const scoped = new Set(Object.keys(attrs).filter((e) => hit(attrs[e].industries)));
     const groups = D.groups || {};
     const stack = Array.from(scoped).filter((e) => groups[e]);
     while (stack.length) {
@@ -229,7 +231,7 @@
     }
     const cardOK = (c) => {
       const inds = (c.industries || []).map(_norm);
-      if (inds.length) return inds.indexOf(slug) !== -1;      // denorm is authoritative
+      if (inds.length) return hit(inds);                     // denorm is authoritative
       return [c.entity].concat(c.entities || []).some((e) => e && scoped.has(e));
     };
     const feed = (D.feed || []).filter(cardOK);
@@ -246,7 +248,7 @@
     const byEnt = (arr, field) => (arr || []).filter((r) => scoped.has(r[field || "entity"]));
     return Object.assign({}, D, {
       feed, entities, entity_attrs: byKey(attrs), groups: byKey(groups),
-      scoped_modules: [slug],
+      scoped_modules: want,
       // entity-keyed auxiliary stores the panels read (risco/swot/mapa) — same slice, so no
       // panel shows a cross-industry entity. Absent keys stay absent (honest empty states).
       reputation: byEnt(D.reputation), distress: byEnt(D.distress),

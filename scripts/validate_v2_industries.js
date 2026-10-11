@@ -88,5 +88,18 @@ if (!Ind.segmentAccess(multi, "acquiring").ok){ console.error("multi-module acqu
 if (Ind.sliceToIndustry(multi, "acquiring").feed.some(c => (c.industries||[]).indexOf("acquiring")<0)){
   console.error("segment slice leaked another industry"); fail++; }
 
+// 7) #237: a list slice (the licensed Entry set) keeps exactly those industries
+const ent = Object.assign({}, Dmix, {
+  entity_attrs:{ agro:{industries:["agri-funds"]}, bet:{industries:["betting"]}, cons:{industries:["consorcio"]} },
+  entities:[{entity:"agro"},{entity:"bet"},{entity:"cons"}],
+  feed:[{ id:"a1", entity:"agro", industries:["agri-funds"], date:"2026-08-31", citations:[] },
+        { id:"b1", entity:"bet", industries:["betting"], date:"2026-08-31", citations:[] },
+        { id:"k1", entity:"cons", industries:["consorcio"], date:"2026-08-31", citations:[] }] });
+const two = Ind.sliceToIndustry(ent, ["agri-funds", "betting"]);
+if (two.feed.map(c=>c.id).sort().join()!=="a1,b1" || two.entities.map(e=>e.entity).sort().join()!=="agro,bet"
+    || JSON.stringify(two.scoped_modules)!=='["agri-funds","betting"]'){
+  console.error("list slice wrong:", two.feed.map(c=>c.id), two.scoped_modules); fail++; }
+if (Ind.sliceToIndustry(ent, ["agri-funds"]).feed.map(c=>c.id).join()!=="a1"){ console.error("one-item list slice wrong"); fail++; }
+
 console.log(fail===0 ? "VALIDATION OK — all industries render, all kinds valid, per-industry slice filters" : ("FAIL: "+fail));
 process.exit(fail?1:0);

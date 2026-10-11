@@ -235,7 +235,7 @@
 
   /* ======================================================================
      SCOPED FEED LOADER (ADR 002: the client never filters a superset).
-       - entry screen  -> static /feed.entry.json (already scoped, no auth)
+       - entry slice   -> static /feed.entry.json (operator-only since #237; screens use /api/feed)
        - SaaS screens  -> GET /api/feed with the Bearer token (server-scoped)
        - ?demo=1       -> co-located ./feed.json (harness only; a screen-local
                           synthetic SCOPED slice — never the root full feed, so
@@ -256,7 +256,8 @@
       catch (e) { return { error: "demo feed indisponível (" + (e.status || e.message) + ")" }; }
     }
     if (opts.entry) {
-      // Entry Portal: the static entry slice. No auth, no higher tier reachable.
+      // static entry slice — operator-only since #237 (needs ?opkey at the edge); client
+      // screens use the server-scoped path below.
       try { return { data: await fetchJson(opts.entryUrl || "/feed.entry.json") }; }
       catch (e) { return { error: "feed de entrada indisponível" }; }
     }
@@ -1279,7 +1280,7 @@
     bootSaaS,
     // feed
     loadScopedFeed, mountGate, setData, indLabel, upgradeHref, billingBannerHTML, bandOf, SAAS_BANDS, comboOf, combosOf,
-    isEntryTier, mountEntryBoard, segmentGateHTML,
+    isEntryTier, mountEntryBoard, segmentGateHTML, ENTRY_INDUSTRIES,
     // drawer
     wireDrawer, openCard, closeDrawer,
     // panels

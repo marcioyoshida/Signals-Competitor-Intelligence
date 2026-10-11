@@ -25,17 +25,19 @@
   </nav>
   <span class="spacer"></span>
   <span class="sub" id="asof">—</span>
+  <span id="authBox" style="display:inline-flex;gap:var(--s2);align-items:center"></span>
   <button class="icnbtn" id="themeBtn" title="Alternar tema" aria-label="Alternar tema claro/escuro">◐</button>
 </header>
 
 <main class="wrap">
   <div class="pagehead">
     <h1>Entrada — verticais em formação</h1>
-    <p class="lede">Quem está SE FORMANDO nas verticais Tier-3 rápidas e fragmentadas
-      (FIAGRO, betting, consórcio, crypto, FIIs)? Novos entrantes e as regras que
-      constituem cada vertical lideram; o mapa do comprador vem logo abaixo. Tudo por
-      contagem citada — nunca um tamanho de mercado estimado.</p>
+    <p class="lede" id="pgLede">Quem está SE FORMANDO nas verticais Entry da sua licença? Novos
+      entrantes e as regras que constituem cada vertical lideram; o mapa do comprador vem logo
+      abaixo. Tudo por contagem citada — nunca um tamanho de mercado estimado.</p>
   </div>
+  <!-- #237: Entry verticals outside the licence — names + upgrade link only, never their data -->
+  <div id="licStrip" style="display:none"></div>
 
   <div class="tiles" id="kpis" style="margin-bottom:var(--s5)"></div>
 
@@ -100,27 +102,54 @@
 
 <script src="/v2/app.js"></script>
 <script src="/v2/context.js"></script>
+<script src="/v2/industries.js"></script>
 <script>
-const U = window.OncaUI, C = window.OncaCtx;
-U.initTheme();
-C.wireDrawer();
-document.getElementById("themeBtn").addEventListener("click", () => { U.toggleTheme(); if (window.DATA) render(); });
+const U = window.OncaUI, C = window.OncaCtx, Ind = window.OncaIndustries;
+// #237: this page used to read the shared static feed.entry.json — every Entry vertical for
+// every client. It now reads the server-scoped tenant feed (/api/feed) like the other v2
+// screens and shows ONLY the Entry verticals the client licenses; the rest appear as names
+// with an upgrade link, never their data.
+C.bootSaaS({
+  ctxLabel: "entrada",
+  render(D) {
+    const lic = Ind.licensedIndustries(D);
+    const mine = C.ENTRY_INDUSTRIES.filter((m) => lic.indexOf(m) !== -1);
+    const locked = C.ENTRY_INDUSTRIES.filter((m) => lic.indexOf(m) === -1);
+    renderLicStrip(D, mine, locked);
+    if (!mine.length) {
+      // inline display, not [hidden]: .band/.tiles set display and would beat the attribute
+      document.querySelectorAll("main .band, #kpis").forEach((el) => { el.style.display = "none"; });
+      return;
+    }
+    document.querySelectorAll("main .band, #kpis").forEach((el) => { el.style.display = ""; });
+    // a SaaS client may license non-Entry industries too: this page frames the Entry set only
+    if (lic.some((m) => mine.indexOf(m) === -1)) D = Ind.sliceToIndustry(D, mine);
+    document.getElementById("pgLede").textContent = "Quem está SE FORMANDO em "
+      + mine.map(C.indLabel).join(", ") + "? Novos entrantes e as regras que constituem cada "
+      + "vertical lideram; o mapa do comprador vem logo abaixo. Tudo por contagem citada — "
+      + "nunca um tamanho de mercado estimado.";
+    render(D, mine);
+  },
+});
 
-(async function boot() {
-  // Entry Portal reads ONLY the static entry slice (feed.entry.json) — no auth,
-  // no higher-tier industry reachable. ?demo loads the co-located sample.
-  const res = await C.loadScopedFeed({ entry: true, entryUrl: "/feed.entry.json" });
-  if (res.error) { document.getElementById("entrants").innerHTML =
-    U.empty("Feed indisponível", res.error, "!"); return; }
-  window.DATA = res.data; C.setData(window.DATA); C.setAsOf(window.DATA); render();
-})();
+function renderLicStrip(D, mine, locked) {
+  const el = document.getElementById("licStrip");
+  if (!locked.length && mine.length) { el.style.display = "none"; return; }
+  const links = locked.map((m) =>
+    `<a class="btn btn--sm" href="${U.esc(C.upgradeHref("entry", m, D.upgrade))}">${U.esc(C.indLabel(m))} · ativar</a>`).join(" ");
+  el.className = "panel";
+  el.style.marginBottom = "var(--s5)";
+  el.innerHTML = `<div class="panel__bd"><b>${mine.length ? "Fora da sua licença" : "Nenhuma vertical Entry na sua licença"}</b>
+    <span class="hd-note"> — ${mine.length ? "estas verticais Entry não estão incluídas; os dados delas não aparecem aqui." : "ative uma vertical para ver novos entrantes e as regras que a constituem."}</span>
+    <div style="margin-top:var(--s2);display:flex;flex-wrap:wrap;gap:var(--s2)">${links}</div></div>`;
+  el.style.display = "";
+}
 
-function render() {
-  const D = window.DATA;
+function render(D, mine) {
   const k = D.kpis || {};
   C.renderKpis(document.getElementById("kpis"), [
     ["Sinais hoje", k.narratives_latest], ["Entidades em formação", k.entities_tracked],
-    ["Fontes distintas", k.sources], ["Verticais", (D.industry_options || []).length],
+    ["Fontes distintas", k.sources], ["Verticais na licença", mine.length],
   ]);
   C.renderQuadrant(document.getElementById("quadBody"), D, {});
   C.renderEntrantsFunnel(document.getElementById("funnel"), D);
