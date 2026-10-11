@@ -47,7 +47,10 @@
 
   /* rows */
   .exrow { display:flex; gap:var(--s3); align-items:flex-start; padding:var(--s2) var(--s4);
-    border-bottom:1px solid var(--border); cursor:pointer; }
+    border-bottom:1px solid var(--border); }
+  /* #239: only a row that opens something looks clickable (bindRows sets tabindex on those) */
+  .exrow[tabindex] { cursor:pointer; }
+  .exrow[tabindex]:focus-visible { outline:2px solid var(--primary); outline-offset:-2px; }
   .exrow:last-child { border-bottom:0; }
   .exrow:hover { background:var(--surface-2); }
   .exrow .ent { font-weight:600; min-width:118px; max-width:36%; color:var(--ink);
@@ -432,7 +435,7 @@
 </main>
 
 <div class="scrim" id="scrim"></div>
-<aside class="drawer" id="drawer" aria-hidden="true" role="dialog" aria-labelledby="drTitle">
+<aside class="drawer" id="drawer" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="drTitle">
   <div class="drawer__hd"><h3 id="drTitle">Inspeção</h3>
     <button class="btn btn--sm drshare" id="drShare" type="button" hidden>Compartilhar</button>
     <button class="drawer__close" id="drClose" aria-label="Fechar">×</button></div>
@@ -458,7 +461,7 @@ const OFFICERS = {
   cro: { label:"CRO · Regulatório", title:"Oficial regulatório (CRO)",
     lede:"O eixo regulatório: linha do tempo consulta→norma→fiscalização, impacto e alcance por setor, mudanças e prazos." },
   cco: { label:"CCO · Compliance", title:"Oficial de compliance (CCO)",
-    lede:"Integridade, registro de risco (distress/reputação/achados) e triagem de watchlist." },
+    lede:"Integridade, registro de risco (insolvência/reputação/achados) e triagem de watchlist." },
   cpo: { label:"CPO · Produto", title:"Oficial de produto (CPO)",
     lede:"Cobertura por setor, pontos cegos, propostas de descoberta e a força de proveniência da base." },
 };
@@ -1836,19 +1839,19 @@ function render() {
                  : heroCount("Achados graves", a.n_high, bandBadge(rc[0], rc[1]), "severidade alta na auditoria"),
         [tile("Achados de integridade", iw ? null : a.n_integrity, iw ? "auditoria do operador" : "registro",
               iw ? null : a.n_integrity > 0 ? "warn" : (sigOk ? "ok" : null)),
-         tile("Distress (confirmado)", a.n_distress, "insolvência", a.n_distress > 0 ? "crit" : "ok"),
+         tile("Insolvência (confirmada)", a.n_distress, "RJ / falência", a.n_distress > 0 ? "crit" : "ok"),
          tile("Reputação", a.n_rep, "rankings BCB"),
-         tile("Enforcement", a.n_enforcement || 0, (a.n_enforcement_severe || 0) + " crítico/alto",
+         tile("Fiscalização", a.n_enforcement || 0, (a.n_enforcement_severe || 0) + " crítico/alto",
               a.enforcement_severity === "critical" ? "crit" : a.enforcement_severity === "high" ? "high" : null)]) +
       (SECTOR !== "__all__" && !sigOk ? band("Sinal de compliance", "insuficiente",
         `<div class="panel"><div class="panel__bd" style="padding:var(--s4);color:var(--muted);font-size:var(--fs-meta)">` +
         `Cobertura de integridade/reputação para este setor é insuficiente para uma leitura de compliance — ` +
         `os zeros acima significam "sem sinal ingerido", não "auditado e limpo". Hoje o sinal robusto está ` +
         `concentrado em banking e fintech (ranking de reclamações do BCB).</div></div>`) : "") +
-      band("Enforcement & sanções", "liquidação · intervenção · RAET · cassação · sanções · CEIS/CNEP",
+      band("Fiscalização & sanções", "liquidação · intervenção · RAET · cassação · sanções · CEIS/CNEP",
            panel("Ações de supervisores contra operadores", (p.enforcement || []).filter(inSector).length,
              "mais grave primeiro · fontes linkadas", rowsEnforcement(p.enforcement))) +
-      band("Registro de risco", "", panel(iw ? "Enforcement · distress · reputação" : "Enforcement · distress · reputação · integridade", null, "prioridade", rowsRisk(p.risk_register))) +
+      band("Registro de risco", "", panel(iw ? "Fiscalização · insolvência · reputação" : "Fiscalização · insolvência · reputação · integridade", null, "prioridade", rowsRisk(p.risk_register))) +
       band(iw ? "Reputação" : "Integridade & reputação", "",
         iw ? panel("Reputação (reclamações)", null, "pior ranking primeiro", rowsRep(p.reputation))
            : grid("1fr 1fr", [panel("Auditoria de integridade", ofN(p.integrity, a.n_integrity, inSectorStrict), "achados do registro", rowsIntegrity(p.integrity)),
@@ -1957,9 +1960,7 @@ function render() {
     const row = t.closest(".exrow");
     engage("headline", expanded ? "expand" : "collapse", row && row.getAttribute("data-id"));
   }));
-  el.querySelectorAll(".exrow[data-id]").forEach(row => row.addEventListener("click", () => inspect(row.getAttribute("data-id"))));
-  el.querySelectorAll(".exrow[data-url],.exrow[data-href]").forEach(row => row.addEventListener("click", () => {
-    const u = row.getAttribute("data-url") || row.getAttribute("data-href"); if (u) window.open(u, "_blank", "noopener"); }));
+  bindRows(el);
   el.querySelectorAll(".traj-f button[data-tv]").forEach(b => b.addEventListener("click", () => askConfirm(b, captureTraj)));
   el.querySelectorAll(".traj-f a[data-ev]").forEach(a => a.addEventListener("click", (e) => { e.preventDefault(); onEvidence(a); }));
   // CSO weekly brief: its rows are plain `.rec` divs directly in the board (the horizons recs
@@ -2083,10 +2084,7 @@ function renderHoje(el) {
   html += `<a href="#painel" class="btn hoje-act" id="hojeFull">Ver painel completo →</a>`;
   el.innerHTML = `<div class="hoje">${html}</div>`;
   if (!STALE) engage("hoje", "open", null);   // not for the cached pre-paint (it re-renders)
-  el.querySelectorAll(".exrow[data-id]").forEach(row => row.addEventListener("click", () => {
-    const id = row.getAttribute("data-id"); if (BYID[id]) inspect(id); }));
-  el.querySelectorAll(".exrow[data-url],.exrow[data-href]").forEach(row => row.addEventListener("click", () => {
-    const u = row.getAttribute("data-url") || row.getAttribute("data-href"); if (u) window.open(u, "_blank", "noopener"); }));
+  bindRows(el);
   el.querySelectorAll(".traj-f button[data-tv]").forEach(b => b.addEventListener("click", () => askConfirm(b, captureTraj)));
   document.getElementById("hojeFull").addEventListener("click", (e) => { e.preventDefault(); setView("painel"); render(); window.scrollTo(0, 0); });
   renderPushBox();
@@ -2352,13 +2350,43 @@ function inspectEnforcement(id) {
   const KIND = { official: "ato oficial", registry: "cadastro oficial", news: "imprensa" };
   const src = (r.sources || []).map(s => `<li><a href="${U.esc(s.url)}" target="_blank" rel="noopener">${U.esc(s.title || s.url)}</a>` +
     ` <span class="hd-note">${U.esc(KIND[s.kind] || s.kind || "")} · ${U.esc(s.label || "")} · ${U.esc(s.date || "")}</span></li>`).join("");
-  document.getElementById("drTitle").textContent = "Enforcement — " + (r.kind_label || r.kind || "");
+  document.getElementById("drTitle").textContent = "Medida de supervisão — " + (r.kind_label || r.kind || "");
   document.getElementById("drBody").innerHTML = `<div class="callout"><p><b>${U.esc(r.label || r.target || "—")}</b></p>` +
     `<p>${U.esc(r.title || "")}</p>` + (r.summary && r.summary !== r.title ? `<p>${U.esc(r.summary)}</p>` : "") +
     `<p class="hd-note">${U.esc(r.authority || "")} · severidade ${U.esc(SECTOR_SEV_PT[r.severity] || r.severity || "—")} · ` +
     `${U.esc(ENF_CONF_PT[r.confidence] || r.confidence || "")}${r.entity ? "" : " · instituição fora do roster"}</p><ol>${src}</ol></div>`;
   openDrawer(id);
   return true;
+}
+// #239/#240: one binding for every row, Painel and Hoje alike. The target is resolved up front so
+// a row that opens nothing never looks (or tabs as) clickable; rows that do open something get
+// mouse AND keyboard activation (Enter/Space), tabindex and a role.
+function inspectTarget(id) {
+  id = String(id || "");
+  if (!id) return null;
+  if (BYID[id] || id.indexOf("sector_event:") === 0 || id.indexOf("enf:") === 0) return id;
+  // a Hoje trajectory keyed by ENTITY ("Inadimplência elevada — Crefisa"): its latest card
+  const cs = Object.values(BYID).filter(c => c.entity === id)
+    .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+  return cs.length ? cs[0].id : null;
+}
+function activateRow(row, fn, role) {
+  row.setAttribute("tabindex", "0"); row.setAttribute("role", role);
+  row.addEventListener("click", fn);
+  row.addEventListener("keydown", (e) => {
+    if (e.target !== row || (e.key !== "Enter" && e.key !== " ")) return;
+    e.preventDefault(); fn();
+  });
+}
+function bindRows(el) {
+  el.querySelectorAll(".exrow[data-id]").forEach(row => {
+    const t = inspectTarget(row.getAttribute("data-id"));
+    if (t) activateRow(row, () => inspect(t), "button");
+  });
+  el.querySelectorAll(".exrow[data-url],.exrow[data-href]").forEach(row => {
+    const u = row.getAttribute("data-url") || row.getAttribute("data-href");
+    if (u) activateRow(row, () => window.open(u, "_blank", "noopener"), "link");
+  });
 }
 function inspect(id) {
   if (String(id || "").indexOf("sector_event:") === 0 && inspectSectorEvent(id)) return;
@@ -2417,13 +2445,37 @@ async function resolveSharedLink() {
     "O item compartilhado não está no escopo da sua licença — ou saiu da janela de dados.", "⦸");
   openDrawer(null);
 }
+// #240: the drawer is a modal dialog for keyboard users too — focus moves in on open (to the
+// close button), Tab stays inside, Esc closes, and focus returns to the row that opened it.
+let DR_RETURN = null;
+function drawerIsOpen() { return document.getElementById("drawer").classList.contains("open"); }
 function openDrawer(shareId) {
+  if (!drawerIsOpen()) DR_RETURN = document.activeElement;
   SHARE_ID = shareId || null;
   const sb = document.getElementById("drShare"); if (sb) sb.hidden = !SHARE_ID || ADMIN;
   document.getElementById("drawer").setAttribute("aria-hidden", "false");
-  document.getElementById("scrim").classList.add("open"); document.getElementById("drawer").classList.add("open"); }
-function closeDrawer() { document.getElementById("drawer").setAttribute("aria-hidden", "true");
-  document.getElementById("scrim").classList.remove("open"); document.getElementById("drawer").classList.remove("open"); }
+  document.getElementById("scrim").classList.add("open"); document.getElementById("drawer").classList.add("open");
+  document.getElementById("drClose").focus({ preventScroll: true }); }
+function closeDrawer() {
+  const wasOpen = drawerIsOpen();
+  document.getElementById("drawer").setAttribute("aria-hidden", "true");
+  document.getElementById("scrim").classList.remove("open"); document.getElementById("drawer").classList.remove("open");
+  if (wasOpen && DR_RETURN && document.contains(DR_RETURN)) DR_RETURN.focus({ preventScroll: true });
+  DR_RETURN = null;
+}
+document.addEventListener("keydown", (e) => {
+  if (!drawerIsOpen()) return;
+  if (e.key === "Escape") { e.preventDefault(); closeDrawer(); return; }
+  if (e.key !== "Tab") return;
+  const dr = document.getElementById("drawer");
+  const f = Array.from(dr.querySelectorAll('a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])'))
+    .filter(x => !x.disabled && !x.hidden && x.offsetParent !== null);
+  if (!f.length) return;
+  const first = f[0], last = f[f.length - 1];
+  if (!dr.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+  else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+});
 </script>
 </body>
 </html>
