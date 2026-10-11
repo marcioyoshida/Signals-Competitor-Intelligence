@@ -1070,22 +1070,30 @@
     // #232: labels used to sit beside every dot regardless of neighbours (15 overlapping pairs on
     // /v2/app). Greedy placement in relevance order (ents is pre-sorted): try a few vertical
     // offsets on the preferred side, then the other side; if none is free, omit the label (the
-    // dot keeps its <title> tooltip). Finite candidate list — no open-ended loop (cf. #206).
-    const placed = [];
-    const boxOf = (lx, ly, anc, w) => ({ x0: anc === "end" ? lx - w : lx, x1: anc === "end" ? lx : lx + w,
-      y0: ly - 10, y1: ly + 3 });
+    // dot keeps its <title> tooltip); an offset label gets a thin leader to its dot. Finite candidate list — no open-ended loop (cf. #206).
+    const boxOf = (lx, ly, anc, w) => ({ x0: anc === "end" ? lx - w - 2 : lx - 2,
+      x1: anc === "end" ? lx + 2 : lx + w + 2, y0: ly - 11, y1: ly + 4 });
+    // occupied space starts with the four quadrant corner labels (11px bold, letter-spaced)
+    // and every dot, so a label never sits on a corner caption or another entity's marker.
+    const placed = [["OFENSIVOS", ML + pW - 6, MT + 14, "end"], ["CONSOLIDADOS", ML + 6, MT + 14, "start"],
+      ["DESAFIANTES", ML + pW - 6, MT + pH - 8, "end"], ["LATENTES", ML + 6, MT + pH - 8, "start"]]
+      .map(([t, x, y, a]) => boxOf(x, y, a, t.length * 8.2));
+    ents.forEach((p) => {
+      const cx = X(p.mom), cy = Y(p.thr), r = 5 + Math.sqrt(p.total / maxTot) * 7;
+      placed.push({ x0: cx - r, x1: cx + r, y0: cy - r, y1: cy + r });
+    });
     const hits = (b) => placed.some((q) => b.x0 < q.x1 && q.x0 < b.x1 && b.y0 < q.y1 && q.y0 < b.y1);
     const inPlot = (b) => b.x0 >= ML && b.x1 <= ML + pW && b.y0 >= MT && b.y1 <= MT + pH;
     const labelPos = ents.map((p) => {
       const cx = X(p.mom), cy = Y(p.thr);
       const r = 5 + Math.sqrt(p.total / maxTot) * 7;
-      const w = String(p.e.label || "").length * 6.4;
+      const w = String(p.e.label || "").length * 7.2;  // 11px/600 ≈ 7px per glyph, rounded up
       const pref = cx > ML + pW * 0.8 ? "end" : "start";
       for (const anc of [pref, pref === "end" ? "start" : "end"]) {
         const lx = anc === "end" ? cx - r - 5 : cx + r + 5;
         for (const dy of [0, -13, 13, -26, 26, -39, 39]) {
           const ly = cy + 3.5 + dy, b = boxOf(lx, ly, anc, w);
-          if (inPlot(b) && !hits(b)) { placed.push(b); return { lx, ly, anc }; }
+          if (inPlot(b) && !hits(b)) { placed.push(b); return { lx, ly, anc, dy }; }
         }
       }
       return null;
@@ -1100,6 +1108,9 @@
         <title>${esc(p.e.label)} — ameaça ${p.thr.toFixed(2)} · expansão ${p.mom} · ${p.total} sinais</title>
         <circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(1)}"
           fill="var(--t-${t.key}-fill)" stroke="var(--t-${t.key})" stroke-width="1.75"/>
+        ${lp && lp.dy ? `<line x1="${(cx + (lp.anc === "end" ? -r : r) * 0.7).toFixed(1)}"
+          y1="${(cy + Math.sign(lp.dy) * r * 0.7).toFixed(1)}" x2="${(lp.lx + (lp.anc === "end" ? 1 : -1)).toFixed(1)}"
+          y2="${(lp.ly - 4).toFixed(1)}" stroke="var(--muted)" stroke-width="1" opacity=".6"/>` : ""}
         ${lp ? `<text x="${lp.lx.toFixed(1)}" y="${lp.ly.toFixed(1)}" text-anchor="${lp.anc}"
           fill="var(--ink-2)" font-size="11" font-weight="600">${esc(p.e.label)}</text>` : ""}
       </g>`;
