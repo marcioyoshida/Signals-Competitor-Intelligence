@@ -135,7 +135,11 @@ C.bootSaaS({
 function renderLicStrip(D, mine, locked) {
   const el = document.getElementById("licStrip");
   if (!locked.length && mine.length) { el.style.display = "none"; return; }
-  const links = locked.map((m) =>
+  // #258: inside the store app the unlicensed verticals are named, never linked to a purchase
+  const links = C.inApp()
+    ? locked.map((m) => `<span class="badge badge--ghost">${U.esc(C.indLabel(m))}</span>`).join(" ")
+      + ` <span class="hd-note">${U.esc(C.PLAN_NOTE)}</span>`
+    : locked.map((m) =>
     `<a class="btn btn--sm" href="${U.esc(C.upgradeHref("entry", m, D.upgrade))}">${U.esc(C.indLabel(m))} · ativar</a>`).join(" ");
   el.className = "panel";
   el.style.marginBottom = "var(--s5)";

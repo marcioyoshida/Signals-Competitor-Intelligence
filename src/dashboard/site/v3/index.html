@@ -750,6 +750,7 @@ const BAND_PRICE = { saas_premium: "8.900", saas_mid: "4.900", saas_entry: "2.90
 const brl = (n) => Number(n).toLocaleString("pt-BR");
 function assinarHTML(D) {
   const m = new URLSearchParams(location.search).get("assinar") || "";
+  if (Ctx.inApp()) return "";   // #258: no purchase flow inside the store app (3.1.1)
   const cta = (tier, id) => `<a class="btn btn--primary btn--sm" href="${U.esc(Ctx.upgradeHref(tier, id, D.upgrade))}">${D.upgrade && D.upgrade.live ? "Continuar para pagamento" : "Falar com a Onça para assinar"}</a>`;
   const have = D.scoped_modules || [];
   if (m.indexOf("combo:") === 0) {
@@ -2450,6 +2451,7 @@ async function shareCurrent() {
   const url = `${location.origin}/exec?c=${await sha16(SHARE_ID)}`;
   const btn = document.getElementById("drShare");
   engage("share", "open", BYID[SHARE_ID] ? SHARE_ID : null);   // #165 count
+  if (Ctx.inApp()) { Ctx.shareViaShell(url); return; }   // #258: native share sheet in the store app
   try {
     if (navigator.share) { await navigator.share({ title: "Onça — painel executivo", url }); return; }
     await navigator.clipboard.writeText(url);

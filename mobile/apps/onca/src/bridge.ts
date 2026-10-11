@@ -57,12 +57,27 @@ export function staysInApp(url: string): boolean {
   return h !== null && IN_APP_HOSTS.has(h);
 }
 
+/** #258 (App Store 3.1.1): the app never opens a purchase surface — not even in the system browser. */
+export function isPurchaseUrl(url: string): boolean {
+  const h = hostOf(url);
+  if (h === "signals-llc.store" || h === "www.signals-llc.store") return true;
+  if (h !== null && IN_APP_HOSTS.has(h) && /^https:\/\/[^/]+\/pricing(\.html)?([?#]|$)/i.test(url)) return true;
+  return /^mailto:/i.test(url) && /subject=[^&]*assinar/i.test(decodeURIComponentSafe(url));
+}
+function decodeURIComponentSafe(s: string): string { try { return decodeURIComponent(s); } catch { return s; } }
+
+/** A #170 card link: only onssa.org/exec?c=<16 hex> is shareable. */
+export function isShareUrl(url: unknown): url is string {
+  return typeof url === "string" && /^https:\/\/(www\.)?onssa\.org\/exec\?c=[0-9a-f]{16}$/.test(url);
+}
+
 /** A message posted by context.js through window.ReactNativeWebView. */
-export type PageMessage = { type: "auth" | "logout"; url: string };
+export type PageMessage = { type: "auth" | "logout" | "share"; url: string };
 export function parseMessage(data: string): PageMessage | null {
   try {
     const m = JSON.parse(data);
     if ((m?.type === "auth" || m?.type === "logout") && isHostedUiUrl(m.url)) return { type: m.type, url: m.url };
+    if (m?.type === "share" && isShareUrl(m.url)) return { type: "share", url: m.url };
   } catch { /* not ours */ }
   return null;
 }

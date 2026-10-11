@@ -33,3 +33,24 @@ test("page messages: only auth/logout to our own Hosted UI", () => {
 test("injected flag is what context.js checks for", () => {
   assert.match(injectedFlag("ios"), /window\.__ONCA_APP__ = \{"redirectUri":"onca:\/\/auth","platform":"ios","bridge":1\}/);
 });
+
+import { isPurchaseUrl, isShareUrl } from "./bridge.ts";
+
+test("#258: purchase surfaces are never opened from the app", () => {
+  for (const u of ["https://signals-llc.store/?product=onca&tier=entry", "https://www.signals-llc.store/",
+                   "https://onssa.org/pricing.html", "https://onssa.org/pricing", "https://www.onssa.org/pricing.html#x",
+                   "mailto:contato@onssa.org?subject=Assinar%20On%C3%A7a%20%E2%80%94%20Entry"]) {
+    assert.ok(isPurchaseUrl(u), u);
+  }
+  for (const u of ["https://onssa.org/exec", "https://onssa.org/docs/privacy.html", "https://www.bcb.gov.br/x",
+                   "mailto:contato@onssa.org?subject=Ajuda"]) {
+    assert.ok(!isPurchaseUrl(u), u);
+  }
+});
+
+test("#258: only /exec?c=<16 hex> card links are shared natively", () => {
+  assert.ok(isShareUrl("https://onssa.org/exec?c=0123456789abcdef"));
+  for (const u of ["https://onssa.org/exec?c=XYZ", "https://evil.example/exec?c=0123456789abcdef", "javascript:1", 7]) {
+    assert.ok(!isShareUrl(u), String(u));
+  }
+});

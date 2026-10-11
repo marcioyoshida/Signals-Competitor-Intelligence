@@ -51,3 +51,16 @@ def test_store_app_bridge_hands_sign_in_to_the_shell():
     assert 'if (APP && APP.redirectUri === "onca://auth") AUTH.redirectUri = APP.redirectUri;' in CTX
     assert 'toShell({ type: "auth", url:' in CTX and 'toShell({ type: "logout", url:' in CTX
     assert APP.count('"onca://auth",') == 2   # Cognito callback + logout URLs
+
+
+def test_app_mode_shows_no_purchase_call_to_action():
+    # #258 (App Store 3.1.1/3.1.3): every purchase CTA has an app-mode branch with no link/price
+    assert 'const PLAN_NOTE = "Gerencie seu plano em onssa.org.";' in CTX
+    assert "${APP ? `<span class=\"hd-note\">${PLAN_NOTE}</span>`" in CTX                 # trial bar
+    assert "${APP ? PLAN_NOTE : `Assine para voltar a ver ${esc(ctxLabel)}.`}" in CTX      # lapsed gate
+    assert "const ctas = APP ? (mods.some((m) => bandOf(m))" in CTX                       # entry board
+    assert "${band && !APP ? `<a class=\"btn btn--primary\"" in CTX                       # segment gate
+    assert 'if (Ctx.inApp()) return "";   // #258' in EXEC                                 # ?assinar
+    assert "if (Ctx.inApp()) { Ctx.shareViaShell(url); return; }" in EXEC                  # share sheet
+    ne = (SITE / "v2" / "newentry" / "index.html").read_text(encoding="utf-8")
+    assert "const links = C.inApp()" in ne

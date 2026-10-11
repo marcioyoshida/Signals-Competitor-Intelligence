@@ -2,12 +2,12 @@
 // jobs here: sign-in in the SYSTEM browser (Google refuses embedded WebViews), external links out
 // to the system browser, and Android back. Everything else is the web app.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BackHandler, Linking, Platform, Pressable, StatusBar, StyleSheet, Text, View } from "react-native";
+import { BackHandler, Linking, Platform, Pressable, Share, StatusBar, StyleSheet, Text, View } from "react-native";
 import { WebView } from "react-native-webview";
 import type { WebViewMessageEvent } from "react-native-webview";
 import type { ShouldStartLoadRequest } from "react-native-webview/lib/WebViewTypes";
 import * as WebBrowser from "expo-web-browser";
-import { ORIGIN, REDIRECT, exchangeUrl, injectedFlag, parseAuthRedirect, parseMessage, staysInApp } from "./bridge.ts";
+import { ORIGIN, REDIRECT, exchangeUrl, injectedFlag, isPurchaseUrl, parseAuthRedirect, parseMessage, staysInApp } from "./bridge.ts";
 
 const BG = "#0e1214";
 
@@ -24,6 +24,7 @@ export default function App() {
   const onMessage = useCallback(async (e: WebViewMessageEvent) => {
     const m = parseMessage(e.nativeEvent.data);
     if (!m) return;
+    if (m.type === "share") { Share.share({ message: m.url, url: m.url }).catch(() => {}); return; }
     const r = await WebBrowser.openAuthSessionAsync(m.url, REDIRECT, { preferEphemeralSession: m.type === "logout" });
     if (m.type === "logout") { go(`${ORIGIN}/exec`); return; }
     if (r.type !== "success") return;                    // cancelled: stay on the gate
@@ -32,6 +33,7 @@ export default function App() {
   }, [go]);
 
   const onShouldStart = useCallback((req: ShouldStartLoadRequest) => {
+    if (isPurchaseUrl(req.url)) return false;            // #258: never, not even in the system browser
     if (staysInApp(req.url)) return true;
     if (/^(https?|mailto|tel):/i.test(req.url)) Linking.openURL(req.url).catch(() => {});
     return false;
@@ -65,7 +67,7 @@ export default function App() {
         injectedJavaScriptBeforeContentLoaded={injectedFlag(Platform.OS)}
         onMessage={onMessage}
         onShouldStartLoadWithRequest={onShouldStart}
-        onOpenWindow={(e) => { const u = e.nativeEvent.targetUrl; if (u) Linking.openURL(u).catch(() => {}); }}
+        onOpenWindow={(e) => { const u = e.nativeEvent.targetUrl; if (u && !isPurchaseUrl(u)) Linking.openURL(u).catch(() => {}); }}
         onNavigationStateChange={(n) => { canGoBack.current = n.canGoBack; }}
         onError={(e) => setFailed(e.nativeEvent.description || "Sem conexão.")}
         javaScriptEnabled

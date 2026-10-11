@@ -51,6 +51,13 @@
   const APP = (global.__ONCA_APP__ && global.ReactNativeWebView) ? global.__ONCA_APP__ : null;
   if (APP && APP.redirectUri === "onca://auth") AUTH.redirectUri = APP.redirectUri;
   function toShell(msg) { global.ReactNativeWebView.postMessage(JSON.stringify(msg)); }
+  // #258 (App Store 3.1.1 / 3.1.3): inside the app there is no purchase call to action — no link to
+  // the storefront, no price, no "Assine". The plan is managed on the web; say so in plain text.
+  function inApp() { return !!APP; }
+  // #258: a #170 card link goes to the native share sheet (Android's WebView has no navigator.share)
+  function shareViaShell(url) { if (APP) toShell({ type: "share", url }); }
+  const PLAN_NOTE = "Gerencie seu plano em onssa.org.";
+  if (APP && global.document) global.document.documentElement.classList.add("onca-app");
   const RETURN_PATH_KEY = "onca_return_path";
   // only a same-site path we wrote ourselves; never "//host" (no open redirect)
   const safePath = (p) => typeof p === "string" && /^\/(?!\/)[A-Za-z0-9_\-\/.]*$/.test(p);
@@ -448,7 +455,8 @@
     const mod = (b.trial_modules || [])[0] || "";
     return `<div class="trialbar" role="status"><span>Teste grátis: <b>${days}</b> ${days === 1 ? "dia restante" : "dias restantes"}
       ${mod ? "· " + esc(indLabel(mod)) : ""}</span>
-      <a class="btn btn--primary btn--sm" href="${esc(upgradeHref("entry", mod, data.upgrade))}">Assinar Entry · R$ 490/mês</a></div>`;
+      ${APP ? `<span class="hd-note">${PLAN_NOTE}</span>`
+        : `<a class="btn btn--primary btn--sm" href="${esc(upgradeHref("entry", mod, data.upgrade))}">Assinar Entry · R$ 490/mês</a>`}</div>`;
   }
 
   // A full-panel login/no-access gate (honest, never a silent empty grid).
@@ -476,9 +484,9 @@
         return `<div class="empty"><div class="em-ico" aria-hidden="true">◐</div>
           <div class="em-t">${ended ? "Seu teste grátis terminou" : "Sua assinatura não está ativa"}</div>
           <div class="em-d">${ended ? "Os 14 dias de teste acabaram." : "O pagamento da assinatura foi encerrado."}
-            Assine para voltar a ver ${esc(ctxLabel)}. Nada do seu histórico foi apagado.</div>
-          <div style="margin-top:var(--s3)">${ctas}</div>
-          <div class="em-d" style="margin-top:var(--s2)"><a href="/pricing.html">Ver planos</a></div></div>`;
+            ${APP ? PLAN_NOTE : `Assine para voltar a ver ${esc(ctxLabel)}.`} Nada do seu histórico foi apagado.</div>
+          ${APP ? "" : `<div style="margin-top:var(--s3)">${ctas}</div>
+          <div class="em-d" style="margin-top:var(--s2)"><a href="/pricing.html">Ver planos</a></div>`}</div>`;
       }
       if (isFederated()) {
         return `<div class="empty"><div class="em-ico" aria-hidden="true">◐</div>
@@ -1231,7 +1239,8 @@
     const board = $("board");
     if (!board) return;
     const cards = feed(D).slice().sort(byDateThreat);
-    const ctas = mods.filter((m) => bandOf(m)).map((m) =>
+    const ctas = APP ? (mods.some((m) => bandOf(m)) ? `<span class="hd-note">${PLAN_NOTE}</span>` : "")
+      : mods.filter((m) => bandOf(m)).map((m) =>
       `<a class="btn btn--primary" href="${esc(upgradeHref(bandOf(m), m, D.upgrade))}">Assinar SaaS · ${esc(indLabel(m))}</a>`).join(" ");
     board.innerHTML = `<div class="tiles" id="entryKpis" style="margin-bottom:var(--s4)"></div>
       <section class="band"><div class="band-hd"><span class="overline">Sinais do setor · ${esc(sector)}</span>
@@ -1269,7 +1278,8 @@
       <div class="em-d">Esta página mostra apenas ${esc(indLabel(acc.slug))}; dados de outros setores não
         aparecem sob este enquadramento.${mine ? " Seus setores: " + mine + "." : ""}</div>
       <div style="margin-top:var(--s3)"><a class="btn" href="${home}">Abrir meus setores</a>
-        ${band ? `<a class="btn btn--primary" href="${esc(upgradeHref(band, acc.slug, D.upgrade))}">Assinar ${esc(indLabel(acc.slug))}</a>` : ""}</div></div>`;
+        ${band && !APP ? `<a class="btn btn--primary" href="${esc(upgradeHref(band, acc.slug, D.upgrade))}">Assinar ${esc(indLabel(acc.slug))}</a>` : ""}</div>
+      ${band && APP ? `<div class="em-d" style="margin-top:var(--s2)">${PLAN_NOTE}</div>` : ""}</div>`;
   }
   function mountSegmentGate(D, acc) {
     const main = document.querySelector("main") || document.body;
@@ -1328,7 +1338,7 @@
     bootSaaS,
     // feed
     loadScopedFeed, mountGate, setData, indLabel, upgradeHref, billingBannerHTML, bandOf, SAAS_BANDS, comboOf, combosOf,
-    isEntryTier, mountEntryBoard, segmentGateHTML, ENTRY_INDUSTRIES,
+    isEntryTier, mountEntryBoard, segmentGateHTML, ENTRY_INDUSTRIES, inApp, PLAN_NOTE, shareViaShell,
     // drawer
     wireDrawer, openCard, closeDrawer,
     // panels
