@@ -1,0 +1,24 @@
+# robots.txt · onssa.org (Onça) — #235
+# Public pages (pricing, the public sample, docs, discovery files) may be crawled and indexed,
+# including by AI crawlers; terms for AI systems: https://onssa.org/ai.txt
+# Licensed client data sits behind sign-in — the rules below keep crawlers off those app surfaces.
+
+User-agent: *
+Allow: /pricing.html
+Allow: /sample/
+Allow: /docs/
+Allow: /llms.txt
+Allow: /ai.txt
+Allow: /openapi.json
+Allow: /.well-known/agent-card.json
+Disallow: /exec
+Disallow: /app
+Disallow: /v2/
+Disallow: /v3/
+Disallow: /entry/
+Disallow: /api/
+Disallow: /feed
+Disallow: /mcp
+Disallow: /docs/qa/
+
+Sitemap: https://onssa.org/sitemap.txt

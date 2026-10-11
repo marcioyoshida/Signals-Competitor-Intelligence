@@ -66,7 +66,7 @@ def test_agent_card_is_served_by_the_oauth_lambda():
 
 def test_only_the_discovery_txt_files_are_in_the_site():
     # CloudFront serves /*.txt publicly (one behavior for llms.txt + ai.txt): nothing else may be .txt
-    assert sorted(p.relative_to(SITE).as_posix() for p in SITE.rglob("*.txt")) == ["ai.txt", "llms.txt"]
+    assert sorted(p.relative_to(SITE).as_posix() for p in SITE.rglob("*.txt")) == ["ai.txt", "llms.txt", "robots.txt", "sitemap.txt"]
 
 
 def test_discovery_txt_deploys_with_utf8_charset():
@@ -76,3 +76,19 @@ def test_discovery_txt_deploys_with_utf8_charset():
     assert 'include=["*.txt"]' in block and 'content_type="text/plain; charset=utf-8"' in block
     main = app.split('"OncaDashboardDeploy"', 1)[1].split("prune=False", 1)[0]
     assert 'exclude=["*.txt"]' in main
+
+
+def test_robots_opens_public_pages_and_closes_the_app():
+    # #235: owner decision 2026-10-11 — public marketing pages indexable (AI crawlers included,
+    # as ai.txt says); licensed app surfaces disallowed. robots and the page tags must agree.
+    robots = (SITE / "robots.txt").read_text(encoding="utf-8")
+    for allow in ("/pricing.html", "/sample/", "/docs/", "/llms.txt", "/ai.txt"):
+        assert f"Allow: {allow}\n" in robots
+    for deny in ("/exec", "/v2/", "/entry/", "/api/", "/feed", "/docs/qa/"):
+        assert f"Disallow: {deny}\n" in robots
+    assert "Sitemap: https://onssa.org/sitemap.txt" in robots
+    for page in ("pricing.html", "sample/index.html", "docs/index.html"):
+        assert "noindex" not in (SITE / page).read_text(encoding="utf-8"), page
+    for url in (SITE / "sitemap.txt").read_text(encoding="utf-8").split():
+        rel = url.removeprefix("https://onssa.org/")
+        assert (SITE / rel).is_file() or (SITE / rel / "index.html").is_file(), url

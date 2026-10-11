@@ -843,8 +843,8 @@ class OncaPrototypeStack(Stack):
             cache_policy=cloudfront.CachePolicy.CACHING_DISABLED,
         )
 
-        # #180: the machine-readable front door — /llms.txt, /ai.txt (one "/*.txt" behavior: the
-        # site holds no other .txt, test-enforced) and /openapi.json. Public, describe-only.
+        # #180: the machine-readable front door — /llms.txt, /ai.txt, plus #235 /robots.txt and
+        # /sitemap.txt (one "/*.txt" behavior: the site holds no other .txt, test-enforced) and /openapi.json. Public, describe-only.
         for _disc in ("/*.txt", "/openapi.json"):
             distribution.add_behavior(
                 _disc,
@@ -1318,7 +1318,7 @@ class OncaPrototypeStack(Stack):
             sources=[s3deploy.Source.asset(str(SITE_ASSET))],
             destination_bucket=site_bucket,
             distribution=distribution,
-            distribution_paths=["/llms.txt", "/ai.txt"],  # #180 discovery
+            distribution_paths=["/llms.txt", "/ai.txt", "/robots.txt", "/sitemap.txt"],  # #180 discovery, #235
             exclude=["*"],
             include=["*.txt"],
             content_type="text/plain; charset=utf-8",

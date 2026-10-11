@@ -63,7 +63,7 @@ def test_unknown_files_go_to_404_and_favicon_to_the_icon():
         import pytest
         pytest.skip("node not installed")
     assert _run_fn("/favicon.ico") == edge_policy.FAVICON_TARGET
-    for missing in ("/robots.txt", "/x.js", "/missing.html", "/v2/nope.css"):
+    for missing in ("/nope.txt", "/x.js", "/missing.html", "/v2/nope.css"):
         assert _run_fn(missing) == "/404.html", missing
     for ok in ("/v2/app.js", "/v2/app.css", "/v3/manifest.webmanifest", "/exec-sw.js",
                "/feed.json", "/feed.entry.json", "/anything.json", "/403.html", "/404.html",
