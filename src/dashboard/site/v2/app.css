@@ -511,5 +511,5 @@ details.fold.chg > summary { padding: var(--s2) var(--s3); font-size: var(--fs-m
     align-items: center; justify-content: center; }
   .btn { min-height: 44px; }
   .view-tabs a, .ctxnav a { min-height: 44px; display: inline-flex; align-items: center; }
-  .selwrap select, .authbtn, #authBox .btn { min-height: 44px; }
+  .selwrap select, .authbtn, #authBox .btn { min-height: 44px; min-width: 44px; justify-content: center; }
 }

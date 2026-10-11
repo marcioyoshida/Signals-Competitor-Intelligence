@@ -46,22 +46,24 @@
   const RETURN_PATH_KEY = "onca_return_path";
   // only a same-site path we wrote ourselves; never "//host" (no open redirect)
   const safePath = (p) => typeof p === "string" && /^\/(?!\/)[A-Za-z0-9_\-\/.]*$/.test(p);
-  function rememberReturnPath() {
+  function rememberReturnPath(kind) {
     try {
       if (AUTH.redirectUri !== location.origin + location.pathname && safePath(location.pathname))
-        sessionStorage.setItem(RETURN_PATH_KEY, JSON.stringify({ p: location.pathname, t: Date.now() }));
+        sessionStorage.setItem(RETURN_PATH_KEY, JSON.stringify({ p: location.pathname, t: Date.now(), k: kind }));
       else sessionStorage.removeItem(RETURN_PATH_KEY);
     } catch (e) {}
   }
   // Back on /exec after a login/logout that started elsewhere: go to that screen. Returns true
   // when it navigated (the caller should stop booting this page).
-  function returnToOrigin(suffix) {
+  function returnToOrigin(suffix, kind) {
     let p = null;
     try {
       const m = JSON.parse(sessionStorage.getItem(RETURN_PATH_KEY) || "null");
       sessionStorage.removeItem(RETURN_PATH_KEY);
       // an abandoned sign-in must not bounce a later, direct /exec visit: 15-minute window
-      if (m && Date.now() - (m.t || 0) < 15 * 60 * 1000) p = m.p;
+      // only the trip that is completing (a login with a code, or a logout) — so an abandoned
+      // sign-in can't bounce a later direct /exec visit — and within a 15-minute window
+      if (m && m.k === kind && Date.now() - (m.t || 0) < 15 * 60 * 1000) p = m.p;
     } catch (e) {}
     if (!safePath(p) || p === location.pathname) return false;
     location.replace(p + (suffix || ""));
@@ -116,7 +118,7 @@
       const back = location.search.replace(/[?&](code|state)=[^&]*/g, "") + location.hash;
       if (back && back !== "?") sessionStorage.setItem("onca_return", back);
     } catch (e) {}
-    rememberReturnPath();
+    rememberReturnPath("login");
     const verifier = randomPkceVerifier();
     sessionStorage.setItem(VERIFIER_KEY, verifier);
     const challenge = await pkceChallenge(verifier);
@@ -213,7 +215,7 @@
     try { if (global.__oncaBeforeLogout) await global.__oncaBeforeLogout(); } catch (e) {}
     try { await sessionPost("logout"); } catch (e) {}
     await clearUserData();
-    rememberReturnPath();
+    rememberReturnPath("logout");
     const params = new URLSearchParams({ client_id: AUTH.clientId, logout_uri: AUTH.redirectUri });
     location.href = `${AUTH.domain}/logout?${params.toString()}`;
   }
@@ -242,7 +244,7 @@
     const code = url.searchParams.get("code");
     if (!code) {
       // #242: a logout that started on another screen lands here (/exec) — send it home
-      if (!isLoggedIn() && returnToOrigin("")) return new Promise(() => {});
+      if (!isLoggedIn() && returnToOrigin("", "logout")) return new Promise(() => {});
       return;
     }
     await exchangeCodeForToken(code);
@@ -251,7 +253,7 @@
     try { back = sessionStorage.getItem("onca_return") || ""; sessionStorage.removeItem("onca_return"); } catch (e) {}
     // #242: a login started on another screen finishes here: continue to it (navigation, so
     // this page stops booting — the pending promise keeps its caller from rendering)
-    if (returnToOrigin(back)) return new Promise(() => {});
+    if (returnToOrigin(back, "login")) return new Promise(() => {});
     history.replaceState({}, "", url.pathname + (back || ((url.search || "") + url.hash)));
   }
   // Header auth affordance: signed-in email + Sair, or Entrar.

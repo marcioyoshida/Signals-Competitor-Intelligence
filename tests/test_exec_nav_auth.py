@@ -16,7 +16,10 @@ def test_v2_uses_only_registered_cognito_urls():
         assert u in APP
     # the return trip is a same-site path only (no open redirect) and expires
     assert r"/^\/(?!\/)[A-Za-z0-9_\-\/.]*$/" in CTX and "15 * 60 * 1000" in CTX
-    assert CTX.count("rememberReturnPath();") == 2 and CTX.count("returnToOrigin(") == 3
+    assert 'rememberReturnPath("login")' in CTX and 'rememberReturnPath("logout")' in CTX
+    # a code-less landing on /exec honours only a LOGOUT trip (an abandoned sign-in never bounces)
+    assert 'returnToOrigin("", "logout")' in CTX and 'returnToOrigin(back, "login")' in CTX
+    assert "m.k === kind" in CTX
 
 
 def test_exec_view_state_lives_in_the_hash():
