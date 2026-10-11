@@ -502,3 +502,14 @@ details.fold.chg > summary { padding: var(--s2) var(--s3); font-size: var(--fs-m
   .icnbtn { width: 44px; height: 44px; }
   .ctxnav a { padding: 10px 12px; }
 }
+
+/* #245: on a touch screen every primary control is at least 44×44 CSS px (WCAG 2.5.5 /
+   Apple HIG) — the drawer close was 29×22, Sair 43×23, the Hoje/Painel tabs 37px tall and
+   the Entry "Assinar" CTA 29px. Shared by /exec and every /v2 screen. */
+@media (pointer: coarse) {
+  .drawer__close { min-width: 44px; min-height: 44px; display: inline-flex;
+    align-items: center; justify-content: center; }
+  .btn { min-height: 44px; }
+  .view-tabs a, .ctxnav a { min-height: 44px; display: inline-flex; align-items: center; }
+  .selwrap select, .authbtn, #authBox .btn { min-height: 44px; }
+}

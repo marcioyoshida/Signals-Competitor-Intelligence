@@ -38,8 +38,35 @@
     domain: "https://onca-668449743071.auth.us-east-1.amazoncognito.com",
     clientId: "7qlquhh56o06tp9bo8gp77p385",
     apiUrl: "", // same origin — /api/feed is fronted by CloudFront -> HTTP API (JWT)
-    redirectUri: location.origin + location.pathname,
+    // #242: Cognito validates redirect_uri / logout_uri literally, and only "/" and "/exec" are
+    // registered (infra/app.py). Any other screen (/v2/*, the clean routes /app, /fintech…)
+    // signs in and out THROUGH /exec and is sent back to where it started (RETURN_PATH_KEY).
+    redirectUri: location.origin + (["/", "/exec"].indexOf(location.pathname) !== -1 ? location.pathname : "/exec"),
   };
+  const RETURN_PATH_KEY = "onca_return_path";
+  // only a same-site path we wrote ourselves; never "//host" (no open redirect)
+  const safePath = (p) => typeof p === "string" && /^\/(?!\/)[A-Za-z0-9_\-\/.]*$/.test(p);
+  function rememberReturnPath() {
+    try {
+      if (AUTH.redirectUri !== location.origin + location.pathname && safePath(location.pathname))
+        sessionStorage.setItem(RETURN_PATH_KEY, JSON.stringify({ p: location.pathname, t: Date.now() }));
+      else sessionStorage.removeItem(RETURN_PATH_KEY);
+    } catch (e) {}
+  }
+  // Back on /exec after a login/logout that started elsewhere: go to that screen. Returns true
+  // when it navigated (the caller should stop booting this page).
+  function returnToOrigin(suffix) {
+    let p = null;
+    try {
+      const m = JSON.parse(sessionStorage.getItem(RETURN_PATH_KEY) || "null");
+      sessionStorage.removeItem(RETURN_PATH_KEY);
+      // an abandoned sign-in must not bounce a later, direct /exec visit: 15-minute window
+      if (m && Date.now() - (m.t || 0) < 15 * 60 * 1000) p = m.p;
+    } catch (e) {}
+    if (!safePath(p) || p === location.pathname) return false;
+    location.replace(p + (suffix || ""));
+    return true;
+  }
   const TOKEN_KEY = "onca_id_token", VERIFIER_KEY = "onca_pkce_verifier";
 
   function b64UrlEncode(bytes) {
@@ -89,6 +116,7 @@
       const back = location.search.replace(/[?&](code|state)=[^&]*/g, "") + location.hash;
       if (back && back !== "?") sessionStorage.setItem("onca_return", back);
     } catch (e) {}
+    rememberReturnPath();
     const verifier = randomPkceVerifier();
     sessionStorage.setItem(VERIFIER_KEY, verifier);
     const challenge = await pkceChallenge(verifier);
@@ -185,6 +213,7 @@
     try { if (global.__oncaBeforeLogout) await global.__oncaBeforeLogout(); } catch (e) {}
     try { await sessionPost("logout"); } catch (e) {}
     await clearUserData();
+    rememberReturnPath();
     const params = new URLSearchParams({ client_id: AUTH.clientId, logout_uri: AUTH.redirectUri });
     location.href = `${AUTH.domain}/logout?${params.toString()}`;
   }
@@ -211,11 +240,18 @@
   async function handleAuthCallback() {
     const url = new URL(location.href);
     const code = url.searchParams.get("code");
-    if (!code) return;
+    if (!code) {
+      // #242: a logout that started on another screen lands here (/exec) — send it home
+      if (!isLoggedIn() && returnToOrigin("")) return new Promise(() => {});
+      return;
+    }
     await exchangeCodeForToken(code);
     url.searchParams.delete("code"); url.searchParams.delete("state");
     let back = "";
     try { back = sessionStorage.getItem("onca_return") || ""; sessionStorage.removeItem("onca_return"); } catch (e) {}
+    // #242: a login started on another screen finishes here: continue to it (navigation, so
+    // this page stops booting — the pending promise keeps its caller from rendering)
+    if (returnToOrigin(back)) return new Promise(() => {});
     history.replaceState({}, "", url.pathname + (back || ((url.search || "") + url.hash)));
   }
   // Header auth affordance: signed-in email + Sair, or Entrar.

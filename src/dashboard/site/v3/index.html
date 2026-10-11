@@ -161,7 +161,8 @@
   .askrow input { flex:1; background:var(--surface-2); color:var(--ink); border:1px solid var(--border);
     border-radius:var(--r-sm); padding:8px var(--s3); font:inherit; font-size:var(--fs-sm); }
   .askrow input:disabled { opacity:.55; }
-  .askbtn { background:var(--primary); color:#fff; border:0; border-radius:var(--r-sm); padding:8px var(--s4);
+  /* #244: --on-primary, not #fff — white on the dark-theme mint was 2.2:1 */
+  .askbtn { background:var(--primary); color:var(--on-primary); border:0; border-radius:var(--r-sm); padding:8px var(--s4);
     font:inherit; font-weight:600; font-size:var(--fs-sm); cursor:pointer; white-space:nowrap; }
   .askbtn:disabled { opacity:.5; cursor:default; }
   .askex { display:flex; flex-wrap:wrap; gap:6px; margin-top:var(--s2); }
@@ -333,7 +334,7 @@
     .exrow--enf .ttl, .exrow--enf .meta { flex-basis: 100%; }
     .exrow--enf .ent { flex: 1; max-width: none; white-space: normal; overflow-wrap: anywhere; }
     .officer-tabs a { padding: 10px var(--s3); }
-    .selwrap select, .authbtn { padding: 9px var(--s2); min-height: 40px; }
+    .selwrap select, .authbtn { padding: 9px var(--s2); min-height: 44px; }
     /* #163 hard gate: primary actions are at least 44×44 CSS px on a phone */
     .officer-tabs a { min-height: 44px; display: inline-flex; align-items: center; }
     .askbtn, .askrow input { min-height: 44px; }
@@ -473,21 +474,37 @@ document.getElementById("scrim").addEventListener("click", closeDrawer);
 // Sector choice persists in location.hash (same pattern as /app's activeSlug) so a
 // reload — or a bookmarked/shared link — lands back on the same sector instead of
 // resetting to "todos". hashchange (not just the <select> handler) covers back/forward.
+// #243: the whole view lives in the hash — "#<officer>/<view>/<sector>", any order, any subset
+// (writeHash emits officer/view[/sector]); the old single-token links #<sector>, #hoje[-section]
+// and #painel keep working. Every tab/view/sector change goes THROUGH the hash, so reload,
+// Back/Forward and a copied link all land on the same view; hashchange applies it.
+function hashTokens() { return (location.hash || "").replace(/^#/, "").toLowerCase().split("/").filter(Boolean); }
+function hashOfficer() { return hashTokens().find(t => Object.prototype.hasOwnProperty.call(OFFICERS, t)) || null; }
+function hashView() {
+  const t = hashTokens().find(x => x === "painel" || x.indexOf("hoje") === 0);
+  return t ? (t === "painel" ? "painel" : "hoje") : null;
+}
+function writeHash(p) {
+  const o = p.officer || OFFICER, v = p.view || VIEW || "painel";
+  const sec = p.sector !== undefined ? p.sector : SECTOR;
+  const h = "#" + [o, v].concat(sec && sec !== "__all__" ? [sec] : []).join("/");
+  if (h !== location.hash) location.hash = h;   // -> hashchange -> applyHash()
+  else applyHash();
+}
 function activeSector() {
-  const h = (location.hash || "").replace(/^#/, "").toLowerCase();
-  if (h === "__all__" || (h && LICENSED.indexOf(h) !== -1)) return h;
-  // #166: #hoje[-section] / #painel pick the VIEW and keep the current sector
-  if (/^(hoje|painel)/.test(h)) return SECTOR || "__all__";
+  const tk = hashTokens();
+  const s = tk.find(t => t === "__all__" || LICENSED.indexOf(t) !== -1);
+  if (s) return s;
+  // a composite link (it names an officer) with no sector means "todos"; a bare legacy
+  // #hoje[-section] / #painel picks the VIEW and keeps the current sector (#166)
+  if (!hashOfficer() && tk.some(t => t === "painel" || t.indexOf("hoje") === 0)) return SECTOR || "__all__";
   return "__all__";
 }
 // #166 view: "hoje" (phone-first brief) | "painel" (the full board). Phones default to Hoje;
 // a #hoje-<section> deep link (digest e-mails, push taps) always opens it.
 let VIEW = null;
 function initialView() {
-  const h = (location.hash || "").toLowerCase();
-  if (h.indexOf("#hoje") === 0) return "hoje";
-  if (h === "#painel") return "painel";
-  return deviceClass() === "phone" ? "hoje" : "painel";
+  return hashView() || (deviceClass() === "phone" ? "hoje" : "painel");
 }
 function setView(v) {
   VIEW = v;
@@ -496,23 +513,25 @@ function setView(v) {
     a.setAttribute("aria-current", a.getAttribute("data-view") === v ? "page" : "false"));
 }
 document.querySelectorAll("#viewTabs a").forEach(a => a.addEventListener("click", (e) => {
-  e.preventDefault(); setView(a.getAttribute("data-view")); render(); window.scrollTo(0, 0);
+  e.preventDefault(); writeHash({ view: a.getAttribute("data-view") }); window.scrollTo(0, 0);
 }));
 function syncOnline() { document.body.classList.toggle("is-offline", !navigator.onLine || OFFLINE); }
 window.addEventListener("online", syncOnline); window.addEventListener("offline", syncOnline);
-document.getElementById("sectorSel").addEventListener("change", (e) => { location.hash = e.target.value; });
-window.addEventListener("hashchange", () => {
-  if ((location.hash || "").toLowerCase().indexOf("#hoje") === 0 && VIEW !== "hoje") setView("hoje");
+document.getElementById("sectorSel").addEventListener("change", (e) => { writeHash({ sector: e.target.value }); });
+function applyHash() {
+  const v = hashView(); if (v && VIEW !== v) setView(v);
+  const o = hashOfficer(); if (o) OFFICER = o;
   SECTOR = activeSector();
   const sel = document.getElementById("sectorSel");
   if (sel.value !== SECTOR) sel.value = SECTOR;
   render();
-});
+}
+window.addEventListener("hashchange", applyHash);
 
 document.getElementById("officerTabs").innerHTML = Object.entries(OFFICERS)
   .map(([k, o]) => `<a href="#${k}" data-officer="${k}">${o.label}</a>`).join("");
 document.querySelectorAll("#officerTabs a").forEach(a => a.addEventListener("click", (e) => {
-  e.preventDefault(); OFFICER = a.getAttribute("data-officer"); render();
+  e.preventDefault(); writeHash({ officer: a.getAttribute("data-officer") });
 }));
 
 // --- Perguntar à Onça: officer-scoped grounded Q&A (v1 → /exec) ---------------
@@ -777,6 +796,7 @@ function boot() {
     .forEach(s => { const o = document.createElement("option"); o.value = s.slug; o.textContent = s.label; sel.appendChild(o); });
   SECTOR = activeSector();
   sel.value = SECTOR;
+  OFFICER = hashOfficer() || OFFICER;
   if (VIEW === null) setView(initialView());
   syncOnline();
   const first = !BOOTED; BOOTED = true;
@@ -2086,11 +2106,11 @@ function renderHoje(el) {
   if (!STALE) engage("hoje", "open", null);   // not for the cached pre-paint (it re-renders)
   bindRows(el);
   el.querySelectorAll(".traj-f button[data-tv]").forEach(b => b.addEventListener("click", () => askConfirm(b, captureTraj)));
-  document.getElementById("hojeFull").addEventListener("click", (e) => { e.preventDefault(); setView("painel"); render(); window.scrollTo(0, 0); });
+  document.getElementById("hojeFull").addEventListener("click", (e) => { e.preventDefault(); writeHash({ view: "painel" }); window.scrollTo(0, 0); });
   renderPushBox();
   renderDigestBox();
-  const m = (location.hash || "").match(/^#(hoje-[a-z]+)/);
-  if (m) { const t = document.getElementById(m[1]); if (t) t.scrollIntoView({ block: "start" }); }
+  const sec = hashTokens().find(t => /^hoje-[a-z]+$/.test(t));
+  if (sec) { const t = document.getElementById(sec); if (t) t.scrollIntoView({ block: "start" }); }
 }
 
 // --- #167 content-free push: opt-in per device, per alert type ------------------------------
