@@ -37,3 +37,9 @@ def test_ask_button_uses_on_primary_and_touch_targets_are_44px():
     for sel in (".drawer__close { min-width: 44px; min-height: 44px;", ".btn { min-height: 44px; }",
                 ".view-tabs a, .ctxnav a { min-height: 44px;"):
         assert sel in coarse, sel
+
+
+def test_entry_tier_resolves_share_links():
+    # #246: the Entry branch of boot() returned before resolveSharedLink ran
+    entry = EXEC.split("if (!ADMIN && Ctx.isEntryTier(DATA)) {   // ADR 016", 1)[1].split("return;", 1)[0]
+    assert "mountEntry();" in entry and "setTimeout(resolveSharedLink, 0)" in entry

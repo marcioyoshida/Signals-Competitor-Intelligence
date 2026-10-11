@@ -785,7 +785,13 @@ function boot() {
   // #187: a storefront tenant in its 14-day Entry trial sees the days left and how to subscribe
   const tb = document.getElementById("trialBar");
   if (tb) { const h = assinarHTML(DATA) || Ctx.billingBannerHTML(DATA); tb.innerHTML = h; tb.hidden = !h; }
-  if (!ADMIN && Ctx.isEntryTier(DATA)) { mountEntry(); return; }  // ADR 016: Entry has no officer suite
+  if (!ADMIN && Ctx.isEntryTier(DATA)) {   // ADR 016: Entry has no officer suite
+    mountEntry();
+    // #246: a ?c= share link must resolve here too — the card if it is in this licence,
+    // otherwise "Sem acesso" (it used to sit unresolved, drawer closed, ?c= left in the URL)
+    if (!BOOTED) { BOOTED = true; setTimeout(resolveSharedLink, 0); }
+    return;
+  }
   document.getElementById("macroStrip").innerHTML = macroStrip(DATA.macro);  // shared header
   if (!QUOTES_TIMER) QUOTES_TIMER = setInterval(() => { if (OFFICER === "cso" && VIEW === "painel") loadQuotes(); }, 60000);  // B3 quotes refresh
   const sel = document.getElementById("sectorSel");
