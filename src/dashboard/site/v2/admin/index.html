@@ -54,8 +54,8 @@
 <main class="wrap">
   <div class="pagehead">
     <h1>Curadoria — todas as indústrias</h1>
-    <p class="lede">O que precisa da minha decisão hoje, e o moat se manteve? Fila de vetting,
-      lacunas de cobertura e integridade do registro lideram; o mapa e o feed citado ficam
+    <p class="lede">O que precisa da minha decisão hoje, e a vantagem da base se manteve? Fila de revisão,
+      lacunas de cobertura e integridade do registro lideram; o mapa e o fluxo citado ficam
       recolhidos como exceções.</p>
   </div>
 
@@ -268,7 +268,7 @@ function renderMobileUsage() {
   document.getElementById("muGate").textContent = g.weeks_required
     ? `gate M2: ${g.weeks_met || 0}/${g.weeks_required} semanas ≥ ${Math.round((g.phone_share_min || 0) * 100)}% no celular` : "";
   const excl = mu.internal_sessions_excluded
-    ? `<p class="sub" style="margin-top:var(--s2)">${mu.internal_sessions_excluded} sessão(ões) de QA/operador excluída(s): automação não é demanda.</p>` : "";
+    ? `<p class="sub" style="margin-top:var(--s2)">${mu.internal_sessions_excluded} ${mu.internal_sessions_excluded === 1 ? "sessão de QA/operador excluída" : "sessões de QA/operador excluídas"}: automação não é demanda.</p>` : "";
   if (!weeks.length) { el.innerHTML = U.empty("Sem sessões de clientes", "Nenhuma sessão de cliente com classe de dispositivo ainda.", "○") + excl; return; }
   const pct = (v) => v == null ? "—" : `${Math.round(v * 100)}%`;
   const rows = weeks.map(w => {
@@ -318,7 +318,7 @@ function renderDescoberta() {
         <div class="cvsub">${names}</div>
         <div class="cvflag num">${items.length}</div></div>`;
     }).join("");
-    seg.innerHTML = rows || U.empty("Sem cobertura", "feed.regulatory_coverage ausente.", "○");
+    seg.innerHTML = rows || U.empty("Sem cobertura", "A cobertura regulatória ainda não foi calculada.", "○");
   }
   const rr = document.getElementById("radarRoll");
   if (rr) {
@@ -326,8 +326,8 @@ function renderDescoberta() {
     Object.values(DATA.entity_attrs || {}).forEach((a) => {
       const t = (a.radar || {}).tier || "unknown"; tiers[t] = (tiers[t] || 0) + 1;
     });
-    const order = [["official", "oficial", "crit"], ["registry", "registro", "high"],
-      ["identified", "identificado", "med"], ["news", "notícia", "low"], ["unknown", "—", "low"]];
+    const order = [["official", "oficial", "crit"], ["registry", "cadastral", "high"],
+      ["identified", "identificada", "med"], ["news", "notícia", "low"], ["unknown", "—", "low"]];
     const total = Object.values(tiers).reduce((a, b) => a + b, 0) || 1;
     document.getElementById("radarCount").textContent = total;
     rr.innerHTML = order.filter(([k]) => tiers[k]).map(([k, label, cls]) => {
@@ -337,7 +337,7 @@ function renderDescoberta() {
         <div class="cvspark"><div style="height:8px;border-radius:999px;background:var(--surface-3);overflow:hidden">
           <span style="display:block;height:100%;width:${pct}%;background:var(--t-${cls})"></span></div></div>
         <div class="cvflag num">${n}</div></div>`;
-    }).join("") || U.empty("Sem radar", "entity_attrs sem radar.", "○");
+    }).join("") || U.empty("Sem radar", "Nenhuma entidade com radar de proveniência ainda.", "○");
   }
 }
 
@@ -501,6 +501,13 @@ const FW_DIM_PT = {
   rivalry: "Rivalidade", new_entrants: "Novos entrantes", substitutes: "Substitutos",
   buyer_power: "Poder do comprador", supplier_power: "Poder do fornecedor",
 };
+// internal review codes → operator-readable Portuguese; an unmapped code still shows as-is.
+const REASON_PT = { name_collision: "homônimo", prominence_gate: "filtro de proeminência",
+  receita_cnae: "CNAE da Receita", needs_brand_review: "marca a revisar",
+  fund_holds_institution_name: "fundo com nome de instituição", name_match: "nome coincidente" };
+const MATCH_PT = { cnpj: "por CNPJ", structured: "dado estruturado", curated: "curado",
+  fuzzy: "aproximado", reported: "noticiado" };
+const SWOT_TAG_PT = { new: "NOVA TESE", seed: "TESE INICIAL", challenge: "CONTESTA", stale: "REVALIDAR" };
 const RELATION_PT = { co_mention: "citados juntos", convergence: "convergência", dispute: "disputa" };
 
 function queueItems() {
@@ -518,13 +525,13 @@ function queueItems() {
     else
       title = `Adicionar nome <b>${U.esc(r.proposed || "?")}</b> a <b>${U.esc(r.member_label || r.member)}</b>`;
     out.push({ id: r.review_id, kind: "review", tag: "Registro", tagClass: "info",
-      title, meta: [r.reason, r.confidence, U.fmtDate(r.created_at)] });
+      title, meta: [REASON_PT[r.reason] || r.reason, MATCH_PT[r.confidence] || r.confidence, U.fmtDate(r.created_at)] });
   });
   (DATA.swot_proposals || []).forEach(p => {
     const dim = FW_DIM_PT[p.dimension] || p.dimension || "";
     const kindPt = p.kind === "challenge" ? "Contesta crença" : p.kind === "seed" ? "Tese inicial"
-      : p.kind === "stale" ? "Revalidar" : (p.kind || "SWOT");
-    out.push({ id: p.id, kind: "swot", tag: (p.kind || "SWOT").toUpperCase(), tagClass: "warn",
+      : p.kind === "stale" ? "Revalidar" : p.kind === "new" ? "Nova tese" : (p.kind || "SWOT");
+    out.push({ id: p.id, kind: "swot", tag: SWOT_TAG_PT[p.kind] || (p.kind || "SWOT").toUpperCase(), tagClass: "warn",
       title: `<b>${U.esc(labelFor(p.entity))}</b> · ${U.esc(kindPt)} <span class="badge badge--ghost">${U.esc(dim)}</span> — ${U.esc(p.text)}`,
       target: p.target_text, infer: true,
       meta: [p.kind === "stale" ? `sem corroboração há ${p.days_stale} dias`
@@ -540,7 +547,9 @@ function queueItems() {
 }
 function labelFor(eid) {
   const e = (DATA.entities || []).find(x => x.entity === eid);
-  return (e && e.label) || (DATA.entity_attrs || {})[eid] && DATA.entity_attrs[eid].display_name || eid;
+  // an entity with no label yet shows its id humanized ("quantum_finance" → "Quantum Finance").
+  return (e && e.label) || (DATA.entity_attrs || {})[eid] && DATA.entity_attrs[eid].display_name
+    || String(eid || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function renderQueue() {
@@ -781,7 +790,7 @@ function renderCoverage() {
     if (!ind.narratives) {
       return `<div class="covrow">
         <div><div class="cvname">${U.esc(ind.display_name)}</div>
-          <div class="cvsub">${ind.entities} monitorada(s)</div></div>
+          <div class="cvsub">${ind.entities} ${ind.entities === 1 ? "monitorada" : "monitoradas"}</div></div>
         <div class="cvtrend flat"><span aria-hidden="true">—</span> sem sinal</div>
         <div class="cvspark"></div>
         <div class="cvflag"><span class="badge badge--warn"><span class="g" aria-hidden="true">◷</span>cobertura fina</span></div>
