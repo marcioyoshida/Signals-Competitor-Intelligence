@@ -116,6 +116,19 @@ def _capital_rows(feed: dict[str, Any], labels: dict[str, str]) -> list[dict[str
     return out
 
 
+def _clip(text: Any, n: int) -> str:
+    """#247: shorten client copy at a WORD boundary with "…" — a bare [:n] slice cut mid-word
+    ("…direitos creditóri", "…alíquo"). Text that fits is returned untouched."""
+    t = str(text or "").strip()
+    if len(t) <= n:
+        return t
+    cut = t[: n - 1]
+    sp = cut.rfind(" ")
+    if sp >= n * 0.6:                      # don't throw away most of the line for one long word
+        cut = cut[:sp]
+    return cut.rstrip(" ,;:·—-") + "…"
+
+
 def _headline(card: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": card.get("id"),
@@ -124,7 +137,7 @@ def _headline(card: dict[str, Any]) -> dict[str, Any]:
         "threat_score": card.get("threat_score"),
         "is_alert": bool(card.get("is_alert")),
         "industries": card.get("industries") or [],
-        "title": (card.get("narrative") or "")[:240],
+        "title": _clip(card.get("narrative"), 240),
     }
 
 
@@ -449,7 +462,7 @@ def _weekly_headline(m: dict[str, Any], top: list[dict[str, Any]]) -> str:
              pt_count(m['entrants']['now'], "novo entrante", "novos entrantes") + _d('entrants'),
              pt_count(m['regulatory']['now'], "mudança regulatória", "mudanças regulatórias") + _d('regulatory')]
     lead = "Semana calma no cenário competitivo." if not top else \
-        f"Prioridade: {top[0]['title'][:120]}"
+        f"Prioridade: {_clip(top[0]['title'], 120)}"
     return f"Nesta semana: {', '.join(parts)}. {lead}"
 
 
@@ -737,7 +750,7 @@ def _reg_row(c: dict[str, Any]) -> dict[str, Any]:
     cr = c.get("change_record") or {}
     # The headline: the change summary if the card has one, else its own narrative (most reg
     # cards — BCB Comunicados/fusions — carry only a narrative, no change_record). Never blank.
-    title = cr.get("change") or (c.get("narrative") or "")[:240]
+    title = cr.get("change") or _clip(c.get("narrative"), 240)
     return {"id": c.get("id"), "domain": c.get("domain") or c.get("subject_label"),
             "title": title,
             "affected_industries": c.get("affected_industries") or [],
@@ -761,7 +774,7 @@ def _change_diff_rows(feed: dict[str, Any], reg_cards: list[dict[str, Any]]) -> 
         cr = c.get("change_record") or {}
         rows.append({
             "id": c.get("id"), "domain": c.get("domain") or c.get("subject_label"),
-            "title": cr.get("change") or (c.get("narrative") or "")[:200],
+            "title": cr.get("change") or _clip(c.get("narrative"), 200),
             "n_changes": c.get("n_changes") or len(changes),
             "changes": [{"art": ch.get("art"), "verb": ch.get("verb")} for ch in changes[:8]],
             "deadline": c.get("deadline"), "days_to_deadline": c.get("days_to_deadline"),
@@ -1656,7 +1669,7 @@ def build_flow(feed: dict[str, Any], ctx: dict[str, Any]) -> list[dict[str, Any]
     # Recurring blind spot (unanswered demand) → CPO.
     for g in sorted([x for x in (feed.get("coverage_gaps") or []) if x.get("status") == "open"],
                     key=lambda g: -(g.get("count") or 0))[:2]:
-        out.append(_traj("ponto_cego", f"Ponto cego recorrente — {(g.get('question') or '')[:60]}", "cpo",
+        out.append(_traj("ponto_cego", f"Ponto cego recorrente — {_clip(g.get('question'), 60)}", "cpo",
                          "med", f"Pergunta sem resposta {g.get('count') or 0}× · {(g.get('triage') or {}).get('class') or 'lacuna'}.",
                          action="Triar lacuna de cobertura", action_ref="resolve_review", key=g.get("id") or ""))
 

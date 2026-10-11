@@ -46,3 +46,19 @@ def test_enforcement_and_distress_labels_are_portuguese():
 def test_cco_reference_names_insolvency_in_portuguese():
     src = (Path(__file__).resolve().parents[1] / "src" / "synth" / "executive.py").read_text(encoding="utf-8")
     assert "Distress societário" not in src and "Insolvência societária (recuperação judicial / falência)" in src
+
+
+def test_clip_cuts_at_a_word_boundary_with_ellipsis():
+    # #247: CSO "Radar regulatório" rows were hard-cut at 240 chars mid-word
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from src.synth.executive import _clip
+    text = ("Dispõe sobre a constituição e o funcionamento de fundos de investimento em direitos "
+            "creditórios e de fundos de investimento em cotas de fundos de investimento em direitos creditórios.")
+    out = _clip(text, 120)
+    assert len(out) <= 120 and out.endswith("…") and out[:-1] == text[: len(out) - 1]
+    assert text[len(out) - 1] == " "                     # cut fell on a space, not mid-word
+    assert _clip("curto", 240) == "curto" and _clip(None, 10) == ""
+    assert _clip("a" * 300, 240) == "a" * 239 + "…"       # one giant word still bounded
+    src = (Path(__file__).resolve().parents[1] / "src" / "synth" / "executive.py").read_text(encoding="utf-8")
+    assert 'or "")[:240]' not in src and 'or "")[:200]' not in src
