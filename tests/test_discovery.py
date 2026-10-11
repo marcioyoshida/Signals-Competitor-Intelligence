@@ -67,3 +67,12 @@ def test_agent_card_is_served_by_the_oauth_lambda():
 def test_only_the_discovery_txt_files_are_in_the_site():
     # CloudFront serves /*.txt publicly (one behavior for llms.txt + ai.txt): nothing else may be .txt
     assert sorted(p.relative_to(SITE).as_posix() for p in SITE.rglob("*.txt")) == ["ai.txt", "llms.txt"]
+
+
+def test_discovery_txt_deploys_with_utf8_charset():
+    # #236: without an explicit charset browsers decode llms.txt/ai.txt as Latin-1 ("OnÃ§a").
+    app = (Path(__file__).resolve().parents[1] / "infra" / "app.py").read_text(encoding="utf-8")
+    block = app.split('"OncaDiscoveryTxtDeploy"', 1)[1].split("prune=False", 1)[0]
+    assert 'include=["*.txt"]' in block and 'content_type="text/plain; charset=utf-8"' in block
+    main = app.split('"OncaDashboardDeploy"', 1)[1].split("prune=False", 1)[0]
+    assert 'exclude=["*.txt"]' in main

@@ -35,7 +35,7 @@ def test_ets_is_partial_composite_board_and_tdr_none():
     assert m["ets_components"]["board"] is None
     assert m["ets_components"]["feedback"] == 10.0 and m["ets_components"]["influence"] == 10.0
     assert m["ets_components"]["engagement"] is None  # no engagement supplied
-    assert m["tdr"] is None and "baseline" in m["tdr_note"]
+    assert m["tdr"] is None and "linha de base" in m["tdr_note"]
 
 
 def test_engagement_folds_into_ets():
@@ -156,4 +156,4 @@ def test_tdr_note_never_names_a_server_setting():
     """#224: the note renders on the client's CONFIANÇA & DECISÃO band — no env var names."""
     from src.synth import decision_metrics as dm
     for m in (dm._tdr([], None), dm._tdr([], 4.0)):
-        assert "ONCA_" not in m["tdr_note"] and "baseline" in m["tdr_note"]
+        assert "ONCA_" not in m["tdr_note"] and "linha de base" in m["tdr_note"]

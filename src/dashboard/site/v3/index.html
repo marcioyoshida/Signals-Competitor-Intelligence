@@ -1301,7 +1301,7 @@ function rowsDiscovery(list) {
 // SURF-1: strategic posture — SWOT counts + TOWS postures (ADR-006 belief store) for the CSO.
 function rowsPosture(list) {
   const rows = (list || []).filter(inSector);
-  if (!rows.length) return U.empty("Sem postura estratégica no escopo.", "requer beliefs SWOT/TOWS", "○");
+  if (!rows.length) return U.empty("Sem postura estratégica no escopo.", "requer teses SWOT/TOWS validadas", "○");
   return `<div class="chart">` + rows.map(r => {
     const c = r.counts || {};
     const chips = [["S", c.S, "ok"], ["W", c.W, "high"], ["O", c.O, "med"], ["T", c.T, "warn"]]
@@ -1317,7 +1317,7 @@ function rowsPosture(list) {
 function prettyDim(d) { return String(d || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()); }
 function rowsFramework(list) {
   const rows = (list || []).filter(inSector);
-  if (!rows.length) return U.empty("Sem framework no escopo.", "beliefs vetados", "○");
+  if (!rows.length) return U.empty("Sem framework no escopo.", "teses validadas", "○");
   return `<div class="chart">` + rows.map(r =>
     `<div style="padding:var(--s2) var(--s3)"><b>${U.esc(r.label)}</b>` +
     (r.bullets || []).slice(0, 4).map(b =>
@@ -1554,18 +1554,18 @@ function metricsBand() {
   const mm = (m.by_officer && m.by_officer[OFFICER]) ? m.by_officer[OFFICER] : m;
   const ets = m.ets;  // partial composite (Feedback+Influence+Engagement, renormalized)
   const [bc, bl] = ets == null ? ["low", "sem dados"] : ets >= 7.6 ? ["ok", "Confiável"] : ets >= 6.1 ? ["warn", "Útil"] : ["high", "Baixa confiança"];
-  const hero = heroGauge(m.ets_full ? "ETS (composto)" : "ETS (parcial)", ets == null ? "—" : ets, bandBadge(bc, bl),
+  const hero = heroGauge(m.ets_full ? "Índice de confiança (composto)" : "Índice de confiança (parcial)", ets == null ? "—" : ets, bandBadge(bc, bl),
     "--" + (bc === "ok" ? "ok" : bc === "warn" ? "warn" : "t-high"), (ets || 0) * 10);
   const c = m.ets_components || {};
   const tilesArr = [tile("Feedback", c.feedback == null ? "—" : c.feedback, "resultado favorável"),
     tile("Influência", c.influence == null ? "—" : c.influence, "com resultado"),
     tile("Engajamento", c.engagement == null ? "—" : c.engagement, `${eng.n_interest || 0} interações`),
     tile("Board", c.board == null ? "—" : c.board, `${mm.n_board_flagged || 0} escalados`)];
-  const tdrStr = m.tdr != null ? `<b style="color:var(--primary)">TDR ${m.tdr}%</b> · ` : "";
+  const tdrStr = m.tdr != null ? `<b style="color:var(--primary)">tempo de decisão −${m.tdr}%</b> · ` : "";
   // DEC-2: record the per-tenant TDR baseline (real pre-Onça latency) — no baseline yet ⇒ offer it.
   const needBase = m.tdr == null && m.tdr_baseline_hours == null;
   const baseCtl = needBase
-    ? `<div style="padding:2px var(--s2) 0"><span class="hd-note">Registrar baseline — tempo médio de decisão ANTES do Onça (h): </span>
+    ? `<div style="padding:2px var(--s2) 0"><span class="hd-note">Registrar linha de base — tempo médio de decisão ANTES do Onça (h): </span>
         <input id="tdrBase" type="number" min="1" step="1" style="width:76px"> <button id="tdrSet">Registrar</button></div>`
     : "";
   // DEC-5: decision-store governance anomalies (stale-pending / contradictory), read-only audit.
@@ -1583,8 +1583,8 @@ function metricsBand() {
           panel("Setores mais abertos", null, "expansões por setor", `<div class="panel__bd--flush">${
             tsec.length ? hbars(tsec.slice(0, 8).map(x => ({ label: (EX.sectors.find(s => s.slug === x.sector) || {}).label || x.sector, value: x.hits, bar: x.hits / (tsec[0].hits || 1) * 100, colorTok: "var(--cat-gold)" }))) : U.empty("Sem sinais de atenção ainda.", "", "○")}</div>`)]))
     : "";
-  const tdrSub = m.tdr != null ? `TDR ${m.tdr}%` : (m.tdr_baseline_hours != null ? "TDR medindo" : "TDR requer baseline");
-  return band("Confiança & decisão", (m.ets_full ? "ETS composto" : "ETS parcial") + " · " + tdrSub, readout(hero, tilesArr) + note) + interestPanel;
+  const tdrSub = m.tdr != null ? `tempo de decisão −${m.tdr}%` : (m.tdr_baseline_hours != null ? "tempo de decisão em medição" : "tempo de decisão requer linha de base");
+  return band("Confiança & decisão", (m.ets_full ? "índice de confiança composto" : "índice de confiança parcial") + " · " + tdrSub, readout(hero, tilesArr) + note) + interestPanel;
 }
 
 // --- Reference / playbook band (§H) — curated baseline per officer ----------
@@ -1632,6 +1632,8 @@ function onEvidence(a) {
 
 // --- CPO charts (inline SVG-free bars; sequential provenance ramp on --info) -
 const TIER_ORDER = ["official", "structured", "registry", "identified"];
+// #238: client-facing names for the provenance tiers (the ids stay internal).
+const TIER_PT = { official: "oficial", structured: "estruturada", registry: "cadastral", identified: "identificada" };
 const TIER_MIX = { official: 88, structured: 60, registry: 38, identified: 20 }; // % of --info
 function tierColor(t) { return `color-mix(in srgb, var(--info) ${TIER_MIX[t] || 30}%, transparent)`; }
 function matBand(v) { return v >= 70 ? "ok" : v >= 50 ? "warn" : "high"; }
@@ -1649,13 +1651,13 @@ function maturityChart(port) {
 }
 function provenanceLegend() {
   return `<div class="legend">` + TIER_ORDER.map(t =>
-    `<span><i style="background:${tierColor(t)}"></i>${t}</span>`).join("") + `</div>`;
+    `<span><i style="background:${tierColor(t)}"></i>${TIER_PT[t] || t}</span>`).join("") + `</div>`;
 }
 function provStack(mix) {
   const total = TIER_ORDER.reduce((s, t) => s + (mix[t] || 0), 0) || 1;
   return `<span class="stack">` + TIER_ORDER.map(t => {
     const w = (mix[t] || 0) / total * 100;
-    return w ? `<i title="${t}: ${mix[t]}" style="width:${w}%;background:${tierColor(t)}"></i>` : "";
+    return w ? `<i title="${TIER_PT[t] || t}: ${mix[t]}" style="width:${w}%;background:${tierColor(t)}"></i>` : "";
   }).join("") + `</span>`;
 }
 function provenanceChart(port) {
@@ -1743,7 +1745,7 @@ function sourceRunsChart(list) {
 function pricingBadge(p) {
   if (!p) return "";
   const cls = p.pressure === "alta" ? "high" : p.pressure === "média" ? "warn" : "low";
-  return `<span class="badge badge--${cls}">pressão ${U.esc(p.pressure)}</span> <span class="hd-note">${p.recent} sinais recentes · inferência</span>`;
+  return `<span class="badge badge--${cls}">pressão ${U.esc(p.pressure)}</span> <span class="hd-note">${p.recent} ${p.recent === 1 ? "sinal recente" : "sinais recentes"} · inferência</span>`;
 }
 
 // Entry (ADR 016) gets no officer suite, but the Monday digest for its sector is part of the plan
@@ -1792,7 +1794,7 @@ function render() {
         panel("Movimentos de capital social", null, "valor anterior → atual", rowsCapital(p.capital_moves))) +
       band("Trajetória de ameaça", "linha do tempo · ameaça média diária por concorrente · inferência",
         `<div class="panel"><div class="panel__bd panel__bd--flush">${threatTimeline(p.momentum)}</div></div>`) +
-      band("Postura estratégica", "SWOT + TOWS · beliefs vetados",
+      band("Postura estratégica", "SWOT + TOWS · teses validadas",
         panel("Concorrentes por postura", ofN(p.posture, totN(p, "posture")), "S·W·O·T + postura TOWS", rowsPosture(p.posture))) +
       band("Força financeira dos concorrentes", "ROE·ROA·alavancagem·eficiência·share de lucro · IF.data + balancete · inferência",
         panel("Rentabilidade & eficiência (maior ROE primeiro)", null, "ROE anual · ROA · alav · opex/ativo · headroom · share", rowsFinancials(p.financials))) +
@@ -1878,7 +1880,7 @@ function render() {
            tile("Pontos cegos", nGaps, "perguntas · geral", nGaps > 0 ? "high" : "ok")]) +
         band("Maturidade da cobertura por setor", "breadth×depth×frescor×proveniência · inferência",
           `<div class="panel"><div class="panel__bd panel__bd--flush">${maturityChart(port)}</div></div>`) +
-        band("Força da proveniência por setor", "official → identified",
+        band("Força da proveniência por setor", "oficial → identificada",
           grid("1.2fr 1fr", [`<div class="panel"><div class="panel__bd panel__bd--flush">${provenanceChart(port)}</div></div>`,
             `<div class="panel"><div class="panel__hd"><h2>Completude de metadados</h2><span class="spacer"></span><span class="hd-note">% da base · Produto</span></div><div class="panel__bd panel__bd--flush">${completenessChart(p.field_completeness)}</div></div>`])) +
         band("Pipeline de descoberta & pontos cegos", "",
@@ -1908,7 +1910,7 @@ function render() {
            tile("Frescor", pr.freshness_days == null ? "—" : pr.freshness_days + "d", "desde o último sinal"),
            tile("Descoberta", pr.discovery, "propostas no setor")]) +
         band("Proveniência & metadados", "",
-          grid("1fr 1fr", [panel("Proveniência da base", null, "official → identified", `<div class="panel__bd--flush">${provenanceLegend()}<div class="chart"><div class="crow"><span class="cl" title="${U.esc(pr.label || "")}">${U.esc(pr.label || "")}</span>${provStack(pr.provenance || {})}<span class="cv">${pr.provenance_score || 0}</span></div></div></div>`),
+          grid("1fr 1fr", [panel("Proveniência da base", null, "oficial → identificada", `<div class="panel__bd--flush">${provenanceLegend()}<div class="chart"><div class="crow"><span class="cl" title="${U.esc(pr.label || "")}">${U.esc(pr.label || "")}</span>${provStack(pr.provenance || {})}<span class="cv">${pr.provenance_score || 0}</span></div></div></div>`),
             panel("Completude de metadados", null, "% das entidades do setor", `<div class="panel__bd--flush">${completenessChart(pr.completeness)}</div>`)])) +
         band("Posição de mercado & preço", "",
           grid("1.2fr 1fr", [panel("Estrutura de mercado (CVM)", null, "receita · share · concentração", `<div class="panel__bd--flush">${marketDetail((p.market_structure || {})[SECTOR])}</div>`),
@@ -1922,7 +1924,7 @@ function render() {
   }
   // SURF-2/3/4: framework belief bands routed per officer (ADR-006 curated, evidence-linked).
   if (OFFICER === "cso") board +=
-    band("Cinco forças de Porter", "rivalidade·entrantes·substitutos·poder · beliefs vetados",
+    band("Cinco forças de Porter", "rivalidade·entrantes·substitutos·poder · teses validadas",
       panel("Concorrentes por força", ofN(p.porter, totN(p, "porter")), "dimensão · avaliação", rowsFramework(p.porter))) +
     band("Quatro Cantos (Four Corners)", "motivação·premissas·estratégia·capacidades",
       panel("Concorrentes por canto", ofN(p.four_corners, totN(p, "four_corners")), "dimensão · avaliação", rowsFramework(p.four_corners))) +
@@ -1934,7 +1936,7 @@ function render() {
   else if (OFFICER === "cco") board +=
     band("Diff de conformidade", "o que mudou (artigos) + prazo",
       panel("Mudanças enumeradas por norma", ofN(p.change_diff, totN(p, "change_diff")), "artigos alterados · prazo", rowsChangeDiff(p.change_diff))) +
-    band("Ambiente PESTLE", "político·econômico·social·tecnológico·legal·ambiental · beliefs vetados",
+    band("Ambiente PESTLE", "político·econômico·social·tecnológico·legal·ambiental · teses validadas",
       panel("Entidades por dimensão", ofN(p.pestle, totN(p, "pestle")), "dimensão · avaliação", rowsFramework(p.pestle)));
   else if (OFFICER === "cpo") board +=
     band("Radar de produto", "App Store vs linha de base (≥10/dia, z ≥3) · mudanças datadas em vídeos",
@@ -1942,7 +1944,7 @@ function render() {
         "mais recente primeiro · fontes linkadas", rowsRadar(p.product_radar))) +
     band("Movimentos de produto", "lançamentos & ofertas · lente ofertas/produto",
       panel("Feed de produto", ofN(p.product_moves, totN(p, "product_moves")), "mais recente primeiro", rowsCard(p.product_moves))) +
-    band("Crescimento (Ansoff) & portfólio (BCG)", "vetores de crescimento · quadrante · beliefs vetados",
+    band("Crescimento (Ansoff) & portfólio (BCG)", "vetores de crescimento · quadrante · teses validadas",
       grid("1fr 1fr", [panel("Ansoff", ofN(p.ansoff, totN(p, "ansoff")), "penetração·desenvolvimento·diversificação", rowsFramework(p.ansoff)),
                        panel("BCG", ofN(p.bcg, totN(p, "bcg")), "estrela·vaca·interrogação·abacaxi", rowsFramework(p.bcg))]));
   el.innerHTML = flowBand() + board + silenceBand() + outcomesDueBand() + metricsBand() + referenceBand();

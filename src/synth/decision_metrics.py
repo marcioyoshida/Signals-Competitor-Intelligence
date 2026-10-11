@@ -173,10 +173,10 @@ def compute_metrics(decisions: list[dict[str, Any]],
         "ets_full": full,
         "ets_components": {"feedback": feedback, "influence": influence,
                            "engagement": engagement_score, "board": board},
-        "ets_note": ("ETS composto (0–10): Feedback 0.40 · Influência 0.25 · Engajamento 0.20 · "
+        "ets_note": ("Índice de confiança composto (0–10): Feedback 0.40 · Influência 0.25 · Engajamento 0.20 · "
                      "Adoção do board 0.15."
                      if full else
-                     "ETS parcial (0–10) — média ponderada dos componentes medidos (Feedback 0.40 · "
+                     "Índice de confiança parcial (0–10) — média ponderada dos componentes medidos (Feedback 0.40 · "
                      "Influência 0.25 · Engajamento 0.20 · Adoção do board 0.15), renormalizada aos "
                      "que já têm sinal."),
         **_tdr(decisions, tdr_baseline_hours),
@@ -199,14 +199,14 @@ def _tdr(decisions: list[dict[str, Any]], baseline_hours: float | None) -> dict[
         return {"tdr": None, "tdr_after_hours": after_avg, "tdr_baseline_hours": None,
                 # #224: client-facing copy — say how the baseline gets set (recorded with the
                 # client via set_tdr_baseline), never a server env var name.
-                "tdr_note": "aguardando o baseline de tempo-para-decisão da sua equipe "
-                            "(registrado com você, nunca assumido) — fale com a equipe Onça "
+                "tdr_note": "aguardando a linha de base de tempo de decisão da sua equipe "
+                            "(registrada com você, nunca assumida) — fale com a equipe Onça "
                             "para registrá-lo."}
     if after_avg is None:
         return {"tdr": None, "tdr_after_hours": None, "tdr_baseline_hours": baseline_hours,
-                "tdr_note": f"baseline {baseline_hours}h registrada; medindo o tempo real de "
+                "tdr_note": f"linha de base {baseline_hours}h registrada; medindo o tempo real de "
                             "deliberação (nenhuma decisão temporizada ainda)."}
     tdr = round((baseline_hours - after_avg) / baseline_hours * 100, 1)
     return {"tdr": tdr, "tdr_after_hours": after_avg, "tdr_baseline_hours": baseline_hours,
-            "tdr_note": f"Before {baseline_hours}h (baseline registrada) → After {after_avg}h "
+            "tdr_note": f"Antes {baseline_hours}h (linha de base registrada) → depois {after_avg}h "
                         f"(deliberação medida, n={len(afters)})."}

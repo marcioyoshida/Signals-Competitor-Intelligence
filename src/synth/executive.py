@@ -1684,7 +1684,7 @@ REFERENCE: dict[str, Any] = {
     "cpo": {"title": "Referência de produto & cobertura", "sections": [
         {"h": "Cobertura", "items": [
             "Mapa CVM / BCB — segmentos regulados (roster / sinal / lacuna)",
-            "Radar de proveniência por tier (official / structured / registry / identified)",
+            "Radar de proveniência por tier (oficial / estruturada / cadastral / identificada)",
             "Pontos cegos — perguntas sem resposta (loop de cobertura)"]},
         {"h": "Descoberta & fontes", "items": [
             "Propostas de descoberta (com revisão humana)", "Registro de fontes por vertical",

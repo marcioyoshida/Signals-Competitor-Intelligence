@@ -1285,9 +1285,7 @@ class OncaPrototypeStack(Stack):
                 "/docs/celular-seguranca.html",  # #164: public mobile security answers
                 "/docs/privacy.html",  # #183: privacy policy (directories + OAuth op_policy_uri)
                 "/docs/terms.html",
-                "/llms.txt",  # #180 discovery
-                "/ai.txt",
-                "/openapi.json",
+                "/openapi.json",  # #180 discovery (the two .txt files deploy below)
                 # v2 multi-context dashboards (six clean routes + shared assets).
                 "/v2/admin/index.html",
                 "/v2/newentry/index.html",
@@ -1309,6 +1307,21 @@ class OncaPrototypeStack(Stack):
                 "/v3/icons/*",
                 "/v3/og.png",
             ],
+            # #236: the discovery .txt files go up in their own deployment (below) so they carry
+            # an explicit charset — without one browsers decode them as Latin-1 ("OnÃ§a").
+            exclude=["*.txt"],
+            prune=False,
+        )
+        s3deploy.BucketDeployment(
+            self,
+            "OncaDiscoveryTxtDeploy",
+            sources=[s3deploy.Source.asset(str(SITE_ASSET))],
+            destination_bucket=site_bucket,
+            distribution=distribution,
+            distribution_paths=["/llms.txt", "/ai.txt"],  # #180 discovery
+            exclude=["*"],
+            include=["*.txt"],
+            content_type="text/plain; charset=utf-8",
             prune=False,
         )
 
