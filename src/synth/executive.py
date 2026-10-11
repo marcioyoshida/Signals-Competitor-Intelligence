@@ -1685,7 +1685,7 @@ REFERENCE: dict[str, Any] = {
             "SUSEP / CNSP — Circular / Resolução", "PREVIC — previdência complementar fechada"]}]},
     "cco": {"title": "Playbook de compliance", "sections": [
         {"h": "Taxonomia de risco", "items": [
-            "Distress societário (recuperação judicial / falência)", "Sanções — CEIS / CNEP",
+            "Insolvência societária (recuperação judicial / falência)", "Sanções — CEIS / CNEP",
             # Reclame Aqui is BUILT but parked (ONCA_RECLAME_AQUI default-off, no authorized
             # feed — see docs/CONTEXT.md "Deferred"), so naming it here promised a source the
             # panel has never been fed. BCB is the only reputation store actually loaded.

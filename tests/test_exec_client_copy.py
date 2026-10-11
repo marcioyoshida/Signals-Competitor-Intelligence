@@ -38,6 +38,11 @@ def test_drawer_and_rows_are_keyboard_accessible():
 def test_enforcement_and_distress_labels_are_portuguese():
     # #241
     for leak in ('"Enforcement — "', 'tile("Enforcement"', '"Enforcement & sanções"', "Enforcement · distress",
-                 'tile("Distress', "(distress/reputação"):
+                 'tile("Distress', "(distress/reputação", "enforcement crítico/alto"):
         assert leak not in PAGE, leak
     assert '"Medida de supervisão — " + (r.kind_label' in PAGE
+
+
+def test_cco_reference_names_insolvency_in_portuguese():
+    src = (Path(__file__).resolve().parents[1] / "src" / "synth" / "executive.py").read_text(encoding="utf-8")
+    assert "Distress societário" not in src and "Insolvência societária (recuperação judicial / falência)" in src

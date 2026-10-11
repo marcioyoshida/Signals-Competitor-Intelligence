@@ -1835,7 +1835,7 @@ function render() {
     // signal", not "clean", and must not be colored the same as a real clean audit.
     const sigOk = a.signal_state !== "insufficient";
     board =
-      readout(iw ? heroCount("Ações graves", risk, bandBadge(rc[0], rc[1]), "enforcement crítico/alto no escopo")
+      readout(iw ? heroCount("Ações graves", risk, bandBadge(rc[0], rc[1]), "medidas de supervisão críticas/altas no escopo")
                  : heroCount("Achados graves", a.n_high, bandBadge(rc[0], rc[1]), "severidade alta na auditoria"),
         [tile("Achados de integridade", iw ? null : a.n_integrity, iw ? "auditoria do operador" : "registro",
               iw ? null : a.n_integrity > 0 ? "warn" : (sigOk ? "ok" : null)),
