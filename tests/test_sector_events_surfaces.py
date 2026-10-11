@@ -62,9 +62,11 @@ def test_cro_after_critical_event_floors_reg_threat_and_counts_change():
     assert row["sources"][0]["title"].startswith("MEDIDA PROVISÓRIA Nº 1.394")
     assert row["n_affected"] == 83
     rec = ex["cro"]["panels"]["recommendations"][0]
-    assert rec["evidence_id"] == row["id"] and "Evento setorial (critical)" in rec["text"]
+    assert rec["evidence_id"] == row["id"] and "Evento setorial (crítico)" in rec["text"]
     traj = [t for t in ex["flow"] if t["trigger"] == "evento_setorial"]
     assert traj and traj[0]["severity"] == "crit" and traj[0]["handoff"] == "cco"
+    # client copy: no raw confidence / severity ids in the Hoje brief or the recommendation
+    assert "(official)" not in traj[0]["briefing"] and "(ato oficial)." in traj[0]["briefing"]
     # CSO's regulatory tile reads the same floor (no two numbers for one sector)
     assert ex["cso"]["by_industry"]["betting"]["reg_threat"] == 90.0
 
@@ -232,3 +234,17 @@ def test_ementa_first_sentence_does_not_stop_at_legal_abbreviations():
     long = "Texto " + "palavra " * 200
     out = se._first_sentence(long)
     assert out.endswith("…") and len(out) <= se._EMENTA_MAX + 1
+
+
+def test_hoje_briefs_carry_no_internal_codes():
+    # client copy: the integrity audit's English operator summary and raw kind never reach /exec.
+    feed = _feed(with_dou=True)
+    feed["integrity"] = {"findings": [{"id": "integ:x", "kind": "institution_leaf_pollution", "severity": "high",
+                                       "summary": "acme: institutional ['banking'] + leaf ['fintech'] (industries provenance=auto)",
+                                       "entity_id": "acme"}]}
+    flow = executive.build_executive(feed)["flow"]
+    integ = [t for t in flow if t["trigger"] == "integridade"]
+    assert integ and "indústrias conflitantes no cadastro" in integ[0]["title"]
+    assert "provenance" not in integ[0]["briefing"] and "institution_leaf_pollution" not in integ[0]["title"]
+    for t in flow:
+        assert "(official)" not in t["briefing"] and "(critical)" not in t["briefing"]

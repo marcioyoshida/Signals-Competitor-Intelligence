@@ -885,6 +885,17 @@ def _solvency_rows(feed: dict[str, Any]) -> list[dict[str, Any]]:
 # Its severity FLOORS that industry's reg_threat: averaging 8 routine BCB cards at 25 must not
 # outvote a measure that shuts the sector down. Transparent, documented floors — not a model.
 SECTOR_EVENT_FLOOR = {"critical": 90.0, "high": 70.0, "medium": 45.0}
+# client copy: severity / confidence ids stay internal (same wording as SECTOR_SEV_PT /
+# SECTOR_CONF_PT in /exec).
+_SECTOR_SEV_PT = {"critical": "crítico", "high": "alto", "medium": "médio", "low": "baixo"}
+_SECTOR_CONF_PT = {"official": "ato oficial", "corroborated": "imprensa · corroborado", "reported": "imprensa"}
+_INTEGRITY_KIND_PT = {
+    "fund_alias_on_institution": "ticker de fundo como apelido de instituição",
+    "fund_holds_institution_name": "fundo com nome de instituição",
+    "institution_leaf_pollution": "indústrias conflitantes no cadastro",
+    "unbacked_cnpj": "CNPJ sem lastro", "parent_inversion": "controle invertido",
+    "card_primary_absent": "entidade principal ausente do cartão",
+}
 _SECTOR_SEV_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3}
 
 
@@ -997,7 +1008,7 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     for ev in [e for e in sector_events if e.get("severity") in ("critical", "high")][:2]:
         label = {x["slug"]: x["label"] for x in ctx["sectors"]}.get(ev.get("industry")) or ev.get("industry")
         recs.append(_rec("imediato",
-                         f"Evento setorial ({ev.get('severity')}) — {ev.get('change_label') or 'mudança regulatória'} "
+                         f"Evento setorial ({_SECTOR_SEV_PT.get(ev.get('severity'), ev.get('severity'))}) — {ev.get('change_label') or 'mudança regulatória'} "
                          f"no setor {label}: {str(ev.get('title') or '')[:110]}",
                          "open_watch", officer="cro", evidence_id=ev.get("id"),
                          industries=[ev.get("industry")]))
@@ -1590,7 +1601,8 @@ def build_flow(feed: dict[str, Any], ctx: dict[str, Any]) -> list[dict[str, Any]
         n_src = len(ev.get("sources") or [])
         brief = (f"{ev.get('summary') or ev.get('title') or ''} · "
                  f"{pt_count(ev.get('n_affected'), 'entidade do setor afetada', 'entidades do setor afetadas')} · "
-                 f"{pt_count(n_src, 'fonte', 'fontes')} ({ev.get('confidence')}).")
+                 f"{pt_count(n_src, 'fonte', 'fontes')} "
+                 f"({_SECTOR_CONF_PT.get(ev.get('confidence'), ev.get('confidence') or '—')}).")
         out.append(_traj("evento_setorial",
                          f"Evento setorial — {ev.get('change_label') or 'mudança regulatória'} ({ev.get('industry')})",
                          "cro", "crit" if ev.get("severity") == "critical" else "high", brief,
@@ -1602,7 +1614,7 @@ def build_flow(feed: dict[str, Any], ctx: dict[str, Any]) -> list[dict[str, Any]
     for d in _trusted_distress(feed):
         e = d.get("entity")
         out.append(_traj("distress", f"Sinal de insolvência — {labels.get(e, e)}", "cco", "crit",
-                         f"Processo de {d.get('label') or 'distress'} (confiança {d.get('confidence')}).",
+                         f"Processo de {d.get('label') or 'insolvência'} (confirmado).",
                          industries=_industries_of(feed, e), evidence_ids=(d.get("evidence") or [])[:2],
                          action="Sinalizar para revisão de compliance", action_ref="flag_entity", key=e or ""))
 
@@ -1612,7 +1624,7 @@ def build_flow(feed: dict[str, Any], ctx: dict[str, Any]) -> list[dict[str, Any]
         who = labels.get(a.get("entity")) if a.get("entity") else (a.get("target") or "instituição")
         brief = (f"{a.get('title') or ''} · {a.get('authority')} · "
                  f"{pt_count(len(a.get('sources') or []), 'fonte oficial', 'fontes oficiais')}, {a.get('date')}.")
-        out.append(_traj("enforcement", f"Enforcement — {a.get('kind_label')} ({who})", "cco", "crit", brief,
+        out.append(_traj("enforcement", f"Medida de supervisão — {a.get('kind_label')} ({who})", "cco", "crit", brief,
                          industries=list(a.get("industries") or []), evidence_ids=[a.get("id")],
                          action="Avaliar exposição de contraparte",
                          action_ref="flag_entity" if a.get("entity") else "open_watch",
@@ -1620,8 +1632,14 @@ def build_flow(feed: dict[str, Any], ctx: dict[str, Any]) -> list[dict[str, Any]
 
     # High-severity integrity finding → CCO.
     for f in [x for x in ((feed.get("integrity") or {}).get("findings") or []) if x.get("severity") == "high"][:3]:
-        out.append(_traj("integridade", f"Achado de integridade — {f.get('kind')}", "cco", "high",
-                         f.get("summary") or "Anomalia de registro detectada.",
+        # the audit's own summary is an operator note (English, internal ids) — the CCO brief
+        # names the anomaly in Portuguese and the entity by its label.
+        kind_pt = _INTEGRITY_KIND_PT.get(f.get("kind"), "inconsistência de cadastro")
+        eid = f.get("entity_id")
+        out.append(_traj("integridade", f"Achado de integridade — {kind_pt}", "cco", "high",
+                         f"Inconsistência de cadastro ({kind_pt})"
+                         + (f" em {labels.get(eid, eid)}" if eid else "")
+                         + " — revisão de curadoria recomendada.",
                          industries=_industries_of(feed, f.get("entity_id")),
                          evidence_ids=[f.get("card_id")], action="Rodar auditoria de integridade",
                          action_ref="run_integrity_audit", key=f.get("id") or ""))

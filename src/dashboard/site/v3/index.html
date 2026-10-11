@@ -2342,7 +2342,7 @@ function inspectSectorEvent(id) {
   document.getElementById("drBody").innerHTML = `<div class="callout"><p><b>${U.esc(r.title || "")}</b></p>` +
     (r.summary ? `<p>${U.esc(r.summary)}</p>` : "") +
     `<p class="hd-note">Severidade ${U.esc(SECTOR_SEV_PT[r.severity] || r.severity || "—")} · ${U.esc(SECTOR_CONF_PT[r.confidence] || r.confidence || "")}` +
-    ` · ${r.n_affected || 0} entidades do setor afetadas</p><ol>${src}</ol></div>`;
+    ` · ${r.n_affected || 0} ${(r.n_affected || 0) === 1 ? "entidade do setor afetada" : "entidades do setor afetadas"}</p><ol>${src}</ol></div>`;
   openDrawer(id);
   return true;
 }
