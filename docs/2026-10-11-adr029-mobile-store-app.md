@@ -26,16 +26,16 @@
 
 ### Why #171's Capacitor plan doesn't survive contact with this environment
 
-1. **iOS can't be built here.** This is WSL on Windows with no Mac. ADR 0023's decisive finding was
+1. **#248** — **iOS can't be built here.** This is WSL on Windows with no Mac. ADR 0023's decisive finding was
    that Expo **EAS Build** solves this (hosted macOS, free tier 15 iOS + 15 Android builds a month).
    Capacitor has no first-party equivalent. The options are Ionic Appflow (paid), Codemagic, or GitHub
    macOS runners (10× minute multiplier on a private repo). Each is a second build pipeline the fleet
    doesn't have.
-2. **The fleet already paid for the hard parts once.** That covers push registration, PKCE in the
+2. **#249** — **The fleet already paid for the hard parts once.** That covers push registration, PKCE in the
    system browser, device registration, crash reporting, the purchase-route contract and the
    TestFlight/EAS release runbooks (`Signals-Creator-Radar/docs/runbooks/`). A Capacitor app re-does
    all of it in a different stack.
-3. **"Wrap" was the point, not "Capacitor".** ADR 0023 ruled out a native UI for the analyst forks.
+3. **#250** — **"Wrap" was the point, not "Capacitor".** ADR 0023 ruled out a native UI for the analyst forks.
    It didn't rule out a native *shell*. An Expo app whose main screen is a `WebView` of `/exec` is
    still a wrap: one UI codebase, the PWA.
 
@@ -92,22 +92,22 @@
    **invite code** that an operator issues per user, which links the federated identity to the tenant.
    Self-registration stays available for genuine individual Entry sign-ups, and the gate states
    explicitly that it creates a new account.
-4. **Account deletion becomes self-service everywhere.** A "Excluir minha conta" action (in `/exec`'s
+4. **#251** — **Account deletion becomes self-service everywhere.** A "Excluir minha conta" action (in `/exec`'s
    account menu, therefore also in the app) goes through `/api/me/act`. It deletes the Cognito user,
    revokes sessions, and deletes that user's push subscriptions, decisions and engagement within the
    privacy policy's 30 days. Organization data stays with the contract. A public web page gives Play
    its deletion URL. The privacy page is updated to match.
-5. **The app is a reader for paid features.** Inside the app, every purchase and upgrade CTA is
+5. **#252** — **The app is a reader for paid features.** Inside the app, every purchase and upgrade CTA is
    hidden, and the app shows no link to the storefront. A user manages their plan on the web. The
    shell's purchase-route contract is the switch. IAP and the US link-out entitlement are out of scope
    until a customer buys in-app (revisit with the 3.1.3 / link-out economics in ADR 0023).
-6. **Native value is deliberate, for 4.2 and for InfoSec buyers.** The app adds:
+6. **#253** — **Native value is deliberate, for 4.2 and for InfoSec buyers.** The app adds:
    - APNs/FCM push under the **same content-free policy** as web push: "Novo alerta no seu painel
      Onça" + a count, never a finding;
    - an optional biometric app lock and a privacy screen in the app switcher;
    - native share sheet for #170 card links;
    - universal links for `onssa.org/exec`.
-7. **Gates.**
+7. **#254** — **Gates.**
    - Everything up to an **internal TestFlight / Play internal-testing build** is **ungated**. It
      de-risks the shell and most of it improves the web product anyway.
    - **Public store release** keeps #171's demand gate: at least 1 paying or signed customer requires
@@ -153,7 +153,7 @@
 
 ## Stories
 
-Raised as GitHub issues under epic **#172**, label `mobile`:
+Raised 2026-10-11 as GitHub issues **#248–#260** under epic **#172**, label `mobile`:
 - Milestone **Mobile M2 — Store readiness** covers stories 1–6. They are ungated and also improve
   the web.
 - Milestone **Mobile M3 — App shell & internal builds** covers stories 7–12. They are ungated and
@@ -167,9 +167,9 @@ Raised as GitHub issues under epic **#172**, label `mobile`:
 5. Store privacy inventory: App Store nutrition labels and the Play Data safety form.
 6. Organization enrolment: Apple team individual → organization (D-U-N-S), Google Play organization account. Owner-run and blocked on the entity rename.
 7. Spike: `/exec` in the fleet Expo shell's WebView. Covers the auth handoff, cookies, App-Bound Domains for the service worker, and offline; a go/no-go decision with the Capacitor fallback.
-8. Onça ForkConfig + `apps/onca` Expo skeleton (bundle ID, EAS project, icons, `onca://auth`, universal links + AASA); decide shell extraction vs vendoring.
-9. Native push (APNs/FCM) with device registration on Onça's API; `OncaPushNotifier` sends web push and native push, both content-free.
-10. App lock (biometric) and app-switcher privacy screen.
-11. App mode: hide purchase/upgrade CTAs, open external links in the system browser, native share sheet for card links.
-12. App QA: Android emulator flows in CI, plus a TestFlight/internal-track device checklist extending #200.
-13. Store release (gated): listings, screenshots, review notes, a reviewer demo tenant, and the 4.2 justification. Supersedes #171.
+8. **#255** — Onça ForkConfig + `apps/onca` Expo skeleton (bundle ID, EAS project, icons, `onca://auth`, universal links + AASA); decide shell extraction vs vendoring.
+9. **#256** — Native push (APNs/FCM) with device registration on Onça's API; `OncaPushNotifier` sends web push and native push, both content-free.
+10. **#257** — App lock (biometric) and app-switcher privacy screen.
+11. **#258** — App mode: hide purchase/upgrade CTAs, open external links in the system browser, native share sheet for card links.
+12. **#259** — App QA: Android emulator flows in CI, plus a TestFlight/internal-track device checklist extending #200.
+13. **#260** — Store release (gated): listings, screenshots, review notes, a reviewer demo tenant, and the 4.2 justification. Supersedes #171.
