@@ -1094,6 +1094,19 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
 _CCO_MIN_REPUTATION_SIGNAL = 5
 
 
+def _rep_detail(r: dict[str, Any]) -> str:
+    """#261: a risk-register line for one reputation row. BCB rows carry a positional rank;
+    ANS rows carry only an IGR rate (no rank, sometimes withheld on a small book), so an
+    unconditional "#{rank}" rendered "#None reclamações" for every ANS row."""
+    idx = r.get("index")
+    idx_txt = "—" if idx is None else str(idx)
+    if r.get("rank") is not None:
+        return f"#{r['rank']} reclamações · índice {idx_txt}"
+    src = r.get("source") or "ANS"
+    tail = " (base pequena)" if r.get("index_withheld") else ""
+    return f"{src} · índice {idx_txt}{tail}"
+
+
 # --- #193 sanctions / enforcement register (feed.enforcement) -------------------------------
 # Supervisor actions against ONE operator: BCB liquidação/RAET/intervenção, SPA/COAF/CVM
 # sanction proceedings, CEIS/CNEP, and enforcement news (CVM PAS, MPF operations). An action
@@ -1176,7 +1189,7 @@ def build_cco(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         + [{"kind": "distress", "label": labels.get(d.get("entity"), d.get("entity")),
           "detail": d.get("label"), "industries": _industries_of(feed, d.get("entity")),
           "severity": "high"} for d in distress]
-        + [{"kind": "reputacao", "label": r["label"], "detail": f"#{r['rank']} reclamações · índice {r['index']}",
+        + [{"kind": "reputacao", "label": r["label"], "detail": _rep_detail(r),
             "industries": r["industries"], "severity": "med"} for r in rep_rows[:8]]
         + [{"kind": "integridade", "label": (i.get("entity_id") or i.get("card_id") or "—"),
             "detail": i.get("summary"), "industries": i.get("industries"), "severity": i.get("severity")}
