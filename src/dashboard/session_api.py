@@ -39,6 +39,8 @@ MAX_IDLE_DAYS = 30  # = the Cognito refresh-token validity (infra/app.py)
 # redirect_uri must be one the Cognito app client already allows; checked here too so this
 # endpoint can't be used to exchange codes for arbitrary origins.
 _ALLOWED_HOSTS = {"onssa.org", "www.onssa.org"}
+# ADR 029 (#254/#255): the store app's native redirect. Exactly this URI — never a scheme wildcard.
+APP_REDIRECT = "onca://auth"
 
 
 def _resp(status: int, body: dict[str, Any], cookies: list[str] | None = None) -> dict[str, Any]:
@@ -113,6 +115,8 @@ def _token_post(data: dict[str, str]) -> requests.Response:
 
 
 def _ok_redirect(uri: str) -> bool:
+    if uri == APP_REDIRECT:
+        return True
     u = urlparse(uri or "")
     extra = {h.strip() for h in os.environ.get("ONCA_SESSION_EXTRA_HOSTS", "").split(",") if h.strip()}
     return u.scheme == "https" and (u.hostname or "") in (_ALLOWED_HOSTS | extra)

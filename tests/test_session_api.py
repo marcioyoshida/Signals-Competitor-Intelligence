@@ -65,6 +65,21 @@ def test_exchange_refuses_a_foreign_redirect_uri(monkeypatch):
     assert resp["statusCode"] == 400
 
 
+def test_exchange_accepts_exactly_the_store_app_redirect(monkeypatch):
+    # ADR 029 (#254): the app's system-browser sign-in comes back on onca://auth; nothing else on
+    # that scheme (or any other custom scheme) is an allowed redirect.
+    monkeypatch.setattr(sa, "_token_post", lambda d: _R(200, {
+        "id_token": _jwt({"sub": "u1"}), "refresh_token": "RT", "expires_in": 3600}))
+    ok = sa.lambda_handler(_ev("/api/session/exchange", {
+        "code": "c", "code_verifier": "v", "redirect_uri": "onca://auth"}), None)
+    assert ok["statusCode"] == 200
+    for bad in ("onca://evil", "onca://auth/x", "evil://auth", "onca:auth"):
+        monkeypatch.setattr(sa, "_token_post", lambda d: pytest.fail("must not call Cognito"))
+        r = sa.lambda_handler(_ev("/api/session/exchange", {
+            "code": "c", "code_verifier": "v", "redirect_uri": bad}), None)
+        assert r["statusCode"] == 400, bad
+
+
 def test_refresh_slides_the_cookie_and_ended_session_expires_it(monkeypatch):
     monkeypatch.setattr(sa, "_token_post", lambda d: _R(200, {"id_token": _jwt({"sub": "u1"})}))
     ok = sa.lambda_handler(_ev("/api/session/refresh", cookie="RT"), None)

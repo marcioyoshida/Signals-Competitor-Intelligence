@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "Onça",
+    "slug": "onca",
+    "scheme": "onca",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0e1214",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "org.onssa.onca",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "WKAppBoundDomains": [
+          "onssa.org",
+          "www.onssa.org"
+        ]
+      }
+    },
+    "android": {
+      "package": "org.onssa.onca",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0e1214"
+      }
+    },
+    "plugins": [
+      "expo-web-browser"
+    ]
+  }
+}

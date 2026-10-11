@@ -955,6 +955,9 @@ class OncaPrototypeStack(Stack):
                     "https://onssa.org/exec",
                     "https://www.onssa.org/",
                     "https://www.onssa.org/exec",
+                    # ADR 029 (#254/#255): the store app signs in through the system browser and
+                    # comes back on its own scheme; /exec in the app's WebView does the exchange.
+                    "onca://auth",
                 ],
                 logout_urls=[
                     f"https://{distribution.distribution_domain_name}/",
@@ -963,6 +966,7 @@ class OncaPrototypeStack(Stack):
                     "https://onssa.org/exec",
                     "https://www.onssa.org/",
                     "https://www.onssa.org/exec",
+                    "onca://auth",
                 ],
             ),
             prevent_user_existence_errors=True,

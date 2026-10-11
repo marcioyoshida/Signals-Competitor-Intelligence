@@ -43,3 +43,11 @@ def test_entry_tier_resolves_share_links():
     # #246: the Entry branch of boot() returned before resolveSharedLink ran
     entry = EXEC.split("if (!ADMIN && Ctx.isEntryTier(DATA)) {   // ADR 016", 1)[1].split("return;", 1)[0]
     assert "mountEntry();" in entry and "setTimeout(resolveSharedLink, 0)" in entry
+
+
+def test_store_app_bridge_hands_sign_in_to_the_shell():
+    # ADR 029 (#254): only when the shell injected __ONCA_APP__ AND the RN bridge exists
+    assert "(global.__ONCA_APP__ && global.ReactNativeWebView) ? global.__ONCA_APP__ : null" in CTX
+    assert 'if (APP && APP.redirectUri === "onca://auth") AUTH.redirectUri = APP.redirectUri;' in CTX
+    assert 'toShell({ type: "auth", url:' in CTX and 'toShell({ type: "logout", url:' in CTX
+    assert APP.count('"onca://auth",') == 2   # Cognito callback + logout URLs

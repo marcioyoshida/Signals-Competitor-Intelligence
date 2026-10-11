@@ -43,6 +43,14 @@
     // signs in and out THROUGH /exec and is sent back to where it started (RETURN_PATH_KEY).
     redirectUri: location.origin + (["/", "/exec"].indexOf(location.pathname) !== -1 ? location.pathname : "/exec"),
   };
+  // ADR 029 (#254): inside the store app the shell injects window.__ONCA_APP__ before the page
+  // loads. Sign-in then runs in the SYSTEM browser (Google refuses embedded WebViews) and comes
+  // back on the app's own redirect; the page hands the Hosted UI URL to the shell instead of
+  // navigating, and the shell reloads /exec?code=… in this same WebView, where the PKCE verifier
+  // still sits in sessionStorage and the code exchange (and its refresh cookie) happens as usual.
+  const APP = (global.__ONCA_APP__ && global.ReactNativeWebView) ? global.__ONCA_APP__ : null;
+  if (APP && APP.redirectUri === "onca://auth") AUTH.redirectUri = APP.redirectUri;
+  function toShell(msg) { global.ReactNativeWebView.postMessage(JSON.stringify(msg)); }
   const RETURN_PATH_KEY = "onca_return_path";
   // only a same-site path we wrote ourselves; never "//host" (no open redirect)
   const safePath = (p) => typeof p === "string" && /^\/(?!\/)[A-Za-z0-9_\-\/.]*$/.test(p);
@@ -128,6 +136,7 @@
     });
     if (useIdp) params.set("identity_provider", useIdp);
     const path = useIdp ? "oauth2/authorize" : "login";
+    if (APP) { toShell({ type: "auth", url: `${AUTH.domain}/${path}?${params.toString()}` }); return; }
     location.href = `${AUTH.domain}/${path}?${params.toString()}`;
   }
   /* ---- Session broker (#161/#164) -----------------------------------------
@@ -217,6 +226,7 @@
     await clearUserData();
     rememberReturnPath("logout");
     const params = new URLSearchParams({ client_id: AUTH.clientId, logout_uri: AUTH.redirectUri });
+    if (APP) { toShell({ type: "logout", url: `${AUTH.domain}/logout?${params.toString()}` }); return; }
     location.href = `${AUTH.domain}/logout?${params.toString()}`;
   }
   async function exchangeCodeForToken(code) {
