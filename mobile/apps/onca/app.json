@@ -28,6 +28,12 @@
     },
     "plugins": [
       "expo-web-browser"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "63b7da8b-7d85-44f9-b784-249a79c47131"
+      }
+    },
+    "owner": "marcioy"
   }
 }

@@ -1,7 +1,17 @@
 {
-  "cli": { "version": ">= 24.8.0", "appVersionSource": "remote" },
+  "cli": {
+    "version": ">= 24.8.0",
+    "appVersionSource": "remote"
+  },
   "build": {
-    "preview": { "distribution": "internal", "android": { "buildType": "apk" }, "channel": "preview" },
-    "production": { "autoIncrement": true, "channel": "production" }
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "production": {
+      "autoIncrement": true
+    }
   }
 }
