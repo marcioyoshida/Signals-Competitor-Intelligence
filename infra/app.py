@@ -1366,6 +1366,10 @@ class OncaPrototypeStack(Stack):
             # #236: the discovery .txt files go up in their own deployment (below) so they carry
             # an explicit charset — without one browsers decode them as Latin-1 ("OnÃ§a").
             exclude=["*.txt"],
+            # No Cache-Control made browsers cache heuristically (10% of the object's age), so a
+            # weeks-old context.js could outlive a deploy for days. no-cache = revalidate each load
+            # (a 304 when unchanged), so an invalidation actually reaches the browser.
+            cache_control=[s3deploy.CacheControl.no_cache()],
             prune=False,
         )
         s3deploy.BucketDeployment(
