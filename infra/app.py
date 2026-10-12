@@ -1019,6 +1019,23 @@ class OncaPrototypeStack(Stack):
             "OncaHostedUi",
             cognito_domain=cognito.CognitoDomainOptions(domain_prefix=f"onca-{_acct}"),
         )
+        # Custom Hosted-UI domain (auth.onssa.org), context-gated like the Apple IdP. Cognito keeps
+        # the prefix domain above alongside it, so adding this changes nothing for existing logins;
+        # the cutover (context.js AUTH.domain, ONCA_COGNITO_DOMAIN, the app's COGNITO_ORIGIN, and
+        # the Google/Apple redirect URIs) is a separate step. The ACM cert (us-east-1) and the
+        # Cloudflare CNAMEs are managed out-of-band, same as the onssa.org distribution's.
+        _auth_cert = self.node.try_get_context("auth_domain_cert_arn") or ""
+        auth_custom_domain = None
+        if _auth_cert:
+            auth_custom_domain = user_pool.add_domain(
+                "OncaAuthCustomDomain",
+                custom_domain=cognito.CustomDomainOptions(
+                    domain_name=self.node.try_get_context("auth_domain") or "auth.onssa.org",
+                    certificate=acm.Certificate.from_certificate_arn(self, "OncaAuthDomainCert", _auth_cert),
+                ),
+            )
+            # the target to CNAME auth.onssa.org at (DNS-only, not proxied)
+            CfnOutput(self, "AuthCustomDomainTarget", value=auth_custom_domain.cloud_front_endpoint)
         CfnOutput(self, "UserPoolId", value=user_pool.user_pool_id)
         CfnOutput(self, "UserPoolClientId", value=user_pool_client.user_pool_client_id)
         if google_idp:

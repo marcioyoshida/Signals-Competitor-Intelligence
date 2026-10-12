@@ -10,6 +10,8 @@
     "apple_services_id": "org.onssa.signin",
     "apple_team_id": "AWSP6DBQ68",
     "apple_key_id": "PGYSQBKG75",
+    "auth_domain": "auth.onssa.org",
+    "auth_domain_cert_arn": "arn:aws:acm:us-east-1:668449743071:certificate/226abdd3-035a-41db-8d62-d77ff36e7537",
     "qa_pipeline_image_tag": "latest",
     "alertEmail": "marcioyoshida@gmail.com",
     "gdelt_bridge_ready": "1",
