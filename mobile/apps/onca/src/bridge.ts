@@ -3,13 +3,15 @@
 
 export const ORIGIN = "https://onssa.org";
 export const REDIRECT = "onca://auth";
-export const COGNITO_ORIGIN = "https://onca-668449743071.auth.us-east-1.amazoncognito.com";
+export const COGNITO_ORIGIN = "https://auth.onssa.org";
+/** The prefix domain still serves the same pool; kept so an older /exec keeps working. */
+export const COGNITO_LEGACY_ORIGIN = "https://onca-668449743071.auth.us-east-1.amazoncognito.com";
 /** Origins the WebView may render. Everything else opens in the system browser. */
 const IN_APP_HOSTS = new Set(["onssa.org", "www.onssa.org"]);
 
 /** Injected before /exec loads: tells context.js it runs inside the app (and which redirect). */
 export function injectedFlag(platform: string): string {
-  return `window.__ONCA_APP__ = ${JSON.stringify({ redirectUri: REDIRECT, platform, bridge: 1 })}; true;`;
+  return `window.__ONCA_APP__ = ${JSON.stringify({ redirectUri: REDIRECT, platform, bridge: 2 })}; true;`;
 }
 
 function query(url: string): Record<string, string> {
@@ -42,7 +44,7 @@ export function exchangeUrl(code: string): string {
 
 /** The page asks the shell to open the Hosted UI; only our own Cognito domain is honoured. */
 export function isHostedUiUrl(url: unknown): url is string {
-  return typeof url === "string" && url.startsWith(COGNITO_ORIGIN + "/");
+  return typeof url === "string" && (url.startsWith(COGNITO_ORIGIN + "/") || url.startsWith(COGNITO_LEGACY_ORIGIN + "/"));
 }
 
 function hostOf(url: string): string | null {

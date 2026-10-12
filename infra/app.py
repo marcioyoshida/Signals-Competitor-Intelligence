@@ -1020,10 +1020,10 @@ class OncaPrototypeStack(Stack):
             cognito_domain=cognito.CognitoDomainOptions(domain_prefix=f"onca-{_acct}"),
         )
         # Custom Hosted-UI domain (auth.onssa.org), context-gated like the Apple IdP. Cognito keeps
-        # the prefix domain above alongside it, so adding this changes nothing for existing logins;
-        # the cutover (context.js AUTH.domain, ONCA_COGNITO_DOMAIN, the app's COGNITO_ORIGIN, and
-        # the Google/Apple redirect URIs) is a separate step. The ACM cert (us-east-1) and the
-        # Cloudflare CNAMEs are managed out-of-band, same as the onssa.org distribution's.
+        # the prefix domain above alongside it (same pool, same tokens). When set it is THE sign-in
+        # domain: session API, OAuth facade, context.js/ask.js; app builds before bridge 2 stay on
+        # the prefix domain, so Google/Apple keep both idpresponse URIs. The ACM cert (us-east-1)
+        # and the Cloudflare CNAMEs are managed out-of-band, same as the onssa.org distribution's.
         _auth_cert = self.node.try_get_context("auth_domain_cert_arn") or ""
         auth_custom_domain = None
         if _auth_cert:
@@ -1044,7 +1044,8 @@ class OncaPrototypeStack(Stack):
             CfnOutput(
                 self, "GoogleOAuthRedirectUri",
                 value=(
-                    f"https://{user_pool_domain.domain_name}.auth.{self.region}"
+                    f"https://{auth_custom_domain.domain_name}/oauth2/idpresponse" if auth_custom_domain
+                    else f"https://{user_pool_domain.domain_name}.auth.{self.region}"
                     ".amazoncognito.com/oauth2/idpresponse"
                 ),
             )
@@ -2641,7 +2642,8 @@ class OncaPrototypeStack(Stack):
             memory_size=256,
             environment={
                 "PYTHONPATH": "/var/task",
-                "ONCA_COGNITO_DOMAIN": user_pool_domain.base_url(),
+                "ONCA_COGNITO_DOMAIN": (f"https://{auth_custom_domain.domain_name}" if auth_custom_domain
+                                        else user_pool_domain.base_url()),
                 "ONCA_COGNITO_CLIENT_ID": user_pool_client.user_pool_client_id,
                 "ONCA_TENANT_CONFIG_TABLE": tenant_config_table.table_name,
                 "ONCA_SESSION_EXTRA_HOSTS": distribution.distribution_domain_name,
@@ -2801,7 +2803,8 @@ class OncaPrototypeStack(Stack):
             memory_size=256,
             environment={
                 **_oauth_env,
-                "ONCA_OAUTH_COGNITO_BASE_URL": user_pool_domain.base_url(),
+                "ONCA_OAUTH_COGNITO_BASE_URL": (f"https://{auth_custom_domain.domain_name}" if auth_custom_domain
+                                                else user_pool_domain.base_url()),
                 "ONCA_OAUTH_COGNITO_CLIENT_ID": oauth_cognito_client.user_pool_client_id,
                 "ONCA_OAUTH_VERIFIED_HOSTS": "",   # D6: empty until the owner names hosts
                 "ONCA_USER_POOL_ID": user_pool.user_pool_id,

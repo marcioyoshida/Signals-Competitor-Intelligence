@@ -33,7 +33,7 @@
      key, so the session is shared across the whole v2 family). Used only when a
      host screen does not inject its own auth (i.e. admin). ------------------ */
   const AUTH = {
-    domain: "https://onca-668449743071.auth.us-east-1.amazoncognito.com",
+    domain: "https://auth.onssa.org",
     clientId: "7qlquhh56o06tp9bo8gp77p385",
     redirectUri: location.origin + location.pathname,
   };

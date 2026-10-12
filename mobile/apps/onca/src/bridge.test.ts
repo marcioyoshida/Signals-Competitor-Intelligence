@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseAuthRedirect, exchangeUrl, staysInApp, parseMessage, injectedFlag, COGNITO_ORIGIN } from "./bridge.ts";
+import { parseAuthRedirect, exchangeUrl, staysInApp, parseMessage, injectedFlag, isHostedUiUrl, COGNITO_ORIGIN, COGNITO_LEGACY_ORIGIN } from "./bridge.ts";
 
 test("auth redirect: code accepted only in Cognito's alphabet", () => {
   assert.deepEqual(parseAuthRedirect("onca://auth?code=abc123-XYZ_9"), { kind: "code", code: "abc123-XYZ_9" });
@@ -31,7 +31,7 @@ test("page messages: only auth/logout to our own Hosted UI", () => {
 });
 
 test("injected flag is what context.js checks for", () => {
-  assert.match(injectedFlag("ios"), /window\.__ONCA_APP__ = \{"redirectUri":"onca:\/\/auth","platform":"ios","bridge":1\}/);
+  assert.match(injectedFlag("ios"), /window\.__ONCA_APP__ = \{"redirectUri":"onca:\/\/auth","platform":"ios","bridge":2\}/);
 });
 
 import { isPurchaseUrl, isShareUrl } from "./bridge.ts";
@@ -77,4 +77,10 @@ test("#257: lock timing", () => {
   assert.equal(shouldLock(true, 5, null, 0), true);                 // cold start
   assert.equal(shouldLock(true, 5, 0, 4 * 60_000), false);
   assert.equal(shouldLock(true, 5, 0, 5 * 60_000), true);
+});
+
+test("hosted UI: custom domain and the legacy prefix domain are both honoured", () => {
+  assert.equal(isHostedUiUrl("https://auth.onssa.org/oauth2/authorize?x=1"), true);
+  assert.equal(isHostedUiUrl(`${COGNITO_LEGACY_ORIGIN}/login?x=1`), true);
+  assert.equal(isHostedUiUrl("https://auth.onssa.org.evil.com/login"), false);
 });

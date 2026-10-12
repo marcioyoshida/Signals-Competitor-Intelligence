@@ -35,7 +35,7 @@
      trust boundary (server-side scoping, ADR 002).
      ====================================================================== */
   const AUTH = {
-    domain: "https://onca-668449743071.auth.us-east-1.amazoncognito.com",
+    domain: "https://auth.onssa.org",
     clientId: "7qlquhh56o06tp9bo8gp77p385",
     apiUrl: "", // same origin — /api/feed is fronted by CloudFront -> HTTP API (JWT)
     // #242: Cognito validates redirect_uri / logout_uri literally, and only "/" and "/exec" are
@@ -50,6 +50,8 @@
   // still sits in sessionStorage and the code exchange (and its refresh cookie) happens as usual.
   const APP = (global.__ONCA_APP__ && global.ReactNativeWebView) ? global.__ONCA_APP__ : null;
   if (APP && APP.redirectUri === "onca://auth") AUTH.redirectUri = APP.redirectUri;
+  // auth.onssa.org cutover: app builds before bridge 2 only honour the prefix domain (bridge.ts isHostedUiUrl).
+  if (APP && !(APP.bridge >= 2)) AUTH.domain = "https://onca-668449743071.auth.us-east-1.amazoncognito.com";
   function toShell(msg) { global.ReactNativeWebView.postMessage(JSON.stringify(msg)); }
   // #258 (App Store 3.1.1 / 3.1.3): inside the app there is no purchase call to action — no link to
   // the storefront, no price, no "Assine". The plan is managed on the web; say so in plain text.

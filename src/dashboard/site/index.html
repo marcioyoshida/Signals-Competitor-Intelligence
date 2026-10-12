@@ -2746,7 +2746,7 @@ document.getElementById("tableToggle").onclick = (e) => {
 // <id_token>`; CloudFront routes /api/ask to the Cognito-JWT-verified HTTP API
 // (no origin secret, no edge basic-auth on that path). apiUrl is "" = same origin.
 const AUTH = {
-  domain: "https://onca-668449743071.auth.us-east-1.amazoncognito.com",
+  domain: "https://auth.onssa.org",
   clientId: "7qlquhh56o06tp9bo8gp77p385",
   apiUrl: "",  // same origin — /api/ask is fronted by CloudFront -> HTTP API (JWT)
   // Must exactly match the Cognito app client's registered callback/logout URL.
