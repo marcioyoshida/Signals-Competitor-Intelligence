@@ -898,27 +898,20 @@ class OncaPrototypeStack(Stack):
         CfnOutput(self, "OncaUserPoolV2Id", value=_ident_v2.pool.user_pool_id)
         CfnOutput(self, "OncaWarroomClientV2Id", value=_ident_v2.client.user_pool_client_id)
         CfnOutput(self, "OncaOAuthFacadeClientV2Id", value=_ident_v2.oauth_client.user_pool_client_id)
-        user_pool_domain = user_pool.add_domain(
-            "OncaHostedUi",
-            cognito_domain=cognito.CognitoDomainOptions(domain_prefix=f"onca-{_acct}"),
-        )
-        # Custom Hosted-UI domain (auth.onssa.org), context-gated like the Apple IdP. Cognito keeps
-        # the prefix domain above alongside it (same pool, same tokens). When set it is THE sign-in
-        # domain: session API, OAuth facade, context.js/ask.js; app builds before bridge 2 stay on
-        # the prefix domain, so Google/Apple keep both idpresponse URIs. The ACM cert (us-east-1)
-        # and the Cloudflare CNAMEs are managed out-of-band, same as the onssa.org distribution's.
+        # #262 P2 (cutover step B): the original pool's two Hosted-UI domains are REMOVED. Domain
+        # names are global, so the prefix domain (onca-<acct>) and auth.onssa.org must be released
+        # before step C can recreate them on V2 — CloudFormation creates before it deletes, so the
+        # move can't be one deploy. Between B and C nothing serves the Hosted UI (sign-in is down
+        # for the cutover window); every consumer stays on the original pool. The values below are
+        # the same strings the domain resources resolved to, as literals, so the session broker
+        # and OAuth facade env vars don't change and nothing references a deleted resource.
+        # AuthCustomDomainTarget is dropped (its CloudFront endpoint dies with the domain; C
+        # outputs the new one from V2).
         _auth_cert = self.node.try_get_context("auth_domain_cert_arn") or ""
-        auth_custom_domain = None
-        if _auth_cert:
-            auth_custom_domain = user_pool.add_domain(
-                "OncaAuthCustomDomain",
-                custom_domain=cognito.CustomDomainOptions(
-                    domain_name=self.node.try_get_context("auth_domain") or "auth.onssa.org",
-                    certificate=acm.Certificate.from_certificate_arn(self, "OncaAuthDomainCert", _auth_cert),
-                ),
-            )
-            # the target to CNAME auth.onssa.org at (DNS-only, not proxied)
-            CfnOutput(self, "AuthCustomDomainTarget", value=auth_custom_domain.cloud_front_endpoint)
+        _hosted_ui_prefix = f"onca-{_acct}"
+        _auth_domain_name = (self.node.try_get_context("auth_domain") or "auth.onssa.org") if _auth_cert else ""
+        _hosted_ui_base = f"https://{_hosted_ui_prefix}.auth.{self.region}.amazoncognito.com"
+        _sign_in_base = f"https://{_auth_domain_name}" if _auth_domain_name else _hosted_ui_base
         CfnOutput(self, "UserPoolId", value=user_pool.user_pool_id)
         CfnOutput(self, "UserPoolClientId", value=user_pool_client.user_pool_client_id)
         if google_idp:
@@ -926,11 +919,7 @@ class OncaPrototypeStack(Stack):
             # Cognito's own federated-IDP callback path, not any URL in this app.
             CfnOutput(
                 self, "GoogleOAuthRedirectUri",
-                value=(
-                    f"https://{auth_custom_domain.domain_name}/oauth2/idpresponse" if auth_custom_domain
-                    else f"https://{user_pool_domain.domain_name}.auth.{self.region}"
-                    ".amazoncognito.com/oauth2/idpresponse"
-                ),
+                value=f"{_sign_in_base}/oauth2/idpresponse",
             )
 
         # Pre Token Generation trigger: resolves custom:tenant/custom:tier for a Google login
@@ -974,10 +963,7 @@ class OncaPrototypeStack(Stack):
         CfnOutput(
             self,
             "UserPoolHostedUi",
-            value=(
-                f"https://{user_pool_domain.domain_name}.auth."
-                f"{self.region}.amazoncognito.com"
-            ),
+            value=_hosted_ui_base,
         )
 
         # --- Demo SaaS tenant provisioning (deploy-time, idempotent) --------------
@@ -2384,8 +2370,7 @@ class OncaPrototypeStack(Stack):
             memory_size=256,
             environment={
                 "PYTHONPATH": "/var/task",
-                "ONCA_COGNITO_DOMAIN": (f"https://{auth_custom_domain.domain_name}" if auth_custom_domain
-                                        else user_pool_domain.base_url()),
+                "ONCA_COGNITO_DOMAIN": _sign_in_base,
                 "ONCA_COGNITO_CLIENT_ID": user_pool_client.user_pool_client_id,
                 "ONCA_TENANT_CONFIG_TABLE": tenant_config_table.table_name,
                 "ONCA_SESSION_EXTRA_HOSTS": distribution.distribution_domain_name,
@@ -2527,8 +2512,7 @@ class OncaPrototypeStack(Stack):
             memory_size=256,
             environment={
                 **_oauth_env,
-                "ONCA_OAUTH_COGNITO_BASE_URL": (f"https://{auth_custom_domain.domain_name}" if auth_custom_domain
-                                                else user_pool_domain.base_url()),
+                "ONCA_OAUTH_COGNITO_BASE_URL": _sign_in_base,
                 "ONCA_OAUTH_COGNITO_CLIENT_ID": oauth_cognito_client.user_pool_client_id,
                 "ONCA_OAUTH_VERIFIED_HOSTS": "",   # D6: empty until the owner names hosts
                 "ONCA_USER_POOL_ID": user_pool.user_pool_id,
