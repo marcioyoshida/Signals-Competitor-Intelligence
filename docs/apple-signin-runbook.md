@@ -26,8 +26,9 @@ Team **AWSP6DBQ68**. https://developer.apple.com/account/resources/identifiers
 - Identifier: `org.onssa.signin`.
 - Tick **Sign in with Apple** → *Configure*:
   - Primary App ID: `org.onssa.onca`.
-  - Domains and Subdomains: `onca-668449743071.auth.us-east-1.amazoncognito.com`.
-  - Return URLs: `https://onca-668449743071.auth.us-east-1.amazoncognito.com/oauth2/idpresponse`.
+  - Domains and Subdomains: `auth.onssa.org, onca-668449743071.auth.us-east-1.amazoncognito.com`.
+  - Return URLs: `https://auth.onssa.org/oauth2/idpresponse` and `https://onca-668449743071.auth.us-east-1.amazoncognito.com/oauth2/idpresponse`
+    (the custom domain is the sign-in domain; the prefix one stays for app builds before bridge 2).
 - Save, then Continue and Register.
 
 **c) Key**: Keys → **+**.

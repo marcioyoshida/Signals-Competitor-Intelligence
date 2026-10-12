@@ -141,7 +141,9 @@ human with access to it:
    (Web application type).
 2. Add this exact redirect URI (Cognito's federated-IDP callback path — output as
    `GoogleOAuthRedirectUri` once deployed with Google wired, or compute it directly):
-   `https://onca-<account-id>.auth.us-east-1.amazoncognito.com/oauth2/idpresponse`
+   `https://auth.onssa.org/oauth2/idpresponse` (custom domain, when `auth_domain_cert_arn` is set)
+   and `https://onca-<account-id>.auth.us-east-1.amazoncognito.com/oauth2/idpresponse` (prefix domain,
+   still used by app builds before bridge 2) — register both.
 3. Store the resulting client ID + secret in Secrets Manager:
    ```bash
    aws secretsmanager create-secret \
