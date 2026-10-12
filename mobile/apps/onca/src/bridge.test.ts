@@ -84,3 +84,19 @@ test("hosted UI: custom domain and the legacy prefix domain are both honoured", 
   assert.equal(isHostedUiUrl(`${COGNITO_LEGACY_ORIGIN}/login?x=1`), true);
   assert.equal(isHostedUiUrl("https://auth.onssa.org.evil.com/login"), false);
 });
+
+import { authBeaconUrl, authFailureMessage } from "./bridge.ts";
+
+test("sign-in outcome beacon carries the outcome and a sanitized reason, never a code", () => {
+  assert.equal(authBeaconUrl("cancel"), "https://onssa.org/v3/manifest.webmanifest?app_auth=cancel");
+  assert.equal(authBeaconUrl("error", "user.email: <x@y.z>"),
+    "https://onssa.org/v3/manifest.webmanifest?app_auth=error&d=user.email%3A%20*");
+  assert.ok(authBeaconUrl("thrown", "x".repeat(200)).length < 160);
+});
+
+test("a cancelled sign-in is silent; every other failure is explained", () => {
+  assert.equal(authFailureMessage("cancel"), null);
+  assert.equal(authFailureMessage("code"), null);
+  assert.match(authFailureMessage("error", "access_denied") ?? "", /access_denied/);
+  assert.match(authFailureMessage("dismiss") ?? "", /Tente de novo/);
+});

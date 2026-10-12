@@ -42,6 +42,24 @@ export function exchangeUrl(code: string): string {
   return `${ORIGIN}/exec?code=${encodeURIComponent(code)}`;
 }
 
+/** How a sign-in attempt ended, as the shell saw it. */
+export type AuthOutcome = "code" | "error" | "none" | "cancel" | "dismiss" | "locked" | "thrown";
+
+/** A log-only GET that records how a sign-in attempt ended (CloudFront access log): the outcome
+ *  and a short sanitized reason — never the code, a token or an email. */
+export function authBeaconUrl(outcome: AuthOutcome, detail = ""): string {
+  const d = detail.replace(/\S*@\S*/g, "*").replace(/[^A-Za-z0-9 _.:*-]/g, "").slice(0, 80);
+  return `${ORIGIN}/v3/manifest.webmanifest?app_auth=${outcome}` + (d ? `&d=${encodeURIComponent(d)}` : "");
+}
+
+/** What the person sees when sign-in did not come back with a code (null = say nothing). */
+export function authFailureMessage(outcome: AuthOutcome, detail = ""): string | null {
+  if (outcome === "code" || outcome === "cancel") return null;
+  if (outcome === "error") return `O provedor de login recusou a entrada${detail ? `: ${detail}` : ""}.`;
+  if (outcome === "thrown") return `Não foi possível abrir o login${detail ? ` (${detail})` : ""}.`;
+  return "O login foi fechado antes de voltar ao app. Tente de novo.";
+}
+
 /** The page asks the shell to open the Hosted UI; only our own Cognito domain is honoured. */
 export function isHostedUiUrl(url: unknown): url is string {
   return typeof url === "string" && (url.startsWith(COGNITO_ORIGIN + "/") || url.startsWith(COGNITO_LEGACY_ORIGIN + "/"));

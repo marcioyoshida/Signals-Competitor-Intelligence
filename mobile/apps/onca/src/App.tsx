@@ -3,7 +3,8 @@
 // system browser, Android back, native push (#256), app lock + app-switcher privacy (#257), native
 // share (#258). Everything else is the web app.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, BackHandler, Linking, Platform, Pressable, Share, StatusBar, StyleSheet, Text, View } from "react-native";
+import { Alert, AppState, BackHandler, Linking, Platform, Pressable, Share, StatusBar, StyleSheet, Text, View } from "react-native";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
 import type { WebViewMessageEvent } from "react-native-webview";
 import type { ShouldStartLoadRequest } from "react-native-webview/lib/WebViewTypes";
@@ -14,9 +15,10 @@ import * as SecureStore from "expo-secure-store";
 import * as ScreenCapture from "expo-screen-capture";
 import Constants from "expo-constants";
 import {
-  ORIGIN, REDIRECT, exchangeUrl, injectedFlag, isPurchaseUrl, parseAuthRedirect, parseMessage,
+  ORIGIN, REDIRECT, authBeaconUrl, authFailureMessage, exchangeUrl, injectedFlag, isPurchaseUrl, parseAuthRedirect, parseMessage,
   replyScript, shouldLock, staysInApp,
 } from "./bridge.ts";
+import type { AuthOutcome } from "./bridge.ts";
 
 const BG = "#0e1214";
 const ALERTS_TARGET = `${ORIGIN}/exec#hoje-alertas`;
@@ -63,6 +65,10 @@ async function authenticate(): Promise<boolean> {
 }
 
 export default function App() {
+  return <SafeAreaProvider><Shell /></SafeAreaProvider>;
+}
+
+function Shell() {
   const web = useRef<WebView>(null);
   const canGoBack = useRef(false);
   const lock = useRef<Lock>({ enabled: false, minutes: 5 });
@@ -133,13 +139,33 @@ export default function App() {
         reply(m.id, { ok: true, ...lock.current });
         return;
       }
-      case "auth":
-      case "logout": {
-        const r = await WebBrowser.openAuthSessionAsync(m.url, REDIRECT, { preferEphemeralSession: m.type === "logout" });
-        if (m.type === "logout") { go(`${ORIGIN}/exec`); return; }
-        if (r.type !== "success") return;                // cancelled: stay on the gate
-        const res = parseAuthRedirect(r.url);
-        if (res.kind === "code") go(exchangeUrl(res.code));
+      case "logout":
+        try { await WebBrowser.openAuthSessionAsync(m.url, REDIRECT, { preferEphemeralSession: true }); } catch { /* still sign out locally */ }
+        go(`${ORIGIN}/exec`);
+        return;
+      case "auth": {
+        // Every way this can end is reported (outcome only, never the code) and, unless the person
+        // cancelled, explained on screen: a silent return to the gate is what made 0.1.0 (3) undiagnosable.
+        let outcome: AuthOutcome, detail = "";
+        try {
+          const r = await WebBrowser.openAuthSessionAsync(m.url, REDIRECT, { preferEphemeralSession: false });
+          if (r.type === "success") {
+            const res = parseAuthRedirect(r.url);
+            if (res.kind === "code") go(exchangeUrl(res.code));
+            outcome = res.kind;
+            if (res.kind === "error") detail = res.error;
+            if (res.kind === "none") detail = r.url.split("?")[0];
+          } else {
+            outcome = r.type === "cancel" || r.type === "dismiss" || r.type === "locked" ? r.type : "dismiss";
+          }
+        } catch (err) {
+          outcome = "thrown";
+          detail = err instanceof Error ? err.message : String(err);
+        }
+        fetch(authBeaconUrl(outcome, detail), { cache: "no-store" }).catch(() => {});
+        const msg = authFailureMessage(outcome, detail);
+        if (msg) Alert.alert("Login não concluído", msg);
+        return;
       }
     }
   }, [go, reply]);
@@ -160,8 +186,10 @@ export default function App() {
     return () => sub.remove();
   }, []);
 
+  // the WebView sits inside the safe area (notch / Dynamic Island / home indicator) on every
+  // iPhone; a fixed 44px top inset hid the top of /exec under the status bar on newer models
   return (
-    <View style={s.root}>
+    <SafeAreaView style={s.root} edges={["top", "bottom"]}>
       <StatusBar barStyle="light-content" backgroundColor={BG} />
       {failed ? (
         <View style={s.center}>
@@ -202,12 +230,12 @@ export default function App() {
           ) : null}
         </View>
       ) : null}
-    </View>
+    </SafeAreaView>
   );
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: BG, paddingTop: Platform.OS === "android" ? StatusBar.currentHeight : 44 },
+  root: { flex: 1, backgroundColor: BG },
   web: { flex: 1, backgroundColor: BG },
   hidden: { display: "none" },
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
