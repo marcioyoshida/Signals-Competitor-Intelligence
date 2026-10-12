@@ -11,7 +11,11 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "org.onssa.onca",
-      "usesAppleSignIn": true,
+      "entitlements": {
+        "com.apple.developer.applesignin": [
+          "Default"
+        ]
+      },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "WKAppBoundDomains": [
