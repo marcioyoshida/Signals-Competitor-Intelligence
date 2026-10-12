@@ -34,7 +34,7 @@
      host screen does not inject its own auth (i.e. admin). ------------------ */
   const AUTH = {
     domain: "https://auth.onssa.org",
-    clientId: "7qlquhh56o06tp9bo8gp77p385",
+    clientId: "4docsvvsocsujjqtj3aofduio3",
     redirectUri: location.origin + location.pathname,
   };
   const TOKEN_KEY = "onca_id_token", VERIFIER_KEY = "onca_pkce_verifier";

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Copy the hand-made native users of the original Onça pool into pool V2 (#262 P1).
 
-    python scripts/migrate_cognito_pool.py --from-pool us-east-1_LfGQGWq56 --to-pool us-east-1_XXXX
+    python scripts/migrate_cognito_pool.py --from-pool us-east-1_LfGQGWq56 --to-pool us-east-1_rxEkYhYHg
     python scripts/migrate_cognito_pool.py --from-pool ... --to-pool ... --apply
 
 Dry-run by default: prints the plan and changes nothing. `--apply` executes it. Idempotent —
@@ -21,7 +21,10 @@ What it does (docs/2026-10-12-cognito-pool-v2-migration.md):
   signalscompetitor/onca/qa-test-credentials) and the fleet health-check user (SSM
   /fleet-monitor/authtest/onca-user + onca-pass). Values are read in-process and never printed
   or written. Everyone else — the owner included — sets their own password:
-  `--prompt-password EMAIL` asks for it on the terminal (getpass, never echoed) during --apply.
+  `--invite EMAIL` (preferred, no terminal needed) creates that user WITHOUT MessageAction=SUPPRESS,
+  so Cognito emails a temporary password and the user sets their own at first sign-in; for a user
+  already in V2 and still FORCE_CHANGE_PASSWORD it re-sends the invite (MessageAction=RESEND).
+  `--prompt-password EMAIL` instead asks for it on the terminal (getpass, never echoed).
   NB Cognito refuses "forgot password" for a FORCE_CHANGE_PASSWORD user, so a migrated user
   without a stored password needs that (or `aws cognito-idp admin-set-user-password`).
 """
@@ -63,7 +66,7 @@ def _email(user: dict) -> str:
 
 def plan_migration(source_users: Iterable[dict], target_users: dict[str, dict], *,
                    cdk_users: dict[str, dict], password_emails: Iterable[str] = (),
-                   target_groups: set[str] | None = None) -> list[Action]:
+                   target_groups: set[str] | None = None, invite_emails: Iterable[str] = ()) -> list[Action]:
     """Pure: what to do in the target pool. No AWS, no secrets.
 
     source_users: [{username, status, attributes: {name: value}, groups: [..]}] from the old pool.
@@ -71,10 +74,20 @@ def plan_migration(source_users: Iterable[dict], target_users: dict[str, dict], 
     cdk_users: username/email -> spec for users the stack declares (never created here).
     password_emails: emails with a STORED password (only the names; values stay elsewhere).
     target_groups: group names that exist in the target pool (None = unknown, e.g. pool not
-    deployed yet in a dry run)."""
+    deployed yet in a dry run).
+    invite_emails: non-CDK native users to create with a Cognito invitation email (temporary
+    password) instead of a suppressed invite; never combined with a stored password."""
     cdk = {e.lower() for e in cdk_users}
     with_password = {e.lower() for e in password_emails}
+    invite = {e.strip().lower() for e in invite_emails}
     actions: list[Action] = []
+    native = {_email(u) for u in source_users if u.get("status") != "EXTERNAL_PROVIDER"
+              and not u.get("attributes", {}).get("identities")}
+    for e in sorted(invite - native):
+        actions.append(Action("warn", e, {"why": "--invite: not a native user of the source pool"}))
+    for e in sorted(invite & cdk):
+        actions.append(Action("warn", e, {"why": "--invite: CDK-declared user, never invited"}))
+    invite -= cdk
     for u in sorted(source_users, key=_email):
         email = _email(u)
         attrs = u.get("attributes", {})
@@ -93,8 +106,11 @@ def plan_migration(source_users: Iterable[dict], target_users: dict[str, dict], 
             else:
                 copied = {k: attrs[k] for k in COPIED_ATTRIBUTES if attrs.get(k)}
                 actions.append(Action("create", email, {"attributes": ",".join(
-                    ["email", "email_verified"] + sorted(copied))} | {k: v for k, v in copied.items()}))
+                    ["email", "email_verified"] + sorted(copied))} | {k: v for k, v in copied.items()}
+                    | ({"invite": True} if email in invite else {})))
                 created = True
+        elif email in invite and target.get("status") == "FORCE_CHANGE_PASSWORD":
+            actions.append(Action("resend_invite", email))
         have = set((target or {}).get("groups", []))
         for g in sorted(set(u.get("groups", [])) - have):
             if target_groups is not None and g not in target_groups:
@@ -103,7 +119,9 @@ def plan_migration(source_users: Iterable[dict], target_users: dict[str, dict], 
             if target is None and is_cdk:
                 continue   # nothing to attach to yet; the warn above covers it
             actions.append(Action("add_group", email, {"group": g}))
-        if email in with_password and (created or (target and target.get("status") != "CONFIRMED")):
+        if email in invite:
+            pass   # the invitation's temporary password is the credential; nothing to set
+        elif email in with_password and (created or (target and target.get("status") != "CONFIRMED")):
             actions.append(Action("set_password", email, {"source": "stored", "permanent": True}))
         elif created:
             actions.append(Action("skip", email, {"why": "no stored password: user sets their own"}))
@@ -188,8 +206,15 @@ def _apply(cip, pool_id: str, actions: list[Action], source: dict[str, dict],
                 attrs = source[a.email]["attributes"]
                 ua = [{"Name": "email", "Value": a.email}, {"Name": "email_verified", "Value": "true"}]
                 ua += [{"Name": k, "Value": attrs[k]} for k in COPIED_ATTRIBUTES if attrs.get(k)]
-                cip.admin_create_user(UserPoolId=pool_id, Username=a.email, UserAttributes=ua,
-                                      MessageAction="SUPPRESS")
+                if a.detail.get("invite"):   # Cognito emails a temporary password
+                    cip.admin_create_user(UserPoolId=pool_id, Username=a.email, UserAttributes=ua,
+                                          DesiredDeliveryMediums=["EMAIL"])
+                else:
+                    cip.admin_create_user(UserPoolId=pool_id, Username=a.email, UserAttributes=ua,
+                                          MessageAction="SUPPRESS")
+            elif a.kind == "resend_invite":
+                cip.admin_create_user(UserPoolId=pool_id, Username=a.email, MessageAction="RESEND",
+                                      DesiredDeliveryMediums=["EMAIL"])
             elif a.kind == "add_group":
                 cip.admin_add_user_to_group(UserPoolId=pool_id, Username=a.email, GroupName=a.detail["group"])
             elif a.kind == "set_password":
@@ -217,6 +242,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--from-pool", required=True, help="the original pool id")
     ap.add_argument("--to-pool", required=True, help="the V2 pool id (stack output OncaUserPoolV2Id)")
     ap.add_argument("--apply", action="store_true", help="execute the plan (default: dry run)")
+    ap.add_argument("--invite", action="append", default=[], metavar="EMAIL",
+                    help="create this native user with a Cognito invitation email (temporary password; "
+                         "the user sets their own at first sign-in). Repeatable")
     ap.add_argument("--prompt-password", action="append", default=[], metavar="EMAIL",
                     help="with --apply: ask for this user's new permanent password (repeatable)")
     ap.add_argument("--profile", default=None)
@@ -224,6 +252,9 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     if args.from_pool == args.to_pool:
         ap.error("--from-pool and --to-pool must differ")
+    both = {e.strip().lower() for e in args.invite} & {e.strip().lower() for e in args.prompt_password}
+    if both:
+        ap.error(f"--invite and --prompt-password are exclusive: {sorted(both)}")
 
     import boto3
 
@@ -233,12 +264,14 @@ def main(argv: list[str] | None = None) -> int:
     target, target_groups = _target_state(cip, args.to_pool)
     passwords = _load_passwords(session)
     actions = plan_migration(source, target, cdk_users=cdk_declared_users(),
-                             password_emails=passwords.emails(), target_groups=target_groups)
+                             password_emails=passwords.emails(), target_groups=target_groups,
+                             invite_emails=args.invite)
 
     print(f"{'APPLY' if args.apply else 'DRY RUN'}: {args.from_pool} -> {args.to_pool}")
     for a in actions:
         print("  " + a.describe())
-    counts = {k: sum(1 for a in actions if a.kind == k) for k in ("create", "add_group", "set_password", "warn")}
+    counts = {k: sum(1 for a in actions if a.kind == k) for k in ("create", "resend_invite", "add_group",
+                                                                  "set_password", "warn")}
     print("  " + ", ".join(f"{k}: {v}" for k, v in counts.items()))
     if not args.apply:
         print("dry run — nothing changed; re-run with --apply")

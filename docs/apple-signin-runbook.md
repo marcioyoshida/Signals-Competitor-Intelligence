@@ -1,6 +1,6 @@
 # Sign in with Apple — runbook (#248, ADR 029)
 
-Onça's Cognito pool (`us-east-1_LfGQGWq56`, Hosted UI `onca-668449743071.auth.us-east-1.amazoncognito.com`)
+Onça's Cognito pool (`us-east-1_rxEkYhYHg`, Hosted UI `onca-668449743071.auth.us-east-1.amazoncognito.com`)
 gets a **SignInWithApple** identity provider next to Google. It is used on the web (Hosted UI button)
 and by the store app (the same Hosted UI, opened in the system browser).
 
@@ -62,7 +62,7 @@ already known. Then Claude:
    `OncaWarroomClient` and `OncaOAuthFacadeClient`, as in-place updates;
 3. deploys;
 4. verifies with
-   `aws cognito-idp list-identity-providers --user-pool-id us-east-1_LfGQGWq56`;
+   `aws cognito-idp list-identity-providers --user-pool-id us-east-1_rxEkYhYHg`;
 5. signs in once with a real Apple ID on `/exec` (and on a `/v2` screen).
 
 ## 4. Behaviour to expect
