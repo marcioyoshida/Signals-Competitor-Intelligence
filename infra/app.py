@@ -11,6 +11,7 @@ from pathlib import Path
 
 import yaml
 from edge_policy import exec_exemption_js, public_paths_js, site_paths_js
+from identity import DEMO_TENANTS, build_identity_pool
 from aws_cdk import App, ArnFormat, CfnOutput, Duration, RemovalPolicy, SecretValue, Size, Stack, Tags
 from aws_cdk import aws_bedrock as bedrock
 from aws_cdk import aws_apigatewayv2 as apigwv2
@@ -884,137 +885,19 @@ class OncaPrototypeStack(Stack):
         # (no built-in authorizer), so JWT verification is a follow-on increment
         # (API Gateway JWT authorizer vs Lambda@Edge vs in-Lambda JWKS — see ADR).
         _acct = os.environ.get("CDK_DEFAULT_ACCOUNT", "signals")
-        user_pool = cognito.UserPool(
-            self,
-            "OncaUserPool",
-            self_sign_up_enabled=False,  # tenants are provisioned, not open self-signup
-            sign_in_aliases=cognito.SignInAliases(email=True),
-            standard_attributes=cognito.StandardAttributes(
-                email=cognito.StandardAttribute(required=True, mutable=False),
-            ),
-            custom_attributes={
-                # the tenant this user belongs to (entitlement key) + its tier.
-                "tenant": cognito.StringAttribute(mutable=False),
-                "tier": cognito.StringAttribute(mutable=True),  # entry | saas | sovereign
-            },
-            password_policy=cognito.PasswordPolicy(min_length=12),
-            account_recovery=cognito.AccountRecovery.EMAIL_ONLY,
-            removal_policy=RemovalPolicy.RETAIN,  # never destroy identities on stack update
-        )
-        # Google sign-in (ported from Signals-Creator-Radar/Bluefin's ADR 0017 pattern — see
-        # docs/google-oauth-runbook.md). Gated on `-c google_client_id=...` (persisted in
-        # infra/cdk.json, not sensitive) — the callback URLs above are already literal strings
-        # (onssa.org / the distribution's own domain), never a construct reference, so adding a
-        # federated provider here does not risk the CFN circular dependency Bluefin's runbook
-        # warns about. Unlike Bluefin, this never auto-provisions a tenant — see
-        # lambda_pretoken.py and tenant_config.map_federated_email.
-        _google_client_id = self.node.try_get_context("google_client_id") or ""
-        google_idp = None
-        if _google_client_id:
-            _google_secret = SecretValue.secrets_manager(
-                "signalscompetitor/onca/google-oauth", json_field="client_secret"
-            )
-            google_idp = cognito.UserPoolIdentityProviderGoogle(
-                self, "OncaGoogleIdp",
-                user_pool=user_pool,
-                client_id=_google_client_id,
-                client_secret_value=_google_secret,
-                scopes=["openid", "email", "profile"],
-                attribute_mapping=cognito.AttributeMapping(
-                    email=cognito.ProviderAttribute.GOOGLE_EMAIL,
-                    # Without this, Cognito defaults email_verified to false for every
-                    # federated user regardless of what Google actually asserts — the exact
-                    # gotcha Bluefin's runbook documents hitting live.
-                    email_verified=cognito.ProviderAttribute.GOOGLE_EMAIL_VERIFIED,
-                ),
-            )
-
-        # #248 (ADR 029): Sign in with Apple, same pattern as Google — gated on context persisted in
-        # infra/cdk.json (Services ID, team ID and key ID are not secrets; NEVER pass them as -c
-        # flags only: an unrelated deploy without the flag would silently destroy the IdP, the
-        # 2026-09-15 Google incident). The .p8 key lives only in Secrets Manager. Its own Onça App ID
-        # / Services ID / key under team AWSP6DBQ68 — not grouped with Bluefin's (shared user ids
-        # and consent branding). Federated users resolve by EMAIL exactly like Google
-        # (lambda_pretoken / map_federated_email); a Hide-My-Email relay address won't match an
-        # operator mapping — the no-access gate says so (#249 adds invite codes).
-        _apple = {k: self.node.try_get_context(f"apple_{k}") or "" for k in ("services_id", "team_id", "key_id")}
-        apple_idp = None
-        if all(_apple.values()):
-            apple_idp = cognito.UserPoolIdentityProviderApple(
-                self, "OncaAppleIdp",
-                user_pool=user_pool,
-                client_id=_apple["services_id"],
-                team_id=_apple["team_id"],
-                key_id=_apple["key_id"],
-                private_key_value=SecretValue.secrets_manager(
-                    "signalscompetitor/onca/apple-oauth", json_field="private_key"),
-                scopes=["email", "name"],
-                attribute_mapping=cognito.AttributeMapping(
-                    email=cognito.ProviderAttribute.APPLE_EMAIL,
-                    email_verified=cognito.ProviderAttribute.APPLE_EMAIL_VERIFIED,
-                ),
-            )
-        _federated = [p for p, idp in ((cognito.UserPoolClientIdentityProvider.GOOGLE, google_idp),
-                                       (cognito.UserPoolClientIdentityProvider.APPLE, apple_idp)) if idp]
-
-        _client_kwargs = dict(
-            # user_srp: the browser/dashboard login flow (PKCE Hosted UI + SRP).
-            # admin_user_password: ADDITIVE — enables AdminInitiateAuth with
-            # ADMIN_USER_PASSWORD_AUTH so a trusted server-side caller (e.g. the
-            # fleet-monitor health-check Lambda in a different AWS account/repo) can
-            # do a full username+password login round-trip without implementing SRP.
-            # Deliberately NOT user_password=True (the non-admin, broader flow) —
-            # AdminInitiateAuth already requires IAM credentials with
-            # cognito-idp:AdminInitiateAuth on this pool, so this stays admin-scoped.
-            auth_flows=cognito.AuthFlow(user_srp=True, admin_user_password=True),
-            o_auth=cognito.OAuthSettings(
-                flows=cognito.OAuthFlows(authorization_code_grant=True),
-                scopes=[cognito.OAuthScope.OPENID, cognito.OAuthScope.EMAIL],
-                # "/" for the (deprecating) v1 warroom; "/exec" for the officer suite's
-                # own PKCE login so it redirects back to /exec, not root.
-                callback_urls=[
-                    f"https://{distribution.distribution_domain_name}/",
-                    f"https://{distribution.distribution_domain_name}/exec",
-                    # onssa.org is an alternate domain name on the SAME distribution
-                    # (added 2026-09-13) — Cognito validates redirect_uri literally,
-                    # so the branded domain needs its own entries or Hosted UI login
-                    # started from onssa.org/exec fails on the callback.
-                    "https://onssa.org/",
-                    "https://onssa.org/exec",
-                    "https://www.onssa.org/",
-                    "https://www.onssa.org/exec",
-                    # ADR 029 (#254/#255): the store app signs in through the system browser and
-                    # comes back on its own scheme; /exec in the app's WebView does the exchange.
-                    "onca://auth",
-                ],
-                logout_urls=[
-                    f"https://{distribution.distribution_domain_name}/",
-                    f"https://{distribution.distribution_domain_name}/exec",
-                    "https://onssa.org/",
-                    "https://onssa.org/exec",
-                    "https://www.onssa.org/",
-                    "https://www.onssa.org/exec",
-                    "onca://auth",
-                ],
-            ),
-            prevent_user_existence_errors=True,
-            # #164 mobile session posture (docs/onca-celular-seguranca): 1h ID tokens; the
-            # refresh token (held ONLY in the /api/session httpOnly cookie) is capped at 30
-            # days absolute — the per-tenant idle limit is the cookie's sliding Max-Age.
-            # Revocation lets logout / operator global sign-out kill a refresh token.
-            id_token_validity=Duration.hours(1),
-            access_token_validity=Duration.hours(1),
-            refresh_token_validity=Duration.days(30),
-            enable_token_revocation=True,
-        )
-        if _federated:
-            _client_kwargs["supported_identity_providers"] = [
-                cognito.UserPoolClientIdentityProvider.COGNITO, *_federated]
-        user_pool_client = user_pool.add_client("OncaWarroomClient", **_client_kwargs)
-        for _idp in (google_idp, apple_idp):
-            if _idp:
-                # The client's supported IDP must exist before the client does.
-                user_pool_client.node.add_dependency(_idp)
+        # #262: the pool + IdPs + clients + groups + CDK users are built by infra/identity.py, once
+        # per pool. suffix "" is the ORIGINAL pool — every logical id byte-identical to before the
+        # refactor (it stays the live pool until P3). "V2" is the side-by-side replacement with a
+        # MUTABLE email (the immutable one breaks every second federated sign-in), deletion
+        # protection on, and no domains yet (domain names are global; they move in P2/P3).
+        _ident = build_identity_pool(self, "", distribution_domain=distribution.distribution_domain_name)
+        user_pool, user_pool_client = _ident.pool, _ident.client
+        google_idp, apple_idp = _ident.google_idp, _ident.apple_idp
+        _ident_v2 = build_identity_pool(self, "V2", distribution_domain=distribution.distribution_domain_name,
+                                        email_mutable=True, deletion_protection=True)
+        CfnOutput(self, "OncaUserPoolV2Id", value=_ident_v2.pool.user_pool_id)
+        CfnOutput(self, "OncaWarroomClientV2Id", value=_ident_v2.client.user_pool_client_id)
+        CfnOutput(self, "OncaOAuthFacadeClientV2Id", value=_ident_v2.oauth_client.user_pool_client_id)
         user_pool_domain = user_pool.add_domain(
             "OncaHostedUi",
             cognito_domain=cognito.CognitoDomainOptions(domain_prefix=f"onca-{_acct}"),
@@ -1084,51 +967,10 @@ class OncaPrototypeStack(Stack):
             # circular dependency documented in docs/google-oauth-runbook.md). Cognito trigger
             # events always carry userPoolId in the payload if it's ever needed.
             user_pool.add_trigger(cognito.UserPoolOperation.PRE_TOKEN_GENERATION, pretoken_fn)
+            # same trigger on V2 (its own Lambda permission, scoped to the V2 pool ARN)
+            _ident_v2.pool.add_trigger(cognito.UserPoolOperation.PRE_TOKEN_GENERATION, pretoken_fn)
 
-        # Industry Cognito Groups — the lightweight, no-tenant-config-row entitlement
-        # path (auth.industry_groups / tenant_config.cognito_grant_industry_group):
-        # add a user to the "banking" group and they see exactly banking's dashboard,
-        # no DynamoDB row needed. One group per canonical industry slug (kept as a
-        # literal tuple, not imported from src.synth.entity_registry.INDUSTRIES,
-        # since infra/app.py's synth-time execution isn't on the same sys.path as
-        # the application source — same duplication convention feed_builder.py
-        # already uses for ENTRY_INDUSTRIES). Coarse for now — one group per
-        # industry, not yet per officer-within-industry (e.g. a future
-        # "banking-cso" group); that finer split is a later increment.
-        _INDUSTRY_GROUPS = (
-            "banking", "investment-banking", "insurance", "asset-management",
-            "wealth-management", "private-markets", "fintech",
-            "financial-data-analytics", "advisory", "crypto", "consorcio",
-            "betting", "real-estate-funds", "agri-funds", "acquiring",
-            "closed-pension", "securitization",
-        )
-        for _ind in _INDUSTRY_GROUPS:
-            cognito.CfnUserPoolGroup(
-                self,
-                f"OncaGroup{_ind.title().replace('-', '')}",
-                user_pool_id=user_pool.user_pool_id,
-                group_name=_ind,
-                description=f"Single-industry dashboard access: {_ind}",
-            )
-
-        # ADR 016 addendum Decision 2 (2026-09-23): the elevated-operator GROUP —
-        # what `act_api.py`/`registry_api.py` actually gate registry-write/agent-
-        # act access on now, instead of the `tier` claim they used to also accept.
-        # Confirmed neither this group nor "admin" existed at all before this
-        # commit (`aws cognito-idp list-groups` returned only industry groups) —
-        # the seeded QA admin persona's elevated access came ENTIRELY from its
-        # `custom:tier=sovereign` claim, i.e. any tenant simply PROVISIONED at the
-        # sovereign pricing tier got registry-mutation rights on shared SaaS infra.
-        # Creating this group and attaching that one persona to it (below) is the
-        # backfill: the one live identity that needs to keep working after `tier`
-        # stops being consulted gets a real role grant instead.
-        operator_group = cognito.CfnUserPoolGroup(
-            self,
-            "OncaGroupOperator",
-            user_pool_id=user_pool.user_pool_id,
-            group_name="operator",
-            description="Elevated control-plane access: registry mutation, /api/act writes.",
-        )
+        # Industry + operator groups and the demo/fleet/QA users: infra/identity.py (#262).
         CfnOutput(
             self,
             "UserPoolHostedUi",
@@ -1148,12 +990,7 @@ class OncaPrototypeStack(Stack):
         # by put_tenant_config on provision. Kept in sync with the v2 dashboard
         # contexts: acquiring↔adquirencia, fintech↔fintech, insurance↔seguros,
         # wealth-management↔wealth (the newentry portal is entry-tier, not here).
-        demo_tenants = [
-            ("acquiring", "acquiring"),
-            ("fintech", "fintech"),
-            ("insurance", "insurance"),
-            ("wealth-management", "wealth-management"),
-        ]
+        demo_tenants = list(DEMO_TENANTS)
         # onca-tenant-config rows via a single idempotent BatchWriteItem custom
         # resource (re-runs each deploy; PutRequest overwrites ⇒ self-healing). Mirrors
         # the {tenant_id, tier, modules, plane} shape put_tenant_config writes.
@@ -1186,107 +1023,6 @@ class OncaPrototypeStack(Stack):
             ),
             install_latest_aws_sdk=False,
         )
-        # One demo Cognito user per tenant. SUPPRESS ⇒ no invite email to the
-        # placeholder .example address; email_verified skips verification. Users land
-        # in FORCE_CHANGE_PASSWORD — an operator sets a permanent demo password
-        # out-of-band (the one unavoidable manual step; see deploy notes).
-        for (tid, _slug) in demo_tenants:
-            _uid = tid.replace("-", "").capitalize()
-            cognito.CfnUserPoolUser(
-                self,
-                f"OncaDemoUser{_uid}",
-                user_pool_id=user_pool.user_pool_id,
-                username=f"demo-{tid}@onca.example",
-                message_action="SUPPRESS",
-                user_attributes=[
-                    cognito.CfnUserPoolUser.AttributeTypeProperty(
-                        name="email", value=f"demo-{tid}@onca.example"),
-                    cognito.CfnUserPoolUser.AttributeTypeProperty(
-                        name="email_verified", value="true"),
-                    cognito.CfnUserPoolUser.AttributeTypeProperty(
-                        name="custom:tenant", value=tid),
-                    cognito.CfnUserPoolUser.AttributeTypeProperty(
-                        name="custom:tier", value="saas"),
-                ],
-            )
-
-        # One dedicated, low-privilege synthetic-monitoring user for the (separate,
-        # unrelated repo) fleet-monitor Lambda to exercise a full Cognito login
-        # round-trip on a schedule — proof the auth stack works end-to-end, not just
-        # that the pool exists. Entitled identically to the "acquiring" demo tenant
-        # (same tenant/tier shape) purely so a JWT-gated GET (e.g. /api/gaps) returns
-        # 200 instead of 403; it is never meant for real dashboard use. Same
-        # SUPPRESS/FORCE_CHANGE_PASSWORD pattern as the demo users above — a human
-        # with AWS console/CLI access sets a permanent password out-of-band via
-        # `aws cognito-idp admin-set-user-password ... --permanent` afterward. This
-        # stack must NEVER set or contain that password.
-        # NB the pool's sign_in_aliases=SignInAliases(email=True) with no `username=True`
-        # makes Cognito treat email as the USERNAME ATTRIBUTE (not just an alias), so
-        # Username must itself be a valid email string — the same reason every demo
-        # user above uses its email address as its username. Kept as
-        # "fleet-health-check@onca.example" rather than the bare slug for that reason.
-        cognito.CfnUserPoolUser(
-            self,
-            "OncaFleetHealthCheckUser",
-            user_pool_id=user_pool.user_pool_id,
-            username="fleet-health-check@onca.example",
-            message_action="SUPPRESS",
-            user_attributes=[
-                cognito.CfnUserPoolUser.AttributeTypeProperty(
-                    name="email", value="fleet-health-check@onca.example"),
-                cognito.CfnUserPoolUser.AttributeTypeProperty(
-                    name="email_verified", value="true"),
-                cognito.CfnUserPoolUser.AttributeTypeProperty(
-                    name="custom:tenant", value="acquiring"),
-                cognito.CfnUserPoolUser.AttributeTypeProperty(
-                    name="custom:tier", value="saas"),
-            ],
-        )
-
-        # ADR 027 (#126): two dedicated QA personas for the automated Playwright
-        # navigation/visual pipeline — never a real design partner's tenant. One entry
-        # persona (exercises the licensed-industry scoping/deep-linking contract from
-        # the 2026-09-12 sector-scoping fix) and one sovereign/admin persona (exercises
-        # the multi-industry, higher-tier surface). Their `onca-tenant-config` rows are
-        # created separately via `provision_tenant.py` (not CDK — matches how every
-        # real tenant is provisioned); this stack only creates the Cognito identities.
-        # Same SUPPRESS/FORCE_CHANGE_PASSWORD-then-admin-set pattern as the fleet
-        # health-check user above — this stack never contains the password itself.
-        for _qa_username, _qa_tenant, _qa_tier in (
-            ("qa-test-entry@onca.example", "qa-internal-test", "entry"),
-            ("qa-test-admin@onca.example", "qa-internal-admin", "sovereign"),
-        ):
-            _qa_user = cognito.CfnUserPoolUser(
-                self, f"OncaQaUser{_qa_tier.capitalize()}",
-                user_pool_id=user_pool.user_pool_id,
-                username=_qa_username,
-                message_action="SUPPRESS",
-                user_attributes=[
-                    cognito.CfnUserPoolUser.AttributeTypeProperty(
-                        name="email", value=_qa_username),
-                    cognito.CfnUserPoolUser.AttributeTypeProperty(
-                        name="email_verified", value="true"),
-                    cognito.CfnUserPoolUser.AttributeTypeProperty(
-                        name="custom:tenant", value=_qa_tenant),
-                    cognito.CfnUserPoolUser.AttributeTypeProperty(
-                        name="custom:tier", value=_qa_tier),
-                ],
-            )
-            if _qa_tenant == "qa-internal-admin":
-                # ADR 016 addendum Decision 2: this persona's elevated access used
-                # to come from `custom:tier=sovereign` alone; now it needs the real
-                # role grant the "operator" group represents (see OncaGroupOperator
-                # above) or ADR 027's Playwright QA pipeline loses coverage of the
-                # elevated/multi-industry surface the moment tier stops granting it.
-                _qa_attachment = cognito.CfnUserPoolUserToGroupAttachment(
-                    self, "OncaQaUserAdminOperatorGroup",
-                    user_pool_id=user_pool.user_pool_id,
-                    username=_qa_username,
-                    group_name=operator_group.group_name,
-                )
-                # `username` above is a plain string, not a CDK token, so CFN
-                # wouldn't otherwise infer this must wait for the user to exist.
-                _qa_attachment.add_dependency(_qa_user)
 
         # And a CloudWatch dashboard to watch pilot traffic at a glance.
         def _cf_metric(name: str, statistic: str) -> cloudwatch.Metric:
@@ -2768,27 +2504,9 @@ class OncaPrototypeStack(Stack):
             string_value="false",
             description="true = the OAuth server refuses all flows and /mcp,/mcp/ops,/a2a all tokens",
         )
-        # a PUBLIC client (PKCE, no secret) whose only callback is the AS's own — the static
-        # upstream client of the MCP spec's confused-deputy rule, hence the per-client consent page
-        oauth_cognito_client = user_pool.add_client(
-            "OncaOAuthFacadeClient",
-            generate_secret=False,
-            auth_flows=cognito.AuthFlow(user_srp=True),
-            o_auth=cognito.OAuthSettings(
-                flows=cognito.OAuthFlows(authorization_code_grant=True),
-                scopes=[cognito.OAuthScope.OPENID, cognito.OAuthScope.EMAIL, cognito.OAuthScope.PROFILE],
-                callback_urls=["https://onssa.org/oauth/callback"],
-                logout_urls=["https://onssa.org/"],
-            ),
-            supported_identity_providers=[cognito.UserPoolClientIdentityProvider.COGNITO, *_federated],
-            id_token_validity=Duration.hours(1),
-            access_token_validity=Duration.hours(1),
-            refresh_token_validity=Duration.days(1),
-            prevent_user_existence_errors=True,
-        )
-        for _idp in (google_idp, apple_idp):
-            if _idp:
-                oauth_cognito_client.node.add_dependency(_idp)
+        # the OAuth facade's static upstream Cognito client (PKCE, no secret, callback = the AS's
+        # own) is created with the pool in infra/identity.py (#262)
+        oauth_cognito_client = _ident.oauth_client
         _oauth_env = {
             "PYTHONPATH": "/var/task",
             "ONCA_OAUTH_ISSUER": "https://onssa.org/oauth",

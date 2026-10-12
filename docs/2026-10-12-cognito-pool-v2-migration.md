@@ -11,7 +11,7 @@ WriteAttributes and in the IdP mapping). Only a new pool fixes it.
 | Phase | What | User impact |
 |---|---|---|
 | P0 ✅ 7d164fd | email→tenant map + self-registration only for provider-verified federated identities (a mutable email would otherwise let a password user claim a mapped tenant) | none |
-| P1 | CDK: identity block becomes a helper; new pool `…V2` side by side (email mutable, deletion protection, RETAIN), same clients/IdPs/groups/CDK users/pretoken. `cdk diff` must show additions only. `scripts/migrate_cognito_pool.py` copies the non-CDK native users (owner, directory-reviewer) + group memberships; passwords from where they're stored | none |
+| P1 ✅ code, not deployed | CDK: identity block becomes a helper (`infra/identity.py`); new pool `…V2` side by side (email mutable, deletion protection, RETAIN), same clients/IdPs/groups/CDK users/pretoken. `cdk diff` must show additions only. `scripts/migrate_cognito_pool.py` copies the non-CDK native users (owner, directory-reviewer) + group memberships; passwords from where they're stored | none |
 | P2 | Deploy B: remove `OncaHostedUi` + `OncaAuthCustomDomain` from the old pool (domain names are global) | **sign-in down** until P3 |
 | P3 | Deploy C: both domains on V2; JWT authorizer, session broker, OAuth facade, act API and the site's client id point to V2; `auth.onssa.org` CNAME → new target | everyone signs in once |
 | P4 | SSM `/fleet-monitor/authtest/onca-*`, QA secret, runbooks | none |
@@ -20,6 +20,17 @@ WriteAttributes and in the IdP mapping). Only a new pool fixes it.
 Downtime P2→P3: ~15–60 min (Cognito custom-domain CloudFront + DNS). Rollback before P3 = revert
 B; after P3 = remove V2 domains, revert C. The old pool is never modified, so rollback restores
 today's state.
+
+## P1 notes
+- `cdk diff` (2026-10-12): +32 resources (pool, 2 clients, 2 IdPs, 18 groups, 7 users, 1 group
+  attachment, 1 pretoken Lambda permission) + 3 outputs; every existing resource's template is
+  byte-identical (only the usual Lambda-asset / BucketDeployment hash noise vs live). Stack at
+  415/500 resources until P5 removes the old block.
+- After the V2 deploy: `python scripts/migrate_cognito_pool.py --from-pool us-east-1_LfGQGWq56
+  --to-pool <OncaUserPoolV2Id> --profile my2027` (dry run), then `--apply`. Creates the owner +
+  directory-reviewer, copies groups, sets stored passwords (directory-reviewer, QA, fleet).
+  The owner adds `--prompt-password <email>` (Cognito refuses "forgot password" while a user is
+  FORCE_CHANGE_PASSWORD).
 
 ## Owner actions
 - Lower the Cloudflare TTL on `auth.onssa.org` to 60s before P2; approve the CNAME change in P3.

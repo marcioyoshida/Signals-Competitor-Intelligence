@@ -6,7 +6,10 @@ SITE = Path(__file__).resolve().parents[1] / "src" / "dashboard" / "site"
 CTX = (SITE / "v2" / "context.js").read_text(encoding="utf-8")
 EXEC = (SITE / "v3" / "index.html").read_text(encoding="utf-8")
 CSS = (SITE / "v2" / "app.css").read_text(encoding="utf-8")
-APP = (Path(__file__).resolve().parents[1] / "infra" / "app.py").read_text(encoding="utf-8")
+# #262: the Cognito pool/clients/IdPs live in infra/identity.py (built once per pool by app.py),
+# so the identity assertions below read both files.
+APP = "\n".join((Path(__file__).resolve().parents[1] / "infra" / f).read_text(encoding="utf-8")
+                for f in ("app.py", "identity.py"))
 
 
 def test_v2_uses_only_registered_cognito_urls():
