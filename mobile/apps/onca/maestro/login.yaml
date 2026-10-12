@@ -38,7 +38,8 @@ appId: org.onssa.onca
 - extendedWaitUntil:
     visible: "Estratégia"   # bottom officer tab bar: only rendered once signed in (d3186b9 moved Sair into the account sheet)
     timeout: 45000
-- tapOn: "Sair"
+- tapOn: "Sua conta"          # avatar opens the account sheet
+- tapOn: "Sair desta conta"
 - extendedWaitUntil:
     visible: "Entrar"
     timeout: 45000
