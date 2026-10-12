@@ -20,7 +20,7 @@ appId: org.onssa.onca
 - inputText: ${QA_PASSWORD}
 - pressKey: Enter
 - extendedWaitUntil:
-    visible: "Sair"
+    visible: "Estratégia"   # bottom officer tab bar: only rendered once signed in (d3186b9 moved Sair into the account sheet)
     timeout: 60000
 - assertNotVisible: "Assinar.*"
 - takeScreenshot: signed-in
@@ -36,7 +36,7 @@ appId: org.onssa.onca
 # logout returns to the gate
 - launchApp
 - extendedWaitUntil:
-    visible: "Sair"
+    visible: "Estratégia"   # bottom officer tab bar: only rendered once signed in (d3186b9 moved Sair into the account sheet)
     timeout: 45000
 - tapOn: "Sair"
 - extendedWaitUntil:
