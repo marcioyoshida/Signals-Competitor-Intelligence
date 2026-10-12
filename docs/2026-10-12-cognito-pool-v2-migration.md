@@ -11,9 +11,9 @@ WriteAttributes and in the IdP mapping). Only a new pool fixes it.
 | Phase | What | User impact |
 |---|---|---|
 | P0 ✅ 7d164fd | email→tenant map + self-registration only for provider-verified federated identities (a mutable email would otherwise let a password user claim a mapped tenant) | none |
-| P1 ✅ code, not deployed | CDK: identity block becomes a helper (`infra/identity.py`); new pool `…V2` side by side (email mutable, deletion protection, RETAIN), same clients/IdPs/groups/CDK users/pretoken. `cdk diff` must show additions only. `scripts/migrate_cognito_pool.py` copies the non-CDK native users (owner, directory-reviewer) + group memberships; passwords from where they're stored | none |
-| P2 | Deploy B: remove `OncaHostedUi` + `OncaAuthCustomDomain` from the old pool (domain names are global) | **sign-in down** until P3 |
-| P3 | Deploy C: both domains on V2; JWT authorizer, session broker, OAuth facade, act API and the site's client id point to V2; `auth.onssa.org` CNAME → new target | everyone signs in once |
+| P1 ✅ defbc15, LIVE (`us-east-1_rxEkYhYHg`) | CDK: identity block becomes a helper (`infra/identity.py`); new pool `…V2` side by side (email mutable, deletion protection, RETAIN), same clients/IdPs/groups/CDK users/pretoken. `cdk diff` must show additions only. `scripts/migrate_cognito_pool.py` copies the non-CDK native users (owner, directory-reviewer) + group memberships; passwords from where they're stored | none |
+| P2 (branch `cutover-262`, commit B) | Deploy B: remove `OncaHostedUi` + `OncaAuthCustomDomain` from the old pool (domain names are global) | **sign-in down** until P3 |
+| P3 (branch `cutover-262`, commit C) | Deploy C: both domains on V2; JWT authorizer, session broker, OAuth facade, act API and the site's client id point to V2; `auth.onssa.org` CNAME → new target | everyone signs in once |
 | P4 | SSM `/fleet-monitor/authtest/onca-*`, QA secret, runbooks | none |
 | P5 | after 2 stable weeks: remove the old block, delete the old pool by hand | none |
 
@@ -29,13 +29,27 @@ today's state.
 - After the V2 deploy: `python scripts/migrate_cognito_pool.py --from-pool us-east-1_LfGQGWq56
   --to-pool <OncaUserPoolV2Id> --profile my2027` (dry run), then `--apply`. Creates the owner +
   directory-reviewer, copies groups, sets stored passwords (directory-reviewer, QA, fleet).
-  The owner adds `--prompt-password <email>` (Cognito refuses "forgot password" while a user is
-  FORCE_CHANGE_PASSWORD).
+  The owner gets `--invite <email>`: created WITHOUT MessageAction=SUPPRESS, so Cognito emails a
+  temporary password (sender no-reply@verificationemail.com — check spam) and the owner sets their
+  own at first sign-in; re-running with `--invite` re-sends while still FORCE_CHANGE_PASSWORD.
+  (`--prompt-password <email>` is the terminal alternative; Cognito refuses "forgot password"
+  while a user is FORCE_CHANGE_PASSWORD.)
+
+## Cutover notes (B, C)
+- B removes only the two `UserPoolDomain`s; the session broker / OAuth facade env and the
+  `GoogleOAuthRedirectUri` / `UserPoolHostedUi` outputs become the same strings as literals,
+  `AuthCustomDomainTarget` is dropped. The ACM cert is imported by ARN and DNS is Cloudflare
+  (out-of-band): no CFN resource for either.
+- Between B and C, delete (or park) the `auth.onssa.org` CNAME so it does not point at the old,
+  deleted Cognito CloudFront distribution while C creates the new one.
+- C: domains on V2 (same names, same cert), every consumer on V2, site client id
+  `4docsvvsocsujjqtj3aofduio3`; new outputs `LegacyUserPoolId`, `AuthCustomDomainTarget` (NEW
+  value → the CNAME). The original pool keeps only its pretoken trigger until P5.
 
 ## Owner actions
 - Lower the Cloudflare TTL on `auth.onssa.org` to 60s before P2; approve the CNAME change in P3.
 - Pick the maintenance window; silence the fleet monitor for it.
-- Set your own password on V2 (or "Esqueci a senha").
+- Set your own password on V2 from the invitation email (`--invite`).
 - No Google/Apple console change: the same domains move, so the `idpresponse` URLs are unchanged.
 
 ## What changes for people

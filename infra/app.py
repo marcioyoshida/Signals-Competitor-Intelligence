@@ -886,32 +886,47 @@ class OncaPrototypeStack(Stack):
         # (API Gateway JWT authorizer vs Lambda@Edge vs in-Lambda JWKS — see ADR).
         _acct = os.environ.get("CDK_DEFAULT_ACCOUNT", "signals")
         # #262: the pool + IdPs + clients + groups + CDK users are built by infra/identity.py, once
-        # per pool. suffix "" is the ORIGINAL pool — every logical id byte-identical to before the
-        # refactor (it stays the live pool until P3). "V2" is the side-by-side replacement with a
-        # MUTABLE email (the immutable one breaks every second federated sign-in), deletion
-        # protection on, and no domains yet (domain names are global; they move in P2/P3).
-        _ident = build_identity_pool(self, "", distribution_domain=distribution.distribution_domain_name)
-        user_pool, user_pool_client = _ident.pool, _ident.client
-        google_idp, apple_idp = _ident.google_idp, _ident.apple_idp
+        # per pool. suffix "" is the ORIGINAL pool (immutable email — the bug), kept with every
+        # logical id unchanged but no longer serving anything: no domains, no consumers, only the
+        # pre-token trigger; it is removed in P5. "V2" (email required + MUTABLE, deletion
+        # protection) is THE live pool since cutover step C (P3): it owns both Hosted-UI domains
+        # and every consumer below — JWT authorizer, session broker, OAuth facade, act API — reads
+        # `user_pool` / `user_pool_client` / `oauth_cognito_client`, which are V2's.
+        _ident_legacy = build_identity_pool(self, "", distribution_domain=distribution.distribution_domain_name)
         _ident_v2 = build_identity_pool(self, "V2", distribution_domain=distribution.distribution_domain_name,
                                         email_mutable=True, deletion_protection=True)
+        _ident = _ident_v2
+        user_pool, user_pool_client = _ident.pool, _ident.client
+        google_idp, apple_idp = _ident.google_idp, _ident.apple_idp
         CfnOutput(self, "OncaUserPoolV2Id", value=_ident_v2.pool.user_pool_id)
         CfnOutput(self, "OncaWarroomClientV2Id", value=_ident_v2.client.user_pool_client_id)
         CfnOutput(self, "OncaOAuthFacadeClientV2Id", value=_ident_v2.oauth_client.user_pool_client_id)
-        # #262 P2 (cutover step B): the original pool's two Hosted-UI domains are REMOVED. Domain
-        # names are global, so the prefix domain (onca-<acct>) and auth.onssa.org must be released
-        # before step C can recreate them on V2 — CloudFormation creates before it deletes, so the
-        # move can't be one deploy. Between B and C nothing serves the Hosted UI (sign-in is down
-        # for the cutover window); every consumer stays on the original pool. The values below are
-        # the same strings the domain resources resolved to, as literals, so the session broker
-        # and OAuth facade env vars don't change and nothing references a deleted resource.
-        # AuthCustomDomainTarget is dropped (its CloudFront endpoint dies with the domain; C
-        # outputs the new one from V2).
+        CfnOutput(self, "LegacyUserPoolId", value=_ident_legacy.pool.user_pool_id)
+        # Both Hosted-UI domains, moved here from the original pool (step B released them; domain
+        # names are global). The prefix domain serves app builds before bridge 2; when the cert
+        # context is set, auth.onssa.org is THE sign-in domain (session API, OAuth facade,
+        # context.js/ask.js). Google/Apple keep both idpresponse URIs — same names, so nothing to
+        # re-register. The ACM cert (us-east-1) is imported by ARN; the Cloudflare CNAME for
+        # auth.onssa.org is out-of-band and must be repointed to the NEW AuthCustomDomainTarget
+        # (a new Cognito-managed CloudFront distribution), DNS-only, not proxied.
+        user_pool_domain = user_pool.add_domain(
+            "OncaHostedUi",
+            cognito_domain=cognito.CognitoDomainOptions(domain_prefix=f"onca-{_acct}"),
+        )
         _auth_cert = self.node.try_get_context("auth_domain_cert_arn") or ""
-        _hosted_ui_prefix = f"onca-{_acct}"
-        _auth_domain_name = (self.node.try_get_context("auth_domain") or "auth.onssa.org") if _auth_cert else ""
-        _hosted_ui_base = f"https://{_hosted_ui_prefix}.auth.{self.region}.amazoncognito.com"
-        _sign_in_base = f"https://{_auth_domain_name}" if _auth_domain_name else _hosted_ui_base
+        auth_custom_domain = None
+        if _auth_cert:
+            auth_custom_domain = user_pool.add_domain(
+                "OncaAuthCustomDomain",
+                custom_domain=cognito.CustomDomainOptions(
+                    domain_name=self.node.try_get_context("auth_domain") or "auth.onssa.org",
+                    certificate=acm.Certificate.from_certificate_arn(self, "OncaAuthDomainCert", _auth_cert),
+                ),
+            )
+            # the target to CNAME auth.onssa.org at (DNS-only, not proxied)
+            CfnOutput(self, "AuthCustomDomainTarget", value=auth_custom_domain.cloud_front_endpoint)
+        _sign_in_base = (f"https://{auth_custom_domain.domain_name}" if auth_custom_domain
+                         else user_pool_domain.base_url())
         CfnOutput(self, "UserPoolId", value=user_pool.user_pool_id)
         CfnOutput(self, "UserPoolClientId", value=user_pool_client.user_pool_client_id)
         if google_idp:
@@ -919,7 +934,11 @@ class OncaPrototypeStack(Stack):
             # Cognito's own federated-IDP callback path, not any URL in this app.
             CfnOutput(
                 self, "GoogleOAuthRedirectUri",
-                value=f"{_sign_in_base}/oauth2/idpresponse",
+                value=(
+                    f"https://{auth_custom_domain.domain_name}/oauth2/idpresponse" if auth_custom_domain
+                    else f"https://{user_pool_domain.domain_name}.auth.{self.region}"
+                    ".amazoncognito.com/oauth2/idpresponse"
+                ),
             )
 
         # Pre Token Generation trigger: resolves custom:tenant/custom:tier for a Google login
@@ -955,15 +974,19 @@ class OncaPrototypeStack(Stack):
             # so would create the function depending back on the pool right back (a two-node
             # circular dependency documented in docs/google-oauth-runbook.md). Cognito trigger
             # events always carry userPoolId in the payload if it's ever needed.
-            user_pool.add_trigger(cognito.UserPoolOperation.PRE_TOKEN_GENERATION, pretoken_fn)
-            # same trigger on V2 (its own Lambda permission, scoped to the V2 pool ARN)
+            # on both pools (each its own Lambda permission, scoped to that pool's ARN): the
+            # original pool keeps it until P5 so its tokens stay well-formed if it is ever used.
+            _ident_legacy.pool.add_trigger(cognito.UserPoolOperation.PRE_TOKEN_GENERATION, pretoken_fn)
             _ident_v2.pool.add_trigger(cognito.UserPoolOperation.PRE_TOKEN_GENERATION, pretoken_fn)
 
         # Industry + operator groups and the demo/fleet/QA users: infra/identity.py (#262).
         CfnOutput(
             self,
             "UserPoolHostedUi",
-            value=_hosted_ui_base,
+            value=(
+                f"https://{user_pool_domain.domain_name}.auth."
+                f"{self.region}.amazoncognito.com"
+            ),
         )
 
         # --- Demo SaaS tenant provisioning (deploy-time, idempotent) --------------

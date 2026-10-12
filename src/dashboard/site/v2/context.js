@@ -36,7 +36,7 @@
      ====================================================================== */
   const AUTH = {
     domain: "https://auth.onssa.org",
-    clientId: "7qlquhh56o06tp9bo8gp77p385",
+    clientId: "4docsvvsocsujjqtj3aofduio3",
     apiUrl: "", // same origin — /api/feed is fronted by CloudFront -> HTTP API (JWT)
     // #242: Cognito validates redirect_uri / logout_uri literally, and only "/" and "/exec" are
     // registered (infra/app.py). Any other screen (/v2/*, the clean routes /app, /fintech…)

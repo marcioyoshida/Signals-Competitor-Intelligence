@@ -105,3 +105,86 @@ def test_password_holder_never_reveals_values():
     pw.add("a@b.c", "s3cret-value")
     assert "s3cret-value" not in repr(pw) and "s3cret-value" not in str(pw)
     assert pw.emails() == {"a@b.c"}
+
+
+# --- --invite (#262 P3): Cognito emails a temporary password; the user sets their own ----------
+
+def test_invite_creates_with_invitation_and_never_sets_a_password():
+    acts = m.plan_migration(SOURCE, _fresh_v2(), cdk_users=CDK, password_emails=STORED | {"owner@example.com"},
+                            target_groups=GROUPS, invite_emails=["Owner@Example.com"])
+    owner = [a for a in acts if a.email == "owner@example.com"]
+    create = [a for a in owner if a.kind == "create"]
+    assert len(create) == 1 and create[0].detail["invite"] is True
+    assert create[0].detail["custom:tenant"] == "operator"
+    assert not [a for a in owner if a.kind == "set_password"]          # even with a stored one
+    assert not [a for a in owner if a.kind == "skip" and "no stored password" in a.detail.get("why", "")]
+    assert sorted(a.detail["group"] for a in owner if a.kind == "add_group") == ["banking", "crypto", "fintech"]
+    # the federated twin of the same email is still skipped, not invited
+    assert [a.kind for a in acts if a.email == "someone@gmail.com"] == ["skip"]
+    # everyone else is unaffected: no invite flag on directory-reviewer's create
+    (dr,) = [a for a in acts if a.kind == "create" and a.email == "directory-reviewer@onca.example"]
+    assert "invite" not in dr.detail
+
+
+def test_invite_resends_only_while_force_change_password():
+    target = _fresh_v2()
+    target["owner@example.com"] = {"status": "FORCE_CHANGE_PASSWORD", "groups": ["banking", "fintech", "crypto"]}
+    acts = m.plan_migration(SOURCE, target, cdk_users=CDK, target_groups=GROUPS, invite_emails=["owner@example.com"])
+    assert [(a.kind, a.email) for a in acts if a.email == "owner@example.com"] == [("resend_invite", "owner@example.com")]
+    target["owner@example.com"]["status"] = "CONFIRMED"
+    acts = m.plan_migration(SOURCE, target, cdk_users=CDK, target_groups=GROUPS, invite_emails=["owner@example.com"])
+    assert [a for a in acts if a.email == "owner@example.com"] == []
+
+
+def test_invite_refuses_cdk_and_unknown_users():
+    acts = m.plan_migration(SOURCE, _fresh_v2(), cdk_users=CDK, password_emails=STORED, target_groups=GROUPS,
+                            invite_emails=["qa-test-admin@onca.example", "someone@gmail.com", "nobody@x.y"])
+    warns = {(a.email, a.detail["why"]) for a in acts if a.kind == "warn"}
+    assert ("qa-test-admin@onca.example", "--invite: CDK-declared user, never invited") in warns
+    assert ("someone@gmail.com", "--invite: not a native user of the source pool") in warns
+    assert ("nobody@x.y", "--invite: not a native user of the source pool") in warns
+    assert not [a for a in acts if a.kind in ("create", "resend_invite") and a.detail.get("invite") is not None
+                and a.email != "owner@example.com"]
+    # the CDK QA admin still gets its stored password, not an invitation
+    assert ("set_password", "qa-test-admin@onca.example") in {(a.kind, a.email) for a in acts}
+
+
+class _FakeCip:
+    def __init__(self):
+        self.calls = []
+
+    def admin_create_user(self, **kw):
+        self.calls.append(("admin_create_user", kw))
+
+    def admin_add_user_to_group(self, **kw):
+        self.calls.append(("admin_add_user_to_group", kw))
+
+    def admin_set_user_password(self, **kw):
+        self.calls.append(("admin_set_user_password", kw))
+
+
+def test_apply_sends_the_invitation_instead_of_suppressing_it():
+    acts = m.plan_migration(SOURCE, _fresh_v2(), cdk_users=CDK, target_groups=GROUPS,
+                            invite_emails=["owner@example.com"])
+    cip = _FakeCip()
+    by_email = {m._email(u): u for u in SOURCE if u["status"] != "EXTERNAL_PROVIDER"}
+    assert m._apply(cip, "us-east-1_V2", acts, by_email, m._Passwords(), set()) == 0
+    creates = {kw["Username"]: kw for name, kw in cip.calls if name == "admin_create_user"}
+    owner = creates["owner@example.com"]
+    assert "MessageAction" not in owner and owner["DesiredDeliveryMediums"] == ["EMAIL"]
+    assert {"Name": "custom:tenant", "Value": "operator"} in owner["UserAttributes"]
+    assert creates["directory-reviewer@onca.example"]["MessageAction"] == "SUPPRESS"
+    assert not [kw for name, kw in cip.calls if name == "admin_set_user_password"]
+
+
+def test_apply_resend_uses_message_action_resend():
+    cip = _FakeCip()
+    assert m._apply(cip, "p", [m.Action("resend_invite", "owner@example.com")], {}, m._Passwords(), set()) == 0
+    assert cip.calls == [("admin_create_user", {"UserPoolId": "p", "Username": "owner@example.com",
+                                                "MessageAction": "RESEND", "DesiredDeliveryMediums": ["EMAIL"]})]
+
+
+def test_cli_rejects_invite_and_prompt_password_for_the_same_user():
+    import pytest
+    with pytest.raises(SystemExit):
+        m.main(["--from-pool", "a", "--to-pool", "b", "--invite", "x@y.z", "--prompt-password", "X@y.z"])

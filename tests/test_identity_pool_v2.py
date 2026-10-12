@@ -19,6 +19,8 @@ from aws_cdk import assertions  # noqa: E402
 import identity  # noqa: E402
 
 APP_SRC = (ROOT / "infra" / "app.py").read_text(encoding="utf-8")
+# stack output OncaWarroomClientV2Id (#262 P1 deploy) — the site hard-codes the public SPA client id
+V2_WARROOM_CLIENT_ID = "4docsvvsocsujjqtj3aofduio3"
 
 # Every Cognito logical id of the live pool as synthesized BEFORE the refactor (ccc1e2c),
 # domains excluded (they stay in app.py). Changing any of these would replace a live resource.
@@ -116,18 +118,43 @@ def test_v2_mirrors_every_old_resource(resources):
         assert a == b, lid
 
 
-def test_v2_has_no_domain_and_app_wires_it_side_by_side():
-    assert not [r for r in ("OncaHostedUiV2", "OncaAuthCustomDomainV2") if r in APP_SRC]
+def test_cutover_v2_is_the_live_pool():
+    """#262 P3 (cutover step C): V2 owns both Hosted-UI domains and every consumer; the original
+    pool keeps only its pre-token trigger until P5."""
     assert 'build_identity_pool(self, "", distribution_domain=' in APP_SRC
     assert 'build_identity_pool(self, "V2", distribution_domain=' in APP_SRC
     assert "email_mutable=True, deletion_protection=True" in APP_SRC
+    assert "_ident = _ident_v2\n" in APP_SRC
+    assert "user_pool, user_pool_client = _ident.pool, _ident.client" in APP_SRC
+    # the domains hang off `user_pool` (= V2) and nothing else adds a domain
+    assert APP_SRC.count(".add_domain(") == 2
+    assert 'user_pool_domain = user_pool.add_domain(\n            "OncaHostedUi",' in APP_SRC
+    assert 'auth_custom_domain = user_pool.add_domain(\n                "OncaAuthCustomDomain",' in APP_SRC
+    # the original pool is referenced only to build it, output its id and attach the trigger
+    import re
+    legacy_uses = re.findall(r"_ident_legacy\.[a-z_.]+", APP_SRC)
+    assert sorted(set(legacy_uses)) == ["_ident_legacy.pool.add_trigger", "_ident_legacy.pool.user_pool_id"]
     assert "_ident_v2.pool.add_trigger(cognito.UserPoolOperation.PRE_TOKEN_GENERATION, pretoken_fn)" in APP_SRC
-    for out in ("OncaUserPoolV2Id", "OncaWarroomClientV2Id", "OncaOAuthFacadeClientV2Id"):
+    for out in ("OncaUserPoolV2Id", "OncaWarroomClientV2Id", "OncaOAuthFacadeClientV2Id", "LegacyUserPoolId",
+                "AuthCustomDomainTarget", "UserPoolId", "UserPoolClientId"):
         assert f'CfnOutput(self, "{out}"' in APP_SRC
-    # P1 repoints nothing: every consumer still reads the original pool/clients
+    # consumers: all through the V2-bound names
+    assert 'f"https://cognito-idp.{self.region}.amazonaws.com/{user_pool.user_pool_id}"' in APP_SRC
     assert "jwt_audience=[user_pool_client.user_pool_client_id]" in APP_SRC
+    assert '"ONCA_COGNITO_CLIENT_ID": user_pool_client.user_pool_client_id' in APP_SRC
     assert '"ONCA_OAUTH_COGNITO_CLIENT_ID": oauth_cognito_client.user_pool_client_id' in APP_SRC
     assert "oauth_cognito_client = _ident.oauth_client" in APP_SRC
+    assert APP_SRC.count('"ONCA_USER_POOL_ID", user_pool.user_pool_id') == 1          # act API
+    assert APP_SRC.count('"ONCA_USER_POOL_ID": user_pool.user_pool_id') == 1          # OAuth facade
+    assert APP_SRC.count("resources=[user_pool.user_pool_arn]") == 2                   # facade + act IAM
+
+
+def test_site_uses_the_v2_warroom_client():
+    site = ROOT / "src" / "dashboard" / "site"
+    for f in ("index.html", "v2/ask.js", "v2/context.js"):
+        src = (site / f).read_text(encoding="utf-8")
+        assert "7qlquhh56o06tp9bo8gp77p385" not in src, f       # the original pool's warroom client
+        assert 'clientId: "' + V2_WARROOM_CLIENT_ID + '"' in src, f
 
 
 def test_cdk_declared_users_match_the_template(resources):
