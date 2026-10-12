@@ -204,14 +204,26 @@
   }
 
   /* ---- honest empty state --------------------------------------------- */
+  // Inline SVG for the empty-state glyphs: "⦸" had no glyph in the iOS/Android system fonts we
+  // checked (rendered as a tofu box) and the others drew at inconsistent weights. Callers keep
+  // passing the short glyph; anything not mapped is still inserted verbatim.
+  const SVG_ICO = (d) => `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" ` +
+    `stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+  const EMPTY_ICONS = {
+    "○": SVG_ICO('<circle cx="12" cy="12" r="8" stroke-dasharray="3 3"/>'),
+    "✓": SVG_ICO('<circle cx="12" cy="12" r="9"/><path d="m8 12.5 2.8 2.8L16.5 9.5"/>'),
+    "!": SVG_ICO('<path d="M12 3 2.5 20h19z"/><path d="M12 10v4.5M12 17.5v.01"/>'),
+    "⦸": SVG_ICO('<circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/>'),
+    "◐": SVG_ICO('<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/>'),
+  };
   function empty(title, detail, ico) {
-    return `<div class="empty"><div class="em-ico" aria-hidden="true">${ico || "○"}</div>
+    return `<div class="empty"><div class="em-ico" aria-hidden="true">${EMPTY_ICONS[ico || "○"] || ico}</div>
       <div class="em-t">${esc(title)}</div>${detail ? `<div class="em-d">${esc(detail)}</div>` : ""}</div>`;
   }
 
   global.OncaUI = {
     esc, fmtDate, TIERS, tierOf, tierBadge, heat,
     hostOf, sourceLabel, citationModel, linkifyNarrative, citationFooter,
-    sparkline, initTheme, toggleTheme, empty, oacFetch,
+    sparkline, initTheme, toggleTheme, empty, oacFetch, EMPTY_ICONS,
   };
 })(window);

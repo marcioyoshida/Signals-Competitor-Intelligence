@@ -477,10 +477,12 @@
 
   // A full-panel login/no-access gate (honest, never a silent empty grid).
   function gateHTML(kind, ctxLabel, res) {
+    const ICO = (k) => (U.EMPTY_ICONS || {})[k] || k;
     if (kind === "needAuth") {
-      return `<div class="empty"><div class="em-ico" aria-hidden="true">◐</div>
+      return `<div class="empty gate gate--auth"><div class="em-ico" aria-hidden="true">${ICO("◐")}</div>
         <div class="em-t">Entre para ver ${esc(ctxLabel)}</div>
-        <div class="em-d">O feed é escopado no servidor à sua licença. Nada é filtrado no navegador.</div>
+        <div class="em-d">Use o e-mail corporativo cadastrado pela sua empresa, ou sua conta Apple ou Google.
+          Você verá só os setores licenciados para a sua conta.</div>
         <div style="margin-top:var(--s3)"><button class="btn btn--primary" id="__gateLogin">Entrar</button></div></div>`;
     }
     if (kind === "noAccess") {
@@ -497,7 +499,7 @@
           const co = combosOf(res.upgrade)[c];
           return `<a class="btn btn--primary" href="${esc(upgradeHref("saas_combo", c, res.upgrade))}">Assinar combo ${esc(co ? co.name : c)}</a>`;
         })).join(" ");
-        return `<div class="empty"><div class="em-ico" aria-hidden="true">◐</div>
+        return `<div class="empty gate"><div class="em-ico" aria-hidden="true">${ICO("◐")}</div>
           <div class="em-t">${ended ? "Seu teste grátis terminou" : "Sua assinatura não está ativa"}</div>
           <div class="em-d">${ended ? "Os 14 dias de teste acabaram." : "O pagamento da assinatura foi encerrado."}
             ${APP ? PLAN_NOTE : `Assine para voltar a ver ${esc(ctxLabel)}.`} Nada do seu histórico foi apagado.</div>
@@ -520,7 +522,7 @@
               <div style="margin-top:var(--s2)"><button type="button" class="btn" id="__gateLogout">Sair</button></div></div>`
           : `<div class="em-d" style="margin-top:var(--s2)">Se a sua empresa já usa o Onça, entre com o e-mail
               que ela cadastrou — o formulário abaixo cria uma <b>conta individual nova</b>.</div>`;
-        return `<div class="empty"><div class="em-ico" aria-hidden="true">◐</div>
+        return `<div class="empty gate"><div class="em-ico" aria-hidden="true">${ICO("◐")}</div>
           <div class="em-t">Comece seu teste grátis de 14 dias</div>
           <div class="em-d">Sua conta ${who} ainda não está vinculada a um plano. Escolha o setor que
             quer acompanhar no plano Entry${APP ? "" : " (R$ 490/mês depois do teste, um setor)"}. Não pedimos cartão agora.</div>
@@ -532,10 +534,18 @@
             <button type="submit" class="btn btn--primary" style="margin-top:var(--s3)">Começar teste grátis</button>
           </form></div>`;
       }
-      return `<div class="empty"><div class="em-ico" aria-hidden="true">⦸</div>
-        <div class="em-t">Sua conta não licencia este contexto</div>
-        <div class="em-d">Este painel só renderiza o feed que o servidor entrega para a sua licença.
-          Fale com o time Onça para habilitar ${esc(ctxLabel)}.</div></div>`;
+      // 403 "no entitlement": signed in, but the account maps to no sector at all. Say WHO is signed
+      // in (the usual cause is a personal address instead of the corporate one the operator
+      // mapped) and give two ways out. A support e-mail is not a purchase CTA (#258 holds in-app).
+      const who = (decodeJwt(getIdToken() || "") || {}).email || "";
+      return `<div class="empty gate gate--none"><div class="em-ico" aria-hidden="true">${ICO("⦸")}</div>
+        <div class="em-t">Nenhum setor habilitado para esta conta</div>
+        <div class="em-d">${who ? `Você entrou como <b>${esc(who)}</b>. ` : ""}Esta conta ainda não está vinculada a
+          nenhum setor do Onça — por isso não há dados para mostrar aqui.</div>
+        <div class="em-d">Se a sua empresa já usa o Onça, entre com o e-mail que ela cadastrou — ou peça ao
+          responsável pelo Onça na empresa para incluir este e-mail.</div>
+        <div class="gate-acts" style="margin-top:var(--s3)"><button type="button" class="btn btn--primary" id="__gateLogout">Entrar com outra conta</button>
+          <a class="btn" href="mailto:contato@onssa.org?subject=${encodeURIComponent("Acesso ao Onça" + (who ? " — " + who : ""))}">Falar com o suporte</a></div></div>`;
     }
     return U.empty("Feed indisponível", kind || "Não foi possível carregar o feed.", "!");
   }
@@ -584,7 +594,7 @@
     "asset-management": "Gestão de ativos", "wealth-management": "Wealth",
     "real-estate-funds": "FIIs", "agri-funds": "FIAGRO", "private-markets": "Private markets",
     "financial-data-analytics": "Dados & analytics", advisory: "Advisory", crypto: "Cripto",
-    betting: "Apostas",
+    betting: "Apostas", "closed-pension": "Previdência fechada", securitization: "Securitização",
   };
   const indLabel = (s) => INDUSTRY_LABELS[s] || s;
 
@@ -1283,7 +1293,7 @@
           <div class="panel__bd panel__bd--flush panel__bd--scroll" id="entryCards"></div></div></section>
       <section class="band" id="entrySaas"><div class="band-hd"><span class="overline">Painéis executivos</span>
         <span class="rule"></span><span class="badge badge--ghost">SaaS</span></div>
-        <div class="panel"><div class="panel__bd"><div class="empty"><div class="em-ico" aria-hidden="true">◐</div>
+        <div class="panel"><div class="panel__bd"><div class="empty"><div class="em-ico" aria-hidden="true">${(U.EMPTY_ICONS || {})["◐"] || "◐"}</div>
           <div class="em-t">Disponível no SaaS</div>
           <div class="em-d">Painéis por diretoria (CSO, CRO, CCO, CPO), estresse e recuperação judicial, movimentos
             de capital, reputação, demonstrações financeiras, frameworks por entidade e Pergunte à Onça fazem

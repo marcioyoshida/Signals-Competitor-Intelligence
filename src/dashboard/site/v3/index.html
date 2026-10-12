@@ -2,7 +2,7 @@
 <html lang="pt-BR" data-theme="dark">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="robots" content="noindex, nofollow" />
 <title>Onça · Sala Executiva</title>
 <!-- #162 installable PWA -->
@@ -405,6 +405,274 @@
   .offline-bar { background: var(--warn-fill); color: var(--warn); border-bottom: 1px solid var(--warn);
     padding: var(--s2) var(--s4); font-size: 13px; text-align: center; }
   [hidden] { display: none !important; }
+
+  /* ===================== shared additions (all widths) ===================== */
+  .ot-ic { display:none; }                       /* officer-tab icons: phone tab bar only */
+  .acct-btn, .whoami, .more-btn { display:none; }
+  .icnbtn svg { display:block; }
+  .drawer__close svg { display:block; }
+  .h-lbl .badge--infer { margin-left:6px; vertical-align:1px; font-size:10px; padding:0 6px; }
+  .rec .rec-a { font-family:inherit; }
+  .asof--stale { color:var(--warn) !important; font-weight:600; }
+  /* gated (signed out / no sector / feed down): no dead navigation around the gate */
+  body.is-gated #officerTabs, body.is-gated #viewTabs, body.is-gated .selwrap,
+  body.is-gated #asof, body.is-gated #askPanel, body.is-gated #recsBand, body.is-gated #macroStrip { display:none; }
+  .gate .em-ico svg { width:28px; height:28px; }
+  .gate-acts { display:flex; flex-wrap:wrap; gap:var(--s2); justify-content:center; }
+  /* card detail */
+  .dmeta { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:0 0 var(--s3); }
+  .dmeta .hd-note { font-size:var(--fs-meta); }
+  .dmeta .dm-date { color:var(--ink-2); font-size:var(--fs-meta); font-variant-numeric:tabular-nums; margin-right:2px; }
+  .dsec-h { font-size:var(--fs-micro); text-transform:uppercase; letter-spacing:.8px; color:var(--muted);
+    font-weight:700; margin:var(--s4) 0 var(--s2); }
+  .dsrc { display:flex; flex-direction:column; gap:var(--s2); margin:0; padding:0; list-style:none; }
+  .dsrc a { display:flex; gap:var(--s2); align-items:baseline; padding:10px var(--s3); border:1px solid var(--border);
+    border-radius:var(--r-md); background:var(--surface-2); color:var(--ink); text-decoration:none; min-height:44px; }
+  .dsrc a b { color:var(--primary); font-variant-numeric:tabular-nums; }
+  .dsrc a span { min-width:0; overflow-wrap:anywhere; }
+  .dsrc a small { color:var(--muted); display:block; }
+  /* account sheet */
+  .acct-hd { display:flex; gap:var(--s3); align-items:center; margin-bottom:var(--s4); }
+  .acct-hd .av { width:48px; height:48px; font-size:20px; }
+  .acct-hd .em { font-weight:700; font-size:var(--fs-md); overflow-wrap:anywhere; }
+  .acct-hd .how { color:var(--muted); font-size:var(--fs-meta); }
+  .av { display:inline-grid; place-items:center; width:34px; height:34px; border-radius:50%; flex:none;
+    background:var(--primary-weak); color:var(--primary); font-weight:800; font-size:15px;
+    border:1px solid color-mix(in srgb, var(--primary) 45%, transparent); text-transform:uppercase; }
+  .acct-secs { display:flex; flex-wrap:wrap; gap:6px; }
+  .acct-acts { display:flex; flex-direction:column; gap:var(--s2); margin-top:var(--s5); }
+  .acct-acts .btn { justify-content:center; min-height:46px; font-size:var(--fs-sm); }
+  .mono { font-family:var(--f-mono); font-size:var(--fs-meta); }
+  /* device settings fold at the end of Hoje */
+  details.hoje-set { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md); }
+  details.hoje-set > summary { list-style:none; cursor:pointer; display:flex; align-items:center; gap:var(--s2);
+    padding:var(--s3); min-height:48px; font-weight:600; color:var(--ink); }
+  details.hoje-set > summary::-webkit-details-marker { display:none; }
+  details.hoje-set > summary .sub { color:var(--muted); font-weight:400; font-size:var(--fs-meta); }
+  details.hoje-set > summary::after { content:""; margin-left:auto; width:8px; height:8px; flex:none;
+    border-right:2px solid var(--muted); border-bottom:2px solid var(--muted); transform:rotate(45deg); }
+  details.hoje-set[open] > summary::after { transform:rotate(-135deg); }
+  details.hoje-set .hoje-sec { border:0; border-top:1px solid var(--border); border-radius:0; }
+  .tdr-in { width:84px; }
+
+  /* =====================================================================================
+     PHONE + STORE APP (<= 640px). Native-app shell for /exec:
+       - top bar: brand + data date scroll away; sector · Hoje|Painel · account stay pinned
+       - bottom tab bar: the four officers, icon + label, above the home indicator
+       - one column: the officer's hero readout leads, long lists cap at 5 with "Ver todos"
+     Safe areas come from --safe-t/--safe-b (env() with viewport-fit=cover). */
+  @media (max-width: 640px) {
+    :root { --fs-sm:14px; --fs-base:15px; --fs-meta:13px; }
+    html { -webkit-text-size-adjust:100%; }
+    body { -webkit-tap-highlight-color:transparent;
+      padding-bottom:calc(var(--tabbar-h) + var(--safe-b) + var(--s4)); }
+    body.is-gated { padding-bottom:calc(var(--safe-b) + var(--s4)); }
+
+    /* --- top bar --------------------------------------------------------------- */
+    .appbar { display:grid; grid-template-columns:minmax(0,1fr) auto 44px; grid-template-rows:54px 58px;
+      grid-template-areas:"brand view view" "sel sel acct"; column-gap:var(--s2); row-gap:0; align-items:center;
+      position:sticky; top:-54px; padding:var(--safe-t) var(--s4) 0; background:var(--bg);
+      backdrop-filter:none; border-bottom:1px solid var(--border); }
+    .appbar > .brand { grid-area:brand; }
+    .brand .mark { font-size:17px; letter-spacing:1.5px; }
+    .brand .ctx { background:none; color:var(--muted); padding:0; letter-spacing:.6px; font-weight:600; }
+    #asof { display:none; }                 /* the data date lives in the identity strip on a phone */
+    .appbar > .spacer { display:none; }
+    .selwrap { grid-area:sel; position:relative; min-width:0; order:0; }
+    .selwrap .hd-note { display:none; }
+    .selwrap select { -webkit-appearance:none; appearance:none; width:100%; min-height:44px; padding:0 32px 0 12px;
+      background:var(--surface-2); color:var(--ink); border:1px solid var(--border-2); border-radius:10px;
+      font-size:15px; font-weight:600; text-overflow:ellipsis; }
+    .selwrap::after { content:""; position:absolute; right:14px; top:50%; width:7px; height:7px; margin-top:-6px;
+      border-right:2px solid var(--ink-2); border-bottom:2px solid var(--ink-2); transform:rotate(45deg); pointer-events:none; }
+    #viewTabs { grid-area:view; justify-self:end; display:inline-flex; gap:2px; padding:3px; order:0; flex-wrap:nowrap;
+      background:var(--surface-2); border:1px solid var(--border-2); border-radius:12px; }
+    #viewTabs a { min-height:38px; padding:0 13px; border:0; border-radius:9px; font-size:14px; font-weight:700;
+      color:var(--ink-2); display:inline-flex; align-items:center; }
+    #viewTabs a[aria-current="page"] { background:var(--primary); color:var(--on-primary); border:0; }
+    #authBox { grid-area:acct; order:0; }
+    #authBox .btn { min-height:44px; font-size:var(--fs-sm); padding:0 var(--s4); border-radius:10px; }
+    body.is-authed #authBox { display:none; }
+    .acct-btn:not([hidden]) { grid-area:acct; justify-self:end; display:inline-grid; place-items:center; width:44px; height:44px;
+      margin-right:-4px; padding:0; border:0; background:none; cursor:pointer; border-radius:50%; }
+    #themeBtn { display:none; }
+    body.is-gated .appbar { grid-template-rows:58px; grid-template-areas:"brand brand acct"; top:0; }
+    body[data-gate="auth"] .appbar { grid-template-areas:"brand brand brand"; }
+    body[data-gate="auth"] #authBox { display:none; }   /* the gate's own Entrar is the one action */
+    body.is-gated .appbar > .brand { align-self:center; }
+
+    /* --- bottom tab bar (officers) --------------------------------------------- */
+    #officerTabs { position:fixed; left:0; right:0; bottom:0; z-index:40; order:0; flex:none;
+      display:grid; grid-template-columns:repeat(4,1fr); gap:0; overflow:visible;
+      height:calc(var(--tabbar-h) + var(--safe-b)); padding:4px 4px var(--safe-b);
+      background:var(--surface); border-top:1px solid var(--border-2);
+      box-shadow:0 -6px 18px rgba(0,0,0,.28); }
+    #officerTabs a { flex-direction:column; justify-content:center; align-items:center; gap:2px;
+      min-height:50px; padding:2px 0; border:0; border-radius:12px; background:none;
+      color:var(--muted); font-size:11.5px; font-weight:600; letter-spacing:.1px; white-space:nowrap; }
+    #officerTabs a .ot-k, #officerTabs a .ot-sep { display:none; }
+    #officerTabs .ot-ic { display:grid; place-items:center; width:52px; height:28px; border-radius:14px; }
+    #officerTabs .ot-ic svg { width:22px; height:22px; }
+    #officerTabs a[aria-current="page"] { color:var(--ink); background:none; border:0; }
+    #officerTabs a[aria-current="page"] .ot-ic { background:var(--primary-weak); color:var(--primary);
+      box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--primary) 40%, transparent); }
+    #officerTabs a[aria-current="page"] .ot-l { font-weight:800; }
+
+    /* --- identity strip + page head ------------------------------------------- */
+    .wrap { padding:var(--s3) var(--s4) var(--s4); display:flex; flex-direction:column; }
+    #board { display:contents; }
+    .wrap > .whoami { order:-2; }
+    .wrap > .pagehead { order:-1; }
+    #board > .readout { order:1; }
+    #macroStrip { order:2; }
+    #askPanel { order:3; }
+    #board > * { order:4; }
+    #board > .readout { order:1; }
+    #recsBand { order:5; }
+    /* demoted sections: one-line headers after the actions, tap to open */
+    #board > .more-hd { order:6; margin:var(--s2) 0 var(--s3); font-size:var(--fs-micro); text-transform:uppercase;
+      letter-spacing:1px; color:var(--muted); font-weight:700; }
+    #board > .band--fold { order:7; margin-bottom:var(--s2); }
+    .band--fold > .band-hd { cursor:pointer; margin:0; padding:var(--s3) var(--s4); min-height:52px; align-items:center;
+      background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); flex-wrap:nowrap; }
+    .band--fold > .band-hd .overline { font-size:15px; font-weight:650; flex:1 1 auto; flex-basis:auto; }
+    .band--fold > .band-hd::after { content:""; width:8px; height:8px; flex:none; margin-left:auto;
+      border-right:2px solid var(--muted); border-bottom:2px solid var(--muted); transform:rotate(45deg); }
+    .band--fold:not(.is-open) > .band-hd .badge { display:none; }
+    .band--fold:not(.is-open) > :not(.band-hd) { display:none; }
+    .band--fold.is-open > .band-hd { flex-wrap:wrap; border-radius:var(--r-lg) var(--r-lg) 0 0; margin-bottom:var(--s2); }
+    .band--fold.is-open > .band-hd::after { transform:rotate(-135deg); position:absolute; right:var(--s4); top:22px; }
+    .band--fold { position:relative; }
+    .whoami:not([hidden]) { display:flex; align-items:center; gap:var(--s3); width:100%; margin:0 0 var(--s3);
+      padding:10px var(--s3); background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg);
+      color:var(--ink); font:inherit; text-align:left; cursor:pointer; min-height:56px; }
+    .whoami .wi-t { min-width:0; flex:1; }
+    .whoami .wi-e { display:block; font-weight:700; font-size:var(--fs-sm); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .whoami .wi-s { display:block; color:var(--muted); font-size:var(--fs-meta); }
+    .whoami .wi-go { width:8px; height:8px; flex:none; margin-right:4px; border-right:2px solid var(--muted);
+      border-top:2px solid var(--muted); transform:rotate(45deg); }
+    body.view-hoje .pagehead { display:none; }
+    .pagehead { margin-bottom:var(--s3); gap:var(--s1); }
+    .pagehead h1 { font-size:22px; line-height:1.2; }
+    .pagehead h1 .pg-dash { display:none; }
+    .pagehead h1 .pg-k { display:block; font-size:var(--fs-micro); text-transform:uppercase; letter-spacing:1px;
+      color:var(--muted); font-weight:700; margin-bottom:2px; }
+    .pagehead .lede { font-size:var(--fs-meta); margin:0; }
+
+    /* --- section / panel hierarchy: section title > card title > row ------------ */
+    .band { margin-bottom:var(--s5); }
+    .band > .band-hd { margin-bottom:var(--s2); }
+    .band > .band-hd .overline { font-size:17px; text-transform:none; letter-spacing:0; font-weight:750;
+      color:var(--ink); flex-basis:100%; }
+    .band > .band-hd .rule { display:none; }
+    .band > .band-hd .badge { font-size:11px; text-transform:none; letter-spacing:0; font-weight:600;
+      padding:1px 8px; line-height:1.5; }
+    .panel { border-radius:var(--r-lg); }
+    .panel__hd { padding:var(--s3) var(--s4) var(--s2); border-bottom-color:transparent; }
+    .panel__hd h2 { font-size:12px; color:var(--ink-2); }
+    .panel__hd .count { background:var(--surface-3); color:var(--ink); }
+    .panel__hd .count--alert { background:var(--t-crit); color:var(--on-primary); }
+    .panel__bd--scroll { max-height:none; overflow:visible; }   /* no scroll-inside-scroll on a phone */
+    .capped:not(.is-open) > :nth-child(n+6) { display:none; }
+    .trajs.capped:not(.is-open) > :nth-child(n+4) { display:none; }
+    .more-btn { display:flex; width:calc(100% - 2 * var(--s4)); margin:var(--s1) var(--s4) var(--s3);
+      justify-content:center; align-items:center; min-height:44px; font:inherit; font-size:var(--fs-sm); font-weight:700;
+      color:var(--primary); background:var(--surface-2); border:1px solid var(--border); border-radius:10px; cursor:pointer; }
+    .band > .more-btn { width:100%; margin:var(--s2) 0 0; }
+
+    /* --- hero readout ---------------------------------------------------------- */
+    .readout { gap:var(--s3); margin-bottom:var(--s5); }
+    .hero { padding:var(--s4); }
+    .hero .h-val { font-size:40px; }
+    .readout .tiles { grid-template-columns:1fr 1fr; gap:var(--s2); }
+    .tile { padding:var(--s3); }
+    .tile__n { font-size:24px; overflow-wrap:anywhere; }
+
+    /* --- rows: two lines — meta line (date · who · score), then the headline -------- */
+    .exrow { flex-wrap:wrap; row-gap:4px; column-gap:var(--s2); padding:var(--s3) var(--s4); align-items:center; }
+    .exrow .ent { min-width:0 !important; max-width:none; flex:1 1 0; white-space:normal;
+      overflow-wrap:anywhere; font-size:var(--fs-sm); }
+    .exrow .ttl { flex:1 1 100%; order:5; -webkit-line-clamp:3; color:var(--ink-2); }
+    .exrow .meta { order:6; flex-basis:100%; }
+    .exrow .dt { min-width:0; }
+    .exrow:active { background:var(--surface-2); }
+    .exrow--reg .ent { flex:1 1 100%; }
+    .exrow--axis > b { min-width:0 !important; flex:1 1 100%; }
+    .exrow--axis > span[style*="flex:1"] { flex:1 1 100% !important; }
+    .silrow { flex-wrap:wrap; row-gap:4px; }
+    .silrow { padding:var(--s3) var(--s4) !important; }
+    .silrow > b { min-width:0 !important; flex:1 1 0; }
+    .silrow > .hd-note { flex:1 1 100% !important; white-space:normal !important; order:5; }
+    .silrow > .hd-note:last-child { order:3; color:var(--ink-2); }
+    .due-row > span[style*="flex:1"] { flex-basis:100% !important; }
+
+    /* --- macro strip: one swipeable line ---------------------------------------- */
+    .macro-strip { margin-bottom:var(--s3); }
+    .macro-inner { flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; -webkit-overflow-scrolling:touch;
+      padding:var(--s2) var(--s3); gap:var(--s3); }
+    .macro-inner::-webkit-scrollbar { display:none; }
+    .macro-inner > * { flex:none; }
+    .macro-headline { display:none; }
+
+    /* --- ask -------------------------------------------------------------------- */
+    .ask-band { margin-bottom:var(--s5); }
+    .askwrap { padding:var(--s3) var(--s4); }
+    .askhd { margin-bottom:var(--s2); }
+    .askhd h2 { font-size:17px; }
+
+    /* --- flow / decisions ----------------------------------------------------- */
+    .trajs { padding:0; gap:var(--s2); }
+    .traj { background:var(--surface); }
+    .traj-f { justify-content:flex-end; }
+    .traj-f .hd-note { flex:1 1 100%; }
+    .traj-f > .spacer { display:none; }
+    .rec .cap button, .traj-f button { min-width:0; flex:1 1 0; }
+    .traj-f button + button { margin-left:0; }
+
+    /* --- recommendations: only horizons that hold something ------------------------ */
+    .hz:has(> .hz-empty) { display:none; }
+    .horizons { gap:var(--s3); }
+
+    /* --- Hoje ------------------------------------------------------------------- */
+    .hoje { gap:var(--s3); }
+    .hoje-sec { border-radius:var(--r-lg); }
+    .hoje-hd { flex-wrap:wrap; row-gap:2px; padding:var(--s4) var(--s4) var(--s2); align-items:center; }
+    .hoje-hd h2 { font-size:17px; }
+    .hoje-hd .n { font-size:var(--fs-meta); font-weight:800; color:var(--ink); background:var(--surface-3);
+      border-radius:var(--r-pill); padding:1px 9px; }
+    .hoje-hd .sub { margin-left:0; flex-basis:100%; }
+    .hoje .exrow .ent { flex:1 1 0; }
+    #hojeFull { justify-content:center; min-height:48px; font-size:var(--fs-sm); border-radius:12px; }
+
+    /* --- drawer = full-screen sheet ---------------------------------------------- */
+    .drawer { width:100vw; border-left:0; padding-top:var(--safe-t); padding-bottom:var(--safe-b); }
+    .drawer__hd { padding:var(--s2) var(--s2) var(--s2) var(--s4); top:0; z-index:1; }
+    .drawer__hd h3 { flex:1; min-width:0; font-size:17px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .drawer__bd { padding:var(--s4); }
+    .drawer .callout { font-size:var(--fs-base); line-height:1.55; }
+
+    /* --- gate ------------------------------------------------------------------- */
+    body.is-gated .pagehead, body.is-gated .whoami { display:none; }
+    body.is-gated #board > .empty, body.is-gated #board > .gate { min-height:calc(100vh - 220px); justify-content:center;
+      gap:var(--s2); padding:var(--s5) var(--s2); }
+    .gate .em-ico { color:var(--primary); opacity:1; margin-bottom:var(--s2); }
+    .gate .em-ico svg { width:40px; height:40px; }
+    .gate .em-t { font-size:21px; line-height:1.3; color:var(--ink); }
+    .gate .em-d { font-size:var(--fs-sm); line-height:1.5; max-width:34ch; color:var(--ink-2); }
+    .gate .btn { min-height:50px; min-width:240px; justify-content:center; font-size:16px; border-radius:12px; }
+    .gate-acts { flex-direction:column; align-items:center; }
+    .gate form { width:100%; }
+    .gate form label.cvsub { display:flex !important; align-items:center; gap:var(--s3); min-height:48px;
+      margin:var(--s2) 0 !important; padding:0 var(--s3); border:1px solid var(--border-2); border-radius:10px;
+      background:var(--surface); color:var(--ink); font-size:15px; }
+    .gate form label.cvsub:has(input:checked) { border-color:var(--primary); background:var(--primary-weak); }
+    .gate form input[type="radio"] { width:20px; height:20px; accent-color:var(--primary); margin:0; }
+    .gate form button[type="submit"] { width:100%; min-width:0; }
+
+    /* --- charts ------------------------------------------------------------------ */
+    .scatter { padding:var(--s3) var(--s2); }
+    .sc-legend { justify-content:flex-start; padding:0 var(--s2); }
+  }
 </style>
 </head>
 <body>
@@ -418,12 +686,14 @@
     <select id="sectorSel"><option value="__all__">Todos os setores</option></select></span>
   <span class="sub" id="asof">—</span>
   <span class="authbox" id="authBox"></span>
-  <button class="icnbtn" id="themeBtn" title="Alternar tema" aria-label="Alternar tema">◐</button>
+  <button class="acct-btn" id="acctBtn" type="button" hidden aria-label="Sua conta"><span class="av" aria-hidden="true"></span></button>
+  <button class="icnbtn" id="themeBtn" title="Alternar tema" aria-label="Alternar tema"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor"/></svg></button>
 </header>
 
 <div class="offline-bar" id="offlineBar" role="status" hidden></div>
 <div id="trialBar" hidden></div>
 <main class="wrap">
+  <button class="whoami" id="whoAmI" type="button" hidden></button>
   <div class="pagehead"><h1 id="pgTitle">Sala executiva</h1><p class="lede" id="pgLede"></p></div>
   <div id="macroStrip" class="macro-strip"></div>
   <section id="askPanel" class="ask-band"></section>
@@ -439,7 +709,7 @@
 <aside class="drawer" id="drawer" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="drTitle">
   <div class="drawer__hd"><h3 id="drTitle">Inspeção</h3>
     <button class="btn btn--sm drshare" id="drShare" type="button" hidden>Compartilhar</button>
-    <button class="drawer__close" id="drClose" aria-label="Fechar">×</button></div>
+    <button class="drawer__close" id="drClose" aria-label="Fechar"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
   <div class="drawer__bd" id="drBody"></div>
 </aside>
 
@@ -457,17 +727,20 @@ const SEEN = {};
 function markSeen(k) { if (k && !SEEN[k]) SEEN[k] = new Date().toISOString(); }
 
 const OFFICERS = {
-  cso: { label:"CSO · Estratégia", title:"Estrategista-chefe (CSO)",
+  cso: { label:"CSO · Estratégia", short:"Estratégia", title:"Estrategista-chefe (CSO)",
     lede:"Clima competitivo, riscos e oportunidades, momentum dos concorrentes e ações por horizonte." },
-  cro: { label:"CRO · Regulatório", title:"Oficial regulatório (CRO)",
+  cro: { label:"CRO · Regulatório", short:"Regulatório", title:"Oficial regulatório (CRO)",
     lede:"O eixo regulatório: linha do tempo consulta→norma→fiscalização, impacto e alcance por setor, mudanças e prazos." },
-  cco: { label:"CCO · Compliance", title:"Oficial de compliance (CCO)",
+  cco: { label:"CCO · Compliance", short:"Compliance", title:"Oficial de compliance (CCO)",
     lede:"Integridade, registro de risco (insolvência/reputação/achados) e triagem de watchlist." },
-  cpo: { label:"CPO · Produto", title:"Oficial de produto (CPO)",
+  cpo: { label:"CPO · Produto", short:"Produto", title:"Oficial de produto (CPO)",
     lede:"Cobertura por setor, pontos cegos, propostas de descoberta e a força de proveniência da base." },
 };
 
 U.initTheme();
+// The store app is dark-only (app.json userInterfaceStyle: dark; native band + status bar are
+// #0e1214 / light-content) — a light page under that band looks broken, so the app pins dark.
+if (window.OncaCtx && window.OncaCtx.inApp()) document.documentElement.setAttribute("data-theme", "dark");
 document.getElementById("themeBtn").addEventListener("click", () => { U.toggleTheme(); render(); });
 document.getElementById("drClose").addEventListener("click", closeDrawer);
 document.getElementById("scrim").addEventListener("click", closeDrawer);
@@ -528,8 +801,18 @@ function applyHash() {
 }
 window.addEventListener("hashchange", applyHash);
 
+// Officer icons (phone bottom tab bar). Desktop shows the same "CSO · Estratégia" text as before.
+const OFFICER_ICON = {
+  cso: '<circle cx="12" cy="12" r="9"/><path d="m15.6 8.4-2.1 5.1-5.1 2.1 2.1-5.1z"/>',
+  cro: '<path d="M3 20.5h18M5 17.5h14M6 10v7.5M10 10v7.5M14 10v7.5M18 10v7.5M3 10h18L12 3.5z"/>',
+  cco: '<path d="M12 3 19.5 6v5.5c0 4.6-3.2 8.3-7.5 9.5-4.3-1.2-7.5-4.9-7.5-9.5V6z"/><path d="m8.8 12.2 2.3 2.3 4.3-4.6"/>',
+  cpo: '<path d="M12 3.5 3.5 8 12 12.5 20.5 8z"/><path d="m3.5 12 8.5 4.5 8.5-4.5"/><path d="m3.5 16 8.5 4.5 8.5-4.5"/>',
+};
+const svgIcon = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" ` +
+  `stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 document.getElementById("officerTabs").innerHTML = Object.entries(OFFICERS)
-  .map(([k, o]) => `<a href="#${k}" data-officer="${k}">${o.label}</a>`).join("");
+  .map(([k, o]) => `<a href="#${k}" data-officer="${k}"><span class="ot-ic">${svgIcon(OFFICER_ICON[k])}</span>` +
+    `<span class="ot-k">${k.toUpperCase()}</span><span class="ot-sep"> · </span><span class="ot-l">${o.short}</span></a>`).join("");
 document.querySelectorAll("#officerTabs a").forEach(a => a.addEventListener("click", (e) => {
   e.preventDefault(); writeHash({ officer: a.getAttribute("data-officer") });
 }));
@@ -549,6 +832,7 @@ function deviceClass() {
   const coarse = window.matchMedia && matchMedia("(pointer: coarse)").matches;
   return w < 600 && coarse ? "phone" : (w < 1024 && coarse ? "tablet" : "desktop");
 }
+function narrowScreen() { return (document.documentElement.clientWidth || window.innerWidth) <= 640; }
 function isStandalone() {
   return !!((window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone);
 }
@@ -566,7 +850,74 @@ function actFetch(body, extra) {
 }
 function renderAuthUI() {
   Ctx.renderAuthBox("authBox", () => renderAskLoginState());
+  renderIdentity();
 }
+// --- who is signed in, and to what (phone identity strip + account button + account sheet) ----
+// Display-only decode of the ID token (the API's JWT authorizer is the trust boundary). There is
+// no organisation display name in the token or the feed yet — only the e-mail and an opaque
+// tenant id — so the strip shows the e-mail and the licensed-sector count, never an invented name.
+function idClaims() { return Ctx.isLoggedIn() ? (Ctx.decodeJwt(Ctx.getIdToken()) || {}) : null; }
+function signInMethod(c) {
+  let idp = "";
+  try { idp = String((JSON.parse(c.identities || "[]")[0] || {}).providerName || ""); }
+  catch (e) { idp = String(((c.identities || [])[0] || {}).providerName || ""); }
+  return /apple/i.test(idp) ? "Apple" : /google/i.test(idp) ? "Google" : idp ? idp : "e-mail e senha";
+}
+const TIER_LABEL = { saas: "SaaS · por setor", entry: "Entry", group: "Acesso por grupo", sovereign: "Sovereign" };
+function scopeSummary() {
+  const n = (LICENSED || []).length;
+  if (!DATA || !DATA.as_of) return "";
+  return n ? `${pl(n, "setor licenciado", "setores licenciados")}` : "nenhum setor licenciado";
+}
+function renderIdentity() {
+  const c = idClaims(), btn = document.getElementById("acctBtn"), who = document.getElementById("whoAmI");
+  document.body.classList.toggle("is-authed", !!c);
+  const email = (c && c.email) || "", init = (email || "?").trim().charAt(0) || "?";
+  if (btn) { btn.hidden = !c; const av = btn.querySelector(".av"); if (av) av.textContent = init;
+    btn.setAttribute("aria-label", c ? `Sua conta: ${email || "conta"}` : "Sua conta"); }
+  if (who) {
+    const sum = scopeSummary();
+    who.hidden = !c || ADMIN || !sum;
+    if (c) who.innerHTML = `<span class="av" aria-hidden="true">${U.esc(init)}</span><span class="wi-t">` +
+      `<span class="wi-e">${U.esc(email || "conta")}</span><span class="wi-s">${U.esc(sum)}` +
+      `${DATA.tier && TIER_LABEL[DATA.tier] ? " · " + U.esc(TIER_LABEL[DATA.tier]) : ""}</span>` +
+      (DATA.as_of ? `<span class="wi-s${asOfAge() >= 2 ? " asof--stale" : ""}">dados de ${U.esc(dShort(DATA.as_of))}` +
+        `${asOfAge() >= 2 ? ` · há ${asOfAge()} dias` : ""}${OFFLINE ? " · offline" : ""}</span>` : "") +
+      `</span><span class="wi-go" aria-hidden="true"></span>`;
+  }
+}
+function openAccount() {
+  const c = idClaims(); if (!c) return;
+  const email = c.email || "conta", D = DATA || {};
+  const secLbl = {}; (EX.sectors || []).forEach(x => { secLbl[x.slug] = x.label; });
+  const secs = (LICENSED || []).map(s => `<span class="chip">${U.esc(secLbl[s] || Ctx.indLabel(s))}</span>`).join("");
+  const b = D.billing || null;
+  const trial = b && b.state === "trial" && b.trial_until
+    ? Math.max(0, Math.ceil((new Date(b.trial_until) - Date.now()) / 86400000)) : null;
+  const plan = (TIER_LABEL[D.tier] || D.tier || "—") + (trial != null ? ` · teste grátis, ${pl(trial, "dia restante", "dias restantes")}` : "");
+  const tenant = c["custom:tenant"] || D.tenant || "";
+  document.getElementById("drTitle").textContent = "Sua conta";
+  document.getElementById("drBody").innerHTML =
+    `<div class="acct-hd"><span class="av" aria-hidden="true">${U.esc(email.charAt(0))}</span><div style="min-width:0">` +
+      `<div class="em">${U.esc(email)}</div><div class="how">Entrou com ${U.esc(signInMethod(c))}</div></div></div>` +
+    `<dl class="kv">` +
+      `<dt>Plano</dt><dd>${U.esc(plan)}</dd>` +
+      `<dt>Dados</dt><dd>${D.as_of ? `de ${U.esc(U.fmtDate(D.as_of))}${asOfAge() >= 2 ? ` <span class="asof--stale">· há ${asOfAge()} dias</span>` : ""} · atualização diária` : "—"}</dd>` +
+      (tenant ? `<dt>ID da conta</dt><dd class="mono">${U.esc(tenant)}</dd>` : "") +
+    `</dl>` +
+    `<div class="dsec-h">${U.esc(scopeSummary() || "Setores")}</div>` +
+    (secs ? `<div class="acct-secs">${secs}</div>` : `<p class="hd-note">Nenhum setor licenciado para esta conta.</p>`) +
+    (Ctx.inApp() ? `<p class="hd-note" style="margin-top:var(--s4)">${U.esc(Ctx.PLAN_NOTE)}</p>` : "") +
+    `<div class="acct-acts">` +
+      (Ctx.inApp() ? "" : `<button class="btn" type="button" id="acctTheme">Alternar tema claro/escuro</button>`) +
+      `<a class="btn" href="/docs/privacy.html">Política de privacidade</a>` +
+      `<button class="btn btn--reject" type="button" id="acctOut">Sair desta conta</button></div>`;
+  const th = document.getElementById("acctTheme"); if (th) th.onclick = () => { U.toggleTheme(); render(); };
+  document.getElementById("acctOut").onclick = () => Ctx.logout();
+  openDrawer(null);
+}
+document.getElementById("acctBtn").addEventListener("click", openAccount);
+document.getElementById("whoAmI").addEventListener("click", openAccount);
 const ASK_EXAMPLES = ["O que mudou esta semana no meu escopo?", "Quem está em alerta agora?",
   "Qual mudança regulatória tem maior alcance?", "Onde há maior risco prudencial?"];
 function renderAskPanel() {
@@ -709,6 +1060,7 @@ async function loadFeed() {
       LICENSED = (DATA.industries || []).map(i => String(i.slug || i).toLowerCase());
       boot();
     } catch (e) {
+      document.body.classList.add("is-gated");
       document.getElementById("board").innerHTML = U.empty("Acesso de operador indisponível",
         "O link de operador é inválido ou expirou.", "!");
       console.warn("operator feed:", e.message || e);
@@ -731,8 +1083,13 @@ async function loadFeed() {
     Ctx.mountGate(document.getElementById("board"), res.error || (res.needAuth ? "needAuth" : "noAccess"), "seu painel executivo", res);
     // #187: no entitlement (e.g. a trial that ended) is a paywall, not a half-live page. Hide the
     // surfaces that a warm cached paint may have filled (ask, macro strip, recommended actions).
-    if (res.noAccess) ["askPanel", "macroStrip", "recsBand"].forEach((id) => {
+    // Signed out / feed down too: a disabled Ask box and an empty "Ações recomendadas" band around
+    // the sign-in gate read as a broken page (is-gated also drops the dead officer/sector nav).
+    ["askPanel", "macroStrip", "recsBand"].forEach((id) => {
       const el = document.getElementById(id); if (el) el.hidden = true; });
+    document.body.classList.add("is-gated");
+    document.body.dataset.gate = res.needAuth ? "auth" : res.noAccess ? "none" : "error";
+    renderIdentity();
     return;
   }
   if (res.error) { OFFLINE = true; STALE = false; boot(); return; }   // keep the painted copy, flagged
@@ -777,17 +1134,27 @@ function assinarHTML(D) {
 // #162: an offline render is the LAST feed this user loaded — say so, visibly.
 window.addEventListener("online", () => { if (OFFLINE) location.reload(); });
 
+// Whole days since the feed's as_of (a daily build): >= 2 means the pipeline is behind and the
+// page says so instead of presenting yesterday's-yesterday as today.
+function asOfAge() {
+  const t = DATA && DATA.as_of ? Date.parse(String(DATA.as_of).slice(0, 10) + "T12:00:00") : NaN;
+  return isNaN(t) ? null : Math.floor((Date.now() - t) / 86400000);
+}
 function boot() {
   EX = DATA.executive || {};
   BYID = {}; (DATA.feed || []).forEach(c => { BYID[c.id] = c; });
-  document.getElementById("asof").textContent = DATA.as_of ? `dados de ${U.fmtDate(DATA.as_of)}${OFFLINE ? " · offline" : STALE ? " · atualizando…" : ""}` : "";
+  document.body.classList.remove("is-gated"); delete document.body.dataset.gate;
+  const age = asOfAge(), asof = document.getElementById("asof");
+  asof.textContent = DATA.as_of ? `dados de ${dShort(DATA.as_of)}${age >= 2 ? ` · há ${age} dias` : ""}${OFFLINE ? " · offline" : STALE ? " · atualizando…" : ""}` : "";
+  asof.title = DATA.as_of ? `Dados de ${U.fmtDate(DATA.as_of)} (atualização diária)` : "";
+  asof.classList.toggle("asof--stale", age >= 2);
   const ob = document.getElementById("offlineBar");
   if (ob) { ob.hidden = !OFFLINE; ob.textContent = OFFLINE ? `Sem conexão — exibindo dados de ${DATA.as_of ? U.fmtDate(DATA.as_of) : "—"} · offline` : ""; }
   // #187: a storefront tenant in its 14-day Entry trial sees the days left and how to subscribe
   const tb = document.getElementById("trialBar");
   if (tb) { const h = assinarHTML(DATA) || Ctx.billingBannerHTML(DATA); tb.innerHTML = h; tb.hidden = !h; }
   if (!ADMIN && Ctx.isEntryTier(DATA)) {   // ADR 016: Entry has no officer suite
-    mountEntry();
+    mountEntry(); renderIdentity();
     // #246: a ?c= share link must resolve here too — the card if it is in this licence,
     // otherwise "Sem acesso" (it used to sit unresolved, drawer closed, ?c= left in the URL)
     if (!BOOTED) { BOOTED = true; setTimeout(resolveSharedLink, 0); }
@@ -801,11 +1168,14 @@ function boot() {
   // filtering here too is a client-side belt-and-suspenders, not the trust boundary itself.
   (EX.sectors || []).filter(s => !LICENSED.length || LICENSED.includes(s.slug))
     .forEach(s => { const o = document.createElement("option"); o.value = s.slug; o.textContent = s.label; sel.appendChild(o); });
+  // the scope is visible at a glance: "Todos os setores (17)" — the count of THIS licence
+  sel.options[0].textContent = sel.options.length > 2 ? `Todos os setores (${sel.options.length - 1})` : "Todos os setores";
   SECTOR = activeSector();
   sel.value = SECTOR;
   OFFICER = hashOfficer() || OFFICER;
   if (VIEW === null) setView(initialView());
   syncOnline();
+  renderIdentity();
   const first = !BOOTED; BOOTED = true;
   if (first) setTimeout(resolveSharedLink, 0);   // #170: ?c=<hash> deep link, after the first render
   // #165: one session event per open (device class + installed-app flag only)
@@ -836,6 +1206,32 @@ function agg() { const bi = block().by_industry || {}; return bi[SECTOR] || bi._
 // #218: a server-capped panel's true size for the current sector (panels.totals[key][SECTOR]).
 // Portuguese count + noun: pl(1, "rascunho") → "1 rascunho"; pl(3, "rascunho") → "3 rascunhos".
 function pl(n, one, many) { return `${n} ${n === 1 ? one : (many || one + "s")}`; }
+// pt-BR numbers ("51,1", not "51.1"); non-numbers pass through untouched.
+function nf(v, d) {
+  if (typeof v !== "number" || !isFinite(v)) return v;
+  return v.toLocaleString("pt-BR", { maximumFractionDigits: d == null ? 1 : d, minimumFractionDigits: d && d > 1 ? d : 0 });
+}
+// Compact row date: "14 out" (this year) / "14 out 2025"; the full date stays in the title.
+const MES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+function dShort(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ""));
+  if (!m) return String(iso || "");
+  return `${Number(m[3])} ${MES[Number(m[2]) - 1]}${Number(m[1]) !== new Date().getFullYear() ? " " + m[1] : ""}`;
+}
+function dCell(iso) { return iso ? `<span class="dt" title="${U.esc(U.fmtDate(iso))}">${U.esc(dShort(iso))}</span>` : `<span class="dt"></span>`; }
+// Internal slugs that reach the screen through feed fields → client-facing Portuguese.
+const SEV_PT = { high: "alta", med: "média", medium: "média", low: "baixa", market: "mercado", broad: "amplo",
+  sector: "setorial", regional: "regional", local: "local", narrow: "restrito", critical: "crítica" };
+const ACTION_PT = { open_watch: "abrir monitoramento", curate_belief: "revisar a tese", propose_vertical: "propor nova vertical",
+  resolve_review: "resolver a revisão", flag_entity: "sinalizar a entidade" };
+const TRIAGE_PT = { ingestion_gap: "lacuna de ingestão", source_gap: "lacuna de fonte", entity_gap: "lacuna de entidade",
+  coverage_gap: "lacuna de cobertura", out_of_scope: "fora do escopo" };
+const GAP_STATUS_PT = { open: "aberto", proposed: "proposto", closed: "fechado", resolved: "resolvido", triaged: "triado" };
+const HZ_LABEL = { imediato: "Imediato", "30d": "30 dias", "90d": "90 dias", estrategico: "Estratégico" };
+const humanize = (k) => String(k || "").replace(/_/g, " ");
+const actionPt = (a) => ACTION_PT[a] || humanize(a);
+// server prose may carry a triage slug ("Pergunta sem resposta 6× · ingestion_gap.")
+const deslug = (t) => String(t || "").replace(/\b(ingestion_gap|source_gap|entity_gap|coverage_gap|out_of_scope)\b/g, (m) => TRIAGE_PT[m]);
 function totN(p, key) { const t = ((p || {}).totals || {})[key]; return t ? t[SECTOR] : null; }
 function ofN(list, total, flt) {
   const shown = (list || []).filter(flt || inSector).length;
@@ -848,7 +1244,7 @@ function panel(title, count, note, body) {
     `<div class="panel__bd panel__bd--flush panel__bd--scroll">${body}</div></div>`;
 }
 function tile(label, value, sub, cls) {
-  return `<div class="tile${cls ? " is-" + cls : ""}"><div class="tile__n">${value == null ? "—" : value}</div>` +
+  return `<div class="tile${cls ? " is-" + cls : ""}"><div class="tile__n">${value == null ? "—" : nf(value)}</div>` +
     `<div class="tile__l">${U.esc(label)}${sub ? ` · ${U.esc(sub)}` : ""}</div></div>`;
 }
 function band(overline, badge, inner) {
@@ -857,15 +1253,17 @@ function band(overline, badge, inner) {
 }
 function grid(cols, panels) { return `<div class="grid" style="grid-template-columns:${cols};gap:var(--s4)">${panels.join("")}</div>`; }
 
-// hero readout: a big promoted metric (gauge for 0–100, plain for counts) + supporting tiles
+// hero readout: a big promoted metric (gauge for 0–100, plain for counts) + supporting tiles.
+// Every gauge is a computed index (clima, ameaça, maturidade, confiança) — never a sourced figure —
+// so it carries the "inferência" label right on the number (CLAUDE.md: no unlabeled scores).
 function heroGauge(label, value, band, fillTok, pct) {
-  return `<div class="hero"><div class="h-lbl">${U.esc(label)}</div>
-    <div class="h-row"><span class="h-val">${value == null ? "—" : value}</span>${band}</div>
+  return `<div class="hero"><div class="h-lbl">${U.esc(label)}<span class="badge badge--infer" title="índice calculado pela Onça a partir dos sinais citados — não é um dado publicado">inferência</span></div>
+    <div class="h-row"><span class="h-val">${value == null ? "—" : nf(value)}</span>${band}</div>
     <div class="gauge"><i style="width:${Math.max(0, Math.min(100, pct))}%;background:var(${fillTok})"></i></div></div>`;
 }
 function heroCount(label, value, band, sub) {
   return `<div class="hero"><div class="h-lbl">${U.esc(label)}</div>
-    <div class="h-row"><span class="h-val">${value == null ? "—" : value}</span>${band}</div>
+    <div class="h-row"><span class="h-val">${value == null ? "—" : nf(value)}</span>${band}</div>
     <div class="h-sub">${U.esc(sub || "")}</div></div>`;
 }
 function bandBadge(cls, text) { return `<span class="badge badge--${cls}">${U.esc(text)}</span>`; }
@@ -876,7 +1274,14 @@ function bandGood(v, hi, mid) { return v >= hi ? ["ok", "Saudável"] : v >= mid 
 function bandThreat(v, hi, mid) { return v >= hi ? ["crit", "Elevada"] : v >= mid ? ["high", "Moderada"] : ["ok", "Baixa"]; }
 const SEV = { high: "high", med: "med", low: "low", market: "crit", broad: "high", sector: "high",
   regional: "med", local: "low", medium: "med" };
-function sevBadge(x) { return x ? `<span class="badge badge--${SEV[x] || "low"}">${U.esc(x)}</span>` : ""; }
+function sevBadge(x, what) {
+  if (!x) return "";
+  const word = SEV_PT[x] || x;
+  return `<span class="badge badge--${SEV[x] || "low"}" title="${U.esc((what ? what + ": " : "") + word)}">${what === "dificuldade" ? "dif. " : ""}${U.esc(word)}</span>`;
+}
+function deadlineTxt(n) {
+  return n < 0 ? `venceu há ${pl(-n, "dia")}` : n === 0 ? "prazo hoje" : `prazo em ${pl(n, "dia")}`;
+}
 // threat_score is already 0–100 — U.heat() is a 0..1 CONFIDENCE formatter that multiplies by
 // 100, so feeding it a raw threat score produced nonsense 4-digit "percentages" (e.g. 65 -> 6500%).
 function threatChip(score) {
@@ -893,7 +1298,7 @@ function rowsCard(list) {
   list = (list || []).filter(inSector);
   if (!list.length) return U.empty("Nada no escopo.", "", "○");
   return list.map(r => `<div class="exrow" data-id="${U.esc(r.id)}">
-    <span class="dt">${r.date ? U.fmtDate(r.date) : ""}</span>
+    ${dCell(r.date)}
     <span class="ent" title="${U.esc(r.entity_label || r.label || "—")}">${U.esc(r.entity_label || r.label || "—")}</span>
     <span class="ttl" title="${U.esc(r.title || "")}">${U.esc(r.title || "")}</span>
     ${r.macro_note && r.macro_note.text ? `<span class="macro-note-dot" title="${U.esc(r.macro_note.text)}">◐</span>` : ""}
@@ -903,12 +1308,12 @@ function rowsReg(list, emptyMsg) {
   list = (list || []).filter(inSector);
   if (!list.length) return U.empty(emptyMsg || "Sem itens regulatórios no escopo.", "", "○");
   return list.map(r => { const txt = r.title || r.change || (r.affected_industries || []).join(", ") || "";
-    return `<div class="exrow" data-id="${U.esc(r.id)}">
+    return `<div class="exrow exrow--reg" data-id="${U.esc(r.id)}">
     <span class="ent" style="min-width:150px" title="${U.esc(r.domain || "Regulação")}">${U.esc(r.domain || "Regulação")}</span>
     <span class="ttl" title="${U.esc(txt)}">${U.esc(txt)}</span>
-    ${r.blast_band ? sevBadge(r.blast_band) : (r.blast ? `<span class="meta">${pl(r.blast, "setor", "setores")}</span>` : "")}
-    ${r.difficulty_band ? sevBadge(r.difficulty_band) : ""}
-    ${r.days_to_deadline != null ? `<span class="dt">${r.days_to_deadline}d</span>` : ""}
+    ${r.blast_band ? sevBadge(r.blast_band, "alcance") : (r.blast ? `<span class="meta">${pl(r.blast, "setor", "setores")}</span>` : "")}
+    ${r.difficulty_band ? sevBadge(r.difficulty_band, "dificuldade") : ""}
+    ${r.days_to_deadline != null ? `<span class="dt${r.days_to_deadline <= 7 ? " sl-warn" : ""}">${deadlineTxt(r.days_to_deadline)}</span>` : ""}
     ${r.threat_score != null ? threatChip(r.threat_score) : ""}</div>`; }).join("");
 }
 // Macro strip (v1 → shared /exec header): Copom Selic + Focus projections, national, so it
@@ -926,7 +1331,7 @@ function macroStrip(m) {
     const dir = ld.direction === "baixa" ? "down" : ld.direction === "alta" ? "up" : "flat";
     const arrow = dir === "down" ? "▼" : dir === "up" ? "▲" : "■";
     const bps = ld.bps != null ? ` ${ld.bps > 0 ? "+" : ""}${ld.bps}bps` : "";
-    chips.push(macroChip("Selic (meta)", m.selic.current.toFixed(2) + "%", arrow + bps, dir, "Copom " + (ld.date || "")));
+    chips.push(macroChip("Selic (meta)", nf(m.selic.current, 2) + "%", arrow + bps, dir, "Copom " + (ld.date ? U.fmtDate(ld.date) : "")));
   }
   const focus = m.focus || [];
   const years = [...new Set(focus.map(f => f.ref_year))].sort().slice(0, 2);
@@ -935,7 +1340,7 @@ function macroStrip(m) {
     if (!f || f.median == null) return;
     const d = f.delta || 0, dir = Math.abs(d) < 0.005 ? "flat" : (d > 0 ? "up" : "down");
     const arrow = dir === "up" ? "▲" : dir === "down" ? "▼" : "■";
-    chips.push(macroChip(`${ind} ${yr}`, f.median.toFixed(2) + "%", arrow, dir, `Focus ${f.date || ""} · projeção mediana`));
+    chips.push(macroChip(`${ind} ${yr}`, nf(f.median, 2) + "%", arrow, dir, `Focus ${f.date ? U.fmtDate(f.date) : ""} · projeção mediana`));
   }));
   // O3 (#138): one macro-theme headline (Fed/rates/forex/funds), linked to its real
   // source — global backdrop, not a claim about any tracked entity, so it's a plain
@@ -1032,7 +1437,10 @@ function declutterLabels(cands) {
 function scatterMap(list) {
   list = (list || []).filter(inSector).filter(d => d && d.entity);
   if (!list.length) return U.empty("Sem dados de posição na janela.", "", "○");
-  const W = 720, H = 380, padL = 46, padR = 18, padT = 18, padB = 40;
+  // Phone: a 720-wide viewBox shrunk into ~340px draws 5px labels — use a narrow canvas instead
+  // (labels stay ~10px) and name only the top 6 by ameaça; tooltips still carry every dot.
+  const narrow = (document.documentElement.clientWidth || window.innerWidth) <= 640;
+  const W = narrow ? 360 : 720, H = narrow ? 320 : 380, padL = narrow ? 34 : 46, padR = narrow ? 10 : 18, padT = 18, padB = 40;
   const iw = W - padL - padR, ih = H - padT - padB;
   const M = Math.max(5, Math.ceil(Math.max(...list.map(d => Math.abs(d.momentum || 0)))));
   const x = m => padL + ((m + M) / (2 * M)) * iw;
@@ -1072,13 +1480,13 @@ function scatterMap(list) {
       `fill="${entityColor(d.entity)}" fill-opacity="${known ? ".85" : ".6"}">` +
       `<title>${U.esc(d.label)} · ameaça ${d.recent} · momentum ${d.momentum > 0 ? "+" : ""}${d.momentum}${deltaTxt} · ${sizeTxt}</title></circle>`;
   }).join("");
-  const labelCands = [...list].sort((a, b) => (b.recent || 0) - (a.recent || 0)).slice(0, 10).map(d => {
-    const cx = x(d.momentum || 0), cy = y(d.recent || 0), end = cx > W - 150;
+  const labelCands = [...list].sort((a, b) => (b.recent || 0) - (a.recent || 0)).slice(0, narrow ? 6 : 10).map(d => {
+    const cx = x(d.momentum || 0), cy = y(d.recent || 0), end = cx > W - (narrow ? 110 : 150);
     // Offset from the DOT'S OWN EDGE, not a flat px — a flat +9 sits inside any bubble whose
     // radius exceeds 9 (r ranges 4–24 here), starting the label on top of its own circle.
     const off = rFor(d) + 6;
     return { x: cx + (end ? -off : off), y: cy + 3.5, anchor: end ? "end" : "start",
-      dotX: cx, dotY: cy, text: (d.label || "").slice(0, 22) };
+      dotX: cx, dotY: cy, text: (d.label || "").slice(0, narrow ? 16 : 22) };
   });
   const placedLabels = declutterLabels(labelCands);
   const labels = placedLabels.map(c => {
@@ -1094,7 +1502,7 @@ function scatterMap(list) {
     `<rect class="sc-frame" x="${padL}" y="${padT}" width="${iw}" height="${ih}"/>` +
     `<text class="sc-quad" x="${padL + iw - 6}" y="${padT + 14}" text-anchor="end">ameaça alta · acelerando</text>` +
     whiskers + dots + labels +
-    `<text class="sc-ax" x="${padL + iw}" y="${H - 10}" text-anchor="end">momentum — recua ← 0 → acelera</text>` +
+    `<text class="sc-ax" x="${padL + iw}" y="${H - 10}" text-anchor="end">${narrow ? "recua ← momentum → acelera" : "momentum — recua ← 0 → acelera"}</text>` +
     `<text class="sc-ax" transform="rotate(-90 14 ${padT + ih / 2})" x="14" y="${padT + ih / 2}" text-anchor="middle">ameaça (0–100)</text>` +
     `</svg><div class="sc-legend">` +
     `<span>cor = concorrente (posição vertical é a ameaça — eixo Y)</span>` +
@@ -1109,8 +1517,19 @@ function sparkline(series, macroIdx) {
   if (series.filter(v => v != null).length < 2) return `<span class="spark--empty">sem histórico</span>`;
   const x = i => pad + (i / (n - 1)) * (W - 2 * pad);
   const y = v => pad + (1 - Math.max(0, Math.min(100, v)) / 100) * (H - 2 * pad);
-  let d = "", pen = false, last = -1;
-  series.forEach((v, i) => { if (v == null) { pen = false; return; } d += (pen ? " L" : " M") + x(i).toFixed(1) + " " + y(v).toFixed(1); pen = true; last = i; });
+  // Solid segment = consecutive observed days; DASHED segment = a gap with no observation in
+  // between (drawn so a sparse series still reads as a trajectory, without implying data on the
+  // missing days); a dot marks every real observation.
+  let d = "", gaps = "", dots = "", prev = -1, last = -1;
+  series.forEach((v, i) => {
+    if (v == null) return;
+    const px = x(i).toFixed(1), py = y(v).toFixed(1);
+    if (prev < 0) d += ` M${px} ${py}`;
+    else if (i - prev === 1) d += ` L${px} ${py}`;
+    else { gaps += ` M${x(prev).toFixed(1)} ${y(series[prev]).toFixed(1)} L${px} ${py}`; d += ` M${px} ${py}`; }
+    dots += `<circle cx="${px}" cy="${py}" r="1.6"/>`;
+    prev = i; last = i;
+  });
   const lv = last >= 0 ? series[last] : null;
   const band = lv >= 65 ? "t-crit" : lv >= 40 ? "t-high" : "ok";
   // Macro-event ticks (CSO dimension 1): a co-occurring Selic decision or macro-news day,
@@ -1124,7 +1543,9 @@ function sparkline(series, macroIdx) {
   ).join("");
   return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-hidden="true">` +
     ticks +
+    (gaps ? `<path d="${gaps.trim()}" fill="none" stroke="var(--${band})" stroke-opacity=".55" stroke-width="1.2" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>` : "") +
     `<path d="${d.trim()}" fill="none" stroke="var(--${band})" stroke-width="1.6" vector-effect="non-scaling-stroke"/>` +
+    `<g fill="var(--${band})" fill-opacity=".7">${dots}</g>` +
     (last >= 0 ? `<circle cx="${x(last).toFixed(1)}" cy="${y(lv).toFixed(1)}" r="2.4" fill="var(--${band})"/>` : "") + `</svg>`;
 }
 // Control network (v1 grafo de relações → CSO): commonly-controlled competitor clusters
@@ -1133,6 +1554,10 @@ function sparkline(series, macroIdx) {
 // reject curation of these proposals stays in /v2/admin. Person names are never shown.
 function controlNetwork(proposals, entities) {
   const lbl = {}; (entities || []).forEach(e => { lbl[e.entity] = e.label || e.entity; });
+  // an entity outside the tracked roster has no label in this feed: show it readable, not as a slug
+  Object.entries(DATA.entity_attrs || {}).forEach(([id, a]) => { if (!lbl[id] && a && a.label) lbl[id] = a.label; });
+  const pretty = (id) => String(id).replace(/[_-]+/g, " ").replace(/\b\w/g, ch => ch.toUpperCase());
+  (proposals || []).forEach(g => (g.entities || []).forEach(id => { if (!lbl[id]) lbl[id] = pretty(id); }));
   const edges = (proposals || []).filter(g => g.kind === "common_control" && (g.entities || []).length >= 2);
   if (!edges.length) return U.empty("Sem vínculos de controle comum.", "", "○");
   const adj = {}, deg = {};
@@ -1198,7 +1623,7 @@ function rowsMomentum(list) {
     const up = r.momentum >= 0, w = Math.round(Math.abs(r.momentum) / max * 48) + 1;
     return `<div class="mom"><span class="lbl" title="${U.esc(r.label)}">${U.esc(r.label)}</span>
       <span class="track"><i class="${up ? "up" : "down"}" style="width:${w}%"></i></span>
-      <span class="val ${up ? "up" : "down"}">${r.momentum > 0 ? "+" : ""}${r.momentum}</span></div>`;
+      <span class="val ${up ? "up" : "down"}">${r.momentum > 0 ? "+" : ""}${nf(r.momentum)}</span></div>`;
   }).join("");
 }
 function rowsRisk(list) {
@@ -1242,14 +1667,14 @@ function rowsCapital(list) {
     <span class="ttl" title="${U.esc(r.title || "")}">${U.esc(r.title || "")}</span>
     <span class="meta">${r.delta_pct != null
       ? `<span class="badge badge--${r.direction === "reducao" ? "high" : "low"}">${
-          (r.delta_pct > 0 ? "+" : "") + r.delta_pct}%</span> ` : ""}${U.esc(r.date || "")}</span></div>`).join("");
+          (r.delta_pct > 0 ? "+" : "") + nf(r.delta_pct)}%</span> ` : ""}${U.esc(r.date ? dShort(r.date) : "")}</span></div>`).join("");
 }
 function rowsGap(list) {
   if (!(list || []).length) return U.empty("Sem pontos cegos.", "", "○");
   return list.map(r => `<div class="exrow" ${r.issue_url ? `data-href="${U.esc(r.issue_url)}"` : ""}>
-    <span class="badge badge--${r.status === "open" ? "high" : "low"}">${U.esc(r.status)}</span>
+    <span class="badge badge--${r.status === "open" ? "high" : "low"}">${U.esc(GAP_STATUS_PT[r.status] || r.status || "")}</span>
     <span class="ttl" title="${U.esc(r.question || "")}">${U.esc(r.question || "")}</span>
-    <span class="meta">${r.count || 0}× · ${U.esc(r.triage || "")}</span></div>`).join("");
+    <span class="meta">${r.count ? `perguntada ${r.count}×` : ""}${r.triage ? " · " + U.esc(TRIAGE_PT[r.triage] || humanize(r.triage)) : ""}</span></div>`).join("");
 }
 // #159 CPO Product Radar — App Store baseline alerts + dated product changes, with sources.
 const RADAR_SEV = { outage: "crit", complaint: "high", price: "warn", launch: "info", feature: "low" };
@@ -1269,7 +1694,7 @@ function rowsRadar(pr) {
       `<a href="${U.esc(s.url)}" target="_blank" rel="noopener" title="${U.esc(s.label || s.url)}">[${i + 1}]</a>`).join(" ");
     const txt = (r.title || "") + (r.reason ? " — " + r.reason : "");
     return `<div class="exrow exrow--radar">
-    <span class="dt">${r.date ? U.fmtDate(r.date) : ""}</span>
+    ${dCell(r.date)}
     <span class="badge badge--${RADAR_SEV[r.type] || "low"}">${U.esc(r.type_label || r.type || "")}</span>
     <span class="ent" title="${U.esc(r.product_label || r.entity_label || "—")}">${U.esc(r.product_label || r.entity_label || "—")}</span>
     <span class="ttl" title="${U.esc(txt)}">${U.esc(txt)}</span>
@@ -1289,9 +1714,9 @@ function rowsSectorEvents(list) {
       `<a href="${U.esc(s.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="${U.esc((s.label || "") + (s.via ? " (via " + s.via + ")" : "") + " — " + (s.title || ""))}">[${i + 1}]</a>`).join(" ");
     const txt = (r.title || "") + (r.summary ? " — " + r.summary : "");
     const meta = `${U.esc(SECTOR_CONF_PT[r.confidence] || r.confidence || "")}` +
-      (r.n_outlets ? ` · ${pl(r.n_outlets, "veículo")}` : "") + (r.n_affected ? ` · ${r.n_affected} entidades afetadas` : "");
+      (r.n_outlets ? ` · ${pl(r.n_outlets, "veículo")}` : "") + (r.n_affected ? ` · ${pl(r.n_affected, "entidade afetada", "entidades afetadas")}` : "");
     return `<div class="exrow exrow--sector" data-id="${U.esc(r.id)}">
-    <span class="dt">${r.date ? U.fmtDate(r.date) : ""}</span>
+    ${dCell(r.date)}
     <span class="badge badge--${SECTOR_SEV[r.severity] || "low"}">${U.esc(SECTOR_SEV_PT[r.severity] || r.severity || "")}</span>
     <span class="ent" title="${U.esc(lbl[r.industry] || r.industry || "")}">${U.esc(lbl[r.industry] || r.industry || "—")} · ${U.esc(r.change_label || "")}</span>
     <span class="ttl" title="${U.esc(txt)}">${U.esc(txt)}</span>
@@ -1312,7 +1737,7 @@ function rowsEnforcement(list) {
     const meta = `${U.esc(r.authority || "")} · ${U.esc(ENF_CONF_PT[r.confidence] || r.confidence || "")}` +
       (r.n_sources > 1 ? ` · ${r.n_sources} fontes` : "");
     return `<div class="exrow exrow--enf" data-id="${U.esc(r.id)}">
-    <span class="dt">${r.date ? U.fmtDate(r.date) : ""}</span>
+    ${dCell(r.date)}
     <span class="badge badge--${SECTOR_SEV[r.severity] || "low"}">${U.esc(SECTOR_SEV_PT[r.severity] || r.severity || "")}</span>
     <span class="ent" title="${U.esc(r.label || r.target || "—")}">${U.esc(r.label || r.target || "—")}</span>
     <span class="ttl" title="${U.esc(txt)}"><b>${U.esc(r.kind_label || r.kind || "")}</b> · ${U.esc(txt)}</span>
@@ -1388,21 +1813,21 @@ function rowsFinancials(list) {
   if (!list.length) return U.empty("Sem fundamentos financeiros no escopo.", "", "○");
   return list.map(r => {
     const roe = r.roe_pct, cls = roe == null ? "low" : (roe < 0 ? "crit" : roe >= 15 ? "ok" : "high");
-    const meta = [r.roa_pct != null ? "ROA " + r.roa_pct + "%" : null,
-                  r.leverage != null ? "alav " + r.leverage + "x" : null,
-                  r.opex_ativo_pct != null ? "opex/ativo " + r.opex_ativo_pct + "%" : null,
-                  r.custo_credito_pct != null ? "custo crédito " + r.custo_credito_pct + "%" : null,
-                  r.cost_to_income_pct != null ? "custo/receita " + r.cost_to_income_pct + "%" : null,
-                  r.issuer_efficiency_pct != null ? "eficiência (emissor, " + r.issuer_kpi_period + ") " + r.issuer_efficiency_pct + "%" : null,
-                  r.nim_pct != null ? "NIM " + r.nim_pct + "%" : null,
-                  r.stage3_pct != null ? "estágio 3 " + r.stage3_pct + "%" : null,
-                  r.market_cap_bi != null ? "valor de mercado R$" + r.market_cap_bi + "bi" : null,
-                  r.pb != null ? "P/VP " + r.pb + "x" : null,
-                  r.pe != null ? "P/L " + r.pe + "x" : null,
-                  r.basileia_headroom_pp != null ? "headroom " + r.basileia_headroom_pp + "pp" : null,
-                  r.lucro_share_pct != null ? r.lucro_share_pct + "% do lucro" : null].filter(Boolean).join(" · ");
+    const meta = [r.roa_pct != null ? "ROA " + nf(r.roa_pct) + "%" : null,
+                  r.leverage != null ? "alavancagem " + nf(r.leverage) + "x" : null,
+                  r.opex_ativo_pct != null ? "opex/ativo " + nf(r.opex_ativo_pct) + "%" : null,
+                  r.custo_credito_pct != null ? "custo do crédito " + nf(r.custo_credito_pct) + "%" : null,
+                  r.cost_to_income_pct != null ? "custo/receita " + nf(r.cost_to_income_pct) + "%" : null,
+                  r.issuer_efficiency_pct != null ? "eficiência (emissor, " + r.issuer_kpi_period + ") " + nf(r.issuer_efficiency_pct) + "%" : null,
+                  r.nim_pct != null ? "NIM " + nf(r.nim_pct) + "%" : null,
+                  r.stage3_pct != null ? "estágio 3 " + nf(r.stage3_pct) + "%" : null,
+                  r.market_cap_bi != null ? "valor de mercado R$ " + nf(r.market_cap_bi) + " bi" : null,
+                  r.pb != null ? "P/VP " + nf(r.pb) + "x" : null,
+                  r.pe != null ? "P/L " + nf(r.pe) + "x" : null,
+                  r.basileia_headroom_pp != null ? "folga de Basileia " + nf(r.basileia_headroom_pp) + " p.p." : null,
+                  r.lucro_share_pct != null ? nf(r.lucro_share_pct) + "% do lucro do setor" : null].filter(Boolean).join(" · ");
     return `<div class="exrow">
-      <span class="badge badge--${cls}" title="ROE anualizado (inferência)">${roe == null ? "—" : "ROE " + roe + "%"}</span>
+      <span class="badge badge--${cls}" title="ROE anualizado (inferência)">${roe == null ? "—" : "ROE " + nf(roe) + "%"}</span>
       <span class="ent" style="min-width:148px" title="${U.esc(r.label || "—")}">${U.esc(r.label || "—")}</span>
       <span class="ttl">${meta}</span></div>`;
   }).join("");
@@ -1429,7 +1854,7 @@ function rowsSolvency(list) {
     const b = r.band ? (SOLV_BAND[r.band] || "low") : (r.slope_warning ? "high" : "low");
     const bandTxt = r.band || (r.slope_warning ? "trajetória" : "—");
     const bas = r.indice_basileia != null
-      ? `Basileia <b>${r.indice_basileia}%</b> · Tier1 ${r.capital_nivel_i != null ? r.capital_nivel_i + "%" : "—"} · CET1 ${r.capital_principal != null ? r.capital_principal + "%" : "—"}`
+      ? `Basileia <b>${nf(r.indice_basileia)}%</b> · Nível I ${r.capital_nivel_i != null ? nf(r.capital_nivel_i) + "%" : "—"} · Capital principal ${r.capital_principal != null ? nf(r.capital_principal) + "%" : "—"}`
       : "sem Basileia trimestral";
     // Tier-B monthly slope: rising PDD is the early-warning line.
     let slope = "";
@@ -1503,12 +1928,12 @@ function flowBand() {
     <div class="traj-hd"><span class="traj-t">${U.esc(t.title)}</span>
       ${t.decided ? `<span class="badge badge--ok" title="decisão registrada">✓ ${U.esc(t.verdict || "decidido")}</span>` : `<span class="badge badge--med" title="decisão pendente">rascunho</span>`}
       <span class="badge badge--ghost">${U.esc(officerShort(t.officer))}${t.handoff ? " → " + officerShort(t.handoff) : ""}</span></div>
-    <div class="traj-b">${U.esc(t.briefing)}</div>
+    <div class="traj-b">${U.esc(deslug(t.briefing))}</div>
     <div class="traj-f">${t.evidence_ids && t.evidence_ids.length ? `<a href="#" data-ev="${U.esc(t.evidence_ids[0])}">evidência</a> · ` : ""}
       <span class="hd-note">${U.esc(t.action || "")}</span><span class="spacer" style="flex:1"></span>
       ${t.decided ? "" : `<button data-tv="aprovado" data-i="${i}">Aprovar</button><button data-tv="rejeitado" data-i="${i}">Rejeitar</button>`}</div></div>`).join("");
   const nd = FLOW.filter(t => !t.decided).length;
-  return band("Fluxo executivo", `incidente → decisão · ${pl(nd, "rascunho pendente", "rascunhos pendentes")}`, `<div class="trajs">${cards}</div>`);
+  return band("Fluxo executivo", `incidente → decisão · ${pl(nd, "rascunho pendente", "rascunhos pendentes")}`, `<div class="trajs" data-cap="3">${cards}</div>`);
 }
 async function captureTraj(btn, extra) {
   const t = FLOW[Number(btn.getAttribute("data-i"))]; if (!t) return;
@@ -1551,7 +1976,7 @@ function silenceBand() {
       <span class="badge badge--${tone}" title="tier de silêncio">T${t}</span>
       <b style="min-width:120px">${U.esc(s.label || s.entity)}</b>
       <span class="hd-note" style="flex:1">${U.esc(s.briefing || "")}</span>
-      <span class="hd-note" style="white-space:nowrap">${s.days_since_last}d · ~${s.mean_gap_days}d</span></div>`;
+      <span class="hd-note" style="white-space:nowrap" title="dias desde o último sinal · intervalo usual entre sinais">${pl(s.days_since_last, "dia")} em silêncio · usual ~${nf(s.mean_gap_days)} d</span></div>`;
   }).join("");
   return band("Silêncios de sinal", "quem ficou quieto · inferência (ausência de sinal), não fato",
     `<div class="panel"><div class="panel__bd panel__bd--flush">${rows}</div></div>`);
@@ -1596,7 +2021,7 @@ function metricsBand() {
   const needBase = m.tdr == null && m.tdr_baseline_hours == null;
   const baseCtl = needBase
     ? `<div style="padding:2px var(--s2) 0"><span class="hd-note">Registrar linha de base — tempo médio de decisão ANTES do Onça (h): </span>
-        <input id="tdrBase" type="number" min="1" step="1" style="width:76px"> <button id="tdrSet">Registrar</button></div>`
+        <input id="tdrBase" class="field tdr-in" type="number" min="1" step="1" inputmode="numeric" aria-label="Horas"> <button id="tdrSet" class="btn btn--sm">Registrar</button></div>`
     : "";
   // DEC-5: decision-store governance anomalies (stale-pending / contradictory), read-only audit.
   const di = (m.decision_integrity || []);
@@ -1674,10 +2099,11 @@ function hbars(rows) { // rows: [{label, value, max, bar (0-100), badge, colorTo
     <span class="bar"><i style="width:${Math.max(2, Math.min(100, r.bar))}%;background:${r.colorTok || "var(--primary)"}"></i></span>
     <span class="cv">${r.value}${r.badge ? " " + r.badge : ""}</span></div>`).join("") + `</div>`;
 }
+const BAND_PT = { premium: "premium", mid: "intermediário", entry: "essencial" };
 function maturityChart(port) {
   return hbars(port.map(p => ({ label: p.label, value: p.maturity, bar: p.maturity,
     colorTok: `var(--${matBand(p.maturity) === "ok" ? "ok" : matBand(p.maturity) === "warn" ? "warn" : "t-high"})`,
-    badge: `<span class="badge badge--${p.tier === "premium" ? "info" : p.tier === "mid" ? "ghost" : "low"}">${U.esc(p.tier || "")}</span>` })));
+    badge: `<span class="badge badge--${p.tier === "premium" ? "info" : p.tier === "mid" ? "ghost" : "low"}" title="faixa de preço do módulo">${U.esc(BAND_PT[p.tier] || p.tier || "")}</span>` })));
 }
 function provenanceLegend() {
   return `<div class="legend">` + TIER_ORDER.map(t =>
@@ -1793,7 +2219,7 @@ function render() {
   document.querySelectorAll("#officerTabs a").forEach(a =>
     a.setAttribute("aria-current", a.getAttribute("data-officer") === OFFICER ? "page" : "false"));
   const meta = OFFICERS[OFFICER];
-  document.getElementById("pgTitle").textContent = "Sala executiva — " + meta.title;
+  document.getElementById("pgTitle").innerHTML = `<span class="pg-k">Sala executiva<span class="pg-dash"> — </span></span>${U.esc(meta.title)}`;
   document.getElementById("pgLede").textContent = meta.lede;
   updateAskScope();  // Ask panel follows the active officer
   const p = block().panels || {}, a = agg();
@@ -1806,8 +2232,8 @@ function render() {
     board =
       readout(heroGauge("Clima estratégico", a.climate, bandBadge(bc, bl), "--" + (bc === "crit" ? "t-crit" : bc === "warn" ? "warn" : "ok"), a.climate),
         [tile("Alertas", a.n_alerts, "em aberto", a.n_alerts > 0 ? "high" : "ok"),
-         tile("Ameaça média", a.avg_threat, "0–100"),
-         tile("Ameaça regulatória", a.reg_threat, "0–100"),
+         tile("Ameaça média", a.avg_threat, "0–100 · inferência"),
+         tile("Ameaça regulatória", a.reg_threat, "0–100 · inferência"),
          tile("Movimentos", a.n_moves, "entrada·oferta·M&A")]) +
       weeklyBand() +
       band("Mapa Competitivo · Ameaça × Momentum", "posição competitiva · ameaça atual × aceleração na janela · inferência",
@@ -1905,7 +2331,7 @@ function render() {
         readout(heroGauge("Maturidade da cobertura", avgMat, bandBadge(bc, bl), "--" + (bc === "crit" ? "t-crit" : bc === "warn" ? "warn" : "ok"), avgMat),
           [tile("Setores cobertos", `${covered}/${total}`, "roster"),
            tile("Propostas", nDisc, "pipeline de descoberta"),
-           tile("Metadado + fraco", `${FIELD_LABEL[thin[0]] || thin[0]} ${thin[1]}%`, "cobertura da base", thin[1] < 20 ? "crit" : "warn"),
+           tile("Metadado mais fraco", `${nf(thin[1])}%`, `${FIELD_LABEL[thin[0]] || thin[0]} · cobertura da base`, thin[1] < 20 ? "crit" : "warn"),
            tile("Confiança de cobertura", cc.score == null ? "—" : cc.score, ccSub, ccCls),
            tile("Pontos cegos", nGaps, "perguntas · geral", nGaps > 0 ? "high" : "ok")]) +
         band("Maturidade da cobertura por setor", "breadth×depth×frescor×proveniência · inferência",
@@ -1929,7 +2355,7 @@ function render() {
       const pr = port.find(x => x.slug === SECTOR) || {};
       const mb = matBand(pr.maturity || 0);
       board =
-        readout(heroGauge("Maturidade — " + (pr.label || SECTOR), pr.maturity, bandBadge(mb === "ok" ? "ok" : mb === "warn" ? "warn" : "high", (pr.tier || "").toString()),
+        readout(heroGauge("Maturidade — " + (pr.label || SECTOR), pr.maturity, bandBadge(mb === "ok" ? "ok" : mb === "warn" ? "warn" : "high", BAND_PT[pr.tier] || (pr.tier || "").toString()),
                           "--" + (mb === "ok" ? "ok" : mb === "warn" ? "warn" : "t-high"), pr.maturity || 0),
           [tile("Universo", pr.universe, "entidades no setor"),
            tile("Rastreadas", pr.tracked, "com atividade", (pr.tracked || 0) > 0 ? "ok" : "high"),
@@ -1982,12 +2408,15 @@ function render() {
   // Click the headline to expand/collapse it inline (doesn't open the drawer); an expand is
   // an attention event (§E engagement telemetry) tagged with the card's entity/sector/threat.
   el.querySelectorAll(".exrow .ttl").forEach(t => t.addEventListener("click", (e) => {
+    if (narrowScreen() && t.closest(".exrow[tabindex]")) return;   // phone: the row opens the card
     e.stopPropagation();
     const expanded = t.classList.toggle("is-expanded");
     const row = t.closest(".exrow");
     engage("headline", expanded ? "expand" : "collapse", row && row.getAttribute("data-id"));
   }));
   bindRows(el);
+  capLists(el);
+  if (narrowScreen()) foldBands(el);
   el.querySelectorAll(".traj-f button[data-tv]").forEach(b => b.addEventListener("click", () => askConfirm(b, captureTraj)));
   el.querySelectorAll(".traj-f a[data-ev]").forEach(a => a.addEventListener("click", (e) => { e.preventDefault(); onEvidence(a); }));
   // CSO weekly brief: its rows are plain `.rec` divs directly in the board (the horizons recs
@@ -2010,6 +2439,58 @@ function render() {
   renderRecs((p.recommendations || []).filter(inSector));
 }
 
+// Phone: a long list shows its first rows and a "Ver todos (N)" button instead of a 460px box that
+// scrolls inside the page (a scroll trap on touch). Desktop CSS ignores .capped and the button.
+function capLists(root) {
+  const cap = (host, n, after) => {
+    const total = host.children.length;
+    if (total <= n + 1) return;
+    host.classList.add("capped");
+    after.insertAdjacentHTML("afterend", `<button class="more-btn" type="button">Ver todos (${total})</button>`);
+    const b = after.nextElementSibling;
+    b.addEventListener("click", () => { host.classList.add("is-open"); b.remove(); });
+  };
+  root.querySelectorAll(".panel__bd--scroll").forEach(bd => {
+    const one = bd.children.length === 1 ? bd.firstElementChild : null;
+    cap(one && one.children.length > 1 ? one : bd, 5, bd);
+  });
+  root.querySelectorAll(".trajs[data-cap]").forEach(t => cap(t, Number(t.getAttribute("data-cap")) || 3, t));
+}
+// Phone hierarchy: the officer's lead sections stay open (in this order of importance); every
+// other section becomes a one-line header under "Mais análises", opened on tap. Same data, same
+// renderer — only presentation (the desktop board is untouched).
+const LEAD_BANDS = {
+  cso: ["Fluxo executivo", "Briefing semanal", "Situação", "Riscos & Oportunidades", "Mapa Competitivo"],
+  cro: ["Fluxo executivo", "Eventos setoriais", "Calendário de conformidade", "Impacto & alcance", "Solidez prudencial"],
+  cco: ["Fluxo executivo", "Sinal de compliance", "Fiscalização & sanções", "Registro de risco", "Diff de conformidade"],
+  cpo: ["Fluxo executivo", "Radar de produto", "Maturidade da cobertura por setor", "Descoberta & pontos cegos",
+        "Pipeline de descoberta", "Movimentos de produto"],
+};
+const FOLD_OPEN = new Set();
+function foldBands(root) {
+  const lead = LEAD_BANDS[OFFICER] || [];
+  const isLead = (t) => lead.some(l => t.indexOf(l) === 0);
+  const folded = [];
+  Array.from(root.children).forEach(b => {
+    if (!b.matches || !b.matches("section.band")) return;
+    const hd = b.querySelector(":scope > .band-hd"), ov = hd && hd.querySelector(".overline");
+    const title = ov ? ov.textContent.trim() : "";
+    if (!hd || isLead(title)) return;
+    const key = OFFICER + "|" + title;
+    b.classList.add("band--fold"); folded.push(b);
+    if (FOLD_OPEN.has(key)) b.classList.add("is-open");
+    hd.setAttribute("role", "button"); hd.setAttribute("tabindex", "0");
+    hd.setAttribute("aria-expanded", b.classList.contains("is-open") ? "true" : "false");
+    const toggle = () => {
+      const open = b.classList.toggle("is-open");
+      hd.setAttribute("aria-expanded", open ? "true" : "false");
+      if (open) FOLD_OPEN.add(key); else FOLD_OPEN.delete(key);
+    };
+    hd.addEventListener("click", toggle);
+    hd.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
+  });
+  if (folded.length) folded[0].insertAdjacentHTML("beforebegin", `<h2 class="more-hd">Mais análises · ${folded.length}</h2>`);
+}
 // --- #166 "Hoje": the phone-first morning brief --------------------------------------
 // A PROJECTION of fields already in the scoped feed — no new data or ranking. Four sections,
 // each deep-linkable (#hoje-alertas / -prioridades / -decisoes / -radar):
@@ -2066,7 +2547,7 @@ function hojePriorities(officer) {
                    industries: p.industries, title: (p.decision && p.decision.text) || p.title }));
   }
   return (((EX[officer] || {}).panels || {}).recommendations || []).filter(inSector).slice(0, 3)
-    .map(r => ({ id: r.evidence_id, title: r.text, industries: r.industries, date: null, entity_label: r.horizon }));
+    .map(r => ({ id: r.evidence_id, title: r.text, industries: r.industries, date: null, entity_label: HZ_LABEL[r.horizon] || r.horizon }));
 }
 function hojeSec(id, title, n, sub, body) {
   return `<section class="hoje-sec" id="${id}"><div class="hoje-hd"><h2>${U.esc(title)}</h2>` +
@@ -2095,7 +2576,7 @@ function renderHoje(el) {
   // #215: the section lists a few highlights but counted everything — say "3 de 17".
   const alShown = top.length + Math.min(al.sev.length, 2) + Math.min(al.radar.length, 2);
   let html = hojeSec("hoje-alertas", "Novo desde a sua última visita", alShown < al.n ? `${alShown} de ${al.n}` : al.n,
-      "desde " + U.fmtDate(since.slice(0, 10)) + (alShown < al.n ? " · demais no Painel" : ""), alertsBody) +
+      "desde " + dShort(since.slice(0, 10)) + (alShown < al.n ? " · demais no Painel" : ""), alertsBody) +
     hojeSec("hoje-prioridades", "Top 3 prioridades", null, OFFICER === "cso" ? "briefing semanal" : "recomendações",
       pri.length ? `<div class="panel__bd--flush">${rowsCard(pri)}</div>` : U.empty("Sem prioridades na janela.", "", "○")) +
     hojeSec("hoje-decisoes", "Decisões pendentes", pendAll.length > pend.length ? `${pend.length} de ${pendAll.length}` : pend.length,
@@ -2104,13 +2585,17 @@ function renderHoje(el) {
     const ev = ((((EX.cpo || {}).panels || {}).product_radar) || DATA.product_radar || {});
     html += hojeSec("hoje-radar", "Radar de produto", null, "mais recente", rowsRadar({ ...ev, events: (ev.events || []).slice(0, 3) }));
   }
+  // Device settings (push, app lock, weekly e-mail) are settings, not the brief: one fold at the end.
+  const brief = html; html = "";
   html += hojeSec("hoje-alertas-cel", "Alertas no celular", null, "sem conteúdo na tela bloqueada",
     `<div class="pushbox" id="pushBox"><span class="hd-note">verificando…</span></div>`);
   if (Ctx.inApp()) html += hojeSec("hoje-bloqueio", "Bloqueio do app", null, "Face ID / digital / senha do aparelho",
     `<div class="pushbox" id="lockBox"><span class="hd-note">verificando…</span></div>`);
   if (!ADMIN) html += hojeSec("hoje-resumo", "Resumo semanal por e-mail", null, "segunda-feira, por setor",
     `<div class="pushbox" id="digestBox"><span class="hd-note">verificando…</span></div>`);
-  html += `<a href="#painel" class="btn hoje-act" id="hojeFull">Ver painel completo →</a>`;
+  const setNames = ["alertas no celular"].concat(Ctx.inApp() ? ["bloqueio"] : [], ADMIN ? [] : ["resumo por e-mail"]);
+  html = brief + `<a href="#painel" class="btn hoje-act" id="hojeFull">Ver painel completo →</a>` +
+    `<details class="hoje-set" id="hojeSet"><summary><span>Ajustes deste aparelho<br><span class="sub">${U.esc(setNames.join(" · "))}</span></span></summary>${html}</details>`;
   el.innerHTML = `<div class="hoje">${html}</div>`;
   if (!STALE) engage("hoje", "open", null);   // not for the cached pre-paint (it re-renders)
   bindRows(el);
@@ -2120,7 +2605,9 @@ function renderHoje(el) {
   renderDigestBox();
   renderLockBox();
   const sec = hashTokens().find(t => /^hoje-[a-z]+$/.test(t));
-  if (sec) { const t = document.getElementById(sec); if (t) t.scrollIntoView({ block: "start" }); }
+  if (sec) { const t = document.getElementById(sec); if (t) {
+    const fold = t.closest("details"); if (fold) fold.open = true;   // deep link into the settings fold
+    t.scrollIntoView({ block: "start" }); } }
 }
 
 // --- #167 content-free push: opt-in per device, per alert type ------------------------------
@@ -2367,7 +2854,7 @@ function renderRecs(recs) {
     const items = recs.map((r, i) => [r, i]).filter(([r]) => r.horizon === key);
     return `<div class="hz"><h3>${label}</h3>` + (items.length ? items.map(([r, i]) =>
       `<div class="rec" data-i="${i}"><div class="rec-t">${U.esc(r.text)}</div>
-        <div class="rec-a">→ ${U.esc(r.action)}${r.evidence_id ? ` · <a href="#" data-ev="${U.esc(r.evidence_id)}">evidência</a>` : ""}</div>
+        <div class="rec-a">→ ${U.esc(actionPt(r.action))}${r.evidence_id ? ` · <a href="#" data-ev="${U.esc(r.evidence_id)}">evidência</a>` : ""}</div>
         <div class="cap"><button data-v="aprovado" data-i="${i}">Aprovar</button><button data-v="rejeitado" data-i="${i}">Rejeitar</button></div></div>`).join("")
       : `<div class="hz-empty">—</div>`) + `</div>`;
   }).join("") + `</div>`;
@@ -2460,14 +2947,37 @@ function bindRows(el) {
     if (u) activateRow(row, () => window.open(u, "_blank", "noopener"), "link");
   });
 }
+// Card detail: WHEN (date), WHERE (sectors), HOW SERIOUS (ameaça, labelled as inference), WHAT
+// KIND (lens) and — the moat — WHERE IT COMES FROM: every source as a tappable row. A card with no
+// http citation says "sem fonte citada" instead of looking like a sourced fact.
+const LENS_LABEL = { regulatory: "regulatório", news: "imprensa", market: "mercado", pricing: "preço", ofertas: "ofertas",
+  entrants: "novos entrantes", fatos: "fato relevante", funds: "fundos", dou: "Diário Oficial", sanctions: "sanções",
+  antitrust: "antitruste", distress: "insolvência", reputation: "reputação", product: "produto", pix: "Pix", juros: "juros" };
+function cardDetail(c) {
+  const model = U.citationModel(c);
+  const body = U.linkifyNarrative(c.narrative || "", model);   // also registers inline URLs as sources
+  const secs = (c.industries || []).map(s => `<span class="chip">${U.esc(Ctx.indLabel(s))}</span>`).join("");
+  const lenses = (c.lenses || []).map(l => LENS_LABEL[l] || humanize(l)).slice(0, 3);
+  const thr = c.threat_score != null ? threatChip(c.threat_score) : "";
+  const meta = `<div class="dmeta">${c.date ? `<span class="dm-date" title="${U.esc(U.fmtDate(c.date))}">${U.esc(dShort(c.date))}${
+      c.date && String(c.date).slice(0, 4) === String(new Date().getFullYear()) ? " " + String(c.date).slice(0, 4) : ""}</span>` : ""}` +
+    (thr ? `<span class="badge badge--infer" title="índice 0–100 calculado pela Onça">ameaça · inferência</span>${thr}` : "") +
+    (c.is_inference ? `<span class="badge badge--infer">inferência</span>` : "") +
+    (!model.entries.length ? `<span class="badge badge--warn">sem fonte citada</span>` : "") +
+    `${secs}${lenses.length ? `<span class="hd-note">· ${U.esc(lenses.join(" · "))}</span>` : ""}</div>`;
+  const src = model.entries.length
+    ? `<div class="dsec-h">${pl(model.entries.length, "fonte", "fontes")}</div><ol class="dsrc">` + model.entries.map(e =>
+        `<li><a href="${U.esc(e.url)}" target="_blank" rel="noopener"><b>[${e.n}]</b><span>${U.esc(e.label)}` +
+        `<small>${U.esc(U.hostOf(e.url))}${e.via ? " · via " + U.esc(e.via) : ""}</small></span></a></li>`).join("") + `</ol>`
+    : `<p class="hd-note" style="margin-top:var(--s3)">Este cartão não traz link para a fonte original — trate como não verificado.</p>`;
+  return meta + `<div class="callout">${body}</div>` + src;
+}
 function inspect(id) {
   if (String(id || "").indexOf("sector_event:") === 0 && inspectSectorEvent(id)) return;
   if (String(id || "").indexOf("enf:") === 0 && inspectEnforcement(id)) return;
   const c = BYID[id];
   document.getElementById("drTitle").textContent = (c && (c.entity_label || c.subject_label || c.entity)) || "Detalhe";
-  document.getElementById("drBody").innerHTML = c
-    ? `<div class="callout">${U.linkifyNarrative(c.narrative || "", U.citationModel(c))}${U.citationFooter(U.citationModel(c))}</div>`
-    : U.empty("Sem cartão citável", `id: ${id || "—"}`, "○");
+  document.getElementById("drBody").innerHTML = c ? cardDetail(c) : U.empty("Sem cartão citável", `id: ${id || "—"}`, "○");
   openDrawer(c ? id : null);
 }
 // ADR 027 #129 caught this live: these used to toggle a ".on" class that no CSS rule

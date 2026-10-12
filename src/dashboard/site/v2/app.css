@@ -77,19 +77,33 @@
   --r-sm: 6px; --r-md: 10px; --r-lg: 14px; --r-pill: 999px;
 
   --maxw: 1360px;
+
+  /* --- device frame (store app / phone) ------------------------------------
+     env() is only non-zero with <meta viewport-fit=cover>; inside the store app's WebView it is
+     the part of the notch/home indicator that overlaps the WebView frame. Kept as tokens so a
+     harness can simulate an inset by overriding --safe-t / --safe-b. */
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --tabbar-h: 58px;
+  color-scheme: light;
 }
 
 html[data-theme="dark"] {
+  /* native controls (select, number input, checkbox, date) render dark too — without this a
+     <select> painted as a white box with near-invisible text on every dark screen */
+  color-scheme: dark;
+  /* elevation by lightness: each step is visibly lifted from the one below (ground #0e1214 is
+     also the store app's native background, so the WebView has no seam under the notch band) */
   --bg:        #0e1214;
-  --surface:   #161c1f;
-  --surface-2: #1e262a;
-  --surface-3: #263036;
-  --border:    #2b343a;
-  --border-2:  #3a454c;
+  --surface:   #172024;
+  --surface-2: #1f292e;
+  --surface-3: #2a353b;
+  --border:    #2d393f;
+  --border-2:  #42515a;
 
-  --ink:   #e9ebe7;
-  --ink-2: #b3bcbb;
-  --muted: #8b938f;
+  --ink:   #ecefeb;
+  --ink-2: #bcc5c3;
+  --muted: #9aa49f;   /* >= 4.5:1 on --surface-3 (was 4.3:1) */
 
   --primary:      #3ec39a;
   --primary-2:    #59d3ae;
