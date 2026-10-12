@@ -45,7 +45,7 @@ def test_creates_entry_tenant_for_unprovisioned_google_identity(monkeypatch):
         return {"tenant_id": "entry-ops-ab12", "tier": "entry", "modules": ["crypto"], "plane": "portal"}
 
     monkeypatch.setattr(tc, "self_register_entry_tenant", _fake)
-    ev = _ev({"sub": "u", "email": "ops@example.com"}, {"industries": ["crypto"]})
+    ev = _ev({"sub": "u", "email": "ops@example.com", "identities": "[{\"providerName\":\"Google\"}]"}, {"industries": ["crypto"]})
     r = self_register.lambda_handler(ev, None)
     assert r["statusCode"] == 200
     body = json.loads(r["body"])
@@ -61,15 +61,30 @@ def test_rejects_bad_industry_choice(monkeypatch):
         raise ValueError("pick at least one entry-tier industry: []")
 
     monkeypatch.setattr(tc, "self_register_entry_tenant", _fake)
-    ev = _ev({"sub": "u", "email": "ops@example.com"}, {"industries": ["banking"]})
+    ev = _ev({"sub": "u", "email": "ops@example.com", "identities": "[{\"providerName\":\"Google\"}]"}, {"industries": ["banking"]})
     r = self_register.lambda_handler(ev, None)
     assert r["statusCode"] == 400
     assert "choices" in json.loads(r["body"])
 
 
 def test_missing_body_is_handled_not_a_crash():
-    ev = _ev({"sub": "u", "email": "ops@example.com"})  # no body key at all
+    ev = _ev({"sub": "u", "email": "ops@example.com", "identities": "[{\"providerName\":\"Google\"}]"})  # no body key at all
     r = self_register.lambda_handler(ev, None)
     # industries defaults to [] -> self_register_entry_tenant's own "pick at least
     # one" ValueError fires before any DynamoDB call, so this needs no mocking.
     assert r["statusCode"] == 400
+
+
+def test_password_account_cannot_self_register_an_email():
+    """#262: once email is mutable, a password user could set any address; only a Google/Apple
+    identity may map an email to a new tenant."""
+    r = self_register.lambda_handler(
+        _ev({"sub": "u", "email": "ops@example.com"}, {"industries": ["crypto"]}), None)
+    assert r["statusCode"] == 403
+
+
+def test_self_changed_unverified_email_cannot_self_register():
+    r = self_register.lambda_handler(
+        _ev({"sub": "u", "email": "ops@example.com", "identities": "[{}]", "email_verified": "false"},
+            {"industries": ["crypto"]}), None)
+    assert r["statusCode"] == 403

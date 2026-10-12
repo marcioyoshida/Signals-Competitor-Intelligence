@@ -67,6 +67,15 @@ def lambda_handler(event, context):
         }
         return event
 
+    # #262: the email map is for FEDERATED identities only, and never for an email the user
+    # changed themselves. Once the pool's email is mutable, a native user with no tenant (or a
+    # federated one via UpdateUserAttributes) could otherwise set a mapped address and inherit
+    # that tenant. A self-made change leaves email_verified "false"; Apple sends no
+    # email_verified at all (its addresses are Apple-verified), so only an explicit "false" fails.
+    federated = (attrs.get("cognito:user_status") == "EXTERNAL_PROVIDER") or bool(attrs.get("identities"))
+    if not federated or str(attrs.get("email_verified", "")).lower() == "false":
+        return event
+
     email = (attrs.get("email") or "").strip().lower()
     if not email or not FEDERATED_TABLE:
         return event

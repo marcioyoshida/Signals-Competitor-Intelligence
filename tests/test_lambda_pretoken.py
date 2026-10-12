@@ -17,6 +17,12 @@ def _event(attrs):
     return {"request": {"userAttributes": attrs}, "response": {}}
 
 
+def _fed(attrs):
+    """A Google/Apple sign-in as Cognito presents it to the trigger."""
+    return {"cognito:user_status": "EXTERNAL_PROVIDER",
+            "identities": '[{"providerName":"Google"}]', **attrs}
+
+
 def test_password_login_reasserts_its_own_tenant_and_tier_claims():
     """Not a no-op: Cognito's Hosted UI OAuth code-grant flow omits custom attributes from the
     ID token unless the trigger explicitly re-adds them, even though the same user's
@@ -40,7 +46,7 @@ def test_password_login_defaults_tier_to_saas_if_somehow_missing():
 
 
 def test_mapped_google_email_injects_tenant_and_tier_claims():
-    ev = _event({"email": "Ops@Acme.Example"})
+    ev = _event(_fed({"email": "Ops@Acme.Example"}))
     ddb = mock.Mock()
     ddb.get_item.return_value = {
         "Item": {"email": {"S": "ops@acme.example"},
@@ -62,7 +68,7 @@ def test_unmapped_google_email_fails_closed_by_omission_not_rejection():
     the entire /oauth2/token exchange with no error surfaced to the browser (the documented
     Bluefin failure mode) — the existing per-tenant read boundary already 403s on a token with
     no custom:tenant, so letting the login "succeed" into that is strictly safer."""
-    ev = _event({"email": "stranger@gmail.com"})
+    ev = _event(_fed({"email": "stranger@gmail.com"}))
     ddb = mock.Mock()
     ddb.get_item.return_value = {}
     with mock.patch("boto3.client", return_value=ddb), \
@@ -84,7 +90,7 @@ def test_federated_table_not_configured_is_a_noop_not_a_crash():
     """A password-only deploy (Google never wired) leaves ONCA_FEDERATED_MAP_TABLE unset — the
     trigger itself only exists once google_idp is configured (infra/app.py), but guard here too
     rather than let a misconfigured env blow up every login."""
-    ev = _event({"email": "someone@gmail.com"})
+    ev = _event(_fed({"email": "someone@gmail.com"}))
     with mock.patch("boto3.client") as bc, \
          mock.patch.object(lambda_pretoken, "FEDERATED_TABLE", ""):
         out = lambda_pretoken.lambda_handler(ev, None)
@@ -94,7 +100,7 @@ def test_federated_table_not_configured_is_a_noop_not_a_crash():
 
 def test_unmapped_login_never_logs_the_email(capsys):
     """Privacy policy: logs never hold a user's email — the domain is enough to debug."""
-    ev = _event({"email": "stranger@gmail.com"})
+    ev = _event(_fed({"email": "stranger@gmail.com"}))
     ddb = mock.Mock()
     ddb.get_item.return_value = {}
     with mock.patch("boto3.client", return_value=ddb), \
@@ -102,3 +108,42 @@ def test_unmapped_login_never_logs_the_email(capsys):
         lambda_pretoken.lambda_handler(ev, None)
     out = capsys.readouterr().out
     assert "stranger" not in out and "gmail.com" in out
+
+
+def _mapped_ddb():
+    ddb = mock.Mock()
+    ddb.get_item.return_value = {"Item": {"email": {"S": "ops@acme.example"},
+                                          "tenant_id": {"S": "acme"}, "tier": {"S": "saas"}}}
+    return ddb
+
+
+def test_native_user_without_tenant_never_gets_a_mapped_tenant():
+    """#262: with a mutable email, a password user with no tenant could change their email to a
+    mapped address — the email map must only ever serve federated identities."""
+    ev = _event({"email": "ops@acme.example", "email_verified": "true"})
+    ddb = _mapped_ddb()
+    with mock.patch("boto3.client", return_value=ddb), \
+         mock.patch.object(lambda_pretoken, "FEDERATED_TABLE", "onca-federated-tenant-map"):
+        out = lambda_pretoken.lambda_handler(ev, None)
+    ddb.get_item.assert_not_called()
+    assert "claimsOverrideDetails" not in out["response"]
+
+
+def test_federated_user_with_a_self_changed_unverified_email_gets_no_tenant():
+    ev = _event(_fed({"email": "ops@acme.example", "email_verified": "false"}))
+    ddb = _mapped_ddb()
+    with mock.patch("boto3.client", return_value=ddb), \
+         mock.patch.object(lambda_pretoken, "FEDERATED_TABLE", "onca-federated-tenant-map"):
+        out = lambda_pretoken.lambda_handler(ev, None)
+    ddb.get_item.assert_not_called()
+    assert "claimsOverrideDetails" not in out["response"]
+
+
+def test_apple_sign_in_without_email_verified_still_maps():
+    """Apple sends no email_verified; its relay/real addresses are verified by Apple."""
+    ev = _event({"cognito:user_status": "EXTERNAL_PROVIDER", "email": "ops@acme.example"})
+    ddb = _mapped_ddb()
+    with mock.patch("boto3.client", return_value=ddb), \
+         mock.patch.object(lambda_pretoken, "FEDERATED_TABLE", "onca-federated-tenant-map"):
+        out = lambda_pretoken.lambda_handler(ev, None)
+    assert out["response"]["claimsOverrideDetails"]["claimsToAddOrOverride"]["custom:tenant"] == "acme"

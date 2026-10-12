@@ -32,6 +32,13 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         return _resp(409, {"error": "already provisioned", "tenant": identity.tenant})
     if not identity.email:
         return _resp(400, {"error": "no email on this identity — cannot self-register"})
+    # #262: self-registration maps an EMAIL to the new tenant, so only a provider-asserted
+    # address may claim one — never a password account, never a self-changed (unverified) email.
+    from src.dashboard.auth import _claims
+
+    claims = _claims(event) or {}
+    if not claims.get("identities") or str(claims.get("email_verified", "")).lower() == "false":
+        return _resp(403, {"error": "self-registration needs a Google or Apple sign-in"})
 
     from src.dashboard.tenant_config import ENTRY_INDUSTRIES, self_register_entry_tenant
 
