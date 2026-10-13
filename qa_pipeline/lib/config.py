@@ -15,6 +15,23 @@ BASIC_AUTH_PASS_PARAM = "/onca/dashboard/basic-auth-pass"
 OPERATOR_SECRET_PARAM = "/onca/dashboard/operator-secret"
 SITE_URL = os.environ.get("ONCA_QA_SITE_URL", "https://onssa.org")
 
+# ADR 016 / ed24dcf (2026-10-01): an Entry-tier tenant's /exec is the Entry board — officer
+# tabs, Ask and the sector selector are hidden ("Entry has no officer suite"). The `entry` QA
+# persona (tier entry, agri-funds) therefore cannot drive an officer-suite journey; the
+# sovereign `admin` persona (banking + fintech) can. This is why the smoke/routing/resilience
+# gates failed every night from 2026-10-02: they were clicking controls Entry never shows.
+OFFICER_SUITE_PERSONA = "admin"
+ENTRY_TIER_PERSONAS = frozenset({"entry"})
+
+
+def officer_suite_persona(event: dict) -> str:
+    """The persona for a journey through /exec's officer suite. The state machine
+    (infra/qa_pipeline.py) still sends persona="entry" for smoke/routing/resilience; an
+    Entry-tier persona is swapped for the sovereign one instead of failing on hidden controls.
+    Any other explicit persona is honored."""
+    persona = event.get("persona") or OFFICER_SUITE_PERSONA
+    return OFFICER_SUITE_PERSONA if persona in ENTRY_TIER_PERSONAS else persona
+
 
 @lru_cache
 def qa_credentials() -> dict[str, Any]:

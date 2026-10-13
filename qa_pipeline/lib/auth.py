@@ -20,6 +20,11 @@ from playwright.sync_api import BrowserContext, Page
 
 SESSION_TOKEN_KEY = "onca_id_token"
 LOGIN_BUTTON = "#__loginBtn"
+# The signed-out board's own "Entrar" (Ctx.mountGate). On a phone (d3186b9) the header
+# #__loginBtn is display:none while the auth gate shows (`body[data-gate="auth"] #authBox`) —
+# the gate's button is the one action a user has. Click whichever "Entrar" is on screen.
+GATE_LOGIN_BUTTON = "#__gateLogin"
+VISIBLE_LOGIN = f"{LOGIN_BUTTON}:visible, {GATE_LOGIN_BUTTON}:visible"
 # Cognito's classic Hosted UI login page renders both a desktop and a mobile-responsive
 # copy of the same form in the DOM; only one is visible at a time. `:visible` picks the
 # one actually on screen — a bare `#signInFormUsername` resolves to 2 elements and
@@ -40,7 +45,7 @@ def login_with_password(page: Page, url: str, username: str, password: str) -> d
     logged in.
     """
     page.goto(url, wait_until="networkidle")
-    page.click(LOGIN_BUTTON, timeout=10_000)
+    page.locator(VISIBLE_LOGIN).first.click(timeout=10_000)
     page.wait_for_url("**/login**", timeout=15_000)
     page.fill(HOSTED_UI_USERNAME, username)
     page.fill(HOSTED_UI_PASSWORD, password)
