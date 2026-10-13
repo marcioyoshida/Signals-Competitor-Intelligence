@@ -50,7 +50,7 @@ FRIENDLY_ROUTES = [
 
 
 def run(event: dict) -> dict:
-    persona = event.get("persona", "entry")
+    persona = config.officer_suite_persona(event)   # Entry tier has no officer suite (ADR 016)
     creds = config.qa_credentials()["personas"][persona]
     user, pw = config.basic_auth()
     exec_url = f"{config.SITE_URL}/exec"

@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import time
+from urllib.parse import urlsplit
 
 from playwright.sync_api import sync_playwright
 
@@ -35,7 +36,7 @@ from qa_pipeline.lib.checklist import Checklist
 
 
 def run(event: dict) -> dict:
-    persona = event.get("persona", "entry")
+    persona = config.officer_suite_persona(event)   # Entry tier has no officer suite (ADR 016)
     creds = config.qa_credentials()["personas"][persona]
     user, pw = config.basic_auth()
     exec_url = f"{config.SITE_URL}/exec"
@@ -123,10 +124,23 @@ def run(event: dict) -> dict:
         # instant a second context is created. Every isolated scenario in this pipeline
         # must be its own full `browser.launch()`/`browser.close()`, never a second context
         # on a shared one (see checks/routing.py, which needs several isolated sessions).
-        for path, expected_title in (("/entry/", "Onça — Entry Portal"), ("/admin", "Onça · Admin — Sala de Guerra")):
+        #
+        # What each route is today:
+        #   /entry/  — the shared Entry Portal was retired (#237); the page is a redirect stub to
+        #              /exec, where an Entry tenant gets its licence-scoped "Plano Entry" board.
+        #   /admin   — operator-only since #213: without ?opkey= the edge 302s to the branded
+        #              /403.html ("Acesso restrito"); with ?admin=1&opkey= it is the admin page.
+        opkey = config.operator_secret()
+        for label, path, expected_title, expected_path in (
+            ("/entry/", "/entry/", "Onça · Sala Executiva", "/exec"),
+            ("/admin", f"/admin?admin=1&opkey={opkey}", "Onça · Admin — Sala de Guerra", "/admin"),
+            ("/admin_without_opkey_is_gated", "/admin", "Acesso restrito · Onça", "/403.html"),
+        ):
             page.goto(f"{config.SITE_URL}{path}", wait_until="networkidle", timeout=30_000)
             title = page.title()
-            c.check(f"reachable{path}", title == expected_title, f"title={title!r}")
+            landed = urlsplit(page.url).path
+            c.check(f"reachable{label}", title == expected_title and landed == expected_path,
+                    f"title={title!r} path={landed!r}")
 
         screenshot_path = "/tmp/smoke.png"
         page.screenshot(path=screenshot_path)
