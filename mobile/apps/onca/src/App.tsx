@@ -156,7 +156,10 @@ function Shell() {
             if (res.kind === "error") detail = res.error;
             if (res.kind === "none") detail = r.url.split("?")[0];
           } else {
-            outcome = r.type === "cancel" || r.type === "dismiss" || r.type === "locked" ? r.type : "dismiss";
+            // Android's Custom Tab reports a user closing it as "dismiss" (iOS says "cancel"), so on
+            // Android a dismiss is the person backing out: still logged, never an error dialog.
+            outcome = r.type === "dismiss" && Platform.OS === "android" ? "cancel"
+              : r.type === "cancel" || r.type === "dismiss" || r.type === "locked" ? r.type : "dismiss";
           }
         } catch (err) {
           outcome = "thrown";
