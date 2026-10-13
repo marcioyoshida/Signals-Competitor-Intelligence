@@ -6,7 +6,8 @@
 #   scripts/e2e_app.sh                      run the suite now (screenshots in /tmp/onca-e2e/)
 #   scripts/e2e_app.sh -k gate              extra args go to pytest
 #   scripts/e2e_app.sh --if-deployed        run only if the live site/stack changed since the last
-#                                           run AND has been stable for 15 min (post-deploy cron)
+#                                           run AND has been stable for 15 min (post-deploy cron),
+#                                           or if the last run is >26h old (missed nightly)
 #   scripts/e2e_app.sh --setup-webkit       fetch WebKit's missing host libraries (no sudo:
 #                                           apt-get download + dpkg -x into ~/.cache/onca-wkdeps)
 #
@@ -72,13 +73,18 @@ if [ "${1:-}" = "--setup-webkit" ]; then setup_webkit; exit 0; fi
 if [ "${1:-}" = "--if-deployed" ]; then
   shift
   fp="$(fingerprint)"
-  [ "$fp" = "$(cat "$STATE/last-run-fingerprint" 2>/dev/null)" ] && exit 0
-  case "$fp" in *err*|*"cfn?"*) exit 0 ;; esac          # can't tell: try again next tick
-  now=$(date +%s)
-  read -r pfp pts < <(cat "$STATE/pending" 2>/dev/null || echo "- 0")
-  if [ "$fp" != "$pfp" ]; then echo "$fp $now" > "$STATE/pending"; exit 0; fi
-  [ $((now - pts)) -lt 900 ] && exit 0                  # still settling (multi-step deploys)
-  RUN_FP="$fp"
+  # catch-up: the 04:30 nightly is skipped when WSL is off, so run if the last run is >26h old
+  last=$(stat -c %Y "$STATE/last-status" 2>/dev/null || echo 0)
+  if [ $(( $(date +%s) - last )) -gt 93600 ]; then RUN_FP="$fp"
+  else
+    [ "$fp" = "$(cat "$STATE/last-run-fingerprint" 2>/dev/null)" ] && exit 0
+    case "$fp" in *err*|*"cfn?"*) exit 0 ;; esac          # can't tell: try again next tick
+    now=$(date +%s)
+    read -r pfp pts < <(cat "$STATE/pending" 2>/dev/null || echo "- 0")
+    if [ "$fp" != "$pfp" ]; then echo "$fp $now" > "$STATE/pending"; exit 0; fi
+    [ $((now - pts)) -lt 900 ] && exit 0                  # still settling (multi-step deploys)
+    RUN_FP="$fp"
+  fi
 fi
 
 # WebKit's missing libs, if fetched (else the suite falls back to Chromium)

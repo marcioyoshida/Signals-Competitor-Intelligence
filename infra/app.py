@@ -1424,13 +1424,15 @@ class OncaPrototypeStack(Stack):
         # via a bounded LLM call over SWOT beliefs + narrative evidence + industry context.
         # Proposed only — flows through Phase C vetting. Needs Bedrock for the draft +
         # entities table for industry membership.
+        # Framework Lambdas (Porter, PESTLE, 7S, Four Corners, BCG, Ansoff) run 140-180s;
+        # at 3 min the midday run timed out (10-08..10-13), so they get 6.
         porter_fn = lambda_.Function(
             self,
             "OncaPorter",
             runtime=LAMBDA_RUNTIME,
             handler="src.synth.porter.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
-            timeout=Duration.minutes(3),
+            timeout=Duration.minutes(6),
             memory_size=256,
             environment={
                 "PYTHONPATH": "/var/task",
@@ -1458,7 +1460,7 @@ class OncaPrototypeStack(Stack):
             runtime=LAMBDA_RUNTIME,
             handler="src.synth.pestle.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
-            timeout=Duration.minutes(3),
+            timeout=Duration.minutes(6),
             memory_size=256,
             environment={
                 "PYTHONPATH": "/var/task",
@@ -1486,7 +1488,7 @@ class OncaPrototypeStack(Stack):
             runtime=LAMBDA_RUNTIME,
             handler="src.synth.ansoff.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
-            timeout=Duration.minutes(3),
+            timeout=Duration.minutes(6),
             memory_size=256,
             environment={
                 "PYTHONPATH": "/var/task",
@@ -1514,7 +1516,7 @@ class OncaPrototypeStack(Stack):
             runtime=LAMBDA_RUNTIME,
             handler="src.synth.bcg.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
-            timeout=Duration.minutes(3),
+            timeout=Duration.minutes(6),
             memory_size=256,
             environment={
                 "PYTHONPATH": "/var/task",
@@ -1542,7 +1544,7 @@ class OncaPrototypeStack(Stack):
             runtime=LAMBDA_RUNTIME,
             handler="src.synth.four_corners.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
-            timeout=Duration.minutes(3),
+            timeout=Duration.minutes(6),
             memory_size=256,
             environment={
                 "PYTHONPATH": "/var/task",
@@ -1570,7 +1572,7 @@ class OncaPrototypeStack(Stack):
             runtime=LAMBDA_RUNTIME,
             handler="src.synth.seven_s.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
-            timeout=Duration.minutes(3),
+            timeout=Duration.minutes(6),
             memory_size=256,
             environment={
                 "PYTHONPATH": "/var/task",
