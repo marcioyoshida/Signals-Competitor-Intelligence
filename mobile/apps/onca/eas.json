@@ -10,6 +10,16 @@
         "buildType": "apk"
       }
     },
+    "e2e": {
+      "withoutCredentials": true,
+      "environment": "preview",
+      "ios": {
+        "simulator": true
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    },
     "production": {
       "autoIncrement": true
     }

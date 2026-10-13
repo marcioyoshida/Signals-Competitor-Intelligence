@@ -1,0 +1,39 @@
+# #259: the bottom officer tab bar switches the view. Hoje is data-driven and looks alike across
+# officers, so the check runs on Painel, whose heading names the officer.
+# Needs MAESTRO_QA_EMAIL / MAESTRO_QA_PASSWORD (the qa admin persona: four officer tabs).
+appId: org.onssa.onca
+tags:
+  - auth
+---
+- launchApp:
+    clearState: true
+- runFlow: subflows/sign_in.yaml
+- assertVisible: "Estratégia"
+- assertVisible: "Regulatório"
+- assertVisible: "Compliance"
+- assertVisible: "Produto"
+- tapOn: "Painel"
+- extendedWaitUntil:
+    visible: ".*\\(CSO\\).*"
+    timeout: 15000
+- tapOn: "Regulatório"
+- extendedWaitUntil:
+    visible: ".*\\(CRO\\).*"
+    timeout: 15000
+- takeScreenshot: tab-cro
+- tapOn: "Compliance"
+- extendedWaitUntil:
+    visible: ".*\\(CCO\\).*"
+    timeout: 15000
+- takeScreenshot: tab-cco
+- tapOn: "Produto"
+- extendedWaitUntil:
+    visible: ".*\\(CPO\\).*"
+    timeout: 15000
+- takeScreenshot: tab-cpo
+- tapOn: "Estratégia"
+- extendedWaitUntil:
+    visible: ".*\\(CSO\\).*"
+    timeout: 15000
+- takeScreenshot: tab-cso
+- assertNotVisible: "Assinar.*"

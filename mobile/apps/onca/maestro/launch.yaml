@@ -1,6 +1,8 @@
 # #259: no credentials needed. The app opens /exec, shows the sign-in gate, and (app mode) never
 # shows a purchase call to action.
 appId: org.onssa.onca
+tags:
+  - smoke
 ---
 - launchApp:
     clearState: true
@@ -8,5 +10,6 @@ appId: org.onssa.onca
     visible: "Entrar"
     timeout: 45000
 - assertNotVisible: "Assinar.*"
-- assertNotVisible: ".*R\\$ .*"
+- assertNotVisible: ".*R\\$.*"
+- assertNotVisible: "Estratégia"     # signed-out: no officer tab bar
 - takeScreenshot: launch-gate

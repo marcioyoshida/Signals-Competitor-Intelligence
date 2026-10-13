@@ -1,0 +1,56 @@
+# #259 Layer 2: native E2E — the store shell on an iOS Simulator and an Android Emulator, driven by
+# the Maestro flows in ../../maestro. Manual only (no push/PR trigger): every run spends EAS build
+# minutes + workflow compute. Run from mobile/apps/onca:
+#   npx eas-cli@latest workflow:run .eas/workflows/e2e.yml
+# Sign-in flows need the EAS environment variables MAESTRO_QA_EMAIL / MAESTRO_QA_PASSWORD in the
+# "preview" environment (Maestro reads MAESTRO_* from the job's environment) — see maestro/README.md.
+name: E2E (Maestro, simulator + emulator)
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  build_ios_simulator:
+    name: Build iOS simulator app (e2e)
+    type: build
+    params:
+      platform: ios
+      profile: e2e
+
+  build_android_apk:
+    name: Build Android APK (e2e)
+    type: build
+    params:
+      platform: android
+      profile: e2e
+
+  maestro_ios:
+    name: Maestro on iOS Simulator
+    needs: [build_ios_simulator]
+    type: maestro
+    environment: preview
+    params:
+      build_id: ${{ needs.build_ios_simulator.outputs.build_id }}
+      flow_path:
+        - maestro/launch.yaml
+        - maestro/auth_cancel.yaml
+        - maestro/login.yaml
+        - maestro/tabbar.yaml
+      retries: 1
+      record_screen: true
+
+  maestro_android:
+    name: Maestro on Android Emulator
+    needs: [build_android_apk]
+    type: maestro
+    environment: preview
+    runs_on: linux-large-nested-virtualization
+    params:
+      build_id: ${{ needs.build_android_apk.outputs.build_id }}
+      flow_path:
+        - maestro/launch.yaml
+        - maestro/auth_cancel.yaml
+        - maestro/login.yaml
+        - maestro/tabbar.yaml
+      retries: 1
+      record_screen: true

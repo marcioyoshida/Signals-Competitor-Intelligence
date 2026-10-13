@@ -1,46 +1,47 @@
-# #259: needs QA_EMAIL / QA_PASSWORD (a qa-internal-* persona, excluded from usage metrics).
-# Sign-in runs in the system browser (Custom Tab), comes back on onca://auth, and /exec in the
-# WebView finishes the exchange.
+# #259: needs MAESTRO_QA_EMAIL / MAESTRO_QA_PASSWORD (a qa-internal-* persona, excluded from usage
+# metrics). Sign in through the system browser, offline relaunch (Android), sign out through the
+# "Sua conta" sheet.
 appId: org.onssa.onca
+tags:
+  - auth
 ---
 - launchApp:
     clearState: true
-- extendedWaitUntil:
-    visible: "Entrar"
-    timeout: 45000
-- tapOn: "Entrar"
-- extendedWaitUntil:
-    visible: ".*[Ss]enha.*|.*[Pp]assword.*"
-    timeout: 45000
-- tapOn:
-    text: ".*[Ee]-?mail.*|.*[Uu]sername.*|.*[Uu]suário.*"
-    optional: true
-- inputText: ${QA_EMAIL}
-- tapOn: ".*[Ss]enha.*|.*[Pp]assword.*"
-- inputText: ${QA_PASSWORD}
-- pressKey: Enter
-- extendedWaitUntil:
-    visible: "Estratégia"   # bottom officer tab bar: only rendered once signed in (d3186b9 moved Sair into the account sheet)
-    timeout: 60000
+- runFlow: subflows/sign_in.yaml
 - assertNotVisible: "Assinar.*"
+- assertNotVisible: ".*R\\$ .*"
 - takeScreenshot: signed-in
-# offline relaunch: the last feed of THIS user, labelled offline
-- setAirplaneMode: enabled
-- stopApp
-- launchApp
+# offline relaunch: the last feed of THIS user, labelled offline. setAirplaneMode is Android-only
+# (Maestro: iOS simulators have no airplane mode — it passes without effect there).
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - setAirplaneMode: enabled
+      - stopApp
+      - launchApp
+      - extendedWaitUntil:
+          visible: ".*offline.*|.*Sem conexão.*"
+          timeout: 30000
+      - assertVisible: "Estratégia"
+      - takeScreenshot: offline
+      - setAirplaneMode: disabled
+      - stopApp
+      - launchApp
 - extendedWaitUntil:
-    visible: ".*offline.*|.*Sem conexão.*"
-    timeout: 30000
-- takeScreenshot: offline
-- setAirplaneMode: disabled
-# logout returns to the gate
-- launchApp
-- extendedWaitUntil:
-    visible: "Estratégia"   # bottom officer tab bar: only rendered once signed in (d3186b9 moved Sair into the account sheet)
+    visible: "Estratégia"
     timeout: 45000
-- tapOn: "Sua conta"          # avatar opens the account sheet
+# logout: the avatar (aria-label "Sua conta: <e-mail>") opens the account sheet
+- tapOn: "Sua conta.*"
+- extendedWaitUntil:
+    visible: "Sair desta conta"
+    timeout: 15000
 - tapOn: "Sair desta conta"
+- tapOn:                      # the logout trip uses an ephemeral session; a prompt is unexpected,
+    text: "Continue|Continuar" # but must not strand the flow if an OS version shows one
+    optional: true
 - extendedWaitUntil:
     visible: "Entrar"
     timeout: 45000
+- assertNotVisible: "Estratégia"
 - takeScreenshot: signed-out

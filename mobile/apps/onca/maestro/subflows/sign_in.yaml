@@ -1,0 +1,41 @@
+# Shared by login.yaml and tabbar.yaml: from the /exec gate to the signed-in tab bar.
+# Sign-in runs in the SYSTEM browser (ASWebAuthenticationSession on iOS, a Custom Tab on Android)
+# and comes back on onca://auth; /exec in the WebView finishes the exchange.
+# Needs MAESTRO_QA_EMAIL / MAESTRO_QA_PASSWORD (Maestro reads MAESTRO_* from the environment; on
+# EAS they are project environment variables — see ../README.md).
+appId: org.onssa.onca
+---
+- extendedWaitUntil:
+    visible: "Entrar"
+    timeout: 45000
+- tapOn: "Entrar"
+# iOS: "“Onça” Wants to Use “…” to Sign In" (non-ephemeral session)
+- tapOn:
+    text: "Continue|Continuar"
+    optional: true
+# Android emulator: Chrome's first-run screens, if any
+- tapOn:
+    text: "Accept & continue|Use without an account|No thanks|Got it"
+    optional: true
+- tapOn:
+    text: "No thanks|Got it"
+    optional: true
+# the Hosted UI form — or straight back, when the system browser still holds a Cognito session
+- extendedWaitUntil:
+    visible: ".*[Ss]enha.*|.*[Pp]assword.*|Estratégia"
+    timeout: 45000
+- runFlow:
+    when:
+      visible: ".*[Ss]enha.*|.*[Pp]assword.*"
+    commands:
+      - tapOn:
+          text: ".*[Ee]-?mail.*|.*[Uu]sername.*|.*[Uu]suário.*"
+          optional: true
+      - inputText: ${MAESTRO_QA_EMAIL}
+      - tapOn: ".*[Ss]enha.*|.*[Pp]assword.*"
+      - inputText: ${MAESTRO_QA_PASSWORD}
+      - pressKey: Enter
+- extendedWaitUntil:
+    visible: "Estratégia"   # bottom officer tab bar: rendered only once signed in (d3186b9)
+    timeout: 60000
+- assertNotVisible: "Login não concluído"
