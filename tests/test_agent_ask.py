@@ -840,3 +840,13 @@ def test_cut_off_answer_drops_the_half_written_line():
     assert aa.trim_unfinished(cut, truncated=True) == "**FATO:** O Bradesco ampliou o crédito [c2]."
     assert aa.trim_unfinished(cut, truncated=False) == cut                     # not at the cap: untouched
     assert aa.trim_unfinished("Ok [c1].\n**Inferência:**", truncated=False) == "Ok [c1]."
+
+
+def test_subjectless_follow_up_grounds_only_on_what_the_last_answer_cited():
+    feed = _chat_feed()
+    feed["feed"].append(dict(_dated(7, "2026-10-15", alert=True, threat=99, entity="boe"), narrative="Bailey alerta supervisão"))
+    hist = [{"q": "Quem está em alerta agora?", "a": "O Itaú está em alerta [c1].", "cited": ["c1"]}]
+    kb_calls = []
+    r = aa.answer("por quê?", feed=feed, converser=_Conv(), history=hist,
+                  kb_retrieve=lambda q: kb_calls.append(q) or [])
+    assert r["considered"] == ["c1"] and kb_calls == []

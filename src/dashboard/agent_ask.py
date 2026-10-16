@@ -1033,9 +1033,15 @@ def answer(
     cards, mode = select_grounding(q, feed_cards, scope=scope, limit=limit, with_mode=True)
     kb_q = q
     if prev_q and not cards:
-        # a follow-up that selects nothing alone is retrieved with the question it follows
-        kb_q = f"{q} {prev_q}"
-        cards, mode = select_grounding(kb_q, feed_cards, scope=scope, limit=limit, with_mode=True)
+        # A follow-up that selects nothing alone ("por quê?", "detalhe isso") is about the previous
+        # ANSWER: ground on what it cited (live 10-16: re-retrieving with the previous question
+        # drifted "por quê?" onto an unrelated card). Nothing cited → retrieve with that question.
+        carried = _carry_cited([], history[-1].get("cited") or [], feed_cards)
+        if carried:
+            cards, mode = carried, "follow-up"
+        else:
+            kb_q = f"{q} {prev_q}"
+            cards, mode = select_grounding(kb_q, feed_cards, scope=scope, limit=limit, with_mode=True)
     if history:
         cards = _carry_cited(cards, history[-1].get("cited") or [], feed_cards)
     kb_snippets: list[dict[str, Any]] = []
@@ -1045,7 +1051,7 @@ def answer(
     # A scope digest ("o que mudou esta semana no meu escopo?") is answered from the scope's
     # recent cards only: semantic KB hits for "mudou" are documents ABOUT change (a 2018 law
     # amendment), not what changed this week — and they aren't scoped to the tenant's window.
-    if kb_retrieve is not None and not distress_intent and mode != "digest":
+    if kb_retrieve is not None and not distress_intent and mode not in ("digest", "follow-up"):
         try:
             kb_snippets = kb_retrieve(kb_q) or []
         except Exception as exc:  # pragma: no cover - KB best-effort
