@@ -37,6 +37,10 @@ def _authorize(page, client_id: str, creds: dict, *, challenge: str | None = Non
          "state": secrets.token_urlsafe(12), "scope": "onca:read"}           # no resource
     if challenge:
         q.update(code_challenge=challenge, code_challenge_method="S256")
+    # The callback is not a real page (the edge 302s unknown /docs paths to /404.html, dropping
+    # ?code=), so read the code off the callback REQUEST — what a client's endpoint receives.
+    hits: list = []
+    page.on("request", lambda r: r.url.startswith(REDIRECT + "?") and hits.append(r.url))
     page.goto(BASE + "/oauth/authorize?" + urllib.parse.urlencode(q), timeout=30_000)
     try:
         page.fill("input[name=username]:visible", creds["username"], timeout=8_000)
@@ -51,11 +55,11 @@ def _authorize(page, client_id: str, creds: dict, *, challenge: str | None = Non
         page.click("button.allow")
     except Exception:
         pass
-    try:
-        page.wait_for_url(REDIRECT + "?*", timeout=20_000)
-    except Exception:
-        pass
-    cb = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(page.url).query)) if page.url.startswith(REDIRECT) else {}
+    for _ in range(40):
+        if hits:
+            break
+        page.wait_for_timeout(500)
+    cb = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(hits[0]).query)) if hits else {}
     cb["_consent"] = consent
     cb["_state_ok"] = cb.get("state") == q["state"]
     return cb
