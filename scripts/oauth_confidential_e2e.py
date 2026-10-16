@@ -39,9 +39,9 @@ def _authorize(page, client_id: str, creds: dict, *, challenge: str | None = Non
         q.update(code_challenge=challenge, code_challenge_method="S256")
     page.goto(BASE + "/oauth/authorize?" + urllib.parse.urlencode(q), timeout=30_000)
     try:
-        page.fill("#signInFormUsername:visible", creds["username"], timeout=8_000)
-        page.fill("#signInFormPassword:visible", creds["password"])
-        page.click('input[name="signInSubmitButton"]:visible')
+        page.fill("input[name=username]:visible", creds["username"], timeout=8_000)
+        page.fill("input[name=password]:visible", creds["password"])
+        page.click('input[name="signInSubmitButton"]:visible, button[type=submit]:visible')
     except Exception:
         pass   # a live Cognito session skips the form
     consent = ""

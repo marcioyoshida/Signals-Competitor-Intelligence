@@ -70,6 +70,7 @@
     const params = new URLSearchParams({
       client_id: AUTH.clientId, response_type: "code", scope: "openid email",
       redirect_uri: AUTH.redirectUri, code_challenge: challenge, code_challenge_method: "S256",
+      lang: "pt-BR",
     });
     location.href = `${AUTH.domain}/login?${params.toString()}`;
   }

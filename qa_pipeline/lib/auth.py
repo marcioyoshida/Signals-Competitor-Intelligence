@@ -25,13 +25,12 @@ LOGIN_BUTTON = "#__loginBtn"
 # the gate's button is the one action a user has. Click whichever "Entrar" is on screen.
 GATE_LOGIN_BUTTON = "#__gateLogin"
 VISIBLE_LOGIN = f"{LOGIN_BUTTON}:visible, {GATE_LOGIN_BUTTON}:visible"
-# Cognito's classic Hosted UI login page renders both a desktop and a mobile-responsive
-# copy of the same form in the DOM; only one is visible at a time. `:visible` picks the
-# one actually on screen — a bare `#signInFormUsername` resolves to 2 elements and
-# Playwright's auto-wait times out on the hidden one it picks first.
-HOSTED_UI_USERNAME = "#signInFormUsername:visible"
-HOSTED_UI_PASSWORD = "#signInFormPassword:visible"
-HOSTED_UI_SUBMIT = 'input[name="signInSubmitButton"]:visible'
+# The sign-in page is Cognito MANAGED LOGIN (one form; a <button type=submit>). These also
+# match the classic Hosted UI, which renders a desktop and a mobile copy of the form with only
+# one visible — hence `:visible` (a bare match picks the hidden copy and the auto-wait times out).
+HOSTED_UI_USERNAME = "input[name=username]:visible"
+HOSTED_UI_PASSWORD = "input[name=password]:visible"
+HOSTED_UI_SUBMIT = 'input[name="signInSubmitButton"]:visible, button[type=submit]:visible'
 
 
 def login_with_password(page: Page, url: str, username: str, password: str) -> dict[str, Any]:

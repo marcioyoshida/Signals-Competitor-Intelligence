@@ -11,7 +11,7 @@ from pathlib import Path
 
 import yaml
 from edge_policy import exec_exemption_js, public_paths_js, site_paths_js
-from identity import DEMO_TENANTS, build_identity_pool
+from identity import DEMO_TENANTS, build_identity_pool, build_managed_login_branding
 from aws_cdk import App, ArnFormat, CfnOutput, Duration, RemovalPolicy, SecretValue, Size, Stack, Tags
 from aws_cdk import aws_bedrock as bedrock
 from aws_cdk import aws_apigatewayv2 as apigwv2
@@ -909,10 +909,16 @@ class OncaPrototypeStack(Stack):
         # re-register. The ACM cert (us-east-1) is imported by ARN; the Cloudflare CNAME for
         # auth.onssa.org is out-of-band and must be repointed to the NEW AuthCustomDomainTarget
         # (a new Cognito-managed CloudFront distribution), DNS-only, not proxied.
+        # Both domains serve MANAGED LOGIN (version 2): the Onça-branded, pt-BR sign-in page
+        # (context.js/ask.js pass lang=pt-BR), not the classic gray Hosted UI. Managed login shows
+        # a per-client style, so the branding exists before either domain switches to it.
+        _login_branding = build_managed_login_branding(self, _ident_v2, "V2")
         user_pool_domain = user_pool.add_domain(
             "OncaHostedUi",
             cognito_domain=cognito.CognitoDomainOptions(domain_prefix=f"onca-{_acct}"),
+            managed_login_version=cognito.ManagedLoginVersion.NEWER_MANAGED_LOGIN,
         )
+        user_pool_domain.node.add_dependency(*_login_branding)
         _auth_cert = self.node.try_get_context("auth_domain_cert_arn") or ""
         auth_custom_domain = None
         if _auth_cert:
@@ -922,7 +928,9 @@ class OncaPrototypeStack(Stack):
                     domain_name=self.node.try_get_context("auth_domain") or "auth.onssa.org",
                     certificate=acm.Certificate.from_certificate_arn(self, "OncaAuthDomainCert", _auth_cert),
                 ),
+                managed_login_version=cognito.ManagedLoginVersion.NEWER_MANAGED_LOGIN,
             )
+            auth_custom_domain.node.add_dependency(*_login_branding)
             # the target to CNAME auth.onssa.org at (DNS-only, not proxied)
             CfnOutput(self, "AuthCustomDomainTarget", value=auth_custom_domain.cloud_front_endpoint)
         _sign_in_base = (f"https://{auth_custom_domain.domain_name}" if auth_custom_domain

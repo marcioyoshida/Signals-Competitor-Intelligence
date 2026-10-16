@@ -1,0 +1,449 @@
+{
+ "categories": {
+  "auth": {
+   "authMethodOrder": [
+    [
+     {
+      "display": "BUTTON",
+      "type": "FEDERATED"
+     },
+     {
+      "display": "INPUT",
+      "type": "USERNAME_PASSWORD"
+     }
+    ]
+   ],
+   "federation": {
+    "interfaceStyle": "BUTTON_LIST",
+    "order": []
+   }
+  },
+  "form": {
+   "displayGraphics": true,
+   "instructions": {
+    "enabled": false
+   },
+   "languageSelector": {
+    "enabled": false
+   },
+   "location": {
+    "horizontal": "CENTER",
+    "vertical": "CENTER"
+   },
+   "sessionTimerDisplay": "NONE"
+  },
+  "global": {
+   "colorSchemeMode": "DYNAMIC",
+   "pageFooter": {
+    "enabled": false
+   },
+   "pageHeader": {
+    "enabled": false
+   },
+   "spacingDensity": "REGULAR"
+  },
+  "signUp": {
+   "acceptanceElements": [
+    {
+     "enforcement": "NONE",
+     "textKey": "en"
+    }
+   ]
+  }
+ },
+ "componentClasses": {
+  "buttons": {
+   "borderRadius": 10.0
+  },
+  "divider": {
+   "darkMode": {
+    "borderColor": "2d393fff"
+   },
+   "lightMode": {
+    "borderColor": "ddd8ccff"
+   }
+  },
+  "dropDown": {
+   "borderRadius": 10.0,
+   "darkMode": {
+    "defaults": {
+     "itemBackgroundColor": "192534ff"
+    },
+    "hover": {
+     "itemBackgroundColor": "081120ff",
+     "itemBorderColor": "5f6b7aff",
+     "itemTextColor": "e9ebedff"
+    },
+    "match": {
+     "itemBackgroundColor": "d1d5dbff",
+     "itemTextColor": "3ec39aff"
+    }
+   },
+   "lightMode": {
+    "defaults": {
+     "itemBackgroundColor": "ffffffff"
+    },
+    "hover": {
+     "itemBackgroundColor": "f4f4f4ff",
+     "itemBorderColor": "7d8998ff",
+     "itemTextColor": "000716ff"
+    },
+    "match": {
+     "itemBackgroundColor": "414d5cff",
+     "itemTextColor": "157a5aff"
+    }
+   }
+  },
+  "focusState": {
+   "darkMode": {
+    "borderColor": "3ec39aff"
+   },
+   "lightMode": {
+    "borderColor": "157a5aff"
+   }
+  },
+  "idpButtons": {
+   "icons": {
+    "enabled": true
+   }
+  },
+  "input": {
+   "borderRadius": 10.0,
+   "darkMode": {
+    "defaults": {
+     "backgroundColor": "172024ff",
+     "borderColor": "42515aff"
+    },
+    "placeholderColor": "9aa49fff"
+   },
+   "lightMode": {
+    "defaults": {
+     "backgroundColor": "ffffffff",
+     "borderColor": "cbc4b4ff"
+    },
+    "placeholderColor": "6c6a62ff"
+   }
+  },
+  "inputDescription": {
+   "darkMode": {
+    "textColor": "9aa49fff"
+   },
+   "lightMode": {
+    "textColor": "6c6a62ff"
+   }
+  },
+  "inputLabel": {
+   "darkMode": {
+    "textColor": "bcc5c3ff"
+   },
+   "lightMode": {
+    "textColor": "444d54ff"
+   }
+  },
+  "link": {
+   "darkMode": {
+    "defaults": {
+     "textColor": "3ec39aff"
+    },
+    "hover": {
+     "textColor": "59d3aeff"
+    }
+   },
+   "lightMode": {
+    "defaults": {
+     "textColor": "157a5aff"
+    },
+    "hover": {
+     "textColor": "0e6349ff"
+    }
+   }
+  },
+  "optionControls": {
+   "darkMode": {
+    "defaults": {
+     "backgroundColor": "0f1b2aff",
+     "borderColor": "7d8998ff"
+    },
+    "selected": {
+     "backgroundColor": "3ec39aff",
+     "foregroundColor": "000716ff"
+    }
+   },
+   "lightMode": {
+    "defaults": {
+     "backgroundColor": "ffffffff",
+     "borderColor": "7d8998ff"
+    },
+    "selected": {
+     "backgroundColor": "157a5aff",
+     "foregroundColor": "ffffffff"
+    }
+   }
+  },
+  "statusIndicator": {
+   "darkMode": {
+    "error": {
+     "backgroundColor": "1a0000ff",
+     "borderColor": "eb6f6fff",
+     "indicatorColor": "eb6f6fff"
+    },
+    "pending": {
+     "indicatorColor": "AAAAAAAA"
+    },
+    "success": {
+     "backgroundColor": "001a02ff",
+     "borderColor": "29ad32ff",
+     "indicatorColor": "29ad32ff"
+    },
+    "warning": {
+     "backgroundColor": "1d1906ff",
+     "borderColor": "e0ca57ff",
+     "indicatorColor": "e0ca57ff"
+    }
+   },
+   "lightMode": {
+    "error": {
+     "backgroundColor": "fff7f7ff",
+     "borderColor": "d91515ff",
+     "indicatorColor": "d91515ff"
+    },
+    "pending": {
+     "indicatorColor": "AAAAAAAA"
+    },
+    "success": {
+     "backgroundColor": "f2fcf3ff",
+     "borderColor": "037f0cff",
+     "indicatorColor": "037f0cff"
+    },
+    "warning": {
+     "backgroundColor": "fffce9ff",
+     "borderColor": "8d6605ff",
+     "indicatorColor": "8d6605ff"
+    }
+   }
+  }
+ },
+ "components": {
+  "alert": {
+   "borderRadius": 10.0,
+   "darkMode": {
+    "error": {
+     "backgroundColor": "3a1d1eff",
+     "borderColor": "ff6b6bff"
+    }
+   },
+   "lightMode": {
+    "error": {
+     "backgroundColor": "fbe7e6ff",
+     "borderColor": "c62828ff"
+    }
+   }
+  },
+  "favicon": {
+   "enabledTypes": [
+    "SVG"
+   ]
+  },
+  "form": {
+   "backgroundImage": {
+    "enabled": false
+   },
+   "borderRadius": 16.0,
+   "darkMode": {
+    "backgroundColor": "172024ff",
+    "borderColor": "2d393fff"
+   },
+   "lightMode": {
+    "backgroundColor": "ffffffff",
+    "borderColor": "ddd8ccff"
+   },
+   "logo": {
+    "enabled": true,
+    "formInclusion": "IN",
+    "location": "CENTER",
+    "position": "TOP"
+   }
+  },
+  "idpButton": {
+   "custom": {},
+   "standard": {
+    "darkMode": {
+     "active": {
+      "backgroundColor": "16302aff",
+      "borderColor": "59d3aeff",
+      "textColor": "ecefebff"
+     },
+     "defaults": {
+      "backgroundColor": "172024ff",
+      "borderColor": "42515aff",
+      "textColor": "ecefebff"
+     },
+     "hover": {
+      "backgroundColor": "16302aff",
+      "borderColor": "3ec39aff",
+      "textColor": "ecefebff"
+     }
+    },
+    "lightMode": {
+     "active": {
+      "backgroundColor": "e3f1ebff",
+      "borderColor": "0e6349ff",
+      "textColor": "1b2023ff"
+     },
+     "defaults": {
+      "backgroundColor": "ffffffff",
+      "borderColor": "cbc4b4ff",
+      "textColor": "1b2023ff"
+     },
+     "hover": {
+      "backgroundColor": "e3f1ebff",
+      "borderColor": "157a5aff",
+      "textColor": "1b2023ff"
+     }
+    }
+   }
+  },
+  "pageBackground": {
+   "darkMode": {
+    "color": "0e1214ff"
+   },
+   "image": {
+    "enabled": true
+   },
+   "lightMode": {
+    "color": "f5f3eeff"
+   }
+  },
+  "pageFooter": {
+   "backgroundImage": {
+    "enabled": false
+   },
+   "darkMode": {
+    "background": {
+     "color": "0f141aff"
+    },
+    "borderColor": "424650ff"
+   },
+   "lightMode": {
+    "background": {
+     "color": "fafafaff"
+    },
+    "borderColor": "d5dbdbff"
+   },
+   "logo": {
+    "enabled": false,
+    "location": "START"
+   }
+  },
+  "pageHeader": {
+   "backgroundImage": {
+    "enabled": false
+   },
+   "darkMode": {
+    "background": {
+     "color": "0f141aff"
+    },
+    "borderColor": "424650ff"
+   },
+   "lightMode": {
+    "background": {
+     "color": "fafafaff"
+    },
+    "borderColor": "d5dbdbff"
+   },
+   "logo": {
+    "enabled": false,
+    "location": "START"
+   }
+  },
+  "pageText": {
+   "darkMode": {
+    "bodyColor": "bcc5c3ff",
+    "descriptionColor": "9aa49fff",
+    "headingColor": "ecefebff"
+   },
+   "lightMode": {
+    "bodyColor": "444d54ff",
+    "descriptionColor": "6c6a62ff",
+    "headingColor": "1b2023ff"
+   }
+  },
+  "phoneNumberSelector": {
+   "displayType": "TEXT"
+  },
+  "primaryButton": {
+   "darkMode": {
+    "active": {
+     "backgroundColor": "59d3aeff",
+     "textColor": "0e1214ff"
+    },
+    "defaults": {
+     "backgroundColor": "3ec39aff",
+     "textColor": "0e1214ff"
+    },
+    "disabled": {
+     "backgroundColor": "ffffffff",
+     "borderColor": "ffffffff"
+    },
+    "hover": {
+     "backgroundColor": "59d3aeff",
+     "textColor": "0e1214ff"
+    }
+   },
+   "lightMode": {
+    "active": {
+     "backgroundColor": "0e6349ff",
+     "textColor": "ffffffff"
+    },
+    "defaults": {
+     "backgroundColor": "157a5aff",
+     "textColor": "ffffffff"
+    },
+    "disabled": {
+     "backgroundColor": "ffffffff",
+     "borderColor": "ffffffff"
+    },
+    "hover": {
+     "backgroundColor": "0e6349ff",
+     "textColor": "ffffffff"
+    }
+   }
+  },
+  "secondaryButton": {
+   "darkMode": {
+    "active": {
+     "backgroundColor": "16302aff",
+     "borderColor": "59d3aeff",
+     "textColor": "ecefebff"
+    },
+    "defaults": {
+     "backgroundColor": "172024ff",
+     "borderColor": "42515aff",
+     "textColor": "ecefebff"
+    },
+    "hover": {
+     "backgroundColor": "16302aff",
+     "borderColor": "3ec39aff",
+     "textColor": "ecefebff"
+    }
+   },
+   "lightMode": {
+    "active": {
+     "backgroundColor": "e3f1ebff",
+     "borderColor": "0e6349ff",
+     "textColor": "1b2023ff"
+    },
+    "defaults": {
+     "backgroundColor": "ffffffff",
+     "borderColor": "cbc4b4ff",
+     "textColor": "1b2023ff"
+    },
+    "hover": {
+     "backgroundColor": "e3f1ebff",
+     "borderColor": "157a5aff",
+     "textColor": "1b2023ff"
+    }
+   }
+  }
+ }
+}

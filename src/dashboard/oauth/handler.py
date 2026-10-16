@@ -97,7 +97,7 @@ def _cognito(settings: config.Settings) -> server.Cognito:
             "client_id": client_id, "response_type": "code",
             "scope": "openid email profile", "redirect_uri": settings.callback,
             "state": state, "nonce": nonce, "code_challenge": challenge,
-            "code_challenge_method": "S256"})
+            "code_challenge_method": "S256", "lang": "pt-BR"})
 
     def exchange(code: str, verifier: str) -> dict[str, Any]:
         import requests

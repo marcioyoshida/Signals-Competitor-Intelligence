@@ -88,9 +88,9 @@ def authorize(page, challenge: str, state: str, creds: dict, resource: str, scop
                                 "state": state, "resource": resource, "scope": scope})
     page.goto(BASE + "/oauth/authorize?" + q, timeout=30_000)
     try:
-        page.fill("#signInFormUsername:visible", creds["username"], timeout=8_000)
-        page.fill("#signInFormPassword:visible", creds["password"])
-        page.click('input[name="signInSubmitButton"]:visible')
+        page.fill("input[name=username]:visible", creds["username"], timeout=8_000)
+        page.fill("input[name=password]:visible", creds["password"])
+        page.click('input[name="signInSubmitButton"]:visible, button[type=submit]:visible')
     except Exception:
         pass   # a live Cognito session skips the form
     try:
