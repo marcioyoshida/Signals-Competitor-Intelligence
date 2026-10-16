@@ -44,6 +44,45 @@
   .tile { position:relative; }
   .tile.is-crit { border-left:3px solid var(--t-crit); } .tile.is-high { border-left:3px solid var(--t-high); }
   .tile.is-warn { border-left:3px solid var(--warn); } .tile.is-ok { border-left:3px solid var(--ok); }
+  /* A tile that leads somewhere is a real <a> (activateTiles): arrow glyph + hover lift + focus ring.
+     The hover ring is a box-shadow so it never repaints the 3px status border on the left. */
+  a.tile--nav { display:block; color:inherit; text-decoration:none; cursor:pointer; padding-right:calc(var(--s4) + 14px);
+    transition:box-shadow .15s, background-color .15s, transform .15s; }
+  a.tile--nav::after { content:"→"; position:absolute; top:var(--s2); right:var(--s3); font-size:var(--fs-sm); font-weight:700;
+    line-height:1; color:var(--primary); transition:transform .15s; }
+  a.tile--nav:hover { background:var(--surface-2); box-shadow:var(--shadow-2), 0 0 0 1px var(--primary); transform:translateY(-1px); }
+  a.tile--nav:hover::after { transform:translateX(3px); }
+  a.tile--nav:hover .tile__l { color:var(--ink-2); }
+  a.tile--nav:focus-visible { outline:2px solid var(--primary); outline-offset:2px; }
+  a.tile--nav:active { background:var(--surface-2); transform:none; }
+  /* destination of a tile / Hoje-count jump: ring for ~2s, then fades */
+  [data-nav] { scroll-margin-top:76px; }   /* phone: slim sticky bar */
+  @media (min-width: 861px) { [data-nav] { scroll-margin-top:116px; } }   /* desktop: ~100px sticky header */
+  .nav-hit { outline:3px solid var(--primary); outline-offset:3px; border-radius:var(--r-lg); transition:outline-color .6s; }
+  .nav-hit.is-fading { outline-color:transparent; }
+  .panel__hd h2:focus, .band-hd .overline:focus { outline:none; }
+  /* --primary-2 (5.65:1 on the pill's surface-3 in light, 6.8:1 dark): --primary is only 4.1:1 there */
+  .hoje-hd a.n--nav { position:relative; color:var(--primary-2); text-decoration:none; border-bottom:1px solid currentColor; }
+  .hoje-hd a.n--nav::after { content:""; position:absolute; inset:-12px -8px; }   /* 44px touch target */
+  .hoje-hd a.n--nav:hover { color:var(--ink); }
+  .hoje-hd a.n--nav:focus-visible { outline:2px solid var(--primary); outline-offset:3px; border-radius:var(--r-sm); }
+  /* Desktop key-decision panels (the one band per officer where the verdict lives): brand-tinted header
+     band, 3px accent rule, bigger sentence-case title, a text tag (never colour alone), taller list. */
+  .lead-tag { display:none; }
+  @media (min-width: 861px) {
+    .panel--key { border-color:color-mix(in srgb, var(--primary) 40%, var(--border)); border-top:3px solid var(--primary);
+      box-shadow:var(--shadow-2); }
+    .panel--key > .panel__hd { background:var(--primary-weak); padding:var(--s4) var(--s5);
+      border-bottom-color:color-mix(in srgb, var(--primary) 30%, var(--border)); }
+    .panel--key > .panel__hd h2 { font-size:var(--fs-md); text-transform:none; letter-spacing:.1px; color:var(--ink); font-weight:750; }
+    .panel--key > .panel__hd .hd-note { color:var(--ink-2); }
+    .panel--key > .panel__hd .lead-tag { display:inline-block; font-size:var(--fs-micro); font-weight:700; letter-spacing:.7px;
+      text-transform:uppercase; color:var(--primary-2); border:1px solid color-mix(in srgb, var(--primary) 55%, transparent);
+      border-radius:var(--r-pill); padding:1px 8px; white-space:nowrap; }
+    .panel--key > .panel__bd--scroll { max-height:640px; }
+    .band--key > .band-hd .overline { color:var(--ink); font-size:var(--fs-sm); letter-spacing:1.1px; }
+    .band--key > .band-hd .rule { height:2px; background:color-mix(in srgb, var(--primary) 55%, var(--border)); }
+  }
 
   /* rows */
   .exrow { display:flex; gap:var(--s3); align-items:flex-start; padding:var(--s2) var(--s4);
@@ -833,7 +872,8 @@ document.querySelectorAll("#viewTabs a").forEach(a => a.addEventListener("click"
 function syncOnline() { document.body.classList.toggle("is-offline", !navigator.onLine || OFFLINE); }
 window.addEventListener("online", syncOnline); window.addEventListener("offline", syncOnline);
 document.getElementById("sectorSel").addEventListener("change", (e) => { writeHash({ sector: e.target.value }); });
-function applyHash() {
+function applyHash(ev) {
+  if (ev && ev.type === "hashchange" && navOnlyChange()) return;   // tile jump: no re-render
   const v = hashView(); if (v && VIEW !== v) setView(v);
   const o = hashOfficer(); if (o) OFFICER = o;
   SECTOR = activeSector();
@@ -842,6 +882,80 @@ function applyHash() {
   render();
 }
 window.addEventListener("hashchange", applyHash);
+// --- KPI tile / Hoje count -> the panel that holds the counted items -----------------------------
+// A tile deep-links with one extra hash token, "#<officer>/painel[/<sector>]/ver-<key>", where <key> is
+// the data-nav of a panel/band on the board. It scrolls there and highlights it; Back returns to the
+// scroll position the click left. Only the token changed => the board is NOT re-rendered.
+function navToken() { const t = hashTokens().find(x => x.indexOf("ver-") === 0); return t ? t.slice(4) : null; }
+function navHash(key, officer, view) {
+  const o = officer || hashOfficer() || OFFICER, v = view || VIEW || "painel";
+  return "#" + [o, v].concat(SECTOR && SECTOR !== "__all__" ? [SECTOR] : [], ["ver-" + key]).join("/");
+}
+let NAV_DONE = "", NAV_TIMER = null, LAST_KEY = null, PREV_HAD_TOK = false;
+function boardKey() { return [OFFICER, VIEW, SECTOR].join("|"); }
+function navTarget(key) { return document.querySelector(`#board [data-nav="${String(key).replace(/[^a-z0-9_-]/gi, "")}"]`); }
+// the destination's heading: a band target uses its own overline; a panel uses its h2, or — for a
+// panel with no header of its own (a chart in a band) — the overline of the band that wraps it
+function navHead(t) {
+  const ov = (b) => b && b.querySelector(":scope > .band-hd .overline");
+  if (t.matches(".band")) return ov(t);
+  return t.querySelector(":scope > .panel__hd h2") || ov(t.closest(".band"));
+}
+function navTitle(t) { const h = navHead(t); return h ? h.textContent.trim() : ""; }
+function goNav(key) {
+  const t = navTarget(key); if (!t) return false;
+  const fold = t.closest(".band--fold");   // phone: the band may be a collapsed "Mais análises" fold
+  if (fold && !fold.classList.contains("is-open")) { const hd = fold.querySelector(":scope > .band-hd"); if (hd) hd.click(); }
+  const calm = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  t.scrollIntoView({ block: "start", behavior: calm ? "auto" : "smooth" });
+  document.querySelectorAll("#board .nav-hit").forEach(x => x.classList.remove("nav-hit", "is-fading"));
+  t.classList.add("nav-hit");
+  clearTimeout(NAV_TIMER);
+  NAV_TIMER = setTimeout(() => { t.classList.add("is-fading"); NAV_TIMER = setTimeout(() => t.classList.remove("nav-hit", "is-fading"), 700); }, 1800);
+  // keyboard / screen reader: move focus to the destination's heading so the jump is announced
+  const hd = navHead(t);
+  if (hd) { hd.setAttribute("tabindex", "-1"); hd.focus({ preventScroll: true }); }
+  return true;
+}
+// Upgrade each tile that declared a destination to a real <a> — only when the destination is on this
+// board and the count is not 0. Anything else stays a plain (non-interactive) tile.
+function activateTiles(root) {
+  root.querySelectorAll(".tile[data-go]").forEach(d => {
+    const key = d.getAttribute("data-go"), t = navTarget(key);
+    const num = Number(String(d.querySelector(".tile__n").textContent).replace(/[%\s]/g, "").replace(",", "."));
+    const empty = d.querySelector(".tile__n").textContent.trim() === "—" || num === 0;
+    if (!t || empty) { d.removeAttribute("data-go"); return; }
+    const a = document.createElement("a");
+    a.className = d.className + " tile--nav";
+    a.innerHTML = d.innerHTML;
+    a.setAttribute("data-go", key);
+    a.setAttribute("href", navHash(key));
+    const dest = navTitle(t);
+    a.setAttribute("aria-label", `${d.querySelector(".tile__l").textContent.trim()}: ${d.querySelector(".tile__n").textContent.trim()}. Ver em ${dest}`);
+    d.replaceWith(a);
+  });
+}
+document.getElementById("board").addEventListener("click", (e) => {
+  const a = e.target.closest && e.target.closest("a[data-go]");
+  if (!a || e.defaultPrevented || e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  e.preventDefault();
+  try { history.replaceState(Object.assign({}, history.state, { y: window.scrollY }), ""); } catch (x) {}
+  const h = a.getAttribute("href");
+  if (h !== location.hash) location.hash = h; else goNav(a.getAttribute("data-go"));
+});
+// hashchange handler hook (called first by applyHash): true = only the "ver-" token changed on the
+// board that is already rendered, so it was handled here (scroll / restore) and no re-render is needed.
+function navOnlyChange() {
+  const tok = navToken(), sameBoard = LAST_KEY !== null && LAST_KEY === [hashOfficer() || OFFICER, hashView() || VIEW, activeSector()].join("|") &&
+    !!document.querySelector("#board [data-nav]");
+  const had = PREV_HAD_TOK; PREV_HAD_TOK = !!tok;
+  if (sameBoard && tok) { NAV_DONE = location.hash + "|f"; goNav(tok); return true; }
+  if (sameBoard && !tok && had) {   // Back from a tile jump: restore where the click left off
+    const y = history.state && history.state.y; if (typeof y === "number") window.scrollTo(0, y);
+    return true;
+  }
+  return false;
+}
 
 // Officer icons (phone bottom tab bar). Desktop shows the same "CSO · Estratégia" text as before.
 const OFFICER_ICON = {
@@ -1349,18 +1463,25 @@ function ofN(list, total, flt) {
   const shown = (list || []).filter(flt || inSector).length;
   return total != null && shown < total ? `${shown} de ${total}` : shown;
 }
-function panel(title, count, note, body) {
+// o.nav = key a KPI tile / Hoje count can scroll to (data-nav); o.lead = the officer's key decision
+// panel (desktop emphasis only, see .panel--key). Both are presentation hooks — no data changes.
+function panel(title, count, note, body, o) {
+  o = o || {};
   const c = count == null ? "" : `<span class="count${count === 0 ? " count--zero" : ""}">${count}</span>`;
-  return `<div class="panel"><div class="panel__hd"><h2>${U.esc(title)}</h2>${c}` +
+  return `<div class="panel${o.lead ? " panel--key" : ""}"${o.nav ? ` data-nav="${o.nav}"` : ""}><div class="panel__hd"><h2>${U.esc(title)}</h2>${c}` +
+    `${o.lead ? `<span class="lead-tag">Painel principal</span>` : ""}` +
     `<span class="spacer"></span>${note ? `<span class="hd-note">${U.esc(note)}</span>` : ""}</div>` +
     `<div class="panel__bd panel__bd--flush panel__bd--scroll">${body}</div></div>`;
 }
-function tile(label, value, sub, cls) {
-  return `<div class="tile${cls ? " is-" + cls : ""}"><div class="tile__n">${value == null ? "—" : nf(value)}</div>` +
+// nav = data-nav key of the panel/band holding the items this tile counts. activateTiles() upgrades
+// the tile to a real <a> after render, only if that target exists and the count is not 0.
+function tile(label, value, sub, cls, nav) {
+  return `<div class="tile${cls ? " is-" + cls : ""}"${nav ? ` data-go="${nav}"` : ""}><div class="tile__n">${value == null ? "—" : nf(value)}</div>` +
     `<div class="tile__l">${U.esc(label)}${sub ? ` · ${U.esc(sub)}` : ""}</div></div>`;
 }
-function band(overline, badge, inner) {
-  return `<section class="band"><div class="band-hd"><span class="overline">${U.esc(overline)}</span>` +
+function band(overline, badge, inner, o) {
+  o = o || {};
+  return `<section class="band${o.lead ? " band--key" : ""}"${o.nav ? ` data-nav="${o.nav}"` : ""}><div class="band-hd"><span class="overline">${U.esc(overline)}</span>` +
     `<span class="rule"></span>${badge ? `<span class="badge badge--infer">${U.esc(badge)}</span>` : ""}</div>${inner}</section>`;
 }
 function grid(cols, panels) { return `<div class="grid" style="grid-template-columns:${cols};gap:var(--s4)">${panels.join("")}</div>`; }
@@ -2045,7 +2166,7 @@ function flowBand() {
       <span class="hd-note">${U.esc(t.action || "")}</span><span class="spacer" style="flex:1"></span>
       ${t.decided ? "" : `<button data-tv="aprovado" data-i="${i}">Aprovar</button><button data-tv="rejeitado" data-i="${i}">Rejeitar</button>`}</div></div>`).join("");
   const nd = FLOW.filter(t => !t.decided).length;
-  return band("Fluxo executivo", `incidente → decisão · ${pl(nd, "rascunho pendente", "rascunhos pendentes")}`, `<div class="trajs" data-cap="3">${cards}</div>`);
+  return band("Fluxo executivo", `incidente → decisão · ${pl(nd, "rascunho pendente", "rascunhos pendentes")}`, `<div class="trajs" data-cap="3">${cards}</div>`, { nav: "flow" });
 }
 async function captureTraj(btn, extra) {
   const t = FLOW[Number(btn.getAttribute("data-i"))]; if (!t) return;
@@ -2126,8 +2247,8 @@ function metricsBand() {
   const c = m.ets_components || {};
   const tilesArr = [tile("Feedback", c.feedback == null ? "—" : c.feedback, "resultado favorável"),
     tile("Influência", c.influence == null ? "—" : c.influence, "com resultado"),
-    tile("Engajamento", c.engagement == null ? "—" : c.engagement, `${eng.n_interest || 0} interações`),
-    tile("Board", c.board == null ? "—" : c.board, `${mm.n_board_flagged || 0} escalados`)];
+    tile("Engajamento", c.engagement == null ? "—" : c.engagement, `${eng.n_interest || 0} interações`, null, "interest"),
+    tile("Board", c.board == null ? "—" : c.board, `${mm.n_board_flagged || 0} escalados`)];   // no list of board-escalated decisions on this board
   const tdrStr = m.tdr != null ? `<b style="color:var(--primary)">tempo de decisão −${m.tdr}%</b> · ` : "";
   // DEC-2: record the per-tenant TDR baseline (real pre-Onça latency) — no baseline yet ⇒ offer it.
   const needBase = m.tdr == null && m.tdr_baseline_hours == null;
@@ -2148,7 +2269,7 @@ function metricsBand() {
           panel("Entidades mais abertas", null, "expansões de manchete", `<div class="panel__bd--flush">${
             te.length ? hbars(te.slice(0, 8).map(x => ({ label: x.label, value: x.hits, bar: x.hits / (te[0].hits || 1) * 100, colorTok: "var(--cat-steel)" }))) : U.empty("Sem sinais de atenção ainda.", "clique numa manchete", "○")}</div>`),
           panel("Setores mais abertos", null, "expansões por setor", `<div class="panel__bd--flush">${
-            tsec.length ? hbars(tsec.slice(0, 8).map(x => ({ label: (EX.sectors.find(s => s.slug === x.sector) || {}).label || x.sector, value: x.hits, bar: x.hits / (tsec[0].hits || 1) * 100, colorTok: "var(--cat-gold)" }))) : U.empty("Sem sinais de atenção ainda.", "", "○")}</div>`)]))
+            tsec.length ? hbars(tsec.slice(0, 8).map(x => ({ label: (EX.sectors.find(s => s.slug === x.sector) || {}).label || x.sector, value: x.hits, bar: x.hits / (tsec[0].hits || 1) * 100, colorTok: "var(--cat-gold)" }))) : U.empty("Sem sinais de atenção ainda.", "", "○")}</div>`)]), { nav: "interest" })
     : "";
   const tdrSub = m.tdr != null ? `tempo de decisão −${m.tdr}%` : (m.tdr_baseline_hours != null ? "tempo de decisão em medição" : "tempo de decisão requer linha de base");
   return band("Confiança & decisão", (m.ets_full ? "índice de confiança composto" : "índice de confiança parcial") + " · " + tdrSub, readout(hero, tilesArr) + note) + interestPanel;
@@ -2330,6 +2451,7 @@ function render() {
   if (!ADMIN && Ctx.isEntryTier(DATA)) { mountEntry(); return; }
   document.querySelectorAll("#officerTabs a").forEach(a =>
     a.setAttribute("aria-current", a.getAttribute("data-officer") === OFFICER ? "page" : "false"));
+  LAST_KEY = boardKey();
   const meta = OFFICERS[OFFICER];
   document.getElementById("pgTitle").innerHTML = `<span class="pg-k">Sala executiva<span class="pg-dash"> — </span></span>${U.esc(meta.title)}`;
   document.getElementById("pgLede").textContent = meta.lede;
@@ -2343,51 +2465,51 @@ function render() {
     const [bc, bl] = bandGood(a.climate || 0, 70, 45);
     board =
       readout(heroGauge("Clima estratégico", a.climate, bandBadge(bc, bl), "--" + (bc === "crit" ? "t-crit" : bc === "warn" ? "warn" : "ok"), a.climate),
-        [tile("Alertas", a.n_alerts, "em aberto", a.n_alerts > 0 ? "high" : "ok"),
-         tile("Ameaça média", a.avg_threat, "0–100 · inferência"),
-         tile("Ameaça regulatória", a.reg_threat, "0–100 · inferência"),
-         tile("Movimentos", a.n_moves, "entrada·oferta·M&A")]) +
+        [tile("Alertas", a.n_alerts, "em aberto", a.n_alerts > 0 ? "high" : "ok", "risks"),
+         tile("Ameaça média", a.avg_threat, "0–100 · inferência", null, "trajetoria"),
+         tile("Ameaça regulatória", a.reg_threat, "0–100 · inferência", null, "reg"),
+         tile("Movimentos", a.n_moves, "entrada·oferta·M&A", null, "moves")]) +
       weeklyBand() +
       band("Mapa Competitivo · Ameaça × Momentum", "posição competitiva · ameaça atual × aceleração na janela · inferência",
         `<div class="panel"><div class="panel__bd panel__bd--flush">${scatterMap(p.momentum)}</div></div>`) +
       band("Situação", "índice de clima · inferência",
         grid("1.4fr .9fr", [panel("Manchetes executivas", ofN(p.headlines, a.n_headlines), "maior ameaça · recente", rowsCard(p.headlines)),
                             panel("Sinais emergentes", ofN(p.emerging, a.n_emerging), "janela recente", rowsCard(p.emerging))])) +
-      band("Riscos & Oportunidades", "", grid("1fr 1fr", [panel("Radar de risco", ofN(p.risks, a.n_alerts), "alertas", rowsCard(p.risks)),
-                            panel("Radar de oportunidade", ofN(p.opportunities, a.n_opportunities), "fraqueza do concorrente", rowsCard(p.opportunities))])) +
+      band("Riscos & Oportunidades", "", grid("1fr 1fr", [panel("Radar de risco", ofN(p.risks, a.n_alerts), "alertas", rowsCard(p.risks), { nav: "risks", lead: true }),
+                            panel("Radar de oportunidade", ofN(p.opportunities, a.n_opportunities), "fraqueza do concorrente", rowsCard(p.opportunities), { lead: true })]), { lead: true }) +
       band("Inteligência competitiva", "momentum na janela · inferência",
         grid("1fr 1fr", [panel("Momentum do concorrente", ofN(p.momentum, totN(p, "momentum")), "↑ ganha · ↓ recua", rowsMomentum(p.momentum)),
-                        panel("Movimentos estratégicos", ofN(p.moves, a.n_moves), "entrada·oferta·M&A", rowsCard(p.moves))])) +
+                        panel("Movimentos estratégicos", ofN(p.moves, a.n_moves), "entrada·oferta·M&A", rowsCard(p.moves), { nav: "moves" })])) +
       band("Capital social", "ato societário registrado em junta comercial · Receita Federal · o ato em si não é público",
         panel("Movimentos de capital social", null, "valor anterior → atual", rowsCapital(p.capital_moves))) +
       band("Trajetória de ameaça", "linha do tempo · ameaça média diária por concorrente · inferência",
-        `<div class="panel"><div class="panel__bd panel__bd--flush">${threatTimeline(p.momentum)}</div></div>`) +
+        `<div class="panel"><div class="panel__bd panel__bd--flush">${threatTimeline(p.momentum)}</div></div>`, { nav: "trajetoria" }) +
       band("Postura estratégica", "SWOT + TOWS · teses validadas",
         panel("Concorrentes por postura", ofN(p.posture, totN(p, "posture")), "S·W·O·T + postura TOWS", rowsPosture(p.posture))) +
       band("Força financeira dos concorrentes", "ROE·ROA·alavancagem·eficiência·share de lucro · IF.data + balancete · inferência",
         panel("Rentabilidade & eficiência (maior ROE primeiro)", null, "ROE anual · ROA · alav · opex/ativo · headroom · share", rowsFinancials(p.financials))) +
       band("Mercado · Cotações B3", "concorrentes listados no escopo · Yahoo Finance · ~60s",
         `<div class="panel"><div class="panel__bd panel__bd--flush"><div id="b3ticker" class="b3wrap">${U.loading("Carregando cotações…")}</div></div></div>`) +
-      band("Inteligência regulatória (resumo)", "", panel("Mudanças por alcance", ofN(p.regulatory, a.n_reg), "domínio·setores·prazo", rowsReg(p.regulatory)));
+      band("Inteligência regulatória (resumo)", "", panel("Mudanças por alcance", ofN(p.regulatory, a.n_reg), "domínio·setores·prazo", rowsReg(p.regulatory), { nav: "reg" }));
   } else if (OFFICER === "cro") {
     const [bc, bl] = bandThreat(a.reg_threat || 0, 65, 40);
     board =
       readout(heroGauge("Ameaça regulatória", a.reg_threat, bandBadge(bc, bl), "--" + (bc === "crit" ? "t-crit" : bc === "high" ? "t-high" : "ok"), a.reg_threat),
         [tile("Eventos setoriais", a.n_sector_events || 0, a.sector_event_severity ? "máx. " + (SECTOR_SEV_PT[a.sector_event_severity] || a.sector_event_severity) : "ato oficial / ≥2 veículos",
-              a.sector_event_severity === "critical" ? "crit" : a.sector_event_severity === "high" ? "high" : null),
-         tile("Cartões regulatórios", a.n_reg, "no escopo"),
+              a.sector_event_severity === "critical" ? "crit" : a.sector_event_severity === "high" ? "high" : null, "events"),
+         tile("Cartões regulatórios", a.n_reg, "no escopo", null, "impact"),
          tile("Atos alterados", a.n_changes, a.n_acts_changed != null && (a.n_sector_events || 0) > 0
-              ? `${a.n_acts_changed} atos + ${a.n_sector_events} eventos setoriais` : "com mudança enumerada"),
-         tile("Maior alcance", a.max_blast, "setores", a.max_blast >= 3 ? "high" : null),
+              ? `${a.n_acts_changed} atos + ${a.n_sector_events} eventos setoriais` : "com mudança enumerada", null, "changes"),
+         tile("Maior alcance", a.max_blast, "setores", a.max_blast >= 3 ? "high" : null, "impact"),
          tile("Solidez sob atenção", a.n_weak_solvency, a.min_basileia != null ? "mín. Basileia " + a.min_basileia + "%" : "prudencial",
-              (a.n_weak_solvency || 0) > 0 ? "high" : null)]) +
+              (a.n_weak_solvency || 0) > 0 ? "high" : null, "solvency")]) +
       band("Eventos setoriais", "mudança regulatória do setor inteiro · ato oficial primeiro",
-           panel("Eventos setoriais", (p.sector_events || []).filter(inSectorStrict).length, "setor · severidade · fontes", rowsSectorEvents(p.sector_events))) +
+           panel("Eventos setoriais", (p.sector_events || []).filter(inSectorStrict).length, "setor · severidade · fontes", rowsSectorEvents(p.sector_events), { nav: "events", lead: true }), { lead: true }) +
       band("Solidez prudencial dos concorrentes", "Basileia + LCR + PDD/mês + inadimplência + fragilidade + tom",
-           panel("Solvência, inadimplência, trajetória & tom (mais frágil primeiro)", null, "Basileia · CET1 · PDD/mês · NPL · tom", rowsSolvency(p.solvency))) +
-      band("Impacto & alcance", "alcance · quantos setores cada norma afeta", panel("Mudanças por impacto", ofN(p.impact, a.n_reg), "banda de alcance · dificuldade", rowsReg(p.impact))) +
+           panel("Solvência, inadimplência, trajetória & tom (mais frágil primeiro)", null, "Basileia · CET1 · PDD/mês · NPL · tom", rowsSolvency(p.solvency), { nav: "solvency" })) +
+      band("Impacto & alcance", "alcance · quantos setores cada norma afeta", panel("Mudanças por impacto", ofN(p.impact, a.n_reg), "banda de alcance · dificuldade", rowsReg(p.impact), { nav: "impact" })) +
       band("Linha do tempo regulatória", "", grid("1fr 1fr", [panel("Consulta → norma → fiscalização", ofN(p.timeline, a.n_reg), "recente", rowsReg(p.timeline)),
-                            panel("Atos com mudanças enumeradas", ofN(p.changes, a.n_acts_changed), "amending acts", rowsReg(p.changes))])) +
+                            panel("Atos com mudanças enumeradas", ofN(p.changes, a.n_acts_changed), "amending acts", rowsReg(p.changes), { nav: "changes" })])) +
       band("Calendário de conformidade", "", panel("Prazos", null, "dias até o prazo", rowsReg(p.deadlines, "Nenhum prazo de conformidade nos itens do escopo.")));
   } else if (OFFICER === "cco") {
     // #211: client feeds withhold the operator-only integrity audit — the hero then reads the
@@ -2403,11 +2525,11 @@ function render() {
       readout(iw ? heroCount("Ações graves", risk, bandBadge(rc[0], rc[1]), "medidas de supervisão críticas/altas no escopo")
                  : heroCount("Achados graves", a.n_high, bandBadge(rc[0], rc[1]), "severidade alta na auditoria"),
         [tile("Achados de integridade", iw ? null : a.n_integrity, iw ? "auditoria do operador" : "registro",
-              iw ? null : a.n_integrity > 0 ? "warn" : (sigOk ? "ok" : null)),
-         tile("Insolvência (confirmada)", a.n_distress, "RJ / falência", a.n_distress > 0 ? "crit" : "ok"),
-         tile("Reputação", a.n_rep, "rankings BCB"),
+              iw ? null : a.n_integrity > 0 ? "warn" : (sigOk ? "ok" : null), "integrity"),
+         tile("Insolvência (confirmada)", a.n_distress, "RJ / falência", a.n_distress > 0 ? "crit" : "ok", "risk"),
+         tile("Reputação", a.n_rep, "rankings BCB", null, "rep"),
          tile("Fiscalização", a.n_enforcement || 0, (a.n_enforcement_severe || 0) + " crítico/alto",
-              a.enforcement_severity === "critical" ? "crit" : a.enforcement_severity === "high" ? "high" : null)]) +
+              a.enforcement_severity === "critical" ? "crit" : a.enforcement_severity === "high" ? "high" : null, "enforcement")]) +
       (SECTOR !== "__all__" && !sigOk ? band("Sinal de compliance", "insuficiente",
         `<div class="panel"><div class="panel__bd" style="padding:var(--s4);color:var(--muted);font-size:var(--fs-meta)">` +
         `Cobertura de integridade/reputação para este setor é insuficiente para uma leitura de compliance — ` +
@@ -2415,12 +2537,12 @@ function render() {
         `concentrado em banking e fintech (ranking de reclamações do BCB).</div></div>`) : "") +
       band("Fiscalização & sanções", "liquidação · intervenção · RAET · cassação · sanções · CEIS/CNEP",
            panel("Ações de supervisores contra operadores", (p.enforcement || []).filter(inSector).length,
-             "mais grave primeiro · fontes linkadas", rowsEnforcement(p.enforcement))) +
-      band("Registro de risco", "", panel(iw ? "Fiscalização · insolvência · reputação" : "Fiscalização · insolvência · reputação · integridade", null, "prioridade", rowsRisk(p.risk_register))) +
+             "mais grave primeiro · fontes linkadas", rowsEnforcement(p.enforcement), { nav: "enforcement", lead: true }), { lead: true }) +
+      band("Registro de risco", "", panel(iw ? "Fiscalização · insolvência · reputação" : "Fiscalização · insolvência · reputação · integridade", null, "prioridade", rowsRisk(p.risk_register), { nav: "risk" })) +
       band(iw ? "Reputação" : "Integridade & reputação", "",
-        iw ? panel("Reputação (reclamações)", null, "pior ranking primeiro", rowsRep(p.reputation))
-           : grid("1fr 1fr", [panel("Auditoria de integridade", ofN(p.integrity, a.n_integrity, inSectorStrict), "achados do registro", rowsIntegrity(p.integrity)),
-                        panel("Reputação (reclamações)", null, "pior ranking primeiro", rowsRep(p.reputation))]));
+        iw ? panel("Reputação (reclamações)", null, "pior ranking primeiro", rowsRep(p.reputation), { nav: "rep" })
+           : grid("1fr 1fr", [panel("Auditoria de integridade", ofN(p.integrity, a.n_integrity, inSectorStrict), "achados do registro", rowsIntegrity(p.integrity), { nav: "integrity" }),
+                        panel("Reputação (reclamações)", null, "pior ranking primeiro", rowsRep(p.reputation), { nav: "rep" })]));
   } else if (OFFICER === "cpo") {
     const port = p.portfolio || [];
     const nGaps = (p.blind_spots || []).filter(g => g.status === "open").length; // cross-sector
@@ -2441,25 +2563,27 @@ function render() {
       const ccCls = cc.score == null ? null : cc.score < 60 ? "high" : cc.score < 85 ? "warn" : "ok";
       board =
         readout(heroGauge("Maturidade da cobertura", avgMat, bandBadge(bc, bl), "--" + (bc === "crit" ? "t-crit" : bc === "warn" ? "warn" : "ok"), avgMat),
-          [tile("Setores cobertos", `${covered}/${total}`, "roster"),
-           tile("Propostas", nDisc, "pipeline de descoberta"),
-           tile("Metadado mais fraco", `${nf(thin[1])}%`, `${FIELD_LABEL[thin[0]] || thin[0]} · cobertura da base`, thin[1] < 20 ? "crit" : "warn"),
-           tile("Confiança de cobertura", cc.score == null ? "—" : cc.score, ccSub, ccCls),
-           tile("Pontos cegos", nGaps, "perguntas · geral", nGaps > 0 ? "high" : "ok")]) +
+          [tile("Setores cobertos", `${covered}/${total}`, "roster", null, "maturity"),
+           tile("Propostas", nDisc, "pipeline de descoberta", null, "discovery"),
+           tile("Metadado mais fraco", `${nf(thin[1])}%`, `${FIELD_LABEL[thin[0]] || thin[0]} · cobertura da base`, thin[1] < 20 ? "crit" : "warn", "completeness"),
+           // the client score is a reduction of raw source telemetry that only the operator sees
+           // (the panel below is ADMIN-only) — a client tile has no panel that holds those items.
+           tile("Confiança de cobertura", cc.score == null ? "—" : cc.score, ccSub, ccCls, ADMIN ? "sourceruns" : null),
+           tile("Pontos cegos", nGaps, "perguntas · geral", nGaps > 0 ? "high" : "ok", "gaps")]) +
         band("Maturidade da cobertura por setor", "breadth×depth×frescor×proveniência · inferência",
-          `<div class="panel"><div class="panel__bd panel__bd--flush">${maturityChart(port)}</div></div>`) +
+          `<div class="panel" data-nav="maturity"><div class="panel__bd panel__bd--flush">${maturityChart(port)}</div></div>`) +
         band("Força da proveniência por setor", "oficial → identificada",
           grid("1.2fr 1fr", [`<div class="panel"><div class="panel__bd panel__bd--flush">${provenanceChart(port)}</div></div>`,
-            `<div class="panel"><div class="panel__hd"><h2>Completude de metadados</h2><span class="spacer"></span><span class="hd-note">% da base · Produto</span></div><div class="panel__bd panel__bd--flush">${completenessChart(p.field_completeness)}</div></div>`])) +
+            `<div class="panel" data-nav="completeness"><div class="panel__hd"><h2>Completude de metadados</h2><span class="spacer"></span><span class="hd-note">% da base · Produto</span></div><div class="panel__bd panel__bd--flush">${completenessChart(p.field_completeness)}</div></div>`])) +
         band("Pipeline de descoberta & pontos cegos", "",
-          grid("1fr 1fr", [panel("Descoberta por setor", null, "novas entidades propostas", `<div class="panel__bd--flush">${discoveryChart(port)}</div>`),
-            panel("Pontos cegos", null, "cross-setor · sem tag de indústria", rowsGap(p.blind_spots))])) +
+          grid("1fr 1fr", [panel("Descoberta por setor", null, "novas entidades propostas", `<div class="panel__bd--flush">${discoveryChart(port)}</div>`, { nav: "discovery" }),
+            panel("Pontos cegos", null, "cross-setor · sem tag de indústria", rowsGap(p.blind_spots), { nav: "gaps" })])) +
         band("Estrutura de mercado & saúde das fontes", "receita CVM · base IF.data · frescor por fonte",
           grid("1fr 1fr 1fr", [panel("Tamanho de mercado por setor", null, "receita dos emissores listados (CVM)", `<div class="panel__bd--flush">${marketSizeChart(p.market_structure, EX.sectors)}</div>`),
             panel("Base de ativos do SFN (IF.data)", null, "sistema · não só listadas · líderes por participação", `<div class="panel__bd--flush">${ifdataMarketBlock(p.ifdata_market)}</div>`),
             panel("Saúde das fontes", null, "frescor · volume · defasagem", `<div class="panel__bd--flush">${sourceHealthChart(p.source_health)}</div>`)])) +
         (ADMIN ? band("Confiabilidade da ingestão (operador)", "telemetria BRUTA por fonte · erro/defasagem que o proxy de frescor não vê (#76) · só operador, ver tile \"Confiança de cobertura\" na visão do cliente",
-          panel("Execução das fontes (pior primeiro)", null, "última execução ok · erro · defasagem", `<div class="panel__bd--flush">${sourceRunsChart(p.source_runs)}</div>`)) : "") +
+          panel("Execução das fontes (pior primeiro)", null, "última execução ok · erro · defasagem", `<div class="panel__bd--flush">${sourceRunsChart(p.source_runs)}</div>`, { nav: "sourceruns" })) : "") +
         band("Instrumentação de solidez prudencial", "cobertura de Basileia + tom Pilar 3 por setor",
           panel("Cobertura de solidez (menor primeiro)", null, "% do portfólio com dado prudencial", rowsSoundnessCov(p.soundness_coverage)));
     } else {
@@ -2469,24 +2593,24 @@ function render() {
       board =
         readout(heroGauge("Maturidade — " + (pr.label || SECTOR), pr.maturity, bandBadge(mb === "ok" ? "ok" : mb === "warn" ? "warn" : "high", BAND_PT[pr.tier] || (pr.tier || "").toString()),
                           "--" + (mb === "ok" ? "ok" : mb === "warn" ? "warn" : "t-high"), pr.maturity || 0),
-          [tile("Universo", pr.universe, "entidades no setor"),
-           tile("Rastreadas", pr.tracked, "com atividade", (pr.tracked || 0) > 0 ? "ok" : "high"),
-           tile("Narrativas", pr.narratives, `${pr.narratives_latest || 0} recentes`),
-           tile("Proveniência", pr.provenance_score, "0–100 · força da fonte"),
-           tile("Concentração", pr.concentration, "top-3 · share dos cards"),
-           tile("Fontes", pr.lens_diversity, "lentes distintas"),
+          [tile("Universo", pr.universe, "entidades no setor"),   // no panel lists the whole universe
+           tile("Rastreadas", pr.tracked, "com atividade", (pr.tracked || 0) > 0 ? "ok" : "high", "topentities"),
+           tile("Narrativas", pr.narratives, `${pr.narratives_latest || 0} recentes`),   // no narrative list on this board
+           tile("Proveniência", pr.provenance_score, "0–100 · força da fonte", null, "provenance"),
+           tile("Concentração", pr.concentration, "top-3 · share dos cards", null, "topentities"),
+           tile("Fontes", pr.lens_diversity, "lentes distintas"),   // source health is portfolio-only: no panel here
            tile("Frescor", pr.freshness_days == null ? "—" : pr.freshness_days + "d", "desde o último sinal"),
-           tile("Descoberta", pr.discovery, "propostas no setor")]) +
+           tile("Descoberta", pr.discovery, "propostas no setor", null, "discovery")]) +
         band("Proveniência & metadados", "",
-          grid("1fr 1fr", [panel("Proveniência da base", null, "oficial → identificada", `<div class="panel__bd--flush">${provenanceLegend()}<div class="chart"><div class="crow"><span class="cl" title="${U.esc(pr.label || "")}">${U.esc(pr.label || "")}</span>${provStack(pr.provenance || {})}<span class="cv">${pr.provenance_score || 0}</span></div></div></div>`),
+          grid("1fr 1fr", [panel("Proveniência da base", null, "oficial → identificada", `<div class="panel__bd--flush">${provenanceLegend()}<div class="chart"><div class="crow"><span class="cl" title="${U.esc(pr.label || "")}">${U.esc(pr.label || "")}</span>${provStack(pr.provenance || {})}<span class="cv">${pr.provenance_score || 0}</span></div></div></div>`, { nav: "provenance" }),
             panel("Completude de metadados", null, "% das entidades do setor", `<div class="panel__bd--flush">${completenessChart(pr.completeness)}</div>`)])) +
         band("Posição de mercado & preço", "",
           grid("1.2fr 1fr", [panel("Estrutura de mercado (CVM)", null, "receita · share · concentração", `<div class="panel__bd--flush">${marketDetail((p.market_structure || {})[SECTOR])}</div>`),
             panel("Pressão de preço", null, "proxy · lentes juros/ofertas", `<div style="padding:var(--s4)">${pricingBadge((p.pricing || {})[SECTOR]) || U.empty("Sem sinais de preço no setor.", "", "○")}</div>`)])) +
         band("Conjunto competitivo", "top entidades por volume de sinais",
-          `<div class="panel"><div class="panel__bd panel__bd--flush">${rowsTopEntities((p.top_entities || {})[SECTOR])}</div></div>`) +
+          `<div class="panel"><div class="panel__bd panel__bd--flush">${rowsTopEntities((p.top_entities || {})[SECTOR])}</div></div>`, { nav: "topentities" }) +
         band("Descoberta & pontos cegos", "",
-          grid("1fr 1fr", [panel("Propostas de descoberta", null, "no setor · revisão pendente", rowsDiscovery(p.discovery)),
+          grid("1fr 1fr", [panel("Propostas de descoberta", null, "no setor · revisão pendente", rowsDiscovery(p.discovery), { nav: "discovery" }),
             panel("Pontos cegos", null, "cross-setor", rowsGap(p.blind_spots))]));
     }
   }
@@ -2513,8 +2637,8 @@ function render() {
     band("Movimentos de produto", "lançamentos & ofertas · lente ofertas/produto",
       panel("Feed de produto", ofN(p.product_moves, totN(p, "product_moves")), "mais recente primeiro", rowsCard(p.product_moves))) +
     band("Crescimento (Ansoff) & portfólio (BCG)", "vetores de crescimento · quadrante · teses validadas",
-      grid("1fr 1fr", [panel("Ansoff", ofN(p.ansoff, totN(p, "ansoff")), "penetração·desenvolvimento·diversificação", rowsFramework(p.ansoff)),
-                       panel("BCG", ofN(p.bcg, totN(p, "bcg")), "estrela·vaca·interrogação·abacaxi", rowsFramework(p.bcg))]));
+      grid("1fr 1fr", [panel("Ansoff", ofN(p.ansoff, totN(p, "ansoff")), "penetração·desenvolvimento·diversificação", rowsFramework(p.ansoff), { lead: true }),
+                       panel("BCG", ofN(p.bcg, totN(p, "bcg")), "estrela·vaca·interrogação·abacaxi", rowsFramework(p.bcg), { lead: true })]), { lead: true });
   el.innerHTML = flowBand() + board + silenceBand() + outcomesDueBand() + metricsBand() + referenceBand();
   if (OFFICER === "cso") loadQuotes();  // async B3 market pulse (fills #b3ticker post-render)
   // Click the headline to expand/collapse it inline (doesn't open the drawer); an expand is
@@ -2549,6 +2673,14 @@ function render() {
     else { tdrBtn.textContent = "falha"; }
   });
   renderRecs((p.recommendations || []).filter(inSector));
+  activateTiles(el);
+  // a deep link / tile jump ("…/ver-<key>"): scroll to + highlight the panel once per hash
+  // (a theme toggle or the warm-cache re-render must not yank the page back again)
+  const tok = navToken(); PREV_HAD_TOK = !!tok;
+  if (tok && NAV_DONE !== location.hash + (STALE ? "|s" : "|f")) {
+    NAV_DONE = location.hash + (STALE ? "|s" : "|f");
+    setTimeout(() => goNav(tok), 0);
+  }
 }
 
 // Phone: a long list shows its first rows and a "Ver todos (N)" button instead of a 460px box that
@@ -2661,9 +2793,14 @@ function hojePriorities(officer) {
   return (((EX[officer] || {}).panels || {}).recommendations || []).filter(inSector).slice(0, 3)
     .map(r => ({ id: r.evidence_id, title: r.text, industries: r.industries, date: null, entity_label: HZ_LABEL[r.horizon] || r.horizon }));
 }
-function hojeSec(id, title, n, sub, body) {
+// go = data-nav key of the Painel panel that holds the counted items (tile-style deep link,
+// "#<officer>/painel/ver-<key>"); only passed when that panel holds exactly this set.
+function hojeSec(id, title, n, sub, body, go, goTitle) {
+  const cnt = n == null ? "" : go && n !== 0
+    ? `<a class="n n--nav" data-go="${go}" href="${navHash(go, OFFICER, "painel")}" aria-label="${U.esc(`${title}: ${n}. Ver no painel: ${goTitle}`)}">${n}<span class="n-go" aria-hidden="true"> →</span></a>`
+    : `<span class="n">${n}</span>`;
   return `<section class="hoje-sec" id="${id}"><div class="hoje-hd"><h2>${U.esc(title)}</h2>` +
-    `${n != null ? `<span class="n">${n}</span>` : ""}<span class="sub hd-note">${U.esc(sub || "")}</span></div>${body}</section>`;
+    `${cnt}<span class="sub hd-note">${U.esc(sub || "")}</span></div>${body}</section>`;
 }
 function renderHoje(el) {
   const since = hojeBaseline(OFFICER);
@@ -2688,11 +2825,14 @@ function renderHoje(el) {
   // #215: the section lists a few highlights but counted everything — say "3 de 17".
   const alShown = top.length + Math.min(al.sev.length, 2) + Math.min(al.radar.length, 2);
   let html = hojeSec("hoje-alertas", "Novo desde a sua última visita", alShown < al.n ? `${alShown} de ${al.n}` : al.n,
-      "desde " + dShort(since.slice(0, 10)) + (alShown < al.n ? " · demais no Painel" : ""), alertsBody) +
+      "desde " + dShort(since.slice(0, 10)) + (alShown < al.n ? " · demais no Painel" : ""), alertsBody,
+      // the count mixes alert cards, sector events and product-radar alerts; only when it is purely
+      // CSO alert cards does one Painel panel (Radar de risco = every is_alert card) hold the set
+      OFFICER === "cso" && al.cards.length === al.n ? "risks" : null, "Radar de risco") +
     hojeSec("hoje-prioridades", "Top 3 prioridades", null, OFFICER === "cso" ? "briefing semanal" : "recomendações",
       pri.length ? `<div class="panel__bd--flush">${rowsCard(pri)}</div>` : U.empty("Sem prioridades na janela.", "", "○")) +
     hojeSec("hoje-decisoes", "Decisões pendentes", pendAll.length > pend.length ? `${pend.length} de ${pendAll.length}` : pend.length,
-      (pendAll.length === 1 ? "rascunho do fluxo executivo" : "rascunhos do fluxo executivo") + (pendAll.length > pend.length ? " · demais no Painel" : ""), decBody);
+      (pendAll.length === 1 ? "rascunho do fluxo executivo" : "rascunhos do fluxo executivo") + (pendAll.length > pend.length ? " · demais no Painel" : ""), decBody, "flow", "Fluxo executivo");
   if (OFFICER === "cpo") {
     const ev = ((((EX.cpo || {}).panels || {}).product_radar) || DATA.product_radar || {});
     html += hojeSec("hoje-radar", "Radar de produto", null, "mais recente", rowsRadar({ ...ev, events: (ev.events || []).slice(0, 3) }));

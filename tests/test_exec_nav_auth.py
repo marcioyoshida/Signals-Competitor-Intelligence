@@ -94,3 +94,64 @@ def test_federated_gate_warns_about_hidden_apple_email():
     assert 'const who = /apple/i.test(idp) ? "Apple" : "Google";' in CTX
     assert "conta individual nova" in CTX
     assert 'quer acompanhar no plano Entry${APP ? "" : " (R$ 490/mês' in CTX   # no price in the app
+
+
+def _tile_calls():
+    """Yield the top-level argument list of every `tile(...)` call in the board code."""
+    i = 0
+    while True:
+        i = EXEC.find("tile(", i)
+        if i < 0:
+            return
+        if EXEC[max(0, i - 8):i].endswith("function "):
+            i += 5
+            continue
+        j, depth, args, cur, q = i + 5, 1, [], "", None
+        while depth:
+            ch = EXEC[j]
+            if q:
+                cur += ch
+                if ch == "\\":
+                    cur += EXEC[j + 1]; j += 1
+                elif ch == q:
+                    q = None
+            elif ch in "\"'`":
+                q = ch; cur += ch
+            elif ch in "([{":
+                depth += 1; cur += ch
+            elif ch in ")]}":
+                depth -= 1
+                if depth:
+                    cur += ch
+            elif ch == "," and depth == 1:
+                args.append(cur.strip()); cur = ""
+            else:
+                cur += ch
+            j += 1
+        args.append(cur.strip())
+        yield args
+        i = j
+
+
+def test_exec_kpi_tiles_lead_to_their_panel():
+    import re
+    nav = set(re.findall(r'nav: "([a-z]+)"', EXEC)) | set(re.findall(r'data-nav="([a-z]+)"', EXEC))
+    dests = set()
+    for args in _tile_calls():
+        if len(args) >= 5:
+            dests |= set(re.findall(r'"([a-z]+)"', args[4]))
+    assert len(dests) >= 14
+    # a tile may only point at a panel/band that exists on the board (data-nav) — never a vague spot
+    assert dests <= nav, dests - nav
+    # activation: real <a>, deep link through the hash, no fake affordance on a 0 / unmapped tile
+    assert "function activateTiles(root)" in EXEC and 'a.setAttribute("href", navHash(key))' in EXEC
+    assert 'if (!t || empty) { d.removeAttribute("data-go"); return; }' in EXEC
+    assert 'if (ev && ev.type === "hashchange" && navOnlyChange()) return;' in EXEC
+    assert "a.tile--nav:focus-visible" in EXEC
+
+
+def test_exec_key_panels_emphasis_is_desktop_only():
+    css = EXEC.split(".lead-tag { display:none; }", 1)[1].split("@media (min-width: 861px) {", 1)[1].split("\n  }\n", 1)[0]
+    assert ".panel--key > .panel__hd" in css and "var(--primary-weak)" in css and ".lead-tag" in css
+    assert "grid-row" not in css                      # masonry unset-span trap: no row spans
+    assert EXEC.count("lead: true") >= 8              # CSO, CRO, CCO, CPO lead bands (band + panels)
