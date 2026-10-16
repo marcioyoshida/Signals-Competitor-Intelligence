@@ -636,3 +636,48 @@ def test_kb_citations_merged_per_act():
                   kb_retrieve=lambda q: kb)
     assert [c["id"] for c in r["citations"]] == ["kb:0", "kb:1", "kb:3", "kb:6"]
     assert "[kb:2]" not in r["answer"] and r["answer"].count("[kb:1]") == 1
+
+
+# --- "what changed in my scope" (the Ask chips) --------------------------------------------
+ASK_CHIPS = [  # v3/index.html ASK_EXAMPLES + v2/ask.js DEFAULT_EXAMPLES
+    "O que mudou esta semana no meu escopo?", "Quem está em alerta agora?",
+    "Qual mudança regulatória tem maior alcance?", "Onde há maior risco prudencial?",
+    "O que mudou recentemente no meu roster?", "Quais entidades estão em alerta esta semana?",
+    "Quem está exposto à regra do DICT?", "Que novos entrantes apareceram na janela?",
+]
+
+
+def test_every_shipped_ask_chip_passes_the_scope_gate():
+    site = Path(__file__).resolve().parents[1] / "src" / "dashboard" / "site"
+    shipped = (site / "v3" / "index.html").read_text(encoding="utf-8") + (site / "v2" / "ask.js").read_text(encoding="utf-8")
+    for q in ASK_CHIPS:
+        assert f'"{q}"' in shipped, q   # keep this list in step with the UI
+        assert aa.classify_scope(q, entity_vocab=set(), lens_vocab=set())[0], q
+
+
+def test_digest_phrasing_in_domain_but_bare_change_question_is_not():
+    for q in ("Quais as novidades desta semana?", "Resuma a semana", "Quais os destaques de hoje?"):
+        assert aa.classify_scope(q, entity_vocab=set(), lens_vocab=set())[0], q
+    for q in ("O que mudou na Copa?", "me passe uma receita de bolo"):
+        assert not aa.classify_scope(q, entity_vocab=set(), lens_vocab=set())[0], q
+
+
+def _dated(i, date, alert=False, threat=10, entity="e"):
+    return {"id": f"c{i}", "date": date, "entity": entity, "entity_label": entity.title(),
+            "lenses": ["news"], "is_alert": alert, "threat_score": threat,
+            "narrative": f"evento {i} sem palavras em comum", "citations": [{"url": f"http://x/{i}"}]}
+
+
+def test_scope_digest_grounds_on_the_last_week_alerts_first():
+    feed = [_dated(1, "2026-10-15", threat=20), _dated(2, "2026-10-12", alert=True, threat=50),
+            _dated(3, "2026-10-01", alert=True, threat=99), _dated(4, "2026-10-09", threat=70)]
+    ids = [c["id"] for c in aa.select_grounding("O que mudou esta semana no meu escopo?", feed)]
+    assert ids == ["c2", "c4", "c1"]          # c3 is outside the 7 days before the newest card
+    ids = [c["id"] for c in aa.select_grounding("Quais os destaques de hoje?", feed)]
+    assert ids == ["c1"]
+
+
+def test_digest_words_do_not_dilute_a_specific_question():
+    feed = _feed()["feed"] + [_dated(9, "2026-08-24", alert=True, threat=99)]
+    ids = [c["id"] for c in aa.select_grounding("O que o Itaú mudou esta semana?", feed)]
+    assert ids and ids[0] == "n1" and "c9" not in ids

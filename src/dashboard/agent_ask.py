@@ -124,6 +124,11 @@ _DOMAIN_CUES = {
     # CPO product radar (#159): app quality + product changes.
     "aplicativo", "produto", "produtos", "lancamento", "lancamentos", "instabilidade",
     "cashback", "beneficio", "beneficios", "tarifa", "tarifas",
+    # "what changed in MY scope" — the Ask chips ("O que mudou esta semana no meu escopo?",
+    # "…no meu roster?", "Que novos entrantes…?"). Scope-anchored words only: a bare
+    # "o que mudou na Copa?" still has no domain cue and stays refused.
+    "escopo", "roster", "carteira", "entrantes", "entrante", "novidades", "novidade",
+    "destaques", "destaque", "resumo", "resuma", "panorama",
 }
 # Hard off-domain / injection cues → refuse even if a domain word slips in.
 _REFUSE_CUES = {
@@ -233,6 +238,26 @@ _DISTRESS_CUES = {
 }
 
 
+# "What changed (this week) in my scope?" — a question about RECENCY, not a topic. These words
+# never count as keyword overlap (they'd match random card prose); when nothing else in the
+# question selects cards, the answer is grounded on the scope's most recent cards instead.
+_DIGEST_CUES = {
+    "mudou", "mudaram", "mudancas", "novidade", "novidades", "novo", "novos", "nova", "novas",
+    "destaque", "destaques", "resumo", "resuma", "recente", "recentes", "recentemente",
+    "aconteceu", "escopo", "roster", "carteira", "panorama", "ultimos", "ultimas", "janela",
+    "apareceram", "surgiram", "agora",
+}
+
+
+def _digest_window_days(q: str) -> int:
+    qf = _fold(q)
+    if re.search(r"\bhoje\b|\bontem\b", qf):
+        return 1
+    if re.search(r"\bmes\b|\b30 dias\b", qf):
+        return 30
+    return 7
+
+
 def _is_distress_card(card: dict[str, Any]) -> bool:
     cid = str(card.get("id") or "")
     if cid.startswith("distress:"):
@@ -251,7 +276,9 @@ def select_grounding(
     dashboard scope (entity/lens/date), alerts and recency. Returns top-K
     compact citable slices."""
     scope = scope or {}
-    q_toks = set(_tokens(q))
+    q_all = set(_tokens(q))
+    digest_intent = bool(q_all & _DIGEST_CUES)
+    q_toks = q_all - _DIGEST_CUES
     classification_intent = bool(q_toks & _CLASSIFICATION_CUES)
     distress_intent = bool(q_toks & _DISTRESS_CUES)
     # ADR #34 Phase 2: the question's topic intent (regulacao/pagamentos/…) — a
@@ -325,8 +352,30 @@ def select_grounding(
         # date as tiebreaker (recent first) via secondary sort key
         scored.append((score, str(card.get("date") or ""), card))
 
+    if not scored and digest_intent:
+        return [_compact_card(c) for c in _recent_digest(q, feed, limit)]
     scored.sort(key=lambda t: (t[0], t[1]), reverse=True)
     return [_compact_card(c) for _, _, c in scored[:limit]]
+
+
+def _recent_digest(q: str, feed: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
+    """The scope's last N days (relative to its newest card, not the wall clock): alerts first,
+    then threat, then date. `feed` is already the caller's tenant-scoped slice."""
+    from datetime import date, timedelta
+    dated = [c for c in feed if re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(c.get("date") or "")[:10])]
+    if not dated:
+        return []
+    newest = max(str(c["date"])[:10] for c in dated)
+    since = (date.fromisoformat(newest) - timedelta(days=_digest_window_days(q))).isoformat()
+
+    def threat(c: dict[str, Any]) -> float:
+        try:
+            return float(c.get("threat_score") or 0)
+        except (TypeError, ValueError):
+            return 0.0
+    recent = [c for c in dated if str(c["date"])[:10] >= since and not str(c.get("id") or "").startswith("fact:")]
+    recent.sort(key=lambda c: (bool(c.get("is_alert")), threat(c), str(c["date"])), reverse=True)
+    return recent[:limit]
 
 
 def build_messages(
