@@ -141,7 +141,10 @@ def curate(
         res = verify(ent, root, fetcher=fetcher)
         written = False
         if res["ok"] and apply:
-            written = bool(entity_registry.add_cnpj_roots(entity_id, [root], table=table))
+            # "enrich": a BrasilAPI-verified data write, kept distinct from manual
+            # curation in the ADR 018 journal (#265).
+            written = bool(entity_registry.add_cnpj_roots(entity_id, [root], source="enrich",
+                                                          table=table))
         report.append({"entity": entity_id, **res, "written": written})
         if pause_sec:
             time.sleep(pause_sec)

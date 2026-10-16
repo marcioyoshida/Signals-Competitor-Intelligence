@@ -53,6 +53,25 @@ def test_curate_writes_only_verified(monkeypatch):
     assert er.get_entity("ghostco", table=t).get("cnpj_roots", []) == []
 
 
+def test_curate_journals_writes_as_enrich(monkeypatch):
+    # A verified seed write is data enrichment, not manual curation (#265).
+    class _Sink:
+        def __init__(self):
+            self.items = []
+
+        def put_item(self, Item):
+            self.items.append(Item)
+
+    sink = _Sink()
+    monkeypatch.setattr(er, "_log_table", lambda: sink)
+    t = FakeTable()
+    er.put_entity("nubank", "Nubank", ["NUBANK"], confidence="curated", table=t)
+    sink.items.clear()
+    fetch = _fetch({"18236120": {"razao_social": "NU PAGAMENTOS S.A. - NUBANK"}})
+    cc.curate({"nubank": "18236120"}, fetcher=fetch, apply=True, table=t, pause_sec=0)
+    assert [(i["action"], i["source"]) for i in sink.items] == [("add_cnpj_roots", "enrich")]
+
+
 def test_curate_skips_entity_with_existing_root(monkeypatch):
     t = FakeTable()
     er.put_entity("cielo", "Cielo", ["CIELO"], cnpj_roots=["01027058"], confidence="curated", table=t)
