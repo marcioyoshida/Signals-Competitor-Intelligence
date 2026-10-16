@@ -245,8 +245,11 @@ _DIGEST_CUES = {
     "mudou", "mudaram", "mudancas", "novidade", "novidades", "novo", "novos", "nova", "novas",
     "destaque", "destaques", "resumo", "resuma", "recente", "recentes", "recentemente",
     "aconteceu", "escopo", "roster", "carteira", "panorama", "ultimos", "ultimas", "janela",
-    "apareceram", "surgiram", "agora",
+    "apareceram", "surgiram", "agora", "entrantes", "entrante",
 }
+# Scaffolding that may sit next to digest words without giving the question a subject.
+_DIGEST_FILLER = {"meu", "minha", "meus", "minhas", "desta", "deste", "nesta", "neste", "ultima",
+                  "ultimo", "dias", "mes", "ontem", "houve", "voce", "pode", "favor"}
 
 
 def _digest_window_days(q: str) -> int:
@@ -271,14 +274,17 @@ def select_grounding(
     *,
     scope: dict[str, Any] | None = None,
     limit: int = 12,
-) -> list[dict[str, Any]]:
+    with_mode: bool = False,
+) -> Any:
     """Rank feed cards by keyword overlap with the question, boosted by the
     dashboard scope (entity/lens/date), alerts and recency. Returns top-K
-    compact citable slices."""
+    compact citable slices (with ``with_mode``: ``(cards, "digest" | "topical")``)."""
     scope = scope or {}
     q_all = set(_tokens(q))
-    digest_intent = bool(q_all & _DIGEST_CUES)
     q_toks = q_all - _DIGEST_CUES
+    # PURE digest only: "o que o BCB mudou na regulação?" has a subject (bcb, regulacao) and
+    # keeps normal topical + KB grounding even when no card matches it.
+    digest_intent = bool(q_all & _DIGEST_CUES) and not (q_toks - _DIGEST_FILLER)
     classification_intent = bool(q_toks & _CLASSIFICATION_CUES)
     distress_intent = bool(q_toks & _DISTRESS_CUES)
     # ADR #34 Phase 2: the question's topic intent (regulacao/pagamentos/…) — a
@@ -353,9 +359,11 @@ def select_grounding(
         scored.append((score, str(card.get("date") or ""), card))
 
     if not scored and digest_intent:
-        return [_compact_card(c) for c in _recent_digest(q, feed, limit)]
+        cards = [_compact_card(c) for c in _recent_digest(q, feed, limit)]
+        return (cards, "digest") if with_mode else cards
     scored.sort(key=lambda t: (t[0], t[1]), reverse=True)
-    return [_compact_card(c) for _, _, c in scored[:limit]]
+    cards = [_compact_card(c) for _, _, c in scored[:limit]]
+    return (cards, "topical") if with_mode else cards
 
 
 def _recent_digest(q: str, feed: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
@@ -978,12 +986,15 @@ def answer(
         return {"answer": REFUSAL_TEXT, "refused": True, "reason": reason,
                 "grounded": False, "citations": []}
 
-    cards = select_grounding(q, feed_cards, scope=scope, limit=limit)
+    cards, mode = select_grounding(q, feed_cards, scope=scope, limit=limit, with_mode=True)
     kb_snippets: list[dict[str, Any]] = []
     # issue #33: KB Retrieve over narratives would reintroduce the same
     # third-party-distress news the store filter just dropped.
     distress_intent = bool(set(_tokens(q)) & _DISTRESS_CUES)
-    if kb_retrieve is not None and not distress_intent:
+    # A scope digest ("o que mudou esta semana no meu escopo?") is answered from the scope's
+    # recent cards only: semantic KB hits for "mudou" are documents ABOUT change (a 2018 law
+    # amendment), not what changed this week — and they aren't scoped to the tenant's window.
+    if kb_retrieve is not None and not distress_intent and mode != "digest":
         try:
             kb_snippets = kb_retrieve(q) or []
         except Exception as exc:  # pragma: no cover - KB best-effort

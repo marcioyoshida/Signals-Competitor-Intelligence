@@ -681,3 +681,19 @@ def test_digest_words_do_not_dilute_a_specific_question():
     feed = _feed()["feed"] + [_dated(9, "2026-08-24", alert=True, threat=99)]
     ids = [c["id"] for c in aa.select_grounding("O que o Itaú mudou esta semana?", feed)]
     assert ids and ids[0] == "n1" and "c9" not in ids
+
+
+def test_scope_digest_answer_skips_kb_retrieval():
+    feed = {"feed": [_dated(1, "2026-10-15", alert=True, threat=60)], "entities": []}
+    kb_calls = []
+    out = aa.answer("O que mudou esta semana no meu escopo?", feed=feed,
+                    converser=lambda user, system=None, max_tokens=0: "**FATO:** evento [c1]",
+                    kb_retrieve=lambda q: kb_calls.append(q) or [{"id": "kb:0", "text": "lei de 2018"}])
+    assert not out.get("refused") and kb_calls == []
+
+
+def test_change_question_with_a_subject_is_not_a_digest():
+    feed = [_dated(1, "2026-10-15", alert=True, threat=60)]
+    assert aa.select_grounding("o que o BCB mudou na regulação de bancos?", feed, with_mode=True) == ([], "topical")
+    for q in ("Quais as novidades desta semana?", "Que novos entrantes apareceram na janela?", "Resuma a semana"):
+        assert aa.select_grounding(q, feed, with_mode=True)[1] == "digest", q
