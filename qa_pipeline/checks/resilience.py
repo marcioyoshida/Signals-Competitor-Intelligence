@@ -121,6 +121,7 @@ def run(event: dict) -> dict:
         page.goto(exec_url, wait_until="networkidle", timeout=30_000)
         page.wait_for_timeout(800)
         page.route("**/api/ask", lambda route: route.abort("failed"))
+        page.evaluate("() => openChat()")          # the ask bar is a launcher; the chat panel holds the input
         page.fill("#askInput", "O que mudou esta semana?")
         page.click("#askBtn")
         page.wait_for_timeout(1500)

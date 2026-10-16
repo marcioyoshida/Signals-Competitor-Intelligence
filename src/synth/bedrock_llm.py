@@ -29,6 +29,7 @@ def converse(
     max_tokens: int = 800,
     usage_out: dict[str, int] | None = None,
     images: list[bytes] | None = None,
+    history: list[dict[str, str]] | None = None,
 ) -> str | None:
     """Return assistant text or None if Bedrock is unavailable/denied.
 
@@ -41,16 +42,29 @@ def converse(
     ``images``, if given, is a list of raw PNG bytes appended as image content
     blocks alongside ``prompt`` — ADR 027 #132's Bedrock-vision QA check
     (``qa_pipeline/checks/vision.py``) is the first caller; every existing
-    text-only caller is unaffected (defaults to no images)."""
+    text-only caller is unaffected (defaults to no images).
+
+    ``history`` (the /exec chat): prior turns as ``[{"role": "user"|"assistant", "text": ...}]``,
+    sent as real Converse messages before ``prompt``. It must start with a user turn and
+    alternate; anything else is dropped rather than sent malformed."""
     model_id = model_id or DEFAULT_SYNTH_MODEL
     try:
         client = boto3.client("bedrock-runtime")
         content: list[dict[str, Any]] = [{"text": prompt}]
         for img in images or []:
             content.append({"image": {"format": "png", "source": {"bytes": img}}})
+        prior: list[dict[str, Any]] = []
+        for i, turn in enumerate(history or []):
+            role, text = turn.get("role"), str(turn.get("text") or "").strip()
+            if role != ("user" if i % 2 == 0 else "assistant") or not text:
+                prior = []
+                break
+            prior.append({"role": role, "content": [{"text": text}]})
+        if prior and prior[-1]["role"] != "assistant":
+            prior = prior[:-1]
         kwargs: dict[str, Any] = {
             "modelId": model_id,
-            "messages": [
+            "messages": prior + [
                 {
                     "role": "user",
                     "content": content,

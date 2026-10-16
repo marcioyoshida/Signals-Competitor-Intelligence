@@ -2158,6 +2158,18 @@ class OncaPrototypeStack(Stack):
             },
         )
         site_bucket.grant_read(agent_fn)  # reads feed.json
+        # Ask chat daily cap (docs/2026-10-16-ask-chat-requirements.md): one atomic counter per
+        # user per UTC day, expired by TTL. Ephemeral by design — nothing to keep on removal.
+        ask_quota_table = dynamodb.Table(
+            self, "OncaAskQuota",
+            partition_key=dynamodb.Attribute(name="pk", type=dynamodb.AttributeType.STRING),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            time_to_live_attribute="ttl",
+            removal_policy=RemovalPolicy.DESTROY,
+        )
+        ask_quota_table.grant_read_write_data(agent_fn)
+        agent_fn.add_environment("ONCA_ASK_QUOTA_TABLE", ask_quota_table.table_name)
+        agent_fn.add_environment("ONCA_ASK_DAILY_TURNS", os.environ.get("ONCA_ASK_DAILY_TURNS", "150"))
         digests_bucket.grant_read_write(agent_fn)  # capture coverage gaps (ADR-014)
         tenant_config_table.grant_read_data(agent_fn)  # Phase D: entitlement lookup
         agent_fn.add_to_role_policy(

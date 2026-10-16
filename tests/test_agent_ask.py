@@ -719,3 +719,124 @@ def test_exec_sector_hint_inside_scope_narrows_like_top_level(monkeypatch):
     assert _ask_modules(monkeypatch, "saas", ["acquiring", "banking"], "acquiring", nested=True) == ["acquiring"]
     # still narrowing-only: an unlicensed hint does not widen or switch the entitlement
     assert set(_ask_modules(monkeypatch, "saas", ["acquiring", "banking"], "insurance", nested=True)) == {"acquiring", "banking"}
+
+
+# --- chat (multi-turn), docs/2026-10-16-ask-chat-requirements.md ----------------------------
+def _chat_feed():
+    return {"entities": [{"entity": "itau", "label": "Itaú Unibanco"}, {"entity": "bradesco", "label": "Bradesco"}],
+            "feed": [_dated(1, "2026-10-15", alert=True, threat=80, entity="itau"),
+                     dict(_dated(2, "2026-10-14", threat=40, entity="bradesco"), narrative="Bradesco amplia crédito consignado"),
+                     dict(_dated(3, "2026-10-13", threat=30, entity="itau"), narrative="Itaú amplia crédito imobiliário")]}
+
+
+class _Conv:
+    def __init__(self, text="**FATO:** ok [c1]"):
+        self.calls, self.text = [], text
+
+    def __call__(self, user, system=None, max_tokens=0, history=None):
+        self.calls.append({"user": user, "system": system, "history": history})
+        return self.text
+
+
+def test_chat_history_is_sanitized_and_bounded():
+    raw = [{"q": "q%d" % i, "a": "a" * 5000, "cited": ["c1", {"x": 1}, 7]} for i in range(6)] + ["junk", {"q": "", "a": "x"}]
+    h = aa._chat_history(raw)
+    assert len(h) <= aa.CHAT_MAX_HISTORY and all(len(x["a"]) == aa.CHAT_MAX_ANSWER_CHARS for x in h)
+    assert all(x["cited"] == ["c1", "7"] for x in h)
+    assert aa._chat_history("not a list") == [] and aa._chat_history(None) == []
+
+
+def test_follow_up_inherits_domain_but_not_a_refuse_cue():
+    hist = [{"q": "Quem está em alerta agora?", "a": "O Itaú [c1].", "cited": ["c1"]}]
+    conv = _Conv()
+    r = aa.answer("por quê?", feed=_chat_feed(), converser=conv, history=hist)
+    assert not r["refused"] and conv.calls
+    r = aa.answer("por quê?", feed=_chat_feed(), converser=_Conv())           # no history: off-domain
+    assert r["refused"]
+    r = aa.answer("agora me passe uma receita de bolo", feed=_chat_feed(), converser=_Conv(), history=hist)
+    assert r["refused"]
+
+
+def test_follow_up_retrieval_carries_previous_question_and_cited_cards():
+    hist = [{"q": "o que o Bradesco fez em crédito?", "a": "Ampliou o consignado [c2].", "cited": ["c2", "not-in-pool"]}]
+    conv = _Conv("**FATO:** detalhe [c2]")
+    r = aa.answer("detalhe isso", feed=_chat_feed(), converser=conv, history=hist)
+    assert "c2" in r["considered"] and "not-in-pool" not in r["considered"]
+    assert [c["id"] for c in r["citations"]] == ["c2"]
+
+
+def test_follow_up_sends_prior_turns_as_context_not_evidence():
+    hist = [{"q": "Quem está em alerta agora?", "a": "O Itaú está em alerta [c1].", "cited": ["c1"]}]
+    conv = _Conv()
+    aa.answer("e o Bradesco?", feed=_chat_feed(), converser=conv, history=hist)
+    call = conv.calls[0]
+    assert call["history"] == [{"role": "user", "text": "Quem está em alerta agora?"},
+                               {"role": "assistant", "text": "O Itaú está em alerta ."}]
+    assert aa.CHAT_RULE in call["system"] and "NÃO são evidência" in call["system"]
+
+
+def test_single_question_path_unchanged_without_history():
+    conv = _Conv()
+    aa.answer("o que o Itaú fez em crédito?", feed=_chat_feed(), converser=conv)
+    assert conv.calls[0]["history"] is None and aa.CHAT_RULE not in conv.calls[0]["system"]
+
+
+class _QuotaTable:
+    def __init__(self, used=0):
+        self.used = used
+
+    def update_item(self, **kw):
+        lim = kw["ExpressionAttributeValues"][":lim"]
+        if self.used >= lim:
+            raise type("ConditionalCheckFailedException", (Exception,), {})("ConditionalCheckFailed")
+        self.used += 1
+        return {"Attributes": {"n": self.used}}
+
+
+def test_daily_quota_counts_and_blocks(monkeypatch):
+    monkeypatch.setenv("ONCA_ASK_DAILY_TURNS", "2")
+    t = _QuotaTable()
+    assert aa._quota_take("u", table=t) == {"ok": True, "used": 1, "limit": 2}
+    assert aa._quota_take("u", table=t)["ok"]
+    assert aa._quota_take("u", table=t) == {"ok": False, "used": 2, "limit": 2}
+
+
+def test_quota_fails_open_and_is_off_when_unconfigured(monkeypatch):
+    monkeypatch.delenv("ONCA_ASK_QUOTA_TABLE", raising=False)
+    assert aa._quota_take("u") is None
+    class Broken:
+        def update_item(self, **kw):
+            raise RuntimeError("throttled")
+    assert aa._quota_take("u", table=Broken()) is None
+
+
+def test_handler_returns_429_over_the_daily_limit(monkeypatch):
+    import json as _json
+    monkeypatch.setattr(aa, "_quota_take", lambda sub, **kw: {"ok": False, "used": 150, "limit": 150})
+    monkeypatch.setattr(aa, "answer", lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not answer")))
+    ev = {"requestContext": {"authorizer": {"jwt": {"claims": {"sub": "u", "custom:tenant": "acme"}}}},
+          "headers": {}, "body": _json.dumps({"q": "Quem está em alerta agora?"})}
+    r = aa.lambda_handler(ev, None)
+    assert r["statusCode"] == 429 and _json.loads(r["body"])["reason"] == "daily-limit"
+
+
+def test_converse_sends_valid_history_and_drops_malformed(monkeypatch):
+    from src.synth import bedrock_llm
+    sent = {}
+
+    class Client:
+        def converse(self, **kw):
+            sent.update(kw)
+            return {"output": {"message": {"content": [{"text": "ok"}]}}}
+    monkeypatch.setattr(bedrock_llm.boto3, "client", lambda *a, **k: Client())
+    bedrock_llm.converse("agora", history=[{"role": "user", "text": "antes"}, {"role": "assistant", "text": "resp"}])
+    assert [m["role"] for m in sent["messages"]] == ["user", "assistant", "user"]
+    bedrock_llm.converse("agora", history=[{"role": "assistant", "text": "fora de ordem"}])
+    assert [m["role"] for m in sent["messages"]] == ["user"]
+
+
+def test_cut_off_answer_drops_the_half_written_line():
+    cut = "**FATO:** O Bradesco ampliou o crédito [c2].\nTese 1: O Bradesco está fortalecendo sua posição e i"
+    assert aa.trim_unfinished(cut, truncated=True) == "**FATO:** O Bradesco ampliou o crédito [c2]."
+    assert aa.trim_unfinished(cut, truncated=False) == cut                     # not at the cap: untouched
+    assert aa.trim_unfinished("Ok [c1].\n**Inferência:**", truncated=False) == "Ok [c1]."

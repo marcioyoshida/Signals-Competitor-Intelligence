@@ -152,30 +152,67 @@
   .authbtn { background:var(--surface-2); color:var(--ink); border:1px solid var(--border); border-radius:var(--r-sm);
     padding:4px var(--s3); font:inherit; font-size:var(--fs-micro); cursor:pointer; }
   .authbtn:hover { border-color:var(--primary); }
+  /* --- Perguntar à Onça: launcher + chat panel (docs/2026-10-16-ask-chat-requirements.md) --- */
   .ask-band { margin:0 0 var(--s4); }
-  .askwrap { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); box-shadow:var(--shadow-1); padding:var(--s4); }
-  .askhd { display:flex; align-items:baseline; gap:var(--s3); flex-wrap:wrap; margin-bottom:var(--s3); }
-  .askhd h2 { font-size:1rem; margin:0; color:var(--ink); }
-  .askhd .sub { font-size:var(--fs-micro); color:var(--muted); }
-  .askrow { display:flex; gap:var(--s2); }
-  .askrow input { flex:1; background:var(--surface-2); color:var(--ink); border:1px solid var(--border);
-    border-radius:var(--r-sm); padding:8px var(--s3); font:inherit; font-size:var(--fs-sm); }
-  .askrow input:disabled { opacity:.55; }
+  .asklaunch { display:flex; align-items:center; gap:var(--s3); width:100%; text-align:left; cursor:pointer; font:inherit;
+    background:var(--surface); color:var(--ink); border:1px solid var(--border); border-radius:var(--r-lg);
+    box-shadow:var(--shadow-1); padding:var(--s3) var(--s4); transition:border-color .15s, box-shadow .15s; }
+  .asklaunch:hover { border-color:var(--primary); box-shadow:var(--shadow-2); }
+  .asklaunch:focus-visible { outline:none; box-shadow:var(--focus); border-color:var(--primary); }
+  .asklaunch__ic { display:grid; place-items:center; width:36px; height:36px; flex:none; border-radius:50%;
+    background:var(--primary-weak); color:var(--primary); }
+  .asklaunch__t { display:flex; flex-direction:column; min-width:0; flex:1; }
+  .asklaunch__t b { font-size:1rem; }
+  .asklaunch__t span { font-size:var(--fs-micro); color:var(--muted); }
+  .asklaunch__k { flex:none; font:600 var(--fs-micro)/1 var(--f-mono); color:var(--muted); border:1px solid var(--border-2);
+    border-bottom-width:2px; border-radius:5px; padding:3px 7px; }
+  .askfab { display:none; }
+  /* the panel: docked on the right on desktop so the board stays readable beside it */
+  .chat { position:fixed; top:0; right:0; bottom:0; width:min(440px, 100vw); z-index:50; display:flex; flex-direction:column;
+    background:var(--surface); border-left:1px solid var(--border); box-shadow:var(--shadow-2); }
+  .chat[hidden] { display:none; }   /* closed = out of layout (an off-screen fixed box widens the page, #128) */
+  .chat__hd { display:flex; align-items:center; gap:var(--s2); padding:var(--s3) var(--s3) var(--s3) var(--s4); border-bottom:1px solid var(--border); }
+  .chat__ttl { flex:1; min-width:0; }
+  .chat__ttl h2 { font-size:1rem; margin:0; color:var(--ink); }
+  .chat__ttl .sub { font-size:var(--fs-micro); color:var(--muted); }
+  .chat__x { display:grid; place-items:center; width:36px; height:36px; border:0; border-radius:50%; background:none; color:var(--ink-2); cursor:pointer; }
+  .chat__x:hover { background:var(--surface-2); }
+  .chat__log { flex:1; overflow-y:auto; padding:var(--s4); display:flex; flex-direction:column; gap:var(--s3); overscroll-behavior:contain; }
+  .chat__empty { color:var(--ink-2); font-size:var(--fs-sm); line-height:1.5; }
+  .chat__empty p { margin:0 0 var(--s3); }
+  .msg { max-width:92%; font-size:var(--fs-sm); line-height:1.55; }
+  .msg__txt { white-space:pre-wrap; overflow-wrap:anywhere; }
+  .msg--q { align-self:flex-end; background:var(--primary); color:var(--on-primary); border-radius:14px 14px 4px 14px; padding:8px 12px; }
+  .msg--a { align-self:flex-start; background:var(--surface-2); color:var(--ink); border:1px solid var(--border); border-radius:14px 14px 14px 4px; padding:10px 12px; }
+  .msg--refused, .msg--err { color:var(--muted); }
+  .msg .cites { margin-top:var(--s2); display:flex; flex-wrap:wrap; gap:6px; }
+  .msg .cite { font-size:var(--fs-micro); color:var(--ink-2); background:var(--surface); border:1px solid var(--border); border-radius:var(--r-pill); padding:2px 8px; text-decoration:none; }
+  .msg a.cite:hover { border-color:var(--primary); color:var(--ink); }
+  .msg .cites__none { font-size:var(--fs-micro); color:var(--muted); }
+  .msg .cref { color:var(--primary); font-weight:600; }
+  .msg .md-h { display:inline-block; margin-top:4px; color:var(--ink); }
+  .chat__in { border-top:1px solid var(--border); padding:var(--s3) var(--s4) var(--s3); background:var(--surface); }
+  .chat__row { display:flex; gap:var(--s2); align-items:flex-end; }
+  #askInput { flex:1; min-width:0; resize:none; max-height:160px; background:var(--surface-2); color:var(--ink); border:1px solid var(--border);
+    border-radius:var(--r-sm); padding:9px var(--s3); font:inherit; font-size:var(--fs-sm); line-height:1.4; }
+  #askInput:focus { outline:none; border-color:var(--primary); box-shadow:var(--focus); }
+  #askInput:disabled { opacity:.55; }
+  .chat__foot { margin-top:6px; font-size:var(--fs-micro); color:var(--muted); }
+  .linkbtn { background:none; border:0; padding:0; font:inherit; color:var(--primary); cursor:pointer; text-decoration:underline; }
   /* #244: --on-primary, not #fff — white on the dark-theme mint was 2.2:1 */
-  .askbtn { background:var(--primary); color:var(--on-primary); border:0; border-radius:var(--r-sm); padding:8px var(--s4);
+  .askbtn { background:var(--primary); color:var(--on-primary); border:0; border-radius:var(--r-sm); padding:9px var(--s4);
     font:inherit; font-weight:600; font-size:var(--fs-sm); cursor:pointer; white-space:nowrap; }
   .askbtn:disabled { opacity:.5; cursor:default; }
-  .askex { display:flex; flex-wrap:wrap; gap:6px; margin-top:var(--s2); }
-  .askex .chip { font-size:var(--fs-micro); color:var(--ink-2); background:var(--surface-2); border:1px solid var(--border);
-    border-radius:var(--r-pill); padding:2px 8px; cursor:pointer; }
-  .askex .chip:hover { border-color:var(--primary); color:var(--ink); }
-  .askhint { font-size:var(--fs-micro); color:var(--muted); margin-top:var(--s2); }
-  .askans { margin-top:var(--s3); font-size:var(--fs-sm); color:var(--ink); line-height:1.55; white-space:pre-wrap; }
-  .askans.refused { color:var(--muted); }
-  .askans .cites { margin-top:var(--s3); display:flex; flex-wrap:wrap; gap:6px; white-space:normal; }
-  .askans .cite { font-size:var(--fs-micro); color:var(--ink-2); background:var(--surface-2); border:1px solid var(--border); border-radius:var(--r-pill); padding:2px 8px; }
-  .askans .cref { color:var(--primary); font-weight:600; }
+  .askex { display:flex; flex-wrap:wrap; gap:6px; }
+  .askex .chip { font:inherit; font-size:var(--fs-micro); color:var(--ink-2); background:var(--surface-2); border:1px solid var(--border);
+    border-radius:var(--r-pill); padding:4px 10px; cursor:pointer; text-align:left; }
+  .askex .chip:hover:not(:disabled) { border-color:var(--primary); color:var(--ink); }
+  .askex .chip:disabled { opacity:.55; cursor:default; }
+  .askhint { font-size:var(--fs-micro); color:var(--muted); margin-bottom:var(--s2); }
+  .askhint[hidden] { display:none; }
   .thinking { color:var(--muted); }
+  /* desktop: the board makes room for the docked panel instead of hiding under it */
+  @media (min-width: 1100px) { body.chat-open main.wrap { margin-right:440px; } }
 
   /* coverage */
   .cov { display:flex; gap:var(--s2); align-items:center; padding:7px var(--s4); border-bottom:1px solid var(--border); }
@@ -327,7 +364,7 @@
     .exrow .ttl { overflow-wrap: anywhere; }
     /* #212: the Ask input's intrinsic min-width (min-width:auto on a flex item) pushed the
        "Perguntar" button 6px past the viewport, so EVERY board scrolled sideways at 375px. */
-    .askrow > input, #askInput { min-width: 0; }
+    #askInput { min-width: 0; }
     /* #193 enforcement rows: the institution name ("Trustee Distribuidora de Títulos e Valores
        Mobiliários Ltda.") and the authority·confidence badge are long — wrap, never overflow. */
     .exrow--enf { flex-wrap: wrap; row-gap: 4px; }
@@ -337,7 +374,7 @@
     .selwrap select, .authbtn { padding: 9px var(--s2); min-height: 44px; }
     /* #163 hard gate: primary actions are at least 44×44 CSS px on a phone */
     .officer-tabs a { min-height: 44px; display: inline-flex; align-items: center; }
-    .askbtn, .askrow input { min-height: 44px; }
+    .askbtn, #askInput { min-height: 44px; }
     /* #166: a compact phone header — brand + Hoje/Painel, then ONE scrolling row of officer
        tabs, then sector/account/theme; the long e-mail and the "Setor" label drop */
     .appbar { row-gap: var(--s1); }
@@ -361,10 +398,9 @@
     .hoje .exrow .ent { flex: 1; max-width: none; }
     .hoje-hd { flex-wrap: wrap; }
     /* #169: iOS zooms any input under 16px; chips scroll sideways; answer readable unzoomed */
-    .askrow input { font-size: 16px; }
-    .askex { display: flex; flex-wrap: nowrap; overflow-x: auto; gap: var(--s2); padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
-    .askex .chip { flex: 0 0 auto; white-space: nowrap; min-height: 36px; display: inline-flex; align-items: center; }
-    .askans { font-size: 16px; line-height: 1.55; }
+    #askInput { font-size: 16px; }
+    .askex .chip { min-height: 36px; display: inline-flex; align-items: center; }
+    .msg { font-size: 16px; }
     .cites .cite { display: inline-flex; min-height: 36px; align-items: center; }
     .rec .cap button, .traj-f button { min-height: 44px; min-width: 88px; padding: 0 var(--s4); }
   }
@@ -374,7 +410,7 @@
   @media (max-width: 1180px) { .appbar { flex-wrap: wrap; row-gap: var(--s1); } }
   .view-tabs a { border-bottom:2px solid transparent; border-radius:0; padding:var(--s2) var(--s3); font-weight:700; }
   .view-tabs a[aria-current="page"] { border-bottom-color:var(--primary); color:var(--ink); }
-  body.view-hoje #macroStrip, body.view-hoje #askPanel, body.view-hoje #recsBand { display:none; }
+  body.view-hoje #macroStrip, body.view-hoje #askOpen, body.view-hoje #recsBand { display:none; }
   .hoje { display:flex; flex-direction:column; gap:var(--s3); }
   .hoje-sec { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md, 10px); overflow:hidden; }
   /* #210 follow-up (smoke 10-09): an empty Hoje section ("Decisões pendentes 0") was a 148px box
@@ -614,11 +650,17 @@
     .macro-inner > * { flex:none; }
     .macro-headline { display:none; }
 
-    /* --- ask -------------------------------------------------------------------- */
-    .ask-band { margin-bottom:var(--s5); }
-    .askwrap { padding:var(--s3) var(--s4); }
-    .askhd { margin-bottom:var(--s2); }
-    .askhd h2 { font-size:17px; }
+    /* --- ask: floating "Perguntar" above the tab bar (like Anteater) → full-screen chat ---- */
+    .ask-band { margin:0; }
+    #askOpen { display:none; }
+    .askfab { display:inline-flex; align-items:center; gap:6px; position:fixed; right:var(--s4); z-index:45;
+      bottom:calc(var(--tabbar-h) + var(--safe-b) + var(--s3)); min-height:48px; padding:0 18px; border:0; border-radius:24px;
+      background:var(--primary); color:var(--on-primary); font:inherit; font-weight:700; font-size:15px;
+      box-shadow:0 6px 18px rgba(0,0,0,.28); cursor:pointer; }
+    body.is-gated .askfab { display:none; }
+    .chat { width:100vw; border-left:0; z-index:58; padding-top:var(--safe-t); padding-bottom:var(--safe-b); }
+    body.chat-open { overflow:hidden; }
+    body.chat-open #officerTabs, body.chat-open .askfab { display:none; }
 
     /* --- flow / decisions ----------------------------------------------------- */
     .trajs { padding:0; gap:var(--s2); }
@@ -918,80 +960,152 @@ function openAccount() {
 }
 document.getElementById("acctBtn").addEventListener("click", openAccount);
 document.getElementById("whoAmI").addEventListener("click", openAccount);
+// --- Perguntar à Onça: chat panel (docs/2026-10-16-ask-chat-requirements.md) ------------------
+// The ask bar is a launcher; the conversation lives in #askChat — docked right on desktop (the
+// board stays visible), a full-screen sheet on a phone (floating "Perguntar" above the tab bar,
+// like Anteater). Multi-turn: each turn sends the last CHAT_HISTORY exchanges (question, the
+// answer without citation markers, the cited card ids) — the server treats them as untrusted
+// context and re-grounds every turn on the asker's own scoped feed. The transcript lives in
+// sessionStorage only (per user; cleared on sign-out and when the tab closes).
 const ASK_EXAMPLES = ["O que mudou esta semana no meu escopo?", "Quem está em alerta agora?",
   "Qual mudança regulatória tem maior alcance?", "Onde há maior risco prudencial?"];
+const CHAT_MAX_TURNS = 20, CHAT_HISTORY = 3, ASK_TIMEOUT_MS = 60000;
+const CHAT_ICON = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 0 1-11.6 7.1L4 20l1-4.1A8 8 0 1 1 20 12z"/></svg>`;
+let CHAT = { turns: [] }, askBusy = false;
+function chatKey() { const p = Ctx.isLoggedIn() ? Ctx.decodeJwt(Ctx.getIdToken()) : null; return p && p.sub ? "onca_chat:" + p.sub : null; }
+function chatLoad() { try { const k = chatKey(); CHAT = (k && JSON.parse(sessionStorage.getItem(k) || "null")) || { turns: [] }; } catch (e) { CHAT = { turns: [] }; } }
+function chatSave() { try { const k = chatKey(); if (k) sessionStorage.setItem(k, JSON.stringify(CHAT)); } catch (e) {} }
+
 function renderAskPanel() {
   const el = document.getElementById("askPanel");
   if (!el) return;
-  el.innerHTML = `<div class="askwrap">
-    <div class="askhd"><h2>Perguntar à Onça</h2>
-      <span class="sub">resposta fundamentada só nos dados · escopo: <b id="askScope">—</b></span></div>
-    <div class="askrow"><input id="askInput" type="text" placeholder="Entre para perguntar à Onça" disabled
-      enterkeyhint="send" autocapitalize="sentences" autocomplete="off">
-      <button class="askbtn" id="askBtn" disabled>Perguntar</button></div>
-    <div class="askex" id="askEx"></div>
-    <div class="askhint" id="askAuthHint" style="display:none">Entre com sua conta para perguntar à Onça.</div>
-    <div class="askans" id="askAns" style="display:none"></div></div>`;
-  document.getElementById("askEx").innerHTML = ASK_EXAMPLES.map(q => `<span class="chip">${U.esc(q)}</span>`).join("");
-  document.querySelectorAll("#askEx .chip").forEach(c => c.onclick = () => { document.getElementById("askInput").value = c.textContent; askOnca(); });
-  document.getElementById("askBtn").onclick = askOnca;
+  el.innerHTML = `<button class="asklaunch" id="askOpen" type="button" aria-haspopup="dialog" aria-controls="askChat">
+      <span class="asklaunch__ic">${CHAT_ICON}</span>
+      <span class="asklaunch__t"><b>Perguntar à Onça</b><span>converse sobre o seu escopo — respostas só com base nos dados</span></span>
+      <kbd class="asklaunch__k" aria-hidden="true">/</kbd></button>
+    <button class="askfab" id="askFab" type="button" aria-haspopup="dialog" aria-controls="askChat">${CHAT_ICON}<span>Perguntar</span></button>`;
+  if (!document.getElementById("askChat")) {
+    document.body.insertAdjacentHTML("beforeend", `<aside class="chat" id="askChat" role="dialog" aria-modal="false" aria-labelledby="chatTitle" hidden>
+      <div class="chat__hd"><div class="chat__ttl"><h2 id="chatTitle">Perguntar à Onça</h2>
+          <span class="sub">escopo: <b id="askScope">—</b></span></div>
+        <button class="btn btn--sm" id="askNew" type="button" title="Começar uma nova conversa">Nova conversa</button>
+        <button class="chat__x" id="askClose" type="button" aria-label="Fechar conversa"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+      <div class="chat__log" id="askAns" role="log" aria-live="polite" aria-relevant="additions"></div>
+      <form class="chat__in" id="askForm" autocomplete="off">
+        <div class="askhint" id="askAuthHint" hidden>Entre com sua conta para conversar com a Onça.</div>
+        <div class="chat__row"><textarea id="askInput" rows="1" maxlength="500" placeholder="Sua pergunta…"
+            enterkeyhint="send" autocapitalize="sentences" aria-label="Sua pergunta"></textarea>
+          <button class="askbtn" id="askBtn" type="submit" aria-label="Enviar pergunta">Enviar</button></div>
+        <div class="chat__foot" id="askFoot"></div></form></aside>`);
+  }
+  document.getElementById("askOpen").onclick = () => openChat();
+  document.getElementById("askFab").onclick = () => openChat();
+  document.getElementById("askClose").onclick = closeChat;
+  document.getElementById("askNew").onclick = () => { CHAT = { turns: [] }; chatSave(); renderChat(); document.getElementById("askInput").focus(); };
+  document.getElementById("askForm").onsubmit = (e) => { e.preventDefault(); askOnca(); };
   const inp = document.getElementById("askInput");
-  inp.addEventListener("keydown", e => { if (e.key === "Enter") askOnca(); });
-  // #169: on a phone the on-screen keyboard covers the lower half — keep the input in view
-  inp.addEventListener("focus", () => { if (deviceClass() !== "desktop") setTimeout(() => inp.scrollIntoView({ block: "center" }), 250); });
+  inp.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); askOnca(); } });
+  inp.addEventListener("input", () => { inp.style.height = "auto"; inp.style.height = Math.min(inp.scrollHeight, 160) + "px"; });
+  if (!window.__chatKeys) {
+    window.__chatKeys = true;
+    document.addEventListener("keydown", (e) => {
+      const chat = document.getElementById("askChat");
+      if (e.key === "Escape" && chat && !chat.hidden) { closeChat(); return; }
+      const t = e.target, typing = t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+      if (e.key === "/" && !typing && !e.metaKey && !e.ctrlKey && !e.altKey && askAvailable()) { e.preventDefault(); openChat(); }
+    });
+  }
+  chatLoad(); renderChat();
+}
+function askAvailable() { const p = document.getElementById("askPanel"); return !!p && !p.hidden && !document.body.classList.contains("is-gated"); }
+function openChat(q) {
+  const chat = document.getElementById("askChat"); if (!chat) return;
+  chatLoad(); renderChat();
+  chat.hidden = false; document.body.classList.add("chat-open");
+  const inp = document.getElementById("askInput");
+  if (q) { inp.value = q; askOnca(); } else if (!inp.disabled) setTimeout(() => inp.focus(), 50);
+}
+function closeChat() {
+  const chat = document.getElementById("askChat"); if (!chat || chat.hidden) return;
+  chat.hidden = true; document.body.classList.remove("chat-open");
+  const back = document.getElementById(deviceClass() === "phone" ? "askFab" : "askOpen"); if (back) back.focus();
 }
 function renderAskLoginState() {
   const hint = document.getElementById("askAuthHint"), input = document.getElementById("askInput"), btn = document.getElementById("askBtn");
   if (!hint || !input || !btn) return;
   const logged = Ctx.isLoggedIn();
-  hint.style.display = logged ? "none" : "";
+  if (!logged) CHAT = { turns: [] };
+  hint.hidden = logged;
   input.disabled = !logged; btn.disabled = !logged;
-  input.placeholder = logged ? "Ex.: o que mudou no meu setor esta semana?" : "Entre para perguntar à Onça";
+  input.placeholder = logged ? "Sua pergunta…" : "Entre para conversar";
+  renderChat();
 }
-function updateAskScope() { const s = document.getElementById("askScope"); if (s) s.textContent = (OFFICERS[OFFICER] || {}).label || OFFICER; }
-function renderAnswer(res) {
-  const box = document.getElementById("askAns"); if (!box) return;
-  box.style.display = "block";
-  if (res.refused || !res.answer) { box.className = "askans refused"; box.textContent = res.answer || "Não consegui responder."; return; }
-  box.className = "askans";
+function updateAskScope() {
+  const s = document.getElementById("askScope"); if (!s) return;
+  const sec = typeof SECTOR !== "undefined" && SECTOR && SECTOR !== "__all__" ? ` · ${(document.querySelector(`#sectorSel option[value="${SECTOR}"]`) || {}).textContent || SECTOR}` : "";
+  s.textContent = ((OFFICERS[OFFICER] || {}).label || OFFICER) + sec;
+}
+// Light markdown for an ESCAPED answer (same rules as Anteater's mdLite): headings → bold line,
+// "- "/"* " bullets → "•", **bold**; stray ** dropped; 3+ blank lines collapse.
+function mdLite(h) {
+  return h.split("\n").map(l => {
+    const hd = /^\s*#{1,6}\s+(.*)$/.exec(l); if (hd) return `<strong class="md-h">${hd[1]}</strong>`;
+    const li = /^\s*[-•*]\s+(.*)$/.exec(l); if (li) return `• ${li[1]}`;
+    return l; }).join("\n")
+    .replace(/\*\*([^*\n]+?)\*\*/g, "<strong>$1</strong>").replace(/\*\*/g, "").replace(/\n{3,}/g, "\n\n").trim();
+}
+// one assistant answer → HTML (inline [id] → superscript refs; cited sources as links)
+function answerHTML(res) {
+  if (res.refused || !res.answer) return `<div class="msg__txt">${U.esc(res.answer || "Não consegui responder.")}</div>`;
   const cites = res.citations || [], byId = {}; cites.forEach((c, i) => byId[c.id] = i + 1);
   const citeUrl = (c) => { const s0 = (c.sources || [])[0]; return c.url || (s0 && (s0.url || (typeof s0 === "string" ? s0 : ""))) || ""; };
-  const body = (txt) => U.esc(txt).replace(/\[([A-Za-z0-9:_\-]+)\]/g, (m, id) => byId[id] ? `<sup class="cref" title="${U.esc(id)}">[${byId[id]}]</sup>` : "");
-  // #169: a long answer leads with a short summary; the full text is one tap away
-  const full = String(res.answer), LIM = 420;
-  let html;
-  if (full.length > LIM + 120) {
-    const cut = full.lastIndexOf(". ", LIM) > 200 ? full.lastIndexOf(". ", LIM) + 1 : LIM;
-    html = `<div class="ans-sum">${body(full.slice(0, cut))}…</div><div class="ans-full" hidden>${body(full)}</div>` +
-      `<button class="btn btn--sm ans-more" type="button">ver resposta completa</button>`;
-  } else {
-    html = body(full);
-  }
-  // citations are LINKS to their first-party source (new tab — the answer stays put)
-  html += cites.length
+  const body = mdLite(U.esc(String(res.answer))).replace(/\[([A-Za-z0-9:_\-.À-ÿ]+)\]/g, (m, id) => byId[id] ? `<sup class="cref" title="${U.esc(id)}">[${byId[id]}]</sup>` : "");
+  return `<div class="msg__txt">${body}</div>` + (cites.length
     ? `<div class="cites">` + cites.map((c, i) => {
         const u = citeUrl(c), label = U.esc(c.entity_label || c.entity || (c.kb ? "base de conhecimento" : c.id));
-        return u ? `<a class="cite" href="${U.esc(u)}" target="_blank" rel="noopener">[${i + 1}] ${label} ↗</a>`
-                 : `<span class="cite">[${i + 1}] ${label}</span>`;
+        return u ? `<a class="cite" href="${U.esc(u)}" target="_blank" rel="noopener">[${i + 1}] ${label} ↗</a>` : `<span class="cite">[${i + 1}] ${label}</span>`;
       }).join("") + `</div>`
-    : `<div class="cites"><span style="color:var(--muted)">Sem fontes citadas — trate com cautela.</span></div>`;
-  box.innerHTML = html;
-  const more = box.querySelector(".ans-more");
-  if (more) more.onclick = () => { box.querySelector(".ans-sum").hidden = true; box.querySelector(".ans-full").hidden = false; more.remove(); };
+    : `<div class="cites"><span class="cites__none">Sem fontes citadas — trate com cautela.</span></div>`);
 }
-let askBusy = false;
+function renderChat() {
+  const log = document.getElementById("askAns"); if (!log) return;
+  const turns = CHAT.turns || [], logged = Ctx.isLoggedIn();
+  if (!turns.length) {
+    log.innerHTML = `<div class="chat__empty"><p>Pergunte sobre as entidades, setores e normativos do seu escopo. Siga a conversa
+      com “e o Bradesco?”, “por quê?” ou “detalhe o item 2”.</p>
+      <div class="askex" id="askEx">${ASK_EXAMPLES.map(q => `<button type="button" class="chip"${logged ? "" : " disabled"}>${U.esc(q)}</button>`).join("")}</div></div>`;
+    log.querySelectorAll("#askEx .chip").forEach(c => c.onclick = () => { document.getElementById("askInput").value = c.textContent; askOnca(); });
+  } else {
+    log.innerHTML = turns.map((t, i) => `<div class="msg msg--q"><div class="msg__txt">${U.esc(t.q)}</div></div>` +
+      (t.pending ? `<div class="msg msg--a"><span class="thinking loading loading--inline"><span class="ld-c" aria-hidden="true">ç</span><span class="ld-t">Consultando a base da Onça… <span id="askSecs">0s</span></span></span></div>`
+       : t.error ? `<div class="msg msg--a msg--err">${U.esc(t.error)} <button class="btn btn--sm" type="button" data-retry="${i}">Tentar de novo</button></div>`
+       : `<div class="msg msg--a${t.res.refused || !t.res.answer ? " msg--refused" : ""}">${answerHTML(t.res)}</div>`)).join("");
+    log.querySelectorAll("[data-retry]").forEach(b => b.onclick = () => {
+      const t = CHAT.turns.splice(Number(b.dataset.retry), 1)[0]; chatSave(); document.getElementById("askInput").value = t.q; askOnca(); });
+    log.scrollTop = log.scrollHeight;
+  }
+  const n = turns.filter(t => !t.pending).length, foot = document.getElementById("askFoot");
+  const full = n >= CHAT_MAX_TURNS;
+  if (foot) foot.innerHTML = full
+    ? `Limite de ${CHAT_MAX_TURNS} perguntas nesta conversa — <button class="linkbtn" type="button" id="askNew2">comece uma nova</button>.`
+    : `Enter envia · Shift+Enter quebra a linha${n ? ` · ${n} de ${CHAT_MAX_TURNS} nesta conversa` : ""}`;
+  const n2 = document.getElementById("askNew2"); if (n2) n2.onclick = () => document.getElementById("askNew").click();
+  const inp = document.getElementById("askInput"), btn = document.getElementById("askBtn");
+  if (inp && logged) { inp.disabled = full; btn.disabled = full || askBusy; }
+}
 async function askOnca() {
   if (askBusy) return;
   if (!Ctx.isLoggedIn()) { renderAskLoginState(); return; }
   const input = document.getElementById("askInput"), q = (input.value || "").trim();
-  if (!q) return;
-  askBusy = true;
+  if (!q || (CHAT.turns || []).length >= CHAT_MAX_TURNS) return;
+  if (OFFLINE || navigator.onLine === false) { CHAT.turns.push({ q, error: "Sem conexão — a pergunta precisa da internet." }); chatSave(); renderChat(); return; }
+  askBusy = true; input.value = ""; input.style.height = "auto";
   engage("ask", "open", null);   // #165 (the question text is never sent with it)
-  const btn = document.getElementById("askBtn"), prev = btn.textContent; btn.disabled = true; btn.textContent = "Pensando…";
-  const box = document.getElementById("askAns"); box.style.display = "block"; box.className = "askans";
-  // #169: visible progress, and a timeout that keeps the question for a one-tap retry
+  // the last exchanges that ANSWERED (not refusals/errors) are the conversation's context
+  const history = CHAT.turns.filter(t => t.res && !t.res.refused && t.res.answer).slice(-CHAT_HISTORY).map(t => ({
+    q: t.q, a: String(t.res.answer).slice(0, 1200), cited: (t.res.citations || []).map(c => c.id) }));
+  const turn = { q, pending: true }; CHAT.turns.push(turn); renderChat();
   const t0 = Date.now();
-  box.innerHTML = `<span class="thinking loading loading--inline"><span class="ld-c" aria-hidden="true">ç</span><span class="ld-t">Consultando a base da Onça… <span id="askSecs">0s</span></span></span>`;
   const tick = setInterval(() => { const e = document.getElementById("askSecs"); if (e) e.textContent = Math.round((Date.now() - t0) / 1000) + "s"; }, 1000);
   const ctl = ("AbortController" in window) ? new AbortController() : null;
   const timer = setTimeout(() => ctl && ctl.abort(), ASK_TIMEOUT_MS);
@@ -999,7 +1113,7 @@ async function askOnca() {
   try {
     const call = () => fetch("/api/ask", { method: "POST", signal: ctl ? ctl.signal : undefined,
       headers: { "content-type": "application/json", "authorization": `Bearer ${Ctx.getIdToken()}` },
-      body: JSON.stringify({ q, scope, officer: OFFICER }) });
+      body: JSON.stringify({ q, scope, officer: OFFICER, history }) });
     await Ctx.ensureSession();
     let r = await call();
     if (r.status === 401) {
@@ -1008,20 +1122,18 @@ async function askOnca() {
     }
     if (r.status === 401) {
       try { sessionStorage.removeItem("onca_id_token"); } catch (e) {}
-      renderAuthUI(); renderAnswer({ refused: true, answer: "Sessão expirada. Entre novamente para perguntar." }); return;
+      delete turn.pending; turn.res = { refused: true, answer: "Sessão expirada. Entre novamente para perguntar." };
+      renderAuthUI(); return;
     }
-    const j = await r.json();
-    renderAnswer(r.ok ? j : { refused: true, answer: "Falha ao consultar. Tente novamente." });
+    const j = await r.json().catch(() => ({}));
+    delete turn.pending;
+    turn.res = (r.ok || r.status === 429) && j.answer ? j : { refused: true, answer: "Falha ao consultar. Tente novamente." };
   } catch (e) {
-    const timedOut = e && e.name === "AbortError";
-    box.className = "askans refused";
-    box.innerHTML = `${timedOut ? "A resposta demorou demais." : "Falha de rede ao consultar."} ` +
-      `<button class="btn btn--sm" id="askRetry" type="button">Tentar de novo</button>`;
-    document.getElementById("askRetry").onclick = () => askOnca();   // the input still holds the question
+    delete turn.pending;
+    turn.error = e && e.name === "AbortError" ? "A resposta demorou demais." : "Falha de rede ao consultar.";
   }
-  finally { clearInterval(tick); clearTimeout(timer); btn.disabled = false; btn.textContent = prev; askBusy = false; }
+  finally { clearInterval(tick); clearTimeout(timer); askBusy = false; chatSave(); renderChat(); }
 }
-const ASK_TIMEOUT_MS = 60000;
 renderAskPanel();
 Ctx.handleAuthCallback().then(() => Ctx.ensureSession()).then(renderAuthUI).then(loadFeed);
 window.addEventListener("appinstalled", () => { if (!ADMIN) engage("install", "open", null); });  // #165

@@ -59,7 +59,7 @@ OFFENDERS_JS = """(vw) => {
 }""" % (TOLERANCE, TOLERANCE)
 
 TAPS_JS = """(min) => {
-  const sel = ['#officerTabs a', '#askBtn', 'button[data-v]', 'button[data-tv]',
+  const sel = ['#officerTabs a', '#askBtn', '#askFab', 'button[data-v]', 'button[data-tv]',
                '.decbtn', '.hoje-act'];
   const small = [];
   for (const s of sel) for (const el of document.querySelectorAll(s)) {

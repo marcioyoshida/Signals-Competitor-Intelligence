@@ -559,6 +559,30 @@ def merge_duplicate_citations(text: str, kb_snippets: list[dict[str, Any]] | Non
     return _RUN_RE.sub(r"\1", text)
 
 
+# Ported from Anteater #143 (Signals-Sectorial-Intelligence 661ec8d): a reply that hits max_tokens
+# stopped mid-word ("…expansão estratégica e i") — the chat shows every answer in full.
+_DANGLING_RE = re.compile(r"^[\s*_#>-]*(FATO|FATOS|INFER[ÊE]NCIAS?)[\s*_:.\-]*$", re.IGNORECASE)
+_SENTENCE_END = (".", "!", "?", "]", ")", ":", "…", "*", "\"")
+
+
+def _approx_tokens(text: str) -> int:
+    """Rough token count for pt-BR (~3–4 chars/token); errs high, so a reply near the cap is
+    treated as possibly cut off. converser returns text only, without Bedrock's stopReason."""
+    return len(text or "") // 3
+
+
+def trim_unfinished(text: str, *, truncated: bool = False) -> str:
+    """Drop what a cut-off answer leaves at the end — a bare section label ("FATO",
+    "**Inferência:**") with nothing under it, and, when the model hit max_tokens, the
+    half-written last line. A complete answer is returned unchanged."""
+    lines = (text or "").rstrip().split("\n")
+    if truncated and len(lines) > 1 and not lines[-1].rstrip().endswith(_SENTENCE_END):
+        lines.pop()
+    while len(lines) > 1 and (not lines[-1].strip() or _DANGLING_RE.match(lines[-1])):
+        lines.pop()
+    return "\n".join(lines).rstrip()
+
+
 def validate_citations(
     answer_text: str,
     cards: list[dict[str, Any]],
@@ -961,8 +985,13 @@ def answer(
     max_tokens: int = 700,
     modules: list[str] | None = None,
     persona: str | None = None,
+    history: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Pure orchestration: scope gate → ground → generate → validate citations.
+
+    ``history`` (the /exec chat): the last exchanges ``[{"q", "a", "cited": [ids]}]``, already
+    sanitized by ``_chat_history``. Context only — grounding is redone from ``feed`` every turn
+    and prior answers are never evidence (see CHAT_RULE).
 
     ``modules`` (Phase D) is the verified tenant's licensed modules: when not None the
     grounding pool is scoped to entities in those modules (an empty list ⇒ no
@@ -989,11 +1018,26 @@ def answer(
             lens_vocab |= set(_tokens(ln))
 
     in_domain, reason = classify_scope(q, entity_vocab=entity_vocab, lens_vocab=lens_vocab)
+    history = history or []
+    prev_q = str(history[-1].get("q") or "") if history else ""
+    # A chat follow-up ("e o Bradesco?", "por quê?") inherits the conversation's domain — only a
+    # short one, and never past a hard refuse cue (code/recipes/prompt injection).
+    if (not in_domain and prev_q and len(_tokens(q)) <= 12
+            and not any(bad in _fold(q) for bad in _REFUSE_CUES)
+            and classify_scope(prev_q, entity_vocab=entity_vocab, lens_vocab=lens_vocab)[0]):
+        in_domain, reason = True, "follow-up"
     if not in_domain:
         return {"answer": REFUSAL_TEXT, "refused": True, "reason": reason,
                 "grounded": False, "citations": []}
 
     cards, mode = select_grounding(q, feed_cards, scope=scope, limit=limit, with_mode=True)
+    kb_q = q
+    if prev_q and not cards:
+        # a follow-up that selects nothing alone is retrieved with the question it follows
+        kb_q = f"{q} {prev_q}"
+        cards, mode = select_grounding(kb_q, feed_cards, scope=scope, limit=limit, with_mode=True)
+    if history:
+        cards = _carry_cited(cards, history[-1].get("cited") or [], feed_cards)
     kb_snippets: list[dict[str, Any]] = []
     # issue #33: KB Retrieve over narratives would reintroduce the same
     # third-party-distress news the store filter just dropped.
@@ -1003,7 +1047,7 @@ def answer(
     # amendment), not what changed this week — and they aren't scoped to the tenant's window.
     if kb_retrieve is not None and not distress_intent and mode != "digest":
         try:
-            kb_snippets = kb_retrieve(q) or []
+            kb_snippets = kb_retrieve(kb_q) or []
         except Exception as exc:  # pragma: no cover - KB best-effort
             print(f"Warning: KB retrieve skipped: {exc}")
 
@@ -1013,7 +1057,14 @@ def answer(
 
     system, user = build_messages(q, cards, kb_snippets=kb_snippets,
                                   macro=feed.get("macro"), persona=persona)
-    text = converser(user, system=system, max_tokens=max_tokens)
+    if history:
+        turns: list[dict[str, str]] = []
+        for h in history:
+            turns += [{"role": "user", "text": str(h.get("q") or "")},
+                      {"role": "assistant", "text": _CITE_MARK.sub("", str(h.get("a") or "")).strip()}]
+        text = converser(user, system=system + CHAT_RULE, max_tokens=max_tokens, history=turns)
+    else:
+        text = converser(user, system=system, max_tokens=max_tokens)
     if not text:
         return {"answer": NO_GROUND_TEXT, "refused": False, "grounded": False,
                 "reason": "no-model", "citations": []}
@@ -1022,7 +1073,8 @@ def answer(
         return {"answer": NO_GROUND_TEXT, "refused": False, "grounded": False,
                 "reason": "model-declined", "citations": [],
                 "considered": [c.get("id") for c in cards]}
-    text = merge_duplicate_citations(tidy_citations(text), kb_snippets)
+    text = trim_unfinished(tidy_citations(text), truncated=_approx_tokens(text) >= int(max_tokens * 0.95))
+    text = merge_duplicate_citations(text, kb_snippets)
     citations = validate_citations(text, cards, kb_snippets)
     return {
         "answer": text,
@@ -1031,6 +1083,77 @@ def answer(
         "citations": citations,
         "considered": [c.get("id") for c in cards],
     }
+
+
+# --- chat (multi-turn) ----------------------------------------------------
+CHAT_RULE = (
+    "\n\nCONVERSA: as mensagens anteriores são só o contexto da conversa (o que o usuário já "
+    "perguntou e leu). Elas NÃO são evidência: afirme e cite apenas o que está nos DADOS desta "
+    "mensagem, com os ids deles. Se a pergunta for um seguimento (\"e o Bradesco?\", \"por quê?\"), "
+    "responda no contexto da conversa, sem repetir o que já foi dito, e seja conciso: o essencial "
+    "em até ~150 palavras."
+)
+_CITE_MARK = re.compile(r"\[[A-Za-z0-9:_\-.À-ÿ]+\]")
+CHAT_MAX_HISTORY = 3          # exchanges sent back to the model
+CHAT_MAX_ANSWER_CHARS = 1200  # per prior answer
+CHAT_MAX_CARRIED = 6          # prior answer's cited cards kept in the pool
+
+
+def _quota_take(sub: str, *, table: Any | None = None) -> dict[str, Any] | None:
+    """Count one question against the user's daily cap (ONCA_ASK_DAILY_TURNS, default 150).
+    Atomic conditional ADD on OncaAskQuota (pk = "<sub>#<UTC day>", TTL 3 days). Returns
+    {"ok", "used", "limit"}; None when unconfigured; fails OPEN on a store error (an outage of
+    the counter must not take Ask down — the per-answer caps still bound each call)."""
+    import datetime
+    import time as _time
+    limit = int(os.environ.get("ONCA_ASK_DAILY_TURNS") or 150)
+    name = os.environ.get("ONCA_ASK_QUOTA_TABLE")
+    if table is None and not name:
+        return None
+    day = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+    try:
+        if table is None:
+            import boto3
+            table = boto3.resource("dynamodb").Table(name)
+        r = table.update_item(
+            Key={"pk": f"{sub}#{day}"},
+            UpdateExpression="ADD n :one SET #t = if_not_exists(#t, :ttl)",
+            ConditionExpression="attribute_not_exists(n) OR n < :lim",
+            ExpressionAttributeNames={"#t": "ttl"},
+            ExpressionAttributeValues={":one": 1, ":lim": limit, ":ttl": int(_time.time()) + 3 * 86400},
+            ReturnValues="UPDATED_NEW")
+        return {"ok": True, "used": int(r["Attributes"]["n"]), "limit": limit}
+    except Exception as exc:  # noqa: BLE001
+        if type(exc).__name__ == "ConditionalCheckFailedException" or "ConditionalCheckFailed" in str(exc):
+            return {"ok": False, "used": limit, "limit": limit}
+        print(f"Warning: ask quota unavailable ({exc}); not enforced for this call")
+        return None
+
+
+def _chat_history(raw: Any) -> list[dict[str, Any]]:
+    """Sanitize the client-held transcript: untrusted, so bounded in count and size, and reduced
+    to plain strings + card ids. Anything malformed is dropped, never an error."""
+    if not isinstance(raw, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for h in raw[-CHAT_MAX_HISTORY:]:
+        if not isinstance(h, dict):
+            continue
+        q, a = str(h.get("q") or "").strip()[:500], str(h.get("a") or "").strip()[:CHAT_MAX_ANSWER_CHARS]
+        if not q or not a:
+            continue
+        cited = [str(c)[:120] for c in (h.get("cited") or []) if isinstance(c, (str, int))][:12]
+        out.append({"q": q, "a": a, "cited": cited})
+    return out
+
+
+def _carry_cited(cards: list[dict[str, Any]], cited: list[str], pool: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keep the previous answer's cited cards in this turn's grounding ("detalhe o item 2"), but
+    only those still in the asker's (already tenant-scoped) pool — never a client-named card."""
+    have = {c.get("id") for c in cards}
+    by_id = {str(c.get("id")): c for c in pool}
+    carried = [_compact_card(by_id[i]) for i in cited if i in by_id and i not in have][:CHAT_MAX_CARRIED]
+    return carried + cards
 
 
 # --- I/O adapters + handler ----------------------------------------------
@@ -1222,6 +1345,14 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         return _resp(400, {"error": "q (question) required"})
     if len(q) > 500:
         q = q[:500]
+    history = _chat_history(body.get("history"))
+    # Daily per-user cap (chat cost bound, docs/2026-10-16-ask-chat-requirements.md). Only a
+    # verified user has a counter; the legacy operator leg is not metered here.
+    quota = _quota_take(identity.sub) if identity is not None else None
+    if quota is not None and not quota["ok"]:
+        return _resp(429, {"refused": True, "reason": "daily-limit", "quota": quota, "citations": [],
+                           "answer": f"Você chegou ao limite de {quota['limit']} perguntas por dia. "
+                                     "O limite renova à meia-noite (UTC)."})
     scope = body.get("scope") if isinstance(body.get("scope"), dict) else None
     # ADR-020 Phase 2: an officer persona reframes the read (voice/priorities) over its lens,
     # without loosening the grounding contract. `officer` may be an explicit role or "auto"
@@ -1281,16 +1412,28 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         kb_fn = None
         if os.environ.get("ONCA_KB_ID"):
             kb_fn = (lambda qq: _kb_retrieve(qq) + _kb_precedents(qq, officer)) if officer else _kb_retrieve
+        usage: dict[str, int] = {}
+
+        def _conv(*a: Any, **kw: Any) -> Any:
+            return converse(*a, usage_out=usage, **kw)
         result = answer(
-            q, feed=feed, scope=scope, converser=converse,
-            kb_retrieve=kb_fn, modules=modules, persona=persona,
+            q, feed=feed, scope=scope, converser=_conv,
+            kb_retrieve=kb_fn, modules=modules, persona=persona, history=history,
         )
         if officer:
             result["officer"] = officer
+        if quota is not None:
+            result["quota"] = quota
+        # cost metering (one line per turn; read with Logs Insights `filter ispresent(ask_usage.in)`)
+        print(json.dumps({"ask_usage": {
+            "tenant": getattr(identity, "tenant", None), "tier": getattr(identity, "tier", None),
+            "in": usage.get("input_tokens", 0), "out": usage.get("output_tokens", 0),
+            "history": len(history), "reason": result.get("reason")}}))
         # Coverage-gap loop (capture stage): an IN-DOMAIN question that produced no
         # grounded answer is a data gap — record it for triage/remediation. An
         # off-domain refusal is not a gap. Best-effort; never breaks the response.
-        if not result.get("refused") and not result.get("grounded"):
+        # A chat follow-up ("por quê?") is not a standalone question — not a coverage gap.
+        if not result.get("refused") and not result.get("grounded") and not history:
             _record_gap(q, scope, result.get("reason") or "no-grounding")
         return _resp(200, result)
     except Exception as exc:  # pragma: no cover - defensive; never leak a stack

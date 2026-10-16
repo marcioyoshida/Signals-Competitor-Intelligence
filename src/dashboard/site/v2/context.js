@@ -201,6 +201,10 @@
       }
     } catch (e) {}
     try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) {}
+    try {   // the /exec chat transcript (per user, sessionStorage) goes with the session
+      Object.keys(sessionStorage).filter((k) => k.indexOf("onca_chat") === 0)
+        .forEach((k) => sessionStorage.removeItem(k));
+    } catch (e) {}
     try {
       Object.keys(localStorage).filter((k) => k.indexOf("onca_u_") === 0)
         .forEach((k) => localStorage.removeItem(k));
