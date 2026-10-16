@@ -272,7 +272,7 @@
       const prev = btn.textContent;
       btn.disabled = true; btn.textContent = "Pensando…";
       ans.hidden = false; ans.className = "ask-ans";
-      ans.innerHTML = `<span class="thinking">Consultando a base da Onça…</span>`;
+      ans.innerHTML = `<span class="thinking loading loading--inline"><span class="ld-c" aria-hidden="true">ç</span><span class="ld-t">Consultando a base da Onça…</span></span>`;
       const scope = (opts.scope && opts.scope()) || {};
       try {
         const r = await fetch(`${apiUrl}/api/ask`, {

@@ -697,11 +697,11 @@
   <div class="pagehead"><h1 id="pgTitle">Sala executiva</h1><p class="lede" id="pgLede"></p></div>
   <div id="macroStrip" class="macro-strip"></div>
   <section id="askPanel" class="ask-band"></section>
-  <div id="board"></div>
+  <div id="board"><div class="loading" role="status" aria-live="polite"><span class="ld-c" aria-hidden="true">ç</span><span class="ld-t">Carregando seu painel…</span></div></div>
   <section class="band" id="recsBand">
     <div class="band-hd"><span class="overline">Ações recomendadas</span><span class="rule"></span>
       <span class="badge badge--ghost">captura ativa · decisões registradas no histórico</span></div>
-    <div class="panel"><div class="panel__bd" id="recs"></div></div>
+    <div class="panel"><div class="panel__bd" id="recs"><div class="loading" role="status" aria-live="polite"><span class="ld-c" aria-hidden="true">ç</span><span class="ld-t">Carregando…</span></div></div></div>
   </section>
 </main>
 
@@ -991,7 +991,7 @@ async function askOnca() {
   const box = document.getElementById("askAns"); box.style.display = "block"; box.className = "askans";
   // #169: visible progress, and a timeout that keeps the question for a one-tap retry
   const t0 = Date.now();
-  box.innerHTML = `<span class="thinking">Consultando a base da Onça… <span id="askSecs">0s</span></span>`;
+  box.innerHTML = `<span class="thinking loading loading--inline"><span class="ld-c" aria-hidden="true">ç</span><span class="ld-t">Consultando a base da Onça… <span id="askSecs">0s</span></span></span>`;
   const tick = setInterval(() => { const e = document.getElementById("askSecs"); if (e) e.textContent = Math.round((Date.now() - t0) / 1000) + "s"; }, 1000);
   const ctl = ("AbortController" in window) ? new AbortController() : null;
   const timer = setTimeout(() => ctl && ctl.abort(), ASK_TIMEOUT_MS);
@@ -2210,7 +2210,7 @@ function mountEntry() {
   Ctx.mountEntryBoard(DATA);
   const board = document.getElementById("board"); if (!board) return;
   board.insertAdjacentHTML("beforeend", hojeSec("hoje-resumo", "Resumo semanal por e-mail", null, "segunda-feira, por setor",
-    `<div class="pushbox" id="digestBox"><span class="hd-note">verificando…</span></div>`));
+    `<div class="pushbox" id="digestBox"><span class="hd-note">${U.loading("verificando…", true)}</span></div>`));
   renderDigestBox();
 }
 // --- board (per officer) ---------------------------------------------------
@@ -2255,7 +2255,7 @@ function render() {
       band("Força financeira dos concorrentes", "ROE·ROA·alavancagem·eficiência·share de lucro · IF.data + balancete · inferência",
         panel("Rentabilidade & eficiência (maior ROE primeiro)", null, "ROE anual · ROA · alav · opex/ativo · headroom · share", rowsFinancials(p.financials))) +
       band("Mercado · Cotações B3", "concorrentes listados no escopo · Yahoo Finance · ~60s",
-        `<div class="panel"><div class="panel__bd panel__bd--flush"><div id="b3ticker" class="b3wrap">${U.empty("Carregando cotações…", "", "○")}</div></div></div>`) +
+        `<div class="panel"><div class="panel__bd panel__bd--flush"><div id="b3ticker" class="b3wrap">${U.loading("Carregando cotações…")}</div></div></div>`) +
       band("Inteligência regulatória (resumo)", "", panel("Mudanças por alcance", ofN(p.regulatory, a.n_reg), "domínio·setores·prazo", rowsReg(p.regulatory)));
   } else if (OFFICER === "cro") {
     const [bc, bl] = bandThreat(a.reg_threat || 0, 65, 40);
@@ -2588,11 +2588,11 @@ function renderHoje(el) {
   // Device settings (push, app lock, weekly e-mail) are settings, not the brief: one fold at the end.
   const brief = html; html = "";
   html += hojeSec("hoje-alertas-cel", "Alertas no celular", null, "sem conteúdo na tela bloqueada",
-    `<div class="pushbox" id="pushBox"><span class="hd-note">verificando…</span></div>`);
+    `<div class="pushbox" id="pushBox"><span class="hd-note">${U.loading("verificando…", true)}</span></div>`);
   if (Ctx.inApp()) html += hojeSec("hoje-bloqueio", "Bloqueio do app", null, "Face ID / digital / senha do aparelho",
-    `<div class="pushbox" id="lockBox"><span class="hd-note">verificando…</span></div>`);
+    `<div class="pushbox" id="lockBox"><span class="hd-note">${U.loading("verificando…", true)}</span></div>`);
   if (!ADMIN) html += hojeSec("hoje-resumo", "Resumo semanal por e-mail", null, "segunda-feira, por setor",
-    `<div class="pushbox" id="digestBox"><span class="hd-note">verificando…</span></div>`);
+    `<div class="pushbox" id="digestBox"><span class="hd-note">${U.loading("verificando…", true)}</span></div>`);
   const setNames = ["alertas no celular"].concat(Ctx.inApp() ? ["bloqueio"] : [], ADMIN ? [] : ["resumo por e-mail"]);
   html = brief + `<a href="#painel" class="btn hoje-act" id="hojeFull">Ver painel completo →</a>` +
     `<details class="hoje-set" id="hojeSet"><summary><span>Ajustes deste aparelho<br><span class="sub">${U.esc(setNames.join(" · "))}</span></span></summary>${html}</details>`;

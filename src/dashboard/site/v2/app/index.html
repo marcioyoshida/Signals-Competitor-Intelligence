@@ -124,6 +124,7 @@
       return;
     }
     Ctx.renderAuthBox("authBox");
+    dash.innerHTML = U.loading("Carregando seu painel…");
     const res = await Ctx.loadScopedFeed({});
     if (res.needAuth) { Ctx.mountGate(dash, "needAuth", "seu painel"); return; }
     if (res.noAccess) { Ctx.mountGate(dash, "noAccess", "seu painel", res); return; }

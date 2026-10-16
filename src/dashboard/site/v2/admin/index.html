@@ -380,7 +380,7 @@ function renderRadar() {
     (b.active - a.active) || String(a.name).localeCompare(String(b.name), "pt-BR"));
   setCount("prCount", subs.length, subs.length ? "" : "zero");
   if (PR.subjects === null) {
-    el.innerHTML = PR.error ? U.empty("Radar indisponível", PR.error, "!") : U.empty("Carregando…", "", "◷");
+    el.innerHTML = PR.error ? U.empty("Radar indisponível", PR.error, "!") : U.loading("Carregando…");
     return;
   }
   const banner = PR.error ? `<div class="qrow"><div class="qrow__main prmsg prmsg--err" style="grid-column:1/-1">${U.esc(PR.error)}</div></div>` : "";

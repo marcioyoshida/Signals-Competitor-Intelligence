@@ -1349,10 +1349,19 @@
     const themeBtn = document.getElementById("themeBtn");
     if (themeBtn) themeBtn.addEventListener("click", () => { U.toggleTheme(); if (global.DATA) cfg.render(global.DATA); });
     const leadEls = () => Array.from(document.querySelectorAll(".panel--lead .panel__bd"));
+    // Every still-empty panel shows the loading Ç until the feed lands; whatever the render (or a
+    // gate) didn't fill is cleared afterwards, so no panel is left "loading" forever.
+    const LOADING_SLOTS = ".panel__bd, #kpis";
     async function load() {
+      document.querySelectorAll(LOADING_SLOTS).forEach((el) => { if (!el.children.length) el.innerHTML = U.loading(); });
+      try { await loadInto(); }
+      finally { document.querySelectorAll(".panel__bd > .loading:only-child, #kpis > .loading:only-child").forEach((n) => n.remove()); }
+    }
+    async function loadInto() {
       await ensureSession();
       renderAuthBox("authBox");
       const first = leadEls()[0] || document.querySelector(".panel__bd");
+      if (first) first.innerHTML = U.loading("Carregando seu painel…");
       const res = await loadScopedFeed({});
       if (res.needAuth) { if (first) mountGate(first, "needAuth", cfg.ctxLabel); return; }
       if (res.noAccess) { if (first) mountGate(first, "noAccess", cfg.ctxLabel, res); return; }

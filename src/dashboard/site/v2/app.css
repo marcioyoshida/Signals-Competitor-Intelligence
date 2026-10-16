@@ -457,6 +457,35 @@ details.fold.chg > summary { padding: var(--s2) var(--s3); font-size: var(--fs-m
 .empty .em-t { font-size: var(--fs-sm); font-weight: 600; color: var(--ink-2); }
 .empty .em-d { font-size: var(--fs-micro); max-width: 42ch; }
 
+/* ============================ loading ================================== */
+/* The brand's Ç as an hourglass: the glyph fills bottom-up like sand, then turns over (a quick
+   Y-flip, reset while it's edge-on) and fills again. One component for every loading panel
+   (U.loading in app.js); a static fill under prefers-reduced-motion. */
+.loading {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 6px; padding: var(--s5) var(--s4); text-align: center; color: var(--muted); font-size: var(--fs-sm);
+}
+.loading--inline { display: inline-flex; flex-direction: row; gap: 6px; padding: 0; font-size: inherit; text-align: left; vertical-align: middle; }
+.ld-c {
+  display: inline-block; font: 700 30px/1 var(--f-sans);
+  color: transparent; -webkit-text-fill-color: transparent;
+  background: linear-gradient(to top, var(--primary) 50%, var(--border-2) 50%) 0 0 / 100% 200% no-repeat;
+  -webkit-background-clip: text; background-clip: text;
+  animation: ld-hourglass 1.8s ease-in-out infinite;
+}
+.loading--inline .ld-c { font-size: 1.15em; }
+@keyframes ld-hourglass {
+  0%      { background-position: 0 0;    transform: perspective(120px) rotateY(0); }
+  58%     { background-position: 0 100%; transform: perspective(120px) rotateY(0); }
+  68%     { background-position: 0 100%; transform: perspective(120px) rotateY(0); }
+  78%     { background-position: 0 100%; transform: perspective(120px) rotateY(90deg); }
+  78.01%  { background-position: 0 0;    transform: perspective(120px) rotateY(-90deg); }
+  88%,100%{ background-position: 0 0;    transform: perspective(120px) rotateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ld-c { animation: none; background-position: 0 100%; opacity: .75; }
+}
+
 /* ============================ drawer =================================== */
 .scrim { position: fixed; inset: 0; z-index: 55; background: rgba(0,0,0,.34); opacity: 0; pointer-events: none; transition: opacity .2s; }
 .scrim.open { opacity: 1; pointer-events: auto; }

@@ -221,9 +221,18 @@
       <div class="em-t">${esc(title)}</div>${detail ? `<div class="em-d">${esc(detail)}</div>` : ""}</div>`;
   }
 
+  /* ---- loading: the animated Ç (app.css .loading) ---------------------- */
+  // Every loading panel uses this, so "still fetching" never looks like an empty panel.
+  // inline=true for a status line inside text (pushbox "verificando…", Ask "Consultando…").
+  function loading(label, inline) {
+    const tag = inline ? "span" : "div";
+    return `<${tag} class="loading${inline ? " loading--inline" : ""}" role="status" aria-live="polite">` +
+      `<span class="ld-c" aria-hidden="true">ç</span>${label ? `<span class="ld-t">${esc(label)}</span>` : ""}</${tag}>`;
+  }
+
   global.OncaUI = {
     esc, fmtDate, TIERS, tierOf, tierBadge, heat,
     hostOf, sourceLabel, citationModel, linkifyNarrative, citationFooter,
-    sparkline, initTheme, toggleTheme, empty, oacFetch, EMPTY_ICONS,
+    sparkline, initTheme, toggleTheme, empty, loading, oacFetch, EMPTY_ICONS,
   };
 })(window);
