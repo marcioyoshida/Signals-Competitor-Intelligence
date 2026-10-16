@@ -285,6 +285,9 @@ def select_grounding(
     # PURE digest only: "o que o BCB mudou na regulação?" has a subject (bcb, regulacao) and
     # keeps normal topical + KB grounding even when no card matches it.
     digest_intent = bool(q_all & _DIGEST_CUES) and not (q_toks - _DIGEST_FILLER)
+    if digest_intent:   # no subject to match — the filler would hit card prose ("Meu Crédito")
+        cards = [_compact_card(c) for c in _recent_digest(q, feed, limit)]
+        return (cards, "digest") if with_mode else cards
     classification_intent = bool(q_toks & _CLASSIFICATION_CUES)
     distress_intent = bool(q_toks & _DISTRESS_CUES)
     # ADR #34 Phase 2: the question's topic intent (regulacao/pagamentos/…) — a
@@ -358,9 +361,6 @@ def select_grounding(
         # date as tiebreaker (recent first) via secondary sort key
         scored.append((score, str(card.get("date") or ""), card))
 
-    if not scored and digest_intent:
-        cards = [_compact_card(c) for c in _recent_digest(q, feed, limit)]
-        return (cards, "digest") if with_mode else cards
     scored.sort(key=lambda t: (t[0], t[1]), reverse=True)
     cards = [_compact_card(c) for _, _, c in scored[:limit]]
     return (cards, "topical") if with_mode else cards

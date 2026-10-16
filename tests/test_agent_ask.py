@@ -697,3 +697,10 @@ def test_change_question_with_a_subject_is_not_a_digest():
     assert aa.select_grounding("o que o BCB mudou na regulação de bancos?", feed, with_mode=True) == ([], "topical")
     for q in ("Quais as novidades desta semana?", "Que novos entrantes apareceram na janela?", "Resuma a semana"):
         assert aa.select_grounding(q, feed, with_mode=True)[1] == "digest", q
+
+
+def test_digest_filler_never_matches_card_prose():
+    # live 10-16: "meu" matched the Inter radar card "Meu Crédito" and turned the chip topical
+    feed = [_dated(1, "2026-10-15", threat=20), dict(_dated(2, "2026-09-01"), narrative="Inter atualiza o Meu Crédito")]
+    cards, mode = aa.select_grounding("O que mudou esta semana no meu escopo?", feed, with_mode=True)
+    assert mode == "digest" and [c["id"] for c in cards] == ["c1"]
