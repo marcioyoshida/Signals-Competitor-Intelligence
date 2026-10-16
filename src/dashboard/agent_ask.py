@@ -383,7 +383,14 @@ def _recent_digest(q: str, feed: list[dict[str, Any]], limit: int) -> list[dict[
             return 0.0
     recent = [c for c in dated if str(c["date"])[:10] >= since and not str(c.get("id") or "").startswith("fact:")]
     recent.sort(key=lambda c: (bool(c.get("is_alert")), threat(c), str(c["date"])), reverse=True)
-    return recent[:limit]
+    # a digest spans the scope: at most 2 cards per entity (live 10-16: Itaú filled the admin week)
+    out, per = [], {}
+    for c in recent:
+        k = _fold(c.get("entity") or c.get("entity_label") or c.get("id"))
+        if per.get(k, 0) < 2:
+            per[k] = per.get(k, 0) + 1
+            out.append(c)
+    return out[:limit]
 
 
 def build_messages(
@@ -1259,7 +1266,10 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # (modules=None, unscoped) is unaffected.
     top_tiers = {t.strip().lower() for t in
                  os.environ.get("ONCA_ASK_CROSS_INDUSTRY_TIERS", "sovereign").split(",") if t.strip()}
-    industry = str(body.get("industry") or "").strip().lower() or None
+    # v2/ask.js sends `industry` top-level; /exec sends it inside `scope` — accept both (a cached
+    # /exec page must narrow too). Still only a NARROWING hint, checked against `modules` below.
+    _scope = body.get("scope") if isinstance(body.get("scope"), dict) else {}
+    industry = str(body.get("industry") or _scope.get("industry") or "").strip().lower() or None
     if modules is not None and industry:
         tier = str((cfg or {}).get("tier") or "").lower()
         if tier not in top_tiers and industry in {str(m).strip().lower() for m in modules}:

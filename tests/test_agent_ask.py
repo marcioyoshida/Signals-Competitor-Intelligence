@@ -480,7 +480,7 @@ def test_handler_needs_bucket(monkeypatch):
 
 
 # --- ADR 019: cross-industry Ask is a top-tier (sovereign) capability -----------------
-def _ask_modules(monkeypatch, tier, modules, industry):
+def _ask_modules(monkeypatch, tier, modules, industry, *, nested=False):
     """Run the handler with a verified tenant; capture the `modules` passed to answer()."""
     import json as _json
     import src.dashboard.tenant_config as _tc
@@ -493,7 +493,8 @@ def _ask_modules(monkeypatch, tier, modules, industry):
     monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
     monkeypatch.delenv("ONCA_ASK_CROSS_INDUSTRY_TIERS", raising=False)
     ev = {"requestContext": {"authorizer": {"jwt": {"claims": {"sub": "u", "custom:tenant": "acme"}}}},
-          "headers": {}, "body": _json.dumps({"q": "como está o mercado?", "industry": industry})}
+          "headers": {}, "body": _json.dumps({"q": "como está o mercado?", "scope": {"industry": industry}} if nested
+                                             else {"q": "como está o mercado?", "industry": industry})}
     aa.lambda_handler(ev, None)
     return captured.get("modules")
 
@@ -669,8 +670,8 @@ def _dated(i, date, alert=False, threat=10, entity="e"):
 
 
 def test_scope_digest_grounds_on_the_last_week_alerts_first():
-    feed = [_dated(1, "2026-10-15", threat=20), _dated(2, "2026-10-12", alert=True, threat=50),
-            _dated(3, "2026-10-01", alert=True, threat=99), _dated(4, "2026-10-09", threat=70)]
+    feed = [_dated(1, "2026-10-15", threat=20, entity="a"), _dated(2, "2026-10-12", alert=True, threat=50, entity="b"),
+            _dated(3, "2026-10-01", alert=True, threat=99, entity="c"), _dated(4, "2026-10-09", threat=70, entity="d")]
     ids = [c["id"] for c in aa.select_grounding("O que mudou esta semana no meu escopo?", feed)]
     assert ids == ["c2", "c4", "c1"]          # c3 is outside the 7 days before the newest card
     ids = [c["id"] for c in aa.select_grounding("Quais os destaques de hoje?", feed)]
@@ -704,3 +705,17 @@ def test_digest_filler_never_matches_card_prose():
     feed = [_dated(1, "2026-10-15", threat=20), dict(_dated(2, "2026-09-01"), narrative="Inter atualiza o Meu Crédito")]
     cards, mode = aa.select_grounding("O que mudou esta semana no meu escopo?", feed, with_mode=True)
     assert mode == "digest" and [c["id"] for c in cards] == ["c1"]
+
+
+def test_scope_digest_caps_cards_per_entity():
+    feed = [_dated(i, "2026-10-15", alert=True, threat=90 - i, entity="itau") for i in range(5)] + \
+           [_dated(9, "2026-10-14", threat=10, entity="nubank")]
+    ids = [c["id"] for c in aa.select_grounding("Resuma a semana", feed)]
+    assert ids == ["c0", "c1", "c9"]
+
+
+def test_exec_sector_hint_inside_scope_narrows_like_top_level(monkeypatch):
+    # /exec sends {q, scope: {industry}, officer}; v2/ask.js sends a top-level `industry`
+    assert _ask_modules(monkeypatch, "saas", ["acquiring", "banking"], "acquiring", nested=True) == ["acquiring"]
+    # still narrowing-only: an unlicensed hint does not widen or switch the entitlement
+    assert set(_ask_modules(monkeypatch, "saas", ["acquiring", "banking"], "insurance", nested=True)) == {"acquiring", "banking"}
