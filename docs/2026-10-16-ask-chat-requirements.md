@@ -71,6 +71,19 @@ Everything else per turn is negligible:
 
 **All-in: about $0.0005 per chat turn.**
 
+**Measured live after deploy (2026-10-16, `ask_usage` log lines, admin persona, a 3-turn conversation):**
+
+| turn | history | input tok | output tok | model $ |
+|---|---|---|---|---|
+| 1 | 0 | 4,419 | 230 | $0.00032 |
+| 2 | 1 | 4,609 | 203 | $0.00033 |
+| 3 | 2 | 5,153 | 327 | $0.00039 |
+
+Input runs about 1k above the offline estimate (officer persona plus KB snippets), and output
+runs about 200 tokens below it, so the ~$0.0005 all-in figure holds. To read real spend:
+CloudWatch Logs Insights on the OncaAgent log group,
+`filter ispresent(ask_usage.in) | stats sum(ask_usage.in), sum(ask_usage.out) by ask_usage.tenant`.
+
 | usage | turns/month | $/month |
 |---|---|---|
 | 20 seats × 15 turns/day × 22 days | 6,600 | ~$3 |
