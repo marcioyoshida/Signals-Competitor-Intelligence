@@ -1409,6 +1409,7 @@ def add_cnpj_roots(
     entity_id: str,
     roots: Iterable[str],
     *,
+    source: str = "curated",
     table: Any | None = None,
 ) -> list[str]:
     """Attach CNPJ 8-digit roots to an entity, writing the CNPJ# lookup items.
@@ -1418,6 +1419,10 @@ def add_cnpj_roots(
     CNPJ# reindex done here). Non-destructive (preserves every other field), idempotent
     (skips roots the entity already has), and it never **steals** a root already owned
     by a *different* entity (returns it unwritten). Returns the roots actually added.
+
+    ADR 018 Phase 1b: journaled like every other registry mutation — an
+    ``add_cnpj_roots`` entry when roots are written, a ``blocked`` entry when the only
+    outcome was a refused steal. ``source`` is the write-precedence class recorded there.
     """
     t = _table(table)
     ent = get_entity(entity_id, table=t)
@@ -1425,21 +1430,28 @@ def add_cnpj_roots(
         return []
     cur = set(ent.get("cnpj_roots") or [])
     added: list[str] = []
+    refused: dict[str, str] = {}
     for r in roots:
         root = "".join(ch for ch in str(r or "") if ch.isdigit())[:8]
         if len(root) < 8 or root in cur:
             continue
         owner = t.get_item(Key={"pk": f"CNPJ#{root}"}).get("Item")
         if owner and owner.get("entity_id") not in (None, entity_id):
+            refused[root] = str(owner.get("entity_id"))
             continue  # another entity owns this CNPJ — never steal it
         cur.add(root)
         added.append(root)
     if not added:
+        if refused:
+            _log(entity_id, "blocked", source,
+                 {"field": "cnpj_roots", "reason": "cnpj-owned-by-other", "refused": refused})
         return []
     ent["cnpj_roots"] = sorted(cur)
     t.put_item(Item=ent)
     for root in added:
         t.put_item(Item={"pk": f"CNPJ#{root}", "type": "cnpj", "entity_id": entity_id})
+    _log(entity_id, "add_cnpj_roots", source,
+         {"added": added, **({"refused": refused} if refused else {})})
     return added
 
 

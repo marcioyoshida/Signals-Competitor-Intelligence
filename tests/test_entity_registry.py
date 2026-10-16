@@ -722,6 +722,49 @@ def test_add_cnpj_roots_never_steals_another_entitys_root():
     assert er.get_entity("b", table=t).get("cnpj_roots", []) == []
 
 
+class _LogSink:
+    def __init__(self):
+        self.items = []
+
+    def put_item(self, Item):
+        self.items.append(Item)
+
+
+def test_add_cnpj_roots_is_journaled(monkeypatch):
+    # ADR 018 Phase 1b: a CNPJ write must leave an audit entry, with its source.
+    sink = _LogSink()
+    monkeypatch.setattr(er, "_log_table", lambda: sink)
+    t = FakeTable()
+    er.put_entity("nubank", "Nubank", ["NUBANK"], confidence="curated", table=t)
+    sink.items.clear()
+    er.add_cnpj_roots("nubank", ["18236120"], source="enrich", table=t)
+    assert [(i["action"], i["source"]) for i in sink.items] == [("add_cnpj_roots", "enrich")]
+    assert sink.items[0]["entity_id"] == "nubank"
+    assert sink.items[0]["detail"] == {"added": ["18236120"]}
+    sink.items.clear()
+    er.add_cnpj_roots("nubank", ["18236120"], table=t)  # idempotent no-op: nothing to journal
+    assert sink.items == []
+
+
+def test_add_cnpj_roots_refused_steal_is_journaled(monkeypatch):
+    sink = _LogSink()
+    monkeypatch.setattr(er, "_log_table", lambda: sink)
+    t = FakeTable()
+    er.put_entity("a", "A", ["A CO"], cnpj_roots=["12345678"], confidence="curated", table=t)
+    er.put_entity("b", "B", ["B CO"], confidence="curated", table=t)
+    sink.items.clear()
+    assert er.add_cnpj_roots("b", ["12345678"], table=t) == []
+    (item,) = sink.items
+    assert (item["entity_id"], item["action"], item["source"]) == ("b", "blocked", "curated")
+    assert item["detail"]["refused"] == {"12345678": "a"}
+    # a mixed call journals the write and records the refusal alongside it
+    sink.items.clear()
+    assert er.add_cnpj_roots("b", ["12345678", "87654321"], table=t) == ["87654321"]
+    (item,) = sink.items
+    assert item["action"] == "add_cnpj_roots"
+    assert item["detail"] == {"added": ["87654321"], "refused": {"12345678": "a"}}
+
+
 def test_add_cnpj_roots_preserves_other_fields():
     t = FakeTable()
     er.put_entity("inter", "Banco Inter", ["INTER"], confidence="curated",
