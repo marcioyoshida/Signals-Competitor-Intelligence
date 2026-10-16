@@ -261,6 +261,12 @@ def _digest_window_days(q: str) -> int:
     return 7
 
 
+# "Quem está em alerta agora?" (an Ask chip) means the scope's ALERT cards (is_alert — the board's
+# "Alertas · em aberto"), not documents that contain the word: live 10-16 it was answered from a
+# KB doc about CVM "ofícios de alerta".
+_ALERT_CUES = {"alerta", "alertas"}
+
+
 def _is_distress_card(card: dict[str, Any]) -> bool:
     cid = str(card.get("id") or "")
     if cid.startswith("distress:"):
@@ -289,6 +295,7 @@ def select_grounding(
         cards = [_compact_card(c) for c in _recent_digest(q, feed, limit)]
         return (cards, "digest") if with_mode else cards
     classification_intent = bool(q_toks & _CLASSIFICATION_CUES)
+    alert_intent = bool(q_toks & _ALERT_CUES)
     distress_intent = bool(q_toks & _DISTRESS_CUES)
     # ADR #34 Phase 2: the question's topic intent (regulacao/pagamentos/…) — a
     # RANKING signal only (lifts on-topic cards), never a relevance trigger, so a
@@ -332,6 +339,9 @@ def select_grounding(
             relevant = True
         if distress_intent and _is_distress_card(card):
             score += 8.0
+            relevant = True
+        if alert_intent and card.get("is_alert"):
+            score += 6.0
             relevant = True
         if scope_entity and scope_entity in (_fold(card.get("entity")), _fold(card.get("entity_label"))):
             score += 3.0
@@ -1048,10 +1058,11 @@ def answer(
     # issue #33: KB Retrieve over narratives would reintroduce the same
     # third-party-distress news the store filter just dropped.
     distress_intent = bool(set(_tokens(q)) & _DISTRESS_CUES)
+    alert_intent = bool(set(_tokens(q)) & _ALERT_CUES) and any(c.get("is_alert") for c in feed_cards)
     # A scope digest ("o que mudou esta semana no meu escopo?") is answered from the scope's
     # recent cards only: semantic KB hits for "mudou" are documents ABOUT change (a 2018 law
     # amendment), not what changed this week — and they aren't scoped to the tenant's window.
-    if kb_retrieve is not None and not distress_intent and mode not in ("digest", "follow-up"):
+    if kb_retrieve is not None and not distress_intent and not alert_intent and mode not in ("digest", "follow-up"):
         try:
             kb_snippets = kb_retrieve(kb_q) or []
         except Exception as exc:  # pragma: no cover - KB best-effort

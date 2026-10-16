@@ -850,3 +850,13 @@ def test_subjectless_follow_up_grounds_only_on_what_the_last_answer_cited():
     r = aa.answer("por quê?", feed=feed, converser=_Conv(), history=hist,
                   kb_retrieve=lambda q: kb_calls.append(q) or [])
     assert r["considered"] == ["c1"] and kb_calls == []
+
+
+def test_alert_question_grounds_on_alert_cards_not_kb():
+    feed = {"entities": [], "feed": [_dated(1, "2026-10-15", alert=True, threat=70, entity="itau"),
+                                     _dated(2, "2026-10-15", alert=False, threat=90, entity="bradesco"),
+                                     _dated(3, "2026-10-10", alert=True, threat=40, entity="pan")]}
+    kb_calls = []
+    r = aa.answer("Quem está em alerta agora?", feed=feed, converser=_Conv("**FATO:** Itaú [c1]"),
+                  kb_retrieve=lambda q: kb_calls.append(q) or [{"id": "kb:0", "title": "ofícios de alerta"}])
+    assert r["considered"][:2] == ["c1", "c3"] and "c2" not in r["considered"] and kb_calls == []
