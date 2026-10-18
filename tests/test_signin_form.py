@@ -12,6 +12,7 @@ Two layers:
 from __future__ import annotations
 
 import base64
+import sys
 import http.server
 import json
 import re
@@ -24,7 +25,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 SITE = ROOT / "src" / "dashboard" / "site"
 CTX = (SITE / "v2" / "context.js").read_text(encoding="utf-8")
-CSS = (SITE / "v2" / "app.css").read_text(encoding="utf-8")
+CSS = (SITE / "v2" / "signin.css").read_text(encoding="utf-8")   # the .si* block (attached by context.js)
 FORM = CTX.split("OWN SIGN-IN FORM (#277)", 1)[1].split("SCOPED FEED LOADER", 1)[0]
 
 
@@ -81,7 +82,7 @@ def test_the_password_never_leaves_its_input():
 
 
 def test_form_css_uses_tokens_and_touch_sizes():
-    css = CSS.split("own sign-in form (#277)", 1)[1]
+    css = CSS.split("/* ============================ own sign-in form (#277)", 1)[1]   # the rules, not the token block
     assert not re.search(r"#[0-9a-fA-F]{3,8}\b", css.split("*/", 1)[1]), "ad-hoc hex in the sign-in CSS"
     assert "rgb(" not in css.split("*/", 1)[1]
     assert ".si input {" in css and "min-height: 48px" in css and "font-size: 16px" in css
@@ -99,12 +100,52 @@ def test_every_page_that_calls_oncactx_login_loads_context_js():
 
 
 def test_only_the_known_pages_still_redirect_to_the_managed_login_page():
-    """Only the legacy v1 page keeps its own managed-login PKCE sign-in. /v2/admin moved to the
-    OncaCtx form too (ask.js no longer carries a built-in flow). Listed on purpose: a new page
-    that builds `${AUTH.domain}/login` must not appear silently."""
+    """No page builds the managed-login URL any more: /v2/admin (ask.js) and the legacy v1 board
+    moved to the OncaCtx form too (#277). A new page that builds `${AUTH.domain}/login` fails here."""
     offenders = sorted(str(p.relative_to(SITE)) for p in list(SITE.rglob("*.html")) + list(SITE.rglob("*.js"))
                        if "${AUTH.domain}/login" in p.read_text(encoding="utf-8"))
-    assert offenders == ["index.html"], offenders
+    assert offenders == [], offenders
+
+
+def test_v1_board_signs_in_through_the_shared_form():
+    """The legacy v1 board loads app.js + context.js before its inline script, delegates every auth
+    call to OncaCtx, and opts into the sheet's standalone tokens (it has no app.css)."""
+    html = (SITE / "index.html").read_text(encoding="utf-8")
+    assert 'class="si-standalone"' in html.split(">", 2)[1] or 'class="si-standalone"' in html[:200]
+    i_app, i_ctx = html.index('src="/v2/app.js"'), html.index('src="/v2/context.js"')
+    assert i_app < i_ctx < html.index("const TIERS")
+    for gone in ("/oauth2/token", "code_verifier", "VERIFIER_KEY", "auth.onssa.org", "clientId"):
+        assert gone not in html, gone
+    assert "function login() { return Ctx.login(); }" in html and "Ctx.ensureSession()" in html
+
+
+def test_signin_css_is_attached_by_context_js_and_reachable_from_exec():
+    ctx = (SITE / "v2" / "context.js").read_text(encoding="utf-8")
+    assert 'l.href = "/v2/signin.css"' in ctx
+    assert ".si {" not in (SITE / "v2" / "app.css").read_text(encoding="utf-8")   # one copy only
+    sys.path.insert(0, str(ROOT / "infra"))
+    import edge_policy
+    assert "/v2/signin.css" in edge_policy.EXEC_PUBLIC_URIS          # /exec visitors have no password
+    assert '"/v2/signin.css"' in (SITE / "exec-sw.js").read_text(encoding="utf-8")
+
+
+def test_standalone_tokens_match_app_css():
+    """v1 has no app.css, so signin.css carries the sheet's tokens for it (html.si-standalone).
+    They must be the SAME values as app.css, light and dark, or the form drifts between pages."""
+    app = (SITE / "v2" / "app.css").read_text(encoding="utf-8")
+    light_app = app[app.index(":root {"):app.index("}", app.index(":root {"))]
+    dark_app = app[app.index('html[data-theme="dark"] {'):]
+    dark_app = dark_app[:dark_app.index("}")]
+    tok = lambda block: dict(re.findall(r"(--[a-z0-9-]+):\s*([^;]+);", block))
+    head = CSS.split("/* ============================ own sign-in form (#277)", 1)[0]
+    light_si = tok(head[head.index("html.si-standalone .si {"):head.index('html.si-standalone[data-theme="dark"]')])
+    dark_si = tok(head[head.index('html.si-standalone[data-theme="dark"] .si {'):])
+    la, da = tok(light_app), tok(dark_app)
+    assert light_si and dark_si
+    for k, v in light_si.items():
+        assert la.get(k, "").strip() == v.strip(), ("light", k)
+    for k, v in dark_si.items():
+        assert da.get(k, "").strip() == v.strip(), ("dark", k)
 
 
 def test_admin_signs_in_through_the_shared_form():

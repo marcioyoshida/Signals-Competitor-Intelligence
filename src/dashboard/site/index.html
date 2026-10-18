@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt-BR" data-theme="dark">
+<html lang="pt-BR" data-theme="dark" class="si-standalone">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -759,6 +759,8 @@
 
 <div class="tip" id="tip"></div>
 
+<script src="/v2/app.js"></script>
+<script src="/v2/context.js"></script>
 <script>
 const TIERS = [
   { min: 0.85, label: "CRÍTICO", var: "--t-crit" },
@@ -937,7 +939,7 @@ async function loadTicker() {
 }
 
 async function boot() {
-  await handleAuthCallback();  // consume ?code=... from the Hosted-UI redirect, if present
+  await handleAuthCallback();  // Google/Apple ?code= return + broker refresh cookie (#277)
   renderAuthUI();               // reflect the just-exchanged token (or logged-out state)
   await loadFeed(true);
   if (OPERATOR) pollRunStatus();   // start following the pipeline (reflects any in-flight run)
@@ -2741,33 +2743,15 @@ document.getElementById("tableToggle").onclick = (e) => {
   e.target.textContent = hidden ? "Tabela" : "Cartões";
 };
 
-// --- Auth (Cognito Hosted UI, Authorization Code + PKCE, public SPA client) ---
-// The "Perguntar" panel POSTs SAME-ORIGIN `/api/ask` with `Authorization: Bearer
-// <id_token>`; CloudFront routes /api/ask to the Cognito-JWT-verified HTTP API
-// (no origin secret, no edge basic-auth on that path). apiUrl is "" = same origin.
-const AUTH = {
-  domain: "https://auth.onssa.org",
-  clientId: "4docsvvsocsujjqtj3aofduio3",
-  apiUrl: "",  // same origin — /api/ask is fronted by CloudFront -> HTTP API (JWT)
-  // Must exactly match the Cognito app client's registered callback/logout URL.
-  redirectUri: location.origin + "/",
-};
-const TOKEN_KEY = "onca_id_token", VERIFIER_KEY = "onca_pkce_verifier";
-
-function b64UrlEncode(bytes) {
-  let bin = "";
-  bytes.forEach(b => { bin += String.fromCharCode(b); });
-  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-function randomPkceVerifier() {
-  const arr = new Uint8Array(64);
-  crypto.getRandomValues(arr);
-  return b64UrlEncode(arr);
-}
-async function pkceChallenge(verifier) {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
-  return b64UrlEncode(new Uint8Array(digest));
-}
+// --- Auth: the shared own sign-in form (#277) --------------------------------------------
+// Sign-in is /v2/context.js's OncaCtx — the same form, session broker and token as /exec and
+// every v2 screen: e-mail + password via /api/session/password, Google/Apple straight to the
+// provider, the refresh token in an HttpOnly cookie. No Cognito page, no code exchange here.
+// The "Perguntar" panel POSTs SAME-ORIGIN `/api/ask` with `Authorization: Bearer <id_token>`;
+// CloudFront routes /api/ask to the Cognito-JWT-verified HTTP API. apiUrl "" = same origin.
+const AUTH = { apiUrl: "" };
+const TOKEN_KEY = "onca_id_token";
+const Ctx = window.OncaCtx;
 // Decode a JWT payload client-side for DISPLAY ONLY (e.g. showing the signed-in
 // email) — this is never treated as a trust boundary; the API Gateway JWT
 // authorizer is what actually validates the token server-side.
@@ -2780,62 +2764,15 @@ function decodeJwt(token) {
     return JSON.parse(json);
   } catch (e) { return null; }
 }
-function getIdToken() { return sessionStorage.getItem(TOKEN_KEY); }
-function isLoggedIn() {
-  const t = getIdToken();
-  if (!t) return false;
-  const p = decodeJwt(t);
-  return !!(p && p.exp && p.exp * 1000 > Date.now());
-}
-async function login() {
-  const verifier = randomPkceVerifier();
-  sessionStorage.setItem(VERIFIER_KEY, verifier);
-  const challenge = await pkceChallenge(verifier);
-  const params = new URLSearchParams({
-    client_id: AUTH.clientId, response_type: "code", scope: "openid email",
-    redirect_uri: AUTH.redirectUri, code_challenge: challenge, code_challenge_method: "S256",
-    lang: "pt-BR",
-  });
-  location.href = `${AUTH.domain}/login?${params.toString()}`;
-}
-function logout() {
-  sessionStorage.removeItem(TOKEN_KEY);
-  const params = new URLSearchParams({ client_id: AUTH.clientId, logout_uri: AUTH.redirectUri });
-  location.href = `${AUTH.domain}/logout?${params.toString()}`;
-}
-// PKCE code -> token exchange for the /?code=... redirect back from Hosted UI.
-async function exchangeCodeForToken(code) {
-  const verifier = sessionStorage.getItem(VERIFIER_KEY);
-  sessionStorage.removeItem(VERIFIER_KEY);
-  if (!verifier) return false;
-  try {
-    const body = new URLSearchParams({
-      grant_type: "authorization_code", client_id: AUTH.clientId,
-      code, redirect_uri: AUTH.redirectUri, code_verifier: verifier,
-    });
-    const r = await fetch(`${AUTH.domain}/oauth2/token`, {
-      method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: body.toString(),
-    });
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    const j = await r.json();
-    if (!j.id_token) throw new Error("sem id_token na resposta");
-    sessionStorage.setItem(TOKEN_KEY, j.id_token);
-    return true;
-  } catch (e) {
-    console.error("Onça auth: falha na troca do código por token", e);
-    return false;
-  }
-}
-// On boot: if the Hosted UI just redirected back with ?code=..., exchange it
-// and strip the query string so a refresh doesn't try to reuse a spent code.
+function getIdToken() { return Ctx.getIdToken(); }
+function isLoggedIn() { return Ctx.isLoggedIn(); }
+function login() { return Ctx.login(); }        // no provider -> opens the sign-in form
+function logout() { return Ctx.logout(); }
+// On boot: finish a Google/Apple return (?code=…), then let the broker's refresh cookie give
+// this tab its ID token when a session already exists.
 async function handleAuthCallback() {
-  const url = new URL(location.href);
-  const code = url.searchParams.get("code");
-  if (!code) return;
-  await exchangeCodeForToken(code);
-  url.searchParams.delete("code"); url.searchParams.delete("state");
-  history.replaceState({}, "", url.pathname + (url.search || "") + url.hash);
+  await Ctx.handleAuthCallback();
+  await Ctx.ensureSession();
 }
 function renderAuthUI() {
   const el = document.getElementById("authBox");

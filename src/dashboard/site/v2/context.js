@@ -53,6 +53,13 @@
   if (APP && APP.redirectUri === "onca://auth") AUTH.redirectUri = APP.redirectUri;
   // auth.onssa.org cutover: app builds before bridge 2 only honour the prefix domain (bridge.ts isHostedUiUrl).
   if (APP && !(APP.bridge >= 2)) AUTH.domain = "https://onca-668449743071.auth.us-east-1.amazoncognito.com";
+  // #277: the sign-in sheet's stylesheet travels with this file (v2/signin.css), so every page
+  // that loads context.js (the legacy v1 board included) gets it without its own <link>.
+  if (global.document && global.document.head && !global.document.querySelector("link[data-si-css]")) {
+    const l = global.document.createElement("link");
+    l.rel = "stylesheet"; l.href = "/v2/signin.css"; l.setAttribute("data-si-css", "");
+    global.document.head.appendChild(l);
+  }
   function toShell(msg) { global.ReactNativeWebView.postMessage(JSON.stringify(msg)); }
   // #258 (App Store 3.1.1 / 3.1.3): inside the app there is no purchase call to action — no link to
   // the storefront, no price, no "Assine". The plan is managed on the web; say so in plain text.

@@ -10,8 +10,8 @@
      "onca-user-feed" cache keyed by the user's sub and wipes it on logout.
    Push (#167) is handled below: payload-free — the lock screen never carries content. */
 "use strict";
-const SHELL_VERSION = "exec-shell-v2";
-const SHELL = ["/exec", "/v2/app.css", "/v2/app.js", "/v2/context.js",
+const SHELL_VERSION = "exec-shell-v3";
+const SHELL = ["/exec", "/v2/app.css", "/v2/app.js", "/v2/context.js", "/v2/signin.css",
   "/v3/manifest.webmanifest", "/v3/icons/icon-192.png", "/v3/icons/apple-touch-icon.png"];
 
 function neverCache(url) {

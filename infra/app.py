@@ -1109,6 +1109,7 @@ class OncaPrototypeStack(Stack):
                 "/v2/app.css",
                 "/v2/app.js",
                 "/v2/context.js",
+                "/v2/signin.css",  # #277 own sign-in form, attached by context.js
                 # v3 executive dashboard (ADR 021) — clean route /exec.
                 "/v3/index.html",
                 # #162 PWA: worker (root, scopes /exec) + manifest/icons; #170 share image

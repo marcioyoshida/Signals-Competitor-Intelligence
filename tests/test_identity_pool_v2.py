@@ -151,12 +151,13 @@ def test_cutover_v2_is_the_live_pool():
 
 def test_site_uses_the_v2_warroom_client():
     site = ROOT / "src" / "dashboard" / "site"
-    for f in ("index.html", "v2/context.js"):
+    for f in ("v2/context.js",):
         src = (site / f).read_text(encoding="utf-8")
         assert "7qlquhh56o06tp9bo8gp77p385" not in src, f       # the original pool's warroom client
         assert 'clientId: "' + V2_WARROOM_CLIENT_ID + '"' in src, f
-    # #277: ask.js has no auth of its own any more (it uses OncaCtx), so no client id at all
-    assert "clientId" not in (site / "v2" / "ask.js").read_text(encoding="utf-8")
+    # #277: ask.js and the v1 board have no auth of their own any more (they use OncaCtx)
+    for f in ("v2/ask.js", "index.html"):
+        assert "clientId" not in (site / f).read_text(encoding="utf-8"), f
 
 
 def test_cdk_declared_users_match_the_template(resources):

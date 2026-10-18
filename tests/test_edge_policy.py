@@ -10,7 +10,7 @@ import edge_policy  # noqa: E402
 
 def test_exec_exemption_list_is_pinned():
     assert set(edge_policy.EXEC_PUBLIC_URIS) == {
-        "/v3/index.html", "/v2/app.css", "/v2/app.js", "/v2/context.js", "/exec-sw.js",
+        "/v3/index.html", "/v2/app.css", "/v2/app.js", "/v2/context.js", "/v2/signin.css", "/exec-sw.js",
         "/v3/manifest.webmanifest", "/v3/icons/icon-192.png", "/v3/icons/icon-512.png",
         "/v3/icons/icon-maskable-512.png", "/v3/icons/apple-touch-icon.png", "/v3/og.png",
         "/404.html", "/403.html"}  # #221: static branded error pages, no data
@@ -19,7 +19,7 @@ def test_exec_exemption_list_is_pinned():
 def test_no_data_or_api_or_other_surface_is_exempt():
     for u in edge_policy.EXEC_PUBLIC_URIS:
         assert not u.startswith("/api/") and "feed" not in u and not u.endswith(".json")
-        assert not u.startswith("/v2/") or u in ("/v2/app.css", "/v2/app.js", "/v2/context.js")
+        assert not u.startswith("/v2/") or u in ("/v2/app.css", "/v2/app.js", "/v2/context.js", "/v2/signin.css")
 
 
 def test_js_is_exact_match_not_prefix():
