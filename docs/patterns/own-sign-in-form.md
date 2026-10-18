@@ -98,10 +98,14 @@ refresh token in an HttpOnly cookie (Onça #161/#164). The password routes add:
 
 ## What stays on managed login
 
-- Operator/admin pages should use the same form. Onça moved `/v2/admin` to it on 2026-10-18
-  (d12a6d6): one session and one token, with no second PKCE flow left to maintain. Only the
-  legacy v1 page still builds the managed-login URL, and a test pins that list, so a new page
-  can't use it silently.
+- Every page should use the same form, operator and legacy pages included. In Onça, `/v2/admin`
+  (d12a6d6) and the legacy v1 board (32f48b6) moved to it on 2026-10-18. No page builds the
+  managed-login URL now, and a test keeps it that way.
+- A page without the product's design tokens (Onça v1) can still use the form. The sheet's CSS
+  lives in its own file (`v2/signin.css`), which `context.js` attaches itself.
+  `<html class="si-standalone">` supplies the tokens scoped to the sheet, and a test keeps them
+  equal to `app.css`. If a public page (Onça `/exec`) loads the form, add the stylesheet to the
+  edge exemption, to the service-worker shell, and to the deploy invalidation paths.
 - OAuth clients (MCP, the agent OAuth facade) use the authorize endpoint and see managed login by
   design.
 
@@ -111,6 +115,6 @@ refresh token in an HttpOnly cookie (Onça #161/#164). The password routes add:
 - `infra/app.py`: session Lambda env `ONCA_USER_POOL_ID`, the grant, and the four routes
 - `src/dashboard/site/v2/context.js`: `openSignIn()` (the "OWN SIGN-IN FORM" block) and
   `acceptSession()`
-- `src/dashboard/site/v2/app.css`: the `.si*` block, tokens only
+- `src/dashboard/site/v2/signin.css`: the `.si*` block (tokens only) and the standalone token block
 - `qa_pipeline/lib/auth.py`: `login_with_password`
 - `tests/test_session_api.py`, `tests/test_signin_form.py`, `tests/test_managed_login.py`
