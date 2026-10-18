@@ -257,6 +257,36 @@
   .askhint { font-size:var(--fs-micro); color:var(--muted); margin-bottom:var(--s2); }
   .askhint[hidden] { display:none; }
   .thinking { color:var(--muted); }
+  /* Reportar: a quiet per-answer control + inline defect/suggestion form (no modal over the board) */
+  .rptslot { display:contents; }
+  .rptbar { align-self:flex-start; display:flex; flex-wrap:wrap; align-items:center; gap:2px var(--s2); margin-top:calc(-1 * var(--s2));
+    font-size:var(--fs-micro); color:var(--muted); }
+  .rptbtn { display:inline-flex; align-items:center; gap:5px; background:none; border:0; border-radius:var(--r-sm); padding:4px 6px;
+    font:inherit; font-size:var(--fs-micro); font-weight:600; color:var(--muted); cursor:pointer; }
+  .rptbtn:hover { color:var(--ink); background:var(--surface-2); }
+  .rptbtn:focus-visible, .rpt button:focus-visible, .rpt textarea:focus-visible { outline:none; box-shadow:var(--focus); }
+  .rptcue { color:var(--ink-2); }
+  .rptcue + .rptbtn { color:var(--primary); text-decoration:underline; }
+  .rpt { align-self:stretch; display:flex; flex-direction:column; gap:var(--s2); background:var(--surface); color:var(--ink);
+    border:1px solid var(--border-2); border-radius:var(--r-lg); padding:var(--s3); font-size:var(--fs-sm); line-height:1.45; }
+  .rpt__hd { font-weight:700; font-size:var(--fs-sm); }
+  .rpt__kinds { display:flex; gap:var(--s2); }
+  .rpt__kind { flex:1; display:inline-flex; align-items:center; justify-content:center; gap:6px; font:inherit; font-size:var(--fs-sm); font-weight:600;
+    color:var(--ink-2); background:var(--surface); border:1px solid var(--border-2); border-radius:var(--r-sm); padding:6px var(--s3); cursor:pointer; }
+  .rpt__kind::before { content:""; width:12px; height:12px; flex:none; border-radius:50%; border:1.5px solid var(--muted); }
+  .rpt__kind[aria-pressed="true"] { color:var(--ink); background:var(--primary-weak); border-color:var(--primary); }
+  .rpt__kind[aria-pressed="true"]::before { border-color:var(--primary); background:radial-gradient(circle, var(--primary) 0 3px, transparent 3.5px); }
+  .rpt textarea { width:100%; box-sizing:border-box; min-height:84px; resize:vertical; background:var(--surface-2); color:var(--ink);
+    border:1px solid var(--border); border-radius:var(--r-sm); padding:9px var(--s3); font:inherit; font-size:var(--fs-sm); line-height:1.4; }
+  .rpt textarea:focus { outline:none; border-color:var(--primary); box-shadow:var(--focus); }
+  .rpt__note { margin:0; font-size:var(--fs-micro); color:var(--muted); }
+  .rpt__acts { display:flex; flex-wrap:wrap; gap:var(--s2); }
+  .rpt__msg { margin:0; font-size:var(--fs-micro); }
+  .rpt__msg:empty { display:none; }
+  .rpt__msg--err { color:var(--warn); font-weight:600; }
+  .rpt--done { flex-direction:row; align-items:flex-start; gap:var(--s2); }
+  .rpt--done:focus { outline:none; box-shadow:var(--focus); }
+  .rpt--done .rpt__ic { color:var(--primary); font-weight:700; }
   /* desktop: the board makes room for the docked panel instead of hiding under it */
   @media (min-width: 1100px) { body.chat-open main.wrap { margin-right:440px; } }
 
@@ -776,6 +806,11 @@
     .exrow .ttl-more::before { content:""; position:absolute; inset:-14px -10px; }
     .cites .cite, .askex .chip { display:inline-flex; align-items:center; min-height:44px; }
     .chat__x { width:44px; height:44px; }
+    /* Reportar: 44px hit areas; 16px field text so iOS doesn't zoom on focus */
+    .rptbtn, .rpt__kind, .rpt .btn, .rpt .askbtn { min-height:44px; }
+    .rptbtn { padding:4px 10px; font-size:var(--fs-sm); }
+    .rptbar { font-size:var(--fs-sm); }
+    .rpt textarea { font-size:16px; }
   }
 </style>
 </head>
@@ -1138,7 +1173,7 @@ function renderAskPanel() {
   document.getElementById("askOpen").onclick = () => openChat();
   document.getElementById("askFab").onclick = () => openChat();
   document.getElementById("askClose").onclick = closeChat;
-  document.getElementById("askNew").onclick = () => { CHAT = { turns: [] }; chatSave(); renderChat(); document.getElementById("askInput").focus(); };
+  document.getElementById("askNew").onclick = () => { CHAT = { turns: [] }; RPT.clear(); chatSave(); renderChat(); document.getElementById("askInput").focus(); };
   document.getElementById("askForm").onsubmit = (e) => { e.preventDefault(); askOnca(); };
   const inp = document.getElementById("askInput");
   inp.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); askOnca(); } });
@@ -1172,7 +1207,7 @@ function renderAskLoginState() {
   const hint = document.getElementById("askAuthHint"), input = document.getElementById("askInput"), btn = document.getElementById("askBtn");
   if (!hint || !input || !btn) return;
   const logged = Ctx.isLoggedIn();
-  if (!logged) CHAT = { turns: [] };
+  if (!logged) { CHAT = { turns: [] }; RPT.clear(); }
   hint.hidden = logged;
   input.disabled = !logged; btn.disabled = !logged;
   input.placeholder = logged ? "Sua pergunta…" : "Entre para conversar";
@@ -1205,6 +1240,111 @@ function answerHTML(res) {
       }).join("") + `</div>`
     : `<div class="cites"><span class="cites__none">Sem fontes citadas — trate com cautela.</span></div>`);
 }
+// --- Reportar: defect / suggestion report from a chat turn --------------------------------------
+// POST /api/me/act (same actFetch as record_engagement). NO top-level `officer` in the body: the act
+// handler rejects the intent with one. The report text lives only in this in-memory map while the form
+// is open; it is never written to sessionStorage (the transcript holds the q/a, not the report).
+const RPT = new Map();   // turn key -> { open, kind, text, status, key, msg, err }
+// Fixed, deterministic cue list (no model call). Matched on accent-stripped lowercase, whole words, optional plural.
+const RPT_CUES = {
+  defeito: ["está errado", "errado", "errada", "incorreto", "incorreta", "não funciona", "não funcionou", "bug", "erro", "problema"],
+  sugestao: ["deveria", "seria bom", "sugiro", "sugestão", "sugestões", "poderia ter"],
+};
+function rptNorm(s) { return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""); }
+const RPT_RE = Object.fromEntries(Object.entries(RPT_CUES).map(([k, l]) =>
+  [k, new RegExp("(?:^|[^a-z0-9])(?:" + l.map(rptNorm).join("|") + ")s?(?![a-z0-9])")]));
+// null | "defeito" | "sugestao" — a suggestion word alone pre-selects Sugestão; any defect word wins a tie
+function rptCue(q) {
+  const n = rptNorm(q), d = RPT_RE.defeito.test(n), i = RPT_RE.sugestao.test(n);
+  return d ? "defeito" : i ? "sugestao" : null;
+}
+function rptReportable(t) { return !ADMIN && !!t && !t.pending && !t.error && !!t.res && !!t.res.answer; }
+function rptKey(t) { return t.q + "\u0001" + String((t.res && t.res.answer) || "").slice(0, 80); }
+function rptUuid() {
+  try { if (crypto.randomUUID) return crypto.randomUUID(); } catch (e) {}
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => { const r = Math.random() * 16 | 0; return (c === "x" ? r : (r & 3 | 8)).toString(16); });
+}
+const RPT_ICON = `<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4m0 0h11l-1.5 4L16 12H5"/></svg>`;
+function rptSlotHTML(t, i) {
+  if (!rptReportable(t)) return "";
+  const st = RPT.get(rptKey(t)), cue = rptCue(t.q);
+  if (st && (st.status === "done" || st.status === "limit")) {
+    return `<div class="rpt rpt--done" role="status" tabindex="-1" data-rpt-done><span class="rpt__ic" aria-hidden="true">✓</span><span>${st.status === "done"
+      ? "Recebido — obrigado. A equipe da Onça vai analisar." : "Limite de relatos de hoje atingido."}</span></div>`;
+  }
+  if (st && st.open) {
+    const sending = st.status === "sending", id = "rpt" + i;
+    return `<form class="rpt" id="${id}" role="group" aria-labelledby="${id}t" novalidate>
+      <div class="rpt__hd" id="${id}t">Reportar sobre esta resposta</div>
+      <div class="rpt__kinds" role="group" aria-label="Tipo de relato">
+        <button type="button" class="rpt__kind" data-kind="defeito" aria-pressed="${st.kind === "defeito"}">Defeito</button>
+        <button type="button" class="rpt__kind" data-kind="sugestao" aria-pressed="${st.kind === "sugestao"}">Sugestão</button></div>
+      <textarea name="text" maxlength="1000" rows="4" aria-label="Descreva o relato" aria-describedby="${id}n"
+        placeholder="O que aconteceu ou o que você sugere?"${sending ? " disabled" : ""}>${U.esc(st.text)}</textarea>
+      <p class="rpt__note" id="${id}n">Seu relato vai só para a equipe da Onça, junto com esta pergunta e resposta. Guardado por 90 dias.</p>
+      <p class="rpt__msg${st.err ? " rpt__msg--err" : ""}" role="status" data-rpt-msg>${U.esc(st.msg || "")}</p>
+      <div class="rpt__acts">
+        <button type="submit" class="askbtn" data-rpt-send${sending ? " disabled" : ""}>${sending ? "Enviando…" : st.err ? "Tentar de novo" : "Enviar"}</button>
+        <button type="button" class="btn" data-rpt-cancel${sending ? " disabled" : ""}>Cancelar</button></div></form>`;
+  }
+  return `<div class="rptbar">${cue ? `<span class="rptcue">Algo errado ou uma ideia?</span>` : ""}<button type="button" class="rptbtn" data-rpt-open
+    aria-label="Reportar um defeito ou sugestão sobre esta resposta">${cue ? "" : RPT_ICON}Reportar</button></div>`;
+}
+function rptRender(slot, focus) {
+  const i = Number(slot.dataset.rptSlot), t = (CHAT.turns || [])[i];
+  slot.innerHTML = t ? rptSlotHTML(t, i) : "";
+  if (!t) return;
+  const st = RPT.get(rptKey(t));
+  const open = slot.querySelector("[data-rpt-open]"), form = slot.querySelector("form.rpt"), done = slot.querySelector("[data-rpt-done]");
+  if (open) open.onclick = () => {
+    const cue = rptCue(t.q);
+    RPT.set(rptKey(t), { open: true, kind: cue === "sugestao" ? "sugestao" : "defeito", text: cue ? t.q : "", status: "form", key: rptUuid(), msg: "", err: false });
+    rptRender(slot, "text");
+  };
+  if (form) {
+    const ta = form.elements.text;
+    form.querySelectorAll("[data-kind]").forEach(b => b.onclick = () => {
+      st.kind = b.dataset.kind; form.querySelectorAll("[data-kind]").forEach(x => x.setAttribute("aria-pressed", String(x === b))); });
+    ta.addEventListener("input", () => { st.text = ta.value; });
+    const cancel = () => { RPT.delete(rptKey(t)); rptRender(slot, "open"); };
+    form.querySelector("[data-rpt-cancel]").onclick = cancel;
+    form.addEventListener("keydown", e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); if (st.status !== "sending") cancel(); } });
+    form.onsubmit = (e) => { e.preventDefault(); rptSend(slot, t, st); };
+  }
+  if (focus === "text" && form) { const ta = form.elements.text; ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); form.scrollIntoView({ block: "nearest" }); }
+  else if (focus === "open" && open) open.focus();
+  else if (focus === "done" && done) { done.focus(); done.scrollIntoView({ block: "nearest" }); }
+}
+async function rptSend(slot, t, st) {
+  const text = (st.text || "").trim();
+  if (text.length < 3) { st.err = true; st.msg = "Escreva ao menos 3 caracteres."; rptRender(slot, "text"); return; }
+  if (OFFLINE || navigator.onLine === false) { st.err = true; st.msg = "Sem conexão — não foi possível enviar."; rptRender(slot, "text"); return; }
+  st.status = "sending"; st.err = false; st.msg = ""; rptRender(slot);
+  const res = t.res || {};
+  const body = { intent: "report_feedback", idempotency_key: st.key, args: {   // no top-level `officer` (handler rejects it)
+    kind: st.kind, text,
+    turn: { q: t.q, a: String(res.answer || "").replace(/\[[A-Za-z0-9:_\-.À-ÿ]+\]/g, "").replace(/[ \t]{2,}/g, " ").replace(/ +([.,;:!?])/g, "$1").trim().slice(0, 1200),
+      cited: (res.citations || []).map(c => c.id).filter(Boolean) },
+    context: { officer: OFFICER, sector: SECTOR === "__all__" ? "todos" : SECTOR, view: VIEW || "painel", feed_as_of: DATA && DATA.as_of ? String(DATA.as_of).slice(0, 10) : "", surface: "chat" } } };
+  let r, j = {};
+  try {
+    await Ctx.ensureSession();
+    r = await actFetch(JSON.stringify(body));
+    if (r.status === 401) {
+      try { sessionStorage.removeItem("onca_id_token"); } catch (e) {}
+      if (await Ctx.ensureSession() === "ok") r = await actFetch(JSON.stringify(body));
+    }
+    j = await r.json().catch(() => ({}));
+  } catch (e) { r = null; }
+  if (!RPT.has(rptKey(t))) return;   // chat reset meanwhile
+  if (r && r.ok && j.outcome === "applied") { st.status = "done"; st.text = ""; rptRender(slot, "done"); return; }
+  if (r && r.status === 429) { st.status = "limit"; st.text = ""; rptRender(slot, "done"); return; }
+  st.status = "form"; st.err = true;
+  st.msg = r && r.status === 400 ? "Não foi possível enviar: confira o tipo e o texto (3 a 1000 caracteres)."
+    : r && r.status === 401 ? "Sessão expirada. Entre novamente para enviar."
+    : "Não foi possível enviar agora. Tente de novo.";
+  rptRender(slot, "text");
+}
 function renderChat() {
   const log = document.getElementById("askAns"); if (!log) return;
   const turns = CHAT.turns || [], logged = Ctx.isLoggedIn();
@@ -1217,7 +1357,8 @@ function renderChat() {
     log.innerHTML = turns.map((t, i) => `<div class="msg msg--q"><div class="msg__txt">${U.esc(t.q)}</div></div>` +
       (t.pending ? `<div class="msg msg--a"><span class="thinking loading loading--inline"><span class="ld-c" aria-hidden="true">ç</span><span class="ld-t">Consultando a base da Onça… <span id="askSecs">0s</span></span></span></div>`
        : t.error ? `<div class="msg msg--a msg--err">${U.esc(t.error)} <button class="btn btn--sm" type="button" data-retry="${i}">Tentar de novo</button></div>`
-       : `<div class="msg msg--a${t.res.refused || !t.res.answer ? " msg--refused" : ""}">${answerHTML(t.res)}</div>`)).join("");
+       : `<div class="msg msg--a${t.res.refused || !t.res.answer ? " msg--refused" : ""}">${answerHTML(t.res)}</div><div class="rptslot" data-rpt-slot="${i}"></div>`)).join("");
+    log.querySelectorAll("[data-rpt-slot]").forEach(sl => rptRender(sl));
     log.querySelectorAll("[data-retry]").forEach(b => b.onclick = () => {
       const t = CHAT.turns.splice(Number(b.dataset.retry), 1)[0]; chatSave(); document.getElementById("askInput").value = t.q; askOnca(); });
     // #284: a finished answer is read from its first line — put the top of the newest answer at the top

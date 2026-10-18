@@ -20,10 +20,34 @@
   #prList .chip { overflow-wrap: anywhere; }
   #prList .chip a { color: inherit; }
   #prAdd { white-space: nowrap; }
+  /* Relatos (client defect/suggestion reports from the /exec chat) — page-scoped */
+  .rlwarn { margin: 0; padding: var(--s2) var(--s4); font-size: var(--fs-meta); color: var(--ink-2);
+    background: var(--warn-fill); border-bottom: 1px solid var(--border); }
+  .rlwarn b { color: var(--warn); }
+  #rlList .qrow__type { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+  #rlList .rltext { white-space: pre-wrap; }
+  #rlList .rlturn { margin-top: var(--s2); padding: var(--s2) var(--s3); background: var(--surface-2);
+    border: 1px solid var(--border); border-radius: var(--r-md); font-size: var(--fs-meta); color: var(--ink-2); overflow-wrap: anywhere; }
+  #rlList .rllab { color: var(--muted); font-size: var(--fs-micro); font-weight: 700; text-transform: uppercase; letter-spacing: .6px; margin-right: 6px; }
+  #rlList .rla > summary { cursor: pointer; color: var(--primary); font-weight: 600; margin-top: 4px; }
+  #rlList .rla > summary:focus-visible { outline: none; box-shadow: var(--focus); border-radius: var(--r-sm); }
+  #rlList .rlans { margin-top: 4px; white-space: pre-wrap; }
+  #rlList .qrow__actions { flex-wrap: wrap; justify-content: flex-end; }
+  #rlList .rltk { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: var(--s2); }
+  #rlList .rltk .field { flex: 1 1 240px; min-width: 0; }
+  #rlList .rltk[hidden] { display: none; }
+  #rlFilter { margin-left: var(--s2); }
+  #rlList .prmsg--err, #rlList .qrow__meta.prmsg--err { color: var(--warn); font-weight: 600; }   /* red is reserved for threats */
   @media (max-width: 560px) {
     /* rows stack: badge + main on top, actions below (no horizontal overflow at 390px) */
     #prList .qrow { grid-template-columns: auto 1fr; }
     #prList .qrow__actions { grid-column: 1 / -1; grid-row: auto; justify-content: flex-start; }
+    #rlList .qrow { grid-template-columns: 1fr; }
+    #rlList .qrow__type { grid-row: auto; flex-direction: row; flex-wrap: wrap; }
+    #rlList .qrow__actions { grid-column: auto; grid-row: auto; justify-content: flex-start; }
+    #rlPanel .panel__hd { flex-wrap: wrap; row-gap: var(--s2); }
+    #rlFilter { margin-left: 0; flex: 1 1 100%; }
+    #rlFilter button { flex: 1; }
     #prPanel .panel__hd .hd-note { display: none; }  /* the lede fits the band; keep the header one line */
     /* #163: band headers carry long provenance badges ("resposta fundamentada · feed completo"
        made the page 397px at 390) — wrap them, as /exec does */
@@ -157,6 +181,25 @@
         <span class="hd-note">coleta diária · pausar mantém a configuração</span>
         <button class="btn btn--primary btn--sm" id="prAdd">+ Adicionar</button></div>
       <div class="panel__bd panel__bd--flush" id="prList"></div>
+    </div>
+  </section>
+
+  <!-- ===================== Relatos (client defect / suggestion reports) ===================== -->
+  <!-- Reports sent from the /exec "Perguntar à Onça" chat (intent report_feedback). Reads/writes go
+       through /api/act's typed intents list_feedback / set_feedback_status. Retention: 90 days. -->
+  <section class="band" id="relatos">
+    <div class="band-hd"><span class="overline">Relatos</span><span class="rule"></span>
+      <span class="badge badge--ghost">chat · defeitos e sugestões · 90 dias</span></div>
+    <div class="panel" id="rlPanel">
+      <div class="panel__hd"><h2>Relatos dos clientes</h2><span class="count count--zero" id="rlCount" title="relatos novos" aria-label="relatos novos">0</span>
+        <span class="spacer"></span>
+        <div class="seg" id="rlFilter" role="group" aria-label="Filtrar relatos por status">
+          <button type="button" data-st="novo" aria-pressed="true">Novos</button>
+          <button type="button" data-st="ticket" aria-pressed="false">Ticket</button>
+          <button type="button" data-st="descartado" aria-pressed="false">Descartados</button>
+          <button type="button" data-st="" aria-pressed="false">Todos</button></div></div>
+      <p class="rlwarn"><b>Atenção:</b> não cole dados do cliente no ticket — o repositório é público. Use o rascunho como ponto de partida e remova nomes, e-mails e trechos da resposta que identifiquem a organização.</p>
+      <div class="panel__bd panel__bd--flush" id="rlList"></div>
     </div>
   </section>
 
@@ -492,6 +535,127 @@ function openRadarForm(s) {
 document.getElementById("prAdd").addEventListener("click", () => openRadarForm(null));
 renderRadar();
 loadRadar();
+
+/* ======================= Relatos (#relatos) ======================= */
+// list_feedback returns every report (status ""); the filter and the "novos" badge are derived here so
+// one call feeds both. set_feedback_status moves a report between novo / ticket / descartado.
+let RL = { reports: null, error: null, filter: "novo" };
+const RL_KIND = { defeito: ["warn", "▲", "Defeito"], sugestao: ["info", "◇", "Sugestão"] };
+const RL_STATUS = { novo: ["ok", "●", "novo"], ticket: ["ghost", "✓", "ticket"], descartado: ["ghost", "×", "descartado"] };
+const RL_EMPTY = { novo: "Nenhum relato novo", ticket: "Nenhum relato virou ticket", descartado: "Nenhum relato descartado", "": "Nenhum relato recebido" };
+function rlDate(iso) {
+  const d = new Date(iso);
+  return isNaN(d) ? String(iso || "—").slice(0, 16) : d.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+}
+async function loadRelatos() {
+  const res = await prAct("list_feedback", { status: "" });
+  if (res.ok && Array.isArray(res.j.reports)) RL = { reports: res.j.reports, error: null, filter: RL.filter };
+  else RL = { reports: RL.reports, error: prErr(res.j, res.status), filter: RL.filter };
+  renderRelatos();
+}
+function renderRelatos() {
+  const el = document.getElementById("rlList");
+  const all = RL.reports;
+  const novos = (all || []).filter((r) => r.status === "novo").length;
+  setCount("rlCount", novos, novos ? "" : "zero");
+  document.getElementById("rlCount").setAttribute("aria-label", `${novos} relatos novos`);
+  document.querySelectorAll("#rlFilter button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.st === RL.filter)));
+  if (all === null) { el.innerHTML = RL.error ? U.empty("Relatos indisponíveis", RL.error, "!") : U.loading("Carregando…"); return; }
+  const rows = all.filter((r) => !RL.filter || r.status === RL.filter)
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+  const banner = RL.error ? `<div class="qrow"><div class="qrow__main prmsg prmsg--err" style="grid-column:1/-1">${U.esc(RL.error)}</div></div>` : "";
+  if (!rows.length) { el.innerHTML = banner + U.empty(RL_EMPTY[RL.filter] || "Nenhum relato", "Os relatos enviados pelo botão Reportar do chat aparecem aqui.", "○"); return; }
+  el.innerHTML = banner + rows.map((r) => {
+    const k = RL_KIND[r.kind] || ["ghost", "·", r.kind || "?"], st = RL_STATUS[r.status] || ["ghost", "·", r.status || "?"];
+    const c = r.context || {}, t = r.turn || {};
+    const meta = [
+      rlDate(r.created_at),
+      [c.officer, c.sector, c.view].filter(Boolean).map((x) => U.esc(x)).join(" / "),
+      r.tenant ? `tenant <b>${U.esc(r.tenant)}</b>` : "",
+      r.sub ? `usuário ${U.esc(r.sub)}` : "",
+      c.feed_as_of ? `dados de ${U.esc(c.feed_as_of)}` : "",
+    ].filter(Boolean).map((m) => `<span>${m}</span>`).join('<span aria-hidden="true">·</span>');
+    const cited = (t.cited || []).map((id) => `<span class="chip">${U.esc(id)}</span>`).join("");
+    const link = r.ticket_url ? `<div class="qrow__meta"><a href="${U.esc(r.ticket_url)}" target="_blank" rel="noopener">ticket ↗</a>${r.triaged_at ? `<span>· triado em ${U.esc(rlDate(r.triaged_at))}</span>` : ""}</div>` : "";
+    const btn = (op, label, cls) => `<button type="button" class="btn btn--sm${cls ? " " + cls : ""}" data-op="${op}">${label}</button>`;
+    const acts = [
+      r.ticket_draft ? btn("copy", "Copiar rascunho do ticket") : "",
+      r.status === "novo" ? btn("ticket", "Marcar como ticket") + btn("discard", "Descartar") : btn("reopen", "Reabrir"),
+    ].join("");
+    return `<div class="qrow" data-rid="${U.esc(r.report_id)}">
+      <div class="qrow__type"><span class="badge badge--${k[0]}"><span class="g" aria-hidden="true">${k[1]}</span>${U.esc(k[2])}</span>
+        <span class="badge badge--${st[0]}"><span class="g" aria-hidden="true">${st[1]}</span>${st[2]}</span></div>
+      <div class="qrow__main">
+        <div class="qrow__title rltext">${U.esc(r.text)}</div>
+        <div class="qrow__meta">${meta}</div>
+        <div class="rlturn"><div><span class="rllab">Pergunta</span>${U.esc(t.q || "—")}</div>
+          <details class="rla"><summary>Resposta</summary><div class="rlans">${U.esc(t.a || "—")}</div></details>
+          ${cited ? `<div class="chiprow" style="margin-top:6px"><span class="rllab">Citados</span>${cited}</div>` : ""}</div>
+        ${link}
+        <div class="rltk" data-tk hidden></div>
+        <div class="qrow__meta prmsg" data-msg role="status"></div>
+      </div>
+      <div class="qrow__actions">${acts}</div>
+    </div>`;
+  }).join("");
+  el.querySelectorAll(".qrow[data-rid]").forEach((row) => {
+    const r = all.find((x) => x.report_id === row.dataset.rid);
+    row.querySelectorAll("button[data-op]").forEach((b) => b.onclick = () => relatoOp(r, b.dataset.op, b, row));
+  });
+}
+async function rlCopy(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch (e) {}
+  try {   // fallback for a non-secure context / denied permission
+    const ta = document.createElement("textarea"); ta.value = text; ta.setAttribute("readonly", "");
+    ta.style.cssText = "position:fixed;top:0;left:0;opacity:0"; document.body.appendChild(ta); ta.select();
+    const ok = document.execCommand("copy"); ta.remove(); return ok;
+  } catch (e) { return false; }
+}
+async function relatoSet(r, row, status, url) {
+  const msg = row.querySelector("[data-msg]");
+  row.classList.add("busy"); row.querySelectorAll("button").forEach((b) => b.disabled = true);
+  const args = { report_id: r.report_id, status }; if (status === "ticket") args.ticket_url = url;
+  const res = await prAct("set_feedback_status", args);
+  if (!res.ok) {
+    row.classList.remove("busy"); row.querySelectorAll("button").forEach((b) => b.disabled = false);
+    msg.classList.add("prmsg--err"); msg.textContent = prErr(res.j, res.status); return;
+  }
+  loadRelatos();
+}
+async function relatoOp(r, op, btn, row) {
+  const msg = row.querySelector("[data-msg]"); msg.classList.remove("prmsg--err"); msg.textContent = "";
+  if (op === "copy") {
+    const d = r.ticket_draft || {};
+    const ok = await rlCopy(`${d.title || ""}\n\n${d.body || ""}`);
+    msg.classList.toggle("prmsg--err", !ok);
+    msg.textContent = ok ? "Rascunho copiado. Não cole dados do cliente no ticket — o repositório é público." : "Não foi possível copiar; selecione o texto manualmente.";
+    return;
+  }
+  if (op === "ticket") {
+    const tk = row.querySelector("[data-tk]");
+    tk.hidden = false;
+    tk.innerHTML = `<input class="field" type="url" inputmode="url" placeholder="https://github.com/…/issues/123" aria-label="URL do ticket no GitHub" autocomplete="off" />
+      <button type="button" class="btn btn--primary btn--sm" data-go>Confirmar</button>
+      <button type="button" class="btn btn--ghost btn--sm" data-no>Cancelar</button>`;
+    const inp = tk.querySelector("input"); inp.focus();
+    const close = () => { tk.hidden = true; tk.innerHTML = ""; btn.focus(); };
+    const go = () => {
+      const u = inp.value.trim();
+      if (!/^https:\/\/github\.com\/[^\s]+$/.test(u)) {
+        msg.classList.add("prmsg--err"); msg.textContent = "Informe a URL do ticket no GitHub (https://github.com/…). Não cole dados do cliente — o repositório é público."; inp.focus(); return;
+      }
+      relatoSet(r, row, "ticket", u);
+    };
+    tk.querySelector("[data-go]").onclick = go;
+    tk.querySelector("[data-no]").onclick = close;
+    inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); go(); } else if (e.key === "Escape") { e.preventDefault(); close(); } });
+    return;
+  }
+  relatoSet(r, row, op === "discard" ? "descartado" : "novo");
+}
+document.querySelectorAll("#rlFilter button").forEach((b) => b.addEventListener("click", () => { RL.filter = b.dataset.st; renderRelatos(); }));
+renderRelatos();
+loadRelatos();
 
 /* ======================= LEAD 1 — Action queue ======================= */
 // Unified vetting queue: entity reviews + SWOT/framework proposals + graph

@@ -44,6 +44,7 @@
 <h2>Uso do produto</h2>
 <ul>
 <li><b>Perguntas à Onça.</b> As perguntas vão para o Amazon Bedrock (AWS) para gerar a resposta, fundamentada apenas nos dados licenciados. Não usamos as suas perguntas para treinar modelos. Quando a Onça não consegue responder com base nos dados, guardamos o texto da pergunta, <b>sem identificar quem perguntou</b>, para corrigir lacunas de cobertura; a nossa equipe pode registrá-lo no nosso rastreador de tarefas (que pode ser público). Não inclua dados pessoais ou confidenciais nas perguntas.</li>
+<li><b>Relatos de defeito e sugestão.</b> Você pode enviar um relato a partir do chat da Onça. O relato guarda o texto que você escreveu, a pergunta e a resposta daquele turno, o oficial, o setor e a tela em que você estava. Usamos só para melhorar o serviço, guardamos por 90 dias e apagamos automaticamente; nunca são publicados. Não inclua dados pessoais ou confidenciais no texto.</li>
 <li><b>Decisões.</b> As decisões que você registra (aprovar/rejeitar, nota opcional, resultado) ficam no registro de decisões da sua organização, com a classe do dispositivo.</li>
 <li><b>Engajamento.</b> Aberturas do painel e de cartões, com o oficial, o setor e a <b>classe</b> do dispositivo (celular, tablet ou computador — nunca user-agent, modelo ou localização).</li>
 <li><b>No celular.</b> O app guarda no próprio aparelho a última versão do seu painel (para leitura sem conexão) e marcadores de sessão; tudo é apagado ao “Sair” ou quando a sessão termina.</li>
@@ -81,6 +82,7 @@
 <li><b>Conta, configuração da organização, chaves de API, apps autorizados, decisões e engajamento:</b> enquanto a conta ou o contrato estiver ativo; excluídos em até 30 dias após um pedido de exclusão ou o fim do contrato, salvo o que a lei obrigue a manter.</li>
 <li><b>Tokens:</b> acesso 1 hora; renovação até 30 dias, apagados automaticamente ao expirar.</li>
 <li><b>Alertas:</b> até você desligá-los ou o navegador deixar de aceitá-los.</li>
+<li><b>Relatos de defeito e sugestão:</b> 90 dias, apagados automaticamente.</li>
 <li><b>Perguntas sem resposta:</b> até 12 meses depois da última vez em que foram feitas.</li>
 <li><b>E-mails recebidos em contato@onssa.org:</b> 12 meses.</li>
 <li><b>Registros de acesso ao site</b> (IP, endereço acessado, data e hora): 12 meses (o Marco Civil exige no mínimo 6).</li>
@@ -103,6 +105,7 @@
 <li><b>Session:</b> a 1-hour token in the tab's <code>sessionStorage</code>; a refresh token in an HttpOnly, Secure, SameSite=Strict cookie scoped to <code>/api/session</code>, expiring after your organization's idle limit (default 7 days, max 30).</li>
 <li><b>Connected apps (MCP/A2A):</b> which app you approved, when, and last use. Tokens are stored hashed; access lasts 1 hour, renewal 30 days (7 days unused). A 10-minute <code>__Host-oauth_csrf</code> cookie protects the Allow button.</li>
 <li><b>API keys:</b> a hash, label, prefix (first 16 characters — identifies the key but cannot be used as it), creator and created/last-used dates; usage metered per organization.</li>
+<li><b>Defect and suggestion reports</b> you send from the chat hold your text plus that turn's question and answer, plus officer, sector and screen. Used only to improve the service; kept 90 days, then deleted automatically; never published.</li>
 <li><b>Questions</b> go to Amazon Bedrock to generate grounded answers; not used to train models. When Onça cannot answer from its data, we keep the question text <b>without the asker's identity</b> to fix coverage gaps; our team may log it in our issue tracker, which may be public. Don't put personal or confidential data in questions.</li>
 <li><b>Also:</b> decisions you record, engagement (with a device <i>class</i> only), optional push subscriptions (content-free notifications), the optional weekly digest (the licensed sectors you choose, when and under which version of this policy you consented, and your login email, to which it is sent via Amazon SES, with an unsubscribe link in every email), emails you send to contato@onssa.org, and — if your organization buys on the website — plan and subscription status from Stripe (we never receive card data).</li>
 <li><b>On your phone:</b> your last loaded dashboard (offline reading) and session markers, wiped on sign-out or when the session ends.</li>
