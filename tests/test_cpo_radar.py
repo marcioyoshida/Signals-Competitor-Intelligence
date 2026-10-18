@@ -392,6 +392,9 @@ def test_inter_2026_09_23_outage_fires_with_version_and_error_strings():
     assert any("test mode" in t for t in texts)
     assert a["url"] == "https://apps.apple.com/br/app/id839711154?see-all=reviews"
     assert a["app"]["version"] == "26.16.1" and "v26.16" in a["reason"]
+    # #263: the reason is client copy — pt-BR decimals (z=+N,N), never "z=8.07"
+    import re as _re
+    assert _re.search(r"z=\+\d+,\d;", a["reason"]) and not _re.search(r"z=\d+\.\d", a["reason"])
 
 
 def test_inter_baseline_is_quiet_on_ordinary_days():

@@ -59,6 +59,7 @@ import urllib.request
 from collections import Counter
 from typing import Any, Callable
 
+from src.synth.fmt_br import signed
 from src.synth.text_pt import pt_count
 
 PREFIX = "product_radar/"
@@ -975,7 +976,7 @@ def detect_alerts(subject: dict[str, Any], reviews: list[dict[str, Any]], *, eva
         noun = {"outage": "relatos de falha", "complaint": "reclamações"}.get(
             next(iter(fired)), "avaliações ≤2★")
         reason = (f"{head['count']} {noun} no app iOS em {day} "
-                  f"(média {str(head['mean']).replace('.', ',')}/dia, z={head['z']}; "
+                  f"(média {str(head['mean']).replace('.', ',')}/dia, z={signed(float(head['z']))}; "   # #263 pt-BR
                   f"{low['count']} avaliações ≤2★)"
                   + (f" · {dom[1]} na v{dom[0]}" if dom else "")
                   + (f" · “{errs[0]['text']}”" if errs else ""))
