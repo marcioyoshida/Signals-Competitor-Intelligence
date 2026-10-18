@@ -144,7 +144,7 @@ def test_cutover_v2_is_the_live_pool():
     assert '"ONCA_COGNITO_CLIENT_ID": user_pool_client.user_pool_client_id' in APP_SRC
     assert '"ONCA_OAUTH_COGNITO_CLIENT_ID": oauth_cognito_client.user_pool_client_id' in APP_SRC
     assert "oauth_cognito_client = _ident.oauth_client" in APP_SRC
-    assert APP_SRC.count('"ONCA_USER_POOL_ID", user_pool.user_pool_id') == 1          # act API
+    assert APP_SRC.count('"ONCA_USER_POOL_ID", user_pool.user_pool_id') == 2          # act API + session broker (#277)
     assert APP_SRC.count('"ONCA_USER_POOL_ID": user_pool.user_pool_id') == 1          # OAuth facade
     assert APP_SRC.count("resources=[user_pool.user_pool_arn]") == 2                   # facade + act IAM
 
