@@ -162,12 +162,41 @@ def fix_sec_cvm(text: str) -> tuple[str, int]:
     return _SEC_AS_CVM.subn(SEC_NAME, text or "")
 
 
+# --- 4. internal source keys (#280) ------------------------------------------------------------
+# The model sees source ids ("cvm:fiagro:63884798000100:pl") and restated them as the fund's "código
+# CVM" in client copy. Drop the key with the phrase that introduces it; an appositive (", com o
+# código CVM <key>,") goes with both commas; a sentence that only says where an id "pode ser
+# encontrado" goes entirely.
+_KEY = r"(?<![\w-])(?:cvm|bcb|sec|news|dou|pix|fiagro|cand|ent)[a-z-]*:[A-Za-z0-9_/-]+(?::[A-Za-z0-9_/-]+)*"
+_KEYS = rf"{_KEY}(?:\s*(?:,|e)\s*{_KEY})*"
+_INTRO = (r"(?:(?:com|sob|pel[oa]|atrav[ée]s d[oa]|identificad[oa]s?(?:\s+(?:pel[oa]|como))?)\s+)?"
+          r"(?:(?:o|a|um|uma)\s+)?(?:(?:c[óo]digo|ID|identificador|registro)(?:\s+CVM)?\s*:?\s*)?")
+_KEY_APPOSITIVE = re.compile(rf",\s*{_INTRO}{_KEYS}\s*,\s*", re.IGNORECASE)
+_KEY_PHRASE = re.compile(rf"\s*,?\s*{_INTRO}{_KEYS}", re.IGNORECASE)
+_ID_ONLY_SENTENCE = re.compile(rf"[^.!?]*\bpode(?:m)? ser encontrad[oa]s?[^.!?]*?{_KEYS}[^.!?]*[.!?]\s*",
+                               re.IGNORECASE)
+
+
+def strip_internal_ids(text: str) -> tuple[str, int]:
+    text = text or ""
+    n = len(re.findall(_KEY, text))
+    if not n:
+        return text, 0
+    text = _ID_ONLY_SENTENCE.sub(" ", text)
+    text = _KEY_APPOSITIVE.sub(" ", text)
+    text = _KEY_PHRASE.sub("", text)
+    text = re.sub(r"\s*\(\s*\)", "", text)
+    text = re.sub(r"\s+([,.;:])", r"\1", re.sub(r"[ \t]{2,}", " ", text))
+    return text.strip(), n
+
+
 # --- all ----------------------------------------------------------------------------------------
 
 def apply(text: str, sources: list[dict[str, Any]], run_date: str) -> dict[str, Any]:
     """Run every guard. ``text`` is "" when nothing survived (the caller falls back)."""
     text, n_sec = fix_sec_cvm(text)
+    text, n_ids = strip_internal_ids(text)
     text, reg = drop_unsupported_regulator_claims(text, sources)
     text, stale = drop_stale_future(text, run_date)
     return {"text": text.strip(), "dropped_regulator": reg, "dropped_stale_future": stale,
-            "sec_fixed": n_sec}
+            "sec_fixed": n_sec, "ids_stripped": n_ids}

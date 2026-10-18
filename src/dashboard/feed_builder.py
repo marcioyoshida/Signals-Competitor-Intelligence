@@ -18,8 +18,13 @@ from urllib.parse import urlparse
 import boto3
 
 from src.dashboard.topics import topic_options, topics_of
+from src.synth.narrative_guards import strip_internal_ids as _strip_internal_ids
 from src.ingest import capital_social
 from src.synth import macro_correlate
+
+
+def _strip_ids(text: str) -> str:
+    return _strip_internal_ids(text)[0]
 
 
 def _json_default(o: Any) -> Any:
@@ -429,7 +434,9 @@ def _project_item(n: dict[str, Any]) -> dict[str, Any]:
         "threat_score": tscore,
         "threat_factors": tfactors,
         "threat_score_note": n.get("threat_score_note"),
-        "narrative": n.get("narrative") or "",
+        # #280: published narratives restated internal source keys ("código CVM
+        # cvm:fiagro:…:pl") — stripped here too, so stored narratives are clean on the next build.
+        "narrative": _strip_ids(n.get("narrative") or ""),
         "citations": [c for c in (n.get("citations") or []) if isinstance(c, dict)],
         "source_ids": n.get("source_ids") or [],
         "mode": n.get("mode"),

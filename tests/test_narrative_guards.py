@@ -68,3 +68,23 @@ def test_synthesize_applies_guards_and_records_them(monkeypatch):
     out = synthesize.synthesize_candidate(cand, use_llm=True)
     assert "Banco Central" not in out["narrative"] and ng.SEC_NAME in out["narrative"]
     assert out["mode"] == "llm" and len(out["guards"]["dropped_regulator"]) == 1 and out["guards"]["sec_fixed"] == 1
+
+
+# --- #280: internal source keys in client copy -------------------------------------------
+def test_internal_source_keys_are_stripped_with_their_phrase():
+    from src.synth.narrative_guards import strip_internal_ids as f
+    cases = {
+        "O fundo JATOBÁ FIAGRO, com o código CVM cvm:fiagro:63884798000100, registrou alta.":
+            "O fundo JATOBÁ FIAGRO registrou alta.",
+        "A Futura FIAGRO DC RESP LTDA, identificada como cvm:fiagro:61929122000151:pl, registrou um aumento.":
+            "A Futura FIAGRO DC RESP LTDA registrou um aumento.",
+        "A X, identificada pelo código CVM: fiagro:42336323000109:pl, registrou uma perda.":
+            "A X registrou uma perda.",
+        "O fundo Y pode ser encontrado através do ID cvm:fund:69641088000127 e cvm:class:69641088000127. A Intrag cresceu.":
+            "A Intrag cresceu.",
+        "Itaú divulga resultado (cvm-fato:000906IPE081020260136929809-64).": "Itaú divulga resultado.",
+    }
+    for raw, want in cases.items():
+        assert f(raw)[0] == want, raw
+    for keep in ("Taxa de 10:30 e razão 3:1 permanecem.", "Segundo a SEC: a empresa cresceu.", "o cliente:ativo"):
+        assert f(keep) == (keep, 0)
