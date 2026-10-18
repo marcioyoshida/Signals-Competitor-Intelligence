@@ -306,6 +306,7 @@ def select_grounding(
     scope_date = str(scope.get("date") or "") or None
 
     scored: list[tuple[float, str, dict[str, Any]]] = []
+    names_entity = False
     for card in feed:
         # issue #33: a distress-status question must not see news cards. A B3
         # market-color narrative that names Braskem's RJ would otherwise rank
@@ -329,6 +330,7 @@ def select_grounding(
         label_extra = set(_tokens(card.get("entity_label") or "")) - id_toks
         if q_toks & id_toks:
             score += 4.0
+            names_entity = True
         elif q_toks & label_extra:
             score += 1.0
         # For an ownership/compliance question, the registry `fact:` card is the
@@ -372,8 +374,27 @@ def select_grounding(
         scored.append((score, str(card.get("date") or ""), card))
 
     scored.sort(key=lambda t: (t[0], t[1]), reverse=True)
-    cards = [_compact_card(c) for _, _, c in scored[:limit]]
+    ranked = [c for _, _, c in scored]
+    # #272: "quem está em alerta?" asks across the scope — one entity's many alerts must not fill
+    # the pool (live 10-16: an all-Itaú answer). A question about a named entity keeps its depth.
+    if alert_intent and not names_entity and not scope_entity:
+        ranked = _spread_entities(ranked, backfill=True)
+    cards = [_compact_card(c) for c in ranked[:limit]]
     return (cards, "topical") if with_mode else cards
+
+
+def _spread_entities(cards: list[dict[str, Any]], per: int = 2, backfill: bool = False) -> list[dict[str, Any]]:
+    """At most `per` cards per entity, keeping the rank order; with `backfill` the rest follow,
+    so a one-entity scope still gets its depth after every entity has had its share."""
+    out, rest, seen = [], [], {}
+    for c in cards:
+        k = _fold(c.get("entity") or c.get("entity_label") or c.get("id"))
+        if seen.get(k, 0) < per:
+            seen[k] = seen.get(k, 0) + 1
+            out.append(c)
+        else:
+            rest.append(c)
+    return out + rest if backfill else out
 
 
 def _recent_digest(q: str, feed: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
@@ -394,13 +415,7 @@ def _recent_digest(q: str, feed: list[dict[str, Any]], limit: int) -> list[dict[
     recent = [c for c in dated if str(c["date"])[:10] >= since and not str(c.get("id") or "").startswith("fact:")]
     recent.sort(key=lambda c: (bool(c.get("is_alert")), threat(c), str(c["date"])), reverse=True)
     # a digest spans the scope: at most 2 cards per entity (live 10-16: Itaú filled the admin week)
-    out, per = [], {}
-    for c in recent:
-        k = _fold(c.get("entity") or c.get("entity_label") or c.get("id"))
-        if per.get(k, 0) < 2:
-            per[k] = per.get(k, 0) + 1
-            out.append(c)
-    return out[:limit]
+    return _spread_entities(recent)[:limit]
 
 
 def build_messages(

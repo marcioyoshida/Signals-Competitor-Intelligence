@@ -714,6 +714,25 @@ def test_scope_digest_caps_cards_per_entity():
     assert ids == ["c0", "c1", "c9"]
 
 
+def test_alert_question_spans_the_scopes_entities():
+    # #272: live 10-16 the alert chip's answer cited only Itaú — its alerts outranked everyone's
+    feed = [_dated(i, "2026-10-15", alert=True, threat=95 - i, entity="itau") for i in range(8)] + \
+           [_dated(10 + i, "2026-10-14", alert=True, threat=60 - i, entity=e)
+            for i, e in enumerate(("bradesco", "nubank", "inter", "c6"))]
+    cards = aa.select_grounding("Quem está em alerta agora?", feed)
+    assert len({c["entity"] for c in cards[:6]}) >= 4
+    assert sum(c["entity"] == "itau" for c in cards[:6]) == 2
+    assert len(cards) == 12                       # Itaú's other alerts backfill the pool
+
+
+def test_alert_question_keeps_depth_for_one_entity():
+    feed = [_dated(i, "2026-10-15", alert=True, threat=95 - i, entity="itau") for i in range(6)]
+    assert [c["id"] for c in aa.select_grounding("Quem está em alerta agora?", feed)] == [f"c{i}" for i in range(6)]
+    many = feed + [_dated(9, "2026-10-14", alert=True, threat=50, entity="bradesco")]
+    named = aa.select_grounding("O Itaú está em alerta?", many, scope={})
+    assert [c["entity"] for c in named[:6]] == ["itau"] * 6
+
+
 def test_exec_sector_hint_inside_scope_narrows_like_top_level(monkeypatch):
     # /exec sends {q, scope: {industry}, officer}; v2/ask.js sends a top-level `industry`
     assert _ask_modules(monkeypatch, "saas", ["acquiring", "banking"], "acquiring", nested=True) == ["acquiring"]
