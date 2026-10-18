@@ -110,3 +110,33 @@ def test_public_txt_unknown_goes_to_404():
         assert _run_public(missing) == [302, "/404.html"], missing
     for ok in ("/llms.txt", "/ai.txt", "/robots.txt", "/sitemap.txt"):
         assert _run_public(ok) == ok, ok
+
+
+def _run_apex(uri, auth=None):
+    """Execute apex_public_js in node against a fake request; return the response or None."""
+    import json, subprocess
+    from edge_policy import apex_public_js
+    key = uri[:-1] if len(uri) > 1 and uri.endswith("/") else uri
+    hdr = {"authorization": {"value": auth}} if auth else {}
+    js = ("var r = {uri: %s}; var h = %s; var key = %s; var expected = 'Basic ok';\n"
+          "function f() {\n%s  return null; }\nconsole.log(JSON.stringify(f()));"
+          % (json.dumps(uri), json.dumps(hdr), json.dumps(key), apex_public_js()))
+    return json.loads(subprocess.run(["node", "-e", js], capture_output=True, text=True, check=True).stdout)
+
+
+def test_apex_without_password_goes_to_pricing_and_aliases_skip_the_challenge():
+    # #282: onssa.org/ answered 401 Basic realm="Onca Warroom" to every stranger
+    import shutil
+    import pytest
+    if not shutil.which("node"):
+        pytest.skip("node not installed")
+    r = _run_apex("/")
+    assert r["statusCode"] == 302 and r["headers"]["location"]["value"] == "/pricing.html"
+    assert _run_apex("/", auth="Basic wrong")["statusCode"] == 302
+    assert _run_apex("/", auth="Basic ok") is None            # the operator keeps the war-room
+    assert _run_apex("/index.html") is None                    # still challenged downstream
+    for uri, loc in (("/pricing", "/pricing.html"), ("/privacidade", "/docs/privacy.html"),
+                     ("/favicon.ico", "/v3/icons/icon-192.png"), ("/pricing/", "/pricing.html")):
+        r = _run_apex(uri)
+        assert r["statusCode"] == 301 and r["headers"]["location"]["value"] == loc, uri
+    assert _run_apex("/v2/admin/") is None and _run_apex("/feed.json") is None

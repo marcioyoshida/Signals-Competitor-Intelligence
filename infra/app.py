@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 
 import yaml
-from edge_policy import exec_exemption_js, public_paths_js, site_paths_js
+from edge_policy import apex_public_js, exec_exemption_js, public_paths_js, site_paths_js
 from identity import DEMO_TENANTS, build_identity_pool, build_managed_login_branding
 from aws_cdk import App, ArnFormat, CfnOutput, Duration, RemovalPolicy, SecretValue, Size, Stack, Tags
 from aws_cdk import aws_bedrock as bedrock
@@ -695,6 +695,7 @@ class OncaPrototypeStack(Stack):
                 "  }\n"
                 + exec_exemption_js() +
                 f'  var expected = "Basic {basic}";\n'
+                + apex_public_js() +
                 "  if (!h.authorization || h.authorization.value !== expected) {\n"
                 "    return { statusCode: 401, statusDescription: 'Unauthorized',\n"
                 "      headers: { 'www-authenticate': { value: 'Basic realm=\"Onca Warroom\"' } } };\n"

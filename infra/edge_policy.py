@@ -77,6 +77,36 @@ def site_files(site_root) -> list[str]:
 FAVICON_TARGET = "/v3/icons/icon-192.png"
 
 
+# #282: the apex is the operator war-room (v1) behind the shared password, so a stranger at
+# onssa.org/ got a native password dialog and a blank page. A request WITHOUT the password is
+# sent to the public sales page; extensionless aliases of public pages and the favicon never
+# hit the challenge. The operator still reaches the war-room at /index.html (challenged).
+APEX_PUBLIC_TARGET = "/pricing.html"
+PUBLIC_ALIASES: dict[str, str] = {
+    "/pricing": "/pricing.html",
+    "/precos": "/pricing.html",
+    "/privacidade": "/docs/privacy.html",
+    "/privacy": "/docs/privacy.html",
+    "/favicon.ico": FAVICON_TARGET,
+}
+
+
+def apex_public_js() -> str:
+    """Snippet run BEFORE the basic-auth check (needs `r`, `h`, `key`, `expected` in scope)."""
+    entries = ", ".join(f'"{k}": "{v}"' for k, v in PUBLIC_ALIASES.items())
+    return (
+        "  // #282: public aliases + the apex for visitors without the shared password\n"
+        "  // (infra/edge_policy.py apex_public_js).\n"
+        f"  var pubAlias = {{ {entries} }};\n"
+        "  if (pubAlias[key]) { return { statusCode: 301, statusDescription: 'Moved Permanently',\n"
+        "    headers: { location: { value: pubAlias[key] } } }; }\n"
+        '  if (key === "/" && (!h.authorization || h.authorization.value !== expected)) {\n'
+        "    return { statusCode: 302, statusDescription: 'Found',\n"
+        f"      headers: {{ location: {{ value: \"{APEX_PUBLIC_TARGET}\" }}, 'cache-control': {{ value: 'no-store' }} }} }};\n"
+        "  }\n"
+    )
+
+
 def site_paths_js(site_root) -> str:
     """Snippet: sets `redir` (a Location) for a directory-without-slash or an unknown path.
     Needs `r`, `key` and `routes` in scope; must run on the RAW uri, BEFORE the clean-route and
