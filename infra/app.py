@@ -2725,6 +2725,29 @@ class OncaPrototypeStack(Stack):
             s3.NotificationKeyFilter(prefix="contato/"),
         )
 
+        # Client reports from the Ask chat ("Reportar", src/dashboard/feedback.py): private triage
+        # store — the repo is public, so reports never go to GitHub directly. 90-day retention
+        # (owner, 2026-10-18) by TTL; the owner gets a content-free e-mail via the contact path.
+        feedback_table = dynamodb.Table(
+            self, "OncaFeedback",
+            partition_key=dynamodb.Attribute(name="pk", type=dynamodb.AttributeType.STRING),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            time_to_live_attribute="ttl",
+            point_in_time_recovery_specification=dynamodb.PointInTimeRecoverySpecification(
+                point_in_time_recovery_enabled=False),
+            removal_policy=RemovalPolicy.RETAIN,
+        )
+        feedback_table.grant_read_write_data(act_fn)
+        act_fn.add_environment("ONCA_FEEDBACK_TABLE", feedback_table.table_name)
+        act_fn.add_environment("ONCA_CONTACT_FORWARD_PARAM", CONTACT_FORWARD_PARAM)
+        act_fn.add_to_role_policy(iam.PolicyStatement(
+            actions=["ssm:GetParameter"],
+            resources=[self.format_arn(service="ssm", resource="parameter",
+                                       resource_name=CONTACT_FORWARD_PARAM.lstrip("/"))]))
+        act_fn.add_to_role_policy(iam.PolicyStatement(
+            actions=["ses:SendEmail"], resources=["*"],
+            conditions={"StringEquals": {"ses:FromAddress": "contato@onssa.org"}}))
+
         contact_receipt_rule = ses.CfnReceiptRule(
             self,
             "OncaContactReceiptRule",

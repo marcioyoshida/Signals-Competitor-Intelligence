@@ -640,7 +640,43 @@ def _act_revoke_user_sessions(args: dict[str, Any], actor: str) -> tuple[str, in
     return "applied", 200, {"revoked": True}
 
 
-_NO_JOURNAL = frozenset({"record_engagement", "list_product_radar"})
+# ---- client reports from the Ask chat (src/dashboard/feedback.py) --------------------------------
+def _act_report_feedback(args: dict[str, Any], actor: str) -> tuple[str, int, dict[str, Any]]:
+    """apply (self-service): a client's defect/suggestion from the chat → the private triage store.
+    The text is NEVER journaled or logged (_NO_JOURNAL): the curation log and CloudWatch outlive
+    the report's 90-day retention."""
+    from src.dashboard import feedback
+
+    r = feedback.record_report(kind=args.get("kind"), text=args.get("text"), sub=actor,
+                               tenant=args.get("tenant"), turn=args.get("turn"),
+                               context=args.get("context"))
+    if not r["ok"]:
+        status = 429 if r["reason"] == "daily-limit" else 400
+        return "blocked", status, {"reason": r["reason"], **({"limit": r["limit"]} if "limit" in r else {})}
+    feedback.notify_owner(str(args.get("kind") or "").lower())
+    return "applied", 200, {"report_id": r["report_id"]}
+
+
+def _act_list_feedback(args: dict[str, Any], actor: str) -> tuple[str, int, dict[str, Any]]:
+    """apply (operator): the /v2/admin "Relatos" triage list."""
+    from src.dashboard import feedback
+
+    rows = feedback.list_reports(status=(str(args.get("status") or "").strip() or None))
+    return "applied", 200, {"reports": rows, "n": len(rows)}
+
+
+def _act_set_feedback_status(args: dict[str, Any], actor: str) -> tuple[str, int, dict[str, Any]]:
+    """apply (operator): triage one report — novo | ticket (+ ticket_url) | descartado."""
+    from src.dashboard import feedback
+
+    rid, status = str(args.get("report_id") or ""), str(args.get("status") or "")
+    if not feedback.set_status(rid, status, ticket_url=args.get("ticket_url")):
+        return "noop", 404, {"detail": "report not found or invalid status", "report_id": rid}
+    return "applied", 200, {"report_id": rid, "status": status}
+
+
+# report_feedback: the client's free text must not be copied into the curation journal.
+_NO_JOURNAL = frozenset({"record_engagement", "list_product_radar", "report_feedback", "list_feedback"})
 
 # DEC-6: decision-management intents operate ON a decision — they must NOT be linked back as
 # "actions authorized BY" that decision (would self-reference).
@@ -678,12 +714,16 @@ _CATALOG: dict[str, tuple[str, Callable[..., tuple[str, int, dict[str, Any]]], s
     "list_product_radar": (APPLY, _act_list_product_radar, None),
     # #164 remote sign-out (operator only — elevated)
     "revoke_user_sessions": (APPLY, _act_revoke_user_sessions, None),
+    # client reports from the chat (feedback.py): self-service report; operator triage
+    "report_feedback": (APPLY, _act_report_feedback, None),
+    "list_feedback": (APPLY, _act_list_feedback, None),
+    "set_feedback_status": (APPLY, _act_set_feedback_status, "report_id"),
 }
 
 # #161: what a NON-elevated tenant identity (Cognito JWT via /api/me/act) may call — the officer's
 # own decision capture and attention telemetry, nothing that touches the registry or pipeline.
 _SELF_SERVICE = frozenset({"record_decision", "set_outcome", "set_board_adoption",
-                           "append_reference", "record_engagement"})
+                           "append_reference", "record_engagement", "report_feedback"})
 # of those, the ones that act on an EXISTING decision — tenant-checked before they run
 _ON_DECISION = frozenset({"set_outcome", "set_board_adoption", "append_reference"})
 
