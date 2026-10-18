@@ -94,12 +94,19 @@
   .exrow:hover { background:var(--surface-2); }
   .exrow .ent { font-weight:600; min-width:118px; max-width:36%; color:var(--ink);
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  /* headline: clamps to 3 lines; CLICK the headline to expand/collapse it inline */
+  /* headline: clamps to 3 lines. A click anywhere on the row opens the sources drawer (as on Hoje, #283);
+     a clamped headline gets an explicit "ver mais"/"ver menos" button (wireHeadlines) that expands it in place. */
   .exrow .ttl { flex:1; min-width:0; color:var(--ink-2); font-size:var(--fs-sm); line-height:1.4;
-    display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; cursor:pointer; }
-  .exrow .ttl:hover { color:var(--ink); }
+    display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+  .exrow[tabindex] .ttl:hover { color:var(--ink); }
   .exrow .ttl.is-expanded { -webkit-line-clamp:unset; display:block; overflow:visible;
     background:var(--surface-2); border-radius:var(--r-sm); padding:2px 6px; margin:-2px -6px; }
+  .exrow .ttl-more { flex:none; align-self:flex-start; margin-top:1px; padding:0 2px; border:0; background:none;
+    font:inherit; font-size:var(--fs-micro); font-weight:700; line-height:1.4; white-space:nowrap; cursor:pointer;
+    color:var(--primary-2); text-decoration:underline; text-underline-offset:2px; }
+  .exrow .ttl-more:hover { color:var(--ink); }
+  .exrow .ttl-more:focus-visible { outline:2px solid var(--primary); outline-offset:2px; border-radius:var(--r-sm); }
+  .exrow .ttl-more[hidden] { display:none; }
   .exrow .dt, .exrow .meta, .exrow .heat, .exrow .badge { margin-top:1px; }
   .exrow .dt { color:var(--muted); font-size:var(--fs-micro); min-width:64px; font-variant-numeric:tabular-nums; }
   .exrow .meta { color:var(--muted); font-size:var(--fs-micro); font-variant-numeric:tabular-nums; }
@@ -560,9 +567,10 @@
       font-size:15px; font-weight:600; text-overflow:ellipsis; }
     .selwrap::after { content:""; position:absolute; right:14px; top:50%; width:7px; height:7px; margin-top:-6px;
       border-right:2px solid var(--ink-2); border-bottom:2px solid var(--ink-2); transform:rotate(45deg); pointer-events:none; }
-    #viewTabs { grid-area:view; justify-self:end; display:inline-flex; gap:2px; padding:3px; order:0; flex-wrap:nowrap;
+    /* #278: the segment is the tap target — 44px tall (was 38 inside 3px of padding), flush in its track */
+    #viewTabs { grid-area:view; justify-self:end; display:inline-flex; gap:0; padding:0; order:0; flex-wrap:nowrap;
       background:var(--surface-2); border:1px solid var(--border-2); border-radius:12px; }
-    #viewTabs a { min-height:38px; padding:0 13px; border:0; border-radius:9px; font-size:14px; font-weight:700;
+    #viewTabs a { min-height:44px; padding:0 15px; border:0; border-radius:11px; font-size:14px; font-weight:700;
       color:var(--ink-2); display:inline-flex; align-items:center; }
     #viewTabs a[aria-current="page"] { background:var(--primary); color:var(--on-primary); border:0; }
     #authBox { grid-area:acct; order:0; }
@@ -668,6 +676,7 @@
     .exrow .ent { min-width:0 !important; max-width:none; flex:1 1 0; white-space:normal;
       overflow-wrap:anywhere; font-size:var(--fs-sm); }
     .exrow .ttl { flex:1 1 100%; order:5; -webkit-line-clamp:3; color:var(--ink-2); }
+    .exrow .ttl-more { order:5; }
     .exrow .meta { order:6; flex-basis:100%; }
     .exrow .dt { min-width:0; }
     .exrow:active { background:var(--surface-2); }
@@ -753,6 +762,20 @@
     /* --- charts ------------------------------------------------------------------ */
     .scatter { padding:var(--s3) var(--s2); }
     .sc-legend { justify-content:flex-start; padding:0 var(--s2); }
+  }
+
+  /* #278: on a touch screen every interactive target is >= 44px tall (WCAG 2.5.5 / HIG), like the #245
+     rules in /v2/app.css. Small inline links (evidência, the [n] source markers in a row) keep their
+     look and get an invisible hit area instead: a ::before that is hit-tested but never painted.
+     Desktop (fine pointer) is untouched. */
+  @media (pointer: coarse) {
+    .traj-f a[data-ev], .rec-a a[data-ev], .exrow .meta a, .exrow .ttl-more { position:relative; }
+    .traj-f a[data-ev]::before, .rec-a a[data-ev]::before { content:""; position:absolute; inset:-16px -8px; }
+    .exrow .meta a { margin-right:8px; }                          /* keep neighbouring [n] hit areas apart */
+    .exrow .meta a::before { content:""; position:absolute; inset:-16px -8px; }
+    .exrow .ttl-more::before { content:""; position:absolute; inset:-14px -10px; }
+    .cites .cite, .askex .chip { display:inline-flex; align-items:center; min-height:44px; }
+    .chat__x { width:44px; height:44px; }
   }
 </style>
 </head>
@@ -1134,8 +1157,9 @@ function renderAskPanel() {
 function askAvailable() { const p = document.getElementById("askPanel"); return !!p && !p.hidden && !document.body.classList.contains("is-gated"); }
 function openChat(q) {
   const chat = document.getElementById("askChat"); if (!chat) return;
-  chatLoad(); renderChat();
+  chatLoad();
   chat.hidden = false; document.body.classList.add("chat-open");
+  renderChat();   // after un-hiding: the scroll position needs layout (#284)
   const inp = document.getElementById("askInput");
   if (q) { inp.value = q; askOnca(); } else if (!inp.disabled) setTimeout(() => inp.focus(), 50);
 }
@@ -1196,7 +1220,13 @@ function renderChat() {
        : `<div class="msg msg--a${t.res.refused || !t.res.answer ? " msg--refused" : ""}">${answerHTML(t.res)}</div>`)).join("");
     log.querySelectorAll("[data-retry]").forEach(b => b.onclick = () => {
       const t = CHAT.turns.splice(Number(b.dataset.retry), 1)[0]; chatSave(); document.getElementById("askInput").value = t.q; askOnca(); });
-    log.scrollTop = log.scrollHeight;
+    // #284: a finished answer is read from its first line — put the top of the newest answer at the top
+    // of the log (a short one still ends up bottom-aligned: scrollTop clamps). Anything else (thinking,
+    // error, retry) follows the end of the log.
+    const last = turns[turns.length - 1], ans = log.querySelectorAll(".msg--a"), ansEl = ans[ans.length - 1];
+    log.scrollTop = last && !last.pending && !last.error && ansEl
+      ? log.scrollTop + ansEl.getBoundingClientRect().top - log.getBoundingClientRect().top - 8
+      : log.scrollHeight;
   }
   const n = turns.filter(t => !t.pending).length, foot = document.getElementById("askFoot");
   const full = n >= CHAT_MAX_TURNS;
@@ -2641,15 +2671,7 @@ function render() {
                        panel("BCG", ofN(p.bcg, totN(p, "bcg")), "estrela·vaca·interrogação·abacaxi", rowsFramework(p.bcg), { lead: true })]), { lead: true });
   el.innerHTML = flowBand() + board + silenceBand() + outcomesDueBand() + metricsBand() + referenceBand();
   if (OFFICER === "cso") loadQuotes();  // async B3 market pulse (fills #b3ticker post-render)
-  // Click the headline to expand/collapse it inline (doesn't open the drawer); an expand is
-  // an attention event (§E engagement telemetry) tagged with the card's entity/sector/threat.
-  el.querySelectorAll(".exrow .ttl").forEach(t => t.addEventListener("click", (e) => {
-    if (narrowScreen() && t.closest(".exrow[tabindex]")) return;   // phone: the row opens the card
-    e.stopPropagation();
-    const expanded = t.classList.toggle("is-expanded");
-    const row = t.closest(".exrow");
-    engage("headline", expanded ? "expand" : "collapse", row && row.getAttribute("data-id"));
-  }));
+  wireHeadlines(el);
   bindRows(el);
   capLists(el);
   if (narrowScreen()) foldBands(el);
@@ -3187,6 +3209,36 @@ function activateRow(row, fn, role) {
   row.addEventListener("keydown", (e) => {
     if (e.target !== row || (e.key !== "Enter" && e.key !== " ")) return;
     e.preventDefault(); fn();
+  });
+}
+// #283: a click anywhere on a row opens its sources drawer (bindRows), headline included. A headline
+// the 3-line clamp actually cuts gets an explicit "ver mais"/"ver menos" button after it (a real <button>:
+// Enter/Space work, and the row's own Enter/Space handler ignores keys from children). Expanding is an
+// attention event (§E engagement telemetry) tagged with the card's entity/sector/threat.
+// A ResizeObserver decides when the button shows, so rows hidden by a fold or a "Ver todos" cap get theirs
+// the moment they are revealed, and a rotation/resize re-checks the clamp.
+let TTL_RO = null;
+function syncMore(t) {
+  const b = t.nextElementSibling;
+  if (!b || !b.classList.contains("ttl-more")) return;
+  b.hidden = !(t.classList.contains("is-expanded") || t.scrollHeight > t.clientHeight + 1);
+}
+function wireHeadlines(el) {
+  if (TTL_RO) TTL_RO.disconnect();
+  else if ("ResizeObserver" in window) TTL_RO = new ResizeObserver(es => es.forEach(en => syncMore(en.target)));
+  el.querySelectorAll(".exrow .ttl").forEach(t => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "ttl-more"; b.hidden = true; b.textContent = "ver mais";
+    b.setAttribute("aria-expanded", "false");
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();   // the control expands the headline; it does not open the drawer
+      const expanded = t.classList.toggle("is-expanded");
+      b.textContent = expanded ? "ver menos" : "ver mais"; b.setAttribute("aria-expanded", String(expanded));
+      const row = t.closest(".exrow");
+      engage("headline", expanded ? "expand" : "collapse", row && row.getAttribute("data-id"));
+    });
+    t.after(b);
+    if (TTL_RO) TTL_RO.observe(t); else syncMore(t);
   });
 }
 function bindRows(el) {

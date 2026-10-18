@@ -555,4 +555,9 @@ details.fold.chg > summary { padding: var(--s2) var(--s3); font-size: var(--fs-m
   .btn { min-height: 44px; }
   .view-tabs a, .ctxnav a { min-height: 44px; display: inline-flex; align-items: center; }
   .selwrap select, .authbtn, #authBox .btn { min-height: 44px; min-width: 44px; justify-content: center; }
+  /* #278: the [n] source markers are 16×13 — keep the look, add a 44px hit area (a ::before is
+     hit-tested but not painted). Shared by every card narrative / citation footer. */
+  .sup a, a.refnum { position: relative; }
+  .sup a::before, a.refnum::before { content: ""; position: absolute; inset: -16px -6px; }
+  a.refnum { margin-right: 4px; }
 }

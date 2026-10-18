@@ -16,6 +16,14 @@
   li { margin-bottom:6px; color:var(--ink2); } p { color:var(--ink2); }
   hr { border:0; border-top:1px solid var(--border); margin:36px 0; }
   code { background:var(--panel); border-radius:4px; padding:1px 5px; font-size:13px; }
+
+  /* #281: touch targets >= 44px (the bar /exec and /v2 already meet, #245). Controls get a real 44px box;
+     links inside prose keep their size and get an invisible hit area (a ::after that is hit-tested, never
+     painted). Mouse users see no change. */
+  @media (pointer: coarse) {
+    a { position: relative; }
+    a:where(:not(.btn):not(.pbtn):not(.mlink))::after { content: ""; position: absolute; inset: -15px -6px; }
+  }
 </style>
 </head>
 <body><div class="wrap">

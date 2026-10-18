@@ -35,6 +35,14 @@
   th { color: var(--ink2); font-weight: 600; }
   .scroll { overflow-x: auto; }
   .foot { color: var(--muted); font-size: 12.5px; margin-top: 34px; border-top: 1px solid var(--border); padding-top: 18px; }
+
+  /* #281: touch targets >= 44px (the bar /exec and /v2 already meet, #245). Controls get a real 44px box;
+     links inside prose keep their size and get an invisible hit area (a ::after that is hit-tested, never
+     painted). Mouse users see no change. */
+  @media (pointer: coarse) {
+    a { position: relative; }
+    a:where(:not(.btn):not(.pbtn):not(.mlink))::after { content: ""; position: absolute; inset: -15px -6px; }
+  }
 </style>
 </head>
 <body>
