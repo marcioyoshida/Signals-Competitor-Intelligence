@@ -88,6 +88,8 @@ PUBLIC_ALIASES: dict[str, str] = {
     "/precos": "/pricing.html",
     "/privacidade": "/docs/privacy.html",
     "/privacy": "/docs/privacy.html",
+    "/excluir-conta": "/docs/excluir-conta.html",   # #251: the store listings' deletion URL
+    "/delete-account": "/docs/excluir-conta.html",
     "/favicon.ico": FAVICON_TARGET,
 }
 

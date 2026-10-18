@@ -555,6 +555,21 @@
   .acct-acts { display:flex; flex-direction:column; gap:var(--s2); margin-top:var(--s5); }
   .acct-acts .btn { justify-content:center; min-height:46px; font-size:var(--fs-sm); }
   .mono { font-family:var(--f-mono); font-size:var(--fs-meta); }
+  /* #251 account deletion: a quiet entry point, then an explicit confirmation step */
+  .acct-del { margin-top:var(--s5); padding-top:var(--s4); border-top:1px solid var(--border); }
+  .acct-del .btn { width:100%; justify-content:center; min-height:46px; font-size:var(--fs-sm); }
+  .del { display:flex; flex-direction:column; gap:var(--s3); font-size:var(--fs-sm); line-height:1.5; }
+  .del h3 { margin:0; font-size:var(--fs-md); }
+  .del .warn { margin:0; color:var(--t-crit); font-weight:700; }
+  .del ul { margin:0; padding-left:1.2em; color:var(--ink-2); } .del li { margin-bottom:4px; }
+  .del label { font-weight:600; }
+  .del input { width:100%; box-sizing:border-box; min-height:46px; background:var(--surface-2); color:var(--ink); font:inherit;
+    font-size:16px; letter-spacing:.06em; border:1px solid var(--border); border-radius:var(--r-sm); padding:9px var(--s3); }
+  .del input:focus { outline:none; border-color:var(--primary); box-shadow:var(--focus); }
+  .del .acts { display:flex; flex-direction:column; gap:var(--s2); }
+  .del .acts .btn { justify-content:center; min-height:46px; font-size:var(--fs-sm); }
+  .del .btn[disabled] { opacity:.5; cursor:not-allowed; }
+  .del .msg { margin:0; } .del .msg:empty { display:none; } .del .msg.err { color:var(--t-crit); }
   /* device settings fold at the end of Hoje */
   details.hoje-set { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md); }
   details.hoje-set > summary { list-style:none; cursor:pointer; display:flex; align-items:center; gap:var(--s2);
@@ -1069,6 +1084,14 @@ function actFetch(body, extra) {
 }
 function renderAuthUI() {
   Ctx.renderAuthBox("authBox", () => renderAskLoginState());
+  // #251: the desktop header reaches the account sheet too (the phone has its avatar button) —
+  // that sheet is where "Excluir minha conta" lives.
+  const out = document.getElementById("__logoutBtn");
+  if (out && !ADMIN) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "btn btn--sm"; b.id = "acctOpenDesk"; b.textContent = "Sua conta";
+    b.onclick = openAccount; out.before(b);
+  }
   renderIdentity();
 }
 // --- who is signed in, and to what (phone identity strip + account button + account sheet) ----
@@ -1130,10 +1153,62 @@ function openAccount() {
     `<div class="acct-acts">` +
       (Ctx.inApp() ? "" : `<button class="btn" type="button" id="acctTheme">Alternar tema claro/escuro</button>`) +
       `<a class="btn" href="/docs/privacy.html">Política de privacidade</a>` +
-      `<button class="btn btn--reject" type="button" id="acctOut">Sair desta conta</button></div>`;
+      `<button class="btn btn--reject" type="button" id="acctOut">Sair desta conta</button></div>` +
+    (ADMIN ? "" : `<div class="acct-del"><button class="btn" type="button" id="acctDel">Excluir minha conta…</button></div>`);
   const th = document.getElementById("acctTheme"); if (th) th.onclick = () => { U.toggleTheme(); render(); };
   document.getElementById("acctOut").onclick = () => Ctx.logout();
+  const del = document.getElementById("acctDel"); if (del) del.onclick = openDeleteAccount;
   openDrawer(null);
+}
+// #251 self-service deletion (App Store 5.1.1(v), Google Play): an explicit step that says what goes
+// and what stays, a typed confirmation, then POST /api/me/act `delete_account` — the server takes
+// WHO from the verified token only. Public explainer: /docs/excluir-conta.html.
+const DELETE_WORD = "EXCLUIR";
+function openDeleteAccount() {
+  const c = idClaims(); if (!c) return;
+  const email = c.email || "";
+  document.getElementById("drTitle").textContent = "Excluir minha conta";
+  document.getElementById("drBody").innerHTML =
+    `<form class="del" id="delForm" novalidate>` +
+      `<p class="warn">A exclusão é imediata e não pode ser desfeita.</p>` +
+      `<div><b>Apagamos agora:</b><ul>` +
+        `<li>o seu acesso${email ? ` (${U.esc(email)})` : ""} e todas as sessões abertas, inclusive no app;</li>` +
+        `<li>as decisões que você registrou e o seu histórico de uso;</li>` +
+        `<li>os alertas no celular e o resumo semanal por e-mail;</li>` +
+        `<li>os relatos enviados pelo chat e os apps de IA conectados (MCP).</li></ul></div>` +
+      `<div><b>Fica com a sua organização:</b><ul>` +
+        `<li>os setores contratados, a configuração e os demais usuários — eles são do contrato.</li>` +
+        `<li>Se você é o único usuário de uma conta Entry criada por você, ela é encerrada junto (o teste termina; nada é cobrado). ` +
+        `Com uma assinatura ativa, encerre-a antes.</li></ul></div>` +
+      `<label for="delWord">Para confirmar, digite ${DELETE_WORD}</label>` +
+      `<input id="delWord" autocomplete="off" autocapitalize="characters" spellcheck="false" inputmode="text">` +
+      `<p class="msg" id="delMsg" role="status" aria-live="polite"></p>` +
+      `<div class="acts"><button class="btn btn--reject" type="submit" id="delGo" disabled>Excluir definitivamente</button>` +
+        `<button class="btn" type="button" id="delBack">Cancelar</button></div>` +
+      `<p class="hd-note">Como funciona: <a href="/docs/excluir-conta.html">onssa.org/docs/excluir-conta.html</a></p>` +
+    `</form>`;
+  const word = document.getElementById("delWord"), go = document.getElementById("delGo"), msg = document.getElementById("delMsg");
+  word.oninput = () => { go.disabled = word.value.trim().toUpperCase() !== DELETE_WORD; };
+  document.getElementById("delBack").onclick = openAccount;
+  document.getElementById("delForm").onsubmit = async (e) => {
+    e.preventDefault();
+    if (go.disabled) return;
+    go.disabled = true; word.disabled = true; msg.className = "msg"; msg.textContent = "Excluindo…";
+    let r = null, j = {};
+    try {
+      r = await actFetch(JSON.stringify({ intent: "delete_account", args: { confirm: word.value.trim().toUpperCase() } }));
+      j = await r.json().catch(() => ({}));
+    } catch (err) { r = null; }
+    if (r && r.ok && (j.outcome === "applied" || j.outcome === "noop")) {
+      msg.textContent = "Conta excluída. Saindo…";
+      setTimeout(() => Ctx.logout(), 1200);
+      return;
+    }
+    msg.className = "msg err";
+    msg.textContent = (j && j.error) || "Não foi possível excluir agora. Tente de novo ou escreva para contato@onssa.org.";
+    word.disabled = false; go.disabled = word.value.trim().toUpperCase() !== DELETE_WORD;
+  };
+  word.focus();
 }
 document.getElementById("acctBtn").addEventListener("click", openAccount);
 document.getElementById("whoAmI").addEventListener("click", openAccount);

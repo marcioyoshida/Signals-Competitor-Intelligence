@@ -157,12 +157,16 @@ def set_status(report_id: str, status: str, *, ticket_url: str | None = None,
 
 
 def delete_for_user(sub: str, table: Any | None = None) -> int:
-    """Account deletion (#251): remove every report a user filed. Returns how many."""
+    """Account deletion (#251): remove every report a user filed (and their daily-cap counters,
+    ``FBQ#<sub>#<day>``). Returns how many reports."""
     t = _table(table)
     n = 0
-    for i in [i for i in _scan_all(t) if i.get("type") == "report" and i.get("sub") == sub]:
-        t.delete_item(Key={"pk": i["pk"]})
-        n += 1
+    for i in _scan_all(t):
+        if i.get("type") == "report" and i.get("sub") == sub:
+            t.delete_item(Key={"pk": i["pk"]})
+            n += 1
+        elif str(i.get("pk") or "").startswith(f"FBQ#{sub}#"):
+            t.delete_item(Key={"pk": i["pk"]})
     return n
 
 

@@ -2611,10 +2611,12 @@ class OncaPrototypeStack(Stack):
                                 integration=_mcp_integ)
         CfnOutput(self, "OAuthIssuer", value="https://onssa.org/oauth")
 
-        # #164 remote sign-out: the operator act `revoke_user_sessions`
+        # #164 remote sign-out: the operator act `revoke_user_sessions`; #251 `delete_account`
+        # (the caller's own user: sign out, sole-user check, delete)
         act_fn.add_environment("ONCA_USER_POOL_ID", user_pool.user_pool_id)
         act_fn.add_to_role_policy(iam.PolicyStatement(
-            actions=["cognito-idp:AdminUserGlobalSignOut"], resources=[user_pool.user_pool_arn]))
+            actions=["cognito-idp:AdminUserGlobalSignOut", "cognito-idp:AdminDeleteUser",
+                     "cognito-idp:ListUsers"], resources=[user_pool.user_pool_arn]))
 
         # POST /api/register — lazy Entry-tier self-registration for a first-time
         # Google login (see docs/google-oauth-runbook.md, src.dashboard.self_register).
@@ -2748,6 +2750,19 @@ class OncaPrototypeStack(Stack):
         feedback_table.grant_read_write_data(act_fn)
         act_fn.add_environment("ONCA_FEEDBACK_TABLE", feedback_table.table_name)
         act_fn.add_environment("ONCA_CONTACT_FORWARD_PARAM", CONTACT_FORWARD_PARAM)
+
+        # #251 self-service account deletion (`delete_account`, src/dashboard/account.py): the act
+        # Lambda removes the caller's own rows from every per-user store, closes a sole-user
+        # self-registered tenant, then deletes the Cognito user (IAM next to #164's sign-out). No new
+        # store, no new Lambda.
+        for _env, _tbl in (("ONCA_PUSH_TABLE", push_table), ("ONCA_ASK_QUOTA_TABLE", ask_quota_table),
+                           ("ONCA_OAUTH_TABLE", oauth_table),
+                           ("ONCA_TENANT_CONFIG_TABLE", tenant_config_table)):
+            act_fn.add_environment(_env, _tbl.table_name)
+            _tbl.grant_read_write_data(act_fn)
+        if google_idp:
+            act_fn.add_environment("ONCA_FEDERATED_MAP_TABLE", federated_map_table.table_name)
+            federated_map_table.grant_read_write_data(act_fn)
         act_fn.add_to_role_policy(iam.PolicyStatement(
             actions=["ssm:GetParameter"],
             resources=[self.format_arn(service="ssm", resource="parameter",

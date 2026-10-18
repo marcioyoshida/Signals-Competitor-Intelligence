@@ -37,7 +37,7 @@
 <ul>
 <li><b>Login.</b> Amazon Cognito (e-mail e senha, ou Google quando habilitado). Guardamos o seu e-mail, a organização (tenant) e os grupos de acesso. A Onça nunca recebe a sua senha.</li>
 <li><b>Sessão.</b> Um token de 1 hora na memória da aba (<code>sessionStorage</code>) e um token de renovação em cookie <code>HttpOnly; Secure; SameSite=Strict</code> restrito a <code>/api/session</code>, que expira após o período de inatividade da sua organização (padrão 7 dias; máximo 30).</li>
-<li><b>Apps conectados (MCP / A2A).</b> Se você conectar um app de IA (ex.: Claude) à sua conta, guardamos qual app você autorizou, quando e quando ele usou o acesso pela última vez. Os tokens ficam do nosso lado só como hash; o acesso expira em 1 hora e a renovação em 30 dias (ou 7 dias sem uso). Um cookie de 10 minutos (<code>__Host-oauth_csrf</code>) protege o botão “Permitir”. Para desconectar, escreva para contato@onssa.org.</li>
+<li><b>Apps conectados (MCP / A2A).</b> Se você conectar um app de IA (ex.: Claude) à sua conta, guardamos qual app você autorizou, quando e quando ele usou o acesso pela última vez. Os tokens ficam do nosso lado só como hash; o acesso expira em 1 hora e a renovação em 30 dias (ou 7 dias sem uso). Um cookie de 10 minutos (<code>__Host-oauth_csrf</code>) protege o botão “Permitir”. Para desconectar, escreva para contato@onssa.org; excluir a conta também desconecta todos os apps.</li>
 <li><b>Chaves de API.</b> Guardamos o hash de cada chave, o rótulo, o prefixo (os 16 primeiros caracteres, que identificam a chave mas não permitem usá-la), quem a criou e as datas de criação e último uso. O uso é medido por organização para cobrança.</li>
 </ul>
 
@@ -79,7 +79,7 @@
 
 <h2>Por quanto tempo guardamos</h2>
 <ul>
-<li><b>Conta, configuração da organização, chaves de API, apps autorizados, decisões e engajamento:</b> enquanto a conta ou o contrato estiver ativo; excluídos em até 30 dias após um pedido de exclusão ou o fim do contrato, salvo o que a lei obrigue a manter.</li>
+<li><b>Conta, configuração da organização, chaves de API, apps autorizados, decisões e engajamento:</b> enquanto a conta ou o contrato estiver ativo; excluídos em até 30 dias após um pedido de exclusão ou o fim do contrato, salvo o que a lei obrigue a manter. Pela opção “Excluir minha conta”, os seus dados pessoais são apagados na hora; os dados da organização ficam com o contrato.</li>
 <li><b>Tokens:</b> acesso 1 hora; renovação até 30 dias, apagados automaticamente ao expirar.</li>
 <li><b>Alertas:</b> até você desligá-los ou o navegador deixar de aceitá-los.</li>
 <li><b>Relatos de defeito e sugestão:</b> 90 dias, apagados automaticamente.</li>
@@ -91,6 +91,7 @@
 </ul>
 
 <h2>Seus direitos</h2>
+<p><b>Excluir a conta:</b> você mesmo exclui a sua conta, no app ou no navegador, em <b>Sua conta → Excluir minha conta</b>; a exclusão é imediata. O passo a passo e o que é apagado estão em <a href="/docs/excluir-conta.html">onssa.org/docs/excluir-conta.html</a>.</p>
 <p>Você pode pedir confirmação, acesso, correção, portabilidade ou exclusão dos seus dados, ou revogar um consentimento, escrevendo para <a href="mailto:contato@onssa.org">contato@onssa.org</a>; respondemos em até 15 dias. Titulares no Brasil têm os direitos da LGPD (Lei 13.709/2018), incluindo reclamar à ANPD; na UE/Reino Unido, os do GDPR, incluindo reclamar à autoridade de proteção de dados local.</p>
 
 <h2>Mudanças</h2>
@@ -113,6 +114,7 @@
 <li><b>Third parties:</b> AWS (US), Stripe (US, payments only), Google (if you sign in with it), browser push services (content-free). No sale or advertising use of personal data.</li>
 <li><b>International transfer:</b> Smart Signals LLC and Onça's infrastructure are in the United States, so using Onça from Brazil transfers your data there, as necessary to perform the contract (LGPD art. 33, IX with art. 7, V). AWS and Stripe process data under their own data-protection terms.</li>
 <li><b>Retention:</b> account, organization settings, API keys, authorized apps, decisions and engagement for as long as the account or contract is active, then deleted within 30 days of a deletion request or contract end (except what law requires us to keep); tokens 1 hour / up to 30 days; alerts until you turn them off; unanswered questions 12 months after last asked; contact emails 12 months; site access logs (IP, URL, time) 12 months; server logs 90 days (errors and counters only — never question text, tokens, passwords or emails); billing records as tax law requires.</li>
+<li><b>Delete your account</b> yourself, in the app or a browser: <b>Sua conta → Excluir minha conta</b>; it takes effect at once. Steps and what is deleted: <a href="/docs/excluir-conta.html">onssa.org/docs/excluir-conta.html</a>.</li>
 <li><b>Rights:</b> confirmation, access, correction, portability, deletion and withdrawal of consent via contato@onssa.org, answered within 15 days; LGPD (Brazil, including complaints to the ANPD) and GDPR/UK GDPR rights apply.</li>
 <li><b>Changes</b> are posted here with a new effective date.</li>
 </ul>

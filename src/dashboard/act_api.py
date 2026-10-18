@@ -677,6 +677,27 @@ def _act_set_feedback_status(args: dict[str, Any], actor: str) -> tuple[str, int
     return "applied", 200, {"report_id": rid, "status": status}
 
 
+# ---- #251 self-service account deletion (src/dashboard/account.py) ----------------------------
+def _act_delete_account(args: dict[str, Any], actor: str) -> tuple[str, int, dict[str, Any]]:
+    """apply (self-service): delete the CALLER's own account. ``args`` is built by lambda_handler
+    from the verified token only (sub, username, email, tenant) plus the typed confirmation word —
+    a client-supplied target never reaches here."""
+    from src.dashboard import account
+
+    if str(args.get("confirm") or "").strip().upper() != account.CONFIRM_WORD:
+        return "blocked", 400, {"reason": "confirm", "error": f"digite {account.CONFIRM_WORD} para confirmar"}
+    try:
+        counts = account.delete_account(sub=str(args.get("_sub") or ""), username=args.get("_username"),
+                                        email=args.get("_email"), tenant=args.get("tenant"))
+    except account.Blocked as exc:
+        return "blocked", exc.status, {"reason": exc.reason, "error": exc.message}
+    except Exception as exc:   # every step is idempotent: the user can simply try again
+        print(f"Warning: delete_account failed: {type(exc).__name__}")
+        return "blocked", 502, {"reason": "failed",
+                                "error": "Não foi possível concluir a exclusão agora; tente de novo em instantes."}
+    return ("applied" if counts["user_deleted"] else "noop"), 200, {"deleted": counts}
+
+
 # report_feedback: the client's free text must not be copied into the curation journal.
 _NO_JOURNAL = frozenset({"record_engagement", "list_product_radar", "report_feedback", "list_feedback"})
 
@@ -720,12 +741,17 @@ _CATALOG: dict[str, tuple[str, Callable[..., tuple[str, int, dict[str, Any]]], s
     "report_feedback": (APPLY, _act_report_feedback, None),
     "list_feedback": (APPLY, _act_list_feedback, None),
     "set_feedback_status": (APPLY, _act_set_feedback_status, "report_id"),
+    # #251 self-service account deletion (the caller's own account only)
+    "delete_account": (APPLY, _act_delete_account, None),
 }
 
 # #161: what a NON-elevated tenant identity (Cognito JWT via /api/me/act) may call — the officer's
 # own decision capture and attention telemetry, nothing that touches the registry or pipeline.
 _SELF_SERVICE = frozenset({"record_decision", "set_outcome", "set_board_adoption",
-                           "append_reference", "record_engagement", "report_feedback"})
+                           "append_reference", "record_engagement", "report_feedback",
+                           "delete_account"})
+# #251: intents that only ever act on the verified caller — no origin-secret operator, no MCP.
+_SELF_ONLY = frozenset({"delete_account"})
 # of those, the ones that act on an EXISTING decision — tenant-checked before they run
 _ON_DECISION = frozenset({"set_outcome", "set_board_adoption", "append_reference"})
 
@@ -768,6 +794,16 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     exec_class, handler, subject_key = entry
     args = dict(body.get("args")) if isinstance(body.get("args"), dict) else {}
     idem = str(body.get("idempotency_key") or "").strip()
+    if intent in _SELF_ONLY:
+        if identity is None:
+            return _resp(403, {"error": "only a signed-in user can delete their own account"})
+        # #251: ONLY the verified token decides whose account this is; any client arg but the
+        # confirmation word is dropped. Nothing about it is stored under the raw sub (the
+        # deletion just purged the ACT#<sub>: rows) — journaled under a one-way hash instead.
+        claims = auth._claims(event) or {}
+        args = {"confirm": args.get("confirm"), "_sub": identity.sub, "_email": identity.email,
+                "_username": claims.get("cognito:username") or claims.get("username") or identity.sub}
+        idem = ""
     if identity is not None:
         # the tenant is the VERIFIED claim, never a client-supplied arg; idempotency keys are
         # per-caller so one tenant can never replay (and read) another's stored result
@@ -814,6 +850,11 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     outcome, status, detail = handler(args, actor)
     subject = str(args.get(subject_key)) if subject_key and args.get(subject_key) else _ACT_SUBJECT
+    if intent in _SELF_ONLY:
+        from src.dashboard.account import user_hash
+
+        actor = "deleted-user:" + user_hash(actor)
+        args = {"tenant": args.get("tenant")}
 
     result = {
         "intent": intent,
