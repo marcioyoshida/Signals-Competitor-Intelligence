@@ -317,3 +317,21 @@ def test_normative_act_text_is_free_text_for_untrusted_bare_words(monkeypatch):
     assert entities.resolve_entities({"source": "BCB", "kind": "regulatory",
                                       "subject": "Cancela a autorização da Swap Instituicao de Pagamento S.A."}) == ["swap"]
     assert entities.resolve_entities({"source": "CVM", "kind": "fii", "name": "PRAZO"}) == ["prazo"]
+
+
+def test_short_code_alias_after_a_content_word_is_a_model_not_the_entity(monkeypatch):
+    # #276: "BYD testa o Denza B3 no Brasil" clustered into B3 the exchange (cand-ent-b3, 10-11/12)
+    from src.synth import entities, entity_registry
+    monkeypatch.setenv("ONCA_ENTITIES_TABLE", "t")
+    monkeypatch.setattr(entity_registry, "load_alias_map", lambda *a, **k: {
+        "b3": ["B3", "B3SA3", "BRASIL BOLSA BALCAO"], "c6": ["C6", "C6 BANK"]})
+    monkeypatch.setattr(entity_registry, "load_trust_map", lambda *a, **k: {})
+    monkeypatch.setattr(entity_registry, "load_ambiguous_tokens", lambda *a, **k: set())
+    monkeypatch.setattr(entity_registry, "load_attribution_roles", lambda *a, **k: {})
+    news = lambda t: entities.resolve_entities({"source": "News", "title": t})
+    assert news("BYD testa o Denza B3 no Brasil, que pode ter até 500 cv") == []
+    assert news("Novo Volvo C6 chega ao país") == []
+    for t in ("A B3 registrou queda de 1,06%", "Ações da B3 sobem", "B3 lança ETF", "ETFs pagam dividendos na B3",
+              "Denza B3 chega; ações da B3 sobem"):
+        assert news(t) == ["b3"], t
+    assert news("Itaú e C6 disputam clientes") == ["c6"]

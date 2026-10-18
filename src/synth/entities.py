@@ -209,6 +209,40 @@ def _entity_actor_only(aliases: list[str], blob: str) -> bool:
     return matched
 
 
+# #276: a short letters+digit alias (B3, C6) is also how products are named — "BYD testa o
+# Denza B3" clustered into B3 the exchange. In free text such a mention counts only after a
+# function word / punctuation / start ("A B3", "na B3", "ações da B3", "Ibovespa e B3"), never
+# right after another content word ("Denza B3"), which is a model code.
+_MODEL_CODE_ALIAS = re.compile(r"^[A-Z]{1,2}\d{1,2}$")
+_ENTITY_LEAD_WORDS = frozenset({
+    "A", "À", "AS", "O", "OS", "NA", "NO", "NAS", "NOS", "DA", "DO", "DAS", "DOS", "PELA", "PELO",
+    "COM", "PARA", "E", "OU", "EM", "SOBRE", "ENTRE", "QUE", "COMO", "ATÉ", "APÓS", "VIA", "DE",
+    "BOLSA", "AÇÕES", "ACOES", "PAPÉIS", "PAPEIS", "LISTADA", "LISTADAS", "LISTAGEM", "IPO", "ÍNDICE",
+    "INDICE", "IBOVESPA", "MERCADO", "PREGÃO", "PREGAO", "CEO", "PRESIDENTE", "DIRETOR", "DIRETORA",
+    "BANCO", "SEGUNDO", "CONFORME", "JUNTO", "INFORMOU", "DIZ", "AFIRMA",
+})
+
+
+def _model_code_only(aliases: list[str], blob: str) -> bool:
+    """True iff the entity matched only through a short letters+digit alias and EVERY mention
+    of it follows a content word (a product/model code, "DENZA B3")."""
+    codes = [a.upper().strip() for a in aliases if _MODEL_CODE_ALIAS.match(a.upper().strip())]
+    if not codes:
+        return False
+    others = [a for a in aliases if a.upper().strip() not in codes and not a.upper().startswith("TICKER:")]
+    if any(_word_match(a.upper().strip(), blob) for a in others):
+        return False  # a distinctive alias (B3SA3, BRASIL BOLSA BALCAO) also names it
+    seen = False
+    for code in codes:
+        for m in _word_re(code).finditer(blob):
+            seen = True
+            before = re.findall(rf"{_WORD}+|[^\s]", blob[:m.start()][-40:])
+            prev = before[-1] if before else ""
+            if not prev or not re.match(_WORD, prev) or prev in _ENTITY_LEAD_WORDS:
+                return False  # start / punctuation / function word → the entity itself
+    return seen
+
+
 def _ambiguous_tokens() -> frozenset[str]:
     """Bare tokens that are common words (resolve only in structured sources).
 
@@ -625,6 +659,8 @@ def resolve_entities(item: dict[str, Any]) -> list[str]:
         # structured assertion) is exempt.
         if free_text and "strong" not in kinds and _entity_source_only(aliases, blob):
             continue
+        if free_text and "strong" not in kinds and _model_code_only(aliases, blob):
+            continue  # #276: "Denza B3" is a car, not the exchange
         # Attribution-role guard (issue #33): operator/data_provider/regulator
         # entities are named in others' news as the actor/venue/source. Attribute
         # to them only in a genuine subject position — drop a match that is ONLY a
