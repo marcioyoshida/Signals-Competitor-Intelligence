@@ -28,9 +28,10 @@
   const esc = U.esc;
 
   /* ======================================================================
-     AUTH — Cognito Hosted UI, Authorization Code + PKCE (public SPA client).
-     Lifted verbatim in behaviour from the live site so the SaaS screens share
-     one login path: login -> id_token -> GET /api/feed with a Bearer token.
+     AUTH — own sign-in form (#277: e-mail + password via the session broker) and, for
+     Google/Apple, Cognito Authorization Code + PKCE straight to the provider (public SPA
+     client). The SaaS screens share one login path:
+     login -> id_token -> GET /api/feed with a Bearer token.
      The token is DISPLAY-decoded only; the API's JWT authorizer is the real
      trust boundary (server-side scoping, ADR 002).
      ====================================================================== */
@@ -135,14 +136,18 @@
     const p = decodeJwt(getIdToken()) || {};
     return !!p.identities;
   }
-  // `idp`, when a string (e.g. "Google"), skips Cognito's own hosted chooser page
-  // and goes straight to that identity provider (`identity_provider=` on
-  // /oauth2/authorize) — used after self-registration to silently re-auth through
-  // Google (session cookie already live) rather than showing the chooser again.
-  // Guarded with typeof because this function is also wired directly as an
-  // onclick handler, which would otherwise pass the click MouseEvent as `idp`.
+  // #277: no Cognito page in the client sign-in path (the managed-login page can't be resized:
+  // 32px inputs and a 16px checkbox on a phone). login() with no provider opens OUR sign-in
+  // form (openSignIn, below); the password goes to /api/session/password, never to Cognito from
+  // the browser. `idp`, when a string ("Google", "SignInWithApple"), goes straight to that
+  // identity provider (`identity_provider=` on /oauth2/authorize) and comes back through the
+  // code exchange — used by the form's provider buttons and after self-registration to
+  // silently re-auth through Google (session cookie already live).
+  // Guarded with typeof because this function is also wired directly as an onclick handler,
+  // which would otherwise pass the click MouseEvent as `idp`.
   async function login(idp) {
     const useIdp = typeof idp === "string" ? idp : null;
+    if (!useIdp) { openSignIn(); return; }
     // #166/#170: a deep link (#hoje-…, ?c=…) must survive the login redirect — Cognito only
     // returns to the bare redirect_uri.
     try {
@@ -156,12 +161,12 @@
     const params = new URLSearchParams({
       client_id: AUTH.clientId, response_type: "code", scope: "openid email",
       redirect_uri: AUTH.redirectUri, code_challenge: challenge, code_challenge_method: "S256",
-      lang: "pt-BR",   // managed login (auth.onssa.org) renders in Portuguese
+      lang: "pt-BR",   // the provider redirect and any Cognito error page render in Portuguese
+      identity_provider: useIdp,   // always a provider here: the password path never leaves the page
     });
-    if (useIdp) params.set("identity_provider", useIdp);
-    const path = useIdp ? "oauth2/authorize" : "login";
-    if (APP) { toShell({ type: "auth", url: `${AUTH.domain}/${path}?${params.toString()}` }); return; }
-    location.href = `${AUTH.domain}/${path}?${params.toString()}`;
+    const authUrl = `${AUTH.domain}/oauth2/authorize?${params.toString()}`;
+    if (APP) { toShell({ type: "auth", url: authUrl }); return; }
+    location.href = authUrl;
   }
   /* ---- Session broker (#161/#164) -----------------------------------------
      The Cognito refresh token never touches page JavaScript: /api/session/exchange does
@@ -267,15 +272,21 @@
       if (!r.ok) throw new Error("HTTP " + r.status);
       const j = await r.json();
       if (!j.id_token) throw new Error("sem id_token");
-      // a different person on this device: nothing of the previous user may survive
-      let prev = {};
-      try { prev = JSON.parse(localStorage.getItem(DEVICE_SESSION_KEY) || "{}"); } catch (e) {}
-      const sub = (decodeJwt(j.id_token) || {}).sub;
-      if (prev.sub && prev.sub !== sub) await clearUserData();
-      sessionStorage.setItem(TOKEN_KEY, j.id_token);
-      markDeviceSession(j.idle_days);
+      await acceptSession(j);
       return true;
     } catch (e) { console.error("Onça auth: troca de código falhou", e); return false; }
+  }
+  // The reply of /api/session/exchange AND of /api/session/password|new-password (same body:
+  // id_token, idle_days; the HttpOnly refresh cookie is set by the server): keep the ID token
+  // for this tab and mark the device session.
+  async function acceptSession(j) {
+    // a different person on this device: nothing of the previous user may survive
+    let prev = {};
+    try { prev = JSON.parse(localStorage.getItem(DEVICE_SESSION_KEY) || "{}"); } catch (e) {}
+    const sub = (decodeJwt(j.id_token) || {}).sub;
+    if (prev.sub && prev.sub !== sub) await clearUserData();
+    sessionStorage.setItem(TOKEN_KEY, j.id_token);
+    markDeviceSession(j.idle_days);
   }
   async function handleAuthCallback() {
     const url = new URL(location.href);
@@ -307,6 +318,324 @@
       document.getElementById("__loginBtn").onclick = login;
     }
     if (onChange) onChange(isLoggedIn());
+  }
+
+  /* ======================================================================
+     OWN SIGN-IN FORM (#277) — e-mail + password, the invited user's first password, and the
+     forgotten-password reset, all against the session broker (/api/session/password |
+     new-password | forgot | reset). Google and Apple go straight to the provider through
+     login("Google" | "SignInWithApple"). No Cognito page is ever shown on the way in.
+     The password lives only in its <input>: read once on submit, sent, never logged, never
+     stored (not in a variable that outlives the handler, not in storage); the inputs are wiped
+     on every step change and on success. Styled by the .si* block of app.css (tokens only).
+     ====================================================================== */
+  const SI_MIN_PW = 12;                       // the policy: 12 characters, no other rules
+  const SI_PRIVACY = "/docs/privacy.html";
+  const SI_LOGO = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 0 210 84" width="126" height="50" role="img" aria-label="Onça" focusable="false" class="si-logo"><path d="M23.9 64.8Q17.6 64.8 12.5 61.9Q7.5 59 4.6 53.7Q1.6 48.3 1.6 40.8Q1.6 33.1 4.6 27.8Q7.5 22.4 12.5 19.5Q17.6 16.7 23.9 16.7Q30.2 16.7 35.2 19.5Q40.3 22.4 43.2 27.8Q46.2 33.1 46.2 40.8Q46.2 48.3 43.2 53.7Q40.3 59.1 35.2 61.9Q30.2 64.8 23.9 64.8ZM23.9 54.9Q27.2 54.9 29.7 53.3Q32.2 51.6 33.5 48.4Q34.8 45.2 34.8 40.8Q34.8 36.2 33.5 33Q32.2 29.8 29.7 28.2Q27.2 26.5 23.9 26.5Q20.6 26.5 18.1 28.2Q15.7 29.8 14.3 33Q13 36.2 13 40.8Q13 45.2 14.3 48.4Q15.7 51.6 18.1 53.3Q20.6 54.9 23.9 54.9Z"/><path d="M56.8 64V17.4H68.4L81.6 38.6Q82.4 39.7 83.5 41.7Q84.6 43.6 85.8 45.8Q87 48.1 88.1 50.1L86.8 53.1Q86.6 50.8 86.5 47.8Q86.4 44.8 86.4 42Q86.4 39.3 86.4 37.6V17.4H97.6V64H85.9L73.8 44.6Q72.9 43.2 71.6 40.9Q70.2 38.6 68.7 35.8Q67.1 32.9 65.4 29.9L67.6 28.9Q67.8 32.3 67.9 35.4Q68 38.5 68 40.9Q68 43.2 68 44.6V64Z"/><path class="c" d="M130.6 64.8Q124.2 64.8 119.1 61.9Q114.1 59 111.1 53.7Q108.2 48.3 108.2 40.8Q108.2 33.1 111.1 27.8Q114.1 22.4 119.1 19.5Q124.2 16.7 130.6 16.7Q134.9 16.7 138.5 17.9Q142.1 19.2 144.9 21.5Q147.6 23.9 149.4 27.1Q151.1 30.4 151.6 34.4H140.3Q139.9 32.5 139.1 31.1Q138.3 29.6 137.1 28.6Q135.8 27.6 134.2 27Q132.7 26.5 130.8 26.5Q127.2 26.5 124.7 28.2Q122.2 29.9 120.9 33.1Q119.5 36.3 119.5 40.8Q119.5 45.2 120.9 48.3Q122.2 51.5 124.7 53.2Q127.2 54.9 130.8 54.9Q132.7 54.9 134.2 54.4Q135.8 53.9 137 52.9Q138.3 51.9 139.1 50.4Q139.9 48.9 140.3 47.1H151.6Q151.1 51.1 149.4 54.4Q147.6 57.6 144.8 59.9Q142.1 62.3 138.5 63.5Q134.9 64.8 130.6 64.8ZM125.9 76.9V72.8H129.6Q130.9 72.8 131.5 72.4Q132.2 71.9 132.2 71.1Q132.2 70.2 131.5 69.8Q130.9 69.3 129.6 69.3H127L128.2 62.5H132.2V63.9V66.3Q135 66.3 136.5 67.8Q138.1 69.2 138.1 71.5Q138.1 74.1 136.1 75.5Q134.1 76.9 130.5 76.9Z"/><path d="M159.3 64 175.3 17.4H190.1L206.2 64H193.7L187.3 43.5Q185.8 38.4 184.3 33.2Q182.8 28 181.2 21.9H184.3Q182.7 28 181.1 33.2Q179.6 38.4 178 43.5L171.5 64ZM170.3 55V46.2H195.2V55Z"/></svg>';
+  const SI_ICON = {
+    eye: '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
+    eyeOff: '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M3 3l18 18M10.6 5.2A10.6 10.6 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4.2M6.6 6.6A17 17 0 0 0 2 12s3.6 7 10 7a10 10 0 0 0 4.4-1M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>',
+    close: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M5 5l14 14M19 5L5 19"/></svg>',
+    warn: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 3l10 18H2L12 3zM12 10v5M12 18h.01"/></svg>',
+    Google: '<svg viewBox="0 0 48 48" width="20" height="20" aria-hidden="true" focusable="false"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>',
+    SignInWithApple: '<svg viewBox="0 0 17 20" width="18" height="20" aria-hidden="true" focusable="false"><path fill="currentColor" d="M14.1 10.6c0-2.6 2.1-3.8 2.2-3.9-1.2-1.8-3.1-2-3.7-2-1.6-.2-3.1.9-3.9.9-.8 0-2-.9-3.4-.9-1.7 0-3.3 1-4.2 2.6-1.8 3.1-.5 7.7 1.3 10.2.9 1.2 1.9 2.6 3.2 2.6 1.3-.1 1.8-.8 3.3-.8 1.6 0 2 .8 3.4.8 1.4 0 2.3-1.3 3.1-2.5 1-1.4 1.4-2.8 1.4-2.9-.1 0-2.7-1-2.7-4.1zM11.6 3c.7-.9 1.2-2 1-3.2-1 0-2.3.7-3 1.6-.7.8-1.2 2-1.1 3.1 1.1.1 2.3-.6 3.1-1.5z"/></svg>',
+  };
+  const SI_STEPS = {
+    signin: { t: "Entrar", l: "Acesse o painel com o e-mail cadastrado pela sua empresa." },
+    newpw: { t: "Defina sua senha", l: "Este é o seu primeiro acesso. Escolha uma senha com pelo menos 12 caracteres." },
+    forgot: { t: "Esqueceu a senha?", l: "Informe o seu e-mail e enviaremos um código para criar uma nova senha." },
+    reset: { t: "Criar nova senha", l: "Digite o código que recebeu e escolha uma senha com pelo menos 12 caracteres." },
+  };
+  const SI_TXT = {
+    invalid_credentials: "E-mail ou senha incorretos.",
+    too_many_attempts: "Muitas tentativas. Aguarde alguns minutos.",
+    unsupported_challenge: "Esta conta precisa de uma etapa extra de acesso. Fale com o suporte: contato@onssa.org.",
+    weak_password: "A senha precisa ter pelo menos 12 caracteres.",
+    bad_code: "Código inválido ou expirado. Confira o código ou peça um novo.",
+    offline: "Sem conexão. Verifique a internet e tente novamente.",
+    server: "Não foi possível concluir agora. Tente novamente em instantes.",
+    bad_request: "Confira os dados informados e tente novamente.",
+    email: "Informe um e-mail válido.",
+    password: "Informe a senha.",
+    code: "Informe o código que enviamos por e-mail.",
+    expired: "O tempo para definir a senha acabou. Entre de novo com a senha temporária.",
+    sent: "Enviamos um código, se o e-mail estiver cadastrado.",
+    resent: "Se o e-mail estiver cadastrado, enviamos um novo código.",
+    reset_ok: "Senha redefinida. Entre com a nova senha.",
+    idp: "Não foi possível abrir o acesso agora. Tente novamente.",
+  };
+  const SI_SERVER_CODES = ["invalid_credentials", "too_many_attempts", "unsupported_challenge", "weak_password", "bad_code"];
+  let SI = null;   // the open sheet: { root, step, email, session, opener, busy }
+
+  function siField(id, label, type, ac, attrs) {
+    return `<div class="si__fld"><label for="${id}">${label}</label>
+      <input id="${id}" name="${ac}" type="${type}" autocomplete="${ac}" ${attrs || ""}></div>`;
+  }
+  function siPwField(id, label, ac, hint) {
+    return `<div class="si__fld"><label for="${id}">${label}</label>
+      <div class="si__pw"><input id="${id}" name="${ac}" type="password" autocomplete="${ac}"
+        autocapitalize="none" autocorrect="off" spellcheck="false" ${hint ? `aria-describedby="${id}-h"` : ""}>
+        <button type="button" class="si__eye" data-si="eye" data-for="${id}" aria-label="Mostrar senha">${SI_ICON.eye}</button></div>
+      ${hint ? `<p class="si__hint" id="${id}-h">${hint}</p>` : ""}</div>`;
+  }
+  const SI_EMAIL = 'inputmode="email" autocapitalize="none" autocorrect="off" spellcheck="false"';
+  function siMsgs(step) {
+    return `<div class="si__msg" id="si-msg-${step}" role="alert"></div><p class="si__note" id="si-note-${step}" role="status"></p>`;
+  }
+  function siHtml() {
+    const idp = (p, label) => `<button type="button" class="si__btn si__idp si__idp--${p}" data-si="idp" data-idp="${p}">${SI_ICON[p]}<span>${label}</span></button>`;
+    const back = '<button type="button" class="si__link" data-si="to" data-to="signin">Voltar para entrar</button>';
+    return `<div class="si__card" role="dialog" aria-modal="true" aria-labelledby="__siTitle">
+      <div class="si__brand">${SI_LOGO}</div>
+      <h2 class="si__title" id="__siTitle" tabindex="-1"></h2>
+      <p class="si__lead" id="__siLead"></p>
+      <section data-step="signin">
+        <form data-form="signin" novalidate>
+          ${siField("si-email", "E-mail", "email", "username", SI_EMAIL + ' enterkeyhint="next"')}
+          ${siPwField("si-pass", "Senha", "current-password")}
+          ${siMsgs("signin")}
+          <button type="submit" class="si__btn si__go" id="si-submit" data-label="Entrar">Entrar</button>
+        </form>
+        <button type="button" class="si__link" data-si="to" data-to="forgot">Esqueceu a senha?</button>
+        <div class="si__or" aria-hidden="true"><span>ou</span></div>
+        <div class="si__idps">${idp("Google", "Continuar com Google")}${idp("SignInWithApple", "Continuar com Apple")}</div>
+      </section>
+      <section data-step="newpw" hidden>
+        <form data-form="newpw" novalidate>
+          ${siPwField("si-newpw", "Nova senha", "new-password", "Mínimo de 12 caracteres.")}
+          ${siMsgs("newpw")}
+          <button type="submit" class="si__btn si__go" data-label="Salvar e entrar">Salvar e entrar</button>
+        </form>
+        ${back}
+      </section>
+      <section data-step="forgot" hidden>
+        <form data-form="forgot" novalidate>
+          ${siField("si-email-f", "E-mail", "email", "email", SI_EMAIL + ' enterkeyhint="go"')}
+          ${siMsgs("forgot")}
+          <button type="submit" class="si__btn si__go" data-label="Enviar código">Enviar código</button>
+        </form>
+        ${back}
+      </section>
+      <section data-step="reset" hidden>
+        <form data-form="reset" novalidate>
+          ${siField("si-code", "Código", "text", "one-time-code", 'inputmode="numeric" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="next"')}
+          ${siPwField("si-resetpw", "Nova senha", "new-password", "Mínimo de 12 caracteres.")}
+          ${siMsgs("reset")}
+          <button type="submit" class="si__btn si__go" data-label="Criar nova senha">Criar nova senha</button>
+        </form>
+        <button type="button" class="si__link" data-si="resend">Enviar outro código</button>
+        ${back}
+      </section>
+      <a class="si__priv" href="${SI_PRIVACY}" target="_blank" rel="noopener">Política de privacidade</a>
+      <button type="button" class="si__x" data-si="close" aria-label="Fechar">${SI_ICON.close}</button>
+    </div>`;
+  }
+  const siQ = (sel) => SI.root.querySelector(sel);
+  const siValueOf = (id) => { const i = siQ("#" + id); return i ? i.value : ""; };
+  function siWipe(except) {   // passwords and codes never outlive their step
+    SI.root.querySelectorAll('input[type="password"], input[autocomplete="one-time-code"]').forEach((i) => {
+      if (!except || !except.contains(i)) i.value = "";
+    });
+    SI.root.querySelectorAll(".si__eye").forEach((b) => siEye(b, false));
+  }
+  function siEye(btn, show) {
+    const input = SI.root.querySelector("#" + btn.dataset.for);
+    if (!input) return;
+    input.type = show ? "text" : "password";
+    btn.setAttribute("aria-label", show ? "Ocultar senha" : "Mostrar senha");
+    btn.innerHTML = show ? SI_ICON.eyeOff : SI_ICON.eye;
+  }
+  // kind "err" -> the assertive role=alert region (icon + text, never colour alone);
+  // kind "note" -> the polite role=status region. Both live in the DOM before they are written.
+  function siSay(text, kind) {
+    const err = siQ("#si-msg-" + SI.step), note = siQ("#si-note-" + SI.step);
+    if (err) err.textContent = "";
+    if (note) note.textContent = "";
+    if (!text) return;
+    if (kind === "err" && err) {
+      err.innerHTML = `<span class="si__ico">${SI_ICON.warn}</span><span class="si__txt"></span>`;
+      err.querySelector(".si__txt").textContent = text;
+    } else if (note) note.textContent = text;
+  }
+  function siFail(text, fieldId) {
+    siSay(text, "err");
+    const f = fieldId && siQ("#" + fieldId);
+    if (!f) return;
+    if (f.dataset.d === undefined) f.dataset.d = f.getAttribute("aria-describedby") || "";
+    f.setAttribute("aria-invalid", "true");
+    f.setAttribute("aria-describedby", (f.dataset.d + " si-msg-" + SI.step).trim());
+    f.focus();
+    if (f.select) f.select();
+  }
+  function siClearInvalid() {
+    SI.root.querySelectorAll('[aria-invalid="true"]').forEach((f) => {
+      f.removeAttribute("aria-invalid");
+      if (f.dataset.d) f.setAttribute("aria-describedby", f.dataset.d); else f.removeAttribute("aria-describedby");
+    });
+  }
+  function siBusy(on) {
+    SI.busy = on;
+    const b = siQ(`[data-step="${SI.step}"] .si__go`);
+    if (!b) return;
+    b.disabled = on;
+    b.setAttribute("aria-busy", on ? "true" : "false");
+    b.textContent = on ? "Aguarde…" : b.dataset.label;
+  }
+  function siFocusFirst(withKeyboard) {
+    const sec = siQ(`[data-step="${SI.step}"]`);
+    const first = sec && sec.querySelector("input");
+    // opening on a touch screen: don't raise the keyboard over the provider buttons; read the title
+    const touch = global.matchMedia && matchMedia("(pointer: coarse)").matches;
+    if (first && (withKeyboard || !touch)) first.focus(); else siQ("#__siTitle").focus();
+  }
+  function siShow(step, note) {
+    SI.step = step;
+    const sec = siQ(`[data-step="${step}"]`);
+    SI.root.querySelectorAll("[data-step]").forEach((s) => { s.hidden = s !== sec; });
+    siWipe(sec);
+    siClearInvalid();
+    SI.root.querySelectorAll(".si__msg, .si__note").forEach((m) => { m.textContent = ""; });
+    siQ("#__siTitle").textContent = SI_STEPS[step].t;
+    siQ("#__siLead").textContent = SI_STEPS[step].l;
+    ["si-email", "si-email-f"].forEach((id) => { const e = siQ("#" + id); if (e && SI.email) e.value = SI.email; });
+    siQ(".si__card").scrollTop = 0;
+    siFocusFirst(step === "newpw" || step === "reset" || step === "forgot");
+    // the note is written once the step is visible, so the polite live region announces it
+    if (note) setTimeout(() => { if (SI && SI.step === step) siSay(note, "note"); }, 60);
+  }
+  async function siCall(path, body) {
+    let r;
+    try { r = await sessionPost(path, body); } catch (e) { return { ok: false, status: 0, error: "offline" }; }
+    const j = await r.json().catch(() => ({}));
+    return Object.assign({}, j, { ok: r.ok, status: r.status });
+  }
+  function siErrText(r) {
+    if (r.error === "offline" || r.status === 0) return SI_TXT.offline;
+    if (r.status === 429) return SI_TXT.too_many_attempts;
+    if (SI_SERVER_CODES.indexOf(r.error) !== -1) return SI_TXT[r.error];
+    if (r.status === 401) return SI_TXT.invalid_credentials;
+    if (r.status === 400) return SI_TXT.bad_request;
+    return SI_TXT.server;   // 502 and anything unexpected: retry text
+  }
+  const siEmailOk = (e) => /^[^@\s]+@[^@\s]+$/.test(e);
+  const siPwLen = (p) => Array.from(p).length;   // characters (code points), like the server
+  async function siFinish(r) {
+    try { await acceptSession(r); }
+    catch (e) { siBusy(false); siFail(SI_TXT.server); return; }
+    // We never left the page, so there is no redirect to come back from: drop any stale
+    // deep-link / return path left by an abandoned provider trip, wipe the inputs, and reload
+    // in place (same path, query and hash) so the screen boots signed in.
+    try { sessionStorage.removeItem("onca_return"); sessionStorage.removeItem(RETURN_PATH_KEY); } catch (e) {}
+    siWipe();
+    location.reload();
+  }
+  async function siSubmit(step) {
+    if (SI.busy) return;
+    siClearInvalid(); siSay("");
+    let r;
+    if (step === "signin") {
+      const email = siValueOf("si-email").trim(), pw = siValueOf("si-pass");
+      if (!siEmailOk(email)) return siFail(SI_TXT.email, "si-email");
+      if (!pw) return siFail(SI_TXT.password, "si-pass");
+      SI.email = email;
+      siBusy(true);
+      r = await siCall("password", { email, password: pw });
+    } else if (step === "newpw") {
+      const pw = siValueOf("si-newpw");
+      if (siPwLen(pw) < SI_MIN_PW) return siFail(SI_TXT.weak_password, "si-newpw");
+      siBusy(true);
+      r = await siCall("new-password", { email: SI.email, session: SI.session, new_password: pw });
+    } else if (step === "forgot") {
+      const email = siValueOf("si-email-f").trim();
+      if (!siEmailOk(email)) return siFail(SI_TXT.email, "si-email-f");
+      SI.email = email;
+      siBusy(true);
+      r = await siCall("forgot", { email });
+    } else {
+      const code = siValueOf("si-code").trim(), pw = siValueOf("si-resetpw");
+      if (!code) return siFail(SI_TXT.code, "si-code");
+      if (siPwLen(pw) < SI_MIN_PW) return siFail(SI_TXT.weak_password, "si-resetpw");
+      siBusy(true);
+      r = await siCall("reset", { email: SI.email, code, new_password: pw });
+    }
+    if (!SI) return;   // closed while the request was in flight
+    if (r.ok && r.id_token) { await siFinish(r); return; }
+    siBusy(false);
+    if (r.ok && r.challenge === "NEW_PASSWORD_REQUIRED" && r.session) { SI.session = r.session; siShow("newpw"); return; }
+    if (r.ok && step === "forgot") { siShow("reset", SI_TXT.sent); return; }
+    if (r.ok && step === "reset") { siShow("signin", SI_TXT.reset_ok); return; }
+    if (!r.ok && step === "newpw" && r.status === 401) { SI.session = ""; siShow("signin", SI_TXT.expired); return; }
+    const field = { signin: "si-pass", newpw: "si-newpw", forgot: "si-email-f", reset: "si-resetpw" }[step];
+    siFail(r.ok ? SI_TXT.server : siErrText(r), r.error === "bad_code" ? "si-code" : field);
+  }
+  async function siResend() {
+    if (SI.busy || !SI.email) return;
+    SI.busy = true; siSay("");
+    const r = await siCall("forgot", { email: SI.email });
+    if (!SI) return;
+    SI.busy = false;
+    siSay(r.ok ? SI_TXT.resent : siErrText(r), r.ok ? "note" : "err");
+  }
+  function siIdp(btn) {
+    if (btn.disabled) return;
+    const arm = (on) => { if (SI) SI.root.querySelectorAll(".si__idp").forEach((b) => { b.disabled = !on; }); };
+    arm(false);   // one tap = one hand-off (the shell would otherwise open the browser twice)
+    setTimeout(() => arm(true), 2500);
+    login(btn.dataset.idp).catch(() => { if (SI) { siSay(SI_TXT.idp, "err"); arm(true); } });
+  }
+  function siClose() {
+    if (!SI) return;
+    const { root, opener } = SI;
+    siWipe();
+    root.remove();
+    document.documentElement.classList.remove("si-lock");
+    SI = null;
+    if (opener && opener.isConnected && opener.focus) opener.focus();
+  }
+  function siKeydown(ev) {
+    if (ev.key === "Escape") { ev.preventDefault(); siClose(); return; }
+    if (ev.key !== "Tab") return;
+    const items = Array.from(SI.root.querySelectorAll("a[href], button:not([disabled]), input:not([disabled])"))
+      .filter((n) => n.offsetParent !== null);
+    if (!items.length) return;
+    const first = items[0], last = items[items.length - 1], cur = document.activeElement;
+    const title = siQ("#__siTitle");
+    if (ev.shiftKey && (cur === first || cur === title || !SI.root.contains(cur))) { ev.preventDefault(); last.focus(); }
+    else if (!ev.shiftKey && (cur === last || !SI.root.contains(cur))) { ev.preventDefault(); first.focus(); }
+  }
+  function openSignIn() {
+    if (SI) { siFocusFirst(true); return; }
+    const root = document.createElement("div");
+    root.className = "si";
+    root.id = "__signin";
+    root.innerHTML = siHtml();
+    document.body.appendChild(root);
+    document.documentElement.classList.add("si-lock");
+    SI = { root, step: "signin", email: "", session: "", busy: false, opener: document.activeElement };
+    root.addEventListener("keydown", siKeydown);
+    root.addEventListener("input", (ev) => {
+      const t = ev.target;
+      if (t.getAttribute && t.getAttribute("aria-invalid")) {
+        t.removeAttribute("aria-invalid");
+        if (t.dataset.d) t.setAttribute("aria-describedby", t.dataset.d); else t.removeAttribute("aria-describedby");
+      }
+    });
+    root.addEventListener("submit", (ev) => { ev.preventDefault(); siSubmit(ev.target.dataset.form); });
+    root.addEventListener("click", (ev) => {
+      if (ev.target === root) { if (SI.step === "signin" || SI.step === "forgot") siClose(); return; }
+      const t = ev.target.closest("[data-si]");
+      if (!t) return;
+      const act = t.dataset.si;
+      if (act === "close") siClose();
+      else if (act === "eye") siEye(t, siQ("#" + t.dataset.for).type === "password");
+      else if (act === "to") {
+        const em = (siValueOf("si-email") || siValueOf("si-email-f")).trim();
+        if (em) SI.email = em;
+        siShow(t.dataset.to);
+      } else if (act === "resend") siResend();
+      else if (act === "idp") siIdp(t);
+    });
+    siShow("signin");
   }
 
   /* ======================================================================
@@ -1392,7 +1721,7 @@
 
   global.OncaCtx = {
     // auth
-    login, logout, isLoggedIn, getIdToken, renderAuthBox, handleAuthCallback,
+    login, openSignIn, logout, isLoggedIn, getIdToken, renderAuthBox, handleAuthCallback,
     ensureSession, clearUserData, decodeJwt, readCachedFeed: readUserFeed,
     bootSaaS,
     // feed

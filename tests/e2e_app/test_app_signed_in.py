@@ -2,8 +2,8 @@
 cards, text hygiene, offline launch and sign-out through the shell.
 
 The app signs in through ASWebAuthenticationSession / Custom Tabs, which a browser driver cannot
-reach. So the session is made the way the web does it — Hosted UI PKCE login in this same browser
-context WITHOUT the app flag (redirect_uri = <base>/exec) — and then the page is reloaded WITH the
+reach. So the session is made the way the web does it — the own sign-in form (#277, no Cognito page) in this same browser
+context WITHOUT the app flag  — and then the page is reloaded WITH the
 app flag and WITHOUT the ID token, so only the session broker's refresh cookie keeps it signed in.
 That is the state the app is in after its own exchange (same /exec, same broker, same cookie).
 
@@ -37,31 +37,23 @@ def _q(url: str) -> dict:
 
 
 def hosted_ui_login(page, live_auth, persona):
-    """Web-mode PKCE sign-in through the live Hosted UI (the page makes the verifier + challenge)."""
+    """Web-mode sign-in through Onça's OWN form (#277): no Cognito page, no navigation — the form
+    posts to /api/session/password and the page reloads signed in. (Name kept for the callers.)"""
     page.goto(f"{BASE_URL}/exec", wait_until="networkidle")
     page.wait_for_selector('body[data-gate="auth"]', timeout=30_000)
     page.get_by_role("button", name="Entrar").first.click()
-    page.wait_for_url(f"{live_auth['domain']}/**", timeout=30_000)
-    q = _q(page.url)
-    assert q.get("client_id") == live_auth["client_id"], "authorize URL is not on the live client id"
-    assert q.get("redirect_uri") == f"{BASE_URL}/exec" and q.get("code_challenge_method") == "S256", q
-
-    user = page.locator("input[name=username]:visible").first
-    user.wait_for(state="visible", timeout=30_000)
-    user.fill(persona["username"])
-    pwd = page.locator("input[name=password]:visible, input[type=password]:visible").first
-    if not pwd.count():   # managed-login style: e-mail first, then the password step
-        page.locator("button[type=submit]:visible, input[type=submit]:visible").first.click()
-        pwd.wait_for(state="visible", timeout=15_000)
-    pwd.fill(persona["password"])
-    page.locator("input[name=signInSubmitButton]:visible, button[type=submit]:visible").first.click()
+    page.locator("#si-email").wait_for(state="visible", timeout=15_000)
+    assert page.url.startswith(f"{BASE_URL}/exec"), f"the form must not navigate away: {page.url}"
+    page.locator("#si-email").fill(persona["username"])
+    page.locator("#si-pass").fill(persona["password"])
+    page.locator("#si-submit").click()
     try:
-        page.wait_for_url(f"{BASE_URL}/exec**", timeout=30_000)
+        page.wait_for_function("!!sessionStorage.getItem('onca_id_token')", timeout=30_000)
     except Exception:
-        err = page.locator("#loginErrorMessage:visible, .errorMessage:visible, [role=alert]:visible")
-        raise AssertionError(f"Hosted UI login did not return to /exec "
+        err = page.locator("#si-msg-signin")
+        raise AssertionError(f"sign-in form did not sign in "
                              f"({err.first.inner_text() if err.count() else page.url.split('?')[0]})")
-    page.wait_for_function("!!sessionStorage.getItem('onca_id_token')", timeout=30_000)
+    assert "amazoncognito.com" not in page.url and "auth.onssa.org" not in page.url, page.url
 
 
 @pytest.fixture(scope="module")
