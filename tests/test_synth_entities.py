@@ -293,3 +293,27 @@ def test_source_attribution_guard_is_free_text_only():
     assert "nubank" in resolve_entities(
         {"source": "CVM-FatoRelevante", "company": "NUBANK"}
     )
+
+
+def test_normative_act_text_is_free_text_for_untrusted_bare_words(monkeypatch):
+    # #274: BCB communiqués ("leilões de swap cambial tradicional", "prorroga o prazo") became
+    # alert cards of Swap IP, Prazo FII and Bravo (alias TRADICIONAL): source "BCB" was treated
+    # as a structured identity source, where an untrusted bare word resolves.
+    from src.synth import entities, entity_registry
+    monkeypatch.setenv("ONCA_ENTITIES_TABLE", "t")
+    monkeypatch.setattr(entity_registry, "load_alias_map", lambda *a, **k: {
+        "swap": ["SWAP", "SWAP INSTITUICAO DE PAGAMENTO S.A."],
+        "bravo": ["BRAVO", "TRADICIONAL", "BLOW MARKETPLACE LTDA"],
+        "prazo": ["PRAZO", "PRAZO FII - RESPONSABILIDADE LIMITADA"]})
+    monkeypatch.setattr(entity_registry, "load_trust_map", lambda *a, **k: {"swap": False, "bravo": False, "prazo": False})
+    monkeypatch.setattr(entity_registry, "load_ambiguous_tokens", lambda *a, **k: set())
+    monkeypatch.setattr(entity_registry, "load_attribution_roles", lambda *a, **k: {})
+    swap_auction = {"source": "BCB", "kind": "regulatory", "doc_type": "Comunicado",
+                    "subject": "Divulga a realização de leilões de swap cambial tradicional para fins de rolagem"}
+    assert entities.resolve_entities(swap_auction) == []
+    assert entities.resolve_entities({"source": "BCB", "_lens": "regulatory",
+                                      "subject": "Prorroga o prazo para conclusão de inquéritos"}) == []
+    # the act naming the institution in full still resolves; a structured fund record still does
+    assert entities.resolve_entities({"source": "BCB", "kind": "regulatory",
+                                      "subject": "Cancela a autorização da Swap Instituicao de Pagamento S.A."}) == ["swap"]
+    assert entities.resolve_entities({"source": "CVM", "kind": "fii", "name": "PRAZO"}) == ["prazo"]

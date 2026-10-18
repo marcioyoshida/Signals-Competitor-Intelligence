@@ -588,6 +588,12 @@ def resolve_entities(item: dict[str, Any]) -> list[str]:
     blob = f" {signal_blob(item)} "
     blob_nospace = blob.replace(" ", "")
     free_text = str(item.get("source") or "").upper() in _FREE_TEXT_SOURCES
+    # #274: a normative act's subject is prose too ("leilões de Swap Cambial Tradicional"), even
+    # though its source tag ("BCB", "CVM") is shared with structured datasets (IF.data, funds).
+    # Treated as structured, it let UNVETTED discovery entities' bare words — SWAP, PRAZO and
+    # Bravo's alias TRADICIONAL — claim BCB communiqués as their alert cards. Curated entities
+    # keep resolving by their bare name in acts ("Nomad autorizada").
+    reg_act = item.get("kind") == "regulatory" or item.get("_lens") == "regulatory"
     trust = _trust_map()
     ambig = _ambiguous_tokens()
     roles = _attribution_role_map()
@@ -604,13 +610,14 @@ def resolve_entities(item: dict[str, Any]) -> list[str]:
                 continue
         # Default trusted=True: the built-in seed is all curated, and a registry
         # entity absent from the trust map shouldn't be silently muted.
+        trusted = trust.get(entity_id, True)
         kinds = _match_kinds(
             aliases, blob, blob_nospace,
-            trusted=trust.get(entity_id, True), ambiguous_tokens=ambig,
+            trusted=trusted, ambiguous_tokens=ambig,
         )
         if not kinds:
             continue
-        resolve = ("strong" in kinds or "distinct" in kinds) or (not free_text)
+        resolve = ("strong" in kinds or "distinct" in kinds) or not (free_text or (reg_act and not trusted))
         if not resolve:
             continue  # ambiguous token in free text → dropped (precision over recall)
         # Source-attribution guard: a free-text distinct match that appears only as
