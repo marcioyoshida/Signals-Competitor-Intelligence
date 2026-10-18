@@ -36,9 +36,12 @@ def _etag(s3_etag: str, tenant: Any, tier: Any, modules: list[str], billing: Any
     return '"' + hashlib.sha256(basis.encode()).hexdigest()[:32] + '"'
 
 
-def _if_none_match(event: dict[str, Any]) -> str | None:
+def _if_none_match(event: dict[str, Any]) -> set[str]:
+    """The ETags the client holds, weak-compared (RFC 9110 §13.1.2): CloudFront's gzip turns our
+    strong ETag into W/"…" on the way out, so the browser sends the weak form back."""
     h = {str(k).lower(): v for k, v in ((event or {}).get("headers") or {}).items()}
-    return h.get("if-none-match")
+    raw = str(h.get("if-none-match") or "")
+    return {t.strip().removeprefix("W/") for t in raw.split(",") if t.strip()}
 
 
 def upgrade_info() -> dict[str, Any]:
@@ -97,7 +100,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         etag = _etag(s3.head_object(Bucket=bucket, Key="feed.json").get("ETag", ""),
                      tenant_id, tier, modules, billing, upgrade)
         cache = {"cache-control": "private, no-cache", "etag": etag}
-        if _if_none_match(event) == etag:
+        if etag in _if_none_match(event):
             return {"statusCode": 304, "headers": cache, "body": ""}
         raw = s3.get_object(Bucket=bucket, Key="feed.json")["Body"].read()
         # ADR 016/024: an Entry tenant (paid Entry or its trial — effective tier "entry"; an

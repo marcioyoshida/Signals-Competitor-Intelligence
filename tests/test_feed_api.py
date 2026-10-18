@@ -129,6 +129,9 @@ def test_unchanged_feed_revalidates_with_304_and_no_body(monkeypatch):
     assert first["statusCode"] == 200 and first["headers"]["cache-control"] == "private, no-cache"
     again = feed_api.lambda_handler({**ev, "headers": {"If-None-Match": etag}}, None)
     assert again["statusCode"] == 304 and again["body"] == "" and fake.gets == 1
+    # CloudFront gzip weakens the ETag; the browser sends W/"…" back (live 2026-10-18)
+    weak = feed_api.lambda_handler({**ev, "headers": {"if-none-match": f'W/{etag}, "other"'}}, None)
+    assert weak["statusCode"] == 304
     # another entitlement never matches this ETag
     monkeypatch.setattr(tc, "get_tenant_config", lambda t: {"tier": "saas", "modules": ["fintech"]})
     other = feed_api.lambda_handler({**ev, "headers": {"if-none-match": etag}}, None)
