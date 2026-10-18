@@ -68,6 +68,7 @@
     a:where(:not(.btn):not(.pbtn):not(.mlink))::after { content: ""; position: absolute; inset: -15px -6px; }
     .pbtn, .cta a.btn { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; }
     .mlink { display: inline-flex; align-items: center; min-height: 44px; }   /* sector links: one per 44px line, no mis-taps */
+    .note a { white-space: nowrap; }   /* a wrapped inline link splits its ::after hit-slop per line (19px) */
   }
 </style>
 </head>
