@@ -155,3 +155,59 @@ def test_exec_key_panels_emphasis_is_desktop_only():
     assert ".panel--key > .panel__hd" in css and "var(--primary-weak)" in css and ".lead-tag" in css
     assert "grid-row" not in css                      # masonry unset-span trap: no row spans
     assert EXEC.count("lead: true") >= 8              # CSO, CRO, CCO, CPO lead bands (band + panels)
+
+
+# --- nav-test findings #278 / #281 / #283 / #284 ------------------------------------------------
+
+def test_exec_touch_targets_are_44px():
+    """#278: phone Hoje/Painel segment, evidência links, [n] source markers, chat chips."""
+    seg = EXEC.split("#viewTabs a { min-height:", 1)[1]
+    assert seg.startswith("44px")                                  # was 38px
+    touch = EXEC.split("@media (pointer: coarse) {", 1)[1].split("\n  }\n", 1)[0]
+    for needle in ("a[data-ev]::before", ".exrow .meta a::before", ".exrow .ttl-more::before",
+                   ".cites .cite", ".askex .chip", "min-height:44px"):
+        assert needle in touch, needle
+    assert "inset:-16px" in touch                                  # hit-slop, not a bigger visual
+    css = CSS.split("@media (pointer: coarse) {", 1)[1]
+    assert ".sup a::before" in css and "a.refnum::before" in css   # shared [n] markers (cards, drawer)
+
+
+def test_public_pages_touch_targets_are_44px():
+    """#281: pricing / sample / docs — every link reaches 44px under a coarse pointer."""
+    for rel in ("pricing.html", "sample/index.html", "docs/index.html", "docs/privacy.html",
+                "docs/terms.html", "docs/celular-seguranca.html"):
+        html = (SITE / rel).read_text(encoding="utf-8")
+        assert "@media (pointer: coarse)" in html, rel
+        blk = html.split("@media (pointer: coarse)", 1)[1].split("</style>", 1)[0]
+        assert "a:where(:not(.btn):not(.pbtn):not(.mlink))::after" in blk and "inset: -15px" in blk, rel
+    pricing = (SITE / "pricing.html").read_text(encoding="utf-8")
+    assert ".mlink { display: inline-flex; align-items: center; min-height: 44px; }" in pricing
+    assert ".pbtn, .cta a.btn" in pricing.split("@media (pointer: coarse)", 1)[1]
+    sample = (SITE / "sample/index.html").read_text(encoding="utf-8")
+    assert ".card .foot a.cite" in sample and ".card p a.cite::after { inset: -16px -17px; }" in sample
+
+
+def test_exec_painel_row_click_opens_drawer_and_ver_mais_is_explicit():
+    """#283: the headline no longer swallows the click; expand is a keyboard-reachable button."""
+    assert "t.addEventListener(\"click\"" not in EXEC.split("function wireHeadlines", 1)[1].split("\n}\n", 1)[0]
+    wire = EXEC.split("function wireHeadlines(el) {", 1)[1].split("\n}\n", 1)[0]
+    assert 'document.createElement("button")' in wire and 'b.type = "button"' in wire
+    assert "e.stopPropagation()" in wire                           # only on the button, never the headline
+    assert '"ver menos"' in wire and 'setAttribute("aria-expanded"' in wire
+    assert "b.hidden = true" in wire                               # hidden until proven clamped
+    assert "t.scrollHeight > t.clientHeight + 1" in EXEC           # shown only when actually clamped
+    assert "if (narrowScreen() && t.closest(\".exrow[tabindex]\")) return;" not in EXEC
+    assert "  wireHeadlines(el);\n  bindRows(el);" in EXEC
+    # Enter/Space on the row still opens the drawer, and ignores keys bubbling from the button
+    assert "if (e.target !== row || (e.key !== \"Enter\" && e.key !== \" \")) return;" in EXEC
+    assert "cursor:pointer; }\n  .exrow .ttl:hover" not in EXEC     # headline no longer styled as its own control
+
+
+def test_exec_chat_scrolls_to_start_of_new_answer():
+    """#284: a finished answer is read from its first line; pending/error follow the end."""
+    fn = EXEC.split("function renderChat() {", 1)[1].split("const n = turns.filter", 1)[0]
+    assert "ansEl.getBoundingClientRect().top - log.getBoundingClientRect().top" in fn
+    assert "!last.pending && !last.error" in fn and ": log.scrollHeight;" in fn
+    # the panel must be visible when renderChat measures it
+    op = EXEC.split("function openChat(q) {", 1)[1].split("\n}\n", 1)[0]
+    assert op.index("chat.hidden = false") < op.index("renderChat()")

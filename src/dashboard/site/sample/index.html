@@ -54,6 +54,18 @@
                padding: 10px 22px; border-radius: 10px; font-size: 14px; }
   .foot { color: var(--muted); font-size: 12.5px; margin-top: 34px;
           border-top: 1px solid var(--border); padding-top: 18px; }
+
+  /* #281: touch targets >= 44px (the bar /exec and /v2 already meet, #245). Controls get a real 44px box;
+     links inside prose keep their size and get an invisible hit area (a ::after that is hit-tested, never
+     painted). Mouse users see no change. */
+  @media (pointer: coarse) {
+    a { position: relative; }
+    a:where(:not(.btn):not(.pbtn):not(.mlink))::after { content: ""; position: absolute; inset: -15px -6px; }
+    .cta a.btn { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; }
+    .card .foot a.cite { display: inline-flex; align-items: center; min-height: 44px; }
+    .card .foot a.cite::after { content: none; }
+    .card p a.cite::after { inset: -16px -17px; }                /* the bare ↗ is 10×14: widen its hit area too */
+  }
 </style>
 </head>
 <body>
