@@ -817,3 +817,48 @@ def test_bcg_position_from_financials():
     # agri-funds is excluded (leaf) -> btg grouped by asset-management, where it leads
     assert out["btg"]["industry"] == "asset-management" and out["btg"]["quadrant"] == "cash_cow"
     assert out["nofin"] is None                        # no revenue/growth -> no bcg
+
+
+# --- #275: routine acts and entity-less soft fusion ----------------------------------------
+def _reg_digest(doc_type, subject, severity, news):
+    return {"regulatory": {"items": [{"id": "bcb:1", "doc_type": doc_type, "subject": subject,
+                                      "url": "https://www.bcb.gov.br/1", "is_new": True,
+                                      "severity": severity}], "context": []},
+            "news": {"items": news, "context": []}}
+
+
+_UNRELATED_NEWS = [
+    {"id": "news:bailey", "title": "Andrew Bailey alerta para supervisão de criptoativos no Banco Central da Inglaterra",
+     "publisher": "Valor", "url": "https://v/1", "is_new": True},
+    {"id": "news:byd", "title": "BYD testa o Denza B3 no Brasil para lançamento",
+     "publisher": "Auto", "url": "https://a/1", "is_new": True},
+]
+
+
+def test_routine_comunicado_absorbs_no_news_and_yields_no_card():
+    # live 10-13: Comunicado 46098 (board appointments) carried Bailey/Betano/BYD and was an alert
+    d = _reg_digest("Comunicado", "Divulga nomes de pessoas eleitas para cargos de órgãos estatutários "
+                    "de sociedades autorizadas a funcionar pelo Banco Central do Brasil", "low", _UNRELATED_NEWS)
+    cands = extract_candidates(d, max_candidates=10, min_score=0.0)
+    for c in cands:
+        ids = {s.get("id") for s in c.get("sources") or []}
+        assert "bcb:1" not in ids, c["id"]
+        assert not ({"news:bailey", "news:byd"} <= ids)
+
+
+def test_routine_normative_act_is_a_solo_non_alert_card():
+    d = _reg_digest("Resolução BCB", "Revoga a Resolução BCB nº 297, que dispõe sobre a transferência de "
+                    "fundos por meio de DOC e TEC no Brasil", "low", _UNRELATED_NEWS)
+    reg = [c for c in extract_candidates(d, max_candidates=10) if c["seed"]["id"] == "bcb:1"]
+    assert len(reg) == 1
+    assert reg[0]["related"] == [] and reg[0]["is_alert"] is False and reg[0]["kind"] == "regulatory"
+
+
+def test_entityless_seed_needs_two_distinctive_shared_words():
+    seed = {"id": "bcb:2", "_lens": "regulatory", "is_new": True, "severity": "medium",
+            "subject": "Banco Central do Brasil altera regras de crédito consignado para aposentados"}
+    one_generic = {"id": "news:g", "_lens": "news", "is_new": True,
+                   "title": "BYD testa o Denza B3 no Brasil para lançamento"}
+    on_topic = {"id": "news:t", "_lens": "news", "is_new": True,
+                "title": "Aposentados terão novas regras no consignado, diz BC"}
+    assert [r["id"] for r in _candidates._soft_related(seed, [one_generic, on_topic], set())] == ["news:t"]

@@ -49,6 +49,34 @@ STRUCTURED_SUBJECT_LENSES = _reg.structured_subject_lenses()
 DEFAULT_NEWS_MIN_PUBLISHERS = int(os.environ.get("ONCA_SYNTH_NEWS_MIN_PUBLISHERS", "2"))
 
 
+# #275: soft fusion of an ENTITY-LESS seed used to admit any signal sharing ONE 4+-letter token —
+# "PARA", "BRASIL", "CENTRAL" — so routine BCB communiqués (board appointments, TBF/TR rates)
+# swallowed unrelated news (Andrew Bailey, Betano, a BYD car) and surfaced as alerts. Without a
+# shared entity or a Pix domain link, a signal now needs TWO distinctive shared words.
+SOFT_GENERIC_TOKENS = frozenset({
+    "PARA", "PELO", "PELA", "PELOS", "PELAS", "COMO", "MAIS", "SOBRE", "ENTRE", "APÓS", "APOS",
+    "ESTA", "ESTE", "ESSA", "ESSE", "ISSO", "SEUS", "SUAS", "QUAL", "QUAIS", "QUANDO", "ONDE",
+    "AINDA", "TAMBÉM", "TAMBEM", "DESDE", "CONTRA", "SERÁ", "SERA", "PODE", "PODEM", "DEVE",
+    "DEVEM", "ANOS", "HOJE", "NOVO", "NOVA", "NOVOS", "NOVAS", "TODOS", "TODAS", "SEGUNDO",
+    "CONFORME", "PARTIR", "BRASIL", "BRASILEIRO", "BRASILEIRA", "BRASILEIROS", "BRASILEIRAS",
+    "CENTRAL", "NACIONAL", "FEDERAL", "GOVERNO", "MERCADO", "EMPRESA", "EMPRESAS", "SETOR",
+    "FINANCEIRO", "FINANCEIRA", "FINANCEIROS", "FINANCEIRAS", "INSTITUIÇÃO", "INSTITUIÇÕES",
+    "INSTITUICAO", "INSTITUICOES", "SISTEMA", "BANCOS", "DIVULGA", "DIVULGOU", "COMUNICADO",
+    "COMUNICADOS", "MILHÕES", "BILHÕES", "MILHOES", "BILHOES", "REAIS", "SOCIEDADES",
+})
+# Normative acts change a rule even when unscoped ("low"): they stay as a solo card. A low
+# Comunicado / Ato is a routine notice (rates, appointments, compromissadas) — no card.
+NORMATIVE_DOC_TYPES = ("resolu", "instru", "circular", "carta circular", "portaria")
+
+
+def _is_routine_act(sig: dict[str, Any]) -> bool:
+    return str(sig.get("severity") or "").lower() == "low"
+
+
+def _is_normative(sig: dict[str, Any]) -> bool:
+    return str(sig.get("doc_type") or "").strip().lower().startswith(NORMATIVE_DOC_TYPES)
+
+
 def _entities_of(item: dict[str, Any]) -> list[str]:
     """Entities for a signal, honoring a pre-resolved ``_entities`` binding.
 
@@ -150,7 +178,14 @@ def extract_candidates(
         rid = str(reg.get("id") or "")
         if rid and rid in used_ids:
             continue
-        related = _soft_related(reg, signals, used_ids, limit=4)
+        # #275: a routine (low-severity) act is never fused and never an alert; only a normative
+        # one (a rule change) keeps a solo card — a routine Comunicado yields none.
+        routine = _is_routine_act(reg)
+        if routine and not _is_normative(reg):
+            if rid:
+                used_ids.add(rid)
+            continue
+        related = [] if routine else _soft_related(reg, signals, used_ids, limit=4)
         for r in related:
             if r.get("id"):
                 used_ids.add(str(r["id"]))
@@ -169,7 +204,8 @@ def extract_candidates(
                 "lenses": _lenses(sources),
                 "threat_score": threat,
                 "threat_factors": factors,
-                "is_alert": bool(reg.get("is_new") or any(r.get("is_new") for r in related)),
+                "is_alert": not routine and bool(reg.get("is_new") or any(r.get("is_new") for r in related)),
+                **({"routine": True} if routine else {}),
                 "as_of": as_of,
                 "data_as_of": _sources_as_of(sources, as_of),
             }
@@ -298,6 +334,10 @@ def _passes_quality_gate(
     if n_all >= min_lenses and score >= min_score * 0.85:
         return True
     if n_core >= min_lenses and score >= min_score * 0.85:
+        return True
+
+    # #275: a routine normative act (unscoped rule change) stays as a solo, non-alert card
+    if cand.get("routine") and cand.get("kind") == "regulatory" and _is_normative(cand.get("seed") or {}):
         return True
 
     # Solo only for new high-value alerts
@@ -537,7 +577,9 @@ def _soft_related(
             "sec", "ofertas", "pix", "juros"
         )
         score = 3 if shares_entity else 0
-        overlap = seed_toks & tokens_for_match(sig)
+        overlap = (seed_toks & tokens_for_match(sig)) - SOFT_GENERIC_TOKENS
+        if not shares_entity and not domain_link and len(overlap) < 2:
+            continue  # #275: one shared word is a coincidence, not a topic
         if len(overlap) >= 1:
             score += min(2, len(overlap))
         if domain_link:
