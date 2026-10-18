@@ -79,9 +79,17 @@ def list_engagement(*, since: str | None = None, table: Any | None = None) -> li
 def aggregate(events: list[dict[str, Any]], *, labels: dict[str, str] | None = None,
               top: int = 10) -> dict[str, Any]:
     """Roll up attention: counts per entity / sector / officer / action, and the top-N interest
-    lists (expand actions weight attention; collapse is neutral)."""
+    lists (expand actions weight attention; collapse is neutral).
+
+    Our own traffic (QA personas, the operator, the owner — `internal_traffic.is_internal`) is
+    dropped first and only COUNTED (`internal_excluded`): it fed the ETS Engagement component and
+    the "interesse executivo" lists with automation (10/10 on zero client events, 2026-10-18)."""
+    from src.synth.internal_traffic import is_internal
+
     labels = labels or {}
     events = [e for e in (events or []) if isinstance(e, dict)]
+    internal = sum(1 for e in events if is_internal(e))
+    events = [e for e in events if not is_internal(e)]
     interest = [e for e in events if e.get("action") in ("expand", "open", "follow")]
     by_entity: Counter = Counter()
     by_sector: Counter = Counter()
@@ -95,7 +103,7 @@ def aggregate(events: list[dict[str, Any]], *, labels: dict[str, str] | None = N
         if e.get("officer"):
             by_officer[e["officer"]] += 1
     return {
-        "n_events": len(events), "n_interest": len(interest),
+        "n_events": len(events), "n_interest": len(interest), "internal_excluded": internal,
         "actions": dict(Counter(e.get("action") for e in events)),
         "top_entities": [{"entity": k, "label": labels.get(k, k), "hits": v}
                          for k, v in by_entity.most_common(top)],

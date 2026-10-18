@@ -2418,7 +2418,9 @@ function metricsBand() {
   const c = m.ets_components || {};
   const tilesArr = [tile("Feedback", c.feedback == null ? "—" : c.feedback, "resultado favorável"),
     tile("Influência", c.influence == null ? "—" : c.influence, "com resultado"),
-    tile("Engajamento", c.engagement == null ? "—" : c.engagement, `${eng.n_interest || 0} interações`, null, "interest"),
+    // the rollup drops our own traffic (QA, operator, owner) and says how much
+    tile("Engajamento", c.engagement == null ? "—" : c.engagement, `${eng.n_interest || 0} interações de clientes` +
+      (eng.internal_excluded ? ` · ${nf(eng.internal_excluded)} internas excluídas` : ""), null, "interest"),
     tile("Board", c.board == null ? "—" : c.board, `${mm.n_board_flagged || 0} escalados`)];   // no list of board-escalated decisions on this board
   const tdrStr = m.tdr != null ? `<b style="color:var(--primary)">tempo de decisão −${m.tdr}%</b> · ` : "";
   // DEC-2: record the per-tenant TDR baseline (real pre-Onça latency) — no baseline yet ⇒ offer it.

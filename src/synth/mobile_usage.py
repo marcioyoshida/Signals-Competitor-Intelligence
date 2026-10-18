@@ -28,13 +28,9 @@ _JOB_KINDS = {"session": "abrir painel", "hoje": "abrir Hoje", "ask": "perguntar
 # Our own sessions are not demand evidence: the OncaQaPipeline phone gate (#163) signs in as the
 # QA personas at 390/412px on every run, and the operator is us. Live 2026-09-29: 134 of 135
 # sessions since 09-21 were qa-internal-* — the gate read 43% phone in W39 from automation alone.
-INTERNAL_TENANT_PREFIXES = ("qa-internal-",)
-INTERNAL_TENANTS = {"operator"}
-
-
-def is_internal(e: dict[str, Any]) -> bool:
-    t = str(e.get("tenant") or "")
-    return t in INTERNAL_TENANTS or t.startswith(INTERNAL_TENANT_PREFIXES)
+# The test itself is shared with the engagement rollup (src/synth/internal_traffic.py).
+from src.synth.internal_traffic import (  # noqa: E402  (re-exported for existing callers)
+    INTERNAL_TENANT_PREFIXES, INTERNAL_TENANTS, is_internal)
 
 
 def _week(ts: str) -> str | None:
