@@ -658,8 +658,7 @@ def build_cso(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
                 "n_opportunities": sum(1 for c in opps if _in_industry(c, slug)),
                 "n_alerts": sum(1 for c in sc if c.get("is_alert")),
                 "avg_threat": round(sum(_threat(c) for c in sc) / n, 1) if n else 0.0,
-                "reg_threat": _reg_threat(sreg, _sector_events(feed, slug),
-                                          floor=_floors(slug, ctx["sectors"])),
+                "reg_threat": _scope_reg_threat(reg_cards, feed, slug, ctx["sectors"]),
                 "n_moves": len(smoves), "distress": len(sdist),
                 # #143: how many tracked competitors registered a capital act in the window.
                 "n_capital_moves": sum(1 for r in capital_rows
@@ -929,6 +928,26 @@ def _reg_threat(cards: list[dict[str, Any]], events: list[dict[str, Any]], *, fl
     return round(max(base, _sector_floor(events)), 1) if floor else base
 
 
+def _scope_reg_threat(reg_cards: list[dict[str, Any]], feed: dict[str, Any], slug: str | None,
+                      sectors: list[dict[str, str]]) -> float:
+    """reg_threat for one scope. #279: the cross-sector aggregate is not floored (see _floors),
+    but it must still read inside the range of its own sectors — "Todos" 25 under Banking 90 and
+    Fintech 90 (both floored by Res. BCB 590) read as a contradiction. It is clamped to
+    [min, max] of the per-sector values (sectors with any reg card or event)."""
+    val = _reg_threat([c for c in reg_cards if _in_industry(c, slug)], _sector_events(feed, slug),
+                      floor=_floors(slug, sectors))
+    if slug in (ALL, None) and len(sectors) > 1:
+        per = []
+        for sec in sectors:
+            sc = [c for c in reg_cards if _in_industry(c, sec["slug"])]
+            ev = _sector_events(feed, sec["slug"])
+            if sc or ev:
+                per.append(_reg_threat(sc, ev))
+        if per:
+            val = round(min(max(val, min(per)), max(per)), 1)
+    return val
+
+
 def _floors(slug: str | None, sectors: list[dict[str, str]]) -> bool:
     """The floor is a per-SECTOR reading. The cross-sector "todos" aggregate is not floored by
     one sector's event (a banking+betting tenant's portfolio is not 90 because bets were banned)
@@ -996,7 +1015,7 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         npls = [r["npl_total"] for r in ss if r.get("npl_total") is not None]
         return {"n_reg": len(sr),
                 # #177: a sector event floors the average (SECTOR_EVENT_FLOOR by severity).
-                "reg_threat": _reg_threat(sr, sev_events, floor=_floors(slug, ctx["sectors"])),
+                "reg_threat": _scope_reg_threat(reg, feed, slug, ctx["sectors"]),
                 "reg_threat_cards": round(sum(_threat(c) for c in sr) / len(sr), 1) if sr else 0.0,
                 "n_changes": sum(1 for c in sr if (c.get("n_changes") or 0) > 0) + len(sev_events),
                 # #208: the acts-only part, so the tile can say "N atos + M eventos" honestly.

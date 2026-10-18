@@ -248,3 +248,18 @@ def test_hoje_briefs_carry_no_internal_codes():
     assert "provenance" not in integ[0]["briefing"] and "institution_leaf_pollution" not in integ[0]["title"]
     for t in flow:
         assert "(official)" not in t["briefing"] and "(critical)" not in t["briefing"]
+
+
+def test_cross_sector_reg_threat_stays_inside_its_sectors_range():
+    # #279: live "Todos os setores (2)" read 25 while Banking AND Fintech each read 90 (both
+    # floored by the same critical Res. BCB 590). The aggregate is clamped to its sectors' range.
+    f = _feed()
+    ev = dict(f["sector_events"][0])
+    f["sector_events"] = [dict(ev, id="se:b", industry="banking"), dict(ev, id="se:f", industry="fintech")]
+    f["industry_options"] = [{"slug": "banking"}, {"slug": "fintech"}]
+    cro = executive.build_executive(f)["cro"]["by_industry"]
+    per = [cro[s]["reg_threat"] for s in ("banking", "fintech") if s in cro]
+    assert per and all(v == 90.0 for v in per)
+    assert cro["__all__"]["reg_threat"] == 90.0
+    cso = executive.build_executive(f)["cso"]["by_industry"]["__all__"]
+    assert cso["reg_threat"] == 90.0
