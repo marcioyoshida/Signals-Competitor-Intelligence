@@ -1094,7 +1094,13 @@ def answer(
         for h in history:
             turns += [{"role": "user", "text": str(h.get("q") or "")},
                       {"role": "assistant", "text": _CITE_MARK.sub("", str(h.get("a") or "")).strip()}]
-        text = converser(user, system=system + CHAT_RULE, max_tokens=max_tokens, history=turns)
+        rule = CHAT_RULE
+        if mode == "follow-up":
+            subjects = list(dict.fromkeys(str(c.get("entity_label") or c.get("entity") or c.get("id"))
+                                          for c in cards))
+            if len(subjects) > 1:   # #284: "por quê?" after an 8-item answer explained one item
+                rule += FOLLOWUP_MULTI_RULE.format(n=len(subjects), items="; ".join(subjects[:CHAT_MAX_CARRIED]))
+        text = converser(user, system=system + rule, max_tokens=max_tokens, history=turns)
     else:
         text = converser(user, system=system, max_tokens=max_tokens)
     if not text:
@@ -1124,6 +1130,12 @@ CHAT_RULE = (
     "mensagem, com os ids deles. Se a pergunta for um seguimento (\"e o Bradesco?\", \"por quê?\"), "
     "responda no contexto da conversa, sem repetir o que já foi dito, e seja conciso: o essencial "
     "em até ~150 palavras."
+)
+# #284: a subject-less follow-up after a multi-item answer must not silently pick one item.
+FOLLOWUP_MULTI_RULE = (
+    "\n\nA pergunta de seguimento não diz sobre qual item. A resposta anterior tratou de {n} "
+    "itens ({items}). Responda a cada um em UMA linha curta, na ordem da resposta anterior, com a "
+    "citação do id; depois ofereça detalhar um item específico."
 )
 _CITE_MARK = re.compile(r"\[[A-Za-z0-9:_\-.À-ÿ]+\]")
 CHAT_MAX_HISTORY = 3          # exchanges sent back to the model

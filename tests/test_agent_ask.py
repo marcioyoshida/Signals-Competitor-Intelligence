@@ -879,3 +879,18 @@ def test_alert_question_grounds_on_alert_cards_not_kb():
     r = aa.answer("Quem está em alerta agora?", feed=feed, converser=_Conv("**FATO:** Itaú [c1]"),
                   kb_retrieve=lambda q: kb_calls.append(q) or [{"id": "kb:0", "title": "ofícios de alerta"}])
     assert r["considered"][:2] == ["c1", "c3"] and "c2" not in r["considered"] and kb_calls == []
+
+
+def test_subjectless_follow_up_after_multi_item_answer_covers_every_item():
+    # #284: "por quê?" after an 8-item digest answered only about Bradesco, silently
+    feed = _chat_feed()
+    hist = [{"q": "O que mudou esta semana no meu escopo?", "a": "Itaú [c1]. Bradesco [c2].", "cited": ["c1", "c2"]}]
+    conv = _Conv()
+    aa.answer("por quê?", feed=feed, converser=conv, history=hist)
+    sysmsg = conv.calls[-1]["system"]
+    assert "A resposta anterior tratou de 2 itens" in sysmsg and "Itau" in sysmsg and "Bradesco" in sysmsg
+    # a single-item answer keeps the plain follow-up contract
+    conv1 = _Conv()
+    aa.answer("por quê?", feed=feed, converser=conv1,
+              history=[{"q": "Quem está em alerta?", "a": "Itaú [c1].", "cited": ["c1"]}])
+    assert "tratou de" not in conv1.calls[-1]["system"]
