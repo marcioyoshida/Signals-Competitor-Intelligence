@@ -6,7 +6,9 @@ senior reader. Pass the whole singular and plural phrase so adjectives agree wit
 """
 from __future__ import annotations
 
+from src.synth.fmt_br import num
+
 
 def pt_count(n: int | float | None, one: str, many: str) -> str:
     n = int(n or 0)
-    return f"{n} {one if n == 1 else many}"
+    return f"{num(n)} {one if n == 1 else many}"

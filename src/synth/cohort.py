@@ -31,6 +31,7 @@ import os
 from typing import Any
 
 from src.synth.text_pt import pt_count
+from src.synth.fmt_br import num, signed
 
 import boto3
 
@@ -292,14 +293,14 @@ def build_narrative(cand: dict[str, Any]) -> dict[str, Any]:
     if cand["direction"] == "heating":
         head = (
             f"Movimento de cohort (aquecimento): o segmento {coh} como um todo está "
-            f"ACIMA da própria média — temperatura {rt:.2f} vs {bt:.2f} de base "
-            f"(z={z:+.1f}, {n_mem} players)."
+            f"ACIMA da própria média — temperatura {num(float(rt), 2)} vs {num(float(bt), 2)} de base "
+            f"(z={signed(float(z))}, {n_mem} players)."
         )
     else:
         head = (
             f"Movimento de cohort (esfriamento): o segmento {coh} como um todo está "
-            f"ABAIXO da própria média — temperatura {rt:.2f} vs {bt:.2f} de base "
-            f"(z={z:+.1f}, {n_mem} players)."
+            f"ABAIXO da própria média — temperatura {num(float(rt), 2)} vs {num(float(bt), 2)} de base "
+            f"(z={signed(float(z))}, {n_mem} players)."
         )
     if n_new:
         head += f" Inclui {pt_count(n_new, 'novo entrante', 'novos entrantes')} no período."

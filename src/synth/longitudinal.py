@@ -34,6 +34,7 @@ from typing import Any
 import boto3
 
 from src.synth import feature_store
+from src.synth.fmt_br import num, signed
 from src.synth.synthesize import ENTITY_LABELS, run_at_now, run_date_today
 
 AXIS = "longitudinal"
@@ -219,14 +220,14 @@ def build_narrative(cand: dict[str, Any]) -> dict[str, Any]:
 
     if cand["direction"] == "escalation":
         head = (
-            f"Quebra de padrão (alta): a ameaça de {label} saltou para {last:.2f}, "
-            f"muito acima da sua própria média de {mean:.2f} (z={z:+.1f}, "
+            f"Quebra de padrão (alta): a ameaça de {label} saltou para {num(float(last), 2)}, "
+            f"muito acima da sua própria média de {num(float(mean), 2)} (z={signed(float(z))}, "
             f"{cand['active_days']} dias ativos)."
         )
     else:
         head = (
-            f"Quebra de padrão (recuo): a ameaça de {label} caiu para {last:.2f}, "
-            f"bem abaixo da sua própria média de {mean:.2f} (z={z:+.1f}, "
+            f"Quebra de padrão (recuo): a ameaça de {label} caiu para {num(float(last), 2)}, "
+            f"bem abaixo da sua própria média de {num(float(mean), 2)} (z={signed(float(z))}, "
             f"{cand['active_days']} dias ativos)."
         )
     driver_txt = (driver.get("narrative") or "").strip()

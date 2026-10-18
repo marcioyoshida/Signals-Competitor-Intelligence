@@ -38,6 +38,7 @@ import datetime as dt
 from typing import Any
 
 from src.synth.text_pt import pt_count
+from src.synth.fmt_br import pct
 
 DEFAULT_WINDOW_DAYS = 3
 
@@ -57,7 +58,7 @@ def macro_event_dates(macro: dict[str, Any] | None) -> dict[str, dict[str, Any]]
     selic = macro.get("selic") or {}
     d = (selic.get("last_decision") or {}).get("date")
     if d:
-        out[d] = {"kind": "selic", "label": f"decisão do Copom (Selic {selic.get('current')}%)"}
+        out[d] = {"kind": "selic", "label": f"decisão do Copom (Selic {pct(selic.get('current'), 2)})"}
     return out
 
 

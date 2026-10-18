@@ -220,7 +220,7 @@ def test_cso_financial_strength_panel_and_recs():
     assert any("Referência competitiva" in r["text"] and "Itaú" in r["text"]
                for r in cso["panels"]["recommendations"])
     # a loss-maker → a fragility thesis
-    assert any("fragilidade de XP" in r["text"] and "-1.2%" in r["text"]
+    assert any("fragilidade de XP" in r["text"] and "-1,2%" in r["text"]
                for r in cso["panels"]["recommendations"])
 
 
@@ -272,11 +272,11 @@ def test_cro_tier_b_slope_fires_on_rising_pdd():
     cro = executive.build_executive(feed)["cro"]
     sv = {r["entity"]: r for r in cro["panels"]["solvency"]}
     assert sv["xp"]["lcr_pct"] == 118.0 and sv["xp"]["lcr_band"] == "atenção"
-    assert any("Liquidez sob atenção" in r["text"] and "118.0%" in r["text"]
+    assert any("Liquidez sob atenção" in r["text"] and "118,0%" in r["text"]
                for r in cro["panels"]["recommendations"])
     sv = {r["entity"]: r for r in executive.build_executive(feed)["cro"]["panels"]["solvency"]}
     assert sv["bb"]["npl_total"] == 12.9 and sv["bb"]["npl_band"] == "elevada"
-    assert any("Inadimplência elevada" in r["text"] and "12.9%" in r["text"]
+    assert any("Inadimplência elevada" in r["text"] and "12,9%" in r["text"]
                for r in cro["panels"]["recommendations"])
     assert cro["by_industry"]["banking"]["max_npl"] == 12.9 and cro["by_industry"]["banking"]["n_npl_elevada"] == 1
     sv = {r["entity"]: r for r in executive.build_executive(feed)["cro"]["panels"]["solvency"]}
@@ -672,7 +672,7 @@ def test_cso_capital_panel_states_both_figures_and_the_act_it_implies():
     assert [r["entity"] for r in rows] == ["itau", "bradesco"]
     # Both figures in the copy — a bare delta cannot be told apart from a data correction.
     assert "R$ 10,0 mi" in rows[0]["title"] and "R$ 30,0 mi" in rows[0]["title"]
-    assert "aumentou" in rows[0]["title"] and "+200.0%" in rows[0]["title"]
+    assert "aumentou" in rows[0]["title"] and "+200,0%" in rows[0]["title"]
     assert "reduziu" in rows[1]["title"]
     # Industry-scoped so the panel can be filtered like every other CSO surface.
     assert rows[0]["industries"] == ["banking"]
@@ -791,3 +791,67 @@ def test_reference_columns_have_no_internal_identifiers():
     import re
     txt = str(executive.build_reference())
     assert not re.search(r"ADR[ -]?\d|\(#\d+\)|feed\.|attribution_role|[Bb]last-radius|review-gated", txt)
+
+
+# --- #263: server-written display strings speak pt-BR numbers ---------------------------
+_DISPLAY_KEYS = {"text", "title", "briefing", "headline", "detail", "ets_note", "tdr_note", "summary"}
+
+
+def _display_strings(node, key=None):
+    """Every display string (recommendation text, titles, briefings, notes) in a built block."""
+    if isinstance(node, dict):
+        for k, v in node.items():
+            yield from _display_strings(v, k)
+    elif isinstance(node, list):
+        for v in node:
+            yield from _display_strings(v, key)
+    elif isinstance(node, str) and key in _DISPLAY_KEYS:
+        yield node
+
+
+def _numbers_feed():
+    """Fires every number-bearing recommendation / trajectory with non-integer figures."""
+    feed = _capital_feed()
+    feed["industry_options"] = [{"slug": "banking", "label": "Banking"}]
+    feed["feed"][0]["threat_score"] = 0.765          # Itaú recent 76,5 vs prior 30,0 → momentum
+    feed["entities"] = [
+        {"entity": "itau", "label": "Itaú", "industries": ["banking"],
+         "fundamentals": {"roe_pct": 19.4, "leverage": 12.2, "basileia_headroom_pp": 4.3,
+                          "lucro_share_pct": 21.35}},
+        {"entity": "weakco", "label": "WeakCo", "industries": ["banking"],
+         "soundness": {"indice_basileia": 9.04, "band": "frágil"},
+         "inadimplencia": {"npl_total": 11.3, "npl_pf": 12.8, "npl_pj": 9.75, "band": "elevada"},
+         "balancete": {"pdd_mom_pct": 10.25, "months": 3},
+         "fundamentals": {"roe_pct": -5.5, "leverage": 28.4, "basileia_headroom_pp": -1.5},
+         "pilar3_km1": {"lcr_pct": 98.5, "band_lcr": "crítica"},
+         "financial_tone": {"net": 0.55, "corpus": "solvency_facts"}},
+    ]
+    return feed
+
+
+def test_display_strings_carry_no_english_decimals():
+    import re
+    decisions = [{"decision_id": "d1", "officer": "cso", "verdict": "aprovado", "outcome": "favoravel",
+                  "started_at": "2026-09-04T10:00:00+00:00", "created_at": "2026-09-04T11:30:00+00:00"}]
+    ex = executive.build_executive(_numbers_feed(), decisions=decisions, tdr_baseline_hours=2.5)
+    strings = list(_display_strings(ex))
+    assert len(strings) > 20
+    bad = [s for s in strings if re.search(r"\d\.\d", s)]
+    assert not bad, bad
+    joined = "\n".join(strings)
+    # the pt-BR forms the client now receives verbatim
+    for want in ("ROE 19,4% · 21,4% do lucro do setor",
+                 "ROE -5,5% (alavancagem 28,4x, folga de Basileia -1,5 p.p.)",
+                 "(Basileia 9,0%)", "provisões (PDD) +10,2% no mês", "11,3% da carteira",
+                 "PF 12,8% · PJ 9,8%", "LCR 98,5% (Pilar 3)", "(+200,0%)", "(momentum +46,5)",
+                 "Momentum +46,5 na janela (ameaça 30,0 → 76,5)",
+                 "Feedback 40% · Influência 25% · Engajamento 20% · Adoção do board 15%",
+                 "Antes 2,5 h", "depois 1,5 h"):
+        assert want in joined, want
+    assert "(divergência +1,55)" in joined   # tone 0,55 vs numbers -1,00
+    # machine-readable fields stay numeric
+    row = {r["entity"]: r for r in ex["cro"]["panels"]["solvency"]}["weakco"]
+    assert row["pdd_mom_pct"] == 10.25 and row["lcr_pct"] == 98.5 and row["npl_total"] == 11.3
+    assert ex["cso"]["panels"]["capital_moves"][0]["delta_pct"] == 200.0
+    mom = {m["entity"]: m for m in ex["cso"]["panels"]["momentum"]}["itau"]
+    assert isinstance(mom["momentum"], float) and mom["momentum"] == 46.5

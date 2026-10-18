@@ -62,3 +62,5 @@ def test_build_narrative_is_labeled_inference_and_capped():
     assert n["threat_score"] <= 0.55            # context, not a top alert
     assert n["swot_hint"]["dimension"] == "S"
     assert "ACIMA dos pares" in n["narrative"]
+    # #263: the card's figures reach /exec headlines in pt-BR ("0,80 vs 0,40", "z setorial=+4,0")
+    assert "ameaça média 0,80 vs 0,40" in n["narrative"] and "z setorial=+4,0" in n["narrative"]

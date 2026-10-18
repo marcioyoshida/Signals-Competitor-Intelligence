@@ -49,6 +49,8 @@ def test_escalation_break_nominated_with_driver_evidence():
     assert card["source_ids"] == ["bcb:x"]
     assert card["threat_score"] == 0.9        # escalation reports the real level
     assert "z=+" in card["narrative"] and "Btg" in card["narrative"]
+    import re
+    assert not re.search(r"\d\.\d", card["narrative"].split(" Sinal que puxou")[0])  # #263: pt-BR figures
 
 
 def test_cooling_break_scores_low():
