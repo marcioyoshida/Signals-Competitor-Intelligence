@@ -157,6 +157,10 @@ def main() -> int:
     s, _, _ = http("POST", BASE + "/oauth/token", {"grant_type": "refresh_token", "refresh_token": tok.get("refresh_token", ""),
                                                   "client_id": cid, "client_secret": secret}, form=True)
     check("after the registration is deleted, refresh is refused", s in (400, 401), str(s))
+    # #205: and without the secret too (a missing registration used to count as a public client)
+    s, _, _ = http("POST", BASE + "/oauth/token", {"grant_type": "refresh_token", "refresh_token": tok.get("refresh_token", ""),
+                                                  "client_id": cid}, form=True)
+    check("after the registration is deleted, a secret-less refresh is refused too", s in (400, 401), str(s))
 
     failed = [n for n, ok, _ in e2e.RESULTS if not ok]
     print("\n%d/%d passed" % (len(e2e.RESULTS) - len(failed), len(e2e.RESULTS)))

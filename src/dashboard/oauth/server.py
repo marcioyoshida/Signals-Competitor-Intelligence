@@ -365,7 +365,15 @@ class AuthServer:
                 f["client_id"] = cid
             except Exception:  # noqa: BLE001
                 return False
-        reg = self.store.get("client#" + cid) if cid and not cimd.is_cimd_client_id(cid) else None
+        # #205: every non-CIMD client_id that /authorize accepts is pre-registered (resolve_client
+        # raises on an unknown one), so an unknown one here is a DELETED registration: its grants
+        # stop now, refresh included, with or without a secret.
+        if cid and not cimd.is_cimd_client_id(cid):
+            reg = self.store.get("client#" + cid)
+            if not reg:
+                return False
+        else:
+            reg = None
         if not reg or not reg.get("confidential"):
             return not secret                      # public client: nothing to check
         return bool(secret) and hmac.compare_digest(tokens.sha256_hex(secret), str(reg.get("secret_sha256") or ""))

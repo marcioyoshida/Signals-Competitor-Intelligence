@@ -623,6 +623,20 @@ def test_confidential_client_basic_auth_and_refresh_needs_the_secret(env):
     assert good["status"] == 200
 
 
+def test_a_deleted_registration_stops_its_refresh_tokens(env):
+    """#205: `oauth_register_client.py --revoke` deletes client#<id>. An unknown non-CIMD client
+    must then fail client auth, so a leaked refresh token stops working with or without a secret
+    (before, a missing registration was treated as a public client and a secret-less refresh passed)."""
+    _register_copilot(env)
+    code = _copilot_code(env)
+    tok = json.loads(token(env, grant_type="authorization_code", code=code, client_id=COPILOT,
+                           client_secret="s3cret-value", redirect_uri=COPILOT_CB)["body"])
+    env.store.delete("client#" + COPILOT)
+    rf = dict(grant_type="refresh_token", refresh_token=tok["refresh_token"], client_id=COPILOT)
+    assert token(env, client_secret="s3cret-value", **rf)["status"] == 401
+    assert token(env, **rf)["status"] == 401                                       # no secret either
+
+
 def test_public_clients_still_need_pkce(env):
     q = parse_qs(urlsplit(authz(env, code_challenge=None, code_challenge_method=None)["headers"]["Location"]).query)
     assert q["error"] == ["invalid_request"]
