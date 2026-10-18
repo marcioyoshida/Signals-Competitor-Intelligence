@@ -925,7 +925,9 @@ function setView(v) {
     a.setAttribute("aria-current", a.getAttribute("data-view") === v ? "page" : "false"));
 }
 document.querySelectorAll("#viewTabs a").forEach(a => a.addEventListener("click", (e) => {
-  e.preventDefault(); writeHash({ view: a.getAttribute("data-view") }); window.scrollTo(0, 0);
+  e.preventDefault();
+  if (a.getAttribute("data-view") !== VIEW) engage("nav", "open", null, a.getAttribute("data-view"));   // #287
+  writeHash({ view: a.getAttribute("data-view") }); window.scrollTo(0, 0);
 }));
 function syncOnline() { document.body.classList.toggle("is-offline", !navigator.onLine || OFFLINE); }
 window.addEventListener("online", syncOnline); window.addEventListener("offline", syncOnline);
@@ -997,6 +999,7 @@ document.getElementById("board").addEventListener("click", (e) => {
   const a = e.target.closest && e.target.closest("a[data-go]");
   if (!a || e.defaultPrevented || e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
   e.preventDefault();
+  engage("tile", "open", null, a.getAttribute("data-go"));   // #287 (key = the panel it counts)
   try { history.replaceState(Object.assign({}, history.state, { y: window.scrollY }), ""); } catch (x) {}
   const h = a.getAttribute("href");
   if (h !== location.hash) location.hash = h; else goNav(a.getAttribute("data-go"));
@@ -1028,7 +1031,9 @@ document.getElementById("officerTabs").innerHTML = Object.entries(OFFICERS)
   .map(([k, o]) => `<a href="#${k}" data-officer="${k}"><span class="ot-ic">${svgIcon(OFFICER_ICON[k])}</span>` +
     `<span class="ot-k">${k.toUpperCase()}</span><span class="ot-sep"> · </span><span class="ot-l">${o.short}</span></a>`).join("");
 document.querySelectorAll("#officerTabs a").forEach(a => a.addEventListener("click", (e) => {
-  e.preventDefault(); writeHash({ officer: a.getAttribute("data-officer") });
+  e.preventDefault();
+  if (a.getAttribute("data-officer") !== OFFICER) engage("nav", "open", null, a.getAttribute("data-officer"));   // #287
+  writeHash({ officer: a.getAttribute("data-officer") });
 }));
 
 // --- Perguntar à Onça: officer-scoped grounded Q&A (v1 → /exec) ---------------
@@ -1297,6 +1302,7 @@ function rptRender(slot, focus) {
   const st = RPT.get(rptKey(t));
   const open = slot.querySelector("[data-rpt-open]"), form = slot.querySelector("form.rpt"), done = slot.querySelector("[data-rpt-done]");
   if (open) open.onclick = () => {
+    engage("report", "open", null);   // #287
     const cue = rptCue(t.q);
     RPT.set(rptKey(t), { open: true, kind: cue === "sugestao" ? "sugestao" : "defeito", text: cue ? t.q : "", status: "form", key: rptUuid(), msg: "", err: false });
     rptRender(slot, "text");
@@ -1337,7 +1343,7 @@ async function rptSend(slot, t, st) {
     j = await r.json().catch(() => ({}));
   } catch (e) { r = null; }
   if (!RPT.has(rptKey(t))) return;   // chat reset meanwhile
-  if (r && r.ok && j.outcome === "applied") { st.status = "done"; st.text = ""; rptRender(slot, "done"); return; }
+  if (r && r.ok && j.outcome === "applied") { engage("report", "sent", null, st.kind); st.status = "done"; st.text = ""; rptRender(slot, "done"); return; }
   if (r && r.status === 429) { st.status = "limit"; st.text = ""; rptRender(slot, "done"); return; }
   st.status = "form"; st.err = true;
   st.msg = r && r.status === 400 ? "Não foi possível enviar: confira o tipo e o texto (3 a 1000 caracteres)."
@@ -1352,7 +1358,9 @@ function renderChat() {
     log.innerHTML = `<div class="chat__empty"><p>Pergunte sobre as entidades, setores e normativos do seu escopo. Siga a conversa
       com “e o Bradesco?”, “por quê?” ou “detalhe o item 2”.</p>
       <div class="askex" id="askEx">${ASK_EXAMPLES.map(q => `<button type="button" class="chip"${logged ? "" : " disabled"}>${U.esc(q)}</button>`).join("")}</div></div>`;
-    log.querySelectorAll("#askEx .chip").forEach(c => c.onclick = () => { document.getElementById("askInput").value = c.textContent; askOnca(); });
+    log.querySelectorAll("#askEx .chip").forEach((c, i) => c.onclick = () => {
+      engage("ask", "chip", null, "ex" + (i + 1));   // #287: which example, never its text
+      document.getElementById("askInput").value = c.textContent; askOnca(); });
   } else {
     log.innerHTML = turns.map((t, i) => `<div class="msg msg--q"><div class="msg__txt">${U.esc(t.q)}</div></div>` +
       (t.pending ? `<div class="msg msg--a"><span class="thinking loading loading--inline"><span class="ld-c" aria-hidden="true">ç</span><span class="ld-t">Consultando a base da Onça… <span id="askSecs">0s</span></span></span></div>`
@@ -1505,7 +1513,7 @@ const brl = (n) => Number(n).toLocaleString("pt-BR");
 function assinarHTML(D) {
   const m = new URLSearchParams(location.search).get("assinar") || "";
   if (Ctx.inApp()) return "";   // #258: no purchase flow inside the store app (3.1.1)
-  const cta = (tier, id) => `<a class="btn btn--primary btn--sm" href="${U.esc(Ctx.upgradeHref(tier, id, D.upgrade))}">${D.upgrade && D.upgrade.live ? "Continuar para pagamento" : "Falar com a Onça para assinar"}</a>`;
+  const cta = (tier, id) => `<a class="btn btn--primary btn--sm" data-upg="${U.esc(tier === "saas_combo" ? "combo:" + id : id)}" href="${U.esc(Ctx.upgradeHref(tier, id, D.upgrade))}">${D.upgrade && D.upgrade.live ? "Continuar para pagamento" : "Falar com a Onça para assinar"}</a>`;
   const have = D.scoped_modules || [];
   if (m.indexOf("combo:") === 0) {
     const id = m.slice(6), c = Ctx.combosOf(D.upgrade)[id];
@@ -1551,7 +1559,7 @@ function boot() {
   const tb = document.getElementById("trialBar");
   if (tb) { const h = assinarHTML(DATA) || Ctx.billingBannerHTML(DATA); tb.innerHTML = h; tb.hidden = !h; }
   if (!ADMIN && Ctx.isEntryTier(DATA)) {   // ADR 016: Entry has no officer suite
-    mountEntry(); renderIdentity();
+    mountEntry(); renderIdentity(); logSession();   // #287: Entry (and its trial) is counted too
     // #246: a ?c= share link must resolve here too — the card if it is in this licence,
     // otherwise "Sem acesso" (it used to sit unresolved, drawer closed, ?c= left in the URL)
     if (!BOOTED) { BOOTED = true; setTimeout(resolveSharedLink, 0); }
@@ -1575,8 +1583,7 @@ function boot() {
   renderIdentity();
   const first = !BOOTED; BOOTED = true;
   if (first) setTimeout(resolveSharedLink, 0);   // #170: ?c=<hash> deep link, after the first render
-  // #165: one session event per open (device class + installed-app flag only)
-  if (!ADMIN && !OFFLINE && !STALE && !SESSION_LOGGED) { SESSION_LOGGED = true; engage("session", "open", null); }
+  logSession();
   if (!EX.officers || !EX.officers.length) {
     document.getElementById("board").innerHTML =
       U.empty("Bloco executivo ausente", "feed.executive ainda não foi publicado.", "○"); return;
@@ -2474,10 +2481,17 @@ function beacon(did, url, officer) {
   } catch (e) { /* best-effort — never blocks navigation */ }
 }
 // §E engagement telemetry — an attention event (headline expand/open), tagged for intelligence.
-function engage(kind, action, cardId) {
+// #287: `key` is a short id/enum (panel key, officer, module, chip index) — never text or a URL; the
+// server refuses a kind/action pair that is not on engagement_log.KINDS. The same event within 3s
+// (a double tap, a re-render) is sent once.
+const ENGAGED = new Map();
+function engage(kind, action, cardId, key) {
+  const sig = [kind, action, cardId || "", key || ""].join("|"), now = Date.now();
+  if (now - (ENGAGED.get(sig) || 0) < 3000) return;
+  ENGAGED.set(sig, now);
   const c = cardId ? BYID[cardId] : null;
   const body = JSON.stringify({ intent: "record_engagement", officer: OFFICER, args: {
-    kind, action, officer: OFFICER, sector: SECTOR, card_id: cardId,
+    kind, action, key: key || null, officer: OFFICER, sector: SECTOR, card_id: cardId,
     entity: c && c.entity, threat_score: c && c.threat_score,
     industries: (c && c.industries) || [], topics: (c && c.topics) || [],
     device: deviceClass(), standalone: isStandalone() } });
@@ -2489,6 +2503,7 @@ function engage(kind, action, cardId) {
 function evUrl(evId) { const c = BYID[evId]; return (c && (c.citations || [])[0] && c.citations[0].url) || ("card:" + evId); }
 function onEvidence(a) {
   const evId = a.getAttribute("data-ev");
+  engage("why", "open", evId);   // #287
   const host = a.closest(".traj") || a.closest(".rec");
   if (host && host.dataset.did) beacon(host.dataset.did, evUrl(evId), host.dataset.off || OFFICER);
   inspect(evId);
@@ -2615,6 +2630,14 @@ function pricingBadge(p) {
 
 // Entry (ADR 016) gets no officer suite, but the Monday digest for its sector is part of the plan
 // (docs/index.html), so the opt-in box rides along under the Entry board.
+// #165: one session event per open (device class + installed-app flag only); #287: plus, once per
+// sign-in, how this tab signed in (password | google | apple).
+function logSession() {
+  if (ADMIN || OFFLINE || STALE || SESSION_LOGGED) return;
+  SESSION_LOGGED = true; engage("session", "open", null);
+  const how = Ctx.isLoggedIn() && Ctx.takeSignInMethod();
+  if (how) engage("signin", how, null);
+}
 function mountEntry() {
   Ctx.mountEntryBoard(DATA);
   const board = document.getElementById("board"); if (!board) return;
@@ -3102,7 +3125,7 @@ async function renderPushBox(note) {
           ps = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uBytes(cfg.public_key) });
         }
         await pushApi("/api/me/push/subscribe", { subscription: ps.toJSON(), officer: OFFICER, prefs: { types: chosen() } });
-        engage("push", "open", null);
+        engage("push", "subscribe", null);   // #287 (was "open": this is the opt-in)
         note = "alertas ativados";
       }
     } catch (e) { note = "não foi possível ativar neste navegador (" + (e.message || e) + ")"; }
@@ -3390,11 +3413,11 @@ function wireHeadlines(el) {
 function bindRows(el) {
   el.querySelectorAll(".exrow[data-id]").forEach(row => {
     const t = inspectTarget(row.getAttribute("data-id"));
-    if (t) activateRow(row, () => inspect(t), "button");
+    if (t) activateRow(row, () => { engage("drawer", "open", t); inspect(t); }, "button");   // #287
   });
   el.querySelectorAll(".exrow[data-url],.exrow[data-href]").forEach(row => {
     const u = row.getAttribute("data-url") || row.getAttribute("data-href");
-    if (u) activateRow(row, () => window.open(u, "_blank", "noopener"), "link");
+    if (u) activateRow(row, () => { engage("source", "follow", null, "row"); window.open(u, "_blank", "noopener"); }, "link");
   });
 }
 // Card detail: WHEN (date), WHERE (sectors), HOW SERIOUS (ameaça, labelled as inference), WHAT
@@ -3464,6 +3487,20 @@ async function shareCurrent() {
   } catch (e) { /* the user dismissed the share sheet */ }
 }
 document.getElementById("drShare").addEventListener("click", shareCurrent);
+// #287: a source opened from the drawer (card id, never the URL) or from a chat answer, and any
+// upgrade/plan button (data-upg = the module or "combo:<id>"; set on every upgrade link).
+// The Entry board opens cards through OncaCtx.openCard (shared drawer), which announces them.
+let CTX_CARD = null;
+document.addEventListener("onca-card", (e) => { CTX_CARD = (e.detail && e.detail.id) || null; engage("drawer", "open", CTX_CARD); });
+function onOutLink(e) {
+  if (e.type === "auxclick" && e.button !== 1) return;
+  const a = e.target.closest && e.target.closest("a[href]"); if (!a) return;
+  if (a.hasAttribute("data-upg")) engage("upgrade", "open", null, a.getAttribute("data-upg"));   // first: plan buttons sit on the board
+  else if (a.closest("#drBody") && /^https?:/.test(a.getAttribute("href") || "")) engage("source", "follow", SHARE_ID || CTX_CARD);
+  else if (a.closest("#askAns") && a.classList.contains("cite")) engage("source", "follow", null, "chat");
+  else if (a.closest("#board") && /^https?:/.test(a.getAttribute("href") || "")) engage("source", "follow", null, "board");   // Entry card links
+}
+document.addEventListener("click", onOutLink); document.addEventListener("auxclick", onOutLink);
 async function resolveSharedLink() {
   const c = new URLSearchParams(location.search).get("c");
   if (!c || !/^[0-9a-f]{16}$/.test(c)) return;
@@ -3484,6 +3521,7 @@ let DR_RETURN = null;
 function drawerIsOpen() { return document.getElementById("drawer").classList.contains("open"); }
 function openDrawer(shareId) {
   if (!drawerIsOpen()) DR_RETURN = document.activeElement;
+  CTX_CARD = null;
   SHARE_ID = shareId || null;
   const sb = document.getElementById("drShare"); if (sb) sb.hidden = !SHARE_ID || ADMIN;
   document.getElementById("drawer").setAttribute("aria-hidden", "false");

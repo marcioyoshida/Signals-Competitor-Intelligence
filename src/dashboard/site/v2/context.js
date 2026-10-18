@@ -109,6 +109,15 @@
     return true;
   }
   const TOKEN_KEY = "onca_id_token", VERIFIER_KEY = "onca_pkce_verifier";
+  // #287: how this tab signed in (password | google | apple), read once by /exec's engagement
+  // event and then removed. Only the method enum is kept, never the address.
+  const SIGNIN_METHOD_KEY = "onca_signin_method";
+  function noteSignInMethod(m) { try { sessionStorage.setItem(SIGNIN_METHOD_KEY, m); } catch (e) {} }
+  function takeSignInMethod() {
+    let m = null;
+    try { m = sessionStorage.getItem(SIGNIN_METHOD_KEY); sessionStorage.removeItem(SIGNIN_METHOD_KEY); } catch (e) {}
+    return m === "password" || m === "google" || m === "apple" ? m : null;
+  }
 
   function b64UrlEncode(bytes) {
     let bin = ""; bytes.forEach((b) => { bin += String.fromCharCode(b); });
@@ -162,6 +171,7 @@
       if (back && back !== "?") sessionStorage.setItem("onca_return", back);
     } catch (e) {}
     rememberReturnPath("login");
+    noteSignInMethod(useIdp === "Google" ? "google" : "apple");
     const verifier = randomPkceVerifier();
     sessionStorage.setItem(VERIFIER_KEY, verifier);
     const challenge = await pkceChallenge(verifier);
@@ -533,6 +543,7 @@
     // deep-link / return path left by an abandoned provider trip, wipe the inputs, and reload
     // in place (same path, query and hash) so the screen boots signed in.
     try { sessionStorage.removeItem("onca_return"); sessionStorage.removeItem(RETURN_PATH_KEY); } catch (e) {}
+    noteSignInMethod("password");
     siWipe();
     location.reload();
   }
@@ -814,7 +825,7 @@
     return `<div class="trialbar" role="status"><span>Teste grátis: <b>${days}</b> ${days === 1 ? "dia restante" : "dias restantes"}
       ${mod ? "· " + esc(indLabel(mod)) : ""}</span>
       ${APP ? `<span class="hd-note">${PLAN_NOTE}</span>`
-        : `<a class="btn btn--primary btn--sm" href="${esc(upgradeHref("entry", mod, data.upgrade))}">Assinar Entry · R$ 490/mês</a>`}</div>`;
+        : `<a class="btn btn--primary btn--sm" data-upg="${esc(mod || "entry")}" href="${esc(upgradeHref("entry", mod, data.upgrade))}">Assinar Entry · R$ 490/mês</a>`}</div>`;
   }
 
   // A full-panel login/no-access gate (honest, never a silent empty grid).
@@ -836,10 +847,10 @@
         const ctas = (mods.length || combos.length ? mods : [""]).map((m) => {
           const band = (bill.bands || {})[m];
           const tier = ended || !band ? "entry" : band;
-          return `<a class="btn btn--primary" href="${esc(upgradeHref(tier, m, res.upgrade))}">Assinar${m ? " " + esc(indLabel(m)) : ""}</a>`;
+          return `<a class="btn btn--primary" data-upg="${esc(m || tier)}" href="${esc(upgradeHref(tier, m, res.upgrade))}">Assinar${m ? " " + esc(indLabel(m)) : ""}</a>`;
         }).concat(combos.map((c) => {
           const co = combosOf(res.upgrade)[c];
-          return `<a class="btn btn--primary" href="${esc(upgradeHref("saas_combo", c, res.upgrade))}">Assinar combo ${esc(co ? co.name : c)}</a>`;
+          return `<a class="btn btn--primary" data-upg="${esc("combo:" + c)}" href="${esc(upgradeHref("saas_combo", c, res.upgrade))}">Assinar combo ${esc(co ? co.name : c)}</a>`;
         })).join(" ");
         return `<div class="empty gate"><div class="em-ico" aria-hidden="true">${ICO("◐")}</div>
           <div class="em-t">${ended ? "Seu teste grátis terminou" : "Sua assinatura não está ativa"}</div>
@@ -1036,6 +1047,8 @@
   function entityRec(eid) { return (DATA_REF.entities || []).find((e) => e.entity === eid) || null; }
 
   function openCard(c) {
+    // #287: the page that hosts the board (/exec) counts the open — the card id only
+    try { document.dispatchEvent(new CustomEvent("onca-card", { detail: { id: c.id || null } })); } catch (e) {}
     const a = attrsOf(c.entity);
     const model = U.citationModel(c);
     const rec = entityRec(c.entity);
@@ -1627,7 +1640,7 @@
     const cards = feed(D).slice().sort(byDateThreat);
     const ctas = APP ? (mods.some((m) => bandOf(m)) ? `<span class="hd-note">${PLAN_NOTE}</span>` : "")
       : mods.filter((m) => bandOf(m)).map((m) =>
-      `<a class="btn btn--primary" href="${esc(upgradeHref(bandOf(m), m, D.upgrade))}">Assinar SaaS · ${esc(indLabel(m))}</a>`).join(" ");
+      `<a class="btn btn--primary" data-upg="${esc(m)}" href="${esc(upgradeHref(bandOf(m), m, D.upgrade))}">Assinar SaaS · ${esc(indLabel(m))}</a>`).join(" ");
     board.innerHTML = `<div class="tiles" id="entryKpis" style="margin-bottom:var(--s4)"></div>
       <section class="band"><div class="band-hd"><span class="overline">Sinais do setor · ${esc(sector)}</span>
         <span class="rule"></span><span class="badge badge--ghost">Entry</span></div>
@@ -1664,7 +1677,7 @@
       <div class="em-d">Esta página mostra apenas ${esc(indLabel(acc.slug))}; dados de outros setores não
         aparecem sob este enquadramento.${mine ? " Seus setores: " + mine + "." : ""}</div>
       <div style="margin-top:var(--s3)"><a class="btn" href="${home}">Abrir meus setores</a>
-        ${band && !APP ? `<a class="btn btn--primary" href="${esc(upgradeHref(band, acc.slug, D.upgrade))}">Assinar ${esc(indLabel(acc.slug))}</a>` : ""}</div>
+        ${band && !APP ? `<a class="btn btn--primary" data-upg="${esc(acc.slug)}" href="${esc(upgradeHref(band, acc.slug, D.upgrade))}">Assinar ${esc(indLabel(acc.slug))}</a>` : ""}</div>
       ${band && APP ? `<div class="em-d" style="margin-top:var(--s2)">${PLAN_NOTE}</div>` : ""}</div>`;
   }
   function mountSegmentGate(D, acc) {
@@ -1728,7 +1741,7 @@
 
   global.OncaCtx = {
     // auth
-    login, openSignIn, logout, isLoggedIn, getIdToken, renderAuthBox, handleAuthCallback,
+    login, openSignIn, logout, isLoggedIn, getIdToken, renderAuthBox, handleAuthCallback, takeSignInMethod,
     ensureSession, clearUserData, decodeJwt, readCachedFeed: readUserFeed,
     bootSaaS,
     // feed

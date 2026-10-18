@@ -422,11 +422,13 @@ def _act_record_engagement(args: dict[str, Any], actor: str) -> tuple[str, int, 
             kind=str(args.get("kind") or "headline"), actor=actor,
             officer=args.get("officer"), sector=args.get("sector"),
             card_id=args.get("card_id"), entity=args.get("entity"),
-            action=args.get("action"), threat_score=args.get("threat_score"),
+            action=args.get("action"), key=args.get("key"), threat_score=args.get("threat_score"),
             industries=args.get("industries") if isinstance(args.get("industries"), list) else None,
             topics=args.get("topics") if isinstance(args.get("topics"), list) else None,
             tenant=(args.get("tenant") or None), device=_device(args.get("device")),
             standalone=(bool(args["standalone"]) if "standalone" in args else None))
+    except ValueError as exc:   # #287: an interaction off the KINDS list
+        return "blocked", 400, {"error": str(exc)}
     except Exception as exc:  # pragma: no cover - telemetry best-effort
         return "noop", 200, {"detail": f"engagement skipped: {exc}"}
     return "applied", 200, {"engagement_id": item["engagement_id"], "kind": item["kind"],

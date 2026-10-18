@@ -22,7 +22,8 @@ GATE_WEEKS = 4
 DEVICES = ("phone", "tablet", "desktop")
 # jobs worth counting on a phone (engagement kinds) — plus decisions from the decision log
 _JOB_KINDS = {"session": "abrir painel", "hoje": "abrir Hoje", "ask": "perguntar",
-              "share": "compartilhar", "headline": "ler manchete", "install": "instalar"}
+              "share": "compartilhar", "headline": "ler manchete", "install": "instalar",
+              "drawer": "ver fontes", "source": "abrir fonte"}   # #287
 
 
 # Our own sessions are not demand evidence: the OncaQaPipeline phone gate (#163) signs in as the

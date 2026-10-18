@@ -421,6 +421,25 @@ def test_record_engagement_applies_and_is_not_journaled(monkeypatch):
     assert "record_engagement" in act_api._NO_JOURNAL
 
 
+def test_record_engagement_refuses_an_unlisted_interaction(monkeypatch):
+    """#287: kind/action must be on engagement_log.KINDS — a free-text kind is a 400, not a row."""
+    _no_journal(monkeypatch)
+    monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
+    monkeypatch.setattr(act_api, "_get_act", lambda *a, **k: None)
+    monkeypatch.setattr(act_api, "_put_act", lambda *a, **k: None)
+    from src.synth import engagement_log
+    puts = []
+    monkeypatch.setattr(engagement_log, "_table", lambda table=None: type("T", (), {"put_item": lambda self, Item: puts.append(Item)})())
+    resp = act_api.lambda_handler(_event(
+        {"intent": "record_engagement", "officer": "cso",
+         "args": {"kind": "O que mudou esta semana?", "action": "open"}}), None)
+    assert resp["statusCode"] == 400 and puts == []
+    resp = act_api.lambda_handler(_event(
+        {"intent": "record_engagement", "officer": "cso",
+         "args": {"kind": "tile", "action": "open", "key": "sector_events"}}), None)
+    assert resp["statusCode"] == 200 and puts[0]["key"] == "sector_events"
+
+
 def test_set_board_adoption_applies(monkeypatch):
     _no_journal(monkeypatch)
     monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
