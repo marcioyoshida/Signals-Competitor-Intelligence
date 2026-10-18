@@ -1,6 +1,10 @@
 """The Onça-branded managed-login page (auth.onssa.org): both Hosted-UI domains run managed login
 (version 2), every Hosted-UI client of the live pool has the Onça style, the assets stay small
-enough to inline in the template, and every sign-in URL asks for Portuguese."""
+enough to inline in the template, and every URL that can land on it asks for Portuguese.
+
+Since #277 the client sign-in path (/exec and every OncaCtx.login() page) is Onça's own form
+(tests/test_signin_form.py); the managed page is what remains behind the OAuth/MCP facade, an
+agent connecting, and as the interstitial of a Google/Apple redirect — so it keeps its brand."""
 import json
 import sys
 from pathlib import Path
@@ -71,6 +75,10 @@ def test_both_domains_run_managed_login_after_the_style_exists():
 
 def test_sign_in_urls_ask_for_portuguese():
     site = ROOT / "src" / "dashboard" / "site"
+    # v1 index.html and v2/ask.js (admin) still build the managed-login URL; context.js now builds
+    # only the provider URL (oauth2/authorize?identity_provider=…), and keeps the lang hint on it
     for f in ("index.html", "v2/ask.js", "v2/context.js"):
         assert 'lang: "pt-BR"' in (site / f).read_text(encoding="utf-8"), f
+    ctx = (site / "v2" / "context.js").read_text(encoding="utf-8")
+    assert "identity_provider: useIdp" in ctx and "${AUTH.domain}/login" not in ctx
     assert '"lang": "pt-BR"' in (ROOT / "src" / "dashboard" / "oauth" / "handler.py").read_text()

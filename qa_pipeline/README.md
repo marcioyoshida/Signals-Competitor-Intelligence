@@ -57,7 +57,7 @@ the QA personas. See the module's docstring for the full account.
 
 ## Directory layout
 
-- `lib/auth.py` — Playwright Hosted UI login + sessionStorage capture/reuse.
+- `lib/auth.py` — Playwright login through Onça's own sign-in form (#277) + sessionStorage capture/reuse.
 - `lib/config.py` — pulls QA credentials (Secrets Manager) + basic-auth (SSM) at runtime.
 - `tasks/login_smoke.py` — CLI entry point; also the login task `OncaQaPipeline` (#127)
   runs once per persona per run.

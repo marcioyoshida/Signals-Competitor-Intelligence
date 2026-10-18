@@ -1,5 +1,6 @@
 """Layer 1, signed out (#259): the /exec gate as the store app shows it, and the sign-in hand-off
-to the shell (ADR 029: Hosted UI in the SYSTEM browser, back on onca://auth)."""
+to the shell (ADR 029: the provider in the SYSTEM browser, back on onca://auth). Since #277 "Entrar"
+opens Onça's own form in the WebView (no Cognito page); only Google/Apple hand off to the shell."""
 from __future__ import annotations
 
 import base64
@@ -90,10 +91,19 @@ def _b64url_sha256(s: str) -> str:
     return base64.urlsafe_b64encode(hashlib.sha256(s.encode()).digest()).decode().rstrip("=")
 
 
-def test_entrar_posts_one_auth_message(app_page, live_auth):
+def test_entrar_opens_the_form_and_google_posts_one_auth_message(app_page, live_auth):
     page = app_page
     _open_gate(page)
     page.get_by_role("button", name="Entrar").first.tap()
+    page.wait_for_selector("#__signin .si__card", timeout=10_000)
+    page.wait_for_timeout(500)
+    assert shell_messages(page) == [], "Entrar must open the in-page form, not hand off to the shell"
+    # #277: every control on the sheet is a real touch target, text inputs don't trigger the iOS zoom
+    small = page.evaluate("""() => Array.from(document.querySelectorAll('#__signin input, #__signin button, #__signin a'))
+        .filter((e) => e.offsetParent).map((e) => [e.id || e.className, e.getBoundingClientRect().height,
+          e.tagName === 'INPUT' ? parseFloat(getComputedStyle(e).fontSize) : 99]).filter((r) => r[1] < 44 || r[2] < 16)""")
+    assert small == [], f"controls under 44px / 16px: {small}"
+    page.locator('#__signin [data-idp="Google"]').tap()
     page.wait_for_function("(window.__shellMsgs || []).length > 0", timeout=10_000)
     page.wait_for_timeout(1000)  # a second (duplicate) message would land here
 
@@ -102,8 +112,9 @@ def test_entrar_posts_one_auth_message(app_page, live_auth):
     m = msgs[0]
     assert set(m) == {"type", "url"} and m["type"] == "auth", m
     url = m["url"]
-    assert url.startswith(f"{AUTH_ORIGIN}/login"), url
+    assert url.startswith(f"{AUTH_ORIGIN}/oauth2/authorize?"), url
     assert url.startswith(live_auth["domain"] + "/"), (url, live_auth)
+    assert "identity_provider=Google" in url, url
 
     q = {k: v[0] for k, v in parse_qs(urlparse(url).query).items()}
     assert q["redirect_uri"] == "onca://auth", q

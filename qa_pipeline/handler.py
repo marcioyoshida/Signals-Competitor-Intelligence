@@ -4,7 +4,7 @@ Dispatches on `event["mode"]`:
   - "skeleton" (default) — #127's original proof that the container image, IAM, and S3
     artifact path all work end to end: opens `/exec`, asserts the title, uploads a
     screenshot + result JSON.
-  - "login" — #128: Hosted UI login for a QA persona (`qa_pipeline.lib.auth`), returns the
+  - "login" — #128: sign-in-form login (#277) for a QA persona (`qa_pipeline.lib.auth`), returns the
     captured sessionStorage so a downstream Map shard can seed it without re-authenticating.
   - "matrix" — #128: opens `/exec` in the given browser engine at the given viewport,
     seeded with a previously captured sessionStorage, asserts no responsive-layout overflow
