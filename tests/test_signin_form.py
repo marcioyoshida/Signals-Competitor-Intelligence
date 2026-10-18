@@ -99,12 +99,23 @@ def test_every_page_that_calls_oncactx_login_loads_context_js():
 
 
 def test_only_the_known_pages_still_redirect_to_the_managed_login_page():
-    """Pages that do NOT load context.js keep their own PKCE sign-in (v1 index.html, and v2/ask.js's
-    built-in auth used by /v2/admin). They are listed here on purpose: a new page that builds
-    `${AUTH.domain}/login` must not appear silently."""
+    """Only the legacy v1 page keeps its own managed-login PKCE sign-in. /v2/admin moved to the
+    OncaCtx form too (ask.js no longer carries a built-in flow). Listed on purpose: a new page
+    that builds `${AUTH.domain}/login` must not appear silently."""
     offenders = sorted(str(p.relative_to(SITE)) for p in list(SITE.rglob("*.html")) + list(SITE.rglob("*.js"))
                        if "${AUTH.domain}/login" in p.read_text(encoding="utf-8"))
-    assert offenders == ["index.html", "v2/ask.js"], offenders
+    assert offenders == ["index.html"], offenders
+
+
+def test_admin_signs_in_through_the_shared_form():
+    """#277 follow-up: the operator page loads context.js BEFORE ask.js, and ask.js defaults to
+    OncaCtx, so admin gets the same form, broker session and token as every client screen."""
+    html = (SITE / "v2" / "admin" / "index.html").read_text(encoding="utf-8")
+    assert 0 < html.index('src="/v2/context.js"') < html.index('src="/v2/ask.js"')
+    ask = (SITE / "v2" / "ask.js").read_text(encoding="utf-8")
+    assert "opts.auth || ctxAuth()" in ask and "global.OncaCtx" in ask
+    for gone in ("/oauth2/token", "code_verifier", "VERIFIER_KEY", "auth.onssa.org"):
+        assert gone not in ask, gone
 
 
 def test_qa_login_fills_our_form_not_the_managed_page():

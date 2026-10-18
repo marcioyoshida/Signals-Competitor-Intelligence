@@ -75,9 +75,9 @@ def test_both_domains_run_managed_login_after_the_style_exists():
 
 def test_sign_in_urls_ask_for_portuguese():
     site = ROOT / "src" / "dashboard" / "site"
-    # v1 index.html and v2/ask.js (admin) still build the managed-login URL; context.js now builds
-    # only the provider URL (oauth2/authorize?identity_provider=…), and keeps the lang hint on it
-    for f in ("index.html", "v2/ask.js", "v2/context.js"):
+    # v1 index.html still builds the managed-login URL; context.js (every v2 page, admin included
+    # since #277) builds only the provider URL (oauth2/authorize?identity_provider=…), keeping lang
+    for f in ("index.html", "v2/context.js"):
         assert 'lang: "pt-BR"' in (site / f).read_text(encoding="utf-8"), f
     ctx = (site / "v2" / "context.js").read_text(encoding="utf-8")
     assert "identity_provider: useIdp" in ctx and "${AUTH.domain}/login" not in ctx

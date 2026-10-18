@@ -12,9 +12,8 @@
      - The five buyer screens already carry Cognito PKCE auth in context.js
        (OncaCtx). They pass it in as `opts.auth` so the SAME session token is
        reused — no second login path.
-     - Admin loads app.js only (no context.js). It uses this module's built-in
-       auth, which shares the SAME sessionStorage token key + client, so a
-       session established anywhere in the family is honoured here too.
+     - Admin loads context.js too (#277) and gets the same auth by default
+       (window.OncaCtx): one sign-in form, one session, no managed-login page.
      - The Entry tier (newentry) is a static, login-less slice with NO /api/ask
        entitlement — it renders an honest "disponível no plano SaaS" state, never
        a broken control (matches the live Entry Portal, which ships "no agent").
@@ -29,27 +28,11 @@
   const U = global.OncaUI;
   const esc = U.esc;
 
-  /* ---- built-in auth (mirrors context.js EXACTLY: same domain/client/token
-     key, so the session is shared across the whole v2 family). Used only when a
-     host screen does not inject its own auth (i.e. admin). ------------------ */
-  const AUTH = {
-    domain: "https://auth.onssa.org",
-    clientId: "4docsvvsocsujjqtj3aofduio3",
-    redirectUri: location.origin + location.pathname,
-  };
-  const TOKEN_KEY = "onca_id_token", VERIFIER_KEY = "onca_pkce_verifier";
-
-  function b64UrlEncode(bytes) {
-    let bin = ""; bytes.forEach((b) => { bin += String.fromCharCode(b); });
-    return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-  }
-  function randomPkceVerifier() {
-    const arr = new Uint8Array(64); crypto.getRandomValues(arr); return b64UrlEncode(arr);
-  }
-  async function pkceChallenge(verifier) {
-    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
-    return b64UrlEncode(new Uint8Array(digest));
-  }
+  /* ---- auth: always context.js (OncaCtx) -------------------------------------
+     #277: there is ONE sign-in path, OncaCtx's own form (e-mail + password through the session
+     broker; Google/Apple straight to the provider). Admin loads context.js too, so this module
+     no longer carries a second, managed-login PKCE flow. A host may still pass `opts.auth`. */
+  const TOKEN_KEY = "onca_id_token";
   function decodeJwt(token) {
     try {
       const b64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
@@ -58,61 +41,12 @@
       return JSON.parse(json);
     } catch (e) { return null; }
   }
-  function getIdToken() { try { return sessionStorage.getItem(TOKEN_KEY); } catch (e) { return null; } }
-  function isLoggedIn() {
-    const t = getIdToken(); if (!t) return false;
-    const p = decodeJwt(t); return !!(p && p.exp && p.exp * 1000 > Date.now());
-  }
-  async function login() {
-    const verifier = randomPkceVerifier();
-    sessionStorage.setItem(VERIFIER_KEY, verifier);
-    const challenge = await pkceChallenge(verifier);
-    const params = new URLSearchParams({
-      client_id: AUTH.clientId, response_type: "code", scope: "openid email",
-      redirect_uri: AUTH.redirectUri, code_challenge: challenge, code_challenge_method: "S256",
-      lang: "pt-BR",
-    });
-    location.href = `${AUTH.domain}/login?${params.toString()}`;
-  }
-  function logout() {
-    try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) {}
-    const params = new URLSearchParams({ client_id: AUTH.clientId, logout_uri: AUTH.redirectUri });
-    location.href = `${AUTH.domain}/logout?${params.toString()}`;
-  }
-  async function exchangeCodeForToken(code) {
-    const verifier = sessionStorage.getItem(VERIFIER_KEY);
-    sessionStorage.removeItem(VERIFIER_KEY);
-    if (!verifier) return false;
-    try {
-      const body = new URLSearchParams({
-        grant_type: "authorization_code", client_id: AUTH.clientId,
-        code, redirect_uri: AUTH.redirectUri, code_verifier: verifier,
-      });
-      const r = await fetch(`${AUTH.domain}/oauth2/token`, {
-        method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" },
-        body: body.toString(),
-      });
-      if (!r.ok) throw new Error("HTTP " + r.status);
-      const j = await r.json();
-      if (!j.id_token) throw new Error("sem id_token");
-      sessionStorage.setItem(TOKEN_KEY, j.id_token);
-      return true;
-    } catch (e) { console.error("Onça auth: troca de código falhou", e); return false; }
-  }
-  async function handleAuthCallback() {
-    const url = new URL(location.href);
-    const code = url.searchParams.get("code");
-    if (!code) return;
-    await exchangeCodeForToken(code);
-    url.searchParams.delete("code"); url.searchParams.delete("state");
-    history.replaceState({}, "", url.pathname + (url.search || "") + url.hash);
-  }
   function accountEmail(auth) {
     const t = (auth.getIdToken && auth.getIdToken()) || null;
     const p = t ? decodeJwt(t) : null;
     return (p && p.email) || "conta";
   }
-  const builtinAuth = { login, logout, isLoggedIn, getIdToken, handleAuthCallback };
+  const ctxAuth = () => global.OncaCtx || null;
 
   const DEFAULT_EXAMPLES = [
     "O que mudou recentemente no meu roster?",
@@ -172,7 +106,7 @@
   /* ---- the mount ---------------------------------------------------------- */
   // OncaAsk.mount(bodyEl, opts)
   //   opts.auth        {login,logout,isLoggedIn,getIdToken,handleAuthCallback}
-  //                    (buyer screens pass OncaCtx; admin omits -> built-in)
+  //                    (default: window.OncaCtx — context.js must be loaded)
   //   opts.entry       true  -> honest "disponível no plano SaaS", no API call
   //   opts.apiUrl      default "" (same origin; CloudFront -> JWT HTTP API)
   //   opts.scope       optional () => ({entity,lens,date}) request scope hint
@@ -182,7 +116,8 @@
   async function mount(bodyEl, opts) {
     opts = opts || {};
     if (!bodyEl) return;
-    const auth = opts.auth || builtinAuth;
+    const auth = opts.auth || ctxAuth();
+    if (!auth) { bodyEl.innerHTML = ""; console.error("OncaAsk: context.js (OncaCtx) não carregado"); return; }
     const apiUrl = opts.apiUrl || "";
     const examples = opts.examples || DEFAULT_EXAMPLES;
 
@@ -204,9 +139,9 @@
       return;
     }
 
-    // If this screen owns auth (admin/built-in), consume the ?code= redirect.
-    if (auth === builtinAuth && auth.handleAuthCallback) {
-      try { await auth.handleAuthCallback(); } catch (e) {}
+    // a session held in the broker's HttpOnly cookie gives this tab its ID token silently
+    if (auth.ensureSession && !auth.isLoggedIn()) {
+      try { await auth.ensureSession(); } catch (e) {}
     }
 
     bodyEl.innerHTML = `
@@ -309,5 +244,5 @@
     bodyEl.__askSync = syncLoginState;
   }
 
-  global.OncaAsk = { mount, auth: builtinAuth };
+  global.OncaAsk = { mount };
 })(window);

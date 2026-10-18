@@ -4,8 +4,8 @@
    app.js stays "pure helpers + primitives only" (its own contract). This file
    is the layer above it: the reusable PANEL compositions + auth + scoped-feed
    loader shared by the five buyer-facing context screens (newentry, adquirencia,
-   fintech, seguros, wealth). Admin does NOT load this file — it is operator-side
-   and keeps its own inline render.
+   fintech, seguros, wealth). Admin loads it ONLY for auth (#277: the same sign-in form and
+   broker session, via ask.js) — it is operator-side and keeps its own inline render.
 
    ONE system, six dashboards: every panel here is built from the same app.css
    component vocabulary (panel / exc / covrow / qrow / tile / badge / sparkline /

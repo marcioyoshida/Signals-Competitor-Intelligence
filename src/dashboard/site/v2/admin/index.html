@@ -205,8 +205,8 @@
 
   <!-- ===================== Perguntar à Onça (operator utility) ======== -->
   <!-- Secondary to the decision panels above: the operator's grounded Q&A over
-       the FULL feed (no tenant scoping — modules=None server-side). Its own
-       login lives here since admin does not load the buyer auth (context.js). -->
+       the FULL feed (no tenant scoping — modules=None server-side). Sign-in is the shared
+       OncaCtx form (context.js, #277) — no Cognito managed-login page. -->
   <section class="band">
     <div class="band-hd"><span class="overline">Perguntar à Onça</span><span class="rule"></span>
       <span class="badge badge--ghost">resposta fundamentada · feed completo</span></div>
@@ -251,6 +251,7 @@
 </aside>
 
 <script src="/v2/app.js"></script>
+<script src="/v2/context.js"></script>
 <script src="/v2/ask.js"></script>
 <script>
 const U = window.OncaUI;
@@ -261,8 +262,8 @@ document.getElementById("themeBtn").addEventListener("click", () => { U.toggleTh
 document.getElementById("drClose").addEventListener("click", closeDrawer);
 document.getElementById("scrim").addEventListener("click", closeDrawer);
 
-// Perguntar à Onça — operator Q&A over the full feed. Built-in auth (admin does
-// not load context.js); shares the same session token as the buyer screens.
+// Perguntar à Onça — operator Q&A over the full feed. Auth is OncaCtx (context.js, #277): our own
+// sign-in form, the same broker session and token as the buyer screens.
 OncaAsk.mount(document.getElementById("askBody"), {
   showAccount: true,
   onCite: (en) => {
