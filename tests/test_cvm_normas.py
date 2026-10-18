@@ -146,8 +146,10 @@ def test_degrades_to_empty_on_fetch_failure():
     assert cn.fetch_recent(fetcher=boom) == []
 
 
-def test_annotate_classifies_the_opea_stop_order_as_critical_securitization():
-    # This is the audit's B3 finding, end to end: ingest -> classify.
+def test_annotate_classifies_the_opea_stop_order_as_severe_operator_level_securitization():
+    # This is the audit's B3 finding, end to end: ingest -> classify. #286: a stop order on ONE
+    # issuer's offer is operator-level "high" (still an alert / severe enforcement row everywhere
+    # "critical" is), so it no longer opens a sector-wide event that floors securitization at 90.
     pages = {
         cn.NOTICIAS_LISTING_URL: _NOTICIAS_LISTING,
         "https://www.gov.br/cvm/pt-br/assuntos/noticias/2026/suspensa-oferta-de-certificados-de-recebiveis-imobiliarios-cri-da-opea-securitizadora-s-a":
@@ -159,5 +161,5 @@ def test_annotate_classifies_the_opea_stop_order_as_critical_securitization():
     recs = cn.fetch_noticias(lookback_days=60, fetcher=_fetcher(pages), today=_TODAY)
     annotated = federal_acts.annotate(recs)
     opea = next(r for r in annotated if "OPEA" in r["title"])
-    assert opea["severity"] == "critical"
+    assert opea["severity"] == "high" and "operator-level" in opea["severity_reason"]
     assert "securitization" in (opea.get("industries") or [])

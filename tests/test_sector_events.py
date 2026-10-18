@@ -390,3 +390,11 @@ def test_store_keeps_one_name_per_outlet():
     [out] = store["events"]
     assert {s["publisher"] for s in out["sources"]} == {"O GLOBO", "Poder360"}
     assert out["n_outlets"] == 2 and sorted(out["outlets"]) == ["O GLOBO", "Poder360"]
+
+
+def test_a_lifted_measure_never_upgrades_a_press_suspension_event():
+    # #286: the OPEA "Revertida suspensão" notice upgraded a press-born securitization
+    # "suspension" event (and opened a second one) — a reverted measure is no change of that kind
+    from src.synth import sector_events as se
+    assert se.rejection_reason("Revertida suspensão da oferta de CRI da OPEA Securitizadora") == "negated"
+    assert se.rejection_reason("CVM restabelece registro de oferta") == "negated"

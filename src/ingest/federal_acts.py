@@ -116,6 +116,14 @@ _BUDGET = re.compile(
     r"\b(?:credito (?:suplementar|especial|extraordinario)|abre ao orcamento|dotac\w*|remanejament\w*"
     r"|orcamento (?:fiscal|da seguridade)|programacao orcamentaria|limites? de (?:movimentacao|pagamento))\b")
 
+# #286: an act that LIFTS a measure ("Revertida suspensão da oferta…", "revoga a suspensão",
+# "restabelece") is the end of a ban, not one — it was rated critical and floored a sector at 90.
+_LIFTED = re.compile(r"\brevertid\w*|\brevert(?:e|em|eu)\b|\brevog\w* (?:a |o )?(?:suspens|proib|veda)"
+                     r"|\blevant\w* (?:a )?(?:suspens|proib)|\brestabelec\w*|\bretomad\w* (?:da|do) (?:oferta|registro)"
+                     r"|\b(?:suspensao|proibicao) (?:\w+ ){0,4}(?:revogad|revertid|levantad|cancelad)\w*")
+# A measure on ONE named company ("…da OPEA Securitizadora S.A.") is operator-level, never sector-wide.
+_NAMED_COMPANY = re.compile(r"\b(?:d[ao]s?|n[ao]s?)\s+[A-ZÀ-Ý][\wÀ-ÿ&.,\- ]{1,90}?\s(?:S\.?\s?/?\s?A\.?|LTDA\.?|Ltda\.?)(?=\W|$)")
+
 # critical: bans / prohibitions / suspensions / revoked authorizations or frameworks
 _BAN = re.compile(
     r"\bproib(?:e|em|ida|idas|ido|idos|icao|icoes|ir)\b"
@@ -356,6 +364,11 @@ def _severity(rec: dict[str, Any], title: str, ementa: str, art1: str, *, has_sc
     individual = bool(_INDIVIDUAL.search(title) or _INDIVIDUAL.search(doc_type))
     ban_zone = f"{head} {art1}"
     banned = _BAN.search(ban_zone) or _REVOKED_AUTH.search(ban_zone) or _REVOKES_FRAMEWORK.search(ementa)
+    if banned and _LIFTED.search(ban_zone):
+        return "medium", f"lifts a measure: {_LIFTED.search(ban_zone).group(0).strip()!r}"
+    if banned and not individual and _NAMED_COMPANY.search(
+            " ".join(str(x) for x in (rec.get("title"), rec.get("subject")) if x)):
+        individual = True  # a named company's offer/registration → operator-level (high)
     if banned and not individual:
         return "critical", f"ban/suspension/revocation: {banned.group(0).strip()!r}"
     if banned and individual:

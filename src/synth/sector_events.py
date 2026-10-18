@@ -160,7 +160,10 @@ _HYPOTHETICAL = re.compile(r"\bpossivel\b|\beventual\b|\bestud(?:a|am|o)\b|\bava
                            r"|\bse (?:\w+ ){0,3}(?:forem|for) (?:proibid|suspens|banid)\w*")
 # A denied / overturned measure is the absence of an event ("Justiça … nega suspensão").
 _NEGATED = re.compile(r"\bnega(?:m|do|da|ou|ram)?\b|\brejeit\w*|\barquiv\w*|\bderrub\w* (?:a |o )?(?:proib|suspens|veto)"
-                      r"|\bafasta\w* (?:a )?(?:proib|suspens)|\bdenie[sd]\b|\boverturn\w*")
+                      r"|\bafasta\w* (?:a )?(?:proib|suspens)|\bdenie[sd]\b|\boverturn\w*"
+                      # #286: a lifted / reverted measure ("Revertida suspensão da oferta…")
+                      r"|\brevertid\w*|\brevog\w* (?:a |o )?(?:proib|suspens)|\blevant\w* (?:a )?suspens"
+                      r"|\brestabelec\w*")
 # A public actor — the difference between "governo suspende 14 casas de apostas" (regulatory) and
 # "Coinbase suspende oito pares" (an operator's own business decision).
 _PUBLIC_ACTOR = re.compile(r"\b(?:governo|fazenda|spa|secretaria|ministerio|ministro|bcb|banco central|cvm|susep"
@@ -636,7 +639,9 @@ def build_events(
             if ev is None and not is_secondary:
                 # a primary act whose industry already has a PRESS-born event of the SAME kind of
                 # change in the window upgrades it (keeps its id) instead of opening a parallel one.
-                act_ctype = change_type_of(f"{src['title']} {src.get('summary') or ''}")
+                act_txt = f"{src['title']} {src.get('summary') or ''}"
+                # #286: a lifted measure ("Revertida suspensão…") is no change of that kind
+                act_ctype = None if _NEGATED.search(_fold(act_txt)) else change_type_of(act_txt)
                 ev = next((e for e in events if e.get("industry") == ind and not e.get("n_official")
                            and _in_window(e, src["date"]) and act_ctype
                            and e.get("change_type") == act_ctype), None)

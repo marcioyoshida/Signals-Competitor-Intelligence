@@ -291,3 +291,21 @@ def test_new_industry_vocabularies_match_their_sector_and_not_homonyms():
     # "credenciadora" alone is an accreditation body in the DOU (75/75 non-FS hits, live)
     assert "acquiring" not in ind("entidade credenciadora de cursos de formação")
     assert fa.compliance_in("Custo do PLD no mercado de energia") == []
+
+
+def test_a_lifted_suspension_or_one_named_company_is_not_a_sector_ban():
+    # #286: "Revertida suspensão da oferta de CRI da OPEA Securitizadora S.A." was rated critical,
+    # opened two securitization sector events and floored the sector's reg_threat at 90
+    from src.ingest import federal_acts as fa
+    t = "Revertida suspensão da oferta de Certificados de Recebíveis Imobiliários (CRI) da OPEA Securitizadora S.A."
+    r = fa.annotate([{"id": "cvm-noticia:x", "source": "CVM", "kind": "regulatory", "title": t, "subject": t,
+                      "industries": ["securitization"]}])[0]
+    assert r["severity"] == "medium" and "lifts" in r["severity_reason"]
+    t2 = "CVM suspende oferta de CRI da XPTO Securitizadora S.A."
+    r2 = fa.annotate([{"id": "cvm-noticia:y", "source": "CVM", "kind": "regulatory", "title": t2, "subject": t2,
+                       "industries": ["securitization"]}])[0]
+    assert r2["severity"] == "high" and "operator-level" in r2["severity_reason"]
+    mp = fa.annotate([{"id": "dou:mp", "source": "DOU", "kind": "regulatory", "doc_type": "Medida Provisória",
+                       "title": "MEDIDA PROVISÓRIA Nº 1.394", "industries": ["betting"],
+                       "subject": "Proíbe a exploração de apostas de quota fixa no território nacional."}])[0]
+    assert mp["severity"] == "critical"
