@@ -2433,7 +2433,10 @@ function metricsBand() {
   const di = (m.decision_integrity || []);
   const diBlock = di.length ? `<div style="padding:2px var(--s2) var(--s2)">` + di.slice(0, 6).map(f =>
     `<div class="hd-note"><span class="badge badge--${f.severity === "high" ? "high" : "warn"}">${U.esc(f.kind)}</span> ${U.esc(f.summary)}</div>`).join("") + `</div>` : "";
-  const note = `<p class="hd-note" style="padding:2px var(--s2) 0;line-height:1.4">${tdrStr}${U.esc(m.ets_note || "")}<br>${U.esc(m.tdr_note || "")}</p>${baseCtl}${diBlock}`;
+  // decisions logged by QA / the operator / the owner are kept in the store but never score the index
+  const intDec = m.internal_decisions_excluded
+    ? `<br>${nf(m.internal_decisions_excluded)} ${m.internal_decisions_excluded === 1 ? "decisão interna (QA/operador) fica" : "decisões internas (QA/operador) ficam"} fora do índice.` : "";
+  const note = `<p class="hd-note" style="padding:2px var(--s2) 0;line-height:1.4">${tdrStr}${U.esc(m.ets_note || "")}<br>${U.esc(m.tdr_note || "")}${intDec}</p>${baseCtl}${diBlock}`;
   // §E intelligence: which entities/sectors draw executive attention (from the engagement rollup).
   const te = eng.top_entities || [], tsec = eng.top_sectors || [];
   const interestPanel = (te.length || tsec.length)

@@ -153,7 +153,15 @@ def compute_metrics(decisions: list[dict[str, Any]],
     Engagement are now measurable; **Board adoption is not**, so `ets` is a PARTIAL composite —
     the weighted average of the measured components, renormalized to their summed weight (0.85),
     on a 0–10 scale, clearly labelled. `tdr` stays None (needs a per-tenant baseline)."""
-    decisions = [d for d in (decisions or []) if isinstance(d, dict)]
+    from src.synth.internal_traffic import is_internal
+
+    all_decisions = [d for d in (decisions or []) if isinstance(d, dict)]
+    # The trust METRICS are client evidence only: decisions logged by QA, the operator (opkey mode,
+    # actor="operator") or the owner don't score the product (2026-10-18: all 21 live decisions
+    # were the operator's — ETS read 0.0 from our own tests). The store workflows below
+    # (outcomes due, integrity audit) still see every decision, so the operator can manage them.
+    decisions = [d for d in all_decisions if not is_internal(d)]
+    internal_excluded = len(all_decisions) - len(decisions)
     overall = _slice(decisions)
 
     # component scores (0–10); None when not yet measurable
@@ -190,9 +198,10 @@ def compute_metrics(decisions: list[dict[str, Any]],
                      f"Índice de confiança parcial (0–10) — média ponderada dos componentes medidos "
                      f"(pesos {_ETS_WEIGHTS_PT}), renormalizada aos que já têm sinal."),
         **_tdr(decisions, tdr_baseline_hours),
-        "outcomes_due": outcomes_due(decisions, min_age_days=outcome_review_days),
+        "internal_decisions_excluded": internal_excluded,
+        "outcomes_due": outcomes_due(all_decisions, min_age_days=outcome_review_days),
         "outcome_review_days": outcome_review_days,
-        "decision_integrity": audit_decisions(decisions, review_days=outcome_review_days),
+        "decision_integrity": audit_decisions(all_decisions, review_days=outcome_review_days),
         "by_officer": by_officer,
         "by_industry": by_industry,
     }
