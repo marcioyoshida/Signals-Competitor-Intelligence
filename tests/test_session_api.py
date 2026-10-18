@@ -107,3 +107,114 @@ def test_idle_days_clamped(monkeypatch):
         monkeypatch.setattr(tenant_config, "get_tenant_config",
                             lambda t, table=None, v=v: {"session_idle_days": v} if v is not None else {})
         assert sa.idle_days("t") == want
+
+
+def _evr(route, body=None, csrf=True):
+    """#277 own sign-in form: the password routes (ported from Anteater a888626)."""
+    return _ev(f"/api/session/{route}", body, hdr=csrf)
+
+
+# --- own sign-in page (2026-10-14): the password side runs in the broker ---------------------
+
+class CE(Exception):
+    def __init__(self, code, msg=""):
+        super().__init__(msg)
+        self.response = {"Error": {"Code": code, "Message": msg}}
+
+
+@pytest.fixture
+def idp(monkeypatch):
+    monkeypatch.setenv("ONCA_USER_POOL_ID", "pool")
+    st = {"calls": [], "resp": {"AuthenticationResult": {
+        "IdToken": _jwt({"custom:tenant": "acme"}), "RefreshToken": "RT2", "ExpiresIn": 3600}}, "raise": None}
+
+    class C:
+        def __getattr__(self, name):
+            def f(**kw):
+                st["calls"].append((name, kw))
+                if st["raise"]:
+                    raise st["raise"]
+                return st["resp"]
+            return f
+    monkeypatch.setattr(sa, "_idp", lambda: C())
+    return st
+
+
+def test_password_signs_in_with_the_same_cookie_reply_as_exchange(idp):
+    r = sa.lambda_handler(_evr("password", {"email": " Ana@Acme.com ", "password": "pw-123456789012"}), None)
+    assert r["statusCode"] == 200
+    body = json.loads(r["body"])
+    assert body["id_token"] and "RT2" not in r["body"]
+    assert any(c.startswith(f"{sa.COOKIE}=RT2;") and "HttpOnly" in c for c in r["cookies"])
+    name, kw = idp["calls"][0]
+    assert name == "admin_initiate_auth" and kw["AuthFlow"] == "ADMIN_USER_PASSWORD_AUTH"
+    assert kw["AuthParameters"]["USERNAME"] == "ana@acme.com" and kw["UserPoolId"] == "pool"
+
+
+@pytest.mark.parametrize("code", ["NotAuthorizedException", "UserNotFoundException"])
+def test_wrong_email_and_wrong_password_answer_the_same(idp, code):
+    idp["raise"] = CE(code, "Incorrect username or password.")
+    r = sa.lambda_handler(_evr("password", {"email": "a@b.co", "password": "x"}), None)
+    assert r["statusCode"] == 401 and json.loads(r["body"]) == {"error": "invalid_credentials"}
+    assert "a@b.co" not in r["body"]
+
+
+def test_lockout_is_reported_as_too_many_attempts(idp):
+    idp["raise"] = CE("NotAuthorizedException", "Password attempts exceeded")
+    assert sa.lambda_handler(_evr("password", {"email": "a@b.co", "password": "x"}), None)["statusCode"] == 429
+
+
+def test_invited_user_gets_the_new_password_challenge_then_signs_in(idp):
+    idp["resp"] = {"ChallengeName": "NEW_PASSWORD_REQUIRED", "Session": "SESS"}
+    r = sa.lambda_handler(_evr("password", {"email": "a@b.co", "password": "temp"}), None)
+    assert json.loads(r["body"]) == {"challenge": "NEW_PASSWORD_REQUIRED", "session": "SESS"}
+    assert not r.get("cookies")
+    idp["resp"] = {"AuthenticationResult": {"IdToken": _jwt({}), "RefreshToken": "RT3", "ExpiresIn": 3600}}
+    r = sa.lambda_handler(_evr("new-password", {"email": "a@b.co", "session": "SESS",
+                                             "new_password": "a-long-new-password"}), None)
+    assert r["statusCode"] == 200 and r["cookies"][0].startswith(f"{sa.COOKIE}=RT3;")
+    name, kw = idp["calls"][-1]
+    assert name == "admin_respond_to_auth_challenge"
+    assert kw["ChallengeResponses"] == {"USERNAME": "a@b.co", "NEW_PASSWORD": "a-long-new-password"}
+
+
+def test_weak_new_password_is_named(idp):
+    idp["raise"] = CE("InvalidPasswordException")
+    r = sa.lambda_handler(_evr("new-password", {"email": "a@b.co", "session": "S", "new_password": "short"}), None)
+    assert r["statusCode"] == 400 and json.loads(r["body"])["error"] == "weak_password"
+
+
+def test_other_challenges_are_not_offered(idp):
+    idp["resp"] = {"ChallengeName": "SOFTWARE_TOKEN_MFA", "Session": "S"}
+    assert sa.lambda_handler(_evr("password", {"email": "a@b.co", "password": "x"}), None)["statusCode"] == 409
+
+
+def test_forgot_never_reveals_whether_the_account_exists(idp):
+    for exc in (None, CE("UserNotFoundException"), CE("InvalidParameterException")):
+        idp["raise"] = exc
+        r = sa.lambda_handler(_evr("forgot", {"email": "who@x.co"}), None)
+        assert r["statusCode"] == 200 and json.loads(r["body"]) == {"ok": True}
+
+
+def test_reset_with_a_bad_code(idp):
+    idp["raise"] = CE("CodeMismatchException")
+    r = sa.lambda_handler(_evr("reset", {"email": "a@b.co", "code": "1", "new_password": "p"}), None)
+    assert r["statusCode"] == 400 and json.loads(r["body"])["error"] == "bad_code"
+    idp["raise"] = None
+    r = sa.lambda_handler(_evr("reset", {"email": "a@b.co", "code": "123456", "new_password": "a-long-pw-12"}), None)
+    assert r["statusCode"] == 200
+    assert idp["calls"][-1][0] == "confirm_forgot_password"
+
+
+def test_new_routes_need_the_csrf_header_and_input(idp):
+    assert sa.lambda_handler(_evr("password", {"email": "a@b.co", "password": "x"}, csrf=False), None)["statusCode"] == 403
+    assert sa.lambda_handler(_evr("password", {"email": "nope", "password": "x"}), None)["statusCode"] == 400
+    assert not idp["calls"]
+
+
+def test_session_lambda_may_run_the_admin_password_flow():
+    stack = (Path(__file__).resolve().parents[1] / "infra" / "app.py").read_text(encoding="utf-8")
+    assert 'session_fn.add_environment("ONCA_USER_POOL_ID", user_pool.user_pool_id)' in stack
+    assert '"cognito-idp:AdminInitiateAuth"' in stack and '"cognito-idp:AdminRespondToAuthChallenge"' in stack
+    for route in ("password", "new-password", "forgot", "reset"):
+        assert f'"/api/session/{route}"' in stack, route

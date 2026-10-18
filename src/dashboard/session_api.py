@@ -16,6 +16,21 @@ Three POST routes on the Cognito HTTP API (no JWT authorizer — the cookie IS t
   Cognito refresh-token validity (30 days, infra) is the absolute cap.
 * ``/api/session/logout`` — revokes the refresh token at Cognito and expires the cookie.
 
+Own sign-in form on /exec (#277, ported from Anteater a888626): Cognito's managed-login page
+can't be resized (inputs/buttons 32px, checkbox 16px on a phone — ``spacingDensity`` only accepts
+REGULAR), so /exec carries its own form and these routes do the password side; Google/Apple go
+straight to the provider (``identity_provider=``) and come back through ``exchange``.
+
+* ``/api/session/password`` ``{email, password}`` — ADMIN_USER_PASSWORD_AUTH (the app client
+  allows it; the call needs THIS Lambda's IAM role, so it is not open to any Cognito API caller).
+  Success = the same reply as ``exchange``; ``{challenge: "NEW_PASSWORD_REQUIRED", session}`` for an
+  invited user's first sign-in. Wrong e-mail and wrong password answer the same 401; Cognito's own
+  per-user lockout throttles guessing.
+* ``/api/session/new-password`` ``{email, session, new_password}`` — answers that challenge.
+* ``/api/session/forgot`` ``{email}`` — sends the reset code; always ``{ok: true}`` (no enumeration).
+* ``/api/session/reset`` ``{email, code, new_password}`` — sets the new password.
+Nothing here logs an e-mail or a password.
+
 A Cognito global sign-out (operator ``revoke_user_sessions`` act, #164) invalidates the refresh
 token, so the next ``refresh`` returns 401 and the client clears its per-user caches.
 
@@ -168,13 +183,112 @@ def logout(event: dict[str, Any]) -> dict[str, Any]:
     return _resp(200, {"ok": True}, [_cookie("", 0)])
 
 
+_NEW_PW = "NEW_PASSWORD_REQUIRED"
+
+
+def _idp():
+    import boto3
+    return boto3.client("cognito-idp")
+
+
+def _email(body: dict[str, Any]) -> str:
+    e = str(body.get("email") or "").strip().lower()
+    return e if 3 <= len(e) <= 254 and "@" in e else ""
+
+
+def _err_name(exc: Exception) -> str:
+    return str(getattr(exc, "response", {}).get("Error", {}).get("Code") or type(exc).__name__)
+
+
+def _auth_result(r: dict[str, Any]) -> dict[str, Any]:
+    a = r.get("AuthenticationResult") or {}
+    if a.get("IdToken") and a.get("RefreshToken"):
+        return _session_reply(a["IdToken"], a["RefreshToken"], a.get("ExpiresIn"))
+    if r.get("ChallengeName") == _NEW_PW and r.get("Session"):
+        return _resp(200, {"challenge": _NEW_PW, "session": r["Session"]})
+    # MFA or any other challenge: not configured on this pool (MfaConfiguration OFF), not offered
+    return _resp(409, {"error": "unsupported_challenge"})
+
+
+def _pw_error(exc: Exception) -> dict[str, Any]:
+    name = _err_name(exc)
+    if name == "InvalidPasswordException":
+        return _resp(400, {"error": "weak_password"})
+    if name in ("CodeMismatchException", "ExpiredCodeException"):
+        return _resp(400, {"error": "bad_code"})
+    if name in ("TooManyRequestsException", "LimitExceededException", "TooManyFailedAttemptsException"):
+        return _resp(429, {"error": "too_many_attempts"})
+    if name == "NotAuthorizedException" and "attempts exceeded" in str(exc).lower():
+        return _resp(429, {"error": "too_many_attempts"})
+    if name in ("NotAuthorizedException", "UserNotFoundException", "UserNotConfirmedException",
+                "PasswordResetRequiredException", "InvalidParameterException"):
+        return _resp(401, {"error": "invalid_credentials"})
+    print(f"session: cognito error ({name})")
+    return _resp(502, {"error": "unavailable"})
+
+
+def password(body: dict[str, Any]) -> dict[str, Any]:
+    email, pw = _email(body), str(body.get("password") or "")
+    if not email or not pw or len(pw) > 256:
+        return _resp(400, {"error": "email and password are required"})
+    try:
+        r = _idp().admin_initiate_auth(
+            UserPoolId=os.environ["ONCA_USER_POOL_ID"], ClientId=os.environ["ONCA_COGNITO_CLIENT_ID"],
+            AuthFlow="ADMIN_USER_PASSWORD_AUTH", AuthParameters={"USERNAME": email, "PASSWORD": pw})
+    except Exception as exc:  # noqa: BLE001 - mapped to a generic answer
+        return _pw_error(exc)
+    return _auth_result(r)
+
+
+def new_password(body: dict[str, Any]) -> dict[str, Any]:
+    email, sess, pw = _email(body), str(body.get("session") or ""), str(body.get("new_password") or "")
+    if not email or not sess or not pw or len(pw) > 256:
+        return _resp(400, {"error": "email, session and new_password are required"})
+    try:
+        r = _idp().admin_respond_to_auth_challenge(
+            UserPoolId=os.environ["ONCA_USER_POOL_ID"], ClientId=os.environ["ONCA_COGNITO_CLIENT_ID"],
+            ChallengeName=_NEW_PW, Session=sess, ChallengeResponses={"USERNAME": email, "NEW_PASSWORD": pw})
+    except Exception as exc:  # noqa: BLE001
+        return _pw_error(exc)
+    return _auth_result(r)
+
+
+def forgot(body: dict[str, Any]) -> dict[str, Any]:
+    email = _email(body)
+    if email:
+        try:
+            _idp().forgot_password(ClientId=os.environ["ONCA_COGNITO_CLIENT_ID"], Username=email)
+        except Exception as exc:  # noqa: BLE001 - same answer either way (no enumeration)
+            if _pw_error(exc)["statusCode"] == 429:
+                return _resp(429, {"error": "too_many_attempts"})
+    return _resp(200, {"ok": True})
+
+
+def reset(body: dict[str, Any]) -> dict[str, Any]:
+    email, code, pw = _email(body), str(body.get("code") or "").strip(), str(body.get("new_password") or "")
+    if not email or not code or not pw or len(pw) > 256:
+        return _resp(400, {"error": "email, code and new_password are required"})
+    try:
+        _idp().confirm_forgot_password(ClientId=os.environ["ONCA_COGNITO_CLIENT_ID"],
+                                       Username=email, ConfirmationCode=code, Password=pw)
+    except Exception as exc:  # noqa: BLE001
+        out = _pw_error(exc)
+        return _resp(400, {"error": "bad_code"}) if out["statusCode"] == 401 else out
+    return _resp(200, {"ok": True})
+
+
+_BODY_ROUTES = {"exchange": exchange, "password": password, "new-password": new_password,
+                "forgot": forgot, "reset": reset}
+
+
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     headers = {str(k).lower(): v for k, v in (event.get("headers") or {}).items()}
     if headers.get("x-onca-session") != "1":
         return _resp(403, {"error": "forbidden"})
     path = str(event.get("rawPath") or "").rstrip("/")
-    if path.endswith("/exchange"):
-        return exchange(_body(event))
+    route = path.rsplit("/", 1)[-1]
+    if route in _BODY_ROUTES:
+        return _BODY_ROUTES[route](_body(event))
     if path.endswith("/refresh"):
         return refresh(event)
     if path.endswith("/logout"):

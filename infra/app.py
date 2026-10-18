@@ -2421,8 +2421,15 @@ class OncaPrototypeStack(Stack):
             },
         )
         tenant_config_table.grant_read_data(session_fn)  # per-tenant session_idle_days
+        # #277 own sign-in form on /exec: the password side runs here (ADMIN_USER_PASSWORD_AUTH +
+        # the invited user's first-password challenge); forgot/reset are public Cognito calls.
+        session_fn.add_environment("ONCA_USER_POOL_ID", user_pool.user_pool_id)
+        user_pool.grant(session_fn, "cognito-idp:AdminInitiateAuth",
+                        "cognito-idp:AdminRespondToAuthChallenge")
         _session_integ = apigwv2_int.HttpLambdaIntegration("SessionInteg", session_fn)
-        for _spath in ("/api/session/exchange", "/api/session/refresh", "/api/session/logout"):
+        for _spath in ("/api/session/exchange", "/api/session/refresh", "/api/session/logout",
+                       "/api/session/password", "/api/session/new-password",
+                       "/api/session/forgot", "/api/session/reset"):
             auth_api.add_routes(path=_spath, methods=[apigwv2.HttpMethod.POST],
                                 integration=_session_integ)
         # #167 content-free push alerts. The VAPID private key is a SecureString created out of
