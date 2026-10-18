@@ -98,8 +98,10 @@ refresh token in an HttpOnly cookie (Onça #161/#164). The password routes add:
 
 ## What stays on managed login
 
-- Operator/admin pages can stay on managed login. In Onça that is `/v2/admin` and the legacy v1
-  page. Pin the list in a test, so a new page can't use it silently.
+- Operator/admin pages should use the same form. Onça moved `/v2/admin` to it on 2026-10-18
+  (d12a6d6): one session and one token, with no second PKCE flow left to maintain. Only the
+  legacy v1 page still builds the managed-login URL, and a test pins that list, so a new page
+  can't use it silently.
 - OAuth clients (MCP, the agent OAuth facade) use the authorize endpoint and see managed login by
   design.
 
