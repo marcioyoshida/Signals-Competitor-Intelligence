@@ -1012,6 +1012,7 @@ def scope_feed_to_modules(feed: dict[str, Any], modules: Any) -> dict[str, Any]:
             "integrity": {"findings": [], "counts": {}, "total": 0, "withheld": True},  # operator-only; #211 "withheld" ≠ "audited clean"
             "regulatory_coverage": {},                                # operator-only (#2)
             "mobile_usage": {},  # operator-only (#165) — per-officer device usage
+            "tenant_usage": {},  # operator-only (#288) — per-tenant adoption
             "source_runs": [],  # operator-only (#139) — raw per-source telemetry incl. error
                                 # text; clients get only the reduced "coverage_confidence" score,
                                 # which `dict(feed)` already carried over unchanged.
@@ -1167,6 +1168,7 @@ def derive_entry_feed(
             "regulatory_coverage": {},                                # operator-only (#2)
             "source_runs": [],  # operator-only (#139) — see scope_feed_to_modules
             "mobile_usage": {},  # operator-only (#165)
+            "tenant_usage": {},  # operator-only (#288)
             "source_coverage": {},  # operator-only — see scope_feed_to_modules
         }
     )
@@ -2115,14 +2117,26 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             _review_days = int(os.environ.get("ONCA_OUTCOME_REVIEW_DAYS") or 7)
         except (TypeError, ValueError):
             _review_days = 7
+        _push_stats: dict[str, Any] = {}
         try:  # #165 operator-only: phone usage by device class (the M2 store-app gate evidence)
             from src.synth import mobile_usage
             feed["mobile_usage"] = mobile_usage.build(_engagement, _decisions)
             if os.environ.get("ONCA_PUSH_TABLE"):   # #167 send/delivered/opened counters
                 from src.dashboard import push as _push
-                feed["mobile_usage"]["push"] = _push.stats()
+                _push_stats = _push.stats()
+                feed["mobile_usage"]["push"] = {k: v for k, v in _push_stats.items() if k != "users_by_tenant"}
         except Exception as exc:  # pragma: no cover - best-effort, read-only
             print(f"Warning: mobile usage skipped: {exc}")
+        try:  # #288 operator-only: per-tenant adoption ("Uso por cliente"), internal traffic excluded
+            from src.synth import tenant_usage
+            _tenants: list[dict[str, Any]] = []
+            if os.environ.get("ONCA_TENANT_CONFIG_TABLE"):
+                from src.dashboard.tenant_config import list_tenant_items
+                _tenants = list_tenant_items()
+            feed["tenant_usage"] = tenant_usage.build(
+                _engagement, _tenants, push_by_tenant=_push_stats.get("users_by_tenant"))
+        except Exception as exc:  # pragma: no cover - best-effort, read-only
+            print(f"Warning: tenant usage skipped: {exc}")
         feed["executive"] = executive.build_executive(feed, decisions=_decisions,
                                                        engagement=_engagement, tdr_baseline_hours=_tdr_base,
                                                        outcome_review_days=_review_days)

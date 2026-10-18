@@ -108,9 +108,11 @@ def _bump(stat: str, n: int = 1, *, table: Any | None = None, now: dt.datetime |
 
 
 def stats(days: int = 28, *, table: Any | None = None) -> dict[str, Any]:
-    """Operator view: per-day sent/delivered/failed/pruned/opened + live subscriptions."""
+    """Operator view: per-day sent/delivered/failed/pruned/opened + live subscriptions (and the
+    distinct subscribed users per tenant, #288)."""
     t = _table(table)
     rows, subs, last = [], 0, None
+    users: dict[str, set] = {}   # #288: distinct subscribed users per tenant (operator view)
     kw: dict[str, Any] = {}
     while True:
         page = t.scan(**kw)
@@ -118,6 +120,7 @@ def stats(days: int = 28, *, table: Any | None = None) -> dict[str, Any]:
             pk = str(it.get("pk") or "")
             if pk.startswith("SUB#"):
                 subs += 1
+                users.setdefault(str(it.get("tenant") or ""), set()).add(str(it.get("user") or pk))
             elif pk.startswith("STATS#"):
                 rows.append({"date": pk[6:], **{k: int(v) for k, v in it.items() if k != "pk"}})
         last = page.get("LastEvaluatedKey")
@@ -125,7 +128,8 @@ def stats(days: int = 28, *, table: Any | None = None) -> dict[str, Any]:
             break
         kw["ExclusiveStartKey"] = last
     rows.sort(key=lambda r: r["date"], reverse=True)
-    return {"subscriptions": subs, "days": rows[:days]}
+    return {"subscriptions": subs, "days": rows[:days],
+            "users_by_tenant": {k: len(v) for k, v in users.items() if k}}
 
 
 # ---- scoping (identical to /api/feed) -------------------------------------------------------

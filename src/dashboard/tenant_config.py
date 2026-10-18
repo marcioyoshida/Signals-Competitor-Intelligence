@@ -220,6 +220,18 @@ def get_tenant_config(tenant_id: str | None, *, table: Any | None = None) -> dic
     }
 
 
+def list_tenant_items(*, table: Any | None = None) -> list[dict[str, Any]]:
+    """#288 operator view: every raw tenant-config row (plan, modules, trial/paid state). No PII
+    lives in this table (e-mails are in the federated map). Paginated scan."""
+    t, out, kw = _table(table), [], {}
+    while True:
+        page = t.scan(**kw)
+        out.extend(page.get("Items", []))
+        if not page.get("LastEvaluatedKey"):
+            return out
+        kw["ExclusiveStartKey"] = page["LastEvaluatedKey"]
+
+
 # The delivery plane a tier defaults to (overridable per tenant): a tier-1 tenant is
 # `saas` unless explicitly provisioned as `marketplace` (in-account).
 VALID_PLANES = ("portal", "saas", "marketplace")

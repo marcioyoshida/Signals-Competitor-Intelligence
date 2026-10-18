@@ -38,6 +38,30 @@
   #rlList .rltk[hidden] { display: none; }
   #rlFilter { margin-left: var(--s2); }
   #rlList .prmsg--err, #rlList .qrow__meta.prmsg--err { color: var(--warn); font-weight: 600; }   /* red is reserved for threats */
+  /* #288 Uso por cliente — one expandable row per tenant (the summary is the ≥44px touch target) */
+  .tu { border-top: 1px solid var(--border); }
+  .tu:first-child { border-top: 0; }
+  .tu > summary { list-style: none; cursor: pointer; min-height: 44px; box-sizing: border-box; padding: var(--s2) var(--s4);
+    display: grid; grid-template-columns: 132px minmax(0, 1fr) 96px 120px 16px; gap: var(--s3); align-items: center; }
+  .tu .tu-tw { color: var(--muted); transition: transform .15s; }
+  .tu[open] .tu-tw { transform: rotate(90deg); }
+  .tu > summary::-webkit-details-marker { display: none; }
+  .tu > summary:hover { background: var(--surface-2); }
+  .tu > summary:focus-visible { outline: none; box-shadow: var(--focus); }
+  .tu .tu-st { display: flex; flex-wrap: wrap; gap: 4px; }
+  .tu .tu-id { min-width: 0; }
+  .tu .tu-id b { overflow-wrap: anywhere; }
+  .tu .tu-id .sub, .tu .tu-n .sub, .tu .tu-last .sub { display: block; font-size: var(--fs-micro); color: var(--muted); }
+  .tu .tu-n, .tu .tu-last { font-variant-numeric: tabular-nums; }
+  .tu .tu-bd { padding: 0 var(--s4) var(--s3); display: grid; gap: var(--s2); }
+  .tu .tu-kv { display: flex; flex-wrap: wrap; gap: 4px var(--s4); font-size: var(--fs-meta); }
+  .tu .tu-kv span b { font-variant-numeric: tabular-nums; }
+  .tu .chip { font-size: var(--fs-micro); }
+  @media (max-width: 560px) {
+    .tu > summary { grid-template-columns: 1fr 1fr 16px; row-gap: 4px; }
+    .tu .tu-st, .tu .tu-id { grid-column: 1 / 3; }
+    .tu .tu-tw { grid-column: 3; grid-row: 1 / 3; align-self: center; }
+  }
   @media (max-width: 560px) {
     /* rows stack: badge + main on top, actions below (no horizontal overflow at 390px) */
     #prList .qrow { grid-template-columns: auto 1fr; }
@@ -144,6 +168,19 @@
       <div class="panel__hd"><h2>Sessões por dispositivo</h2><span class="spacer"></span>
         <span class="hd-note" id="muGate"></span></div>
       <div class="panel__bd" id="mobileUsage"></div>
+    </div>
+  </section>
+
+  <!-- ===================== Uso por cliente (#288) ===================== -->
+  <!-- Operator-only (feed.tenant_usage is blanked in every tenant feed): per-tenant activity, risk-
+       sorted (a trial gone quiet first). ADR 021 §E: adoption, not a success KPI. Users = hashes. -->
+  <section class="band">
+    <div class="band-hd"><span class="overline">Uso por cliente</span><span class="rule"></span>
+      <span class="badge badge--ghost">adoção operacional · não é KPI · usuários como hash</span></div>
+    <div class="panel">
+      <div class="panel__hd"><h2>Clientes por risco</h2><span class="spacer"></span>
+        <span class="hd-note" id="tuSum"></span></div>
+      <div class="panel__bd panel__bd--flush" id="tenantUsage"></div>
     </div>
   </section>
 
@@ -299,6 +336,7 @@ function render() {
   renderCoverage();
   renderDescoberta();
   renderMobileUsage();
+  renderTenantUsage();
   renderKpis();
   renderMapa();
   renderExceptions();
@@ -328,6 +366,46 @@ function renderMobileUsage() {
     `<tbody>${rows}</tbody></table></div>` +
     `<div style="margin-top:var(--s3)"><span class="overline">No celular</span> ${jobs || '<span class="sub">—</span>'}</div>` +
     `<p class="sub" style="margin-top:var(--s2)">${U.esc(g.note || "")}</p>` + excl + pushStats(mu.push);
+}
+// #288 — "Uso por cliente": one row per client tenant from feed.tenant_usage (operator feed only).
+// A trial gone quiet sorts first; a tenant with no client events still has a row ("sem uso").
+function renderTenantUsage() {
+  const el = document.getElementById("tenantUsage"), tu = DATA.tenant_usage || {};
+  const rows = tu.tenants || [], nf = (n) => Number(n || 0).toLocaleString("pt-BR");
+  const excl = `${nf(tu.internal_events_excluded)} ${tu.internal_events_excluded === 1 ? "evento" : "eventos"} e ${nf(tu.internal_tenants_excluded)} ${tu.internal_tenants_excluded === 1 ? "tenant" : "tenants"} internos (QA/operador) excluídos` +
+    (tu.events_without_tenant ? ` · ${nf(tu.events_without_tenant)} ${tu.events_without_tenant === 1 ? "evento" : "eventos"} sem tenant` : "");
+  document.getElementById("tuSum").textContent = rows.length
+    ? `${rows.length} ${rows.length === 1 ? "cliente" : "clientes"} · ${tu.n_active_7 || 0} ${tu.n_active_7 === 1 ? "ativo" : "ativos"} em 7 dias · ${tu.n_quiet || 0} ${tu.n_quiet === 1 ? "parado" : "parados"}` : "";
+  const foot = `<p class="sub" style="margin:var(--s3) var(--s4)">${U.esc(excl)}. ${U.esc(tu.note || "")}</p>`;
+  if (!rows.length) { el.innerHTML = U.empty("Sem clientes", "Nenhum tenant de cliente cadastrado ou com uso ainda.", "○") + foot; return; }
+  const when = (iso) => iso ? U.fmtDate(String(iso).slice(0, 10)) : "—";
+  const DEV = { phone: "celular", tablet: "tablet", desktop: "computador", "?": "sem classe" };
+  const SIGN = { password: "senha", google: "Google", apple: "Apple" };
+  el.innerHTML = rows.map((r) => {
+    const p = r.plan || {}, u = r.users || {}, s = r.sessions || {}, c = r.chat || {};
+    const badges = [`<span class="badge badge--ghost">${U.esc(p.state_pt || p.state || "—")}</span>`];
+    if (r.quiet) badges.push(`<span class="badge badge--warn">parado${r.idle_days != null ? " · " + r.idle_days + "d" : ""}</span>`);
+    if (r.no_use) badges.push(`<span class="badge badge--ghost">sem uso</span>`);
+    const plan = [p.tier, (p.modules || []).join(", ")].filter(Boolean).join(" · ") +
+      (p.trial_days_left != null ? ` · teste: ${p.trial_days_left} ${p.trial_days_left === 1 ? "dia" : "dias"}` : "");
+    const kv = (k, v) => `<span>${k} <b>${v}</b></span>`;
+    const devs = Object.entries(r.devices || {}).map(([d, n]) => `${DEV[d] || d} ${nf(n)}`).join(" · ") || "—";
+    const feats = (r.features || []).map((f) => `<span class="chip">${U.esc(f.label)} · ${nf(f.count)}</span>`).join(" ") || '<span class="sub">nenhum recurso usado em 28 dias</span>';
+    const sign = Object.entries(r.signin || {}).map(([m, n]) => `${SIGN[m] || m} ${nf(n)}`).join(" · ");
+    const users = (r.user_list || []).map((x) => `<tr><td><code>${U.esc(x.user)}</code></td><td>${when(x.last)}</td><td>${nf(x.sessions_28)}</td><td>${nf(x.events_28)}</td></tr>`).join("");
+    const body = r.no_use
+      ? `<p class="sub">Nenhum evento de cliente registrado para este tenant.</p>`
+      : `<div class="tu-kv">${kv("sessões 7d/28d", `${nf(s["7"])} / ${nf(s["28"])}`)}${kv("dispositivos (28d)", U.esc(devs))}` +
+        `${kv("chat 7d/28d", `${nf(c["7"])} / ${nf(c["28"])}`)}${kv("pico por usuário/dia", `${nf(c.peak_user_day)} de ${nf(c.cap)}`)}` +
+        `${kv("relatos (28d)", nf(r.reports_28))}${kv("alertas push", `${nf(r.push_users)} ${r.push_users === 1 ? "usuário" : "usuários"}`)}` +
+        (sign ? kv("entrada (28d)", U.esc(sign)) : "") + `</div><div>${feats}</div>` +
+        (users ? `<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>usuário (hash)</th><th>último uso</th><th>sessões 28d</th><th>eventos 28d</th></tr></thead><tbody>${users}</tbody></table></div>` : "");
+    return `<details class="tu"><summary><span class="tu-st">${badges.join("")}</span>` +
+      `<span class="tu-id"><b>${U.esc(r.tenant)}</b><span class="sub">${U.esc(plan || "sem plano")}</span></span>` +
+      `<span class="tu-n">${nf(u["7"])} / ${nf(u["28"])}<span class="sub">usuários 7d/28d</span></span>` +
+      `<span class="tu-last">${when(r.last_activity)}<span class="sub">último uso</span></span><span class="tu-tw" aria-hidden="true">▸</span></summary>` +
+      `<div class="tu-bd">${body}</div></details>`;
+  }).join("") + foot;
 }
 // #167: push delivery is reported honestly — sent / accepted by the push service / failed /
 // pruned (expired subscription) / opened, per day.
