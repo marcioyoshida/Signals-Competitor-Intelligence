@@ -345,7 +345,8 @@
       return cached ? { data: cached.data, offline: true, cachedAt: cached.at } : { needAuth: true, offline: true };
     }
     try {
-      const r = await fetch("/api/feed", { cache: "no-store",
+      // #285: revalidate (ETag → 304) instead of re-downloading the whole scoped feed each open
+      const r = await fetch("/api/feed", { cache: "no-cache",
         headers: { authorization: `Bearer ${getIdToken()}` } });
       if (r.status === 401) { try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) {} return { needAuth: true }; }
       if (r.status === 403) {

@@ -25,6 +25,22 @@ def _resp(status: int, body: Any) -> dict[str, Any]:
     }
 
 
+def _etag(s3_etag: str, tenant: Any, tier: Any, modules: list[str], billing: Any, upgrade: Any) -> str:
+    """#285: a revisit re-downloaded the whole scoped feed (617 KB gzip for a sovereign admin) on
+    every open of the PWA, though feed.json changes ~3x/day. The ETag covers everything the
+    response depends on: the published object and the caller's entitlement."""
+    import hashlib
+
+    basis = json.dumps([s3_etag, tenant, tier, sorted(modules), billing, upgrade],
+                       sort_keys=True, ensure_ascii=False, default=str)
+    return '"' + hashlib.sha256(basis.encode()).hexdigest()[:32] + '"'
+
+
+def _if_none_match(event: dict[str, Any]) -> str | None:
+    h = {str(k).lower(): v for k, v in ((event or {}).get("headers") or {}).items()}
+    return h.get("if-none-match")
+
+
 def upgrade_info() -> dict[str, Any]:
     """#187: may the dashboard send buyers to the storefront yet? OFF until Signals-Storefront
     #6/#7/#8 ship: before that a checkout can't attach to the tenant, and the customer would pay
@@ -76,7 +92,14 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
         from src.dashboard.feed_builder import scope_feed_for_entry_tenant, scope_feed_to_modules
 
-        raw = boto3.client("s3").get_object(Bucket=bucket, Key="feed.json")["Body"].read()
+        s3 = boto3.client("s3")
+        upgrade = upgrade_info()
+        etag = _etag(s3.head_object(Bucket=bucket, Key="feed.json").get("ETag", ""),
+                     tenant_id, tier, modules, billing, upgrade)
+        cache = {"cache-control": "private, no-cache", "etag": etag}
+        if _if_none_match(event) == etag:
+            return {"statusCode": 304, "headers": cache, "body": ""}
+        raw = s3.get_object(Bucket=bucket, Key="feed.json")["Body"].read()
         # ADR 016/024: an Entry tenant (paid Entry or its trial — effective tier "entry"; an
         # active SaaS sub lifts it to "saas" in tenant_config.effective_entitlement) gets the
         # Entry slice at Entry depth, never the full SaaS projection of its module.
@@ -85,8 +108,10 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         scoped["tenant"] = tenant_id
         scoped["tier"] = tier
         scoped["billing"] = billing
-        scoped["upgrade"] = upgrade_info()
-        return _resp(200, scoped)
+        scoped["upgrade"] = upgrade
+        out = _resp(200, scoped)
+        out["headers"].update(cache)
+        return out
     except Exception as exc:  # pragma: no cover - read-only, best-effort
         print(f"feed_api error: {exc}")
         return _resp(500, {"error": "feed unavailable"})

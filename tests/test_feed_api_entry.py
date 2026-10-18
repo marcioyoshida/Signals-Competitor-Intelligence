@@ -63,6 +63,9 @@ class _FakeS3:
     def get_object(self, Bucket, Key):
         return {"Body": _FakeBody(json.dumps(self._feed).encode())}
 
+    def head_object(self, Bucket, Key):
+        return {"ETag": '"v1"'}
+
 
 def _call(monkeypatch, cfg):
     import boto3

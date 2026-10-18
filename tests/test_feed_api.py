@@ -39,7 +39,11 @@ class _FakeS3:
         self._feed = feed
 
     def get_object(self, Bucket, Key):
+        self.gets = getattr(self, "gets", 0) + 1
         return {"Body": _FakeBody(json.dumps(self._feed).encode())}
+
+    def head_object(self, Bucket, Key):
+        return {"ETag": '"v1"'}
 
 
 def _patch_s3(monkeypatch, feed):
@@ -108,3 +112,24 @@ def test_no_tenant_and_no_industry_group_fails_closed():
     ev = _ev({"sub": "u", "cognito:groups": ["not-a-real-industry", "strategy"]})
     r = feed_api.lambda_handler(ev, None)
     assert r["statusCode"] == 403
+
+
+def test_unchanged_feed_revalidates_with_304_and_no_body(monkeypatch):
+    # #285: every PWA open re-downloaded 617 KB gzip although feed.json changes ~3x/day
+    import boto3
+    import src.dashboard.tenant_config as tc
+
+    monkeypatch.setattr(tc, "get_tenant_config", lambda t: {"tier": "saas", "modules": ["banking"]})
+    monkeypatch.setenv("ONCA_SITE_BUCKET", "b")
+    fake = _FakeS3(_feed())
+    monkeypatch.setattr(boto3, "client", lambda name: fake)
+    ev = _ev({"sub": "u", "custom:tenant": "acme"})
+    first = feed_api.lambda_handler(ev, None)
+    etag = first["headers"]["etag"]
+    assert first["statusCode"] == 200 and first["headers"]["cache-control"] == "private, no-cache"
+    again = feed_api.lambda_handler({**ev, "headers": {"If-None-Match": etag}}, None)
+    assert again["statusCode"] == 304 and again["body"] == "" and fake.gets == 1
+    # another entitlement never matches this ETag
+    monkeypatch.setattr(tc, "get_tenant_config", lambda t: {"tier": "saas", "modules": ["fintech"]})
+    other = feed_api.lambda_handler({**ev, "headers": {"if-none-match": etag}}, None)
+    assert other["statusCode"] == 200 and other["headers"]["etag"] != etag
