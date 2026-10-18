@@ -32,6 +32,7 @@ from typing import Any
 import boto3
 
 from src.synth import feature_store, longitudinal
+from src.synth.fmt_br import num, signed
 from src.synth.synthesize import ENTITY_LABELS, run_at_now, run_date_today
 
 AXIS = "comparative"
@@ -212,14 +213,14 @@ def build_narrative(cand: dict[str, Any]) -> dict[str, Any]:
     if cand["direction"] == "outperform":
         head = (
             f"Comparativo setorial: {label} opera ACIMA dos pares de {coh} — "
-            f"ameaça média {em:.2f} vs {cm:.2f} do setor "
-            f"(z setorial={z:+.1f}, {n} concorrentes). Sinal de força competitiva."
+            f"ameaça média {num(float(em), 2)} vs {num(float(cm), 2)} do setor "
+            f"(z setorial={signed(float(z))}, {n} concorrentes). Sinal de força competitiva."
         )
     else:
         head = (
             f"Comparativo setorial: {label} opera ABAIXO dos pares de {coh} — "
-            f"ameaça média {em:.2f} vs {cm:.2f} do setor "
-            f"(z setorial={z:+.1f}, {n} concorrentes). Possível fraqueza relativa."
+            f"ameaça média {num(float(em), 2)} vs {num(float(cm), 2)} do setor "
+            f"(z setorial={signed(float(z))}, {n} concorrentes). Possível fraqueza relativa."
         )
     driver_txt = (driver.get("narrative") or "").strip()
     if driver_txt:

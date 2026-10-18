@@ -30,6 +30,7 @@ from typing import Any
 import boto3
 
 from src.synth import feature_store, longitudinal, threads
+from src.synth.fmt_br import compact
 from src.synth.synthesize import ENTITY_LABELS, run_at_now, run_date_today
 
 AXIS = "behavioral"
@@ -177,7 +178,7 @@ def build_narrative(cand: dict[str, Any]) -> dict[str, Any]:
     if cand["pattern"] == "drumbeat":
         head = (
             f"Padrão de comportamento — cadência regular: {label} mantém um ritmo "
-            f"constante de sinais (~{cand['mean_gap_days']:g} dias entre atividades, "
+            f"constante de sinais (~{compact(cand['mean_gap_days'])} dias entre atividades, "
             f"{cand['active_days']} dias ativos). Postura de presença contínua."
         )
     else:

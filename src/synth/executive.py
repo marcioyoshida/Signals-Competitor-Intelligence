@@ -17,6 +17,7 @@ from __future__ import annotations
 from itertools import zip_longest
 from typing import Any
 
+from src.synth.fmt_br import num, pct, pp, signed, signed_pct
 from src.synth.text_pt import pt_count
 
 ALL = "__all__"
@@ -84,8 +85,8 @@ def _brl(value: float | None) -> str:
     v = float(value)
     for scale, suffix in ((1e9, " bi"), (1e6, " mi"), (1e3, " mil")):
         if abs(v) >= scale:
-            return f"R$ {v / scale:,.1f}".replace(".", ",") + suffix
-    return f"R$ {v:,.0f}".replace(",", ".")
+            return f"R$ {num(v / scale, 1)}{suffix}"
+    return f"R$ {num(round(v))}"
 
 
 def _capital_rows(feed: dict[str, Any], labels: dict[str, str]) -> list[dict[str, Any]]:
@@ -102,15 +103,15 @@ def _capital_rows(feed: dict[str, Any], labels: dict[str, str]) -> list[dict[str
         e = m.get("entity")
         label = labels.get(e) or m.get("label") or e
         verb = "reduziu" if m.get("direction") == "reducao" else "aumentou"
-        pct = m.get("delta_pct")
+        delta_pct = m.get("delta_pct")
         title = (f"{label} {verb} o capital social de {_brl(m.get('previous_capital'))} "
                  f"para {_brl(m.get('capital'))}")
-        if pct is not None:
-            title += f" ({pct:+.1f}%)"
+        if delta_pct is not None:
+            title += f" ({signed_pct(delta_pct)})"
         out.append({
             "entity": e, "label": label, "title": title, "date": m.get("date"),
             "capital": m.get("capital"), "previous_capital": m.get("previous_capital"),
-            "delta": m.get("delta"), "delta_pct": pct, "direction": m.get("direction"),
+            "delta": m.get("delta"), "delta_pct": delta_pct, "direction": m.get("direction"),
             "source": m.get("source"), "industries": _industries_of(feed, e),
         })
     return out
@@ -696,20 +697,20 @@ def build_cso(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     rising = [m for m in momentum if m["momentum"] > 0][:1]
     if rising:
         m = rising[0]
-        recs.append(_rec("90d", f"Formular tese sobre o avanço de {m['label']} (momentum +{m['momentum']})",
+        recs.append(_rec("90d", f"Formular tese sobre o avanço de {m['label']} (momentum {signed(m['momentum'])})",
                          "curate_belief", officer="cso", entity=m["entity"], industries=m["industries"]))
     # financial strength: the profitability leader → competitive benchmark; a loss-maker → thesis.
     leader = sorted(financials, key=lambda r: (r.get("lucro_share_pct") or 0), reverse=True)[:1]
     if leader:
         w = leader[0]
         recs.append(_rec("estrategico", f"Referência competitiva: {w['label']} lidera rentabilidade "
-                         f"(ROE {w['roe_pct']}% · {w['lucro_share_pct']}% do lucro do setor)",
+                         f"(ROE {pct(w['roe_pct'])} · {pct(w['lucro_share_pct'])} do lucro do setor)",
                          "curate_belief", officer="cso", entity=w.get("entity"), industries=w.get("industries") or []))
     losers = [r for r in financials if (r.get("roe_pct") or 0) < 0]
     if losers:
         w = losers[0]
-        recs.append(_rec("90d", f"Tese sobre fragilidade de {w['label']} — ROE {w['roe_pct']}% "
-                         f"(alavancagem {w.get('leverage')}x, headroom {w.get('basileia_headroom_pp')}pp)",
+        recs.append(_rec("90d", f"Tese sobre fragilidade de {w['label']} — ROE {pct(w['roe_pct'])} "
+                         f"(alavancagem {num(w.get('leverage'))}x, folga de Basileia {pp(w.get('basileia_headroom_pp'))})",
                          "curate_belief", officer="cso", entity=w.get("entity"), industries=w.get("industries") or []))
 
     return {"by_industry": _by_industry(ctx["sectors"], agg),
@@ -1057,26 +1058,26 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     if weak_solvency:
         w = weak_solvency[0]
         recs.append(_rec("imediato",
-                         f"Solidez sob {w['band']} — {w['label']} (Basileia {w['indice_basileia']}%)",
+                         f"Solidez sob {w['band']} — {w['label']} (Basileia {pct(w['indice_basileia'])})",
                          "open_watch", officer="cro", evidence_id=w.get("entity"),
                          industries=w.get("industries") or []))
     if slope_warnings:
         w = slope_warnings[0]
         recs.append(_rec("imediato",
-                         f"Deterioração de crédito — {w['label']}: provisões (PDD) +{w['pdd_mom_pct']}% no mês",
+                         f"Deterioração de crédito — {w['label']}: provisões (PDD) {signed_pct(w['pdd_mom_pct'])} no mês",
                          "open_watch", officer="cro", evidence_id=w.get("entity"),
                          industries=w.get("industries") or []))
     if npl_high:
         w = npl_high[0]
         recs.append(_rec("imediato",
-                         f"Inadimplência elevada — {w['label']}: {w['npl_total']}% da carteira (15+ dias; "
-                         f"PF {w.get('npl_pf')}% · PJ {w.get('npl_pj')}%)",
+                         f"Inadimplência elevada — {w['label']}: {pct(w['npl_total'])} da carteira (15+ dias; "
+                         f"PF {pct(w.get('npl_pf'))} · PJ {pct(w.get('npl_pj'))})",
                          "open_watch", officer="cro", evidence_id=w.get("entity"),
                          industries=w.get("industries") or []))
     if fragile:
         w = fragile[0]
         recs.append(_rec("imediato",
-                         f"Fragilidade composta — {w['label']}: índice {w['fragility']['score']}/100 "
+                         f"Fragilidade composta — {w['label']}: índice {num(w['fragility']['score'], 0)}/100 "
                          f"(capital·NPL·PDD·ROE·alavancagem)",
                          "open_watch", officer="cro", evidence_id=w.get("entity"),
                          industries=w.get("industries") or []))
@@ -1084,13 +1085,13 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         w = optimism[0]
         recs.append(_rec("30d",
                          f"Tom vs números — {w['label']}: relato mais otimista que os indicadores "
-                         f"(divergência +{w['tone_divergence']['divergence']}) — verificar credibilidade",
+                         f"(divergência {signed(w['tone_divergence']['divergence'], 2)}) — verificar credibilidade",
                          "curate_belief", officer="cro", evidence_id=w.get("entity"),
                          industries=w.get("industries") or []))
     if lcr_low:
         w = lcr_low[0]
         recs.append(_rec("30d",
-                         f"Liquidez sob {w['lcr_band']} — {w['label']}: LCR {w['lcr_pct']}% (Pilar 3)",
+                         f"Liquidez sob {w['lcr_band']} — {w['label']}: LCR {pct(w['lcr_pct'])} (Pilar 3)",
                          "open_watch", officer="cro", evidence_id=w.get("entity"),
                          industries=w.get("industries") or []))
     return {"by_industry": _by_industry(ctx["sectors"], agg), "panels": {
@@ -1118,7 +1119,7 @@ def _rep_detail(r: dict[str, Any]) -> str:
     ANS rows carry only an IGR rate (no rank, sometimes withheld on a small book), so an
     unconditional "#{rank}" rendered "#None reclamações" for every ANS row."""
     idx = r.get("index")
-    idx_txt = "—" if idx is None else str(idx)
+    idx_txt = num(idx, 2)
     if r.get("rank") is not None:
         return f"#{r['rank']} reclamações · índice {idx_txt}"
     src = r.get("source") or "ANS"
@@ -1538,13 +1539,13 @@ def build_cpo(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     weak = sorted([p for p in portfolio if p["covered"]], key=lambda p: p["maturity"])[:1]
     if weak:
         w = weak[0]
-        recs.append(_rec("30d", f"Aprofundar cobertura em {w['label']} (maturidade {w['maturity']})",
+        recs.append(_rec("30d", f"Aprofundar cobertura em {w['label']} (maturidade {num(w['maturity'], 0)})",
                          "propose_vertical", officer="cpo", industries=[w["slug"]]))
     # thinnest Product field across the base → an ingestion requirement
     thin = sorted(field_completeness.items(), key=lambda kv: kv[1])[:1]
     if thin:
         f, pctv = thin[0]
-        recs.append(_rec("estrategico", f"Fechar lacuna de metadado '{f}' (só {pctv}% da base)",
+        recs.append(_rec("estrategico", f"Fechar lacuna de metadado '{f}' (só {pct(pctv, 0)} da base)",
                          "propose_vertical", officer="cpo"))
     open_gaps = [g for g in blind_rows if g["status"] == "open"]
     if open_gaps:
@@ -1694,7 +1695,7 @@ def build_flow(feed: dict[str, Any], ctx: dict[str, Any]) -> list[dict[str, Any]
     for m in [x for x in momentum if x["momentum"] >= 15][:3]:
         out.append(_traj("avanco_competitivo", f"Avanço competitivo — {m['label']}", "cso",
                          "high" if m["momentum"] >= 25 else "med",
-                         f"Momentum +{m['momentum']} na janela (ameaça {m['prior']}→{m['recent']}).",
+                         f"Momentum {signed(m['momentum'])} na janela (ameaça {num(m['prior'])} → {num(m['recent'])}).",
                          industries=m["industries"], action="Formular tese competitiva",
                          action_ref="curate_belief", key=m["entity"]))
 

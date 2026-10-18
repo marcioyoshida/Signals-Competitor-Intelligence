@@ -32,6 +32,7 @@ from typing import Any
 import boto3
 
 from src.synth import feature_store
+from src.synth.fmt_br import compact
 from src.synth.synthesize import ENTITY_LABELS, run_at_now, run_date_today
 
 AXIS = "silence"
@@ -215,7 +216,7 @@ def build_narrative(cand: dict[str, Any]) -> dict[str, Any]:
     score = _silence_score(cand)
     text = (
         f"Silêncio de sinal: {label} não emite sinais rastreáveis há {days} dias, "
-        f"contra uma cadência típica de ~{gap:g} dias ({cand['active_days']} dias "
+        f"contra uma cadência típica de ~{compact(gap)} dias ({cand['active_days']} dias "
         f"ativos na janela, padrão {cadence}). Última atividade observada em "
         f"{cand['last_seen']}. Indicador derivado (ausência de sinal), não um fato "
         f"reportado — vale monitorar se reflete recuo estratégico, sazonalidade ou "
