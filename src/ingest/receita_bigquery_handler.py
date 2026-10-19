@@ -11,11 +11,15 @@ IAM-gated model as every other bridge function in this stack):
     runs `receita_bigquery.introspect_schema` + `sample_rows` against both tables and
     returns the raw result, no registry writes. Use this to confirm/correct
     `_ESTABELECIMENTOS_COLUMNS`/`_ACTIVE_SITUACAO`/`_MATRIZ_FLAG` before switching modes.
-  - `mode: "discover"` (the real path) — runs `fetch_fs_candidates` then
+  - `mode: "discover_s3"` (the real path, #227) — reads Anteater's shared monthly
+    extract in S3 (Signals-Sectorial-Intelligence#97), no BigQuery job at all, then
     `receita_bulk.propose_candidates`, same propose-only discipline (ADR 011 §4) as
     every other entity-discovery source; never auto-creates. Gated on the snapshot:
-    skips (cheap probe only) when the mirror's (ano, mes) matches the SSM marker of
-    the last processed run; `force: true` overrides.
+    skips when the extract's (ano, mes) matches the SSM marker of the last processed
+    run; `force: true` overrides. `mode: "discover"` is an alias — the BigQuery
+    discover query it used to run was retired once parity was proven live.
+  - `mode: "parity"` (#227) — read-only check that the extract and the discover query
+    select the same head offices on the same snapshot.
 """
 from __future__ import annotations
 
@@ -25,12 +29,16 @@ import re
 from typing import Any
 
 import receita_bigquery
-from receita_bigquery import ByteCapExceeded, fetch_fs_candidates, introspect_schema, sample_rows
+from receita_bigquery import ByteCapExceeded, introspect_schema, sample_rows
 
 
 def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     event = event or {}
     mode = str(event.get("mode") or "introspect")
+    if mode in ("discover", "discover_s3"):
+        # #227: discovery reads Anteater's shared extract; the BigQuery discover query is
+        # retired, and a stale `discover` invoke lands here instead of scanning BigQuery.
+        return _discover_s3(event)
 
     from google.cloud import bigquery
 
@@ -72,49 +80,6 @@ def _dispatch(mode: str, event: dict[str, Any], client: Any) -> dict[str, Any]:
         print(json.dumps(safe_result)[:4000])
         return safe_result
 
-    if mode == "discover":
-        from src.synth import entity_registry as er
-        from src.ingest import receita_bulk
-
-        # Loaded ONCE, passed to BOTH the query (as a server-side NOT-IN exclusion
-        # — 2026-09-23 live finding: fetching the whole FS-CNAE universe with no
-        # exclusion timed out a 300s/512MB Lambda before it could even finish
-        # materializing the result set) and propose_candidates (so it doesn't
-        # re-scan the registry a second time for the same information).
-        # Snapshot gate: the mirror refreshes monthly at best (and sat on 2026-01 for
-        # months), so the ~7 GiB discover scan runs only when the probe sees a snapshot
-        # it hasn't processed. `force: true` bypasses it for a manual run.
-        snaps = receita_bigquery.current_snapshots(client)
-        key = receita_bigquery.snapshot_key(snaps)
-        if not event.get("force") and key == _read_marker():
-            result = {"ok": True, "mode": mode, "skipped": "snapshot_unchanged", "snapshot": key}
-            print(json.dumps(result))
-            return result
-
-        known_roots = er.load_cnpj_root_map(force=True)
-        fetch_limit = int(os.environ.get("ONCA_RECEITA_BQ_FETCH_LIMIT", "0")) or None
-        candidates = fetch_fs_candidates(
-            client, known_roots=known_roots.keys(), snapshots=snaps,
-            **({"limit": fetch_limit} if fetch_limit else {}),
-        )
-        report = receita_bulk.propose_candidates(
-            candidates,
-            max_propose=int(os.environ.get("ONCA_RECEITA_BQ_MAX_PROPOSE", "200")),
-            known_roots=known_roots,
-        )
-        result = {
-            "ok": True,
-            "mode": mode,
-            "candidates": len(candidates),
-            "already": report["already"],
-            "proposed": len(report["proposed"]),
-            "no_name": report["no_name"],
-            "snapshot": key,
-        }
-        _write_marker(key)
-        print(json.dumps(result))
-        return result
-
     if mode == "estimate":
         # #156: read-only cost measurement. `max_bytes` may only LOWER the cap for this one
         # run — a pass under a tight cap is a proven upper bound on the scan, which is the
@@ -152,7 +117,62 @@ def _dispatch(mode: str, event: dict[str, Any], client: Any) -> dict[str, Any]:
         print(json.dumps(result, default=str)[:4000])
         return json.loads(json.dumps(result, default=str))
 
-    return {"ok": False, "error": f"unknown mode {mode!r} (expected introspect|discover|recheck|estimate)"}
+    if mode == "parity":
+        # #227: read-only. The discover query's full universe vs the extract's Onça FS rows,
+        # both pinned to the extract's snapshot and reduced to per-division fingerprints.
+        import boto3
+
+        s3 = boto3.client("s3")
+        marker = receita_bigquery.extract_marker(s3)
+        snaps = receita_bigquery.extract_snapshots(marker)
+        bq = receita_bigquery.bigquery_fingerprint(client, snaps["estabelecimentos"])
+        ex = receita_bigquery.extract_fingerprint(receita_bigquery.iter_extract_rows(s3, marker))
+        result = {"ok": True, "mode": mode, "snapshot": receita_bigquery.snapshot_key(snaps),
+                  "match": bq == ex, "bigquery": bq, "extract": ex}
+        print(json.dumps(result))
+        return result
+
+    return {"ok": False, "error": f"unknown mode {mode!r} "
+                                  "(expected introspect|discover_s3|parity|recheck|estimate)"}
+
+
+def _discover_s3(event: dict[str, Any]) -> dict[str, Any]:
+    """#227: `discover`, fed from Anteater's shared monthly extract in S3 instead of a
+    BigQuery scan. Same propose-only consumer, same snapshot gate and SSM marker (the
+    key is the same `est=YYYY-MM;emp=YYYY-MM` string), so a month the BigQuery path
+    already processed is not proposed from again."""
+    import boto3
+    from src.synth import entity_registry as er
+    from src.ingest import receita_bulk
+
+    s3 = boto3.client("s3")
+    marker = receita_bigquery.extract_marker(s3)
+    key = receita_bigquery.snapshot_key(receita_bigquery.extract_snapshots(marker))
+    if not event.get("force") and key == _read_marker():
+        result = {"ok": True, "mode": "discover_s3", "skipped": "snapshot_unchanged", "snapshot": key}
+        print(json.dumps(result))
+        return result
+
+    known_roots = er.load_cnpj_root_map(force=True)
+    report = receita_bulk.propose_candidates(
+        receita_bigquery.candidates_from_extract(
+            receita_bigquery.iter_extract_rows(s3, marker), known_roots.keys()),
+        max_propose=int(os.environ.get("ONCA_RECEITA_BQ_MAX_PROPOSE", "200")),
+        known_roots=known_roots,
+    )
+    result = {
+        "ok": True,
+        "mode": "discover_s3",
+        "candidates": report["seen"],
+        "already": report["already"],
+        "proposed": len(report["proposed"]),
+        "no_name": report["no_name"],
+        "snapshot": key,
+        "bytes_billed": 0,
+    }
+    _write_marker(key)
+    print(json.dumps(result))
+    return result
 
 
 _MARKER_PARAM = os.environ.get("ONCA_RECEITA_BQ_MARKER_PARAM", "/onca/receita-bq/last-snapshot")

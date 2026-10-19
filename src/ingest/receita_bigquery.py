@@ -24,7 +24,7 @@ needs the real bridge.
 was deployed (only fragments were confirmable via search). `introspect_schema()` exists
 for exactly that: run it once against the live bridge (`receita_bigquery_handler.py`'s
 `mode="introspect"`) to confirm/correct `_ESTABELECIMENTOS_COLUMNS`/`_EMPRESAS_COLUMNS`
-below before trusting `fetch_fs_candidates`'s output.
+below before trusting the discover query's output.
 
 Output rows are shaped IDENTICALLY to `receita_bulk.parse_estabelecimentos`'s —
 `{id, source, kind, cnpj, name, cnae, industry, uf, registry, discovery_source}` — so
@@ -36,11 +36,21 @@ fallback" gap as a side effect, for free): this query LEFT JOINs `empresas` for 
 social, so a CNPJ whose `nome_fantasia` is empty (the common case — `nome_fantasia` is
 optional in the Estabelecimentos layout, `razao_social` is not) still gets a usable
 name instead of being silently dropped by `propose_candidates`'s `no_name` skip.
+
+**#227 (2026-10-19): discovery itself no longer queries BigQuery.** It reads Anteater's
+shared monthly extract in S3 (`candidates_from_extract`, end of this module); parity with
+this module's query was proven live on the 2026-01 snapshot (450,924 FS head offices,
+identical per-division fingerprints). The query stays for `estimate`, `parity` and
+`recheck`.
 """
 from __future__ import annotations
 
+import csv
+import gzip
+import io
+import json
 import os
-from typing import Any
+from typing import Any, Iterable, Iterator
 
 from src.ingest.receita_bulk import FS_CNAE_DIVISIONS, cnae_to_industry, is_fs_cnae
 
@@ -48,7 +58,7 @@ DATASET = "basedosdados.br_me_cnpj"
 
 # Best-effort column names as of 2026-09-23, assembled from public examples/issues —
 # NOT independently confirmed against a live schema dump before first deploy. Correct
-# these against `introspect_schema()`'s real output before trusting `fetch_fs_candidates`.
+# these against `introspect_schema()`'s real output before trusting the discover query.
 _ESTABELECIMENTOS_COLUMNS = {
     "cnpj_basico": "cnpj_basico",
     "cnae": "cnae_fiscal_principal",
@@ -194,7 +204,7 @@ def _snapshot_params(prefix: str, snap: tuple[int, int]) -> list[Any]:
 
 def introspect_schema(client: Any) -> list[dict[str, str]]:
     """Run a FIXED schema-introspection query (never arbitrary SQL) against the two
-    tables `fetch_fs_candidates` depends on. Returns `[{table_name, column_name,
+    tables the discover query depends on. Returns `[{table_name, column_name,
     data_type}, ...]` — call this once against the live bridge before trusting the
     main query, and whenever basedosdados might have changed the schema."""
     query = f"""
@@ -343,38 +353,107 @@ def _row_to_candidate(row: Any) -> dict[str, Any] | None:
 DEFAULT_FETCH_LIMIT = 20_000
 
 
-def fetch_fs_candidates(
-    client: Any, *, cnae_divisions: tuple[str, ...] = FS_CNAE_DIVISIONS,
-    known_roots: Any = None, limit: int = DEFAULT_FETCH_LIMIT,
-    snapshots: dict[str, tuple[int, int]] | None = None,
-) -> list[dict[str, Any]]:
-    """Query the live BigQuery mirror for active, head-office, FS-CNAE establishments
-    and shape the results into `receita_bulk.propose_candidates`-compatible rows.
 
-    `known_roots` (any iterable of 8-digit cnpj roots — pass
-    `entity_registry.load_cnpj_root_map(...)`'s keys) is pushed into the SQL as a
-    `NOT IN UNNEST(...)` exclusion, so a already-registered CNPJ never even crosses
-    the wire — `limit` then bounds only the genuinely NEW candidates fetched per
-    run, not the whole FS-CNAE universe. Without `known_roots`, `limit` still
-    applies (server-side row cap), but the same top-N would repeat every run.
-    """
+# --- #227: Anteater's shared monthly extract (Signals-Sectorial-Intelligence#97) ------------
+#
+# Anteater owns ONE monthly Receita extract for both products, written to S3 in this same
+# account. `_snapshot.json` is written LAST, so its presence means the month is complete.
+# Reading it costs no BigQuery bytes at all; the rows are the same active head offices the
+# discover query selects (`products` carries `onca` for the FS divisions).
+# The bucket comes from the stack (ONCA_RECEITA_EXTRACT_BUCKET), never a literal (ADR 016 Decision 5).
+EXTRACT_MARKER_KEY = "receita/_snapshot.json"
+
+
+def _extract_bucket(bucket: str | None) -> str:
+    bucket = bucket or os.environ.get("ONCA_RECEITA_EXTRACT_BUCKET", "")
+    if not bucket:
+        raise ValueError("ONCA_RECEITA_EXTRACT_BUCKET is not set")
+    return bucket
+
+
+def extract_marker(s3: Any, bucket: str | None = None) -> dict[str, Any]:
+    marker = json.loads(s3.get_object(Bucket=_extract_bucket(bucket), Key=EXTRACT_MARKER_KEY)["Body"].read())
+    if not str(marker.get("prefix") or "").startswith("receita/"):
+        raise ValueError(f"receita extract marker has an unexpected prefix: {marker.get('prefix')!r}")
+    return marker
+
+
+def extract_snapshots(marker: dict[str, Any]) -> dict[str, tuple[int, int]]:
+    return {t: (int(a), int(m)) for t, (a, m) in marker["snapshots"].items()}
+
+
+def iter_extract_rows(s3: Any, marker: dict[str, Any], bucket: str | None = None) -> Iterator[dict[str, str]]:
+    """Streams the gzip CSV (~23 MB compressed, ~1.2M rows) — never held whole in memory."""
+    body = s3.get_object(Bucket=_extract_bucket(bucket), Key=marker["prefix"] + "estabelecimentos.csv.gz")["Body"]
+    with gzip.GzipFile(fileobj=body) as gz:
+        yield from csv.DictReader(io.TextIOWrapper(gz, encoding="utf-8", newline=""))
+
+
+def _is_onca_fs(row: dict[str, str]) -> bool:
+    return "onca" in str(row.get("products") or "") and is_fs_cnae(row.get("cnae"))
+
+
+def candidates_from_extract(rows: Iterable[dict[str, str]], known_roots: Any) -> Iterator[dict[str, Any]]:
+    """The extract's Onça FS rows, shaped exactly like the discover query's, minus known roots.
+    A generator: ~450k FS head offices exist, and `propose_candidates` only needs a stream."""
+    known, seen = set(known_roots or ()), set()
+    for r in rows:
+        root = str(r.get("cnpj_basico") or "").strip()
+        if not _is_onca_fs(r) or root in known or root in seen:
+            continue
+        seen.add(root)
+        cand = _row_to_candidate({**r, "uf": r.get("sigla_uf")})
+        if cand is not None:
+            yield {**cand, "registry": "receita_extract_s3", "discovery_source": "receita_extract"}
+
+
+def _fingerprint(pairs: Iterable[tuple[str, str]]) -> dict[str, list[int]]:
+    """{cnae division: [count, sum of roots, xor of roots]} over (root, cnae) pairs."""
+    out: dict[str, list[int]] = {}
+    for root, cnae in pairs:
+        n = int(root)
+        f = out.setdefault(str(cnae)[:2], [0, 0, 0])
+        f[0], f[1], f[2] = f[0] + 1, f[1] + n, f[2] ^ n
+    return out
+
+
+def extract_fingerprint(rows: Iterable[dict[str, str]]) -> dict[str, list[int]]:
+    seen: set[str] = set()
+    pairs = []
+    for r in rows:
+        root = str(r.get("cnpj_basico") or "").strip()
+        if root and root not in seen and _is_onca_fs(r):
+            seen.add(root)
+            pairs.append((root, r["cnae"]))
+    return _fingerprint(pairs)
+
+
+def bigquery_fingerprint(client: Any, est_snapshot: tuple[int, int]) -> dict[str, list[int]]:
+    """The discover query's FULL candidate universe (no known-roots exclusion, no LIMIT),
+    reduced server-side to the same per-division fingerprint — the parity check for #227,
+    since the 20k-row discover fetch never sees the whole universe at once."""
     from google.cloud import bigquery
 
+    e = _ESTABELECIMENTOS_COLUMNS
+    sql = f"""
+        SELECT SUBSTR(CAST(cnae AS STRING), 1, 2) AS division, COUNT(*) AS n,
+               SUM(CAST(root AS INT64)) AS root_sum, BIT_XOR(CAST(root AS INT64)) AS root_xor
+        FROM (
+          SELECT {e['cnpj_basico']} AS root, ANY_VALUE({e['cnae']}) AS cnae
+          FROM `{DATASET}.estabelecimentos`
+          WHERE ano = @est_ano AND mes = @est_mes
+            AND {e['situacao']} = @active_situacao
+            AND {e['matriz_filial']} = @matriz_flag
+            AND SUBSTR(CAST({e['cnae']} AS STRING), 1, 2) IN UNNEST(@cnae_divisions)
+          GROUP BY {e['cnpj_basico']}
+        )
+        GROUP BY division
+    """
     params = [
         bigquery.ScalarQueryParameter("active_situacao", "STRING", _ACTIVE_SITUACAO),
         bigquery.ScalarQueryParameter("matriz_flag", "STRING", _MATRIZ_FLAG),
-        bigquery.ArrayQueryParameter("cnae_divisions", "STRING", list(cnae_divisions)),
+        bigquery.ArrayQueryParameter("cnae_divisions", "STRING", list(FS_CNAE_DIVISIONS)),
+        *_snapshot_params("est", est_snapshot),
     ]
-    exclude_known = known_roots is not None
-    if exclude_known:
-        params.append(bigquery.ArrayQueryParameter("known_roots", "STRING", list(known_roots)))
-    snaps = snapshots or current_snapshots(client)
-    params += _snapshot_params("est", snaps["estabelecimentos"])
-    params += _snapshot_params("emp", snaps["empresas"])
-    rows = _run(client, _build_query(exclude_known=exclude_known, limit=limit), params)
-    out: list[dict[str, Any]] = []
-    for row in rows:
-        candidate = _row_to_candidate(dict(row))
-        if candidate is not None:
-            out.append(candidate)
-    return out
+    return {str(r["division"]): [int(r["n"]), int(r["root_sum"]), int(r["root_xor"])]
+            for r in _run(client, sql, params)}

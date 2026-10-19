@@ -63,6 +63,7 @@ ROLE_NAME = "OncaGdeltBridgeRole"
 FN_NAME = "OncaGdeltBridgeFn"
 MACRO_FN_NAME = "OncaGdeltMacroFn"
 RECEITA_FN_NAME = "OncaReceitaBigqueryFn"
+RECEITA_EXTRACT_BUCKET = "anteater-digests-668449743071"  # #227, owned by Anteater
 
 
 class OncaGdeltBridgeStack(Stack):
@@ -163,6 +164,7 @@ class OncaGdeltBridgeStack(Stack):
         # without a flood. The code default (200) stays available for a manual
         # ad-hoc invoke that deliberately wants to seed/clear a larger backlog.
         receita_env["ONCA_RECEITA_BQ_MAX_PROPOSE"] = "25"
+        receita_env["ONCA_RECEITA_EXTRACT_BUCKET"] = RECEITA_EXTRACT_BUCKET  # #227
 
         receita_fn = lambda_.Function(
             self,
@@ -186,17 +188,27 @@ class OncaGdeltBridgeStack(Stack):
             actions=["ssm:GetParameter", "ssm:PutParameter"],
             resources=[f"arn:aws:ssm:{self.region}:{self.account}:parameter/onca/receita-bq/*"],
         ))
+        # #227: read Anteater's shared monthly Receita extract (same account, so no bucket
+        # policy needed). Read-only, and only the `receita/` prefix.
+        role.add_to_principal_policy(iam.PolicyStatement(
+            actions=["s3:GetObject"],
+            resources=[f"arn:aws:s3:::{RECEITA_EXTRACT_BUCKET}/receita/*"],
+        ))
+        role.add_to_principal_policy(iam.PolicyStatement(
+            actions=["s3:ListBucket"],
+            resources=[f"arn:aws:s3:::{RECEITA_EXTRACT_BUCKET}"],
+            conditions={"StringLike": {"s3:prefix": ["receita/*"]}},
+        ))
 
-        if gcp_ready:
-            # Monthly (the mirror refreshes monthly at best); the handler additionally
-            # skips the ~7 GiB scan when the snapshot hasn't moved since the last run
-            # (SSM marker). 08:00 UTC lands after the GDELT sweep.
-            events.Rule(
-                self,
-                "ReceitaBigqueryMonthlyTrigger",
-                schedule=events.Schedule.cron(minute="0", hour="8", day="5"),
-                targets=[targets.LambdaFunction(
-                    receita_fn, event=events.RuleTargetInput.from_object({"mode": "discover"})
-                )],
-                description="#104: monthly Receita CNAE discovery via BigQuery, snapshot-gated, propose-only.",
-            )
+        # Monthly (the extract is monthly); the handler skips when the extract's snapshot
+        # hasn't moved since the last run (SSM marker). #227: reads Anteater's shared S3
+        # extract, so the rule no longer depends on the GCP bridge being ready.
+        events.Rule(
+            self,
+            "ReceitaBigqueryMonthlyTrigger",
+            schedule=events.Schedule.cron(minute="0", hour="8", day="5"),
+            targets=[targets.LambdaFunction(
+                receita_fn, event=events.RuleTargetInput.from_object({"mode": "discover_s3"})
+            )],
+            description="#104/#227: monthly Receita CNAE discovery from the shared S3 extract, snapshot-gated, propose-only.",
+        )

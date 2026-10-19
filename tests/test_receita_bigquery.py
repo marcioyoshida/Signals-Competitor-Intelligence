@@ -107,31 +107,7 @@ def test_row_with_non_fs_cnae_is_dropped():
     assert rbq._row_to_candidate(row) is None
 
 
-# --- fetch_fs_candidates --------------------------------------------------------
 
-def test_fetch_fs_candidates_filters_and_shapes_query_results(monkeypatch):
-    rows = [
-        {"cnpj_basico": "11111111", "nome_fantasia": "Banco X", "razao_social": "",
-         "cnae": "6422800", "uf": "SP"},
-        {"cnpj_basico": "22222222", "nome_fantasia": "Mercado Y", "razao_social": "",
-         "cnae": "4711301", "uf": "RJ"},  # non-FS — must be excluded even if the WHERE clause missed it
-    ]
-    fake_client = FakeBigQueryClient(rows)
-
-    import types
-    fake_bigquery_module = types.SimpleNamespace(
-        QueryJobConfig=lambda **kw: kw,
-        ScalarQueryParameter=lambda *a: a,
-        ArrayQueryParameter=lambda *a: a,
-    )
-    monkeypatch.setitem(sys.modules, "google.cloud.bigquery", fake_bigquery_module)
-    monkeypatch.setitem(sys.modules, "google.cloud", types.SimpleNamespace(bigquery=fake_bigquery_module))
-
-    out = rbq.fetch_fs_candidates(fake_client)
-
-    assert len(out) == 1
-    assert out[0]["cnpj"] == "11111111"
-    assert fake_client.queries  # the query was actually issued
 
 
 def test_introspect_schema_runs_a_fixed_query_not_arbitrary_sql():
@@ -145,38 +121,17 @@ def test_introspect_schema_runs_a_fixed_query_not_arbitrary_sql():
     assert rbq.DATASET in sql
 
 
-def test_fetch_fs_candidates_pushes_known_roots_exclusion_into_the_sql(monkeypatch):
+def test_estimate_runs_the_discover_query_with_the_known_roots_exclusion():
     fake_client = FakeBigQueryClient([])
-    import types
-    fake_bigquery_module = types.SimpleNamespace(
-        QueryJobConfig=lambda **kw: kw,
-        ScalarQueryParameter=lambda *a: a,
-        ArrayQueryParameter=lambda *a: a,
-    )
-    monkeypatch.setitem(sys.modules, "google.cloud.bigquery", fake_bigquery_module)
-    monkeypatch.setitem(sys.modules, "google.cloud", types.SimpleNamespace(bigquery=fake_bigquery_module))
-
-    rbq.fetch_fs_candidates(fake_client, known_roots=["11111111", "22222222"])
-
+    rbq.estimate_bytes(fake_client, known_roots=["11111111", "22222222"])
     sql, job_config = fake_client.queries[-1]
     assert "NOT IN UNNEST" in sql
     assert any(p[0] == "known_roots" for p in job_config["query_parameters"])
+    assert job_config["use_query_cache"] is False
 
 
-def test_fetch_fs_candidates_omits_exclusion_when_no_known_roots(monkeypatch):
-    fake_client = FakeBigQueryClient([])
-    import types
-    fake_bigquery_module = types.SimpleNamespace(
-        QueryJobConfig=lambda **kw: kw,
-        ScalarQueryParameter=lambda *a: a,
-        ArrayQueryParameter=lambda *a: a,
-    )
-    monkeypatch.setitem(sys.modules, "google.cloud.bigquery", fake_bigquery_module)
-    monkeypatch.setitem(sys.modules, "google.cloud", types.SimpleNamespace(bigquery=fake_bigquery_module))
-
-    rbq.fetch_fs_candidates(fake_client)
-
-    sql, job_config = fake_client.queries[-1]
+def test_query_omits_exclusion_when_not_asked():
+    sql = rbq._build_query(exclude_known=False, limit=rbq.DEFAULT_FETCH_LIMIT)
     assert "NOT IN UNNEST" not in sql
     assert f"LIMIT {rbq.DEFAULT_FETCH_LIMIT}" in sql
 
@@ -194,9 +149,9 @@ def test_query_pins_both_tables_by_parameter_not_subquery():
     assert sql.index("QUALIFY") < sql.index("LIMIT")
 
 
-def test_fetch_passes_each_tables_own_snapshot_as_params():
+def test_estimate_passes_each_tables_own_snapshot_as_params():
     client = FakeBigQueryClient([])
-    rbq.fetch_fs_candidates(client, known_roots=["1"])
+    rbq.estimate_bytes(client, known_roots=["1"])
     names = {p[0]: p[2] for p in client.queries[-1][1]["query_parameters"]}
     assert names["est_ano"] == 2026 and names["est_mes"] == 8
     assert names["emp_ano"] == 2026 and names["emp_mes"] == 8
@@ -205,7 +160,8 @@ def test_fetch_passes_each_tables_own_snapshot_as_params():
 def test_every_query_carries_the_byte_cap(monkeypatch):
     monkeypatch.setenv("ONCA_RECEITA_BQ_MAX_BYTES", "12345")
     client = FakeBigQueryClient([])
-    rbq.fetch_fs_candidates(client, known_roots=["1"])
+    rbq.estimate_bytes(client, known_roots=["1"])
+    rbq.bigquery_fingerprint(client, (2026, 1))
     rbq.introspect_schema(client)
     rbq.sample_rows(client, table="empresas", limit=2)
     rbq.recheck_roots(client, ["1"])
@@ -256,23 +212,19 @@ def test_snapshot_key_is_stable_and_readable():
     assert rbq.snapshot_key({"empresas": (2026, 1), "estabelecimentos": (2026, 8)}) == "est=2026-08;emp=2026-01"
 
 
-def test_fetch_reuses_given_snapshots_without_probing():
-    client = FakeBigQueryClient([])
-    rbq.fetch_fs_candidates(client, known_roots=["1"],
-                            snapshots={"estabelecimentos": (2025, 12), "empresas": (2025, 11)})
-    assert len(client.queries) == 1
-    names = {p[0]: p[2] for p in client.queries[-1][1]["query_parameters"]}
-    assert (names["est_mes"], names["emp_mes"]) == (12, 11)
 
 
-def test_discover_skips_when_snapshot_unchanged(monkeypatch):
+def test_legacy_discover_mode_reads_the_extract_not_bigquery(monkeypatch):
+    # #227: the BigQuery discover query is retired; a stale `discover` invoke must
+    # not scan BigQuery, so it routes to the S3 path (here: snapshot-gated skip).
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src" / "ingest"))
     import receita_bigquery_handler as h
-    client = FakeBigQueryClient([])
-    monkeypatch.setattr(h, "_read_marker", lambda: "est=2026-08;emp=2026-08")
-    out = h._dispatch("discover", {}, client)
-    assert out["skipped"] == "snapshot_unchanged"
-    assert all("GROUP BY ano, mes" in q for q, _ in client.queries)  # probe only
+    monkeypatch.setenv("ONCA_RECEITA_EXTRACT_BUCKET", "extract-bucket")
+    monkeypatch.setitem(sys.modules, "boto3", types.SimpleNamespace(client=lambda svc: FakeS3()))
+    monkeypatch.setitem(sys.modules, "google.cloud.bigquery", None)  # importing it would fail
+    monkeypatch.setattr(h, "_read_marker", lambda: "est=2026-01;emp=2026-01")
+    out = h.handler({"mode": "discover"}, None)
+    assert out["mode"] == "discover_s3" and out["skipped"] == "snapshot_unchanged"
 
 
 def test_table_review_sets_aside_and_untable_restores():
@@ -286,3 +238,114 @@ def test_table_review_sets_aside_and_untable_restores():
     assert er.table_review("r1", "receita recheck not_active", table=t)["status"] == "tabled"
     assert er.table_review("r1", "again", table=t) is None  # only from pending
     assert er.untable_review("r1", table=t)["status"] == "pending"
+
+
+# --- #227: Anteater's shared extract in S3 -------------------------------------
+
+import gzip as _gzip  # noqa: E402
+import io as _io  # noqa: E402
+import json as _json  # noqa: E402
+
+_EXTRACT_HEADER = "cnpj_basico,razao_social,nome_fantasia,cnae,sigla_uf,porte,sector,products,ano,mes\n"
+_EXTRACT_ROWS = [
+    "00508114,I.C. HOLDINGS LTDA,,6461100,SC,1,,onca,2026,1",
+    "00141155,COOP CRED LTDA,COOPCRED,6424703,RJ,5,,onca+anteater,2026,1",
+    "00302225,OSMAR LTDA,ELOGRAN,4744005,PR,5,retail,anteater,2026,1",   # not Onça
+    "11111111,KNOWN BANCO SA,KNOWN,6422100,SP,5,,onca,2026,1",           # already registered
+    "22222222,SEGUROS SA,,6511101,SP,5,,onca,2026,1",
+]
+
+
+@pytest.fixture(autouse=True)
+def _extract_bucket(monkeypatch):
+    monkeypatch.setenv("ONCA_RECEITA_EXTRACT_BUCKET", "extract-bucket")
+
+
+def test_extract_bucket_must_come_from_the_stack(monkeypatch):
+    monkeypatch.delenv("ONCA_RECEITA_EXTRACT_BUCKET")
+    with pytest.raises(ValueError):
+        rbq.extract_marker(FakeS3())
+
+
+class FakeS3:
+    def __init__(self, marker=None, rows=_EXTRACT_ROWS):
+        self.marker = marker or {"snapshots": {"estabelecimentos": [2026, 1], "empresas": [2026, 1]},
+                                 "prefix": "receita/2026-01/", "rows": len(rows)}
+        self.csv = _gzip.compress((_EXTRACT_HEADER + "\n".join(rows) + "\n").encode())
+        self.keys = []
+
+    def get_object(self, Bucket, Key):
+        self.keys.append((Bucket, Key))
+        if Key == "receita/_snapshot.json":
+            return {"Body": _io.BytesIO(_json.dumps(self.marker).encode())}
+        assert Key == self.marker["prefix"] + "estabelecimentos.csv.gz"
+        return {"Body": _io.BytesIO(self.csv)}
+
+
+def test_extract_candidates_keep_onca_fs_rows_minus_known_roots():
+    s3 = FakeS3()
+    marker = rbq.extract_marker(s3)
+    out = list(rbq.candidates_from_extract(rbq.iter_extract_rows(s3, marker), ["11111111"]))
+    assert [c["cnpj"] for c in out] == ["00508114", "00141155", "22222222"]
+    first = out[0]
+    assert first["name"] == "I.C. HOLDINGS LTDA"            # razão social when no fantasia
+    assert out[1]["name"] == "COOPCRED" and out[1]["uf"] == "RJ"
+    assert first["discovery_source"] == "receita_extract" and first["registry"] == "receita_extract_s3"
+    # Same shape as the discover query's rows, so propose_candidates is unchanged.
+    bq_shape = rbq._row_to_candidate({"cnpj_basico": "1", "cnae": "6461100", "uf": "SC"})
+    assert set(first) == set(bq_shape)
+
+
+def test_extract_snapshot_key_matches_the_bigquery_marker_format():
+    marker = rbq.extract_marker(FakeS3())
+    assert rbq.snapshot_key(rbq.extract_snapshots(marker)) == "est=2026-01;emp=2026-01"
+
+
+def test_extract_marker_rejects_a_prefix_outside_receita():
+    s3 = FakeS3(marker={"snapshots": {"estabelecimentos": [2026, 1]}, "prefix": "digests/"})
+    with pytest.raises(ValueError):
+        rbq.extract_marker(s3)
+
+
+def test_extract_fingerprint_matches_the_bigquery_shape():
+    s3 = FakeS3()
+    fp = rbq.extract_fingerprint(rbq.iter_extract_rows(s3, rbq.extract_marker(s3)))
+    assert fp == {"64": [3, 508114 + 141155 + 11111111, 508114 ^ 141155 ^ 11111111],
+                  "65": [1, 22222222, 22222222]}
+    client = FakeBigQueryClient([{"division": "64", "n": 3, "root_sum": 1, "root_xor": 2}])
+    assert rbq.bigquery_fingerprint(client, (2026, 1)) == {"64": [3, 1, 2]}
+    sql, cfg = client.queries[-1]
+    assert "LIMIT" not in sql and "known_roots" not in sql  # the FULL universe
+    names = {p[0]: p[2] for p in cfg["query_parameters"]}
+    assert (names["est_ano"], names["est_mes"]) == (2026, 1)
+
+
+def test_discover_s3_proposes_from_the_extract_without_bigquery(monkeypatch):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src" / "ingest"))
+    import receita_bigquery_handler as h
+    from src.synth import entity_registry as er
+
+    s3, written, proposed = FakeS3(), [], []
+    monkeypatch.setitem(sys.modules, "boto3", types.SimpleNamespace(client=lambda svc: s3))
+    monkeypatch.setitem(sys.modules, "google.cloud.bigquery", None)  # importing it would fail
+    monkeypatch.setattr(h, "_read_marker", lambda: None)
+    monkeypatch.setattr(h, "_write_marker", written.append)
+    monkeypatch.setattr(er, "load_cnpj_root_map", lambda **kw: {"11111111": "ent-1"})
+    monkeypatch.setattr(er, "propose_review", lambda **kw: proposed.append(kw["key"]) or kw["key"])
+    monkeypatch.setenv("ONCA_RECEITA_BQ_MAX_PROPOSE", "2")
+    out = h.handler({"mode": "discover_s3"}, None)
+    assert out["ok"] and out["candidates"] == 3 and out["proposed"] == 2 and out["bytes_billed"] == 0
+    assert proposed == ["receita:00508114", "receita:00141155"]
+    assert written == ["est=2026-01;emp=2026-01"]
+
+
+def test_discover_s3_skips_when_the_snapshot_was_already_processed(monkeypatch):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src" / "ingest"))
+    import receita_bigquery_handler as h
+
+    s3 = FakeS3()
+    monkeypatch.setitem(sys.modules, "boto3", types.SimpleNamespace(client=lambda svc: s3))
+    monkeypatch.setattr(h, "_read_marker", lambda: "est=2026-01;emp=2026-01")
+    out = h.handler({"mode": "discover_s3"}, None)
+    assert out["skipped"] == "snapshot_unchanged"
+    assert [k for _, k in s3.keys] == ["receita/_snapshot.json"]  # marker only, no CSV read
