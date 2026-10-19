@@ -16,6 +16,8 @@
   .prform .actions { display: flex; gap: 6px; flex-wrap: wrap; }
   .prmsg { font-size: var(--fs-micro); }
   .prmsg--err { color: var(--t-crit); }
+  .invcode { display: flex; align-items: center; gap: var(--s2); margin: var(--s2) 0; }
+  .invcode code { font-size: 17px; letter-spacing: .05em; padding: 6px 10px; background: var(--surface-2); border-radius: 6px; user-select: all; }
   #prList .qrow__actions { flex-wrap: wrap; justify-content: flex-end; }
   #prList .chip { overflow-wrap: anywhere; }
   #prList .chip a { color: inherit; }
@@ -179,7 +181,8 @@
       <span class="badge badge--ghost">adoção operacional · não é KPI · usuários como hash</span></div>
     <div class="panel">
       <div class="panel__hd"><h2>Clientes por risco</h2><span class="spacer"></span>
-        <span class="hd-note" id="tuSum"></span></div>
+        <span class="hd-note" id="tuSum"></span>
+        <button class="btn btn--sm" type="button" id="invOpen" title="#249: código de uso único que vincula um login Google/Apple a um cliente">Gerar convite</button></div>
       <div class="panel__bd panel__bd--flush" id="tenantUsage"></div>
     </div>
   </section>
@@ -468,6 +471,9 @@ function renderDescoberta() {
 // /api/act's typed intents — same fetch/auth path as the other operator actions.
 let PR = { subjects: null, error: null };
 const PR_ERR_PT = [
+  [/unknown tenant/, "Cliente não encontrado — confira o tenant id."],
+  [/days must/, "Validade: de 1 a 30 dias."],
+  [/tier must/, "Nível inválido."],
   [/apple_app_ids or youtube_channels/, "Informe ao menos um app da App Store ou um canal do YouTube."],
   [/invalid Apple app id/, "ID de app da Apple inválido — use só os dígitos (ex.: 814456780)."],
   [/invalid YouTube channel id/, "ID de canal do YouTube inválido — use o id UC… (24 caracteres), não o @handle."],
@@ -561,6 +567,48 @@ async function radarRowOp(s, op, btn, row) {
   }
   loadRadar();
 }
+// #249: a single-use invite code links ONE Google/Apple login to a tenant (the fix for Apple's
+// Hide My Email, whose relay address never matches the corporate e-mail map). Shown once here,
+// never stored in clear, never journaled.
+function openInviteForm() {
+  const tenants = ((DATA.tenant_usage || {}).tenants || []).map((t) =>
+    `<option value="${U.esc(t.tenant)}">${U.esc((t.plan || {}).state_pt || "")}</option>`).join("");
+  document.getElementById("drTitle").textContent = "Gerar convite";
+  document.getElementById("drBody").innerHTML = `
+    <form class="prform" id="invForm" novalidate>
+      <label>Cliente (tenant id)
+        <input class="field" name="tenant_id" list="invTenants" required autocomplete="off" />
+        <datalist id="invTenants">${tenants}</datalist></label>
+      <label>Nível <span class="hint">padrão: o do cliente</span>
+        <select class="field" name="tier"><option value="">do cliente</option><option>entry</option><option>saas</option><option>sovereign</option></select></label>
+      <label>Validade (dias) <input class="field" name="days" type="number" min="1" max="30" value="7" /></label>
+      <label>Para quem <span class="hint">opcional, só para você reconhecer (ex.: cargo)</span>
+        <input class="field" name="label" maxlength="60" /></label>
+      <div class="hint">Um código serve para UMA pessoa e uma vez. Ela o digita em “Tenho um código de convite” depois de entrar com Google ou Apple.</div>
+      <div class="actions"><button class="btn btn--primary" type="submit">Gerar</button>
+        <button class="btn btn--ghost" type="button" id="invCancel">Cancelar</button></div>
+      <div class="prmsg" id="invMsg" role="status"></div>
+    </form>`;
+  const form = document.getElementById("invForm");
+  document.getElementById("invCancel").onclick = closeDrawer;
+  form.onsubmit = async (ev) => {
+    ev.preventDefault();
+    const fd = new FormData(form), out = document.getElementById("invMsg");
+    const args = {};
+    ["tenant_id", "tier", "days", "label"].forEach((k) => { const v = String(fd.get(k) || "").trim(); if (v) args[k] = v; });
+    out.className = "prmsg"; out.textContent = "Gerando…";
+    const res = await prAct("issue_invite", args);
+    const inv = res.ok && res.j.invite;
+    if (!inv) { out.classList.add("prmsg--err"); out.textContent = prErr(res.j, res.status); return; }
+    out.innerHTML = `<div class="invcode"><code id="invCode">${U.esc(inv.code)}</code>
+      <button class="btn btn--sm" type="button" id="invCopy">Copiar</button></div>
+      <div class="hint">Para ${U.esc(inv.tenant_id)} · ${U.esc(inv.tier)} · vale até ${U.esc(U.fmtDate(String(inv.expires_at).slice(0, 10)))}.
+      <b>Este código não aparece de novo</b> — envie-o agora por um canal da empresa.</div>`;
+    document.getElementById("invCopy").onclick = () => navigator.clipboard && navigator.clipboard.writeText(inv.code);
+    form.querySelector('button[type="submit"]').disabled = true;
+  };
+  openDrawer();
+}
 function openRadarForm(s) {
   const edit = !!s; s = s || {};
   const ids = (xs) => (xs || []).map((x) => x.id).join(", ");
@@ -612,6 +660,7 @@ function openRadarForm(s) {
   (edit ? form.elements.name : form.elements.entity_id).focus();
 }
 document.getElementById("prAdd").addEventListener("click", () => openRadarForm(null));
+document.getElementById("invOpen").addEventListener("click", openInviteForm);
 renderRadar();
 loadRadar();
 

@@ -91,9 +91,9 @@ def test_apple_idp_is_context_gated_and_on_both_clients():
 
 def test_federated_gate_warns_about_hidden_apple_email():
     assert r"/@privaterelay\.appleid\.com$/i" in CTX and "Compartilhar meu e-mail" in CTX
-    assert 'const who = /apple/i.test(idp) ? "Apple" : "Google";' in CTX
-    assert "conta individual nova" in CTX
-    assert 'quer acompanhar no plano Entry${APP ? "" : " (R$ 490/mês' in CTX   # no price in the app
+    assert 'const who = /apple/i.test(idpName(claims)) ? "Apple" : "Google";' in CTX
+    assert "Criar uma conta individual nova" in CTX                  # #249: labelled, and last
+    assert 'teste grátis de 14 dias no plano Entry${APP ? "" : " (R$ 490/mês' in CTX   # no price in the app
 
 
 def _tile_calls():

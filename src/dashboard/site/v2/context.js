@@ -752,24 +752,45 @@
   // same duplication convention infra/app.py's _INDUSTRY_GROUPS already uses).
   const ENTRY_INDUSTRIES = ["agri-funds", "betting", "consorcio", "crypto", "real-estate-funds"];
 
-  // Lazy Entry-tier self-registration (see docs/google-oauth-runbook.md): the one
-  // user-initiated write that turns an authenticated-but-unprovisioned Google
-  // login into a real (entry-tier) tenant. After it succeeds the CURRENT id token
-  // still has no custom:tenant claim (lambda_pretoken.py only resolves it at the
-  // NEXT token issuance) — silently re-auth straight through Google (no chooser
-  // page) to pick up a fresh token that carries it.
-  async function completeRegistration(industries) {
+  // Lazy Entry-tier self-registration (see docs/google-oauth-runbook.md) and #249 invite
+  // redemption: the user-initiated writes that turn an authenticated-but-unprovisioned
+  // Google/Apple login into a tenant member. After either succeeds the CURRENT id token still has
+  // no custom:tenant claim (lambda_pretoken.py resolves it at the NEXT token issuance), so trade
+  // the session cookie for a fresh token (/api/session/refresh re-runs the trigger) and reload.
+  // Only if that fails, sign in again with the SAME provider (it used to be always Google, which
+  // sent an Apple user to the wrong screen).
+  async function postRegister(body) {
     const r = await fetch("/api/register", {
       method: "POST",
       headers: { authorization: `Bearer ${getIdToken()}`, "content-type": "application/json" },
-      body: JSON.stringify({ industries }),
+      body: JSON.stringify(body),
     });
     if (!r.ok) {
       const j = await r.json().catch(() => ({}));
       throw new Error(j.error || ("HTTP " + r.status));
     }
+  }
+  async function reissueToken() {
+    const idp = idpName(decodeJwt(getIdToken() || "") || {});
     try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) {}
-    await login("Google");
+    _noSession = false;
+    if ((await ensureSession()) === "ok" && (decodeJwt(getIdToken() || "") || {})["custom:tenant"]) {
+      location.reload();
+      return;
+    }
+    await login(/apple/i.test(idp) ? "SignInWithApple" : "Google");
+  }
+  function idpName(claims) {
+    try { return String((JSON.parse(claims.identities || "[]")[0] || {}).providerName || ""); }
+    catch (e) { return String(((claims.identities || [])[0] || {}).providerName || ""); }
+  }
+  async function completeRegistration(industries) {
+    await postRegister({ industries });
+    await reissueToken();
+  }
+  async function redeemInvite(code) {
+    await postRegister({ invite: code });
+    await reissueToken();
   }
 
   /* ---- #187 upgrade path -------------------------------------------------------
@@ -860,32 +881,41 @@
           <div class="em-d" style="margin-top:var(--s2)"><a href="/pricing.html">Ver planos</a></div>`}</div>`;
       }
       if (isFederated()) {
-        // #248/#249: Apple or Google — and a Hide-My-Email relay address can never match the
-        // corporate email an operator mapped, so say so BEFORE offering a new individual account.
+        // #248/#249: Apple or Google with no tenant. A Hide-My-Email relay address can never match
+        // the corporate e-mail an operator mapped, so the ways IN to an existing organization come
+        // first — (1) the company e-mail, (2) an invite code — and only then (3) a NEW individual
+        // account, labelled as such. Nothing here is pre-selected or automatic.
         const claims = decodeJwt(getIdToken() || "") || {};
-        let idp = "";
-        try { idp = String((JSON.parse(claims.identities || "[]")[0] || {}).providerName || ""); }
-        catch (e) { idp = String(((claims.identities || [])[0] || {}).providerName || ""); }
-        const who = /apple/i.test(idp) ? "Apple" : "Google";
+        const who = /apple/i.test(idpName(claims)) ? "Apple" : "Google";
         const relay = /@privaterelay\.appleid\.com$/i.test(String(claims.email || ""));
-        const company = relay
-          ? `<div class="em-d" style="margin-top:var(--s2)"><b>Você ocultou seu e-mail na Apple.</b> Se a sua
-              empresa já usa o Onça, saia e entre de novo escolhendo <b>Compartilhar meu e-mail</b> (o
-              corporativo) — com o e-mail oculto não conseguimos encontrar a conta dela.
-              <div style="margin-top:var(--s2)"><button type="button" class="btn" id="__gateLogout">Sair</button></div></div>`
-          : `<div class="em-d" style="margin-top:var(--s2)">Se a sua empresa já usa o Onça, entre com o e-mail
-              que ela cadastrou — o formulário abaixo cria uma <b>conta individual nova</b>.</div>`;
-        return `<div class="empty gate"><div class="em-ico" aria-hidden="true">${ICO("◐")}</div>
-          <div class="em-t">Comece seu teste grátis de 14 dias</div>
-          <div class="em-d">Sua conta ${who} ainda não está vinculada a um plano. Escolha o setor que
-            quer acompanhar no plano Entry${APP ? "" : " (R$ 490/mês depois do teste, um setor)"}. Não pedimos cartão agora.</div>
-          ${company}
-          <form id="__regForm" style="margin-top:var(--s3);text-align:left;max-width:340px;margin-inline:auto">
-            ${ENTRY_INDUSTRIES.map((s) => `<label class="cvsub" style="display:block;margin:6px 0">
-              <input type="radio" name="ind" value="${esc(s)}"> ${esc(indLabel(s))}</label>`).join("")}
-            <div id="__regErr" class="badge badge--crit" style="display:none;margin-top:var(--s2)"></div>
-            <button type="submit" class="btn btn--primary" style="margin-top:var(--s3)">Começar teste grátis</button>
-          </form></div>`;
+        return `<div class="empty gate gate--join"><div class="em-ico" aria-hidden="true">${ICO("◐")}</div>
+          <div class="em-t">Sua conta ${who} ainda não está vinculada a uma organização</div>
+          <ol class="join">
+            <li class="join__step"><div class="join__h">Entre com o e-mail cadastrado pela sua empresa</div>
+              <div class="em-d">${relay
+                ? `<b>Você ocultou seu e-mail na Apple</b>, e com o e-mail oculto não encontramos a conta da sua
+                   empresa. Saia e entre de novo escolhendo <b>Compartilhar meu e-mail</b> — ou use um código de convite.`
+                : `Se a sua empresa já usa o Onça, saia e entre com o e-mail que ela cadastrou.`}</div>
+              <button type="button" class="btn" id="__gateLogout">Sair e entrar com outro e-mail</button></li>
+            <li class="join__step"><div class="join__h">Tenho um código de convite</div>
+              <form id="__invForm" class="join__inv" novalidate>
+                <label class="em-d" for="__invCode">O código que o responsável pelo Onça na sua empresa enviou</label>
+                <input id="__invCode" name="invite" autocomplete="one-time-code" autocapitalize="characters"
+                  spellcheck="false" placeholder="XXXXX-XXXXX-XXXXX-XXXXX" maxlength="40">
+                <div id="__invErr" class="badge badge--crit" role="alert" style="display:none"></div>
+                <button type="submit" class="btn btn--primary">Entrar na organização</button>
+              </form></li>
+            <li class="join__step"><div class="join__h">Criar uma conta individual nova</div>
+              <div class="em-d">Só se você <b>não</b> faz parte de uma organização que já usa o Onça: uma conta
+                separada, só sua, com teste grátis de 14 dias no plano Entry${APP ? "" : " (R$ 490/mês depois do teste, um setor)"}.
+                Não pedimos cartão agora.</div>
+              <form id="__regForm" class="join__reg">
+                ${ENTRY_INDUSTRIES.map((s) => `<label class="cvsub" style="display:block;margin:6px 0">
+                  <input type="radio" name="ind" value="${esc(s)}"> ${esc(indLabel(s))}</label>`).join("")}
+                <div id="__regErr" class="badge badge--crit" style="display:none;margin-top:var(--s2)"></div>
+                <button type="submit" class="btn" style="margin-top:var(--s3)">Criar conta individual e começar o teste</button>
+              </form></li>
+          </ol></div>`;
       }
       // 403 "no entitlement": signed in, but the account maps to no sector at all. Say WHO is signed
       // in (the usual cause is a personal address instead of the corporate one the operator
@@ -919,7 +949,21 @@
       try { await completeRegistration(picked); }
       catch (ex) {
         err.textContent = ex.message || "Falha ao registrar.";
-        err.style.display = ""; btn.disabled = false; btn.textContent = "Começar teste grátis";
+        err.style.display = ""; btn.disabled = false; btn.textContent = "Criar conta individual e começar o teste";
+      }
+    });
+    const inv = el.querySelector("#__invForm");
+    if (inv) inv.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const code = inv.querySelector("#__invCode").value.trim();
+      const err = inv.querySelector("#__invErr");
+      const btn = inv.querySelector('button[type="submit"]');
+      if (code.replace(/[\s-]/g, "").length < 20) { err.textContent = "Digite o código completo (20 letras e números)."; err.style.display = ""; return; }
+      err.style.display = "none"; btn.disabled = true; btn.textContent = "Verificando…";
+      try { await redeemInvite(code); }
+      catch (ex) {
+        err.textContent = ex.message || "Não foi possível usar o código.";
+        err.style.display = ""; btn.disabled = false; btn.textContent = "Entrar na organização";
       }
     });
   }

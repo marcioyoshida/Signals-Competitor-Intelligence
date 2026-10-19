@@ -963,6 +963,9 @@ class OncaPrototypeStack(Stack):
                 partition_key=dynamodb.Attribute(
                     name="email", type=dynamodb.AttributeType.STRING),
                 billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+                # #249: invite codes + redemption counters expire (src/dashboard/invites.py);
+                # e-mail and sub links carry no ttl and never do
+                time_to_live_attribute="ttl",
                 removal_policy=RemovalPolicy.RETAIN,
                 point_in_time_recovery_specification=dynamodb.PointInTimeRecoverySpecification(
                     point_in_time_recovery_enabled=True
@@ -2640,7 +2643,7 @@ class OncaPrototypeStack(Stack):
                 },
             )
             tenant_config_table.grant_read_write_data(self_register_fn)
-            federated_map_table.grant_write_data(self_register_fn)
+            federated_map_table.grant_read_write_data(self_register_fn)   # #249 invite redemption
             auth_api.add_routes(
                 path="/api/register",
                 methods=[apigwv2.HttpMethod.POST],

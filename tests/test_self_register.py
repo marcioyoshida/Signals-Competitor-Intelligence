@@ -8,7 +8,20 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import pytest
+
 from src.dashboard import self_register
+
+
+@pytest.fixture(autouse=True)
+def _no_invite_link(monkeypatch):
+    """#249: registration first checks for an invite link (sub#…) — none here, and no AWS call."""
+    import src.dashboard.tenant_config as tc
+
+    class _Empty:
+        def get_item(self, **kw):
+            return {}
+    monkeypatch.setattr(tc, "_federated_table", lambda table=None: _Empty())
 
 
 def _ev(claims, body=None):

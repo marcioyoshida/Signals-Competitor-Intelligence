@@ -84,10 +84,14 @@ def _other_users(tenant: str, sub: str, email: str, *, cognito: Any, pool: str,
     """How many OTHER people resolve to ``tenant``: federated e-mail mappings plus Cognito users
     whose ``custom:tenant`` attribute names it. Fails closed (an unreadable pool counts as
     'others exist', so a shared tenant is never closed by mistake)."""
+    from src.dashboard.invites import SUB, is_person_row
+
     others = 0
     if federated is not None:
         for it in _scan(federated):
-            if str(it.get("tenant_id") or "") == tenant and str(it.get("email") or "").lower() != email:
+            key = str(it.get("email") or "")
+            if (str(it.get("tenant_id") or "") == tenant and is_person_row(key)
+                    and key.lower() != email and key != SUB + sub):
                 others += 1
     if cognito is None or not pool:
         return others + 1
@@ -251,12 +255,25 @@ def revoke_apps(sub: str, *, store: Any | None = None) -> int:
     return apps.revoke_app(store, sub)
 
 
-def unmap_email(email: str, *, table: Any | None = None) -> int:
-    t = table if table is not None else (_ddb("ONCA_FEDERATED_MAP_TABLE", None) if email else None)
-    if t is None or not email:
+def unmap_email(email: str, sub: str = "", *, table: Any | None = None) -> int:
+    """The e-mail mapping and the #249 invite link (``sub#<sub>``, which holds the relay address
+    as a contact field)."""
+    t = table if table is not None else _ddb("ONCA_FEDERATED_MAP_TABLE", None)
+    if t is None:
         return 0
-    old = t.delete_item(Key={"email": email}, ReturnValues="ALL_OLD").get("Attributes")
-    return 1 if old else 0
+    n = 0
+    for key in [k for k in (email, f"sub#{sub}" if sub else "") if k]:
+        if t.delete_item(Key={"email": key}, ReturnValues="ALL_OLD").get("Attributes"):
+            n += 1
+    if sub:   # the redeemed invite forgets who used it; the redemption counters go (TTL 2 h anyway)
+        for it in _scan(t):
+            key = str(it.get("email") or "")
+            if key.startswith(f"rl#sub#{sub}#"):
+                t.delete_item(Key={"email": key})
+            elif key.startswith("invite#") and it.get("used_by") == sub:
+                t.update_item(Key={"email": key}, UpdateExpression="SET used_by = :d",
+                              ExpressionAttributeValues={":d": "deleted-user"})
+    return n
 
 
 def _cognito_missing(exc: Exception) -> bool:
@@ -301,7 +318,7 @@ def delete_account(*, sub: str, username: str | None, email: str | None, tenant:
         "reports": purge_feedback(sub, table=tables.get("feedback")),
         "ask_quota": purge_ask_quota(sub, table=tables.get("ask_quota")),
         "apps_revoked": revoke_apps(sub, store=oauth_store),
-        "federated_mapping": unmap_email(email, table=fed),
+        "federated_mapping": unmap_email(email, sub, table=fed),
         "tenant_closed": bool(plan["close"]) and close_tenant(str(tenant), tenants=tables.get("tenants"), now=now),
         "tenant": plan["reason"],
     }

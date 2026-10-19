@@ -77,14 +77,19 @@ def lambda_handler(event, context):
         return event
 
     email = (attrs.get("email") or "").strip().lower()
-    if not email or not FEDERATED_TABLE:
+    sub = str(attrs.get("sub") or "").strip()
+    if not (email or sub) or not FEDERATED_TABLE:
         return event
 
     import boto3
 
-    item = boto3.client("dynamodb").get_item(
-        TableName=FEDERATED_TABLE, Key={"email": {"S": email}}
-    ).get("Item")
+    ddb = boto3.client("dynamodb")
+    # #249: an invite links the identity's SUB (a Hide-My-Email relay address can't match the
+    # corporate e-mail an operator mapped) — that link wins; the e-mail map is the fallback.
+    item = (ddb.get_item(TableName=FEDERATED_TABLE, Key={"email": {"S": "sub#" + sub}}).get("Item")
+            if sub else None)
+    if not item and email:
+        item = ddb.get_item(TableName=FEDERATED_TABLE, Key={"email": {"S": email}}).get("Item")
     if not item:
         # The domain only: logs must never hold a user's email (privacy policy).
         print(f"[pretoken] no federated tenant mapping for a user at "

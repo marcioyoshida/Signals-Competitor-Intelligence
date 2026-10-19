@@ -698,8 +698,26 @@ def _act_delete_account(args: dict[str, Any], actor: str) -> tuple[str, int, dic
     return ("applied" if counts["user_deleted"] else "noop"), 200, {"deleted": counts}
 
 
+# ---- #249 invite codes (src/dashboard/invites.py) ---------------------------------------------
+def _act_issue_invite(args: dict[str, Any], actor: str) -> tuple[str, int, dict[str, Any]]:
+    """apply (operator): a single-use, expiring code that links ONE federated login to a tenant —
+    for an invited officer whose Apple relay address can't match the corporate e-mail map. The
+    code is returned once and never stored, journaled or kept as an idempotency replay."""
+    from src.dashboard import invites
+
+    try:
+        inv = invites.issue(str(args.get("tenant_id") or ""), args.get("tier") or None, issued_by=actor,
+                            days=args.get("days"), label=args.get("label"))
+    except ValueError as exc:
+        return "blocked", 400, {"error": str(exc)}
+    return "applied", 200, {"invite": inv}
+
+
 # report_feedback: the client's free text must not be copied into the curation journal.
 _NO_JOURNAL = frozenset({"record_engagement", "list_product_radar", "report_feedback", "list_feedback"})
+
+# results that must not be kept as an idempotency replay (#249: an invite code is shown once)
+_NO_REPLAY = frozenset({"issue_invite"})
 
 # DEC-6: decision-management intents operate ON a decision — they must NOT be linked back as
 # "actions authorized BY" that decision (would self-reference).
@@ -741,6 +759,8 @@ _CATALOG: dict[str, tuple[str, Callable[..., tuple[str, int, dict[str, Any]]], s
     "report_feedback": (APPLY, _act_report_feedback, None),
     "list_feedback": (APPLY, _act_list_feedback, None),
     "set_feedback_status": (APPLY, _act_set_feedback_status, "report_id"),
+    # #249 invite codes (operator only — elevated)
+    "issue_invite": (APPLY, _act_issue_invite, "tenant_id"),
     # #251 self-service account deletion (the caller's own account only)
     "delete_account": (APPLY, _act_delete_account, None),
 }
@@ -885,6 +905,6 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                                      act_key=idem or None)
         except Exception as exc:  # pragma: no cover - link best-effort
             print(f"Warning: decision-action link skipped: {exc}")
-    if idem:
+    if idem and intent not in _NO_REPLAY:
         _put_act(idem, status, result)
     return _resp(status, result)

@@ -456,6 +456,23 @@ details.fold.chg > summary { padding: var(--s2) var(--s3); font-size: var(--fs-m
 .empty .em-ico { font-size: 20px; opacity: .6; }
 .empty .em-t { font-size: var(--fs-sm); font-weight: 600; color: var(--ink-2); }
 .empty .em-d { font-size: var(--fs-micro); max-width: 42ch; }
+/* #249: the no-tenant federated gate — three numbered ways in, the new individual account last */
+.join { list-style: none; counter-reset: join; margin: var(--s3) auto 0; padding: 0; width: 100%; max-width: 440px;
+  display: flex; flex-direction: column; gap: var(--s3); text-align: left; }
+.join__step { counter-increment: join; position: relative; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-md, 10px); padding: var(--s3) var(--s3) var(--s3) calc(var(--s3) + 30px);
+  display: flex; flex-direction: column; align-items: flex-start; gap: var(--s2); }
+.join__step::before { content: counter(join); position: absolute; left: var(--s3); top: var(--s3); width: 22px; height: 22px;
+  border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700;
+  background: var(--primary-weak, var(--surface-2)); color: var(--primary); }
+.join__h { font-weight: 700; color: var(--ink); font-size: var(--fs-sm); }
+.gate .join .em-d, .join .em-d { max-width: none; }
+.join__inv, .join__reg { display: flex; flex-direction: column; align-items: stretch; gap: var(--s2); width: 100%; }
+.join__inv input { width: 100%; box-sizing: border-box; min-height: 46px; background: var(--surface-2); color: var(--ink);
+  border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font: inherit; font-size: 16px;
+  font-family: var(--f-mono, ui-monospace, monospace); letter-spacing: .04em; text-transform: uppercase; }
+.join__inv input:focus { outline: none; border-color: var(--primary); box-shadow: var(--focus); }
+.join .btn { align-self: stretch; justify-content: center; min-height: 44px; }
 
 /* ============================ loading ================================== */
 /* The brand's Ç as an hourglass: the glyph fills bottom-up like sand, then turns over (a quick
