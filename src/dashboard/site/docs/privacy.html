@@ -29,7 +29,7 @@
 <body><div class="wrap">
 
 <h1>Política de Privacidade — Onça (onssa.org)</h1>
-<p class="meta"><b>Controladora:</b> Smart Signals LLC, sociedade de responsabilidade limitada do Wyoming (EUA). <b>Encarregado (LGPD, art. 41):</b> Smart Signals LLC, <a href="mailto:contato@onssa.org">contato@onssa.org</a>. <b>Vigência:</b> 1º de outubro de 2026.</p>
+<p class="meta"><b>Controladora:</b> Smart Signals LLC, sociedade de responsabilidade limitada do Wyoming (EUA). <b>Encarregado (LGPD, art. 41):</b> Smart Signals LLC, <a href="mailto:contato@onssa.org">contato@onssa.org</a>. <b>Vigência:</b> 20 de outubro de 2026.</p>
 <p>A Onça é um produto licenciado de inteligência competitiva e regulatória para instituições financeiras brasileiras. Coletamos o mínimo necessário para operar o serviço e esta política lista tudo o que coletamos, por que e por quanto tempo.</p>
 <p>A Smart Signals LLC é a controladora dos dados da sua conta e do uso do serviço. Para o conteúdo que a sua organização registra na Onça (por exemplo, decisões e notas), a sua organização é a controladora e a Smart Signals atua como operadora, seguindo o contrato.</p>
 
@@ -49,10 +49,10 @@
 <li><b>Decisões.</b> As decisões que você registra (aprovar/rejeitar, nota opcional, resultado) ficam no registro de decisões da sua organização, com a classe do dispositivo.</li>
 <li><b>Engajamento.</b> Quais recursos do painel você usa: aberturas do painel, de cartões e de fontes, indicadores e evidências consultados, troca de oficial ou de visão, uso do chat e de relatos (sem o texto da pergunta, da resposta ou do relato), ativação de alertas, botões de assinatura e o método de entrada (senha, Google ou Apple). Cada registro leva só identificadores — o cartão, o oficial, o setor e a <b>classe</b> do dispositivo (celular, tablet ou computador) —, nunca o texto, o endereço das fontes, o user-agent, o modelo ou a localização.</li>
 <li><b>No celular.</b> O app guarda no próprio aparelho a última versão do seu painel (para leitura sem conexão) e marcadores de sessão; tudo é apagado ao “Sair” ou quando a sessão termina.</li>
-<li><b>Alertas (opcional).</b> O endereço de push do navegador, as suas preferências e os ids dos eventos já avisados. As notificações não têm conteúdo (“Novo alerta no seu painel Onça”).</li>
+<li><b>Alertas (opcional).</b> O endereço de push do navegador ou, no app, o token de push do aparelho (emitido pela Expo), as suas preferências e os ids dos eventos já avisados. As notificações não têm conteúdo (“Novo alerta no seu painel Onça”).</li>
 <li><b>Resumo semanal (opcional).</b> Os setores licenciados que você escolher no painel, a data e a versão desta política em que você consentiu, e o e-mail do seu login, para onde o resumo de cada setor é enviado pelo Amazon SES. Todo e-mail traz um link para cancelar a inscrição.</li>
 <li><b>Contato.</b> Os e-mails que você envia para contato@onssa.org.</li>
-<li><b>Pagamento.</b> Quando a sua organização contrata pelo site, o pagamento é feito na Stripe. A Onça não recebe dados de cartão; guarda só o plano, os módulos e a situação da assinatura.</li>
+<li><b>Pagamento.</b> Quando a sua organização contrata pelo site, o pagamento é feito na Stripe. A Onça não recebe dados de cartão; guarda só o plano, os módulos, a situação da assinatura e os identificadores dos eventos de cobrança. O app não vende nada: a contratação é só pelo site.</li>
 </ul>
 
 <h2>Bases legais</h2>
@@ -70,8 +70,9 @@
 <ul>
 <li><b>Amazon Web Services</b> (EUA, us-east-1): hospedagem, login, e-mail e modelos de IA.</li>
 <li><b>Stripe</b> (EUA): pagamentos, somente se a sua organização contratar pelo site.</li>
-<li><b>Google</b>: somente se você entrar com Google.</li>
-<li><b>Serviços de push do navegador</b> (Apple, Google, Mozilla): recebem só uma notificação sem conteúdo, se você ativar alertas.</li>
+<li><b>Google</b> e <b>Apple</b>: somente se você entrar com uma dessas contas.</li>
+<li><b>Serviços de push</b>, se você ativar alertas: no navegador, o da Apple, do Google ou da Mozilla; no app, a <b>Expo</b> (EUA), que repassa a notificação ao serviço da Apple ou do Google. Recebem só o token do aparelho e uma notificação sem conteúdo.</li>
+<li><b>Não há no app nem no site nenhum SDK ou script de análise, publicidade ou rastreamento de terceiros</b>, e não usamos o identificador de publicidade do aparelho.</li>
 <li><b>Não vendemos nem compartilhamos dados pessoais para publicidade.</b></li>
 </ul>
 
@@ -80,14 +81,15 @@
 
 <h2>Por quanto tempo guardamos</h2>
 <ul>
-<li><b>Conta, configuração da organização, chaves de API, apps autorizados, decisões e engajamento:</b> enquanto a conta ou o contrato estiver ativo; excluídos em até 30 dias após um pedido de exclusão ou o fim do contrato, salvo o que a lei obrigue a manter. Pela opção “Excluir minha conta”, os seus dados pessoais são apagados na hora; os dados da organização ficam com o contrato.</li>
+<li><b>Conta, configuração da organização, chaves de API, apps autorizados, decisões e engajamento:</b> enquanto a conta ou o contrato estiver ativo; excluídos em até 30 dias após um pedido de exclusão ou o fim do contrato, salvo o que a lei obrigue a manter. Pela opção “Excluir minha conta”, os seus dados pessoais são apagados na hora; as chaves de API que você criou continuam com a organização, sem o seu e-mail; os dados da organização ficam com o contrato. As cópias de segurança automáticas das tabelas guardam o estado dos últimos 35 dias e expiram sozinhas; não as usamos para restaurar contas excluídas.</li>
 <li><b>Tokens:</b> acesso 1 hora; renovação até 30 dias, apagados automaticamente ao expirar.</li>
 <li><b>Alertas:</b> até você desligá-los ou o navegador deixar de aceitá-los.</li>
 <li><b>Relatos de defeito e sugestão:</b> 90 dias, apagados automaticamente.</li>
 <li><b>Perguntas sem resposta:</b> até 12 meses depois da última vez em que foram feitas.</li>
 <li><b>E-mails recebidos em contato@onssa.org:</b> 12 meses.</li>
-<li><b>Registros de acesso ao site</b> (IP, endereço acessado, data e hora): 12 meses (o Marco Civil exige no mínimo 6).</li>
-<li><b>Registros técnicos dos servidores:</b> 90 dias. Contêm erros e contadores, nunca o texto das suas perguntas, tokens, senhas ou e-mails.</li>
+<li><b>Registros de acesso ao site</b> (IP, endereço acessado com os seus parâmetros, data e hora, navegador ou app — o <i>user-agent</i> — e a página de origem): 12 meses (o Marco Civil exige no mínimo 6).</li>
+<li><b>Proteção contra abuso de convites:</b> o IP de quem resgata um código de convite fica num contador por até 2 horas.</li>
+<li><b>Registros técnicos dos servidores:</b> 90 dias. Contêm erros e contadores, nunca o texto das suas perguntas, tokens, senhas, e-mails ou o seu identificador de usuário.</li>
 <li><b>Registros de cobrança:</b> pelo prazo exigido pela legislação fiscal.</li>
 </ul>
 
@@ -100,7 +102,7 @@
 
 <hr>
 <h1>Privacy Policy — Onça (onssa.org)</h1>
-<p class="meta"><b>Controller:</b> Smart Signals LLC, a Wyoming limited liability company. <b>Data protection officer (LGPD art. 41):</b> Smart Signals LLC, contato@onssa.org. <b>Effective:</b> 1 October 2026. The Portuguese text above prevails for users in Brazil.</p>
+<p class="meta"><b>Controller:</b> Smart Signals LLC, a Wyoming limited liability company. <b>Data protection officer (LGPD art. 41):</b> Smart Signals LLC, contato@onssa.org. <b>Effective:</b> 20 October 2026. The Portuguese text above prevails for users in Brazil.</p>
 <ul>
 <li><b>Roles:</b> Smart Signals LLC controls your account and service-usage data. For content your organization records in Onça (e.g. decisions and notes), your organization is the controller and Smart Signals processes it under the contract.</li>
 <li><b>Account:</b> Amazon Cognito sign-in (email/password, Google or Apple). We keep your email, organization (tenant) and access groups — never your password.</li>
@@ -110,13 +112,13 @@
 <li><b>API keys:</b> a hash, label, prefix (first 16 characters — identifies the key but cannot be used as it), creator and created/last-used dates; usage metered per organization.</li>
 <li><b>Defect and suggestion reports</b> you send from the chat hold your text plus that turn's question and answer, plus officer, sector and screen. Used only to improve the service; kept 90 days, then deleted automatically; never published.</li>
 <li><b>Questions</b> go to Amazon Bedrock to generate grounded answers; not used to train models. When Onça cannot answer from its data, we keep the question text <b>without the asker's identity</b> to fix coverage gaps; our team may log it in our issue tracker, which may be public. Don't put personal or confidential data in questions.</li>
-<li><b>Also:</b> decisions you record, engagement (with a device <i>class</i> only), optional push subscriptions (content-free notifications), the optional weekly digest (the licensed sectors you choose, when and under which version of this policy you consented, and your login email, to which it is sent via Amazon SES, with an unsubscribe link in every email), emails you send to contato@onssa.org, and — if your organization buys on the website — plan and subscription status from Stripe (we never receive card data).</li>
+<li><b>Also:</b> decisions you record, engagement (with a device <i>class</i> only), optional push subscriptions (a browser push address or, in the app, the device's push token issued by Expo; content-free notifications), the optional weekly digest (the licensed sectors you choose, when and under which version of this policy you consented, and your login email, to which it is sent via Amazon SES, with an unsubscribe link in every email), emails you send to contato@onssa.org, and — if your organization buys on the website — plan, module, subscription status and billing event ids from Stripe (we never receive card data; the app sells nothing — purchases happen on the website only).</li>
 <li><b>On your phone:</b> your last loaded dashboard (offline reading) and session markers, wiped on sign-out or when the session ends.</li>
 <li><b>Legal bases:</b> contract (account, sessions, apps, keys, questions, decisions, metering, payment); legitimate interests (engagement, anonymous unanswered questions, technical logs, contact email); consent (alerts, weekly digest — withdraw any time); legal obligation (access logs under Brazil's Marco Civil art. 15, billing records).</li>
-<li><b>Third parties:</b> AWS (US), Stripe (US, payments only), Google (if you sign in with it), browser push services (content-free). No sale or advertising use of personal data.</li>
+<li><b>Third parties:</b> AWS (US), Stripe (US, payments only), Google and Apple (if you sign in with them), push services if you turn on alerts (browser: Apple, Google, Mozilla; app: Expo (US), which relays to Apple's or Google's service — they receive only the device token and a content-free notification). No third-party analytics, advertising or tracking SDK or script in the app or the site, and no use of the device advertising identifier. No sale or advertising use of personal data.</li>
 <li><b>International transfer:</b> Smart Signals LLC and Onça's infrastructure are in the United States, so using Onça from Brazil transfers your data there, as necessary to perform the contract (LGPD art. 33, IX with art. 7, V). AWS and Stripe process data under their own data-protection terms.</li>
-<li><b>Retention:</b> account, organization settings, API keys, authorized apps, decisions and engagement for as long as the account or contract is active, then deleted within 30 days of a deletion request or contract end (except what law requires us to keep); tokens 1 hour / up to 30 days; alerts until you turn them off; unanswered questions 12 months after last asked; contact emails 12 months; site access logs (IP, URL, time) 12 months; server logs 90 days (errors and counters only — never question text, tokens, passwords or emails); billing records as tax law requires.</li>
-<li><b>Delete your account</b> yourself, in the app or a browser: <b>Sua conta → Excluir minha conta</b>; it takes effect at once. Steps and what is deleted: <a href="/docs/excluir-conta.html">onssa.org/docs/excluir-conta.html</a>.</li>
+<li><b>Retention:</b> account, organization settings, API keys, authorized apps, decisions and engagement for as long as the account or contract is active, then deleted within 30 days of a deletion request or contract end (except what law requires us to keep); tokens 1 hour / up to 30 days; alerts until you turn them off; unanswered questions 12 months after last asked; contact emails 12 months; site access logs (IP, URL with its query string, time, user agent, referrer) 12 months; the IP of an invite redemption in an abuse counter for up to 2 hours; server logs 90 days (errors and counters only — never question text, tokens, passwords, emails or your user id); automatic table backups keep the last 35 days and expire on their own (never used to restore a deleted account); billing records as tax law requires.</li>
+<li><b>Delete your account</b> yourself, in the app or a browser: <b>Sua conta → Excluir minha conta</b>; it takes effect at once; API keys you created stay with your organization, without your email. Steps and what is deleted: <a href="/docs/excluir-conta.html">onssa.org/docs/excluir-conta.html</a>.</li>
 <li><b>Rights:</b> confirmation, access, correction, portability, deletion and withdrawal of consent via contato@onssa.org, answered within 15 days; LGPD (Brazil, including complaints to the ANPD) and GDPR/UK GDPR rights apply.</li>
 <li><b>Changes</b> are posted here with a new effective date.</li>
 </ul>

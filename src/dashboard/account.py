@@ -242,6 +242,27 @@ def purge_feedback(sub: str, *, table: Any | None = None) -> int:
     return feedback.delete_for_user(sub, table=table)
 
 
+def anonymize_api_keys(email: str, sub: str, *, table: Any | None = None) -> int:
+    """#252: an API key belongs to the organization and stays, but it forgets who created it
+    (``created_by`` holds the creator's e-mail, or the sub when there was none)."""
+    t = _ddb("ONCA_API_KEYS_TABLE", table)
+    if t is None:
+        return 0
+    from boto3.dynamodb.conditions import Attr
+
+    who = {w for w in (email, sub) if w}
+    if not who:
+        return 0
+    cond = None
+    for w in sorted(who):
+        cond = Attr("created_by").eq(w) if cond is None else cond | Attr("created_by").eq(w)
+    rows = [it for it in _scan(t, FilterExpression=cond) if it.get("created_by") in who]
+    for it in rows:
+        t.update_item(Key={"key_hash": it["key_hash"]}, UpdateExpression="SET created_by = :d",
+                      ExpressionAttributeValues={":d": "deleted-user:" + user_hash(sub)})
+    return len(rows)
+
+
 def revoke_apps(sub: str, *, store: Any | None = None) -> int:
     if store is None:
         name = os.environ.get("ONCA_OAUTH_TABLE")
@@ -318,6 +339,7 @@ def delete_account(*, sub: str, username: str | None, email: str | None, tenant:
         "reports": purge_feedback(sub, table=tables.get("feedback")),
         "ask_quota": purge_ask_quota(sub, table=tables.get("ask_quota")),
         "apps_revoked": revoke_apps(sub, store=oauth_store),
+        "api_keys_anonymized": anonymize_api_keys(email, sub, table=tables.get("api_keys")),
         "federated_mapping": unmap_email(email, sub, table=fed),
         "tenant_closed": bool(plan["close"]) and close_tenant(str(tenant), tenants=tables.get("tenants"), now=now),
         "tenant": plan["reason"],

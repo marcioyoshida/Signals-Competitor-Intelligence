@@ -1097,6 +1097,7 @@ class OncaPrototypeStack(Stack):
                 "/docs/index.html",  # E3 (#155): public Entry getting-started guide
                 "/docs/celular-seguranca.html",  # #164: public mobile security answers
                 "/docs/privacy.html",  # #183: privacy policy (directories + OAuth op_policy_uri)
+                "/docs/excluir-conta.html",  # #251/#252: public account-deletion page (store forms link it)
                 "/docs/terms.html",
                 "/openapi.json",  # #180 discovery (the two .txt files deploy below)
                 # v2 multi-context dashboards (six clean routes + shared assets).
@@ -2445,6 +2446,9 @@ class OncaPrototypeStack(Stack):
             partition_key=dynamodb.Attribute(name="pk", type=dynamodb.AttributeType.STRING),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
             removal_policy=RemovalPolicy.RETAIN,
+            # #252: only the digest unsubscribe tokens (DIGESTTOK#, +400 days) carry it; subscriptions
+            # and counters have no `expires_at` and are cleaned up by push.py's own rules.
+            time_to_live_attribute="expires_at",
         )
         _vapid_param = "/onca/push/vapid-private"
         _vapid_arn = f"arn:aws:ssm:{self.region}:{self.account}:parameter{_vapid_param}"
@@ -2760,7 +2764,8 @@ class OncaPrototypeStack(Stack):
         # store, no new Lambda.
         for _env, _tbl in (("ONCA_PUSH_TABLE", push_table), ("ONCA_ASK_QUOTA_TABLE", ask_quota_table),
                            ("ONCA_OAUTH_TABLE", oauth_table),
-                           ("ONCA_TENANT_CONFIG_TABLE", tenant_config_table)):
+                           ("ONCA_TENANT_CONFIG_TABLE", tenant_config_table),
+                           ("ONCA_API_KEYS_TABLE", api_keys_table)):  # #252: forget a key's creator
             act_fn.add_environment(_env, _tbl.table_name)
             _tbl.grant_read_write_data(act_fn)
         if google_idp:

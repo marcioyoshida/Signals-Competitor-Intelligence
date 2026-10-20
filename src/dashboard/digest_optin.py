@@ -36,7 +36,7 @@ import urllib.parse
 from typing import Any, Callable
 
 #: The privacy-policy effective date the consent was given under (docs/privacy.html "Vigência").
-CONSENT_VERSION = "2026-10-01"
+CONSENT_VERSION = "2026-10-20"
 POLICY_URL = "https://onssa.org/docs/privacy.html"
 MANAGE_URL = "https://onssa.org/exec"
 UNSUB_PATH = "/api/push/digest/unsubscribe"

@@ -124,7 +124,8 @@ def _put_act(idempotency_key: str, status: int, result: dict[str, Any],
                   "created_at": entity_registry._now_iso()}
         )
     except Exception as exc:  # pragma: no cover - best-effort, never blocks the response
-        print(f"Warning: act idempotency store failed for {idempotency_key}: {exc}")
+        # The key is `<sub>:<client key>` — never log it (#252: server logs carry no user ids).
+        print(f"Warning: act idempotency store failed: {type(exc).__name__}")
 
 
 def _journal(subject: str, intent: str, actor: str, detail: dict[str, Any]) -> None:

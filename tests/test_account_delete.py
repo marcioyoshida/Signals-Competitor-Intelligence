@@ -134,8 +134,11 @@ def _world(tenant_item=None, other_in_tenant=False):
     oauth.put("usr#" + ME, "consent#claude", {"client_id": "claude"})
     oauth.put("usr#" + OTHER, "fam#f2", {"client_id": "claude", "created": 1})
     cognito = Cognito({"google_123": {"sub": ME}, "colega": {"sub": OTHER, "custom:tenant": "org-1"}})
+    keys = Table("key_hash", items=[{"key_hash": "h1", "tenant_id": tid, "created_by": "me@example.com"},
+                                    {"key_hash": "h2", "tenant_id": tid, "created_by": ME},
+                                    {"key_hash": "h3", "tenant_id": tid, "created_by": "colega@example.com"}])
     tables = {"entities": entities, "journal": journal, "push": push, "feedback": feedback,
-              "ask_quota": quota, "tenants": tenants, "federated": fed}
+              "ask_quota": quota, "tenants": tenants, "federated": fed, "api_keys": keys}
     return tables, oauth, cognito
 
 
@@ -150,7 +153,7 @@ def test_deletes_every_row_of_the_caller_and_nothing_of_anyone_else():
     tables, oauth, cognito = _world()
     counts = _delete(tables, oauth, cognito)
     assert counts == {"decisions": 1, "engagement": 2, "act_replays": 1, "journal": 2, "push": 4,
-                      "reports": 1, "ask_quota": 1, "apps_revoked": 1, "federated_mapping": 1,
+                      "reports": 1, "ask_quota": 1, "apps_revoked": 1, "api_keys_anonymized": 2, "federated_mapping": 1,
                       "tenant_closed": True, "tenant": "sole-user", "user_deleted": True}
     assert sorted(k[0] for k in tables["entities"].items) == [
         f"ACT#{OTHER}:k1", "DECISION#d2", "ENGAGEMENT#e3", "bancoabc"]
@@ -158,6 +161,9 @@ def test_deletes_every_row_of_the_caller_and_nothing_of_anyone_else():
     assert sorted(k[0] for k in tables["push"].items) == [
         f"DIGEST#{OTHER}", "DIGESTTOK#h2", "STAT#2026-10-18", "SUB#web2"]
     assert sorted(k[0] for k in tables["feedback"].items) == ["FB#r2", f"FBQ#{OTHER}#2026-10-18"]
+    keys = {k[0]: v["created_by"] for k, v in tables["api_keys"].items.items()}  # #252: keys stay, creator forgotten
+    assert keys == {"h1": "deleted-user:" + account.user_hash(ME), "h2": "deleted-user:" + account.user_hash(ME),
+                    "h3": "colega@example.com"}
     assert list(tables["ask_quota"].items) == [(f"{OTHER}#2026-10-18",)]
     assert oauth.get("usr#" + ME, "fam#f1")["revoked"] and not oauth.get("usr#" + ME, "consent#claude")
     assert not oauth.get("usr#" + OTHER, "fam#f2").get("revoked")
