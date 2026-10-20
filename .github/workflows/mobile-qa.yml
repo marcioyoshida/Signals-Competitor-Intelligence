@@ -31,6 +31,18 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: npx tsc --noEmit
       - run: node --test "src/*.test.ts"
+
+  # Its own job so Expo's patch releases (doctor fails on any patch drift; it did for a week from
+  # 2026-10-12) show as a red check WITHOUT skipping the emulator flows below.
+  doctor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults: { run: { working-directory: mobile/apps/onca } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: npm, cache-dependency-path: mobile/apps/onca/package-lock.json }
+      - run: npm ci --no-audit --no-fund
       - run: npx expo-doctor
 
   emulator:

@@ -1,6 +1,6 @@
 # ADR 029 — Onça in the App Store and Google Play: an Expo shell around the PWA, Sign in with Apple, and store compliance
 
-- Status: **Proposed** — 2026-10-11. Owner-requested: *"Fill the ADR for mobile, raise the stories
+- Status: **Proposed** — 2026-10-11. Spike #254: **go** for the WebView (2026-10-20, see *Spike result*). Owner-requested: *"Fill the ADR for mobile, raise the stories
   for it. Apple auth and so."*
 - Builds on epic **#172** (Onça on the phone, PWA-first): M0 + M1 shipped (#161–#170), and the
   real-device pass is #200. The store app was a single gated story, **#171**.
@@ -115,6 +115,39 @@
      weeks (QA/operator excluded, per the 2026-09-29 fix) plus at least 1 app request.
    - Public release also requires the Apple team to be an **organization** (Smart Signals LLC,
      D-U-N-S), so the seller of record is the company.
+
+## Spike result (#254) and where the shell lives (#255) — 2026-10-20
+
+**Verdict: go for the WebView.** No blocker the WebView can't clear was found, so the Capacitor
+fallback is not needed. The device checks still open are acceptance checks, and #200 tracks them.
+None of them has an answer that only Capacitor could give.
+
+| #254 question | Result |
+|---|---|
+| 1. Auth handoff | **Option (a), built.** `/exec` posts the Hosted UI URL to the shell. The shell opens it in the system browser (ASWebAuthenticationSession / Custom Tabs) and returns on `onca://auth`. It then loads `/exec?code=…` in the same WebView, where the PKCE verifier is still in `sessionStorage`. `/exec`'s own exchange puts `onca_rt` in the WebView's cookie jar. Since #277, password sign-in is Onça's own form inside `/exec` (`POST /api/session/password`, same cookie), so only Google and Apple take the round trip. Device evidence: iOS TestFlight builds 3 and 4 opened the sheet and returned to the app. The failure seen on 2026-10-12 (`user.email: Attribute cannot be updated`) was Cognito, not the WebView (#262), and the V2 pool cutover fixed it on 2026-10-13. Still to observe on a device (#200, #262): a full Google/Apple sign-in and a silent refresh after 1 h. |
+| 2. Google blocks embedded OAuth | **Holds by construction.** The WebView never loads a host other than `onssa.org`/`www.onssa.org`; any other navigation goes to the system browser (`App.tsx`, `onShouldStartLoadWithRequest`). Google and Apple run only in the system auth session. |
+| 3. Service worker and offline | iOS sets `WKAppBoundDomains = [onssa.org, www.onssa.org]` so `/exec-sw.js` can register. Layer 1 (`scripts/e2e_app.sh`, app mode in WebKit) covers the offline last-feed view; Maestro `login.yaml` covers the Android offline relaunch in CI. Still to observe on a device (#200): the service worker in WKWebView. |
+| 4. Session isolation | `/exec`'s sign-out (`context.js` `logout()`) removes this device's push subscription and revokes the refresh token server-side (`/api/session/logout`). It then clears the session token, the chat transcript, per-user `localStorage`, the offline feed cache and the per-user IndexedDB. Finally it hands the Hosted UI logout to the shell, which runs it in an ephemeral system session and reloads `/exec`. Layer 1 and Maestro check sign-out. Still to observe on a device (#200): a second user on the same phone sees nothing. |
+| 5. External links | **Built.** `http(s)`/`mailto`/`tel` links that leave `onssa.org` open in the system browser, and purchase URLs are blocked there too (#258). **Universal links are not built yet**: no `apple-app-site-association`, `assetlinks.json` or associated-domains entitlement. A follow-up issue tracks them. |
+
+**The spike code was not thrown away. It became the app** (`mobile/apps/onca`, Expo SDK 57), and
+#256–#259 were built on it. As the exit required, nothing was merged into the fleet shell.
+
+**Where the shell lives (#255): Onça owns its own thin shell, and there is no `ForkConfig` on
+`@signals/mobile-shell`.**
+- **What the shell is:** `App.tsx` plus `bridge.ts`, roughly the size of the `ForkConfig` it
+  replaces. It holds the WebView, the system-browser auth handoff, native push registration, the
+  app lock, the link and purchase-route rules, and the sign-in beacon.
+- **Why not reuse the fleet shell:**
+  - The fleet shell's API client, view states and device-registration flow serve Bluefin's native
+    screens. A WebView of `/exec` needs none of them.
+  - The fleet shell lives in a fork repo (tickets only), so every change Onça needed would have been
+    a cross-repo ticket.
+- **What Onça doesn't need in the app:** the Cognito domain and client ID. `/exec` builds the Hosted
+  UI URL, and the shell accepts only `auth.onssa.org` (and the legacy prefix domain) as an auth target.
+- **What the app does hold:** the `onca` scheme and the API base `https://onssa.org`, both in
+  `bridge.ts`.
+- **Option 1 stays open:** if SCR #113 extracts the shell later, Onça can adopt it then.
 
 ## Consequences
 
