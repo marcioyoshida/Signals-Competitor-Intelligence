@@ -70,7 +70,28 @@
       return n;
     };
     (f.citations || []).forEach((c) => { if (isHttp(c.url)) add(c.url, c.label, c.via); });
+    // #290: a structured BCB record (id only, no URL) links to its public dataset page, so a card
+    // built from open data still names and links its source. Several ids of one dataset share a line.
+    (f.citations || []).forEach((c) => {
+      const d = !isHttp(c.url) && DATASET_PAGES[String(c.id || "").split(":")[0]];
+      if (d) add(d[1], d[0], "dados abertos");
+    });
     return { entries, numByUrl, strip, add, isHttp };
+  }
+  const DATASET_PAGES = {
+    "pix": ["Banco Central — Estatísticas do Pix", "https://dadosabertos.bcb.gov.br/dataset/pix"],
+    "juros-d": ["Banco Central — Taxas de juros por instituição",
+      "https://dadosabertos.bcb.gov.br/dataset/taxas-de-juros-de-operacoes-de-credito"],
+    "bcb-auth": ["Banco Central — Instituições em funcionamento",
+      "https://dadosabertos.bcb.gov.br/dataset/relacao-de-instituicoes-em-funcionamento-no-pais"],
+    "market": ["Banco Central — IF.data", "https://www3.bcb.gov.br/ifdata/"],
+  };
+  // #290: the feed carries one card per day for the same id (the weekly view), so an id → card map
+  // must keep the NEWEST copy — last-wins kept the oldest, and the drawer showed a stale card.
+  function newestById(cards) {
+    const out = {}, key = (c) => String(c.date || "") + "|" + String(c.run_at || "");  // ISO: sorts as text
+    (cards || []).forEach((c) => { const o = out[c.id]; if (!o || key(c) > key(o)) out[c.id] = c; });
+    return out;
   }
   const URL_RE = /https?:\/\/[^\s<>]+/g;
   function linkifyNarrative(text, model) {
@@ -232,7 +253,7 @@
 
   global.OncaUI = {
     esc, fmtDate, TIERS, tierOf, tierBadge, heat,
-    hostOf, sourceLabel, citationModel, linkifyNarrative, citationFooter,
+    hostOf, sourceLabel, citationModel, linkifyNarrative, citationFooter, newestById,
     sparkline, initTheme, toggleTheme, empty, loading, oacFetch, EMPTY_ICONS,
   };
 })(window);

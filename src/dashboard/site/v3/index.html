@@ -1622,7 +1622,7 @@ function asOfAge() {
 }
 function boot() {
   EX = DATA.executive || {};
-  BYID = {}; (DATA.feed || []).forEach(c => { BYID[c.id] = c; });
+  BYID = U.newestById(DATA.feed);   // #290: one card per day shares an id; the drawer shows the newest
   document.body.classList.remove("is-gated"); delete document.body.dataset.gate;
   const age = asOfAge(), asof = document.getElementById("asof");
   asof.textContent = DATA.as_of ? `dados de ${dShort(DATA.as_of)}${age >= 2 ? ` · há ${age} dias` : ""}${OFFLINE ? " · offline" : STALE ? " · atualizando…" : ""}` : "";
@@ -3507,17 +3507,22 @@ function cardDetail(c) {
   const secs = (c.industries || []).map(s => `<span class="chip">${U.esc(Ctx.indLabel(s))}</span>`).join("");
   const lenses = (c.lenses || []).map(l => LENS_LABEL[l] || humanize(l)).slice(0, 3);
   const thr = c.threat_score != null ? threatChip(c.threat_score) : "";
+  // #290: a derived indicator with nothing to cite (silence: the ABSENCE of signals) is not an
+  // unsourced fact — say what it is instead of warning that a source is missing.
+  const derivedOnly = c.mode === "derived" && !model.entries.length;
   const meta = `<div class="dmeta">${c.date ? `<span class="dm-date" title="${U.esc(U.fmtDate(c.date))}">${U.esc(dShort(c.date))}${
       c.date && String(c.date).slice(0, 4) === String(new Date().getFullYear()) ? " " + String(c.date).slice(0, 4) : ""}</span>` : ""}` +
     (thr ? `<span class="badge badge--infer" title="índice 0–100 calculado pela Onça">ameaça · inferência</span>${thr}` : "") +
     (c.is_inference ? `<span class="badge badge--infer">inferência</span>` : "") +
-    (!model.entries.length ? `<span class="badge badge--warn">sem fonte citada</span>` : "") +
+    (!model.entries.length && !derivedOnly ? `<span class="badge badge--warn">sem fonte citada</span>` : "") +
     `${secs}${lenses.length ? `<span class="hd-note">· ${U.esc(lenses.join(" · "))}</span>` : ""}</div>`;
   const src = model.entries.length
     ? `<div class="dsec-h">${pl(model.entries.length, "fonte", "fontes")}</div><ol class="dsrc">` + model.entries.map(e =>
         `<li><a href="${U.esc(e.url)}" target="_blank" rel="noopener"><b>[${e.n}]</b><span>${U.esc(e.label)}` +
         `<small>${U.esc(U.hostOf(e.url))}${e.via ? " · via " + U.esc(e.via) : ""}</small></span></a></li>`).join("") + `</ol>`
-    : `<p class="hd-note" style="margin-top:var(--s3)">Este cartão não traz link para a fonte original — trate como não verificado.</p>`;
+    : derivedOnly
+      ? `<p class="hd-note dsrc-derived" style="margin-top:var(--s3)">Indicador calculado pela Onça a partir das fontes monitoradas (por exemplo, a ausência de sinais) — não há uma fonte única a citar.</p>`
+      : `<p class="hd-note" style="margin-top:var(--s3)">Este cartão não traz link para a fonte original — trate como não verificado.</p>`;
   return meta + `<div class="callout">${body}</div>` + src;
 }
 function inspect(id) {

@@ -210,7 +210,7 @@ def test_card_shows_date_and_sources(request, S):
         srcs = page.locator("#drBody a[href^='http']").count()
         if not DATE.search(text):
             problems.append(f"{label} / {title!r}: no date")
-        if srcs < 1:
+        if srcs < 1 and not page.locator("#drBody .dsrc-derived").count():   # #290: derived (silence) cards cite nothing
             problems.append(f"{label} / {title!r}: no source link")
         if BAD_TEXT.search(title + "\n" + text):
             problems.append(f"{label} / {title!r}: {BAD_TEXT.search(title + text).group(0)!r} in the card")

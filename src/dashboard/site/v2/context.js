@@ -1052,8 +1052,10 @@
     const model = U.citationModel(c);
     const infer = c.is_inference
       ? ' <span class="badge badge--infer">inferência</span>' : "";
-    const noSrc = model.entries.length ? "" :
-      ' <span class="badge badge--crit"><span class="g" aria-hidden="true">⚠</span>sem fonte</span>';
+    // #290: a derived indicator with nothing to cite (silence) is not an unsourced fact.
+    const noSrc = model.entries.length ? "" : c.mode === "derived"
+      ? ' <span class="badge badge--infer">indicador derivado</span>'
+      : ' <span class="badge badge--crit"><span class="g" aria-hidden="true">⚠</span>sem fonte</span>';
     const footer = model.entries.length ? U.citationFooter(model)
       : `<div class="cites"><span class="cite-grp"><span class="src">Sem fonte pública clicável</span>
          — apenas id de sinal interno (${esc((c.source_ids || [])[0] || "—")})</span></div>`;

@@ -1146,8 +1146,7 @@ function renderMapa() {
 // The cited buyer feed is collapsed to an EXCEPTIONS view: only cards whose
 // trust signals need a curator's eye. Each still shows its clickable sources.
 function renderExceptions() {
-  const cardById = {};
-  (DATA.feed || []).forEach(c => { cardById[c.id] = c; });
+  const cardById = U.newestById(DATA.feed);   // #290: same id across days → keep the newest
   const misattributed = new Set(
     (((DATA.integrity || {}).findings) || []).filter(f => f.kind === "card_primary_absent").map(f => f.card_id));
   const excs = [];
