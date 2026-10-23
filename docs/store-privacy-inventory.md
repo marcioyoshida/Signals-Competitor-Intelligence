@@ -140,5 +140,6 @@ Everything else is **not collected**:
   deploying a new Lambda; a new log group starts with no expiry.
 - **Push subscriptions have no TTL:** they rely on the cleanup rules in section 1. The push table's TTL
   (`expires_at`, enabled in #252) sweeps only the digest unsubscribe tokens (`DIGESTTOK#`, +400 days).
-- **Two empty, orphaned contact-mail buckets** (`…contactmailbucket…-j3anwi05tvue` and
-  `…-ppbiwsc7fk1f`) have no lifecycle. They hold nothing; deleting them is housekeeping.
+- Two empty, orphaned contact-mail buckets (`…contactmailbucket…-j3anwi05tvue` and
+  `…-ppbiwsc7fk1f`, no lifecycle) were deleted 2026-10-23. The only contact-mail bucket is the
+  stack's `…-ny4niagkiuzf`.
