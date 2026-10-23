@@ -472,7 +472,9 @@ details.fold.chg > summary { padding: var(--s2) var(--s3); font-size: var(--fs-m
   border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font: inherit; font-size: 16px;
   font-family: var(--f-mono, ui-monospace, monospace); letter-spacing: .04em; text-transform: uppercase; }
 .join__inv input:focus { outline: none; border-color: var(--primary); box-shadow: var(--focus); }
-.join .btn { align-self: stretch; justify-content: center; min-height: 44px; }
+.join .btn { align-self: stretch; justify-content: center; min-height: 44px;
+  /* a label must fit one line at 320px; balance the wrap if a large text size forces two */
+  text-align: center; text-wrap: balance; }
 
 /* ============================ loading ================================== */
 /* The brand's Ç as an hourglass: the glyph fills bottom-up like sand, then turns over (a quick

@@ -896,7 +896,7 @@
                 ? `<b>Você ocultou seu e-mail na Apple</b>, e com o e-mail oculto não encontramos a conta da sua
                    empresa. Saia e entre de novo escolhendo <b>Compartilhar meu e-mail</b> — ou use um código de convite.`
                 : `Se a sua empresa já usa o Onça, saia e entre com o e-mail que ela cadastrou.`}</div>
-              <button type="button" class="btn" id="__gateLogout">Sair e entrar com outro e-mail</button></li>
+              <button type="button" class="btn" id="__gateLogout">Entrar com outro e-mail</button></li>
             <li class="join__step"><div class="join__h">Tenho um código de convite</div>
               <form id="__invForm" class="join__inv" novalidate>
                 <label class="em-d" for="__invCode">O código que o responsável pelo Onça na sua empresa enviou</label>
@@ -913,7 +913,7 @@
                 ${ENTRY_INDUSTRIES.map((s) => `<label class="cvsub" style="display:block;margin:6px 0">
                   <input type="radio" name="ind" value="${esc(s)}"> ${esc(indLabel(s))}</label>`).join("")}
                 <div id="__regErr" class="badge badge--crit" style="display:none;margin-top:var(--s2)"></div>
-                <button type="submit" class="btn" style="margin-top:var(--s3)">Criar conta individual e começar o teste</button>
+                <button type="submit" class="btn" style="margin-top:var(--s3)">Criar conta individual</button>
               </form></li>
           </ol></div>`;
       }
@@ -949,7 +949,7 @@
       try { await completeRegistration(picked); }
       catch (ex) {
         err.textContent = ex.message || "Falha ao registrar.";
-        err.style.display = ""; btn.disabled = false; btn.textContent = "Criar conta individual e começar o teste";
+        err.style.display = ""; btn.disabled = false; btn.textContent = "Criar conta individual";
       }
     });
     const inv = el.querySelector("#__invForm");
