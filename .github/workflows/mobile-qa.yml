@@ -1,5 +1,5 @@
 # #259 (ADR 029): QA for the store app. Builds a release APK (debug-signed) in CI (no EAS quota, no secrets) and runs
-# Maestro flows on an Android emulator. The sign-in flow runs only when the QA_EMAIL/QA_PASSWORD
+# Maestro flows on an Android emulator. The sign-in flows (login, tabbar) run only when the QA_EMAIL/QA_PASSWORD
 # repository secrets exist (a qa-internal-* persona; never a real client).
 name: mobile-qa
 
@@ -50,8 +50,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
-      QA_EMAIL: ${{ secrets.QA_EMAIL }}
-      QA_PASSWORD: ${{ secrets.QA_PASSWORD }}
+      # Maestro reads MAESTRO_* from the environment (subflows/sign_in.yaml uses these names), so
+      # the values never appear on a command line.
+      MAESTRO_QA_EMAIL: ${{ secrets.QA_EMAIL }}
+      MAESTRO_QA_PASSWORD: ${{ secrets.QA_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -81,13 +83,24 @@ jobs:
           disable-animations: true
           script: |
             adb install -r mobile/apps/onca/android/app/build/outputs/apk/release/app-release.apk
-            maestro test mobile/apps/onca/maestro/launch.yaml --format junit --output maestro-launch.xml
-            if [ -n "$QA_EMAIL" ] && [ -n "$QA_PASSWORD" ]; then maestro test mobile/apps/onca/maestro/login.yaml -e QA_EMAIL="$QA_EMAIL" -e QA_PASSWORD="$QA_PASSWORD" --format junit --output maestro-login.xml; else echo "::notice::QA_EMAIL/QA_PASSWORD not set — sign-in flow skipped"; fi
+            maestro test mobile/apps/onca/maestro/launch.yaml --format junit --output maestro-launch.xml --debug-output maestro-debug/launch
+            if [ -n "$MAESTRO_QA_EMAIL" ] && [ -n "$MAESTRO_QA_PASSWORD" ]; then maestro test mobile/apps/onca/maestro/login.yaml --format junit --output maestro-login.xml --debug-output maestro-debug/auth && maestro test mobile/apps/onca/maestro/tabbar.yaml --format junit --output maestro-tabbar.xml --debug-output maestro-debug/auth; else echo "::notice::QA_EMAIL/QA_PASSWORD not set — sign-in flows skipped"; fi
+      # The repo is PUBLIC, so artifacts are too. The signed-in flows' debug output (maestro.log,
+      # commands JSON, failure screenshots of the sign-in form) can carry the typed credentials:
+      # it is never uploaded, and any report that still contains a credential is dropped.
+      - name: Scrub credentials from reports
+        if: always()
+        run: |
+          rm -rf maestro-debug/auth
+          for f in maestro-*.xml; do
+            [ -f "$f" ] || continue
+            if { [ -n "$MAESTRO_QA_EMAIL" ] && grep -qF -- "$MAESTRO_QA_EMAIL" "$f"; } || { [ -n "$MAESTRO_QA_PASSWORD" ] && grep -qF -- "$MAESTRO_QA_PASSWORD" "$f"; }; then rm -f "$f"; echo "::warning::$f contained a credential and was not uploaded"; fi
+          done
       - if: always()
         uses: actions/upload-artifact@v4
         with:
           name: maestro
           path: |
             maestro-*.xml
-            ~/.maestro/tests/**
+            maestro-debug/launch/**
           if-no-files-found: ignore

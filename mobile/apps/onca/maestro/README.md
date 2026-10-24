@@ -31,6 +31,10 @@ and after each deploy) is `scripts/e2e_app.sh` at the repo root.
    npx eas-cli@latest env:set preview --name MAESTRO_QA_PASSWORD --visibility secret
    ```
 
+   On GitHub Actions (`.github/workflows/mobile-qa.yml`, Android only, free runners) the same persona
+   is in the repository secrets `QA_EMAIL` / `QA_PASSWORD` (set 2026-10-24); the job maps them to
+   `MAESTRO_QA_*`. The repo is public, so the signed-in flows' debug output is never uploaded.
+
 ## Run
 
 ```sh
