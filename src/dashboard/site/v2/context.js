@@ -320,7 +320,12 @@
     // #242: a login started on another screen finishes here: continue to it (navigation, so
     // this page stops booting — the pending promise keeps its caller from rendering)
     if (returnToOrigin(back, "login")) return new Promise(() => {});
-    history.replaceState({}, "", url.pathname + (back || ((url.search || "") + url.hash)));
+    const clean = url.pathname + (back || ((url.search || "") + url.hash));
+    // #259: in the store app, finish with a real load. The refresh cookie came from a fetch
+    // AFTER this page loaded, and Android's WebView only writes cookies to disk on a page load
+    // (or every ~30 s): an app killed right after sign-in came back signed out.
+    if (APP) { location.replace(clean); return new Promise(() => {}); }
+    history.replaceState({}, "", clean);
   }
   // Header auth affordance: signed-in email + Sair, or Entrar.
   function renderAuthBox(elId, onChange) {
