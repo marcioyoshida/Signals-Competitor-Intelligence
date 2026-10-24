@@ -17,6 +17,14 @@ tags:
     when:
       platform: Android
     commands:
+      # leave the app first, as a person does, and give the WebView time to write localStorage and
+      # Cache Storage to disk: a force-stop ~1 s after sign-in can drop both (run 40141373644 came
+      # back to the gate, not the offline feed). The OS killing a backgrounded app is the real case.
+      - pressKey: Home
+      - extendedWaitUntil:
+          visible: "__never__"
+          timeout: 10000
+          optional: true
       - setAirplaneMode: enabled
       - stopApp
       - launchApp
