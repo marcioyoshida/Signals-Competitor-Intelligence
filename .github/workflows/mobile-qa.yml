@@ -84,7 +84,7 @@ jobs:
           script: |
             adb install -r mobile/apps/onca/android/app/build/outputs/apk/release/app-release.apk
             maestro test mobile/apps/onca/maestro/launch.yaml --format junit --output maestro-launch.xml --debug-output maestro-debug/launch
-            if [ -n "$MAESTRO_QA_EMAIL" ] && [ -n "$MAESTRO_QA_PASSWORD" ]; then maestro test mobile/apps/onca/maestro/login.yaml --format junit --output maestro-login.xml --debug-output maestro-debug/auth && maestro test mobile/apps/onca/maestro/tabbar.yaml --format junit --output maestro-tabbar.xml --debug-output maestro-debug/auth; else echo "::notice::QA_EMAIL/QA_PASSWORD not set — sign-in flows skipped"; fi
+            if [ -n "$MAESTRO_QA_EMAIL" ] && [ -n "$MAESTRO_QA_PASSWORD" ]; then maestro test mobile/apps/onca/maestro/login.yaml --format junit --output maestro-login.xml --debug-output maestro-debug/auth && maestro test mobile/apps/onca/maestro/tabbar.yaml --format junit --output maestro-tabbar.xml --debug-output maestro-debug/auth || { echo "::group::screen text at the failure (the job log masks the secrets; the debug output is not uploaded)"; adb shell uiautomator dump /sdcard/ui.xml >/dev/null; adb exec-out cat /sdcard/ui.xml | grep -oE '(text|content-desc)="[^"]+"' | sort -u; echo "::endgroup::"; exit 1; }; else echo "::notice::QA_EMAIL/QA_PASSWORD not set — sign-in flows skipped"; fi
       # The repo is PUBLIC, so artifacts are too. The signed-in flows' debug output (maestro.log,
       # commands JSON, failure screenshots of the sign-in form) can carry the typed credentials:
       # it is never uploaded, and any report that still contains a credential is dropped.
