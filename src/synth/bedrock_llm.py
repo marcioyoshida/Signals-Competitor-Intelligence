@@ -13,12 +13,12 @@ DEFAULT_ROUTER_MODEL = os.environ.get(
 DEFAULT_SYNTH_MODEL = os.environ.get(
     "ONCA_SYNTH_MODEL_ID", "amazon.nova-lite-v1:0"
 )
-# SURF-9 (#89): the strategy frameworks (Porter/PESTLE/Ansoff/BCG/Four-Corners/7S) draft nuanced
-# multi-dimension analysis — worth a more capable model than the default synth tier. Nova Pro is
-# available + already in production on this account (Claude is blocked pending the Anthropic
-# use-case form), and is markedly more coherent than Nova Lite. Low volume (gated per-entity
-# drafts) keeps the cost small. Env-overridable; falls back to the synth default.
-FRAMEWORK_MODEL = os.environ.get("ONCA_FRAMEWORK_MODEL_ID", "amazon.nova-pro-v1:0")
+# SURF-9 (#89): the strategy frameworks (Porter/PESTLE/Ansoff/BCG/Four-Corners/7S) ran on Nova Pro.
+# Owner, 2026-10-25: no paying customers yet, so every hosted call runs on Nova Lite; anything
+# that needs a stronger model is the customer's own (BYOK), never hosted Nova Pro. A read-only
+# Lite trial against Pro's published proposals preceded the switch (same recipe as Anteater #199).
+# tests/test_model_defaults.py fails if a hosted default names Nova Pro again.
+FRAMEWORK_MODEL = os.environ.get("ONCA_FRAMEWORK_MODEL_ID", "amazon.nova-lite-v1:0")
 
 
 def converse(
