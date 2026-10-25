@@ -53,6 +53,13 @@
   if (APP && APP.redirectUri === "onca://auth") AUTH.redirectUri = APP.redirectUri;
   // auth.onssa.org cutover: app builds before bridge 2 only honour the prefix domain (bridge.ts isHostedUiUrl).
   if (APP && !(APP.bridge >= 2)) AUTH.domain = "https://onca-668449743071.auth.us-east-1.amazoncognito.com";
+  // #259: a cookie the page itself can see, so Android writes the cookie jar to disk on every load.
+  // react-native-webview flushes CookieManager in onPageFinished only when the PAGE has cookies,
+  // and onca_rt is scoped to /api/session: without this the refresh cookie stayed in memory and an
+  // app killed soon after sign-in came back signed out. Value is a constant, no personal data.
+  if (APP && global.document) {
+    try { global.document.cookie = "onca_app=1; Path=/; Max-Age=31536000; Secure; SameSite=Strict"; } catch (e) {}
+  }
   // #277: the sign-in sheet's stylesheet travels with this file (v2/signin.css), so every page
   // that loads context.js (the legacy v1 board included) gets it without its own <link>.
   if (global.document && global.document.head && !global.document.querySelector("link[data-si-css]")) {
@@ -322,8 +329,9 @@
     if (returnToOrigin(back, "login")) return new Promise(() => {});
     const clean = url.pathname + (back || ((url.search || "") + url.hash));
     // #259: in the store app, finish with a real load. The refresh cookie came from a fetch
-    // AFTER this page loaded, and Android's WebView only writes cookies to disk on a page load
-    // (or every ~30 s): an app killed right after sign-in came back signed out.
+    // AFTER this page loaded, and Android's WebView writes cookies to disk on a page load (with
+    // the onca_app cookie above) or every ~30 s: an app killed right after sign-in came back
+    // signed out.
     if (APP) { location.replace(clean); return new Promise(() => {}); }
     history.replaceState({}, "", clean);
   }
