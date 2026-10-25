@@ -18,7 +18,7 @@ appId: org.onssa.onca
     text: "Accept & continue|Use without an account|No thanks|Got it"
     optional: true
 - tapOn:
-    text: "No thanks|Got it"
+    text: "Use without an account|No thanks|Got it"
     optional: true
 # the Hosted UI form — or straight back, when the system browser still holds a Cognito session
 - extendedWaitUntil:

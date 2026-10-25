@@ -48,6 +48,14 @@ tags:
 - tapOn:                      # the logout trip uses an ephemeral session; a prompt is unexpected,
     text: "Continue|Continuar" # but must not strand the flow if an OS version shows one
     optional: true
+# Android emulator: Chrome can show its first-run screens on the logout Custom Tab too
+# (run 40146283611: "Welcome to Chrome" / "Use without an account")
+- tapOn:
+    text: "Use without an account|Accept & continue|No thanks|Got it"
+    optional: true
+- tapOn:
+    text: "Use without an account|No thanks|Got it"
+    optional: true
 - extendedWaitUntil:
     visible: "Entrar"
     timeout: 45000
