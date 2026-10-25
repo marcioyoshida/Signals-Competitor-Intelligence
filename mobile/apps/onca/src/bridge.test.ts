@@ -100,3 +100,15 @@ test("a cancelled sign-in is silent; every other failure is explained", () => {
   assert.match(authFailureMessage("error", "access_denied") ?? "", /access_denied/);
   assert.match(authFailureMessage("dismiss") ?? "", /Tente de novo/);
 });
+
+test("#289 incoming links: only a card link opens in the WebView", async () => {
+  const { incomingCardUrl } = await import("./bridge.ts");
+  assert.equal(incomingCardUrl("https://onssa.org/exec?c=0123456789abcdef"), "https://onssa.org/exec?c=0123456789abcdef");
+  assert.equal(incomingCardUrl("https://www.onssa.org/exec?c=0123456789abcdef"), "https://onssa.org/exec?c=0123456789abcdef");
+  for (const u of ["https://onssa.org/exec?code=abc", "https://onssa.org/exec", "onca://auth?code=abc",
+                   "https://onssa.org/exec?c=0123456789abcdef&x=1", "https://evil.example/exec?c=0123456789abcdef",
+                   "https://onssa.org/exec?c=ZZZZ", null, 42]) {
+    assert.equal(incomingCardUrl(u), null, String(u));
+  }
+});
+

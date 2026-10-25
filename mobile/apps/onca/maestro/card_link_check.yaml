@@ -1,0 +1,11 @@
+# #289: after a VIEW intent for https://onssa.org/exec?c=0000000000000000 (no such card), the
+# shell must open it IN the WebView (not the browser) and /exec must resolve the ?c= link: an
+# unknown id shows the "Sem acesso" sheet. No launchApp: it checks whatever the intent opened.
+appId: org.onssa.onca
+tags:
+  - auth
+---
+- extendedWaitUntil:
+    visible: "Sem acesso a este conteúdo"
+    timeout: 45000
+- assertNotVisible: "Welcome to Chrome"

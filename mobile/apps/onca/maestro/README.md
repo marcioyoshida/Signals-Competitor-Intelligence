@@ -11,6 +11,7 @@ and after each deploy) is `scripts/e2e_app.sh` at the repo root.
 | `auth_cancel.yaml` | none | backing out of sign-in returns to the gate WITHOUT "Login não concluído" |
 | `login.yaml` | QA | sign-in → tab bar; offline relaunch (Android only); sign-out via "Sua conta" → "Sair desta conta" |
 | `back.yaml` | QA | Android back closes the open sheet, stays in the app (checklist row 7) |
+| `card_link.yaml` + `card_link_check.yaml` | QA | CI sends `onssa.org/exec?c=…` as a VIEW intent (app running, then cold): it opens in the app and /exec resolves it (#289) |
 | `tabbar.yaml` | QA | Estratégia/Regulatório/Compliance/Produto each switch the Painel view |
 | `subflows/sign_in.yaml` | QA | shared: gate → system-browser sign-in → tab bar |
 

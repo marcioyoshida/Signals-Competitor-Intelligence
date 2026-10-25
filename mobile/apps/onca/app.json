@@ -22,7 +22,10 @@
           "onssa.org",
           "www.onssa.org"
         ]
-      }
+      },
+      "associatedDomains": [
+        "applinks:onssa.org"
+      ]
     },
     "android": {
       "package": "org.onssa.onca",

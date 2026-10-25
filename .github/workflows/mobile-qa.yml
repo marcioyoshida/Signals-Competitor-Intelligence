@@ -85,7 +85,7 @@ jobs:
             adb install -r mobile/apps/onca/android/app/build/outputs/apk/release/app-release.apk
             maestro test mobile/apps/onca/maestro/launch.yaml --format junit --output maestro-launch.xml --debug-output maestro-debug/launch
             maestro test mobile/apps/onca/maestro/auth_cancel.yaml --format junit --output maestro-auth_cancel.xml --debug-output maestro-debug/auth_cancel || touch .maestro-failed
-            if [ -n "$MAESTRO_QA_EMAIL" ] && [ -n "$MAESTRO_QA_PASSWORD" ]; then bash mobile/apps/onca/maestro/ci_signed_in.sh login tabbar back || touch .maestro-failed; else echo "::notice::QA_EMAIL/QA_PASSWORD not set — sign-in flows skipped"; fi
+            if [ -n "$MAESTRO_QA_EMAIL" ] && [ -n "$MAESTRO_QA_PASSWORD" ]; then bash mobile/apps/onca/maestro/ci_signed_in.sh login tabbar back card_link || touch .maestro-failed; else echo "::notice::QA_EMAIL/QA_PASSWORD not set — sign-in flows skipped"; fi
             test ! -f .maestro-failed
       # The repo is PUBLIC, so artifacts are too. The signed-in flows' debug output (maestro.log,
       # commands JSON, failure screenshots of the sign-in form) can carry the typed credentials:

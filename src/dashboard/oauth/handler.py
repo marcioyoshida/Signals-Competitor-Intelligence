@@ -161,6 +161,9 @@ def lambda_handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]
         route, out = path, {"status": 200, "cookies": [], "body": json.dumps(render_agent_card(), ensure_ascii=False),
                             "headers": {"Content-Type": "application/json", "Cache-Control": "public, max-age=3600",
                                         "Access-Control-Allow-Origin": "*"}}
+    elif path == "/.well-known/apple-app-site-association":   # #289 universal links (same behavior)
+        from src.dashboard.app_links import aasa_response
+        route, out = path, aasa_response()
     elif path == "/oauth/jwks.json":
         route, out = path, build().jwks()
     elif path in FLOW:

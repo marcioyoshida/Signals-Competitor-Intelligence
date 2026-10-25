@@ -16,7 +16,7 @@ import * as ScreenCapture from "expo-screen-capture";
 import Constants from "expo-constants";
 import {
   ORIGIN, REDIRECT, authBeaconUrl, authFailureMessage, exchangeUrl, injectedFlag, isPurchaseUrl, parseAuthRedirect, parseMessage,
-  replyScript, shouldLock, staysInApp,
+  incomingCardUrl, replyScript, shouldLock, staysInApp,
 } from "./bridge.ts";
 import type { AuthOutcome } from "./bridge.ts";
 
@@ -106,6 +106,15 @@ function Shell() {
     });
     return () => sub.remove();
   }, []);
+
+  // #289: a shared card link (universal link / App Link) opens that card in this WebView. A cold
+  // start swaps the first load; a link while running navigates in place (same session storage).
+  const [source, setSource] = useState(`${ORIGIN}/exec`);
+  useEffect(() => {
+    Linking.getInitialURL().then((u) => { const c = incomingCardUrl(u); if (c) setSource(c); }).catch(() => {});
+    const sub = Linking.addEventListener("url", ({ url }) => { const c = incomingCardUrl(url); if (c) go(c); });
+    return () => sub.remove();
+  }, [go]);
 
   // #256: a tap on a notification opens Hoje › alertas (cold start included)
   useEffect(() => {
@@ -206,7 +215,7 @@ function Shell() {
       <WebView
         ref={web}
         style={[s.web, failed ? s.hidden : null]}
-        source={{ uri: `${ORIGIN}/exec` }}
+        source={{ uri: source }}
         injectedJavaScriptBeforeContentLoaded={injectedFlag(Platform.OS)}
         onMessage={onMessage}
         onShouldStartLoadWithRequest={onShouldStart}

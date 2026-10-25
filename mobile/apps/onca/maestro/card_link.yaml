@@ -1,0 +1,14 @@
+# #289: setup for the card-link check; ci_signed_in.sh then sends the link as an Android VIEW intent
+# and runs card_link_check.yaml. Needs MAESTRO_QA_EMAIL / MAESTRO_QA_PASSWORD.
+appId: org.onssa.onca
+tags:
+  - auth
+---
+- launchApp:
+    clearState: true
+- runFlow: subflows/sign_in.yaml
+- pressKey: Home            # let the WebView write its cookie jar before the force-stop (cold-start leg)
+- extendedWaitUntil:
+    visible: "__never__"
+    timeout: 5000
+    optional: true
