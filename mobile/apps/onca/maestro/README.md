@@ -10,6 +10,7 @@ and after each deploy) is `scripts/e2e_app.sh` at the repo root.
 | `launch.yaml` | none | gate shows Entrar, no "Assinar"/"R$", no tab bar |
 | `auth_cancel.yaml` | none | backing out of sign-in returns to the gate WITHOUT "Login não concluído" |
 | `login.yaml` | QA | sign-in → tab bar; offline relaunch (Android only); sign-out via "Sua conta" → "Sair desta conta" |
+| `back.yaml` | QA | Android back closes the open sheet, stays in the app (checklist row 7) |
 | `tabbar.yaml` | QA | Estratégia/Regulatório/Compliance/Produto each switch the Painel view |
 | `subflows/sign_in.yaml` | QA | shared: gate → system-browser sign-in → tab bar |
 
@@ -53,9 +54,8 @@ maestro check-syntax maestro/login.yaml
 
 ## Known expectations
 
-- **`auth_cancel.yaml` fails on Android with the current shell.** expo-web-browser 57 reports a
-  closed Custom Tab as `dismiss`, and `App.tsx` (`authFailureMessage`) shows
-  "Login não concluído" for `dismiss`. On iOS, Cancel reports `cancel`, which stays quiet.
+- **`auth_cancel.yaml`:** expo-web-browser 57 reports a closed Custom Tab as `dismiss`; `App.tsx`
+  maps an Android dismiss to `cancel`, so backing out stays quiet on both platforms.
 - `setAirplaneMode` only works on Android. On iOS, `login.yaml` skips the offline step. Layer 1
   covers the offline view.
 - The iOS sign-in session is not ephemeral, so Safari can keep a Cognito session between flows.

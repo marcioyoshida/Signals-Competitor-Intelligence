@@ -1,0 +1,24 @@
+# #200 checklist row 7: Android's back button closes the open sheet first; it must not leave
+# /exec or close the app. The account sheet ("Sua conta") is the same drawer as a card's, and it
+# needs no particular feed data. Needs MAESTRO_QA_EMAIL / MAESTRO_QA_PASSWORD.
+appId: org.onssa.onca
+tags:
+  - auth
+---
+- launchApp:
+    clearState: true
+- runFlow: subflows/sign_in.yaml
+- tapOn: "Sua conta.*"
+- extendedWaitUntil:
+    visible: "Sair desta conta"
+    timeout: 15000
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - back
+      - extendedWaitUntil:
+          notVisible: "Sair desta conta"
+          timeout: 10000
+      - assertVisible: "Estratégia"     # still in the app, still signed in
+      - takeScreenshot: back-closed-sheet

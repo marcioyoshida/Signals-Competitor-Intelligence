@@ -1,9 +1,8 @@
 # #259: the person backs out of sign-in. App.tsx shows "Login não concluído" only when sign-in
 # FAILED; a cancel must return quietly to the gate. No credentials needed.
 #   iOS: Cancel on the "Wants to Use … to Sign In" prompt (or on the auth sheet) -> type "cancel".
-#   Android: Back closes the Custom Tab. NB expo-web-browser 57 resolves that as type "dismiss",
-#   which App.tsx (authFailureMessage) treats as a failure — this flow is expected to FAIL on
-#   Android until the shell tells a user-closed tab apart from a lost redirect.
+#   Android: Back closes the Custom Tab. expo-web-browser 57 resolves that as type "dismiss";
+#   App.tsx maps an Android dismiss to "cancel" (quiet), so this passes on Android too.
 appId: org.onssa.onca
 tags:
   - smoke
@@ -26,6 +25,12 @@ tags:
     when:
       platform: Android
     commands:
+      - tapOn:                 # a fresh emulator's Chrome first-run screens, if any
+          text: "Use without an account|Accept & continue|No thanks|Got it"
+          optional: true
+      - tapOn:
+          text: "Use without an account|No thanks|Got it"
+          optional: true
       - extendedWaitUntil:     # the Custom Tab is up with the Hosted UI
           visible: ".*[Ss]enha.*|.*[Pp]assword.*"
           timeout: 45000
