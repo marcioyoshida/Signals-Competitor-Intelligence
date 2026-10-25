@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 
 import yaml
-from edge_policy import apex_public_js, exec_exemption_js, public_paths_js, site_paths_js
+from edge_policy import apex_public_js, exec_exemption_js, public_paths_js, share_link_js, site_paths_js
 from identity import DEMO_TENANTS, build_identity_pool, build_managed_login_branding
 from aws_cdk import App, ArnFormat, CfnOutput, Duration, RemovalPolicy, SecretValue, Size, Stack, Tags
 from aws_cdk import aws_bedrock as bedrock
@@ -683,6 +683,7 @@ class OncaPrototypeStack(Stack):
                 '  if (key.length > 1 && key.charAt(key.length - 1) === "/") {\n'
                 "    key = key.substring(0, key.length - 1);\n"
                 "  }\n"
+                + share_link_js()
                 + site_paths_js(SITE_ASSET) +
                 '  if (key === "/exec" || key === "/executivo") { r.uri = "/v3/index.html"; }\n'
                 '  else if (routes[key]) { r.uri = "/v2/" + routes[key] + "/index.html"; }\n'

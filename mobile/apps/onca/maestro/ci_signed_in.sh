@@ -12,16 +12,19 @@ dump() {
   echo "::endgroup::"
 }
 run() { maestro test "mobile/apps/onca/maestro/$1.yaml" --format junit --output "maestro-$2.xml" --debug-output maestro-debug/auth; }
-CARD="https://onssa.org/exec?c=0000000000000000"
+OLD="https://onssa.org/exec?c=0000000000000000"     # #170 form
+NEW="https://onssa.org/c/0000000000000000"           # #289 path form
+view() { adb shell am start -W -a android.intent.action.VIEW -d "'$1'" -n org.onssa.onca/.MainActivity >/dev/null; }
 for flow in "$@"; do
   if [ "$flow" = card_link ]; then
-    # #289: warm (app running -> Linking "url" event), then cold (force-stopped -> getInitialURL)
+    # #289: warm (app running -> Linking "url" event) with both link forms, then cold
+    # (force-stopped -> getInitialURL) with the /c/ form
     if run card_link card_link-setup \
-       && adb shell am start -W -a android.intent.action.VIEW -d "'$CARD'" -n org.onssa.onca/.MainActivity >/dev/null \
-       && run card_link_check card_link-warm \
+       && view "$OLD" && run card_link_check card_link-warm-exec \
+       && adb shell input keyevent KEYCODE_BACK && sleep 3 \
+       && view "$NEW" && run card_link_check card_link-warm-c \
        && adb shell am force-stop org.onssa.onca \
-       && adb shell am start -W -a android.intent.action.VIEW -d "'$CARD'" -n org.onssa.onca/.MainActivity >/dev/null \
-       && run card_link_check card_link-cold; then :; else rc=1; dump card_link; fi
+       && view "$NEW" && run card_link_check card_link-cold-c; then :; else rc=1; dump card_link; fi
     continue
   fi
   if ! maestro test "mobile/apps/onca/maestro/$flow.yaml" --format junit --output "maestro-$flow.xml" --debug-output maestro-debug/auth; then

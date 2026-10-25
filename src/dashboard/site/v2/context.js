@@ -73,6 +73,8 @@
   function inApp() { return !!APP; }
   // #258: a #170 card link goes to the native share sheet (Android's WebView has no navigator.share)
   function shareViaShell(url) { if (APP) toShell({ type: "share", url }); }
+  // #289: the shell's bridge version (0 = a browser). Bridge 3 accepts the /c/<id> share path.
+  function appBridge() { return APP ? (Number(APP.bridge) || 1) : 0; }
   // #256/#257: request/reply with the shell (native push token, app lock). The shell answers by
   // calling window.__oncaShell.reply(id, value); no answer within the timeout resolves null.
   let shellSeq = 0;
@@ -1805,7 +1807,7 @@
     bootSaaS,
     // feed
     loadScopedFeed, mountGate, setData, indLabel, upgradeHref, billingBannerHTML, bandOf, SAAS_BANDS, comboOf, combosOf,
-    isEntryTier, mountEntryBoard, segmentGateHTML, ENTRY_INDUSTRIES, inApp, PLAN_NOTE, shareViaShell, askShell,
+    isEntryTier, mountEntryBoard, segmentGateHTML, ENTRY_INDUSTRIES, inApp, appBridge, PLAN_NOTE, shareViaShell, askShell,
     // drawer
     wireDrawer, openCard, closeDrawer,
     // panels

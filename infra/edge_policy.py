@@ -110,6 +110,25 @@ def apex_public_js() -> str:
     )
 
 
+# #289: a shared card has its own PATH, https://onssa.org/c/<16 hex>, because Android App Links
+# match paths only. A verified filter on /exec would also claim the web sign-in return
+# /exec?code=…; /c/ claims nothing else. The app opens /c/<id> itself (bridge incomingCardUrl);
+# a browser gets this redirect to the page that resolves it. Old /exec?c= links keep working.
+SHARE_PREFIX = "/c/"
+
+
+def share_link_js() -> str:
+    """Snippet run first (needs `key`): /c/<16 lowercase hex> -> 302 /exec?c=<id>, before any
+    password challenge (the link carries no data; /exec signs in per person). Anything else
+    under /c/ falls through to the normal handling (unknown path -> 404 after auth)."""
+    return (
+        "  // #289: share links /c/<16 hex> -> /exec?c=<id> (infra/edge_policy.py share_link_js).\n"
+        "  var sm = /^\\/c\\/([0-9a-f]{16})$/.exec(key);\n"
+        "  if (sm) { return { statusCode: 302, statusDescription: 'Found',\n"
+        "    headers: { location: { value: '/exec?c=' + sm[1] }, 'cache-control': { value: 'public, max-age=86400' } } }; }\n"
+    )
+
+
 def site_paths_js(site_root) -> str:
     """Snippet: sets `redir` (a Location) for a directory-without-slash or an unknown path.
     Needs `r`, `key` and `routes` in scope; must run on the RAW uri, BEFORE the clean-route and

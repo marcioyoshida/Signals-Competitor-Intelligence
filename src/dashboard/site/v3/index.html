@@ -3539,7 +3539,8 @@ function inspect(id) {
 // never fired; the drawer was functionally open yet stayed fully off-screen. "open" is
 // the class the shared component vocabulary actually styles.
 // --- #170 share a card without leaking it -----------------------------------------------
-// The link is /exec?c=<first 16 hex of SHA-256(card id)> — card ids name entities
+// The link is /c/<first 16 hex of SHA-256(card id)> (#289: its own path, so Android App Links
+// can claim it without /exec?code=; the edge redirects it to /exec?c=<id>) — card ids name entities
 // ("cand-ent-itau-unibanco"), so the id itself never goes in the URL. The page's OpenGraph
 // tags are generic, the share sheet gets no text, and the recipient must sign in: the hash is
 // resolved against THEIR scoped feed, so a card outside their licence is "sem acesso".
@@ -3556,7 +3557,9 @@ function shareableIds() {
 }
 async function shareCurrent() {
   if (!SHARE_ID) return;
-  const url = `${location.origin}/exec?c=${await sha16(SHARE_ID)}`;
+  const h = await sha16(SHARE_ID);
+  // store-app builds before bridge 3 only accept the /exec?c= form in their share handler
+  const url = Ctx.inApp() && Ctx.appBridge() < 3 ? `${location.origin}/exec?c=${h}` : `${location.origin}/c/${h}`;
   const btn = document.getElementById("drShare");
   engage("share", "open", BYID[SHARE_ID] ? SHARE_ID : null);   // #165 count
   if (Ctx.inApp()) { Ctx.shareViaShell(url); return; }   // #258: native share sheet in the store app

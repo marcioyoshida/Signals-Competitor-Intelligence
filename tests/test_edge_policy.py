@@ -140,3 +140,27 @@ def test_apex_without_password_goes_to_pricing_and_aliases_skip_the_challenge():
         r = _run_apex(uri)
         assert r["statusCode"] == 301 and r["headers"]["location"]["value"] == loc, uri
     assert _run_apex("/v2/admin/") is None and _run_apex("/feed.json") is None
+
+
+def _run_share(uri):
+    import json, subprocess
+    from edge_policy import share_link_js
+    key = uri[:-1] if len(uri) > 1 and uri.endswith("/") else uri
+    js = ("var key = %s;\nfunction f() {\n%s  return null; }\nconsole.log(JSON.stringify(f()));"
+          % (json.dumps(key), share_link_js()))
+    return json.loads(subprocess.run(["node", "-e", js], capture_output=True, text=True, check=True).stdout)
+
+
+def test_share_path_redirects_to_exec_and_nothing_else():
+    # #289: /c/<16 hex> is the share link Android App Links can claim without /exec?code=
+    import shutil
+    import pytest
+    if not shutil.which("node"):
+        pytest.skip("node not installed")
+    r = _run_share("/c/0123456789abcdef")
+    assert r["statusCode"] == 302 and r["headers"]["location"]["value"] == "/exec?c=0123456789abcdef"
+    assert _run_share("/c/0123456789abcdef/")["headers"]["location"]["value"] == "/exec?c=0123456789abcdef"
+    for other in ("/c/", "/c/0123456789ABCDEF", "/c/0123456789abcde", "/c/0123456789abcdef0",
+                  "/c/0123456789abcdef/x", "/cx/0123456789abcdef", "/exec", "/c/%2e%2e/feed.json"):
+        assert _run_share(other) is None, other
+

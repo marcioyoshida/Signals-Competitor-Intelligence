@@ -11,7 +11,7 @@ const IN_APP_HOSTS = new Set(["onssa.org", "www.onssa.org"]);
 
 /** Injected before /exec loads: tells context.js it runs inside the app (and which redirect). */
 export function injectedFlag(platform: string): string {
-  return `window.__ONCA_APP__ = ${JSON.stringify({ redirectUri: REDIRECT, platform, bridge: 2 })}; true;`;
+  return `window.__ONCA_APP__ = ${JSON.stringify({ redirectUri: REDIRECT, platform, bridge: 3 })}; true;`;
 }
 
 function query(url: string): Record<string, string> {
@@ -86,9 +86,10 @@ export function isPurchaseUrl(url: string): boolean {
 }
 function decodeURIComponentSafe(s: string): string { try { return decodeURIComponent(s); } catch { return s; } }
 
-/** A #170 card link: only onssa.org/exec?c=<16 hex> is shareable. */
+/** A card link: only onssa.org/c/<16 hex> (#289) or the older onssa.org/exec?c=<16 hex> (#170). */
 export function isShareUrl(url: unknown): url is string {
-  return typeof url === "string" && /^https:\/\/(www\.)?onssa\.org\/exec\?c=[0-9a-f]{16}$/.test(url);
+  return typeof url === "string" &&
+    /^https:\/\/(www\.)?onssa\.org\/(c\/[0-9a-f]{16}|exec\?c=[0-9a-f]{16})$/.test(url);
 }
 
 /** #289: an incoming universal / App Link. Only a #170 card link is honoured (it then opens in the
@@ -96,7 +97,9 @@ export function isShareUrl(url: unknown): url is string {
 export function incomingCardUrl(url: unknown): string | null {
   if (typeof url !== "string") return null;
   const u = url.replace(/^https:\/\/www\.onssa\.org\//, "https://onssa.org/");
-  return isShareUrl(u) ? u : null;
+  if (!isShareUrl(u)) return null;
+  const m = /\/c\/([0-9a-f]{16})$/.exec(u);          // load the page that resolves it, not the edge redirect
+  return m ? `https://onssa.org/exec?c=${m[1]}` : u;
 }
 
 /** A message posted by context.js through window.ReactNativeWebView. Requests that expect an

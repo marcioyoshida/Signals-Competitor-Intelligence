@@ -31,7 +31,7 @@ test("page messages: only auth/logout to our own Hosted UI", () => {
 });
 
 test("injected flag is what context.js checks for", () => {
-  assert.match(injectedFlag("ios"), /window\.__ONCA_APP__ = \{"redirectUri":"onca:\/\/auth","platform":"ios","bridge":2\}/);
+  assert.match(injectedFlag("ios"), /window\.__ONCA_APP__ = \{"redirectUri":"onca:\/\/auth","platform":"ios","bridge":3\}/);
 });
 
 import { isPurchaseUrl, isShareUrl } from "./bridge.ts";
@@ -105,10 +105,21 @@ test("#289 incoming links: only a card link opens in the WebView", async () => {
   const { incomingCardUrl } = await import("./bridge.ts");
   assert.equal(incomingCardUrl("https://onssa.org/exec?c=0123456789abcdef"), "https://onssa.org/exec?c=0123456789abcdef");
   assert.equal(incomingCardUrl("https://www.onssa.org/exec?c=0123456789abcdef"), "https://onssa.org/exec?c=0123456789abcdef");
-  for (const u of ["https://onssa.org/exec?code=abc", "https://onssa.org/exec", "onca://auth?code=abc",
+  assert.equal(incomingCardUrl("https://onssa.org/c/0123456789abcdef"), "https://onssa.org/exec?c=0123456789abcdef");
+  assert.equal(incomingCardUrl("https://www.onssa.org/c/0123456789abcdef"), "https://onssa.org/exec?c=0123456789abcdef");
+  for (const u of ["https://onssa.org/c/0123456789abcdef/x", "https://onssa.org/c/0123456789ABCDEF", "https://onssa.org/c/",
+                   "https://onssa.org/exec?code=abc", "https://onssa.org/exec", "onca://auth?code=abc",
                    "https://onssa.org/exec?c=0123456789abcdef&x=1", "https://evil.example/exec?c=0123456789abcdef",
                    "https://onssa.org/exec?c=ZZZZ", null, 42]) {
     assert.equal(incomingCardUrl(u), null, String(u));
   }
+});
+
+test("#289 share messages: both card-link forms, nothing else", () => {
+  for (const u of ["https://onssa.org/c/0123456789abcdef", "https://onssa.org/exec?c=0123456789abcdef"]) {
+    assert.deepEqual(parseMessage(JSON.stringify({ type: "share", url: u })), { type: "share", url: u });
+  }
+  assert.equal(parseMessage(JSON.stringify({ type: "share", url: "https://onssa.org/c/0123456789abcdef?x=1" })), null);
+  assert.match(injectedFlag("android"), /"bridge":3/);
 });
 
