@@ -177,6 +177,25 @@ def test_account_sheet_without_purchase_cta(request, S):
     _close_drawer(page)
 
 
+def test_back_closes_the_sheet_and_stays_on_the_view(request, S):
+    """#200 row 7: Android's back button is the WebView's history.back(); with a sheet open it
+    must close the sheet, not leave the view (or, with no history, the app)."""
+    page = attach(request, S.page)
+    url, depth = page.url, page.evaluate("history.length")
+    page.locator("#acctBtn").tap()
+    _wait_drawer(page)
+    page.evaluate("history.back()")
+    page.wait_for_function("!document.getElementById('drawer').classList.contains('open')", timeout=5_000)
+    assert page.url == url, f"back left the view: {url} -> {page.url}"
+    # closing with the X consumes the sheet's entry: the next back is not a dead press
+    page.locator("#acctBtn").tap()
+    _wait_drawer(page)
+    _close_drawer(page)
+    page.wait_for_timeout(300)
+    assert page.evaluate("history.length") >= depth
+    assert not (page.evaluate("history.state") or {}).get("drawer"), "the sheet's history entry was left behind"
+
+
 def _luminance(rgb: str) -> float:
     r, g, b = (int(x) / 255 for x in re.findall(r"\d+(?:\.\d+)?", rgb)[:3])
     lin = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in (r, g, b)]

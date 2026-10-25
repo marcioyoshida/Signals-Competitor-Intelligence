@@ -3599,8 +3599,19 @@ async function resolveSharedLink() {
 // close button), Tab stays inside, Esc closes, and focus returns to the row that opened it.
 let DR_RETURN = null;
 function drawerIsOpen() { return document.getElementById("drawer").classList.contains("open"); }
+// #200 row 7: in the store app, Android's back button is the WebView's history.back(), so an
+// open drawer owns one history entry (same URL, no hashchange): back closes it instead of
+// leaving the view or closing the app. Closing it any other way consumes that entry.
+let DR_HIST = false;
+const DR_HIST_ON = !!(window.OncaCtx && window.OncaCtx.inApp());
+window.addEventListener("popstate", () => { if (DR_HIST && drawerIsOpen()) { DR_HIST = false; closeDrawer(); } });
 function openDrawer(shareId) {
-  if (!drawerIsOpen()) DR_RETURN = document.activeElement;
+  if (!drawerIsOpen()) {
+    DR_RETURN = document.activeElement;
+    if (DR_HIST_ON && !DR_HIST) {
+      try { history.pushState(Object.assign({}, history.state, { drawer: 1 }), ""); DR_HIST = true; } catch (x) {}
+    }
+  }
   CTX_CARD = null;
   SHARE_ID = shareId || null;
   const sb = document.getElementById("drShare"); if (sb) sb.hidden = !SHARE_ID || ADMIN;
@@ -3609,6 +3620,10 @@ function openDrawer(shareId) {
   document.getElementById("drClose").focus({ preventScroll: true }); }
 function closeDrawer() {
   const wasOpen = drawerIsOpen();
+  if (DR_HIST) {   // closed by ✕ / Esc / scrim: drop our entry, unless something navigated on top of it
+    DR_HIST = false;
+    if (history.state && history.state.drawer) history.back();
+  }
   document.getElementById("drawer").setAttribute("aria-hidden", "true");
   document.getElementById("scrim").classList.remove("open"); document.getElementById("drawer").classList.remove("open");
   if (wasOpen && DR_RETURN && document.contains(DR_RETURN)) DR_RETURN.focus({ preventScroll: true });
