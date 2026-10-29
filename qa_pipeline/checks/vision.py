@@ -24,7 +24,9 @@ from qa_pipeline.lib.vision import VISION_MODEL, build_prompt, parse_verdict
 
 # (panel key, path, locator kind, locator value). `section.band` is the wrapping element
 # every `band()`-rendered panel on /exec gets (src/dashboard/site/v3/index.html); `/app`'s
-# quadrant has its own stable id (src/dashboard/site/v2/app/index.html).
+# quadrant has its own stable id (src/dashboard/site/v2/app/index.html). Both /exec bands
+# live on the CSO officer board (desktop default: officer "cso", view "painel"), which an
+# Entry-tier tenant never sees — see `run()`'s persona swap.
 PANELS = [
     ("mapa_competitivo", "/exec", "band_text", "Mapa Competitivo · Ameaça × Momentum"),
     ("quotes", "/exec", "band_text", "Mercado · Cotações B3"),
@@ -41,7 +43,11 @@ def _capture(page, kind: str, value: str) -> bytes:
 def run(event: dict) -> dict:
     from src.synth import bedrock_llm  # deferred: only this check needs the synth package
 
-    persona = event.get("persona", "entry")
+    # The state machine sends persona="entry", but an Entry tenant's /exec is the Entry board
+    # (ADR 016: no officer suite), so neither /exec band ever rendered and both captures timed
+    # out every night. 23446a6 moved smoke/routing/resilience onto the sovereign persona and
+    # missed this branch.
+    persona = config.officer_suite_persona(event)
     creds = config.qa_credentials()["personas"][persona]
     user, pw = config.basic_auth()
     exec_url = f"{config.SITE_URL}/exec"

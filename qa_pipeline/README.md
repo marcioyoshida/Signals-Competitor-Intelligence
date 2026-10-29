@@ -249,6 +249,15 @@ until 2026-10-28; the owner's 10-25 rule puts every hosted call on Lite. In a tr
 nights of screenshots, Lite missed stacked markers and an edge-clipped marker that Pro caught
 on 3 of 4 nights, so expect fewer findings, not a cleaner chart.
 
+Persona: like smoke/routing/resilience, the branch logs in through
+`config.officer_suite_persona()`, so the state machine's `"entry"` becomes the sovereign
+`admin` persona. Both `/exec` panels (Mapa Competitivo, Cotações B3) are bands on the CSO
+officer board, and an Entry-tier tenant's `/exec` is the Entry board with no officer suite
+(ADR 016). Until 2026-10-28 vision still logged in as `entry`. Both `/exec` captures timed
+out every night (`Locator.wait_for: Timeout 15000ms`) and only the `/app` quadrant was
+captured. The swap the other branches got in 23446a6 had missed this one.
+`tests/test_qa_vision.py` pins the band titles to the CSO branch of `v3/index.html`.
+
 `checks/report.py` (a sixth, final state — not a parallel branch) consolidates every
 branch's raw output into one static HTML page: a pass/fail table per hard-gate check plus
 every vision finding with its screenshot inlined. Uploaded to the same private
