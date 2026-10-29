@@ -1,16 +1,23 @@
 # ADR 025 — Agentic API billing (pilot fork: Onça)
 
-- Status: **Onça pilot built and live (2026-09-14, 6898b4d); billing half not built
-  (review 2026-10-28).** Was: **Proposed** (2026-09-13).
+- Status: **Onça pilot built and live (2026-09-14, 6898b4d); Entry gate live
+  (2026-10-28, 64634a3); quota and billing half not built.** Was: **Proposed** (2026-09-13).
   - **Live:**
     - The `onca-api-keys` and `onca-api-usage` tables.
     - `POST /api/v1/agent/ask`.
     - The self-service `/api/keys` panel.
+    - "Entry gets no API access" (`api_keys.api_access_refusal`): `POST /api/keys` returns 403
+      for an Entry tenant, and `/api/v1/agent/ask` returns 403 on every call from an Entry
+      tenant's key, including a key minted before a downgrade or a lapsed SaaS subscription.
+      Listing and revoking still work. Verified live 2026-10-28 with a temporary key for the
+      Entry QA tenant. Before the deploy, `onca-api-keys` held 0 rows.
   - **Engineering left, mostly in the Storefront repo:**
     - Stripe metered line items and the usage-reporting job. The canonical Storefront
       ADR is still Proposed, and the shared-table vs. poll-endpoint sub-decision is open.
-    - Here: no included-quota check, and no "Entry gets no API access" gate, was found in
-      `agent_api.py` / `api_keys_api.py`. Any tenant with licensed modules can mint a key.
+    - Here: no included-quota check. **Owner decision needed:** the only figure is a
+      placeholder in the Storefront ADR ("e.g. Onça SaaS module = 2M tokens/mo"). That ADR
+      also rejects a hard cutoff, so past the quota the overage is metered, not refused.
+      Enforcing a quota needs a real number and the metered overage line item.
     - The other forks have not been replicated.
   - **Owner:** no paying customer exists to meter (2026-10-25).
 - Canonical design (shared across all six Signals forks) lives in the
