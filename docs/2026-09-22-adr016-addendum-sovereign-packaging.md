@@ -1,7 +1,34 @@
 # ADR 016 Addendum — Sovereign in-account packaging: the telemetry-off boundary,
 ## the resolve API, and the tier/plane collision (#49)
 
-- Status: **Proposed** — 2026-09-22.
+- Status: **Decisions 1–5 implemented as scoped (2026-09-22/23); #49 is still not a
+  deployable product (review 2026-10-28)**. Was: **Proposed** (2026-09-22).
+  - **Built:**
+
+    | Decision | What | Commit(s) |
+    |---|---|---|
+    | D1 | Structural, so no code | — |
+    | D2 | Tier separated from operator privilege | 152baba |
+    | D3 | `src/dashboard/resolve_api.py`, a live AWS_IAM Function URL | 75c41ae |
+    | D4 steps 1–4 | Steps 1–4 | d408613, 90733a9, 50e121e, a1e8cb3 |
+    | D5 | `tests/test_no_hardcoded_vendor_refs.py`, `infra/egress_audit.py` | d408613, ea57927 |
+
+    "Every Decision … shipped" at the end of Decision 5 is true of the decisions. It is
+    not true of a working Sovereign tenant.
+  - **Still engineering:**
+    - `OncaTenantStack` is a shell with no ingest/synth/feed Lambdas and no dashboard
+      (see its docstring).
+    - `tenant_s3.py` is not wired to any Lambda, and it reads text formats only (no
+      PDF/DOCX/XLSX).
+    - Free-text entity tagging has no remote path (the step 3 gap). It needs new design.
+    - Step 1 shipped as a separate skeleton stack. The shared-construct split was never
+      done.
+    - ADR 015's Marketplace SNS entitlement handler is not built.
+    - The `/resolve` support window is undecided.
+  - **Owner/external:**
+    - A Sovereign buyer and a tenant AWS account.
+    - AWS Marketplace seller registration, which needs the legal entity (#185).
+  - #49 is open.
 - Addends [ADR 016](2026-08-30-adr-distribution-three-tier.md) §③ Sovereign and its
   "Open decisions", and [ADR 005](2026-08-23-adr-private-tenant-in-account.md)
   (superseded by ADR 015/016 but its mechanics — in-account stack, resolve-by-API,

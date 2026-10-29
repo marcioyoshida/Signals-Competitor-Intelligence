@@ -1,6 +1,12 @@
 # ADR 015 — Visual competitive mapping: Mapa Competitivo (Threat × Momentum) and the warroom visual layer
 
-- Status: **ACCEPTED + IMPLEMENTED** (2026-08-30; realization log 2026-09-11). The Mapa
+- Status: **Concluded (2026-10-28)** — checked again, nothing outstanding. The Mapa Competitivo
+  is still in code on `/exec` (`scatterMap`, fed by `executive.py` `_momentum`) and `/v2/*`
+  (`renderQuadrant`). `market_share_pct` is emitted (`feed_builder.py`, `bcb_ifdata.py`). The five
+  §2 visuals (Radar de Risco, Balanço de Crença, Radar Regulatório, Ranking de Momentum, Linha do
+  tempo) live on the v1 board (`src/dashboard/site/index.html`). Since 2026-09-07 that board is
+  being deprecated in favour of `/exec`, so moving more of them onto `/exec` belongs to that port,
+  not this ADR. Previous status: **ACCEPTED + IMPLEMENTED** (2026-08-30; realization log 2026-09-11). The Mapa
   Competitivo ships on both surfaces — `/v2/app` (`renderQuadrant`) and the `/exec` CSO
   panels (`scatterMap`) — fed by `executive.cso.panels.momentum`. See the realization log
   at the end of this ADR for the three selection/identity rules added after live review.

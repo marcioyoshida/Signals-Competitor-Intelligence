@@ -1,5 +1,14 @@
 # Cognito pool V2 — mutable email (#262)
 
+**Status (2026-10-28): P0–P4 done; P5 waits on the owner.** V2 (`us-east-1_rxEkYhYHg`, email
+mutable) has been live since the 2026-10-13 cutover, and every consumer points to it. Fleet
+Monitor, the last user of the old pool, moved on 2026-10-25 (Signals-Fleet-Monitor#17). CloudWatch
+shows no sign-in, federation or token-refresh datapoints on the old pool since 2026-10-25 04:00Z.
+**Left (owner):** a returning Google and Apple sign-in on the phone, then explicit confirmation
+to remove the pool. **Left (engineering, after that):** remove the old `build_identity_pool`
+block and deploy. The pool is `RemovalPolicy.RETAIN`, so it then needs a manual
+`delete-user-pool`.
+
 **Why.** Pool `us-east-1_LfGQGWq56` has `email` required + immutable, and Google/Apple map
 email→email. Reproduced on throwaway pools (2026-10-12): the first federated sign-in creates the
 user; every later one fails with `user.email: Attribute cannot be updated`, even with an identical
@@ -12,10 +21,10 @@ WriteAttributes and in the IdP mapping). Only a new pool fixes it.
 |---|---|---|
 | P0 ✅ 7d164fd | email→tenant map + self-registration only for provider-verified federated identities (a mutable email would otherwise let a password user claim a mapped tenant) | none |
 | P1 ✅ defbc15, LIVE (`us-east-1_rxEkYhYHg`) | CDK: identity block becomes a helper (`infra/identity.py`); new pool `…V2` side by side (email mutable, deletion protection, RETAIN), same clients/IdPs/groups/CDK users/pretoken. `cdk diff` must show additions only. `scripts/migrate_cognito_pool.py` copies the non-CDK native users (owner, directory-reviewer) + group memberships; passwords from where they're stored | none |
-| P2 (branch `cutover-262`, commit B) | Deploy B: remove `OncaHostedUi` + `OncaAuthCustomDomain` from the old pool (domain names are global) | **sign-in down** until P3 |
-| P3 (branch `cutover-262`, commit C) | Deploy C: both domains on V2; JWT authorizer, session broker, OAuth facade, act API and the site's client id point to V2; `auth.onssa.org` CNAME → new target | everyone signs in once |
-| P4 | SSM `/fleet-monitor/authtest/onca-*`, QA secret, runbooks | none |
-| P5 | after 2 stable weeks: remove the old block, delete the old pool by hand | none |
+| P2 ✅ 4b8a3c8, deployed 2026-10-13 | Deploy B: remove `OncaHostedUi` + `OncaAuthCustomDomain` from the old pool (domain names are global) | **sign-in down** until P3 |
+| P3 ✅ a8d7394, deployed 2026-10-13 | Deploy C: both domains on V2; JWT authorizer, session broker, OAuth facade, act API and the site's client id point to V2; `auth.onssa.org` CNAME → new target | everyone signs in once |
+| P4 ✅ (audit 2026-10-25: no Lambda env, String SSM parameter or secret references the old pool; Fleet Monitor moved via Signals-Fleet-Monitor#17) | SSM `/fleet-monitor/authtest/onca-*`, QA secret, runbooks | none |
+| P5 ⏳ waiting on the owner's Google/Apple check and explicit go-ahead | after 2 stable weeks: remove the old block, delete the old pool by hand | none |
 
 Downtime P2→P3: ~15–60 min (Cognito custom-domain CloudFront + DNS). Rollback before P3 = revert
 B; after P3 = remove V2 domains, revert C. The old pool is never modified, so rollback restores

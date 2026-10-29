@@ -1,7 +1,18 @@
 # ADR 009 — Regulatory Change Intelligence: document versioning, diff, and impact tagging
 
-- Status: **FULLY REALIZED** (2026-09-03) — Phases A, B, §2, §3, §5 all live; design
-  2026-08-25. Owner-requested expansion of the Regulatory axis.
+- Status: **Code complete; two of five phases switched off in production (re-checked
+  2026-10-28).** Phase A (amending-act parser) and §5 (dashboard change panel) run on every
+  pipeline run. Phase B (`regdocs/` fetch), and with it the §2 diff, plus the §3 LLM change
+  record are gated by `ONCA_REGDOCS` / `ONCA_REG_LLM`. Both default `false`, neither has ever
+  been set in `infra/app.py`, and the live `OncaRegulatory` Lambda environment has neither
+  (checked 2026-10-28). `regdocs/index.json` was last written 2026-09-04. So the "live" runs
+  below were one-off runs with the flags set by hand. #208 changed `executive.py` so the CRO
+  panels no longer depend on change records being present.
+  **What's left:** `ONCA_REG_LLM` is an **owner decision** (Bedrock cost; the record already
+  uses Nova Lite, which matches the Nova-Lite-only policy). `ONCA_REGDOCS` is an
+  **engineering/ops** change: add the flag in CDK and confirm the in.gov.br fetch is
+  acceptable. It needs no LLM. Was: **FULLY REALIZED** (2026-09-03) — Phases A, B, §2, §3, §5
+  all live; design 2026-08-25. Owner-requested expansion of the Regulatory axis.
   - **Phase A (deterministic amending-act parser) LIVE** — `src/synth/reg_change.py`
     enumerates the discrete changes an act declares (`altera`/`revoga`/`dá nova
     redação`/`inclui`/…) + the article/dispositivo refs + the base instrument each
@@ -187,6 +198,11 @@ whole new nav):
   ADR must not become a source of confident-but-unsourced compliance advice.
 
 ## Status / next steps
+
+**2026-10-28:** steps (1)–(5) below are all built (see the Status header). Two items remain,
+and both are about switching things on: set `ONCA_REGDOCS` in CDK (engineering), and decide
+on `ONCA_REG_LLM` (owner, cost). The rest of this section is the original plan, kept for
+history.
 
 Proposed. Implementation order when picked up: (1) full-text fetch + `regdocs/` versioned
 store + index (the enabler); (2) deterministic diff — amending-act parser first (higher

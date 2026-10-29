@@ -1,6 +1,10 @@
 # ADR 012 — Entity-tagged corporate-distress store (Recuperação Judicial / falência)
 
-- Status: **Accepted & implemented (v1)** — 2026-08-25. Owner-requested ("Go for A").
+- Status: **Concluded (2026-10-28)**. The decision (option A) is built and live:
+  `distress.py`, `feed.json.distress`, and Guard 4 against counterparty-bank framing
+  (`d1d4638`, #73). Of the optional follow-ups, (1) and option C have shipped; option B and
+  join (3) are unbuilt and unticketed. Both are optional engineering, see *Status / next
+  steps*. Was: **Accepted & implemented (v1)** — 2026-08-25. Owner-requested ("Go for A").
 - Delivers an **entity-level RJ/distress dataset** (the follow-up to the DataJud
   sector-distress signal, #25). Code: `src/synth/distress.py`,
   `tests/test_distress.py`, wired into `src/synth/lambda_handler.py` and surfaced
@@ -86,3 +90,15 @@ Implemented v1. Optional follow-ups: (1) a dashboard distress badge/panel on the
 entity view; (2) option B (DOU judicial section) or C (CVM-FR tag) for official
 confirmation; (3) join with DataJud's macro trend (option E) for a "sector distress
 rising + here are the names" view.
+
+**2026-10-28 audit:**
+- (1) **SHIPPED.** There is a distress badge in the v1 "Radar de Risco" tab
+  (`site/index.html`, `.distress-badge`). The v3 `/exec` board has an "Insolvência
+  (confirmada)" tile and a CCO `distress` lens, and distress is a push-alert type.
+- (2) **C SHIPPED** through [ADR 013](2026-08-25-adr-entity-classification-attributes.md):
+  `update_from_digest` reads the CVM Fato Relevante (`fatos`) stream as the `regulatory` trust
+  tier, and ADR 013 adds the confidence tiers. **B (DOU judicial section) is NOT built.**
+  `dou.py` has no judicial or RJ handling.
+- (3) **NOT built.** No DataJud × distress join exists in `executive.py` or
+  `feed_builder.py`. DataJud stays the macro trend only.
+- B and (3) are optional engineering work with no owner gate and no open ticket.

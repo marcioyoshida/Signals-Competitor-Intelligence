@@ -1,6 +1,26 @@
 # ADR 022 — Financial-Soundness (Prudential) Ingestion + Financial-Tone NLP for BCB/CVM Institutions
 
-Status: **PROPOSED** 2026-09-06. **Rev. 2 (2026-09-06)** — FinBERT reinstated as a
+Status: **Accepted and largely built — 3 remainders (re-checked 2026-10-28).**
+Phases 1–6 and Addendum Tiers 1–3, #16, #17 and KM1 run live on `OncaFinancialsPipeline`.
+The live state machine has these tasks: Soundness, Balancete, CvmStatements, IssuerKpis,
+Tone. The monthly run last SUCCEEDED on 2026-10-06. The `onca-finbert-ptbr` SageMaker
+Serverless endpoint is `InService`. Two items the Addendum deferred have since shipped:
+- **#15 valuation:** `src/synth/valuation.py` (#93, `9ee29db`).
+- **Custo de crédito / cost-to-income:** COSIF 4010 groups 7/8 (#146, `ba38cbc`) plus the CVM
+  DRE (#92, `9ee29db`). Doc 4016 was not needed ([ADR 028](2026-09-19-adr028-competitor-financial-statements-acquisition.md)).
+
+**Left (engineering; item 2 also depends on external sources):**
+1. Phase 6 KB-grounding: no code feeds Pilar 3 text into the Bedrock KB.
+2. Multi-bank Pilar 3 *tone* corpus: still Itaú only via IPE. The other banks' IR PDFs are
+   opaque or bot-blocked, which is an external dependency. KM1 covers the *numbers*.
+3. The per-metric sanity guards for insurer ROA and small-book NPL: not found in
+   `bcb_fundamentals.py` / `bcb_inadimplencia.py`.
+
+**Cost flag for the owner:** FinBERT runs on a hosted SageMaker endpoint that bills per
+invocation. It is not Bedrock, so the Nova-Lite-only policy does not literally apply, but it
+is a paid hosted model.
+
+Was: **PROPOSED** 2026-09-06. **Rev. 2 (2026-09-06)** — FinBERT reinstated as a
 scale-to-zero *feature-extraction* stage (Batch Transform, FinBERT-PT-BR) after review;
 the Rev. 1 blanket rejection conflated SageMaker with an always-on endpoint. See
 *Revision note* and §3. **Pilot-validated (2026-09-06)** — the flow runs end-to-end on real
@@ -434,10 +454,10 @@ product-mix intelligence from carteira composition (#11).
      Live: Mercado Pago +1.47. **Caveat:** the signal is only fully meaningful once the tone comes
      from real Pilar 3 text; with the current `solvency_facts` tone (uniformly ~+0.5, only Itaú on
      pilar3), the divergence mostly re-flags weak numbers — it sharpens as Pilar 3 coverage expands.
-   - **#15 Valuation (P/L, P/VP) — DEFERRED.** Needs market cap; Yahoo's v7 marketCap endpoint is
+   - **#15 Valuation (P/L, P/VP) — DEFERRED** *(2026-10-28: since SHIPPED, #93 `9ee29db`, `src/synth/valuation.py`; CVM share counts plus the Yahoo v8 price)*. Needs market cap; Yahoo's v7 marketCap endpoint is
      401-blocked and the v8 proxy gives price only (no shares). Requires a shares-outstanding source
      (CVM capital social) or an unblocked marketCap feed — won't ship a fabricated valuation.
-   - Still deferred from Tier-3: DRE-based custo-de-crédito + cost-to-income (doc 4016).
+   - Still deferred from Tier-3: DRE-based custo-de-crédito + cost-to-income (doc 4016). *(2026-10-28: both SHIPPED without doc 4016. Custo de crédito comes from COSIF 4010 groups 7/8 (#146 `ba38cbc`); cost-to-income comes from the CVM DRE (#92 `9ee29db`).)*
 
 ## Addendum 2 (2026-09-06) — Multi-bank Pilar 3 via DASFN KM1 (SHIPPED + LIVE)
 

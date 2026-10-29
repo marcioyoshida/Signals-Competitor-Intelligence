@@ -4,6 +4,15 @@ Companion to [ADR 024](2026-09-11-adr-launch-readiness.md) (what GA means and wh
 is design-partner-first). This is the *dated* plan; `docs/2026-08-16-roadmap.md` remains the
 living depth/backlog log.
 
+**Status (review 2026-10-28):**
+
+| Milestone | Status | Evidence / what's left |
+|---|---|---|
+| M0 | Done | #109–#113 closed |
+| M1 | Engineering done | #114, #116–#119 closed. P3 (2–3 signed SaaS design partners) is owner/sales work and still open: no paying customers yet |
+| M2 | Done | #115 closed 2026-09-21. Entry is paid with a trial (#187) |
+| M3 / #49 | Open | Not only onboarding — see the correction under M3 |
+
 Durations are working-day estimates for a single builder; they are deliberately conservative
 about the parts that depend on **external parties** (AWS SES review, Marketplace review, buyer
 calendars), because those, not the code, set the critical path.
@@ -90,6 +99,13 @@ an E1 blocker only — it does not block M0 or M1.
   anticipates (registering that tenant's `resolve_caller_role_arn`, granting
   its role's cross-account Lambda-invoke permissions per the documented trap
   in `infra/app.py`'s `OncaResolveApi` block).
+- **Correction (2026-10-28):** the line above overstates it.
+  - **Engineering still left:** `OncaTenantStack` holds no pipeline Lambdas and no
+    dashboard. `tenant_s3.py` is unwired. Free-text entity tagging has no remote path.
+    The Marketplace SNS entitlement handler is not built.
+  - **Owner gates:** a Sovereign buyer, and Marketplace seller registration (needs the
+    legal entity, #185).
+  - Details are in the addendum's status header.
 
 ---
 

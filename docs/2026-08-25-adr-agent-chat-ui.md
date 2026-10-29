@@ -1,6 +1,15 @@
 # ADR 010 — Agent Chat in the dashboard: a curated, grounded Q&A over the tool's own data
 
-- Status: **Implemented (v1, read-only)** — 2026-08-25. Owner-requested.
+- Status: **Concluded (2026-10-28), except Decision 2.** The live `OncaAgent` (`/api/ask/`)
+  was redeployed on 2026-10-25. Since v1 the Ask panel has become a multi-turn chat on `/exec`
+  (`1af0994`, 2026-10-16, `docs/2026-10-16-ask-chat-requirements.md`), with a per-user daily cap
+  (`ONCA_ASK_DAILY_TURNS`, `OncaAskQuota`). Issues #20 and #21 are closed. The write side shipped
+  separately as ADR-020 `/api/act` (`docs/2026-09-04-adr-write-agent-api-officers.md`). **Not
+  built:** Decision 2, a **Bedrock Guardrail** on the Converse call. No guardrail is attached and
+  none exists for Onça in the account. Input is filtered only by the deterministic scope gate,
+  its hard-refuse/injection cues, and the prompt rule that card text is data, never
+  instructions. Adding a guardrail is optional engineering work, not a blocker.
+  Prior status: **Implemented (v1, read-only)** — 2026-08-25. Owner-requested.
   `src/dashboard/agent_ask.py` (`OncaAgent` Lambda, `/api/ask/`) + the dashboard
   "Perguntar" panel + `tests/test_agent_ask.py`. Grounds on the published
   `feed.json` (scoped selective retrieval) + KB Retrieve; scope gate + grounded-only
@@ -104,7 +113,10 @@ in, ground the rest, cite everything, refuse the rest.
 
 ## Status / next steps
 
-Proposed. Implementation order when picked up: (1) `OncaAgent` Lambda with KB Retrieve +
+**2026-10-28:** steps (1), (3), (4) and (5) are built and live. In step (2), the scope gate
+is built and the Bedrock Guardrail is not (see the status header).
+
+Original plan (2026-08-25): Proposed. Implementation order when picked up: (1) `OncaAgent` Lambda with KB Retrieve +
 2–3 structured tools + the grounded system contract; (2) the scope classifier + Bedrock
 Guardrail; (3) `/api/ask/` Function URL + CloudFront behavior (before `/api/*`); (4) the
 dashboard Ask panel with clickable citations + example prompts; (5) rate limit + token

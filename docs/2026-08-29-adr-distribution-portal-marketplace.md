@@ -1,6 +1,29 @@
 # ADR 015 — Distribution: two SKUs, Portal and Marketplace (telemetry is the axis)
 
-- Status: **Proposed (2026-08-29), REVISED by
+- Status: **Revised by ADR 016; principles in force, open decisions closed (review
+  2026-10-28).** What is left is tracked in ADR 016, its
+  [2026-09-22 addendum](2026-09-22-adr016-addendum-sovereign-packaging.md) and #49.
+  - **Portal (now ADR 016 Entry + SaaS): built and live.** ADR 002 Phase C/D identity,
+    the per-tenant `/api/feed` read boundary and `onca-tenant-config` with `tier`/`plane`.
+  - **Marketplace build deltas (below):** these are built:
+    - `src/ingest/tenant_s3.py`;
+    - the resolution seam `src/synth/resolver.py` (known-id lookups only);
+    - a hardened `/resolve` (`src/dashboard/resolve_api.py`: per-tenant IAM role, rate
+      limit, breadth canary);
+    - a tenant CDK app (`infra/tenant_stack.py`), which is still a shell with no
+      pipeline Lambdas.
+
+    **Not built:** the Marketplace SNS `subscribe`/`entitlement-updated` handler. No
+    tenant stack has been deployed anywhere.
+  - **Open decisions (below), resolved:**
+    - Listing shape: a flat licence sold as a private offer, R$ 25k/month
+      ([ADR 024 pricing](2026-09-12-adr024-pricing.md)).
+    - Portal-on-Marketplace-rail: hold the line, Marketplace ⇒ dedicated (owner
+      2026-09-28, option (a) in
+      [agent-discovery ADR §6](2026-09-28-adr-agent-discovery-mcp.md)).
+    - Portal delivery default: dashboard-first in practice (`/exec`), with the Feed and
+      Agent API as add-ons.
+  - Was: **Proposed (2026-08-29), REVISED by
   [ADR 016 — Distribution tiers](2026-08-30-adr-distribution-three-tier.md) (2026-08-30).**
   ADR 016 keeps this ADR's telemetry axis + moat invariant but adds a delivery/sovereignty
   axis: *Portal* splits into **Entry Portal** (static, CloudFront multi-tenant) + **SaaS

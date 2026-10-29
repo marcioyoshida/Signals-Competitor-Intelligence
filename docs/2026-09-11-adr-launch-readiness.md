@@ -1,6 +1,18 @@
 # ADR 024 — Launch readiness: what "GA" means for Onça, and the gate that defines it
 
-- Status: **PROPOSED** — 2026-09-11. Written from a product review of the whole build to date,
+- Status: **Executed through M2; M3 and sales remain (review 2026-10-28).** This ADR was
+  never formally re-marked Accepted, but its plan was carried out.
+  - **Done:**
+    - All five GA blockers G1–G5 (#109–#113, closed 2026-09-12→21).
+    - The M1 engineering items P1, P2, P2a–P2c (#114, #116–#119).
+    - M2 Entry self-serve E1–E3 (#115, closed 2026-09-21). Since then Entry is paid with
+      a 14-day trial (#187), and storefront CTAs have been live since 2026-10-03 (85f4b27).
+  - **Left (owner/sales):**
+    - P3: sign 2–3 SaaS design partners. There are no paying customers as of 2026-10-25.
+    - The storefront README still says Stripe is in TEST mode. Not verified here.
+  - **Left (engineering + owner gate):** M3 / #49 (see the
+    [ADR 016 addendum](2026-09-22-adr016-addendum-sovereign-packaging.md) status).
+  - Was: **PROPOSED** — 2026-09-11. Written from a product review of the whole build to date,
   not from a single feature request.
 - Relates to [ADR 002](2026-08-18-adr-commercial-multitenancy.md) (registry as a commercial
   product), [ADR 015/016](2026-08-30-adr-distribution-three-tier.md) (Entry / SaaS / Sovereign

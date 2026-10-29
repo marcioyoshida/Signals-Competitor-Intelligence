@@ -1,6 +1,13 @@
 # ADR — Narrative signal taxonomy: unify axis + lens so frameworks can bind per-dimension
 
-- Status: **Phase 1 + 2 SHIPPED** (2026-08-26). Phase 1 is the Design B dual-field
+- Status: **Concluded (2026-10-28)** — both phases shipped; issue #34 closed
+  2026-08-30. Phase 1 `649913f` (closes #32), Phase 2 `bb58049`
+  (`src/dashboard/topics.py`, consumed by `feed_builder` + `agent_ask`). Work items
+  7–8 (backfill `topic` onto raw narratives; point `DIM_SIGNALS` at `topic`) were
+  **dropped by design** (feed-build-time derivation needs neither). They come back
+  only if a consumer needs a durable per-narrative `topic`. No pending work. Prior
+  status kept as history:
+- Was: **Phase 1 + 2 SHIPPED** (2026-08-26). Phase 1 is the Design B dual-field
   (axis-OR-lens) gate — closes the deferred half of #32. Phase 2 (unified `topic`)
   is built at **feed-build time** (not synth time — see note) with a dashboard
   topic filter + an agent grounding boost. Optional leftover: persist `topic` onto

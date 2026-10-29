@@ -1,6 +1,29 @@
 # ADR 016 — Distribution tiers: Entry Portal · SaaS Platform · Sovereign (delivery × vertical)
 
-- Status: **Proposed** (2026-08-30). **See
+- Status: **Partly built (review 2026-10-28)**; was **Proposed** (2026-08-30).
+  - **Entry: built and live** (`derive_entry_feed`, `ENTRY_INDUSTRIES` provisioning guard,
+    19e7261). #237 (86f0e6e, 2026-10-11) superseded the "one shared static site" shape:
+    - Entry is licence-scoped through `/api/feed` on `/exec`, and `/entry/` now redirects
+      there.
+    - `feed.entry.json` is operator-only.
+    - `site/shared/` was never built, and is moot now.
+
+    The open decision on Entry billing is resolved: a paid R$ 490/month plan with a
+    14-day trial (#187, [ADR 024 pricing](2026-09-12-adr024-pricing.md)).
+  - **SaaS: the per-tenant scoped dynamic API and dashboard are live** on the one shared
+    CloudFront distribution. **Not built:** the CloudFront multi-tenant distribution
+    template and per-tenant custom domains (nothing in `infra/`). This is engineering
+    work, but no SaaS tenant has needed it yet.
+  - **Cross-cutting: built.** `tier ∈ {entry, saas, sovereign}` and a separate `plane`
+    (`tenant_config.VALID_TIERS` / `VALID_PLANES`).
+  - **Sovereign: not deployable yet.** The addendum's decisions are built, but
+    `OncaTenantStack` has no pipeline Lambdas or dashboard. Engineering remains, plus an
+    owner gate: there is no Sovereign buyer or tenant account (#49).
+  - **Open decisions:**
+    - The vertical map holds as the default.
+    - True air-gap stays deferred, because no buyer has asked.
+
+  **See
   [2026-09-22 addendum](2026-09-22-adr016-addendum-sovereign-packaging.md)** for
   the concrete telemetry-off boundary, the `/resolve` API contract, and a real
   bug this ADR's design surfaced (`tier="sovereign"` already means something

@@ -1,6 +1,29 @@
 # ADR 002 — Commercial packaging, multi-tenancy, and IP protection
 
-- Status: **Proposed** (2026-08-18)
+- Status: **Accepted & largely realized (audit 2026-10-28)** (was: Proposed,
+  2026-08-18). Not superseded: ADR 015/016 fix the *product packaging* and state that
+  this ADR "remains the principles substrate". Phase by phase:
+  - **A — SHIPPED 2026-08-18:** `infra/harden_buckets.sh` (Deny non-TLS + cross-account,
+    S3 access logging, account BPA, raw-corpus lifecycle).
+  - **B — SHIPPED 2026-08-19** (`bdee193`): `IND#` taxonomy, `entity.industries[]`,
+    `industry_rollup`, per-industry volume/coverage panel.
+  - **C — SHIPPED 2026-08-30** (`8cec0b8`, `84a8381`, `7c0a3cd`): Cognito pool, JWT
+    authorizer, PKCE dashboard login.
+  - **D — SHIPPED 2026-08-30** (`b602958`; `/resolve` `75c41ae`): `onca-tenant-config`
+    with `modules[]`, fail-closed `/api/feed` scoping, resolve-by-known-id API with
+    per-tenant rate limit + daily breadth warning (`src/dashboard/resolve_api.py`).
+    Leak-forensics canary *records* (planted fake entities) are unverified: only the
+    breadth warning exists.
+  - **E — MOSTLY SHIPPED:** module catalog + price bands/combos
+    (`tenant_config.SAAS_BANDS`/`COMBOS`, ADR 024), Stripe checkout webhook (`61a8c06`),
+    paid Entry + per-module SaaS (`d306620`), Sovereign tenant stack (ADR 016 addendum).
+    **Left (owner/external):** an AWS Marketplace listing + metering (Marketplace
+    seller review; `OncaTenantStack` never deployed by design), and Stripe live mode
+    (last known TEST; live status unverified here), which waits on the billing entity.
+  - **F — SHIPPED (operator side):** curation over the review queue in `/v2/admin`
+    (ADR 018).
+  - **Still open from §6 (owner decision):** per-role S3 principal allowlist and SSE-KMS
+    CMK on `digests`/`raw`.
 - Extends [ADR 001](2026-08-17-adr-entities-registry.md) (entities registry).
   ADR 001 steps 6 (per-tenant config) and 7 (accounts/UI) are the commercial
   slices; this ADR records the pricing, entitlement, IP-protection, and tenancy

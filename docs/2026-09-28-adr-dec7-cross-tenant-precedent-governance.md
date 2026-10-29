@@ -1,5 +1,15 @@
 # ADR — DEC-7: cross-tenant anonymized precedent: consent and governance (#100)
 
+- **Review 2026-10-28: still Accepted, still deferred on data.**
+  - **Done:** design; §7(d), the annex `docs/trust/precedent-sharing-annex.md` plus the
+    onboarding-runbook step (4ab7365).
+  - **Not built, by design:** `OncaPrecedentPool` and the builder Lambda. There is no
+    code for them.
+  - **The §6 gate is unmet:** there are no paying customer tenants (owner, 2026-10-25),
+    so there are 0 opted-in tenants and 0 reviewed customer outcomes. The live
+    `DECISION#` count was not re-measured since 2026-09-28.
+  - **Owner/external still open:** counsel review of the DPA annex (§6.3).
+  - #100 stays open.
 - **Status:** **Accepted** (owner, 2026-09-28): §7 (a)–(d) as proposed. Building remains gated on §6 (data), not on design.
   This ADR is the "consent/governance design first" that #100 names. Proposed 2026-09-28. The contract clause is
   `docs/trust/precedent-sharing-annex.md`.

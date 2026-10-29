@@ -1,6 +1,16 @@
 # ADR 019 — Declarative Source Registry & First-Class Verticals
 
-Status: ACCEPTED 2026-08-31; **IMPLEMENTED (core) — with named follow-ons.** The
+Status (audit 2026-10-28): **IMPLEMENTED (core); completion items C1–C6 NOT started.**
+Core is unchanged since `8f73014` (2026-08-31), and the recipe has since proven itself:
+`cvm_normas` (#194, `cea40e1`) was added as one `SourceSpec` + one `_FETCHERS` entry.
+Still bespoke in `lambda_port.py`: the `moves` sources (pix/juros/inf_diario/fiagro via
+`_moves_since_last_run`), `market`, and the side-effecting sec/fatos/new_entrants blocks
+(C1–C2). `SourceSpec` has no `params` (C3) and no `lens=None` store specs (C4), and
+fetch-gating (C5) is not done. C1–C5 are **engineering** work, low priority while only
+the financial-services vertical is deployed. C6 (retire the Anteater fork) has not
+happened: Anteater ships as its own live spin-off repo, so whether to fold it back is an
+**owner decision**, not a pending task. Prior status kept as history:
+Was: ACCEPTED 2026-08-31; **IMPLEMENTED (core) — with named follow-ons.** The
 registry-driven loop is now REAL: `lambda_port` runs `for spec in registry.active(vertical)`
 over a `FETCHERS` registry that applies vertical-gating + budget + delta + section-building
 uniformly, for the sector-agnostic + core document sources (regulatory, competitor, ofertas,

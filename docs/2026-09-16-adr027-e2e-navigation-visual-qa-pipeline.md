@@ -1,6 +1,25 @@
 # ADR 027 — End-to-end navigation + AI visual QA pipeline (Playwright + Bedrock, on Lambda/Step Functions)
 
-- Status: **Proposed** — 2026-09-16. Owner-requested.
+- Status: **Concluded (2026-10-28)** — all eight phase issues (#126–#133) shipped and closed
+  2026-09-17 (`b7a7a6b` personas, `bbc0095` scaffold, `0e9e3a5` matrix, `cafa9ab` smoke +
+  routing, `0e8355a` resiliency, `7df7df5`/`146a8fe` vision + report), plus the failure alarm
+  (`e4cb714`). `OncaQaPipeline` (`infra/qa_pipeline.py`, container Lambda `onca-qa-runner`,
+  code in `qa_pipeline/`) runs nightly at 06:00 UTC and succeeded every night from 2026-10-19
+  to 2026-10-28. Differences from the text below:
+  - The fire-and-forget post-deploy `StartExecution` from `buildspec.yml` was never wired.
+    The pipeline runs on the nightly schedule only.
+  - The vision check was built on `amazon.nova-pro-v1:0` (the "Nova Pro" below). Hosted
+    Bedrock is Nova Lite only since 2026-10-25, so it moved to Nova Lite on 2026-10-28
+    (`qa_pipeline/lib/vision.py`, overridable with `ONCA_QA_VISION_MODEL_ID`), deployed and
+    verified by a manual run that made no Nova Pro call. In a trial on four nights of screenshots,
+    Lite passed both layout items on 3 of 4 nights where Pro failed them, and the screenshots did
+    show stacked markers and an edge-clipped marker. The check is advisory and never fails a run.
+  - Only the `/app` quadrant panel is captured. The `/exec` Mapa Competitivo and B3 quotes
+    panels time out on their locators every night (seen 10-23 to 10-28), so two of the three
+    curated panels go unchecked.
+  - The open questions at the end (one flow per tier, feeding ADR-014) were not taken up.
+
+  Prior status: **Proposed** — 2026-09-16. Owner-requested.
 - Builds on: the `OncaPipeline` Step Functions DAG pattern (`infra/app.py` — Parallel/Map
   tasks coordinating only through S3, empty payloads, one shared Lambda asset), the
   Cognito identity + per-tenant read boundary (ADR 002 Phase D), the industry-sector

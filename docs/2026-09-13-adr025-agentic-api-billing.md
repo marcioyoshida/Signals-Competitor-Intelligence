@@ -1,6 +1,18 @@
 # ADR 025 — Agentic API billing (pilot fork: Onça)
 
-- Status: **Proposed** — 2026-09-13.
+- Status: **Onça pilot built and live (2026-09-14, 6898b4d); billing half not built
+  (review 2026-10-28).** Was: **Proposed** (2026-09-13).
+  - **Live:**
+    - The `onca-api-keys` and `onca-api-usage` tables.
+    - `POST /api/v1/agent/ask`.
+    - The self-service `/api/keys` panel.
+  - **Engineering left, mostly in the Storefront repo:**
+    - Stripe metered line items and the usage-reporting job. The canonical Storefront
+      ADR is still Proposed, and the shared-table vs. poll-endpoint sub-decision is open.
+    - Here: no included-quota check, and no "Entry gets no API access" gate, was found in
+      `agent_api.py` / `api_keys_api.py`. Any tenant with licensed modules can mint a key.
+    - The other forks have not been replicated.
+  - **Owner:** no paying customer exists to meter (2026-10-25).
 - Canonical design (shared across all six Signals forks) lives in the
   Storefront repo:
   [`docs/adr-agentic-api-billing.md`](../../storefront/docs/adr-agentic-api-billing.md).

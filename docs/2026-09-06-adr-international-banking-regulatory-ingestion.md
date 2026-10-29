@@ -1,6 +1,12 @@
 # ADR 023 — International Banking-Regulatory Ingestion (Basel / BCBS / BIS)
 
-Status: **PROPOSED** 2026-09-06. **Pilot-validated** (feasibility probed live; a working
+Status: **PROPOSED; not built (re-checked 2026-10-28).** None of Phases 1–5 exists:
+there is no `src/ingest/bis_bcbs.py`, no `intl_reg/` store, and no BCBS/BIS source in
+`src/`. There is no ticket for it either. The only artifact is the pilot script. What remains
+is the **owner's go/no-go** on accepting the ADR, then **engineering** for Phase 1 (shadow
+ingester), which needs no new credential or licence. If the optional "LLM relevance pass" is
+built, it must use Nova Lite (hosted-Bedrock policy 2026-10-25). Was: **PROPOSED** 2026-09-06.
+**Pilot-validated** (feasibility probed live; a working
 ingester runs — see [`scripts/pilot_bis_bcbs.py`](../scripts/pilot_bis_bcbs.py)).
 
 Relates to / extends: the **regulatory-change-intelligence** line

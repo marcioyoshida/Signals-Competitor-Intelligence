@@ -1,6 +1,12 @@
 # ADR 011 — Entity discovery, enrichment & profile composition (a separate curated pipeline)
 
-- Status: **Implemented — issue #14 closed 2026-09-26.** Design 2026-08-25; first vertical
+- Status: **Concluded (2026-10-28)** — checked again. Issues #14, #7, #22 and #102–#107 are all
+  closed. The five flags below are still `true` in `infra/app.py` and on the live ingest Lambda,
+  and so are `ONCA_ENTITIES_AUTOCREATE_REGULATED` and `ONCA_PROMOTE_REGULATED`. The stages are in
+  code: `receita_bigquery.py` (#104), `5cffd9b` probe (#106), `cvm_financials.py` (#7). The only
+  item left is the deferral already recorded below: PREVIC/CVM-cadastro entrants stay
+  signal-only until prominence data exists. That is future work, not a gap in this ADR.
+  Previous status: **Implemented — issue #14 closed 2026-09-26.** Design 2026-08-25; first vertical
   (FIAGRO) 2026-08-28. Every pipeline stage shipped via sub-tickets #102–#107 and is live, with
   these flags ON in the ingest Lambda: `ONCA_ENTITY_DISCOVERY`, `ONCA_ENTITY_DISCOVERY_AUTOCREATE`,
   `ONCA_NER_HARVEST`, `ONCA_INGEST_SUSEP`, `ONCA_INGEST_PREVIC`.
@@ -205,4 +211,6 @@ Remaining implementation order: (1) ~~general unresolved-mention harvest~~ **DON
 (2) ~~FII sibling of `cvm_fiagro`~~ **DONE (#102)**; (3) CNPJ/Receita profile composition for
 news-only candidates (#104); (4) ingestion follow-up probe ("added but not surfacing", #106);
 (5) CVM DFP/ITR → KB (#7); (6) ~~discovery/curation dashboard tab~~ **DONE** (Descoberta rail).
+**2026-10-28:** (3) #104, (4) #106 and (5) #7 are also done and closed (see the status header).
+Nothing in this order remains.
 Related: `docs/2026-08-16-roadmap.md`, [ADR 010](2026-08-25-adr-agent-chat-ui.md).

@@ -1,6 +1,14 @@
 # ADR 017 — Conglomerate multi-tier disambiguation (sub-entities + card-level industry + tier-1 opt-in)
 
-Status: ACCEPTED 2026-08-30. Relates to ADR 016 (distribution tiers), ADR 013
+Status: **Concluded (2026-10-28)** — all three phases shipped 2026-08-30. Phase 1
+`b707df0` (registry `parent` + `set_parent`/`children_of`, card-level `industries`);
+Phase 2 `58303ed` (consórcio source + sub-entity discovery) + `12a5e3d` (news →
+sub-entity attribution, #47 closed), later hardened by `d5c10f1` (auto-link FIAGRO
+funds) and `75e5130` (orphan sub-entity links + `set_parent` cycle guard); Phase 3
+`b1fa441` ("show group" toggle, in `site/index.html` + `v2/app.js`), with
+`scope_feed_to_modules` folding a licensed parent's children server-side. Nothing left;
+residual attribution misses are curation, not ADR work. Was: ACCEPTED 2026-08-30.
+Relates to ADR 016 (distribution tiers), ADR 013
 (entity classification attrs), ADR 011 (entity discovery), ADR 005/entities registry.
 
 ## Problem
@@ -71,10 +79,10 @@ build, ADR 016).
   - Durable cleanup of the runtime FIAGRO-enrich pollution on `btg`/`bb` (the code-level
     brand-match fix `37fb048` already stops recurrence; the fixture already has the
     conglomerates as tier-1 only).
-- **Phase 2:** create the first conglomerate sub-entities (Itaú/Bradesco/BB consórcio +
+- **Phase 2 (DONE 2026-08-30, `58303ed` + `12a5e3d`):** create the first conglomerate sub-entities (Itaú/Bradesco/BB consórcio +
   fund lines) with `parent` links; route their structured filings to them; verify the
   lower views show the sub-entity, not the parent.
-- **Phase 3:** the tier-1 opt-in toggle in the SaaS dashboard + a `children_of` rollup;
+- **Phase 3 (DONE 2026-08-30, `b1fa441`):** the tier-1 opt-in toggle in the SaaS dashboard + a `children_of` rollup;
   entitlement passes through unchanged (group is under the parent's tier).
 
 ## Consequences

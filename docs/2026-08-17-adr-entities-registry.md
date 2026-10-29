@@ -1,6 +1,20 @@
 # ADR 001 — Entities registry, per-tenant watchlists, and auto-mapping
 
-- Status: **Accepted** — rollout steps 1–5 shipped (2026-08-18); 6–7 pending.
+- Status: **Accepted — steps 1–5 and 7 shipped; step 6 partly (audit 2026-10-28)**
+  (was: Accepted, steps 1–5 shipped 2026-08-18, 6–7 pending).
+  - **Step 7 (accounts) SHIPPED** via ADR 002 Phase C: Cognito user pool + JWT
+    authorizer + dashboard PKCE login (`8cec0b8`, `84a8381`, `7c0a3cd`). Curation of the
+    review queue moved off shared basic-auth into `/v2/admin` (`/api/review`, `/api/act`
+    `flag_entity`/`revert_entity`, ADR 018).
+  - **Step 6 PARTLY SHIPPED:** `onca-tenant-config` exists (`b602958`,
+    `src/dashboard/tenant_config.py`) but holds *entitlement* (`tier`, `modules[]`,
+    billing), and read-layer personalization is module/industry scoping
+    (`feed_builder.scope_feed_to_modules`). The per-tenant `watchlist` /
+    `score_weights` / `alert_prefs` of §3 are **not built** (no code reads them), and
+    there is no tenant-facing "manage my competitors" UI.
+  - **Left:** engineering work, but demand-gated: whether a per-tenant watchlist
+    boost/filter/alerts is still wanted on top of module entitlement is an
+    **owner/product decision** (no paying tenant has asked yet).
   Commercial/multi-tenant/IP-protection concerns for steps 6–7 are recorded in
   [ADR 002](2026-08-18-adr-commercial-multitenancy.md).
 - Supersedes the hardcoded `config/watchlist.yaml` entity lists and the static
@@ -152,7 +166,11 @@ parts):
    Chose reused basic-auth over Cognito to keep step 5 self-contained; full
    accounts/identity remains step 7.
 6. `onca-tenant-config` + read-layer personalization (scoring/filter/alerts).
-7. Manage-entities UI (with the Cognito accounts layer).
+   **Partly shipped 2026-08-30** (`b602958`): table + module scoping live; per-tenant
+   watchlist/score weights/alert prefs not built (see Status).
+7. Manage-entities UI (with the Cognito accounts layer). **Accounts shipped
+   2026-08-30** (`8cec0b8`); operator curation lives in `/v2/admin`; no tenant-facing
+   entity-management UI.
 
 Steps 1–4 are the high-value core (kills the "redeploy to change competitors"
 pain and makes the radar self-expanding); 5–7 come with the multi-tenant/account

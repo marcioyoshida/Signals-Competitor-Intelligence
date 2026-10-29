@@ -1,6 +1,13 @@
 # ADR 006 — Addendum: framework evidence-independence (own-track evidence, TOWS exempt)
 
-- Status: **Partially SHIPPED** (2026-08-25, `<pending>`). Decisions 1–3 built &
+- Status: **Concluded (2026-10-28)** — all five decisions shipped. Decisions 1–3
+  `0f2177e` (2026-08-25, own-track evidence, SWOT block removed from the six non-TOWS
+  prompts); decisions 4–5 `649913f` (2026-08-26) as an axis-OR-lens gate
+  (`framework_common.on_signal_ids` + per-feeder `DIM_SIGNALS`, kill-switch
+  `ONCA_FRAMEWORK_SIGNAL_GATE`), not the strict axis-only whitelist. Issue #32 closed
+  2026-08-26. Open question 2 (a per-framework `min_evidence` floor) was never acted
+  on and is optional tuning. Prior status kept as history:
+- Was: **Partially SHIPPED** (2026-08-25, `0f2177e`). Decisions 1–3 built &
   deployed; decisions 4–5 (the strict per-axis whitelist) **deferred** — see the
   *Implementation reality* section: live narratives are ~83% `axis: None`, so a
   strict axis whitelist would drop the bulk of framework evidence and collapse

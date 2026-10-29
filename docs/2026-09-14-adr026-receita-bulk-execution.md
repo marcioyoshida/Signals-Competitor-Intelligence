@@ -1,6 +1,16 @@
 # ADR 026 — Execution environment for the Receita CNPJ bulk fetch (#104 unblock)
 
-Status: PROPOSED 2026-09-14. Not yet built — recorded so the decision doesn't get
+Status: **SUPERSEDED (2026-09-23); concluded without building the Glue job (re-checked
+2026-10-28).** The Glue Python Shell job was never built. #104 was unblocked another way.
+First, `src/ingest/receita_bigquery.py` queried the public basedosdados BigQuery mirror over
+the AWS↔GCP workload-identity bridge (`infra/gdelt_bridge.py`, `OncaReceitaBigqueryFn`,
+`304aaa1`). That gave a monthly schedule on day 5 with a snapshot-change gate (`785c227`).
+Since 2026-10-19 the same function reads Anteater's shared monthly S3 extract (#227,
+`fa01711`; live env checked 2026-10-28). #124 (Glue) was closed as superseded. #123
+(razão-social join) was closed because the BigQuery SQL LEFT JOINs `empresas` (first run
+`no_name=0`). The Lambda live-shard path is retired (`ONCA_INGEST_RECEITA_BULK=false`).
+`receita_bulk.py` is kept as a fallback. **Nothing left**, unless the shared extract or
+BigQuery access is lost; reopen this ADR only then. Was: PROPOSED 2026-09-14. Not yet built — recorded so the decision doesn't get
 re-litigated from scratch, and so the two follow-on tickets have a shared rationale to
 point at.
 Relates to ADR 011 (entity discovery/enrichment — this is Stage 2 of that pipeline),

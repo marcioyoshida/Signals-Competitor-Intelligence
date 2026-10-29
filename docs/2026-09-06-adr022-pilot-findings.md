@@ -1,6 +1,10 @@
 # ADR 022 — Pilot findings: balancete/resultados soundness flow + local FinBERT-PT-BR
 
 Date: 2026-09-06. Companion to [ADR 022](2026-09-06-adr-financial-soundness-prudential-ingestion.md).
+**Concluded (2026-10-28):** the pilot's job is done. Its flow is now production code
+(`bcb_soundness` / `bcb_balancete` / `financial_tone` on `OncaFinancialsPipeline`, with tone
+from the `onca-finbert-ptbr` SageMaker endpoint instead of a local run). See the ADR 022
+Status header for what remains.
 Reproducible via [`scripts/pilot_soundness_finbert.py`](../scripts/pilot_soundness_finbert.py).
 
 ## Goal

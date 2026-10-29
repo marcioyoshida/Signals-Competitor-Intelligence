@@ -1,6 +1,8 @@
 # ADR 013 — Queryable entity-classification attributes (ownership nature, compliance) + distress confidence tiers
 
-- Status: **Accepted & implemented (v1)** — 2026-08-25. Owner-requested.
+- Status: **Concluded (2026-10-28)**. Everything decided (§1–§4) is built and deployed. The
+  open items in *Status / next steps* are optional extensions, partly shipped; see the
+  2026-10-28 audit there. Was: **Accepted & implemented (v1)** — 2026-08-25. Owner-requested.
 - Extends [ADR 012](2026-08-25-adr-distress-rj-store.md) (distress store) with the
   **trusted-seed + double-validation** model, and generalizes the pattern to other
   **per-entity attributes that were queryable-in-principle but not scoped**: a
@@ -86,3 +88,16 @@ Implemented v1; deployed. Next: (1) a dashboard classification facet/filter (own
 certified); (2) an evidence-backed certifications detector (news/fatos "certificada ISO");
 (3) fill `SEED_DISTRESS`/`CERTIFICATIONS` from vetted sources; (4) the other attribute
 candidates above as demand appears.
+
+**2026-10-28 audit:**
+- (1) **Partly built.** Ownership is shown in the v2 entity drawer (`v2/context.js`,
+  "Controle"). `ownership` and `certifications` are labelled fields in v3. There is no
+  dashboard *filter* facet on them yet. That is engineering work.
+- (2) **Partly built, by a different route.** #74/R2 (`e53e22c`, `bcb_autorizacoes.
+  apply_verified_certifications`) fills `certifications` from the BCB in-operation register.
+  That is evidence-backed, and it also covers the "regulator/licence class" candidate. The
+  news/fatos "certificada ISO" detector is **not built**. That is engineering work.
+- (3) `SEED_DISTRESS` and `CERTIFICATIONS` are still empty (0 entries), by design. They are
+  filled from evidence and never guessed. Any vetted analyst entries are an **owner/curation**
+  task, not engineering.
+- (4) Still open-ended and demand-driven. No ticket.

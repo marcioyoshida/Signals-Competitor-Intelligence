@@ -1,6 +1,12 @@
 # ADR 008 — X/Twitter ingestion: a scored, noise-filtered social subpipeline with vision OCR
 
-- Status: **Planned (design only)** — issue #19. This ADR specifies the subpipeline;
+- Status: **Planned, BLOCKED on an owner spend decision (audit 2026-10-28)** — nothing
+  built: no X ingester, no `onca-social-sources` table; `source_coverage.py` lists
+  `x_twitter` as `planned`. The 2026-09-18 access probe on #19 (open, labels
+  `blocked`/`source-needed`) found scraping robots-barred (`x.com` `Disallow: /`), so
+  the only route is the **paid X API tier** (or a paid third-party feed). Once the
+  owner funds access, the five steps below are engineering work.
+- Was: **Planned (design only)** — issue #19. This ADR specifies the subpipeline;
   no code ships with it. Of the same issue batch, #25 DataJud and #24 CoAF (via the
   DOU organ filter) shipped; #26 JUCESP is **backlogged** (the PRODESP JUCESP API
   is contract-gated — a *Fluxo de Contratação* + issued credentials, not openly
@@ -132,7 +138,8 @@ in `trust`.
 
 ## Status / next steps
 
-Planned. Implementation order when picked up: (1) `onca-social-sources` table +
+Planned; **blocked on the owner funding X API access** (2026-10-28: no code shipped;
+scraping is robots-barred). Implementation order when picked up: (1) `onca-social-sources` table +
 `get/put_source` + seed; (2) account-scoped ingester with `posted_at` diff; (3)
 the three-gate filter reusing existing resolvers; (4) Bedrock vision OCR with the
 strict prompt + `is_ocr` labelling; (5) the `x` lens + review-queue curation.

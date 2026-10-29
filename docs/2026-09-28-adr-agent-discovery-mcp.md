@@ -1,5 +1,16 @@
 # ADR — Agent discovery for Onça: discovery files, OAuth-protected MCP, A2A, and where we list
 
+- **Review 2026-10-28: engineering concluded.** #180, #181, #182 and #186 are closed. MCP
+  follow-ups landed 2026-10-04 (bd020c5, 9365c76). The MCP Registry has
+  `io.github.marcioyoshida/onca` v1.0.0. Everything left is an owner action or external,
+  with no new submissions since the 2026-10-03 pre-flight:
+  - #183: the Claude directory, Smithery, Postman and the Glama claim, all under the
+    owner's logins. APIs.guru #3464 is unanswered.
+  - #184: an M365 test tenant.
+  - #185: AWS Marketplace, which needs the legal entity and also a deployable Sovereign
+    product (#49).
+  - Google Cloud Marketplace for #186 needs a partner account.
+  - The one untested client is a real `claude mcp add` run by the owner.
 - **Status:** Implemented and live 2026-09-28 for the build scope (#180, #181, #182, #186 endpoint). Listing submissions (#183), the Copilot Studio install (#184), AWS Marketplace (#185) and the Gemini Enterprise listing (#186) wait on owner actions, recorded in §6.
 - **Epic:** #179. **Fleet pattern:** Tarantula #99 (Cyber-Monitor-Intelligence `docs/2026-09-27-adr-mcp-oauth-authorization.md` and its threat model T1–T21). This ADR records only where Onça differs.
 - **Live verification:** `scripts/oauth_mcp_e2e.py` passed **29/29** against onssa.org with two real tenants (QA personas `admin` and `entry`).

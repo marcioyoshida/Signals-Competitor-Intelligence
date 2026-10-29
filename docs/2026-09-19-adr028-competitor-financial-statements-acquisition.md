@@ -1,6 +1,17 @@
 # ADR 028 — Balance sheets and results: which acquisition route actually works
 
-- Status: **Proposed** — 2026-09-19. Owner-requested: *"check how Balance Sheets and
+- Status: **Concluded (2026-10-28)**. All four decisions were carried out.
+  (1) The CVM DFP + ITR path is fixed and on the monthly pipeline (#145,
+  `OncaCvmStatements` / `CvmStatementsTask`).
+  (2) COSIF 4010 groups 7/8 are mined for custo de crédito (#146, `ba38cbc`), with
+  cost-to-income from the CVM DRE (#92, `9ee29db`). Name resolution was fixed (#149/#151).
+  (3) The MZiQ spike ran (#147) and its kill criterion fired: 6 confirmed issuers against a
+  threshold of 20. The general adapter (#148) was **not built**. A curated 5-issuer workbook
+  adapter shipped in its place (#152, `mziq_workbooks.py`, `IssuerKpisTask`), which corrects
+  the "directory is 401" claim below.
+  (4) GDELT and Google Search stay rejected.
+  The live `OncaFinancialsPipeline` carries both tasks; last run SUCCEEDED 2026-10-06.
+  Nothing is left. Was: **Proposed** — 2026-09-19. Owner-requested: *"check how Balance Sheets and
   Results could be fetched by GDELT, Google Search or their site."*
 - Complements **ADR 022** (financial-soundness / prudential ingestion — the *health*
   question) and **#7 / ADR 011 stage 6** (`cvm_financials.py` — the *statements*

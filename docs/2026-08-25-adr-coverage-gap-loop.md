@@ -1,6 +1,12 @@
 # ADR 014 — Coverage-gap loop: self-improving data coverage from unanswered questions
 
-- Status: **Accepted & implemented (v1)** — 2026-08-25. Owner-requested.
+- Status: **Implemented (v1), next steps not started (re-checked 2026-10-28).** All six stages
+  exist in code, and the capture and the "Pontos Cegos" Remediar path are live (`OncaGapsApi`
+  Lambda is deployed). None of the three next steps has shipped. `run_pipeline` has no
+  EventBridge rule or pipeline step, so the loop only runs on demand. `safe_autofix` is still
+  ownership, tickers and curation backfills only. There is no `ingestion_gap` detector. All
+  three are **engineering** work with no owner gate. Was: **Accepted & implemented (v1)** —
+  2026-08-25. Owner-requested.
 - When the agent ([ADR 010](2026-08-25-adr-agent-chat-ui.md)) can't answer an *in-domain*
   question, treat it as a data-coverage signal and drive it through:
   **issue creation → assert if current data is enough → decide remediation → implement
@@ -80,3 +86,9 @@ surface, **"Pontos Cegos" dashboard tab + Remediar button (deployed)**. Next: (1
 `run_pipeline` (EventBridge) or run it as a pipeline step; (2) widen the safe-autofix set
 (news_term fixes, enable-known-source); (3) an evidence-backed detector path for
 `ingestion_gap` classes (still issue-gated for the code itself).
+
+**2026-10-28:** none of (1)–(3) has shipped. There is no schedule for `coverage.run_pipeline`
+in `infra/app.py` or in the live EventBridge rules. `safe_autofix()` still only runs
+`backfill_ownership` / `backfill_tickers` / `backfill_curation`. The capture surface is unchanged and live.
+Separately, `coverage_alarm.py` (#178, incident #173) is a different alarm. It fires when an
+industry's news volume spikes with no matching sector event. It is not step (1).

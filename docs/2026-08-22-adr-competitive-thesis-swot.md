@@ -1,6 +1,12 @@
 # ADR 004 — Competitive thesis: a per-entity SWOT belief store that narratives reinforce or contradict
 
-Status: **Accepted (2026-08-22)** — step 1 (Comparative axis) SHIPPED 2026-08-23;
+Status: **Concluded (2026-10-28)** — all four steps + Phase C vetting + belief
+maintenance shipped and still wired in `infra/app.py` (`OncaComparative`, `OncaSwot`,
+`OncaSwotReconcile`, `OncaSwotSeed`, `OncaSwotMaintenance`); commits `1db55c7`, `b04dc55`,
+`25d88f1`, `f494fb2`, `eaa8ce4`, `5df8b7d`. Generalized to 8 frameworks by ADR 006. Not
+built, and never a decided step: the per-tenant "threat-to-our-client" projection (open
+question #1, deferred to the entitlement layer). Prior status kept below as history.
+Was: **Accepted (2026-08-22)** — step 1 (Comparative axis) SHIPPED 2026-08-23;
 **step 2 (SWOT belief store v1, deterministic feeders) SHIPPED 2026-08-23**;
 **step 3 (reconcile-against-belief — LLM stance + embeddings) SHIPPED & VERIFIED
 LIVE 2026-08-23 (`25d88f1`)**; **step 4 (cold-start seeding — LLM-drafted,
