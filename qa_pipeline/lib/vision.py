@@ -1,14 +1,19 @@
 """ADR 027 #132 — Bedrock-vision checklist prompts + a strict-JSON verdict parser, shared by
-checks/vision.py. Model: amazon.nova-pro-v1:0 (same family already in production for
-framework synthesis — src/synth/bedrock_llm.py's FRAMEWORK_MODEL — no new model-access
-request needed; Nova Pro is multimodal, Nova Micro/Lite's cheaper tiers are not)."""
+checks/vision.py. Model: Nova Lite (multimodal; Micro is the text-only tier).
+
+Owner, 2026-10-25: every hosted call runs on Nova Lite until there are paying customers. This
+check ran on Nova Pro until 2026-10-28. A read-only trial on four nights of quadrant screenshots
+(10-25..10-28): Lite passed both layout items on 3 of 4 nights where Pro failed them, and the
+screenshots did show stacked markers and a marker clipped at the plot edge. Lite misses real
+layout defects more often; the check is advisory and never fails a run."""
 from __future__ import annotations
 
 import json
+import os
 import re
 from typing import Any
 
-VISION_MODEL = "amazon.nova-pro-v1:0"
+VISION_MODEL = os.environ.get("ONCA_QA_VISION_MODEL_ID", "amazon.nova-lite-v1:0")
 
 # One small checklist per curated panel type (ADR 027: "curated panel list only... not every
 # screenshot in the full browser/viewport matrix" — cost containment). Deliberately about

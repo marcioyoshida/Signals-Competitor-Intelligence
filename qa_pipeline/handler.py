@@ -16,7 +16,7 @@ Dispatches on `event["mode"]`:
     See qa_pipeline/checks/routing.py.
   - "resilience" — #131: broken-link scan (hard gate) + network interception (offline/slow/
     aborted API calls). See qa_pipeline/checks/resilience.py.
-  - "vision" — #132: Bedrock (Nova Pro) image-inference visual QA on a curated set of
+  - "vision" — #132: Bedrock (Nova Lite) image-inference visual QA on a curated set of
     chart panels. Advisory only — never fails. See qa_pipeline/checks/vision.py.
   - "phone" — #163: phone viewports (390/412, light/dark) over every /exec officer tab,
     /v2/admin and /entry — HARD gate on horizontal overflow + 44px tap targets.

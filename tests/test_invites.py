@@ -212,6 +212,7 @@ def test_register_redeems_an_invite(monkeypatch):
     fed = Fed()
     code = _issue(fed)["code"]
     monkeypatch.setattr(tenant_config, "_federated_table", lambda table=None: fed)
+    monkeypatch.setattr(invites, "_now", lambda: NOW)                  # the code expires 7 days after NOW
     r = self_register.lambda_handler(_reg_event({"invite": code}), None)
     assert r["statusCode"] == 200 and json.loads(r["body"]) == {"linked": True, "tier": "saas"}
     assert any(k.startswith("rl#ip#198.51.100.7#") for k in fed.items)
@@ -223,6 +224,7 @@ def test_register_redeems_an_invite(monkeypatch):
 def test_register_errors_never_say_whether_a_code_exists(monkeypatch):
     fed = Fed()
     monkeypatch.setattr(tenant_config, "_federated_table", lambda table=None: fed)
+    monkeypatch.setattr(invites, "_now", lambda: NOW)                  # "used", not "expired", below
     r = self_register.lambda_handler(_reg_event({"invite": "ZZZZZ-ZZZZZ-ZZZZZ-ZZZZZ"}), None)
     used = _issue(fed)["code"]
     invites.redeem(used, sub="someone", email=None, ip=None, table=fed)

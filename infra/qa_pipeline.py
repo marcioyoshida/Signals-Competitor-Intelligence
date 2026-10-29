@@ -123,7 +123,7 @@ class OncaQaPipelineStack(Stack):
                 f"arn:aws:ssm:{self.region}:{self.account}:parameter/onca/dashboard/operator-secret",
             ],
         ))
-        # #132: Bedrock (Nova Pro) vision calls — same action pair + resource-scoping
+        # #132: Bedrock (Nova Lite) vision calls — same action pair + resource-scoping
         # pattern already used elsewhere in this account (infra/app.py), not a new pattern.
         fn_role.add_to_policy(iam.PolicyStatement(
             actions=["bedrock:InvokeModel", "bedrock:Converse"],
@@ -260,7 +260,7 @@ class OncaQaPipelineStack(Stack):
         )
         resilience_task.add_catch(sfn.Pass(self, "QaResilienceFailed"), result_path="$.error")
 
-        # #132: Bedrock (Nova Pro) visual QA — advisory, checks/vision.py never raises on
+        # #132: Bedrock (Nova Lite) visual QA — advisory, checks/vision.py never raises on
         # its own, but this catch is cheap insurance against a truly unexpected crash (e.g.
         # an import error) still letting the report run.
         vision_task = sfn_tasks.LambdaInvoke(

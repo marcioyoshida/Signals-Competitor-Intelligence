@@ -243,9 +243,11 @@ isn't covered — same documented Google-self-registration automation gap as #12
 `checks/vision.py` adds a fifth parallel branch (`QaVisionTask`, advisory — never fails the
 run). `qa_pipeline/lib/vision.py` holds the checklist prompts + a strict-JSON verdict parser;
 `src/synth/bedrock_llm.py`'s `converse()` gained an `images: list[bytes]` param (ADR 027's
-first caller) rather than a second Bedrock client. Model: `amazon.nova-pro-v1:0` — the same
-family already in production for framework synthesis, multimodal (Nova Micro/Lite are not),
-no new model-access request.
+first caller) rather than a second Bedrock client. Model: `amazon.nova-lite-v1:0` (multimodal;
+Micro is the text-only tier), overridable with `ONCA_QA_VISION_MODEL_ID`. It ran on Nova Pro
+until 2026-10-28; the owner's 10-25 rule puts every hosted call on Lite. In a trial on four
+nights of screenshots, Lite missed stacked markers and an edge-clipped marker that Pro caught
+on 3 of 4 nights, so expect fewer findings, not a cleaner chart.
 
 `checks/report.py` (a sixth, final state — not a parallel branch) consolidates every
 branch's raw output into one static HTML page: a pass/fail table per hard-gate check plus

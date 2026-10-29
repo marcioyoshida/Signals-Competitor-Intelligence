@@ -3,7 +3,7 @@
 Captures a curated set of chart-bearing panels — NOT every screenshot in the full browser/
 viewport matrix (cost containment, per ADR 027's "Bedrock image-inference visual QA"):
 Mapa Competitivo and the B3 quotes panel on `/exec`, the threat×expansion quadrant on `/app`.
-Each is evaluated by `amazon.nova-pro-v1:0` against a small visual-defect checklist
+Each is evaluated by Nova Lite (`lib/vision.py`'s VISION_MODEL) against a small visual-defect checklist
 (`qa_pipeline/lib/vision.py`) and the verdict is uploaded to S3 for the report (#133).
 
 This module NEVER raises — not on a failed/low-confidence verdict, not on a capture failure,
