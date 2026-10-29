@@ -14,9 +14,13 @@
     verified by a manual run that made no Nova Pro call. In a trial on four nights of screenshots,
     Lite passed both layout items on 3 of 4 nights where Pro failed them, and the screenshots did
     show stacked markers and an edge-clipped marker. The check is advisory and never fails a run.
-  - Only the `/app` quadrant panel is captured. The `/exec` Mapa Competitivo and B3 quotes
-    panels time out on their locators every night (seen 10-23 to 10-28), so two of the three
-    curated panels go unchecked.
+  - Until 2026-10-28 only the `/app` quadrant panel was captured. The `/exec` Mapa Competitivo
+    and B3 quotes panels timed out on their locators every night (seen 10-23 to 10-28). The
+    cause was the persona, not the markup: the vision branch logged in as `entry`, and an
+    Entry-tier `/exec` is the Entry board with no officer suite, so the CSO bands never
+    rendered. `379361f` moved it onto `config.officer_suite_persona()` (sovereign `admin`), as
+    `23446a6` had done for smoke/routing/resilience. Manual run
+    `vision-persona-fix-20261029T022746Z` captured all three panels.
   - The open questions at the end (one flow per tier, feeding ADR-014) were not taken up.
 
   Prior status: **Proposed** — 2026-09-16. Owner-requested.
