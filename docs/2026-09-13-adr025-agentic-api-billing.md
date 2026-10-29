@@ -1,7 +1,7 @@
 # ADR 025 — Agentic API billing (pilot fork: Onça)
 
 - Status: **Onça pilot built and live (2026-09-14, 6898b4d); Entry gate live
-  (2026-10-28, 64634a3); quota and billing half not built.** Was: **Proposed** (2026-09-13).
+  (2026-10-28, bb0f775); quota and billing half not built.** Was: **Proposed** (2026-09-13).
   - **Live:**
     - The `onca-api-keys` and `onca-api-usage` tables.
     - `POST /api/v1/agent/ask`.
