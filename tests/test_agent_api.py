@@ -92,3 +92,55 @@ def test_happy_path_records_usage_and_touches_key(monkeypatch):
     assert body["usage"] == {"input_tokens": 12, "output_tokens": 34, "total_tokens": 46}
     assert recorded == {"tenant": "acme", "tokens": 46}
     assert touched == {"hash": "hash123"}
+
+
+# ADR 025: Entry-tier keys are refused on every call, even if the key already exists
+# (minted before a downgrade, or the SaaS subscription lapsed).
+
+def test_entry_tier_key_is_403_even_with_licensed_modules(monkeypatch):
+    monkeypatch.setenv("ONCA_SITE_BUCKET", "bucket")
+    monkeypatch.setattr(api_keys, "lookup_key",
+                        lambda raw, table=None: {"tenant_id": "acme", "scopes": ["ask"], "key_hash": "h"})
+    monkeypatch.setattr(tenant_config, "get_tenant_config",
+                        lambda t: {"tier": "entry", "modules": ["crypto"]})
+
+    def no_answer(*a, **k):
+        raise AssertionError("an Entry-tier key must never reach the agent")
+
+    monkeypatch.setattr(aapi, "answer", no_answer)
+    monkeypatch.setattr(api_usage, "record_usage",
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError("no metering on a refusal")))
+    resp = aapi.lambda_handler(_event("Bearer sk_onca_x", {"q": "hi"}), None)
+    assert resp["statusCode"] == 403
+    assert "Entry plan" in json.loads(resp["body"])["error"]
+
+
+def test_lapsed_billing_managed_tenant_falls_back_to_entry_and_is_refused(monkeypatch):
+    """The real entitlement derivation: a billing-managed Entry tenant whose SaaS
+    subscription lapsed reads as tier=entry, so its old key stops working."""
+    item = {"tenant_id": "acme", "tier": "entry", "billing_managed": True,
+            "modules": ["crypto"], "subs": {"banking": {"tier": "saas", "status": "canceled"}}}
+
+    class _T:
+        def get_item(self, Key):
+            return {"Item": item}
+
+    real = tenant_config.get_tenant_config
+    monkeypatch.setattr(tenant_config, "get_tenant_config", lambda t: real(t, table=_T()))
+    monkeypatch.setattr(api_keys, "lookup_key",
+                        lambda raw, table=None: {"tenant_id": "acme", "scopes": ["ask"], "key_hash": "h"})
+    resp = aapi.lambda_handler(_event("Bearer sk_onca_x", {"q": "hi"}), None)
+    assert resp["statusCode"] == 403
+
+    item["subs"]["banking"]["status"] = "active"  # resubscribed -> SaaS again -> allowed past the gate
+    resp = aapi.lambda_handler(_event("Bearer sk_onca_x", {}), None)
+    assert resp["statusCode"] == 400  # reached body validation, i.e. not refused
+
+
+def test_sovereign_tier_is_not_refused(monkeypatch):
+    monkeypatch.setattr(api_keys, "lookup_key",
+                        lambda raw, table=None: {"tenant_id": "acme", "scopes": ["ask"], "key_hash": "h"})
+    monkeypatch.setattr(tenant_config, "get_tenant_config",
+                        lambda t: {"tier": "sovereign", "modules": ["banking"]})
+    resp = aapi.lambda_handler(_event("Bearer sk_onca_x", {}), None)
+    assert resp["statusCode"] == 400

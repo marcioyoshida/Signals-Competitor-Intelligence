@@ -2255,12 +2255,14 @@ class OncaPrototypeStack(Stack):
             memory_size=256,
             environment={
                 "PYTHONPATH": "/var/task",
+                "ONCA_TENANT_CONFIG_TABLE": tenant_config_table.table_name,
                 "ONCA_API_KEYS_TABLE": api_keys_table.table_name,
                 "ONCA_API_USAGE_TABLE": api_usage_table.table_name,
             },
         )
         api_keys_table.grant_read_write_data(api_keys_admin_fn)  # list/create/revoke
         api_usage_table.grant_read_data(api_keys_admin_fn)  # usage-this-cycle display
+        tenant_config_table.grant_read_data(api_keys_admin_fn)  # ADR 025: no keys for Entry tier
         # Coverage-gap API (ADR-014): the "Pontos Cegos" dashboard surface + the
         # Remediar button (single-gap remediation: triage → safe backfill → re-ask
         # the agent → resolve). Needs the union of the agent's + registry's access

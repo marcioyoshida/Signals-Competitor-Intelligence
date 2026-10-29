@@ -21,6 +21,27 @@ from typing import Any
 
 VALID_SCOPES = ("ask",)
 
+NO_ENTITLEMENT = "tenant has no active API-eligible entitlement"
+ENTRY_NO_API = ("the Agentic API is not included in the Entry plan — "
+                "it requires an active SaaS module subscription")
+
+
+def api_access_refusal(cfg: dict[str, Any] | None) -> str | None:
+    """Why a tenant may NOT use the Agentic API, or None if it may (ADR 025).
+
+    Entry-tier tenants get no API access: unbounded machine traffic is the cost
+    profile Entry's near-zero-marginal-cost plane can't absorb. Checked on every
+    call, not only at key creation, so a key minted before an Entry downgrade (or
+    a lapsed SaaS subscription) stops working with it. Fails closed: no config
+    row, or a row with no licensed modules, has nothing to ground on."""
+    if not cfg:
+        return NO_ENTITLEMENT
+    if str(cfg.get("tier") or "") == "entry":
+        return ENTRY_NO_API
+    if not cfg.get("modules"):
+        return NO_ENTITLEMENT
+    return None
+
 
 def _table(table: Any | None = None) -> Any:
     if table is not None:

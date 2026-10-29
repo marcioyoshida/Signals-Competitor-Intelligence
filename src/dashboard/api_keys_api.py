@@ -63,6 +63,12 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         return _resp(200, {"revoked": ok})
 
     if method == "POST":
+        # ADR 025: Entry tenants may list and revoke keys, but not mint one.
+        from src.dashboard.tenant_config import get_tenant_config
+
+        refusal = api_keys.api_access_refusal(get_tenant_config(tenant_id))
+        if refusal:
+            return _resp(403, {"error": refusal})
         body = _body(event)
         if body is None:
             return _resp(400, {"error": "invalid JSON body"})

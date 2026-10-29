@@ -47,11 +47,10 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     tenant_id = row["tenant_id"]
     cfg = get_tenant_config(tenant_id)
-    modules = list((cfg or {}).get("modules") or [])
-    if not modules:
-        # Fail closed: no entitlement row, or a row with no licensed modules,
-        # both mean "nothing this key is allowed to ground on".
-        return _resp(403, {"error": "tenant has no active API-eligible entitlement"})
+    refusal = api_keys.api_access_refusal(cfg)
+    if refusal:
+        return _resp(403, {"error": refusal})
+    modules = list(cfg["modules"])
 
     body = _body(event)
     if body is None:

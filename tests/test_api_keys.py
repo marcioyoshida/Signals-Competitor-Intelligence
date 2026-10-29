@@ -96,3 +96,12 @@ def test_touch_last_used_is_best_effort_on_missing_row():
     t = _FakeKeysTable()
     # Must not raise even though the hash doesn't exist.
     api_keys.touch_last_used("nonexistent-hash", table=t)
+
+
+def test_api_access_refusal_rules():
+    """ADR 025's API-access rule as one pure function, shared by key creation and every call."""
+    assert api_keys.api_access_refusal(None) == api_keys.NO_ENTITLEMENT
+    assert api_keys.api_access_refusal({"tier": "entry", "modules": ["crypto"]}) == api_keys.ENTRY_NO_API
+    assert api_keys.api_access_refusal({"tier": "saas", "modules": []}) == api_keys.NO_ENTITLEMENT
+    assert api_keys.api_access_refusal({"tier": "saas", "modules": ["banking"]}) is None
+    assert api_keys.api_access_refusal({"tier": "sovereign", "modules": ["banking"]}) is None
