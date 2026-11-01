@@ -1,17 +1,29 @@
 # ADR 009 — Regulatory Change Intelligence: document versioning, diff, and impact tagging
 
-- Status: **Code complete; two of five phases switched off in production (re-checked
-  2026-10-28).** Phase A (amending-act parser) and §5 (dashboard change panel) run on every
-  pipeline run. Phase B (`regdocs/` fetch), and with it the §2 diff, plus the §3 LLM change
-  record are gated by `ONCA_REGDOCS` / `ONCA_REG_LLM`. Both default `false`, neither has ever
-  been set in `infra/app.py`, and the live `OncaRegulatory` Lambda environment has neither
-  (checked 2026-10-28). `regdocs/index.json` was last written 2026-09-04. So the "live" runs
-  below were one-off runs with the flags set by hand. #208 changed `executive.py` so the CRO
-  panels no longer depend on change records being present.
-  **What's left:** `ONCA_REG_LLM` is an **owner decision** (Bedrock cost; the record already
-  uses Nova Lite, which matches the Nova-Lite-only policy). `ONCA_REGDOCS` is an
-  **engineering/ops** change: add the flag in CDK and confirm the in.gov.br fetch is
-  acceptable. It needs no LLM. Was: **FULLY REALIZED** (2026-09-03) — Phases A, B, §2, §3, §5
+- Status: **Phase B and §2 on in production since 2026-11-01 (#294); §3 (LLM) still off, by
+  owner decision.** Phase A (amending-act parser) and §5 (dashboard change panel) run on every
+  pipeline run.
+  - **Phase B / §2 (#294):** `ONCA_REGDOCS=true` and `ONCA_REGDOCS_BUDGET_S=120` are set on
+    `OncaRegulatory` in CDK.
+    - **Why the source changed:** the DOU page of an act never changes, so it never gave a
+      second version to diff. The 2026-09-04 index had 5 instruments, 1 version each, 0 diffs.
+    - **What it fetches now:** BCB/CMN norms (Res. CMN/BCB, IN BCB, Circular) come from BCB's
+      content API (`exibenormativo`). That is the **consolidated** text, with its
+      `VersaoNormativo` and `Atualizacoes`, the regulator's own list of amending acts and
+      articles. DOU stays the fallback for other regulators. Diffs are computed only between
+      versions from the same source.
+    - **What users see:** the sync runs before the cards. Radar and lifecycle cards carry
+      `consolidated`: the version, the 3 latest amendments, and a section diff if one was found
+      in the last 30 days. They also get a narrative sentence, and the "Mudança regulatória"
+      fold renders the block.
+    - **First live run (2026-11-01):** 58 targets, 57 stored, 0 errors, 140 s in total. 4 feed
+      cards show it, e.g. Res. CMN 4.995 v21.0 (amended by 5.342) and Res. BCB 588 (revoked by
+      591). Diffs appear from the next amendment of a tracked norm on.
+  - **§3 LLM change record:** gated by `ONCA_REG_LLM`, which is still unset. It is an **owner
+    decision** (Bedrock cost; the record uses Nova Lite, as the Nova-Lite-only policy requires).
+    #208 changed `executive.py` so the CRO panels don't depend on change records.
+  Prior status (2026-10-28): code complete, Phase B/§2 and §3 switched off.
+  Was: **FULLY REALIZED** (2026-09-03) — Phases A, B, §2, §3, §5
   all live; design 2026-08-25. Owner-requested expansion of the Regulatory axis.
   - **Phase A (deterministic amending-act parser) LIVE** — `src/synth/reg_change.py`
     enumerates the discrete changes an act declares (`altera`/`revoga`/`dá nova
