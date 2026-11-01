@@ -885,7 +885,16 @@ function decideQueue(id, decision, row) {
 
 /* ======================= LEAD 2 — Pontos Cegos ======================= */
 const GAP_CLASS_PT = { curation_gap: "curadoria", discovery_gap: "descoberta",
-  ingestion_gap: "nova fonte", retrieval_gap: "recuperação" };
+  ingestion_gap: "nova fonte", coverage_gap: "cobertura", retrieval_gap: "recuperação" };
+// ADR 014 step 3: what the live feed holds for each data family the question asks about.
+const GAP_VERDICT_PT = { ingestion_gap: "sem fonte", coverage_gap: "fonte sem cobertura",
+  retrieval_gap: "dado existe" };
+function gapEvidence(g) {
+  const ev = (g.triage && g.triage.evidence) || [];
+  if (!ev.length) return "";
+  return `<div class="qrow__meta">${ev.map(e => `<span title="${U.esc(e.note || "")}">${U.esc(e.label)}: ` +
+    `${U.esc(GAP_VERDICT_PT[e.verdict] || e.verdict)} · ${Number(e.rows) || 0} registros</span>`).join(" · ")}</div>`;
+}
 function renderGaps() {
   const list = DATA.coverage_gaps || [];
   const el = document.getElementById("gaps");
@@ -903,6 +912,7 @@ function renderGaps() {
         <div class="qrow__title">${U.esc(g.question)}</div>
         <div class="qrow__meta">${cls ? `<span class="badge badge--ghost">${U.esc(cls)}</span>` : ""}
           <span>×${g.count || 1}</span>${g.verified_at ? `<span>· reverificado em ${U.esc(String(g.verified_at).slice(5).split("-").reverse().join("/"))}, ainda sem resposta</span>` : ""}${issue}</div>
+        ${gapEvidence(g)}
         <div class="qrow__meta gres" data-for="${U.esc(g.id)}"></div>
       </div>
       <div class="qrow__actions">

@@ -151,8 +151,8 @@ def test_run_scheduled_wires_the_resolver_and_verifier(monkeypatch):
     monkeypatch.setenv("ONCA_SITE_BUCKET", "site")
     monkeypatch.setattr(agent_ask, "_load_feed", lambda site: {"feed": []})
     got = {}
-    def fake_pass(bucket, *, resolver, verifier):
-        got.update(bucket=bucket, resolver=resolver, verifier=verifier)
+    def fake_pass(bucket, *, resolver, verifier, feed):
+        got.update(bucket=bucket, resolver=resolver, verifier=verifier, feed=feed)
         return {"triaged": 0}
     monkeypatch.setattr(cov, "scheduled_pass", fake_pass)
     assert gaps_api.run_scheduled() == {"status": "ok", "triaged": 0}

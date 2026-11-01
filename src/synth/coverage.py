@@ -89,8 +89,13 @@ def triage(
     *,
     resolver: Callable[[dict[str, Any]], list[str]] | None = None,
     known_entity_ids: set[str] | None = None,
+    feed: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Heuristic classification of an unanswered question. Pure given its inputs."""
+    """Classification of an unanswered question. Pure given its inputs.
+
+    With `feed`, a question that asks for a known data family is classed from EVIDENCE
+    (`ingestion_evidence.assess`: what the live feed holds, and the source's status), not from
+    keywords (ADR 014 next step 3). Without it, the keyword heuristic below is the fallback."""
     qn = normalize_q(q)
     toks = set(qn.split())
     entities: list[str] = []
@@ -100,6 +105,14 @@ def triage(
         except Exception:  # pragma: no cover - resolver best-effort
             entities = []
 
+    if feed is not None and not (entities and toks & _ATTR_CUES):
+        from src.synth import ingestion_evidence
+
+        ev = ingestion_evidence.assess(q, feed, entities)
+        if ev:
+            return {"class": ev["class"], "auto_fixable": False,
+                    "recommendation": ev["recommendation"], "entities": entities,
+                    "evidence": ev["families"]}
     if toks & _INGESTION_CUES:
         return {
             "class": "ingestion_gap",
@@ -320,6 +333,7 @@ def remediate(
     only_id: str | None = None,
     s3: Any | None = None,
     today: dt.date | None = None,
+    feed: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run the loop over open gaps: triage -> auto-fix safe ones + re-verify ->
     open an issue for the rest -> close what's now answerable.
@@ -338,7 +352,8 @@ def remediate(
             continue
         if rec.get("status") not in (STATUS_OPEN, STATUS_PROPOSED):
             continue
-        t = triage(rec["question"], resolver=resolver, known_entity_ids=known_entity_ids)
+        t = triage(rec["question"], resolver=resolver, known_entity_ids=known_entity_ids,
+                   feed=feed)
         rec["triage"] = t
         summary["triaged"] += 1
 
@@ -409,6 +424,7 @@ def scheduled_pass(
     autofixer: Callable[[], dict[str, Any]] = safe_autofix,
     closer: Callable[[str | None], bool] = close_issue,
     max_verify: int = SCHEDULED_VERIFY_MAX,
+    feed: dict[str, Any] | None = None,
     s3: Any | None = None,
     today: dt.date | None = None,
 ) -> dict[str, Any]:
@@ -430,7 +446,8 @@ def scheduled_pass(
     todo = [r for r in records.values() if r.get("status") in (STATUS_OPEN, STATUS_PROPOSED)]
     for rec in todo:
         try:
-            t = triage(rec["question"], resolver=resolver, known_entity_ids=known_entity_ids)
+            t = triage(rec["question"], resolver=resolver, known_entity_ids=known_entity_ids,
+                       feed=feed)
         except Exception as exc:  # pragma: no cover - one bad gap never stops the pass
             print(f"Warning: triage {rec.get('id')} failed: {exc}")
             continue

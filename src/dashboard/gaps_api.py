@@ -93,17 +93,19 @@ def run_scheduled() -> dict[str, Any]:
     from src.synth import coverage
     from src.synth.entities import resolve_entities
 
-    verifier = None
+    verifier, feed = None, None
     site = os.environ.get("ONCA_SITE_BUCKET")
     if site:
         try:
             from src.dashboard import agent_ask
 
-            verifier = coverage.feed_verifier(agent_ask._load_feed(site))
+            feed = agent_ask._load_feed(site)
+            verifier = coverage.feed_verifier(feed)
         except Exception as exc:  # pragma: no cover - triage still runs without the verify
             print(f"Warning: coverage verify unavailable: {exc}")
     try:
-        summary = coverage.scheduled_pass(bucket, resolver=resolve_entities, verifier=verifier)
+        summary = coverage.scheduled_pass(bucket, resolver=resolve_entities, verifier=verifier,
+                                          feed=feed)
     except Exception as exc:  # pragma: no cover
         print(f"coverage scheduled pass failed: {exc}")
         return {"status": "error"}
@@ -149,11 +151,20 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 return _resp(400, {"error": "id required"})
             from src.synth.entities import resolve_entities
 
+            feed = None
+            if os.environ.get("ONCA_SITE_BUCKET"):
+                try:
+                    from src.dashboard import agent_ask
+
+                    feed = agent_ask._load_feed(os.environ["ONCA_SITE_BUCKET"])
+                except Exception as exc:  # pragma: no cover - keyword triage still works
+                    print(f"Warning: feed for triage evidence unavailable: {exc}")
             summary = coverage.remediate(
                 bucket,
                 resolver=resolve_entities,
                 verifier=_verifier(os.environ.get("ONCA_SITE_BUCKET")),
                 only_id=gid,
+                feed=feed,
             )
             idx = coverage.load_index(bucket)
             rec = (idx.get("records") or {}).get(gid)
