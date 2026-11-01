@@ -1,0 +1,127 @@
+{
+ "outcome": "ambiguous",
+ "query_key": "DOMAIN#kraken.com",
+ "text": "The website kraken.com is listed for 3 candidates that no shared identifier ties to one legal entity; they may be different firms or one firm listed more than once or in more than one register. No status is given for a key Ibis cannot tie to one entity: choose a candidate, or query by LEI, CNPJ, registration number, Japanese corporate number, Taiwan unified business number, Argentine CUIT, Australian ABN, Australian ACN, Korean business registration number or entity id. Sources of the candidates: FINTRAC https://fintrac-canafe.canada.ca/msb-esm/reg-eng.xlsx (source last read by Ibis on 2026-11-01); ESMA https://www.esma.europa.eu/sites/default/files/2024-12/CASPS.csv (source last read by Ibis on 2026-11-01).",
+ "disclaimer": "Monitoring aid over public sources. Not legal advice. Does not replace your own due diligence.",
+ "generated_at": "2026-11-01T07:04:26+00:00",
+ "jurisdiction": null,
+ "matched_on": "domain",
+ "sources": [
+  {
+   "register_id": "eu-esma",
+   "register": "ESMA interim MiCA register of crypto-asset service providers and of e-money token and asset-referenced token issuers",
+   "regulator": "ESMA",
+   "as_of": "2026-11-01",
+   "as_of_basis": "retrieved",
+   "last_fetched_at": "2026-11-01T05:20:03+00:00",
+   "stale_after": "2026-11-03T05:20:03+00:00",
+   "stale": false,
+   "key_kinds": [
+    "domain",
+    "lei",
+    "name"
+   ],
+   "scope_note": null,
+   "role": "searched",
+   "lists": [
+    "authorizations",
+    "warnings"
+   ],
+   "status_cutoff": "2026-11-15T05:20:03+00:00",
+   "url": "https://www.esma.europa.eu/esmas-activities/digital-finance-and-innovation/markets-crypto-assets-regulation-mica",
+   "snapshot_ids": [
+    "eu-esma@20261101T052003Z#14d19dfd3bb4",
+    "eu-esma@20261101T052003Z#d6f35618d2ff",
+    "eu-esma@20261101T052003Z#f7fb1c594f03",
+    "eu-esma@20261101T052003Z#fa1ef4da123e"
+   ],
+   "warning_list_updated": "2026-10-29",
+   "reference_snapshot_ids": []
+  },
+  {
+   "register_id": "ca-fintrac",
+   "register": "FINTRAC Money Services Business Registry (virtual-currency dealers only)",
+   "regulator": "FINTRAC",
+   "as_of": "2026-11-01",
+   "as_of_basis": "retrieved",
+   "last_fetched_at": "2026-11-01T05:10:22+00:00",
+   "stale_after": "2026-11-03T05:10:22+00:00",
+   "stale": false,
+   "key_kinds": [
+    "domain",
+    "name",
+    "registration_number"
+   ],
+   "scope_note": null,
+   "role": "searched",
+   "lists": [
+    "authorizations"
+   ],
+   "status_cutoff": "2026-11-15T05:10:22+00:00",
+   "url": "https://open.canada.ca/data/en/dataset/8beacccf-3b54-4d12-9cf7-24e2ada90a83",
+   "snapshot_ids": [
+    "ca-fintrac@20261101T051022Z#cc48ce799ab6"
+   ],
+   "warning_list_updated": null,
+   "reference_snapshot_ids": [
+    "ca-fintrac@20261025T044948Z#7a79af60b82b"
+   ]
+  }
+ ],
+ "matches": [],
+ "warnings": [],
+ "candidates": [
+  {
+   "name_as_published": "PAYWARD CANADA INC.",
+   "register_id": "ca-fintrac",
+   "jurisdiction": "CA",
+   "lookup_key": "ENT#ca-inc:ontario:1000481047",
+   "entity_id": "ca-inc:ontario:1000481047",
+   "register_entry_url": "https://fintrac-canafe.canada.ca/msb-esm/reg-eng.xlsx",
+   "snapshot_id": "ca-fintrac@20261101T051022Z#cc48ce799ab6"
+  },
+  {
+   "name_as_published": "Payward Europe Solutions Limited",
+   "register_id": "eu-esma",
+   "jurisdiction": "IE",
+   "lookup_key": "ENT#lei:254900641D8KNHUZYX24",
+   "entity_id": "lei:254900641D8KNHUZYX24",
+   "register_entry_url": "https://www.esma.europa.eu/sites/default/files/2024-12/CASPS.csv",
+   "snapshot_id": "eu-esma@20261101T052003Z#14d19dfd3bb4"
+  },
+  {
+   "name_as_published": "Payward Global Solutions Limited",
+   "register_id": "eu-esma",
+   "jurisdiction": "IE",
+   "lookup_key": "ENT#lei:9845003D98SCC2851458",
+   "entity_id": "lei:9845003D98SCC2851458",
+   "register_entry_url": "https://www.esma.europa.eu/sites/default/files/2024-12/CASPS.csv",
+   "snapshot_id": "eu-esma@20261101T052003Z#14d19dfd3bb4"
+  }
+ ],
+ "coverage_map_url": null,
+ "entity_id": null,
+ "warning_pointers": [],
+ "listed_outside_scope": [],
+ "schema_version": "1.25.0",
+ "generated_by": "42ee41aeae5d4b2cf6ebfd268dde389b54c5b773",
+ "regulator_links": [
+  {
+   "source_id": "ca-fintrac",
+   "regulator": "FINTRAC",
+   "url": "https://fintrac-canafe.canada.ca/msb-esm/reg-eng.xlsx",
+   "basis": "read",
+   "checked_on": "2026-11-01",
+   "reason": null
+  },
+  {
+   "source_id": "eu-esma",
+   "regulator": "ESMA",
+   "url": "https://www.esma.europa.eu/sites/default/files/2024-12/CASPS.csv",
+   "basis": "read",
+   "checked_on": "2026-11-01",
+   "reason": null
+  }
+ ],
+ "activity_check": null
+}
