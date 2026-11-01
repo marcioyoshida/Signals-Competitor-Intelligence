@@ -2,11 +2,12 @@
 
 Bedrock spend on a bare foundation-model id carries no cost-allocation tag, so 2026-10's Onça
 Bedrock bill showed up untagged in Cost Explorer. A call through a profile tagged
-``project=onca`` is attributed. The Lambdas pick the profile up from ``MODEL_PROFILES``
+``project=onssa`` is attributed. The Lambdas pick the profile up from ``MODEL_PROFILES``
 (``src/synth/bedrock_llm.invoke_target``).
 """
 from __future__ import annotations
 
+import os
 import re
 
 from aws_cdk import CfnTag, Stack
@@ -14,7 +15,7 @@ from aws_cdk import aws_bedrock as bedrock
 
 
 def model_profiles(scope, surface: str, model_ids) -> dict[str, str]:
-    """One application inference profile per model, tagged ``project=onca`` and
+    """One application inference profile per model, tagged ``project=onssa`` (Onça's cost-allocation value) and
     ``surface=<surface>``, COPIED FROM the in-region foundation model (never a cross-region
     profile). Returns model id -> profile ARN for ``MODEL_PROFILES`` and the IAM grants.
     Same shape as Signals-Legal-Intelligence ``infra/app_stack.py``."""
@@ -29,6 +30,9 @@ def model_profiles(scope, surface: str, model_ids) -> dict[str, str]:
             description=f"Onca {surface} cost attribution for {mid}",
             model_source=bedrock.CfnApplicationInferenceProfile.InferenceProfileModelSourceProperty(
                 copy_from=f"arn:{stack.partition}:bedrock:{stack.region}::foundation-model/{mid}"),
-            tags=[CfnTag(key="project", value="onca"), CfnTag(key="surface", value=surface)])
+            # project= the stack-wide Onça value (app.py tags everything ONCA_PROJECT_TAG,
+            # default "onssa"); setting it here only keeps the template honest.
+            tags=[CfnTag(key="project", value=os.environ.get("ONCA_PROJECT_TAG", "onssa")),
+                  CfnTag(key="surface", value=surface)])
         out[mid] = p.attr_inference_profile_arn
     return out
