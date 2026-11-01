@@ -1,8 +1,27 @@
 # ADR 014 — Coverage-gap loop: self-improving data coverage from unanswered questions
 
-- Status: **Implemented; scheduled weekly since 2026-11-01 (#295).** Next steps 2
-  (`safe_autofix` beyond registry backfills) and 3 (an `ingestion_gap` detector) are not started;
-  both are engineering work with no owner gate.
+- Status: **Implemented; scheduled weekly since 2026-11-01 (#295); evidence-backed
+  ingestion detector live (#297).** Next step 2 (`safe_autofix` beyond registry backfills) is
+  not started; it is engineering work with no owner gate.
+  - **Detector (#297):** `src/synth/ingestion_evidence.py` replaces the keyword call. Before,
+    every gap was labelled "no source ingests this"; now triage checks what the live feed
+    holds.
+    - It knows 15 data families: the question cues, where each lives in feed.json, and their
+      sources on the "Fontes" roadmap.
+    - `ingestion_gap` means no live source carries the family.
+    - `coverage_gap` means the source is live but misses the named entity, or holds nothing.
+    - `retrieval_gap` means the data exists.
+    - The class comes with per-family evidence, which "Pontos cegos" shows.
+    - The weekly pass and Remediar pass the feed in. A curation gap keeps priority.
+  - **Live results, 2026-11-01:** on the store, both keyword `ingestion_gap` labels were
+    wrong: ESG via ISE B3, and Reclame Aqui via reputation. The RJ/falência questions are
+    `coverage_gap`s, because the distress store is empty after #296.
+  - **Note:** `certifications` holds regulatory licences, not ISO/PCI/SOC, so ISO is a true
+    `ingestion_gap`.
+  - **Knock-on from #296:** two gaps the first run had resolved on the false Daycoval record
+    were re-opened.
+  - **Second live run, after #297:** 5 open gaps (3 retrieval, 2 coverage), 5 re-asked,
+    0 resolved.
   - **Schedule (#295):** rule `OncaCoverageGapWeekly` runs `cron(0 10 ? * WED *)` and sends the
     fixed input `{"coverage_loop": "scheduled"}` to `OncaGapsApi` (timeout 300 s).
     `coverage.scheduled_pass`:
@@ -21,7 +40,7 @@
   - **First live run, 2026-11-01:** 11 triaged (1 ingestion, 10 retrieval, 0 auto-fixable), 11
     re-asked, 8 resolved, 3 still open. A spot check found two of the resolved answers grounded
     and on topic.
-  Prior status (2026-10-28): implemented (v1), no schedule.
+  Prior status (2026-10-28): implemented (v1), no schedule, keyword-only `ingestion_gap`.
 - When the agent ([ADR 010](2026-08-25-adr-agent-chat-ui.md)) can't answer an *in-domain*
   question, treat it as a data-coverage signal and drive it through:
   **issue creation → assert if current data is enough → decide remediation → implement
