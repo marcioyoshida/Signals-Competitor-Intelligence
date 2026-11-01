@@ -84,7 +84,7 @@ _INGESTION_CUES = {
 }
 
 
-def triage(
+def _classify(
     q: str,
     *,
     resolver: Callable[[dict[str, Any]], list[str]] | None = None,
@@ -147,6 +147,21 @@ def triage(
                           "grounding/KB para essa consulta.",
         "entities": entities,
     }
+
+
+def triage(
+    q: str,
+    *,
+    resolver: Callable[[dict[str, Any]], list[str]] | None = None,
+    known_entity_ids: set[str] | None = None,
+    feed: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Classify an unanswered question (`_classify`), then attach the bounded fixes it calls
+    for (`fixes_for`, ADR 014 step 2). `auto_fixable` is true exactly when there is one."""
+    t = _classify(q, resolver=resolver, known_entity_ids=known_entity_ids, feed=feed)
+    t["fixes"] = fixes_for(t)
+    t["auto_fixable"] = bool(t["fixes"])
+    return t
 
 
 # --- store (merge / list) -------------------------------------------------
@@ -229,19 +244,68 @@ def record(
 
 # --- safe auto-fix (bounded, reversible, data-only) -----------------------
 
-def safe_autofix() -> dict[str, Any]:
-    """Apply the bounded/reversible registry remediations (idempotent). These
-    "deploy" instantly — the registry is the live source of truth, no code deploy.
-    Returns what changed. This is the ONLY thing the loop mutates autonomously."""
+def _fix_esg_ise_b3(reg: Any) -> int:
+    """Fetch the current ISE B3 portfolio and apply it (a member dropped at rebalance is
+    cleared, so a stale `ise_b3: true` never survives). One HTTP call to B3."""
+    from src.ingest import esg_ise_b3
+
+    return len(reg.backfill_esg_ise_b3(esg_ise_b3.fetch_portfolio()))
+
+
+#: ADR 014 step 2: the ONLY remediations the loop may run by itself. Each is an idempotent
+#: registry backfill from a curated seed or a structured source, never from the question text.
+#: No alias, CNPJ or search term is written from free text: a wrong term is how a bank gets
+#: bound to someone else's news (#296). Every write is provenance-stamped, may not overwrite a
+#: curated value, and is journaled for rollback (ADR 018).
+AUTOFIXES: dict[str, tuple[str, Callable[[Any], Any]]] = {
+    "ownership": ("natureza de controle a partir do registro", lambda reg: len(reg.backfill_ownership())),
+    "tickers": ("tickers B3 do mapa curado", lambda reg: len(reg.backfill_tickers())),
+    "curation": ("termo de busca de notícias e tokens ambíguos a partir das fixtures",
+                 lambda reg: reg.backfill_curation()),
+    "certifications": ("autorizações regulatórias do seed curado",
+                       lambda reg: len(reg.backfill_certifications())),
+    "esg_ise_b3": ("carteira ISE B3 vigente (busca na B3)", _fix_esg_ise_b3),
+}
+#: The fixes a curation gap (known entity + ownership/ticker cue) has always run.
+CURATION_FIXES = ("ownership", "tickers", "curation")
+#: Data family (ingestion_evidence) -> the fixes that can close a coverage_gap on it.
+FAMILY_FIXES: dict[str, tuple[str, ...]] = {
+    "authorization": ("certifications",),
+    "esg": ("esg_ise_b3",),
+}
+
+
+def safe_autofix(fixes: Any = None) -> dict[str, Any]:
+    """Run the named AUTOFIXES (default: the curation trio), each once and independently: one
+    failing never blocks the others. They "deploy" instantly, because the registry is the live
+    source of truth. Returns {fix: changed count | error}. This is the ONLY thing the loop
+    mutates autonomously."""
     from src.synth import entity_registry as reg
     changed: dict[str, Any] = {}
-    try:
-        changed["ownership"] = len(reg.backfill_ownership())
-        changed["tickers"] = len(reg.backfill_tickers())
-        changed["curation"] = reg.backfill_curation()
-    except Exception as exc:  # pragma: no cover - best-effort
-        changed["error"] = str(exc)
+    for name in (CURATION_FIXES if fixes is None else fixes):
+        if name not in AUTOFIXES:
+            changed[name] = "unknown fix"
+            continue
+        try:
+            changed[name] = AUTOFIXES[name][1](reg)
+        except Exception as exc:  # pragma: no cover - best-effort
+            changed[name] = f"error: {str(exc)[:120]}"
     return changed
+
+
+def fixes_for(t: dict[str, Any]) -> list[str]:
+    """The bounded fixes a triage result calls for (empty: nothing the loop may do alone)."""
+    if t.get("class") == "curation_gap":
+        return list(CURATION_FIXES)
+    out: list[str] = []
+    for ev in t.get("evidence") or []:
+        if ev.get("verdict") == "coverage_gap":
+            out += [f for f in FAMILY_FIXES.get(ev.get("family"), ()) if f not in out]
+    # "news_term fix": an unanswered question about a KNOWN entity may come from that entity's
+    # missing search term; the curation backfill fills it from the fixtures, never from the question
+    if t.get("class") == "retrieval_gap" and t.get("entities") and "curation" not in out:
+        out.append("curation")
+    return out
 
 
 # --- GitHub issue (dedup by gap id) ---------------------------------------
@@ -327,7 +391,7 @@ def remediate(
     resolver: Callable[[dict[str, Any]], list[str]] | None = None,
     known_entity_ids: set[str] | None = None,
     verifier: Callable[[str], bool] | None = None,
-    autofixer: Callable[[], dict[str, Any]] = safe_autofix,
+    autofixer: Callable[[list[str]], dict[str, Any]] = safe_autofix,
     issuer: Callable[[dict[str, Any], dict[str, Any]], str | None] = open_issue,
     closer: Callable[[str | None], bool] = close_issue,
     only_id: str | None = None,
@@ -345,7 +409,7 @@ def remediate(
     index = load_index(bucket, s3=s3)
     records = index.get("records") or {}
     summary = {"triaged": 0, "auto_fixed": 0, "proposed": 0, "resolved": 0}
-    did_autofix = False
+    done_fixes: set[str] = set()
 
     for gid, rec in records.items():
         if only_id is not None and gid != only_id:
@@ -358,9 +422,10 @@ def remediate(
         summary["triaged"] += 1
 
         if t.get("auto_fixable"):
-            if not did_autofix:
-                rec["autofix"] = autofixer()  # once per run (backfills are global)
-                did_autofix = True
+            todo_fixes = [f for f in t.get("fixes") or [] if f not in done_fixes]
+            if todo_fixes:   # each fix once per run (backfills are global)
+                rec["autofix"] = autofixer(todo_fixes)
+                done_fixes.update(todo_fixes)
             # re-verify: can the agent answer now?
             if verifier is not None and verifier(rec["question"]):
                 rec["status"] = STATUS_RESOLVED
@@ -421,7 +486,7 @@ def scheduled_pass(
     resolver: Callable[[dict[str, Any]], list[str]] | None = None,
     known_entity_ids: set[str] | None = None,
     verifier: Callable[[str, Any], bool] | None = None,
-    autofixer: Callable[[], dict[str, Any]] = safe_autofix,
+    autofixer: Callable[[list[str]], dict[str, Any]] = safe_autofix,
     closer: Callable[[str | None], bool] = close_issue,
     max_verify: int = SCHEDULED_VERIFY_MAX,
     feed: dict[str, Any] | None = None,
@@ -431,7 +496,7 @@ def scheduled_pass(
     """The weekly pass over open + proposed gaps (ADR 014 next step 1, #295).
 
     - Triage each gap (deterministic, plus the registry resolver).
-    - Run the bounded, reversible registry backfills once if any gap is auto-fixable (§4).
+    - Run the bounded fixes the gaps call for (`fixes_for`), each once, as one union (§4, step 2).
     - Re-ask the agent for at most `max_verify` gaps, the least recently verified first.
       A gap that now grounds is resolved (and its issue closed, when a token is set).
 
@@ -444,6 +509,7 @@ def scheduled_pass(
     summary: dict[str, Any] = {"triaged": 0, "auto_fixable": 0, "verified": 0, "resolved": 0,
                                "autofix": None}
     todo = [r for r in records.values() if r.get("status") in (STATUS_OPEN, STATUS_PROPOSED)]
+    wanted: list[str] = []
     for rec in todo:
         try:
             t = triage(rec["question"], resolver=resolver, known_entity_ids=known_entity_ids,
@@ -455,8 +521,9 @@ def scheduled_pass(
         summary["triaged"] += 1
         if t.get("auto_fixable"):
             summary["auto_fixable"] += 1
-    if summary["auto_fixable"]:
-        summary["autofix"] = autofixer()
+            wanted += [f for f in t.get("fixes") or [] if f not in wanted]
+    if wanted:
+        summary["autofix"] = autofixer(wanted)
     if verifier is not None and max_verify > 0:
         queue = sorted(todo, key=lambda r: (str(r.get("verified_at") or ""), str(r.get("first_seen") or "")))
         for rec in queue[:max_verify]:

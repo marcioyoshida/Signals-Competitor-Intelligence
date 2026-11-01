@@ -37,7 +37,7 @@ def test_pass_triages_verifies_and_resolves_what_now_grounds():
     def verify(q, scope):
         asked.append(q)
         return "Pix" in q
-    out = cov.scheduled_pass("b", verifier=verify, autofixer=lambda: pytest.fail("no auto-fixable gap"),
+    out = cov.scheduled_pass("b", verifier=verify, autofixer=lambda fixes=None: pytest.fail("no auto-fixable gap"),
                              closer=lambda u: closed.append(u) or True, s3=s3, today=D)
     assert out == {"triaged": 2, "auto_fixable": 0, "verified": 2, "resolved": 1, "autofix": None}
     assert "velha pergunta resolvida?" not in asked                 # resolved gaps aren't re-asked
@@ -83,7 +83,7 @@ def test_backfills_run_once_only_when_a_gap_is_auto_fixable():
            ("o Bradesco é público ou privado?", "no-grounding", cov.STATUS_OPEN))
     ran = []
     out = cov.scheduled_pass("b", resolver=lambda item: ["itau"], verifier=None,
-                             autofixer=lambda: ran.append(1) or {"ownership": 0}, s3=s3, today=D)
+                             autofixer=lambda fixes=None: ran.append(1) or {"ownership": 0}, s3=s3, today=D)
     assert ran == [1] and out["auto_fixable"] == 2 and out["autofix"] == {"ownership": 0}
     assert out["verified"] == 0
 

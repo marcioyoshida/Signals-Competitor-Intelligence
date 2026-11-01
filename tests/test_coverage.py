@@ -96,7 +96,7 @@ def test_remediate_autofix_then_resolve():
     q = "o Itaú é público ou privado?"
     cov.record(q, "b", s3=s3, today=dt.date(2026, 8, 25))
     fixes = {"ran": 0}
-    def fixer():
+    def fixer(names=None):
         fixes["ran"] += 1; return {"ownership": 1}
     # verifier says the agent can now answer -> gap resolves, no issue opened
     out = cov.remediate(
@@ -116,7 +116,7 @@ def test_remediate_opens_issue_for_ingestion_gap():
     opened = []
     out = cov.remediate(
         "b", resolver=lambda i: [], verifier=lambda x: False,
-        autofixer=lambda: {}, issuer=lambda g, t: opened.append(g["id"]) or "http://issue/1",
+        autofixer=lambda fixes=None: {}, issuer=lambda g, t: opened.append(g["id"]) or "http://issue/1",
         s3=s3, today=dt.date(2026, 8, 25))
     assert out["proposed"] == 1 and opened
     saved = json.loads(s3.store[cov.INDEX_KEY])
@@ -145,7 +145,7 @@ def test_remediate_closes_issue_on_resolve():
     closed = []
     cov.remediate(
         "b", resolver=_resolver({cov.normalize_q(q): ["itau"]}),
-        verifier=lambda x: True, autofixer=lambda: {}, issuer=lambda g, t: "u",
+        verifier=lambda x: True, autofixer=lambda fixes=None: {}, issuer=lambda g, t: "u",
         closer=lambda url: closed.append(url) or True, only_id=gid,
         s3=s3, today=dt.date(2026, 8, 25))
     saved = json.loads(s3.store[cov.INDEX_KEY])
@@ -159,7 +159,7 @@ def test_remediate_only_id_touches_one_gap():
     target = cov.gap_id("o Itaú é público?")
     out = cov.remediate(
         "b", resolver=_resolver({cov.normalize_q("o Itaú é público?"): ["itau"]}),
-        verifier=lambda x: True, autofixer=lambda: {"ownership": 1},
+        verifier=lambda x: True, autofixer=lambda fixes=None: {"ownership": 1},
         issuer=lambda g, t: "u", only_id=target, s3=s3, today=dt.date(2026, 8, 25))
     assert out["triaged"] == 1  # only the targeted gap was processed
     saved = json.loads(s3.store[cov.INDEX_KEY])
