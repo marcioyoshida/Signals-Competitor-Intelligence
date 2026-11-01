@@ -14,7 +14,7 @@ one baseline:
   ``relevanceLanguage=pt``) over the last ``ONCA_CPO_YT_LOOKBACK_DAYS``, then ``videos``
   hydration. A hard unit budget (``ONCA_CPO_YT_QUOTA``, default 1,000/day) is enforced BEFORE
   each call. The key comes from ``ONCA_YOUTUBE_API_KEY`` or the ``YOUTUBE_API_KEY`` field of
-  the ``signalscompetitor/onca/api-key`` secret, resolved once per container; with no key the
+  the ``/onca/api-key`` SSM parameter, resolved once per container; with no key the
   leg is skipped and the output says ``youtube: "disabled: no key"``. The key is never logged.
 * **Nova Lite classification** in Bluefin's ``analyze.py`` shape (relevant / event / sentiment /
   feature / why, with official-account anchors), plus the three fixes the spike called for:
@@ -67,7 +67,7 @@ LATEST_KEY = PREFIX + "latest.json"
 STATE_KEY = PREFIX + "state.json"
 _DATED_RE = re.compile(r"^product_radar/(\d{4}-\d{2}-\d{2})\.json$")
 SUBJECTS_PATH = pathlib.Path(__file__).with_name("cpo_radar_subjects.json")
-_SECRET_ID = "signalscompetitor/onca/api-key"
+_SECRET_ID = "/onca/api-key"  # SSM SecureString (#292); was Secrets Manager
 UA = "onca-cpo-radar/1.0 (competitor product monitoring; read-only)"
 
 RSS_URL = "https://itunes.apple.com/br/rss/customerreviews/page={page}/id={app}/sortby=mostrecent/json"
@@ -183,19 +183,17 @@ _YT_KEY: dict[str, str | None] = {}
 _REDACT: list[str] = []
 
 
-def youtube_key(*, secrets_client: Any = None) -> str | None:
-    """ONCA_YOUTUBE_API_KEY env, else ``YOUTUBE_API_KEY`` in the Onça api-key secret.
+def youtube_key(*, ssm_client: Any = None) -> str | None:
+    """ONCA_YOUTUBE_API_KEY env, else ``YOUTUBE_API_KEY`` in the Onça ``/onca/api-key`` parameter.
     Resolved ONCE per container; None when absent. The value is never printed or written."""
     if "v" in _YT_KEY:
         return _YT_KEY["v"]
     key = os.environ.get("ONCA_YOUTUBE_API_KEY") or None
     if not key:
         try:
-            if secrets_client is None:
-                import boto3
+            from src import secretvalue
 
-                secrets_client = boto3.client("secretsmanager")
-            raw = secrets_client.get_secret_value(SecretId=_SECRET_ID)["SecretString"]
+            raw = secretvalue.read(_SECRET_ID, client=ssm_client)
             key = (json.loads(raw) or {}).get("YOUTUBE_API_KEY") or None
         except Exception as exc:  # secret unavailable (locally / no grant) → leg disabled
             print(f"Warning: YouTube key lookup failed ({exc.__class__.__name__}); leg disabled")
@@ -662,6 +660,8 @@ def bedrock_converser(*, region: str | None = None) -> Converser:
     Model id overridable with ONCA_CPO_RADAR_MODEL_ID."""
     import boto3
 
+    from src.synth.bedrock_llm import invoke_target   # #291: tagged profile when deployed
+
     rt = boto3.client("bedrock-runtime", region_name=region or os.environ.get("AWS_REGION") or "us-east-1")
     env_model = os.environ.get("ONCA_CPO_RADAR_MODEL_ID")
     models = [env_model] if env_model else list(MODEL_IDS)
@@ -670,7 +670,7 @@ def bedrock_converser(*, region: str | None = None) -> Converser:
     def converse(prompt: str, max_tokens: int) -> tuple[str | None, dict[str, int]]:
         for model in (chosen[:1] or models):
             try:
-                r = rt.converse(modelId=model, messages=[{"role": "user", "content": [{"text": prompt}]}],
+                r = rt.converse(modelId=invoke_target(model), messages=[{"role": "user", "content": [{"text": prompt}]}],
                                 inferenceConfig={"maxTokens": max_tokens, "temperature": 0})
             except Exception as exc:  # noqa: BLE001
                 msg = str(exc).lower()

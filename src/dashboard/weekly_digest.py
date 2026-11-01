@@ -8,7 +8,7 @@ absent, and NEVER fabricated content (every number/priority comes straight from
 `feed.executive.cso.weekly`, nothing invented here).
 
 Config: each channel reads from its env var, falling back to the shared
-``signalscompetitor/onca/api-key`` secret (JSON) — the same env→secret pattern as
+``/onca/api-key`` SSM parameter (JSON) — the same env→secret pattern as
 `search_expansion.token()` / `gov_dados.token()`.
   Teams   ONCA_TEAMS_WEBHOOK_URL   — an Incoming Webhook / Power Automate "when a Teams webhook
                                      request is received" URL, created in the target Teams
@@ -41,19 +41,19 @@ import json
 import os
 from typing import Any, Callable
 
-_SECRET_ID = "signalscompetitor/onca/api-key"
+_SECRET_ID = "/onca/api-key"  # SSM SecureString (#292); was Secrets Manager
 _TOKEN_CACHE: dict[str, str | None] = {}
 
 
 def _config(env_key: str) -> str | None:
-    """env_key from os.environ, else the api-key secret (JSON). Cached; None if absent."""
+    """env_key from os.environ, else the /onca/api-key parameter (JSON). Cached; None if absent."""
     if env_key in _TOKEN_CACHE:
         return _TOKEN_CACHE[env_key]
     val = os.environ.get(env_key)
     if not val:
         try:
-            import boto3
-            raw = boto3.client("secretsmanager").get_secret_value(SecretId=_SECRET_ID)["SecretString"]
+            from src import secretvalue
+            raw = secretvalue.read(_SECRET_ID)
             val = (json.loads(raw) or {}).get(env_key)
         except Exception as exc:  # pragma: no cover - secret unavailable locally
             print(f"Warning: {env_key} unavailable: {exc}")

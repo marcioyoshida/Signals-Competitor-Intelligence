@@ -14,7 +14,7 @@ Environment:
   ONCA_E2E_BASE_URL          default https://onssa.org
   ONCA_E2E_AUTH_ORIGIN       expected Hosted UI origin, default https://auth.onssa.org
   ONCA_E2E_BROWSER           webkit | chromium | auto (default: WebKit if it launches, else Chromium)
-  ONCA_E2E_PERSONA           QA persona in signalscompetitor/onca/qa-test-credentials (default admin:
+  ONCA_E2E_PERSONA           QA persona in the /onca/qa-test-credentials SSM parameter (default admin:
                              the only one with the officer tab bar; Entry gets the Entry board)
   ONCA_E2E_OUT               screenshots, default /tmp/onca-e2e
   AWS_PROFILE                credentials for Secrets Manager (my2027); the secret is read in-process
@@ -86,12 +86,12 @@ def live_auth():
 
 @pytest.fixture(scope="session")
 def qa_persona():
-    """The QA persona's credentials, read in-process from Secrets Manager (never printed)."""
+    """The QA persona's credentials, read in-process from SSM (never printed)."""
     import boto3
 
     name = os.environ.get("ONCA_E2E_PERSONA", "admin")
     sess = boto3.Session(profile_name=os.environ.get("AWS_PROFILE") or "my2027")
-    raw = sess.client("secretsmanager", region_name="us-east-1").get_secret_value(SecretId=QA_SECRET)["SecretString"]
+    raw = sess.client("ssm", region_name="us-east-1").get_parameter(Name=QA_SECRET, WithDecryption=True)["Parameter"]["Value"]
     personas = json.loads(raw)["personas"]
     assert name in personas, f"persona {name!r} not in {QA_SECRET} (have: {sorted(personas)})"
     p = personas[name]

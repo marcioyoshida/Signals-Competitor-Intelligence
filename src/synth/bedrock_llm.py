@@ -1,10 +1,32 @@
 """Thin Bedrock Converse wrapper — always safe to call; returns None on failure."""
 from __future__ import annotations
 
+import json
 import os
+import re
 from typing import Any
 
 import boto3
+
+# #291: Onça's tagged application inference profiles, one per model. The deployment passes
+# MODEL_PROFILES = {"<model id>": "<profile ARN>"}; spend through a profile carries the
+# project=onca tag (a bare model id can't carry one, so 2026-10 Bedrock spend landed untagged).
+_PROFILE_ARN = re.compile(r"^arn:aws:bedrock:([a-z0-9-]+):\d{12}:application-inference-profile/[a-z0-9]+$")
+
+
+def invoke_target(model_id: str) -> str:
+    """What to send as ``modelId``: Onça's tagged profile for ``model_id`` when the deployment
+    names one in ``MODEL_PROFILES``, else the model id itself. The model id stays the name used
+    in logs, pricing and metering; only the invoke target changes. Each profile is copied from
+    the in-region foundation model, so a profile ARN for another region is ignored."""
+    try:
+        profiles = json.loads(os.environ.get("MODEL_PROFILES") or "{}")
+    except ValueError:
+        return model_id
+    arn = str((profiles or {}).get(model_id) or "")
+    m = _PROFILE_ARN.match(arn)
+    region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or "us-east-1"
+    return arn if m and m.group(1) == region else model_id
 
 # Prefer cheap/fast defaults; override via env when account has access.
 DEFAULT_ROUTER_MODEL = os.environ.get(
@@ -63,7 +85,7 @@ def converse(
         if prior and prior[-1]["role"] != "assistant":
             prior = prior[:-1]
         kwargs: dict[str, Any] = {
-            "modelId": model_id,
+            "modelId": invoke_target(model_id),
             "messages": prior + [
                 {
                     "role": "user",

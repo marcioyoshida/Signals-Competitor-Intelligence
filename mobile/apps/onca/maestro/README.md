@@ -22,7 +22,7 @@ and after each deploy) is `scripts/e2e_app.sh` at the repo root.
    https://expo.dev/accounts/marcioy/settings/billing. Each run also spends two builds (an iOS
    simulator build and an Android APK) plus macOS and Linux nested-virtualization minutes.
 2. **QA credentials.** Use the `qa-test-admin@…` persona: it is the only one with the four
-   officer tabs. Its password is in Secrets Manager `signalscompetitor/onca/qa-test-credentials`,
+   officer tabs. Its password is in the SSM SecureString `/onca/qa-test-credentials`,
    under `personas.admin`. Maestro only reads environment variables named `MAESTRO_*`, so the
    variable names carry that prefix. The maestro jobs run in the `preview` environment. Leave out
    `--value` so the CLI prompts for it and the password stays out of shell history:

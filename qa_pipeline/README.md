@@ -15,8 +15,8 @@ identity (`infra/app.py`, `OncaQaUserEntry`/`OncaQaUserSovereign`):
 | `entry` | `qa-test-entry@onca.example` | `qa-internal-test` | entry | `agri-funds` |
 | `admin` | `qa-test-admin@onca.example` | `qa-internal-admin` | sovereign | `banking`, `fintech` |
 
-Credentials + pool/client ids live in Secrets Manager
-(`signalscompetitor/onca/qa-test-credentials`), never in this repo. The tenant_config rows
+Credentials + pool/client ids live in the SSM SecureString
+`/onca/qa-test-credentials` (Secrets Manager until #292), never in this repo. The tenant_config rows
 were provisioned the normal way (`scripts/provision_tenant.py put qa-internal-test entry
 agri-funds` / `put qa-internal-admin sovereign banking fintech`).
 

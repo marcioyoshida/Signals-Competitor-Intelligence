@@ -37,8 +37,10 @@ def embed(text: str, *, model_id: str | None = None) -> list[float] | None:
     model_id = model_id or DEFAULT_EMBED_MODEL
     try:
         client = boto3.client("bedrock-runtime")
+        from src.synth.bedrock_llm import invoke_target
+
         resp = client.invoke_model(
-            modelId=model_id, body=json.dumps({"inputText": text[:8000]})
+            modelId=invoke_target(model_id), body=json.dumps({"inputText": text[:8000]})
         )
         payload = json.loads(resp["body"].read())
         vec = payload.get("embedding")

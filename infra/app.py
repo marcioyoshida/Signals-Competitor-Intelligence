@@ -11,6 +11,7 @@ from pathlib import Path
 
 import yaml
 from edge_policy import apex_public_js, exec_exemption_js, public_paths_js, share_link_js, site_paths_js
+from bedrock_profiles import model_profiles
 from identity import DEMO_TENANTS, build_identity_pool, build_managed_login_branding
 from aws_cdk import App, ArnFormat, CfnOutput, Duration, RemovalPolicy, SecretValue, Size, Stack, Tags
 from aws_cdk import aws_bedrock as bedrock
@@ -44,6 +45,17 @@ from aws_cdk import aws_stepfunctions as sfn
 from aws_cdk import aws_stepfunctions_tasks as sfn_tasks
 
 EMBEDDING_MODEL_ID = "amazon.titan-embed-text-v2:0"
+# The shared api-key JSON (GOV_DADOS_TOKEN, ONCA_TAVILY_TOKEN, YOUTUBE_API_KEY, digest channels):
+# an SSM SecureString since 2026-11-01 (#292), read through src/secretvalue.py. The aws/ssm key
+# policy allows decryption through SSM in-account, so ssm:GetParameter is the only grant.
+ONCA_API_KEY_PARAM_ARN = "arn:aws:ssm:{region}:{account}:parameter/onca/api-key"
+
+# #291: every model a hosted Onça Lambda calls. Spend on a bare model id carries no tag, so
+# 2026-10's Bedrock bill landed untagged; each id below gets a tagged application inference
+# profile and the Lambdas invoke through it (src/synth/bedrock_llm.invoke_target).
+BEDROCK_MODEL_IDS = ("amazon.nova-micro-v1:0", "amazon.nova-lite-v1:0", EMBEDDING_MODEL_ID)
+
+
 VECTOR_DIMENSION = 1024
 
 
@@ -125,6 +137,7 @@ def operator_secret() -> str:
 class OncaPrototypeStack(Stack):
     def __init__(self, scope: object, id: str, **kwargs):
         super().__init__(scope, id, **kwargs)
+        self.model_profiles = model_profiles(self, "app", BEDROCK_MODEL_IDS)
         # Cost-allocation tagging consolidated onto the single account-wide "project" key
         # (Tags.of(app).add("project", ...) below) — the separate "tr:project-name" tag this
         # stack used to carry was retired 2026-09-14 so every fork rolls up under one key.
@@ -547,16 +560,13 @@ class OncaPrototypeStack(Stack):
         digests_bucket.grant_put(func)
         digests_bucket.grant_read(func)  # #14 NER harvest reads recent narratives (ListBucket)
         # GOV_DADOS_TOKEN access (#63 / Tier-3): the ingester reads the token from the
-        # api-key secret (via boto3) to reach the dados.gov.br catalog. The token now
+        # /onca/api-key parameter (via src/secretvalue.py) to reach the dados.gov.br catalog. The token now
         # authenticates and catalog search/resource-resolution work live. Grant read on
         # that one secret so any dados.gov.br source can use it.
         func.add_to_role_policy(
             iam.PolicyStatement(
-                actions=["secretsmanager:GetSecretValue"],
-                resources=[
-                    f"arn:aws:secretsmanager:{self.region}:{self.account}"
-                    ":secret:signalscompetitor/onca/api-key-*"
-                ],
+                actions=["ssm:GetParameter"],   # SecureString, aws/ssm key (#292)
+                resources=[ONCA_API_KEY_PARAM_ARN.format(region=self.region, account=self.account)],
             )
         )
         # consumidor.gov.br (#63) stays default-off: the catalog resolves its resources to
@@ -1833,11 +1843,8 @@ class OncaPrototypeStack(Stack):
         # api-key secret when not set via env (same pattern as GOV_DADOS_TOKEN/ONCA_TAVILY_TOKEN).
         feed_fn.add_to_role_policy(
             iam.PolicyStatement(
-                actions=["secretsmanager:GetSecretValue"],
-                resources=[
-                    f"arn:aws:secretsmanager:{self.region}:{self.account}"
-                    ":secret:signalscompetitor/onca/api-key-*"
-                ],
+                actions=["ssm:GetParameter"],   # SecureString, aws/ssm key (#292)
+                resources=[ONCA_API_KEY_PARAM_ARN.format(region=self.region, account=self.account)],
             )
         )
         # email digest channel (SES) — scoped to send only, no recipient/identity restriction
@@ -3542,14 +3549,11 @@ class OncaPrototypeStack(Stack):
             },
         )
         # Same channel-config lookup as feed_fn's weekly digest (env, falling back to the
-        # shared api-key secret) and the same SES send-only scope.
+        # shared /onca/api-key parameter) and the same SES send-only scope.
         alert_fn.add_to_role_policy(
             iam.PolicyStatement(
-                actions=["secretsmanager:GetSecretValue"],
-                resources=[
-                    f"arn:aws:secretsmanager:{self.region}:{self.account}"
-                    ":secret:signalscompetitor/onca/api-key-*"
-                ],
+                actions=["ssm:GetParameter"],   # SecureString, aws/ssm key (#292)
+                resources=[ONCA_API_KEY_PARAM_ARN.format(region=self.region, account=self.account)],
             )
         )
         alert_fn.add_to_role_policy(
@@ -3782,9 +3786,8 @@ class OncaPrototypeStack(Stack):
             ],
         ))
         cpo_radar_fn.add_to_role_policy(iam.PolicyStatement(
-            actions=["secretsmanager:GetSecretValue"],
-            resources=[f"arn:aws:secretsmanager:{self.region}:{self.account}"
-                       ":secret:signalscompetitor/onca/api-key-*"],
+            actions=["ssm:GetParameter"],   # SecureString, aws/ssm key (#292)
+            resources=[ONCA_API_KEY_PARAM_ARN.format(region=self.region, account=self.account)],
         ))
         # Own daily schedule, NOT the pipeline: OncaPipeline runs 3×/day, which would triple the
         # YouTube quota and Nova spend for no new data. 06:15 UTC = 03:15 BRT, so the 09:45
@@ -3944,6 +3947,19 @@ class OncaPrototypeStack(Stack):
             value=f"https://{distribution.distribution_domain_name}",
             description="Onca warroom dashboard (basic auth)",
         )
+        # #291: every Lambda that calls Bedrock invokes through the tagged profiles. The
+        # existing grants already cover the foundation models a profile resolves to; a profile
+        # call ALSO needs InvokeModel on the profile ARN itself.
+        profiles_json = self.to_json_string(self.model_profiles)
+        for fn in (synth, regulatory_fn, reconcile_fn, seed_fn, tows_fn, porter_fn, pestle_fn,
+                   ansoff_fn, bcg_fn, four_corners_fn, seven_s_fn, agent_fn, agent_api_fn,
+                   gaps_fn, cpo_radar_fn):
+            fn.add_environment("MODEL_PROFILES", profiles_json)
+            fn.add_to_role_policy(iam.PolicyStatement(
+                actions=["bedrock:InvokeModel", "bedrock:Converse"],
+                resources=list(self.model_profiles.values()),
+            ))
+
         CfnOutput(
             self,
             "EntitiesTableName",

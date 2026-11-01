@@ -14,7 +14,7 @@ Tavily Search REST contract (verified against docs.tavily.com, 2026-09-07):
            time_range(day|week|month|year), include_domains[], language(ISO 639-1), ... }
   resp   { query, results: [ {title, url, content, score, id} ], response_time, request_id }
 
-Token: read from ``ONCA_TAVILY_TOKEN`` env, else the ``signalscompetitor/onca/api-key`` secret
+Token: read from ``ONCA_TAVILY_TOKEN`` env, else the ``/onca/api-key`` SSM parameter
 (JSON key ``ONCA_TAVILY_TOKEN``). With no token this client returns ``[]`` (fail-closed), so
 the ingest wiring built on it is simply inert until the token is set — no fabricated results.
 """
@@ -25,7 +25,7 @@ import os
 from typing import Any, Callable, Iterable
 
 ENDPOINT = "https://api.tavily.com/search"
-_SECRET_ID = "signalscompetitor/onca/api-key"
+_SECRET_ID = "/onca/api-key"  # SSM SecureString (#292); was Secrets Manager
 _TOKEN_CACHE: dict[str, str | None] = {}
 
 # Default discovery queries: BR financial-services firms likely absent from the daily corpus.
@@ -48,14 +48,14 @@ DEFAULT_DOMAINS: tuple[str, ...] = (
 
 
 def token() -> str | None:
-    """ONCA_TAVILY_TOKEN from env, else the api-key secret (JSON). Cached; None if absent."""
+    """ONCA_TAVILY_TOKEN from env, else the /onca/api-key parameter (JSON). Cached; None if absent."""
     if "v" in _TOKEN_CACHE:
         return _TOKEN_CACHE["v"]
     tok = os.environ.get("ONCA_TAVILY_TOKEN")
     if not tok:
         try:
-            import boto3
-            raw = boto3.client("secretsmanager").get_secret_value(SecretId=_SECRET_ID)["SecretString"]
+            from src import secretvalue
+            raw = secretvalue.read(_SECRET_ID)
             tok = (json.loads(raw) or {}).get("ONCA_TAVILY_TOKEN")
         except Exception as exc:  # pragma: no cover - secret unavailable locally
             print(f"Warning: ONCA_TAVILY_TOKEN unavailable: {exc}")

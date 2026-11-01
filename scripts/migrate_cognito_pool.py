@@ -17,8 +17,8 @@ What it does (docs/2026-10-12-cognito-pool-v2-migration.md):
   they are never created here.
 - Group memberships are copied for EVERY native user, matched by email.
 - Permanent passwords are set ONLY where the password is already stored: directory-reviewer
-  (Secrets Manager signalscompetitor/onca/directory-reviewer), the QA personas (Secrets Manager
-  signalscompetitor/onca/qa-test-credentials) and the fleet health-check user (SSM
+  (SSM SecureString /onca/directory-reviewer), the QA personas (SSM SecureString
+  /onca/qa-test-credentials; both Secrets Manager until #292) and the fleet health-check user (SSM
   /fleet-monitor/authtest/onca-user + onca-pass). Values are read in-process and never printed
   or written. Everyone else — the owner included — sets their own password:
   `--invite EMAIL` (preferred, no terminal needed) creates that user WITHOUT MessageAction=SUPPRESS,
@@ -42,8 +42,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "infra"))
 
 from identity import cdk_declared_users  # noqa: E402  (plain data module, no synth)
 
-DIRECTORY_REVIEWER_SECRET = "signalscompetitor/onca/directory-reviewer"
-QA_SECRET = "signalscompetitor/onca/qa-test-credentials"
+DIRECTORY_REVIEWER_SECRET = "/onca/directory-reviewer"  # SSM (#292); was Secrets Manager
+QA_SECRET = "/onca/qa-test-credentials"  # SSM (#292); was Secrets Manager
 FLEET_USER_PARAM = "/fleet-monitor/authtest/onca-user"
 FLEET_PASS_PARAM = "/fleet-monitor/authtest/onca-pass"
 COPIED_ATTRIBUTES = ("custom:tenant", "custom:tier")
@@ -177,14 +177,14 @@ class _Passwords:
 
 def _load_passwords(session) -> _Passwords:
     pw = _Passwords()
-    sm, ssm = session.client("secretsmanager"), session.client("ssm")
+    ssm = session.client("ssm")
     for name, extract in (
         (DIRECTORY_REVIEWER_SECRET, lambda d: [(d.get("username"), d.get("password"))]),
         (QA_SECRET, lambda d: [(p.get("username"), p.get("password"))
                                for p in (d.get("personas") or {}).values()]),
     ):
         try:
-            data = json.loads(sm.get_secret_value(SecretId=name)["SecretString"])
+            data = json.loads(ssm.get_parameter(Name=name, WithDecryption=True)["Parameter"]["Value"])
             for email, password in extract(data):
                 pw.add(email, password)
         except Exception as e:  # noqa: BLE001 — report the source, never the content

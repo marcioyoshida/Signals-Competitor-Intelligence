@@ -1,7 +1,7 @@
 """Shared helpers for the brand-impersonation spike (#160). Read-only.
 
 Same shape as ../cpo_radar/common.py (#158), but on Onça's OWN YouTube key
-(Secrets Manager `signalscompetitor/onca/api-key`, field `YOUTUBE_API_KEY`), which is shared with
+(SSM SecureString `/onca/api-key`, field `YOUTUBE_API_KEY`; Secrets Manager until #292), which is shared with
 the live CPO radar (~510 units/day at 08:30 UTC). Every YouTube call is metered into
 out/quota.json (search = 100 units, channels/playlistItems/videos = 1) and the spike refuses to
 spend past HARD_CAP. The key is held in memory only: never printed, logged or written.
@@ -39,8 +39,8 @@ def subjects() -> list[dict]:
 def youtube_key() -> str:
     if not _KEY:
         import boto3
-        sm = boto3.Session(profile_name=PROFILE).client("secretsmanager")
-        doc = json.loads(sm.get_secret_value(SecretId="signalscompetitor/onca/api-key")["SecretString"])
+        ssm = boto3.Session(profile_name=PROFILE).client("ssm")
+        doc = json.loads(ssm.get_parameter(Name="/onca/api-key", WithDecryption=True)["Parameter"]["Value"])
         _KEY.append(doc.get("YOUTUBE_API_KEY", ""))
     return _KEY[0]
 

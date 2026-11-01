@@ -48,6 +48,8 @@ from aws_cdk import aws_stepfunctions as sfn
 from aws_cdk import aws_stepfunctions_tasks as sfn_tasks
 from constructs import Construct
 
+from bedrock_profiles import model_profiles
+
 
 class OncaQaPipelineStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
@@ -104,18 +106,12 @@ class OncaQaPipelineStack(Stack):
             ],
         )
         artifacts.grant_read_write(fn_role)
-        # Least-privilege reads: the ONE secret + the TWO SSM params this Lambda needs,
-        # nothing else in the account's Secrets Manager/Parameter Store.
-        fn_role.add_to_policy(iam.PolicyStatement(
-            actions=["secretsmanager:GetSecretValue"],
-            resources=[
-                f"arn:aws:secretsmanager:{self.region}:{self.account}:"
-                "secret:signalscompetitor/onca/qa-test-credentials-*"
-            ],
-        ))
+        # Least-privilege reads: only the SSM params this Lambda needs, nothing else in the
+        # account's Parameter Store. The QA personas moved here from Secrets Manager (#292).
         fn_role.add_to_policy(iam.PolicyStatement(
             actions=["ssm:GetParameter"],
             resources=[
+                f"arn:aws:ssm:{self.region}:{self.account}:parameter/onca/qa-test-credentials",
                 f"arn:aws:ssm:{self.region}:{self.account}:parameter/onca/dashboard/basic-auth-user",
                 f"arn:aws:ssm:{self.region}:{self.account}:parameter/onca/dashboard/basic-auth-pass",
                 # #130: the routing checks exercise the ?admin=1&opkey=... operator bypass
@@ -131,6 +127,12 @@ class OncaQaPipelineStack(Stack):
                 f"arn:aws:bedrock:{self.region}::foundation-model/*",
                 f"arn:aws:bedrock:{self.region}:{self.account}:inference-profile/*",
             ],
+        ))
+        # #291: the vision check (Nova Lite) invokes through a tagged profile, surface=qa.
+        qa_profiles = model_profiles(self, "qa", ["amazon.nova-lite-v1:0"])
+        fn_role.add_to_policy(iam.PolicyStatement(
+            actions=["bedrock:InvokeModel", "bedrock:Converse"],
+            resources=list(qa_profiles.values()),
         ))
 
         runner_fn = lambda_.DockerImageFunction(
@@ -153,6 +155,7 @@ class OncaQaPipelineStack(Stack):
                 "HOME": "/tmp",
                 "XDG_CACHE_HOME": "/tmp/.cache",
                 "XDG_CONFIG_HOME": "/tmp/.config",
+                "MODEL_PROFILES": self.to_json_string(qa_profiles),
             },
         )
 

@@ -10,7 +10,7 @@ ENABLED = os.environ.get("ONCA_E2E") == "1"
 BASE_URL = os.environ.get("ONCA_E2E_BASE_URL", "https://onssa.org").rstrip("/")
 AUTH_ORIGIN = os.environ.get("ONCA_E2E_AUTH_ORIGIN", "https://auth.onssa.org").rstrip("/")
 OUT = Path(os.environ.get("ONCA_E2E_OUT", "/tmp/onca-e2e"))
-QA_SECRET = "signalscompetitor/onca/qa-test-credentials"
+QA_SECRET = "/onca/qa-test-credentials"  # SSM SecureString (#292); was Secrets Manager
 VIEWPORT = {"width": 390, "height": 844}
 
 # What the native shell injects (bridge.ts injectedFlag + react-native-webview), with a recorder

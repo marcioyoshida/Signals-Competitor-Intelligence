@@ -121,33 +121,34 @@ def test_pull_reviews_error_page_ends_pull_without_raising():
 # --- YouTube key + quota ------------------------------------------------------------------------
 
 class _SM:
+    """Fake SSM client: the key lives in the /onca/api-key SecureString since #292."""
     def __init__(self, doc=None, fail=False):
         self.doc, self.fail, self.n = doc or {}, fail, 0
 
-    def get_secret_value(self, SecretId):
+    def get_parameter(self, Name, WithDecryption=False):
         self.n += 1
-        assert SecretId == "signalscompetitor/onca/api-key"
+        assert Name == "/onca/api-key" and WithDecryption
         if self.fail:
             raise RuntimeError("AccessDenied")
-        return {"SecretString": json.dumps(self.doc)}
+        return {"Parameter": {"Value": json.dumps(self.doc)}}
 
 
 def test_youtube_key_absent_in_secret_is_none_and_cached():
     sm = _SM({"GOV_DADOS_TOKEN": "x"})
-    assert cr.youtube_key(secrets_client=sm) is None
-    assert cr.youtube_key(secrets_client=sm) is None
+    assert cr.youtube_key(ssm_client=sm) is None
+    assert cr.youtube_key(ssm_client=sm) is None
     assert sm.n == 1                                     # resolved once per container
 
 
 def test_youtube_key_env_wins_and_secret_field_is_used(monkeypatch):
     monkeypatch.setenv("ONCA_YOUTUBE_API_KEY", "env-key")
     sm = _SM({"YOUTUBE_API_KEY": "secret-key"})
-    assert cr.youtube_key(secrets_client=sm) == "env-key" and sm.n == 0
+    assert cr.youtube_key(ssm_client=sm) == "env-key" and sm.n == 0
     monkeypatch.setattr(cr, "_YT_KEY", {})
     monkeypatch.delenv("ONCA_YOUTUBE_API_KEY")
-    assert cr.youtube_key(secrets_client=sm) == "secret-key"
+    assert cr.youtube_key(ssm_client=sm) == "secret-key"
     monkeypatch.setattr(cr, "_YT_KEY", {})
-    assert cr.youtube_key(secrets_client=_SM(fail=True)) is None
+    assert cr.youtube_key(ssm_client=_SM(fail=True)) is None
 
 
 def test_redact_strips_key_from_error_text(monkeypatch):

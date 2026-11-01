@@ -12,7 +12,7 @@ API shape (verified against the OpenAPI at https://dados.gov.br/v3/api-docs, 202
   detail GET /conjuntos-dados/{id}                   -> { recursos: [ {link, nomeArquivo,
                                                         formato, titulo, tamanho} ] }
 
-Token: read from ``GOV_DADOS_TOKEN`` env or the ``signalscompetitor/onca/api-key`` secret.
+Token: read from ``GOV_DADOS_TOKEN`` env or the ``/onca/api-key`` SSM parameter.
 NB (2026-08-31) the stored token is currently REJECTED (401 on every route) — it must be
 regenerated at dados.gov.br → "Minha Conta". With no valid token this client returns
 ``[]``/``None`` (fail-closed), so any ingester built on it is simply inert until the token
@@ -26,19 +26,19 @@ from typing import Any, Callable
 
 BASE = "https://dados.gov.br/dados/api/publico"
 AUTH_HEADER = "chave-api-dados-abertos"
-_SECRET_ID = "signalscompetitor/onca/api-key"
+_SECRET_ID = "/onca/api-key"  # SSM SecureString (#292); was Secrets Manager
 _TOKEN_CACHE: dict[str, str | None] = {}
 
 
 def token() -> str | None:
-    """GOV_DADOS_TOKEN from env, else the api-key secret (JSON). Cached; None if absent."""
+    """GOV_DADOS_TOKEN from env, else the /onca/api-key parameter (JSON). Cached; None if absent."""
     if "v" in _TOKEN_CACHE:
         return _TOKEN_CACHE["v"]
     tok = os.environ.get("GOV_DADOS_TOKEN")
     if not tok:
         try:
-            import boto3
-            raw = boto3.client("secretsmanager").get_secret_value(SecretId=_SECRET_ID)["SecretString"]
+            from src import secretvalue
+            raw = secretvalue.read(_SECRET_ID)
             tok = (json.loads(raw) or {}).get("GOV_DADOS_TOKEN")
         except Exception as exc:  # pragma: no cover - secret unavailable locally
             print(f"Warning: GOV_DADOS_TOKEN unavailable: {exc}")

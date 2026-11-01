@@ -9,7 +9,7 @@ import os
 from functools import lru_cache
 from typing import Any
 
-QA_SECRET_NAME = "signalscompetitor/onca/qa-test-credentials"
+QA_SECRET_PARAM = "/onca/qa-test-credentials"  # SSM SecureString (#292); was Secrets Manager
 BASIC_AUTH_USER_PARAM = "/onca/dashboard/basic-auth-user"
 BASIC_AUTH_PASS_PARAM = "/onca/dashboard/basic-auth-pass"
 OPERATOR_SECRET_PARAM = "/onca/dashboard/operator-secret"
@@ -38,8 +38,8 @@ def qa_credentials() -> dict[str, Any]:
     """{'user_pool_id', 'client_id', 'hosted_ui_domain', 'personas': {'entry': {...}, 'admin': {...}}}"""
     import boto3
 
-    client = boto3.client("secretsmanager")
-    return json.loads(client.get_secret_value(SecretId=QA_SECRET_NAME)["SecretString"])
+    ssm = boto3.client("ssm")
+    return json.loads(ssm.get_parameter(Name=QA_SECRET_PARAM, WithDecryption=True)["Parameter"]["Value"])
 
 
 @lru_cache
