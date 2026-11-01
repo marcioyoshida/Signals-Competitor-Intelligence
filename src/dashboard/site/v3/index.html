@@ -2721,6 +2721,94 @@ function mountEntry() {
   renderDigestBox();
 }
 // --- board (per officer) ---------------------------------------------------
+// #293 — Ibis Brazil module. The tenant's crypto partners are watched on Ibis by an identifier
+// the register prints (CNPJ, LEI, site, register number) — never by name. Each alert is Ibis's
+// own pt-BR sentence and disclaimer, shown VERBATIM (Ibis ADR 0005, rule 1): no badge, no score,
+// no status of ours, and the event type is never shown as a label. A partner's status "now" is
+// Ibis's /v1/check text as Ibis wrote it (English today), never translated here.
+const IBIS_KINDS = [["cnpj", "CNPJ"], ["lei", "LEI"], ["domain", "Site"], ["registration_number", "Nº de registro"]];
+async function ibisFetch(path, opts) {
+  const tok = Ctx.getIdToken();
+  if (!tok) throw Object.assign(new Error("sem sessão"), { status: 401 });
+  const r = await fetch(path, Object.assign({ method: "GET",
+    headers: { "content-type": "application/json", authorization: `Bearer ${tok}` } }, opts || {}));
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw Object.assign(new Error(j.error || ("HTTP " + r.status)), { status: r.status });
+  return j;
+}
+function ibisAnswerHtml(a) {
+  if (!a || !a.text) return "";
+  const links = (a.links || []).map((u, i) => `<a href="${U.esc(u)}" target="_blank" rel="noopener">[${i + 1}]</a>`).join(" ");
+  return `<div class="hd-note" style="margin-top:var(--s2)"><b>Resposta do Ibis agora</b> (em inglês, como publicada): ` +
+    `<span lang="en">${U.esc(a.text)}</span> ${links}<br><span style="opacity:.75" lang="en">${U.esc(a.disclaimer || "")}</span></div>`;
+}
+function ibisAlertsHtml(alerts) {
+  const note = `<div class="hd-note" style="padding:var(--s2) var(--s3)">Sem alerta não quer dizer sem mudança: ` +
+    `o Ibis só detecta uma mudança quando lê cada registro.</div>`;
+  if (!alerts.length) return note + U.empty("Nenhum alerta do Ibis para os parceiros acompanhados.", "", "○");
+  return note + alerts.map(a => {
+    const e = a.entry || {}, ev = a.event || {};
+    const when = String(ev.detected_at || a.received_at || "").slice(0, 10);
+    const evid = (ev.evidence || []).map(x => `<code>${U.esc(x)}</code>`).join(" → ");
+    const link = e.url ? `<a href="${U.esc(e.url)}" target="_blank" rel="noopener">entrada no registro</a>` : "";
+    return `<div class="ibis-alert" style="padding:var(--s2) var(--s3);border-top:1px solid var(--border)">
+      <div class="hd-note">${U.esc(when)} · ${U.esc(e.regulator || "")}</div>
+      <div style="margin:2px 0">${U.esc(a.text_pt_br || a.text || "")}</div>
+      <div class="hd-note">${link}${evid ? ` · cópias comparadas: ${evid}` : ""}</div>
+      <div class="hd-note" style="opacity:.75">${U.esc(a.disclaimer_pt_br || a.disclaimer || "")}</div></div>`;
+  }).join("");
+}
+function ibisWatchesHtml(watches) {
+  const rows = watches.map(w => `<div class="exrow" style="padding:var(--s1) var(--s3)">
+      <span class="ttl"><code>${U.esc(w.lookup_key)}</code></span>
+      <button class="btn" data-ibis-del="${U.esc(w.lookup_key)}">Parar de acompanhar</button></div>`).join("");
+  const opts = IBIS_KINDS.map(([k, l]) => `<option value="${k}">${U.esc(l)}</option>`).join("");
+  return `<div style="padding:var(--s3);border-top:1px solid var(--border)">
+      <div class="hd-note" style="margin-bottom:var(--s2)"><b>Parceiros acompanhados</b> (${watches.length}) — por identificador, nunca por nome</div>
+      ${rows}
+      <form id="ibisAdd" style="display:flex;gap:var(--s2);flex-wrap:wrap;margin-top:var(--s2)">
+        <select name="kind" aria-label="Tipo de identificador">${opts}</select>
+        <input name="value" required placeholder="identificador" aria-label="Identificador" style="flex:1;min-width:12ch">
+        <input name="register" placeholder="registro (ex.: br-bcb)" aria-label="Registro" hidden>
+        <button class="btn" type="submit">Acompanhar</button></form>
+      <div id="ibisMsg" class="hd-note" style="margin-top:var(--s2)"></div></div>`;
+}
+function wireIbis(box) {
+  const form = box.querySelector("#ibisAdd"), msg = box.querySelector("#ibisMsg");
+  if (form) {
+    const reg = form.querySelector("[name=register]");
+    form.kind.addEventListener("change", () => { reg.hidden = form.kind.value !== "registration_number"; });
+    form.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const btn = form.querySelector("button"); btn.disabled = true; msg.textContent = "Enviando ao Ibis…";
+      try {
+        const out = await ibisFetch("/api/me/ibis/watch", { method: "POST", body: JSON.stringify({
+          kind: form.kind.value, value: form.value.value, register: reg.value }) });
+        await loadIbis();
+        const m = document.getElementById("ibisMsg");
+        if (m) m.innerHTML = `Acompanhando <code>${U.esc(out.lookup_key || "")}</code>.` + ibisAnswerHtml(out.answer);
+      } catch (e) { msg.textContent = e.message || "falha"; btn.disabled = false; }
+    });
+  }
+  box.querySelectorAll("[data-ibis-del]").forEach(b => b.addEventListener("click", async () => {
+    b.disabled = true;
+    try { await ibisFetch("/api/me/ibis/watch", { method: "DELETE", body: JSON.stringify({ lookup_key: b.getAttribute("data-ibis-del") }) }); await loadIbis(); }
+    catch (e) { b.disabled = false; if (msg) msg.textContent = e.message || "falha"; }
+  }));
+}
+async function loadIbis() {
+  const box = document.getElementById("ibisPanel");
+  if (!box) return;
+  if (ADMIN || !Ctx.getIdToken()) { box.innerHTML = U.empty("Entre com sua conta para ver os parceiros acompanhados.", "", "○"); return; }
+  let d;
+  try { d = await ibisFetch("/api/me/ibis"); }
+  catch (e) {
+    box.innerHTML = U.empty(e.status === 403 ? "Disponível na suíte de diretoria." : "Não foi possível carregar os alertas agora.", "", "○");
+    return;
+  }
+  box.innerHTML = ibisAlertsHtml(d.alerts || []) + ibisWatchesHtml(d.watches || []);
+  wireIbis(box);
+}
 function render() {
   if (!ADMIN && Ctx.isEntryTier(DATA)) { mountEntry(); return; }
   document.querySelectorAll("#officerTabs a").forEach(a =>
@@ -2812,6 +2900,11 @@ function render() {
       band("Fiscalização & sanções", "liquidação · intervenção · RAET · cassação · sanções · CEIS/CNEP",
            panel("Ações de supervisores contra operadores", (p.enforcement || []).filter(inSector).length,
              "mais grave primeiro · fontes linkadas", rowsEnforcement(p.enforcement), { nav: "enforcement", lead: true }), { lead: true }) +
+      // #293: Ibis register alerts on the tenant's crypto partners — filled by loadIbis() post-render
+      band("Parceiros cripto · Ibis", "registros oficiais · alertas assinados",
+        `<div class="panel" data-nav="ibis"><div class="panel__hd"><h2>Alertas de registro dos parceiros cripto</h2>` +
+        `<span class="spacer"></span><span class="hd-note">texto do Ibis, sem reescrita</span></div>` +
+        `<div class="panel__bd panel__bd--flush" id="ibisPanel">${U.empty("Carregando…", "", "○")}</div></div>`, { nav: "ibis" }) +
       band("Registro de risco", "", panel(iw ? "Fiscalização · insolvência · reputação" : "Fiscalização · insolvência · reputação · integridade", null, "prioridade", rowsRisk(p.risk_register), { nav: "risk" })) +
       band(iw ? "Reputação" : "Integridade & reputação", "",
         iw ? panel("Reputação (reclamações)", null, "pior ranking primeiro", rowsRep(p.reputation), { nav: "rep" })
@@ -2915,6 +3008,7 @@ function render() {
                        panel("BCG", ofN(p.bcg, totN(p, "bcg")), "estrela·vaca·interrogação·abacaxi", rowsFramework(p.bcg), { lead: true })]), { lead: true });
   el.innerHTML = flowBand() + board + silenceBand() + outcomesDueBand() + metricsBand() + referenceBand();
   if (OFFICER === "cso") loadQuotes();  // async B3 market pulse (fills #b3ticker post-render)
+  if (OFFICER === "cco") loadIbis();    // #293: async Ibis partner alerts (fills #ibisPanel)
   wireHeadlines(el);
   bindRows(el);
   capLists(el);

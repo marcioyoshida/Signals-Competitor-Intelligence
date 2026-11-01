@@ -1,0 +1,230 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ibis.signals/contracts/v1/WebhookEvent.schema.json",
+  "title": "WebhookEvent",
+  "x-schema-version": "1.26.0",
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string"
+    },
+    "delivery_id": {
+      "type": "string"
+    },
+    "watch": {
+      "$ref": "#/$defs/Watch"
+    },
+    "event": {
+      "$ref": "#/$defs/Event"
+    },
+    "entry": {
+      "$ref": "#/$defs/EntryRef"
+    },
+    "text": {
+      "type": "string"
+    },
+    "disclaimer": {
+      "type": "string"
+    },
+    "schema_version": {
+      "type": "string"
+    },
+    "generated_by": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "quoted_warning": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "text_pt_br": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "disclaimer_pt_br": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "type",
+    "delivery_id",
+    "watch",
+    "event",
+    "entry",
+    "text"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "EntryRef": {
+      "type": "object",
+      "properties": {
+        "register_id": {
+          "type": "string"
+        },
+        "register": {
+          "type": "string"
+        },
+        "regulator": {
+          "type": "string"
+        },
+        "name_as_published": {
+          "type": "string"
+        },
+        "jurisdiction": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "register_id",
+        "register",
+        "regulator",
+        "name_as_published",
+        "jurisdiction",
+        "url"
+      ],
+      "additionalProperties": false
+    },
+    "Event": {
+      "type": "object",
+      "properties": {
+        "event_id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "granted",
+            "applied",
+            "denied",
+            "revoked",
+            "warned",
+            "activity_changed",
+            "entry_removed",
+            "status_changed",
+            "left_scope",
+            "entered_scope"
+          ]
+        },
+        "authorization_id": {
+          "type": "string"
+        },
+        "detected_at": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "before": {
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": {}
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "after": {
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": {}
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "entity_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "warning_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "event_id",
+        "type",
+        "authorization_id",
+        "detected_at",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "Watch": {
+      "type": "object",
+      "properties": {
+        "lookup_key": {
+          "type": "string"
+        },
+        "jurisdiction": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "lookup_key"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

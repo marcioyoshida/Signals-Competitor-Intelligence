@@ -1,0 +1,787 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ibis.signals/contracts/v1/Answer.schema.json",
+  "title": "Answer",
+  "x-schema-version": "1.26.0",
+  "type": "object",
+  "properties": {
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "match",
+        "no_public_record",
+        "not_covered",
+        "ambiguous"
+      ]
+    },
+    "query_key": {
+      "type": "string"
+    },
+    "text": {
+      "type": "string"
+    },
+    "disclaimer": {
+      "type": "string"
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "jurisdiction": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "matched_on": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SourceAsOf"
+      }
+    },
+    "matches": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/MatchedAuthorization"
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/CitedWarning"
+      }
+    },
+    "candidates": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Candidate"
+      }
+    },
+    "coverage_map_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "entity_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "warning_pointers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/WarningPointer"
+      }
+    },
+    "listed_outside_scope": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ListedOutsideScope"
+      }
+    },
+    "schema_version": {
+      "type": "string"
+    },
+    "generated_by": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "regulator_links": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/RegulatorLink"
+      }
+    },
+    "activity_check": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ActivityCheck"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "outcome",
+    "query_key",
+    "text",
+    "disclaimer",
+    "generated_at"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "ActivityCheck": {
+      "type": "object",
+      "properties": {
+        "activity": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ActivityResult"
+          }
+        }
+      },
+      "required": [
+        "activity",
+        "label",
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    "ActivityResult": {
+      "type": "object",
+      "properties": {
+        "authorization_id": {
+          "type": "string"
+        },
+        "result": {
+          "type": "string",
+          "enum": [
+            "listed",
+            "not_listed",
+            "not_stated"
+          ]
+        },
+        "listed_as": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "text": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "authorized",
+            "registered",
+            "applied_under_review",
+            "transitional",
+            "denied",
+            "revoked",
+            "suspended",
+            "withdrawn",
+            "expired",
+            "listed"
+          ]
+        },
+        "status_current": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "authorization_id",
+        "result",
+        "listed_as",
+        "text",
+        "status"
+      ],
+      "additionalProperties": false
+    },
+    "Candidate": {
+      "type": "object",
+      "properties": {
+        "name_as_published": {
+          "type": "string"
+        },
+        "register_id": {
+          "type": "string"
+        },
+        "jurisdiction": {
+          "type": "string"
+        },
+        "lookup_key": {
+          "type": "string"
+        },
+        "entity_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "register_entry_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "snapshot_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "name_as_published",
+        "register_id",
+        "jurisdiction",
+        "lookup_key"
+      ],
+      "additionalProperties": false
+    },
+    "CitedWarning": {
+      "type": "object",
+      "properties": {
+        "warning_id": {
+          "type": "string"
+        },
+        "regulator": {
+          "type": "string"
+        },
+        "jurisdiction": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name_as_published": {
+          "type": "string"
+        },
+        "issued_on": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "snapshot_id": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "reason_as_published": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "issued_on_basis": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "entry_updated": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "warning_id",
+        "regulator",
+        "jurisdiction",
+        "name_as_published",
+        "issued_on",
+        "url",
+        "snapshot_id",
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    "ListedOutsideScope": {
+      "type": "object",
+      "properties": {
+        "register_id": {
+          "type": "string"
+        },
+        "regulator": {
+          "type": "string"
+        },
+        "register_entry_url": {
+          "type": "string"
+        },
+        "snapshot_id": {
+          "type": "string"
+        },
+        "as_of": {
+          "type": "string"
+        },
+        "as_of_basis": {
+          "type": "string",
+          "enum": [
+            "register",
+            "file",
+            "retrieved"
+          ]
+        },
+        "reason": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "register_id",
+        "regulator",
+        "register_entry_url",
+        "snapshot_id",
+        "as_of",
+        "as_of_basis",
+        "reason",
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    "MatchedAuthorization": {
+      "type": "object",
+      "properties": {
+        "authorization_id": {
+          "type": "string"
+        },
+        "register_id": {
+          "type": "string"
+        },
+        "regulator": {
+          "type": "string"
+        },
+        "jurisdiction": {
+          "type": "string"
+        },
+        "regime": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "authorized",
+            "registered",
+            "applied_under_review",
+            "transitional",
+            "denied",
+            "revoked",
+            "suspended",
+            "withdrawn",
+            "expired",
+            "listed"
+          ]
+        },
+        "activities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "name_as_published": {
+          "type": "string"
+        },
+        "register_entry_url": {
+          "type": "string"
+        },
+        "as_of": {
+          "type": "string"
+        },
+        "as_of_basis": {
+          "type": "string",
+          "enum": [
+            "register",
+            "file",
+            "retrieved"
+          ]
+        },
+        "snapshot_id": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "entry_updated": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "entity_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "effective_to": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "passported_to": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "instruments": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "identifiers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "status_current": {
+          "type": "boolean"
+        },
+        "text_after_cutoff": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "authorization_id",
+        "register_id",
+        "regulator",
+        "jurisdiction",
+        "regime",
+        "status",
+        "activities",
+        "name_as_published",
+        "register_entry_url",
+        "as_of",
+        "as_of_basis",
+        "snapshot_id",
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    "RegulatorLink": {
+      "type": "object",
+      "properties": {
+        "source_id": {
+          "type": "string"
+        },
+        "regulator": {
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "basis": {
+          "type": "string",
+          "enum": [
+            "read",
+            "checked",
+            "not_verified"
+          ]
+        },
+        "checked_on": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "source_id",
+        "regulator",
+        "url",
+        "basis"
+      ],
+      "additionalProperties": false
+    },
+    "SourceAsOf": {
+      "type": "object",
+      "properties": {
+        "register_id": {
+          "type": "string"
+        },
+        "register": {
+          "type": "string"
+        },
+        "regulator": {
+          "type": "string"
+        },
+        "as_of": {
+          "type": "string"
+        },
+        "as_of_basis": {
+          "type": "string",
+          "enum": [
+            "register",
+            "file",
+            "retrieved"
+          ]
+        },
+        "last_fetched_at": {
+          "type": "string"
+        },
+        "stale_after": {
+          "type": "string"
+        },
+        "stale": {
+          "type": "boolean"
+        },
+        "key_kinds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "scope_note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "searched",
+            "drawn_on"
+          ]
+        },
+        "lists": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "status_cutoff": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "snapshot_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "warning_list_updated": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reference_snapshot_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "register_id",
+        "register",
+        "regulator",
+        "as_of",
+        "as_of_basis",
+        "last_fetched_at",
+        "stale_after"
+      ],
+      "additionalProperties": false
+    },
+    "WarningPointer": {
+      "type": "object",
+      "properties": {
+        "warning_id": {
+          "type": "string"
+        },
+        "regulator": {
+          "type": "string"
+        },
+        "register_id": {
+          "type": "string"
+        },
+        "jurisdiction": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name_as_published": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "snapshot_id": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "lookup_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "entry_updated": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "warning_id",
+        "regulator",
+        "register_id",
+        "jurisdiction",
+        "name_as_published",
+        "url",
+        "snapshot_id",
+        "text"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

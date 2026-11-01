@@ -2529,6 +2529,54 @@ class OncaPrototypeStack(Stack):
                             methods=[apigwv2.HttpMethod.GET, apigwv2.HttpMethod.POST],
                             integration=_push_integ)
 
+        # #293 — Ibis Brazil module: crypto-partner register alerts on the CCO board. Onça holds
+        # ONE Ibis key + ONE webhook (SSM /onca/ibis/*, never in this repo); the table maps each
+        # Ibis watch to the tenants that asked for it and keeps each tenant's alerts verbatim.
+        # RETAIN + PITR: the alerts are the bank's compliance evidence of what Ibis said, when.
+        ibis_table = dynamodb.Table(
+            self,
+            "OncaIbisTable",
+            table_name="onca-ibis",
+            partition_key=dynamodb.Attribute(name="pk", type=dynamodb.AttributeType.STRING),
+            sort_key=dynamodb.Attribute(name="sk", type=dynamodb.AttributeType.STRING),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            point_in_time_recovery_specification=dynamodb.PointInTimeRecoverySpecification(
+                point_in_time_recovery_enabled=True),
+            removal_policy=RemovalPolicy.RETAIN,
+        )
+        ibis_fn = lambda_.Function(
+            self,
+            "OncaIbis",
+            runtime=LAMBDA_RUNTIME,
+            handler="src.dashboard.ibis.handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.seconds(20),
+            memory_size=256,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_IBIS_TABLE": ibis_table.table_name,
+                "ONCA_TENANT_CONFIG_TABLE": tenant_config_table.table_name,
+            },
+        )
+        ibis_table.grant_read_write_data(ibis_fn)
+        tenant_config_table.grant_read_data(ibis_fn)
+        ibis_fn.add_to_role_policy(iam.PolicyStatement(
+            actions=["ssm:GetParameter"],   # SecureString, aws/ssm key: the key, the signing secret, the URL
+            resources=[f"arn:aws:ssm:{self.region}:{self.account}:parameter/onca/ibis/*"],
+        ))
+        _ibis_integ = apigwv2_int.HttpLambdaIntegration("IbisInteg", ibis_fn)
+        # The receiver has no JWT: Ibis signs each delivery (HMAC over the raw body) and the
+        # handler verifies it before parsing. /api/hooks/* is its own CloudFront behavior.
+        auth_api.add_routes(path="/api/hooks/ibis", methods=[apigwv2.HttpMethod.POST],
+                            integration=_ibis_integ)
+        auth_api.add_routes(path="/api/me/ibis", methods=[apigwv2.HttpMethod.GET],
+                            integration=_ibis_integ, authorizer=jwt_authorizer)
+        auth_api.add_routes(path="/api/me/ibis/watch",
+                            methods=[apigwv2.HttpMethod.POST, apigwv2.HttpMethod.DELETE],
+                            integration=_ibis_integ, authorizer=jwt_authorizer)
+        auth_api.add_routes(path="/api/me/ibis/check", methods=[apigwv2.HttpMethod.GET],
+                            integration=_ibis_integ, authorizer=jwt_authorizer)
+
         # #181/#182/#186 agent discovery: an OAuth 2.1 authorization server in front of Cognito
         # (the fleet pattern from Tarantula #99 — own pool, own KMS key, own table) and the remote
         # MCP (/mcp read, /mcp/ops operators) + A2A (/a2a) resource servers. Both Lambdas sit on
@@ -2876,6 +2924,7 @@ class OncaPrototypeStack(Stack):
         _api_patterns = ["/api/ask*", "/api/gaps*", "/api/feed*", "/api/registry*",
                           "/api/v1/agent*", "/api/keys*", "/api/me/*", "/api/session/*",
                           "/api/push/*",
+                          "/api/hooks/*",   # #293: signed inbound webhooks (Ibis), no edge gate
                           # #181/#182/#186 — OAuth AS + MCP/A2A resource servers (no edge gate)
                           "/oauth/*", "/.well-known/*", "/mcp*", "/a2a"]
         if google_idp:

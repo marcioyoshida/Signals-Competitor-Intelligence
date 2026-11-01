@@ -1,0 +1,1239 @@
+{
+ "openapi": "3.1.0",
+ "info": {
+  "title": "Ibis lookup API",
+  "version": "1.26.0",
+  "summary": "Crypto entities as public regulator registers and warning lists record them, each fact with its source and date.",
+  "description": "Every answered lookup returns an Answer (ADR 0005) with one of four outcomes: match, no_public_record, not_covered or ambiguous. Each register an Answer names carries its as_of date and whether it is stale. no_public_record means no public record found in the registers named, as of their dates; it says nothing about whether an entity is licensed. not_covered means the registers Ibis searches cannot answer the query for that jurisdiction (see the coverage map); it says nothing about any entity. ambiguous lists candidates and no status. Monitoring aid over public sources. Not legal advice. Does not replace your own due diligence. info.version is the contract version (contracts/VERSION)."
+ },
+ "security": [
+  {
+   "apiKey": []
+  }
+ ],
+ "paths": {
+  "/v1/check": {
+   "get": {
+    "operationId": "check",
+    "summary": "One lookup by exactly one identifier, optionally in one jurisdiction",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/lei"
+     },
+     {
+      "$ref": "#/components/parameters/cnpj"
+     },
+     {
+      "$ref": "#/components/parameters/jp_corporate_number"
+     },
+     {
+      "$ref": "#/components/parameters/tw_business_number"
+     },
+     {
+      "$ref": "#/components/parameters/cuit"
+     },
+     {
+      "$ref": "#/components/parameters/abn"
+     },
+     {
+      "$ref": "#/components/parameters/acn"
+     },
+     {
+      "$ref": "#/components/parameters/kr_business_number"
+     },
+     {
+      "$ref": "#/components/parameters/name"
+     },
+     {
+      "$ref": "#/components/parameters/domain"
+     },
+     {
+      "$ref": "#/components/parameters/registration_number"
+     },
+     {
+      "$ref": "#/components/parameters/entity_id"
+     },
+     {
+      "$ref": "#/components/parameters/register"
+     },
+     {
+      "$ref": "#/components/parameters/jurisdiction"
+     },
+     {
+      "$ref": "#/components/parameters/activity"
+     }
+    ],
+    "responses": {
+     "200": {
+      "$ref": "#/components/responses/Answer"
+     },
+     "400": {
+      "$ref": "#/components/responses/Error"
+     },
+     "401": {
+      "$ref": "#/components/responses/Error"
+     },
+     "503": {
+      "$ref": "#/components/responses/Error"
+     }
+    }
+   }
+  },
+  "/v1/entities/{id}": {
+   "get": {
+    "operationId": "getEntity",
+    "summary": "The Answer for an Ibis entity id, as /v1/check?entity_id=",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      },
+      "description": "An Ibis entity id (an Answer's entity_id), percent-encoded.",
+      "example": "ca-inc:federal:13148483"
+     },
+     {
+      "$ref": "#/components/parameters/jurisdiction"
+     },
+     {
+      "$ref": "#/components/parameters/activity"
+     }
+    ],
+    "responses": {
+     "200": {
+      "$ref": "#/components/responses/Answer"
+     },
+     "400": {
+      "$ref": "#/components/responses/Error"
+     },
+     "401": {
+      "$ref": "#/components/responses/Error"
+     },
+     "503": {
+      "$ref": "#/components/responses/Error"
+     }
+    }
+   }
+  },
+  "/v1/screen": {
+   "post": {
+    "operationId": "screen",
+    "summary": "A batch of lookups, each answered as /v1/check answers it, with staleness judged at one instant for the whole batch",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ScreenRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "One result per query, in the order sent. A query that cannot be answered has its own status and error; the others are still answered.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ScreenResponse"
+        }
+       }
+      },
+      "headers": {
+       "x-ibis-audit-id": {
+        "$ref": "#/components/headers/AuditId"
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/Error"
+     },
+     "401": {
+      "$ref": "#/components/responses/Error"
+     },
+     "413": {
+      "$ref": "#/components/responses/Error"
+     }
+    }
+   }
+  },
+  "/v1/snapshots/{id}": {
+   "get": {
+    "operationId": "getSnapshot",
+    "summary": "The record of a register snapshot that current answers were built from (reference_snapshot_ids are not served here)",
+    "description": "Metadata only: when Ibis retrieved the register file, its content hash and the parser version. The raw file is not served here.",
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      },
+      "description": "A snapshot id as an Answer cites it, percent-encoded (\"#\" as %23).",
+      "example": "eu-esma@20261018T053001Z%23b7a805013f1d"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "The snapshot record.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "Snapshot.schema.json"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/Error"
+     },
+     "401": {
+      "$ref": "#/components/responses/Error"
+     },
+     "404": {
+      "description": "An id that current answers were not built from (a reference-page snapshot, or one only earlier answers cited) is 404; that says nothing about the snapshot or the answer that cited it.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/coverage": {
+   "get": {
+    "operationId": "coverageMap",
+    "summary": "The public coverage map (HTML): each jurisdiction's coverage status and registers, with our fetch cadence, last successful fetch, the register's as-of date and when it is treated as stale",
+    "security": [],
+    "responses": {
+     "200": {
+      "description": "The coverage map.",
+      "content": {
+       "text/html": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/Error"
+     }
+    }
+   }
+  },
+  "/v1/coverage.json": {
+   "get": {
+    "operationId": "coverageMapJson",
+    "summary": "The public coverage map as JSON",
+    "security": [],
+    "responses": {
+     "200": {
+      "description": "The coverage map.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/Error"
+     }
+    }
+   }
+  },
+  "/mcp": {
+   "post": {
+    "operationId": "mcp",
+    "summary": "The MCP server (Streamable HTTP, stateless): one JSON-RPC 2.0 message per POST",
+    "description": "Read-only tools check_license, can_operate, regulator_warnings, stablecoin_status and jurisdiction_profile (tools/list gives their schemas). Authenticate with an API key (x-api-key, or Authorization: Bearer <key>) or an OAuth access token from Ibis's authorization server (Authorization: Bearer <token>; see the mcpOAuth scheme). Without either, the 401 carries WWW-Authenticate naming the protected resource metadata. A tool's structuredContent is the Answer (or the coverage-map entry for jurisdiction_profile); each answered call is an audit record, as for the REST API.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "jsonrpc",
+         "method"
+        ],
+        "properties": {
+         "jsonrpc": {
+          "const": "2.0"
+         },
+         "id": {},
+         "method": {
+          "type": "string"
+         },
+         "params": {
+          "type": "object"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "The JSON-RPC response (a result, or an error object)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object"
+        }
+       }
+      }
+     },
+     "202": {
+      "description": "A notification, accepted; no body"
+     },
+     "400": {
+      "$ref": "#/components/responses/Error"
+     },
+     "401": {
+      "$ref": "#/components/responses/Error"
+     }
+    },
+    "security": [
+     {
+      "apiKey": []
+     },
+     {
+      "mcpOAuth": [
+       "ibis:read"
+      ]
+     }
+    ]
+   },
+   "get": {
+    "operationId": "mcpGet",
+    "summary": "Not served: the server sends no server-sent events (405)",
+    "responses": {
+     "405": {
+      "$ref": "#/components/responses/Error"
+     }
+    }
+   }
+  },
+  "/v1/webhook": {
+   "put": {
+    "operationId": "putWebhook",
+    "summary": "Register (or replace) this API key's webhook; the reply holds the signing secret, shown this once",
+    "description": "Ibis calls only public HTTPS endpoints (port 443 or 8443, no credentials in the URL); the host is resolved and checked again at each delivery, and redirects are not followed. Each delivery is a WebhookEvent signed as Ibis-Signature: t=<unix seconds>,v1=<hex HMAC-SHA256(secret, \"<t>.<body>\")>, with Ibis-Delivery-Id, Ibis-Event-Id and Ibis-Attempt headers. A 2xx reply is delivered; anything else is retried with exponential backoff (30 s doubling, at most an hour) up to 8 attempts.",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "url"
+        ],
+        "properties": {
+         "url": {
+          "type": "string",
+          "format": "uri"
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "The webhook, with its secret",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "url": {
+           "type": "string"
+          },
+          "secret": {
+           "type": "string"
+          },
+          "created_at": {
+           "type": "string"
+          },
+          "note": {
+           "type": "string"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/Error"
+     },
+     "401": {
+      "$ref": "#/components/responses/Error"
+     }
+    }
+   },
+   "get": {
+    "operationId": "getWebhook",
+    "summary": "This API key's webhook URL and when it was set (never the secret)",
+    "responses": {
+     "200": {
+      "description": "The webhook",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "url": {
+           "type": "string"
+          },
+          "created_at": {
+           "type": "string"
+          }
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Error"
+     },
+     "404": {
+      "$ref": "#/components/responses/Error"
+     }
+    }
+   },
+   "delete": {
+    "operationId": "deleteWebhook",
+    "summary": "Remove this API key's webhook; queued deliveries are then dropped",
+    "responses": {
+     "204": {
+      "description": "Removed"
+     },
+     "401": {
+      "$ref": "#/components/responses/Error"
+     }
+    }
+   }
+  },
+  "/v1/webhook/test": {
+   "post": {
+    "operationId": "testWebhook",
+    "summary": "Queue one signed ibis.test delivery to this API key's webhook",
+    "responses": {
+     "202": {
+      "description": "Queued",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "delivery_id": {
+           "type": "string"
+          }
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Error"
+     },
+     "404": {
+      "$ref": "#/components/responses/Error"
+     }
+    }
+   }
+  },
+  "/v1/webhook/deliveries": {
+   "get": {
+    "operationId": "webhookDeliveries",
+    "summary": "The latest delivery attempts, newest first (kept 30 days)",
+    "parameters": [
+     {
+      "name": "limit",
+      "in": "query",
+      "schema": {
+       "type": "integer",
+       "minimum": 1,
+       "maximum": 200,
+       "default": 50
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Delivery attempts",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "deliveries": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "delivery_id": {
+              "type": "string"
+             },
+             "event_id": {
+              "type": "string"
+             },
+             "outcome": {
+              "type": "string",
+              "enum": [
+               "delivered",
+               "retrying",
+               "failed",
+               "dropped"
+              ]
+             },
+             "attempt": {
+              "type": "integer"
+             },
+             "http_status": {
+              "type": "integer"
+             },
+             "error": {
+              "type": "string"
+             },
+             "at": {
+              "type": "string"
+             }
+            }
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/Error"
+     },
+     "401": {
+      "$ref": "#/components/responses/Error"
+     }
+    }
+   }
+  },
+  "/v1/watchlist": {
+   "post": {
+    "operationId": "addWatches",
+    "summary": "Watch identifiers: each ADR 0003 event on a register entry with one of them is delivered to this key's webhook",
+    "description": "A watch is an identifier the registers publish (lei, cnpj, jp_corporate_number, tw_business_number, cuit, abn, acn, kr_business_number, domain, or registration_number with register) and optionally a jurisdiction (the entry's own, or one it is passported to). Names and Ibis entity ids are not accepted: an event reaches a watch only through an identifier the register prints. At most 100 queries per request and 1000 watches per API key. No delivery does not mean nothing changed: Ibis detects an event only when it retrieves a register (see the coverage map for each register's last successful fetch), and a delivery not accepted after 8 attempts is dropped (see /v1/webhook/deliveries).",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "queries"
+        ],
+        "properties": {
+         "queries": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "items": {
+           "$ref": "#/components/schemas/Query"
+          }
+         }
+        }
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "One result per query, in order",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "results": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "status": {
+              "type": "integer"
+             },
+             "watch": {
+              "type": "object",
+              "properties": {
+               "lookup_key": {
+                "type": "string"
+               },
+               "jurisdiction": {
+                "type": [
+                 "string",
+                 "null"
+                ]
+               }
+              },
+              "required": [
+               "lookup_key",
+               "jurisdiction"
+              ]
+             },
+             "added": {
+              "type": "boolean"
+             },
+             "error": {
+              "type": "string"
+             }
+            }
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/Error"
+     },
+     "401": {
+      "$ref": "#/components/responses/Error"
+     },
+     "409": {
+      "$ref": "#/components/responses/Error"
+     }
+    }
+   },
+   "get": {
+    "operationId": "listWatches",
+    "summary": "This API key's watches",
+    "responses": {
+     "200": {
+      "description": "Watches",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "watches": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "lookup_key": {
+              "type": "string"
+             },
+             "jurisdiction": {
+              "type": [
+               "string",
+               "null"
+              ]
+             }
+            },
+            "required": [
+             "lookup_key",
+             "jurisdiction"
+            ]
+           }
+          },
+          "max": {
+           "type": "integer"
+          }
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Error"
+     }
+    }
+   },
+   "delete": {
+    "operationId": "removeWatch",
+    "summary": "Remove one watch, given as the same identifier query parameters",
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/lei"
+     },
+     {
+      "$ref": "#/components/parameters/cnpj"
+     },
+     {
+      "$ref": "#/components/parameters/jp_corporate_number"
+     },
+     {
+      "$ref": "#/components/parameters/tw_business_number"
+     },
+     {
+      "$ref": "#/components/parameters/cuit"
+     },
+     {
+      "$ref": "#/components/parameters/abn"
+     },
+     {
+      "$ref": "#/components/parameters/acn"
+     },
+     {
+      "$ref": "#/components/parameters/kr_business_number"
+     },
+     {
+      "$ref": "#/components/parameters/domain"
+     },
+     {
+      "$ref": "#/components/parameters/registration_number"
+     },
+     {
+      "$ref": "#/components/parameters/register"
+     },
+     {
+      "$ref": "#/components/parameters/jurisdiction"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Removed",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "watch": {
+           "type": "object",
+           "properties": {
+            "lookup_key": {
+             "type": "string"
+            },
+            "jurisdiction": {
+             "type": [
+              "string",
+              "null"
+             ]
+            }
+           },
+           "required": [
+            "lookup_key",
+            "jurisdiction"
+           ]
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/Error"
+     },
+     "401": {
+      "$ref": "#/components/responses/Error"
+     },
+     "404": {
+      "$ref": "#/components/responses/Error"
+     }
+    }
+   }
+  },
+  "/v1/feed": {
+   "get": {
+    "operationId": "feed",
+    "summary": "The data-feed manifest, each file with a link valid 15 minutes (API keys with feed access only)",
+    "description": "A daily full file and a daily delta (JSON Lines, gzip): one record per line, {\"record_type\": \"authorization\"|\"warning\"|\"event\"|\"source\"|\"source_link\", \"schema_version\", \"record\"}, each record as the committed contract (Authorization, Warning, Event, Source). Only registers whose terms are an open licence are carried in full, each with its attribution; others are link only, with the reason. Records outside Ibis's scope of a register and rows that may name a natural person are never carried. Absence of an entity from the feed is no finding about it. Files are kept 30 days. Each request is metered.",
+    "responses": {
+     "200": {
+      "description": "The manifest",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "schema_version": {
+           "type": "string"
+          },
+          "generated_at": {
+           "type": "string"
+          },
+          "disclaimer": {
+           "type": "string"
+          },
+          "note": {
+           "type": "string"
+          },
+          "registers": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "register_id": {
+              "type": "string"
+             },
+             "register": {
+              "type": "string"
+             },
+             "in_feed": {
+              "type": "string",
+              "enum": [
+               "full",
+               "link_only"
+              ]
+             },
+             "reason": {
+              "type": [
+               "string",
+               "null"
+              ]
+             },
+             "records_in_latest_full": {
+              "type": [
+               "integer",
+               "null"
+              ]
+             }
+            }
+           }
+          },
+          "files": {
+           "type": "array",
+           "items": {
+            "type": "object",
+            "properties": {
+             "name": {
+              "type": "string"
+             },
+             "kind": {
+              "type": "string",
+              "enum": [
+               "full",
+               "delta"
+              ]
+             },
+             "date": {
+              "type": "string"
+             },
+             "lines": {
+              "type": "integer"
+             },
+             "bytes": {
+              "type": "integer"
+             },
+             "sha256": {
+              "type": "string"
+             },
+             "generated_at": {
+              "type": "string"
+             },
+             "since": {
+              "type": [
+               "string",
+               "null"
+              ]
+             },
+             "url": {
+              "type": "string"
+             },
+             "url_expires_in": {
+              "type": "integer"
+             }
+            }
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Error"
+     },
+     "403": {
+      "$ref": "#/components/responses/Error"
+     },
+     "404": {
+      "$ref": "#/components/responses/Error"
+     }
+    }
+   }
+  }
+ },
+ "components": {
+  "securitySchemes": {
+   "apiKey": {
+    "type": "apiKey",
+    "in": "header",
+    "name": "x-api-key"
+   },
+   "mcpOAuth": {
+    "type": "oauth2",
+    "description": "POST /mcp only (ADR 0007 note 2026-11-01): OAuth 2.1 authorization code with PKCE (S256) against Ibis's own authorization server at /oauth, for users an Ibis operator invited (invite-only). Clients identify with a Client ID Metadata Document or are pre-registered; there is no dynamic client registration. Discovery: the 401 from /mcp carries WWW-Authenticate with resource_metadata=/.well-known/oauth-protected-resource/mcp (RFC 9728), and the server's metadata is at /.well-known/oauth-authorization-server/oauth (RFC 8414). Access tokens last 1 hour and are bound to the /mcp resource.",
+    "flows": {
+     "authorizationCode": {
+      "authorizationUrl": "/oauth/authorize",
+      "tokenUrl": "/oauth/token",
+      "refreshUrl": "/oauth/token",
+      "scopes": {
+       "ibis:read": "The read-only MCP tools"
+      }
+     }
+    }
+   }
+  },
+  "parameters": {
+   "lei": {
+    "name": "lei",
+    "in": "query",
+    "schema": {
+     "type": "string"
+    },
+    "description": "Legal Entity Identifier (20 characters)."
+   },
+   "cnpj": {
+    "name": "cnpj",
+    "in": "query",
+    "schema": {
+     "type": "string"
+    },
+    "description": "Brazilian CNPJ."
+   },
+   "jp_corporate_number": {
+    "name": "jp_corporate_number",
+    "in": "query",
+    "schema": {
+     "type": "string"
+    },
+    "description": "Japanese corporate number (法人番号)."
+   },
+   "tw_business_number": {
+    "name": "tw_business_number",
+    "in": "query",
+    "schema": {
+     "type": "string"
+    },
+    "description": "Taiwanese unified business number (統一編號)."
+   },
+   "cuit": {
+    "name": "cuit",
+    "in": "query",
+    "schema": {
+     "type": "string"
+    },
+    "description": "Argentine CUIT; refused (400) when its check digit fails."
+   },
+   "abn": {
+    "name": "abn",
+    "in": "query",
+    "schema": {
+     "type": "string"
+    },
+    "description": "Australian Business Number; refused (400) when its check digits fail."
+   },
+   "acn": {
+    "name": "acn",
+    "in": "query",
+    "schema": {
+     "type": "string"
+    },
+    "description": "Australian Company Number; refused (400) when its check digit fails."
+   },
+   "kr_business_number": {
+    "name": "kr_business_number",
+    "in": "query",
+    "schema": {
+     "type": "string"
+    },
+    "description": "Korean business registration number (사업자등록번호); refused (400) when its check digit fails."
+   },
+   "name": {
+    "name": "name",
+    "in": "query",
+    "schema": {
+     "type": "string"
+    },
+    "description": "Entity name. A name that reaches several firms is ambiguous, with candidates and no status."
+   },
+   "domain": {
+    "name": "domain",
+    "in": "query",
+    "schema": {
+     "type": "string"
+    },
+    "description": "Website domain."
+   },
+   "registration_number": {
+    "name": "registration_number",
+    "in": "query",
+    "schema": {
+     "type": "string"
+    },
+    "description": "A register's own number for the entity; needs register."
+   },
+   "entity_id": {
+    "name": "entity_id",
+    "in": "query",
+    "schema": {
+     "type": "string"
+    },
+    "description": "An Ibis entity id."
+   },
+   "register": {
+    "name": "register",
+    "in": "query",
+    "schema": {
+     "type": "string"
+    },
+    "description": "With registration_number: a register id from the coverage map, e.g. ca-fintrac. An unknown id is refused (400)."
+   },
+   "jurisdiction": {
+    "name": "jurisdiction",
+    "in": "query",
+    "schema": {
+     "type": "string",
+     "minLength": 2,
+     "maxLength": 6
+    },
+    "description": "ISO 3166 code, e.g. DE or US-NY. Without it, every jurisdiction's records for the identifier are merged."
+   },
+   "activity": {
+    "name": "activity",
+    "in": "query",
+    "schema": {
+     "type": "string",
+     "enum": [
+      "custody",
+      "trading_platform",
+      "exchange_for_funds",
+      "exchange_for_crypto",
+      "execution_of_orders",
+      "placing",
+      "reception_and_transmission",
+      "advice",
+      "portfolio_management",
+      "transfer",
+      "emt_issuance",
+      "art_issuance"
+     ]
+    },
+    "description": "An Ibis activity term (#31). Adds activity_check to the Answer: for each matched register entry, listed (the entry lists a wording Ibis takes as the activity, quoted), not_listed (every wording the entry lists is one Ibis maps, none to the activity: what the entry listed, not a finding about what the firm may do) or not_stated (Ibis cannot tell from the entry). It never changes the outcome or removes a match; an answer with no match gets no results. An unknown term is HTTP 400."
+   }
+  },
+  "responses": {
+   "Answer": {
+    "description": "The ADR 0005 answer, for all four outcomes.",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "Answer.schema.json"
+      }
+     }
+    },
+    "headers": {
+     "x-ibis-audit-id": {
+      "$ref": "#/components/headers/AuditId"
+     }
+    }
+   },
+   "Error": {
+    "description": "The request is not answered; nothing is said about any entity.",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   }
+  },
+  "schemas": {
+   "Error": {
+    "type": "object",
+    "properties": {
+     "error": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "error"
+    ],
+    "additionalProperties": false
+   },
+   "Query": {
+    "type": "object",
+    "description": "The /v1/check query parameters as an object of strings: exactly one identifier, with register for a registration_number, and optionally jurisdiction and activity.",
+    "properties": {
+     "lei": {
+      "type": "string"
+     },
+     "cnpj": {
+      "type": "string"
+     },
+     "jp_corporate_number": {
+      "type": "string"
+     },
+     "tw_business_number": {
+      "type": "string"
+     },
+     "cuit": {
+      "type": "string"
+     },
+     "abn": {
+      "type": "string"
+     },
+     "acn": {
+      "type": "string"
+     },
+     "kr_business_number": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "domain": {
+      "type": "string"
+     },
+     "registration_number": {
+      "type": "string"
+     },
+     "entity_id": {
+      "type": "string"
+     },
+     "register": {
+      "type": "string"
+     },
+     "jurisdiction": {
+      "type": "string"
+     },
+     "activity": {
+      "type": "string",
+      "enum": [
+       "custody",
+       "trading_platform",
+       "exchange_for_funds",
+       "exchange_for_crypto",
+       "execution_of_orders",
+       "placing",
+       "reception_and_transmission",
+       "advice",
+       "portfolio_management",
+       "transfer",
+       "emt_issuance",
+       "art_issuance"
+      ]
+     }
+    },
+    "additionalProperties": {
+     "type": "string"
+    }
+   },
+   "ScreenRequest": {
+    "type": "object",
+    "properties": {
+     "queries": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/Query"
+      },
+      "minItems": 1,
+      "maxItems": 100
+     }
+    },
+    "required": [
+     "queries"
+    ]
+   },
+   "ScreenResult": {
+    "oneOf": [
+     {
+      "type": "object",
+      "properties": {
+       "status": {
+        "const": 200
+       },
+       "answer": {
+        "$ref": "Answer.schema.json"
+       },
+       "audit_id": {
+        "type": "string",
+        "description": "The id of this answer's audit record: the x-ibis-audit-id header value, a hyphen, and the query's 0-based index in the request. Results with an error have no audit record."
+       }
+      },
+      "required": [
+       "status",
+       "answer",
+       "audit_id"
+      ],
+      "additionalProperties": false
+     },
+     {
+      "type": "object",
+      "properties": {
+       "status": {
+        "enum": [
+         400,
+         503
+        ]
+       },
+       "error": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "status",
+       "error"
+      ],
+      "additionalProperties": false
+     }
+    ]
+   },
+   "ScreenResponse": {
+    "type": "object",
+    "properties": {
+     "results": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/ScreenResult"
+      }
+     }
+    },
+    "required": [
+     "results"
+    ],
+    "additionalProperties": false
+   }
+  },
+  "headers": {
+   "AuditId": {
+    "description": "This request's audit id. For /v1/check and /v1/entities/{id} it is the id of the answer's audit record. For /v1/screen, each answered query has its own record, whose id is that result's audit_id. A record holds the query (for /v1/entities/{id}, as the equivalent entity_id and jurisdiction query), a hash of the API key, the answer as served with its SHA-256, and the snapshot ids it cites. An answer too large for one log event is recorded by its SHA-256 and snapshot ids only. Records are written off the response path, and a failed write does not fail the lookup. Error responses are not recorded.",
+    "schema": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ "webhooks": {
+  "event": {
+   "post": {
+    "summary": "One ADR 0003 event on a watched register entry (or an ibis.test delivery)",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "WebhookEvent.schema.json"
+       }
+      }
+     }
+    },
+    "responses": {
+     "2XX": {
+      "description": "Delivered"
+     }
+    }
+   }
+  }
+ }
+}
