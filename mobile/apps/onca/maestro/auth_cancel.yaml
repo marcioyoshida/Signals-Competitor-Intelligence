@@ -25,7 +25,13 @@ tags:
     when:
       platform: Android
     commands:
-      - tapOn:                 # a fresh emulator's Chrome first-run screens, if any
+      # A fresh emulator's Chrome first-run screens, if any: the same taps as subflows/sign_in.yaml.
+      # auth_cancel runs FIRST on a clean emulator, so it is the flow that meets them; without the
+      # "Continue" tap it waited on a first-run screen (run 41318887061) while login, later, passed.
+      - tapOn:
+          text: "Continue|Continuar"
+          optional: true
+      - tapOn:
           text: "Use without an account|Accept & continue|No thanks|Got it"
           optional: true
       - tapOn:
