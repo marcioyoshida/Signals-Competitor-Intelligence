@@ -38,4 +38,4 @@ Pre-flight before any submission:
 **Reviewer instructions (Claude directory):**
 > Connect `https://onssa.org/mcp`; the connector opens the Onça sign-in. Use the test account below (licensed for Banking + Fintech). On the consent screen choose "Permitir". Try the example prompts above. Institutions outside the licence (e.g. insurers) are intentionally not returned.
 
-Test account: user and password are in AWS Secrets Manager `signalscompetitor/onca/directory-reviewer` (tenant `directory-reviewer`, saas: banking + fintech). Copy them into the form yourself; never paste them into a ticket or chat. Rotate the password after the review.
+Test account: user and password are in SSM Parameter Store SecureString `/onca/directory-reviewer` (#292; was Secrets Manager) (tenant `directory-reviewer`, saas: banking + fintech). Copy them into the form yourself; never paste them into a ticket or chat. Rotate the password after the review.

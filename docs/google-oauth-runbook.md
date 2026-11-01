@@ -43,8 +43,8 @@ Google login can even reach the authenticated-but-unprovisioned state this depen
   a `supported_identity_providers` entry on the client, Hosted UI shows a "Continue with
   Google" button automatically — **no frontend code change is needed** for the button itself.
 - **Client secret**: `signalscompetitor/onca/google-oauth` in Secrets Manager
-  (`{"client_id", "client_secret"}`, same shape as the existing `signalscompetitor/onca/api-key`
-  secret). Never in `cdk.json`, never in git.
+  (`{"client_id", "client_secret"}` JSON). It stays in Secrets Manager because Cognito reads it
+  through a CloudFormation dynamic reference; Lambda-read secrets moved to SSM in #292. Never in `cdk.json`, never in git.
 - **OAuth scopes requested from Google**: `openid email profile`. Onça does NOT need
   `aws.cognito.signin.user.admin` — unlike Bluefin, nothing in the dashboard calls
   `GetUserAttributeVerificationCode`/`VerifyUserAttribute` with a user's own access token, so
