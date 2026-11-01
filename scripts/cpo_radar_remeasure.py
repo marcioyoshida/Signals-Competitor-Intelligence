@@ -19,13 +19,15 @@ This does the mechanical half and leaves the verification to a human:
 Output: a markdown worksheet with one checkbox per candidate (verify: real, in-window,
 CPO-actionable, not in Onça) and a per-product / per-leg summary.
 
-  AWS_PROFILE=my2027 .venv/bin/python scripts/cpo_radar_remeasure.py --as-of 2026-10-27 --out remeasure.md
+  AWS_PROFILE=my2027 ONCA_ENTITIES_TABLE=<EntitiesTableName output> \
+      .venv/bin/python scripts/cpo_radar_remeasure.py --as-of 2026-10-27 --out remeasure.md
 """
 from __future__ import annotations
 
 import argparse
 import datetime as dt
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -222,6 +224,11 @@ def main(argv: list[str] | None = None) -> int:
     start = (dt.date.fromisoformat(end) - dt.timedelta(days=a.days - 1)).isoformat()
     s3 = boto3.client("s3")
     subjects = {s["id"]: s for s in cr.load_subjects()}
+    if not os.environ.get("ONCA_ENTITIES_TABLE"):
+        # without the registry, load_subjects() falls back to the 5-product seed file and the
+        # products added 2026-09-27 silently drop out of the worksheet (seen 2026-11-01)
+        print("warning: ONCA_ENTITIES_TABLE unset — only the seed products are measured; set it to the "
+              "live entities table (OncaPrototypeStack output EntitiesTableName)", file=sys.stderr)
     events = load_events(s3, start, end)
     n_lo = (dt.date.fromisoformat(start) - dt.timedelta(days=BEFORE)).isoformat()
     n_hi = (dt.date.fromisoformat(end) + dt.timedelta(days=AFTER)).isoformat()

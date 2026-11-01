@@ -135,3 +135,34 @@ $PY classify.py && $PY baseline.py
 aws s3 cp s3://oncaprototypestack-oncadashboardsitefdbca924-eu9minmw6ljv/feed.json out/feed.json
 aws s3 sync s3://onca-digests-668449743071/narratives/ out/narratives/ --exclude "*" --include "2026-08-2[7-9]/*" --include "2026-08-3*" --include "2026-09-*"
 ```
+
+## 9. 30-day re-measure (window 2026-09-28 → 2026-10-27, run 2026-11-01): kill rule NOT triggered
+
+`scripts/cpo_radar_remeasure.py --as-of 2026-10-27` with `ONCA_ENTITIES_TABLE` set (without it the
+script measures only the 5 seed products; it now warns). 194 radar events, checked against 2,946 Onça
+narratives from 14 days before to 7 days after each.
+
+**Original 5: 4 of 5 have a verified hit Onça's feed never carried** (rule: retire the YouTube creator
+leg below 3/5). Each was checked two ways: its distinctive term appears in **none** of the 2,946
+narratives, and the video's own metadata (YouTube `videos.list`) is a dated item in the window.
+
+| product | events | already in Onça | verified unsurfaced hit |
+|---|---|---|---|
+| Nubank | 39 | 4 | Nu Smart Invest, AI score for a portfolio (2026-10-15, 5 channels) |
+| PicPay | 21 | 3 | Central de Cashback raising the card limit (2026-10-05, 4 channels) |
+| Inter | 12 | 0 | Loop points converted to dollars (2026-09-28, Inter's official channel) |
+| Mercado Pago | 18 | 0 | Anitta partnership (2026-10-22, 9 channels; marketing more than product, so the weakest of the four) |
+| C6 Bank | 7 | 0 | none verified: single-creator items only (e.g. a Tesouro Direto account for non-residents) |
+
+Even without Mercado Pago the count is 3/5, so **the YouTube creator leg stays**. Two items the radar
+caught that do **not** count: NuCoin's launch (radar 10-01; Onça's feed had it 10-07) and Inter's
+VIP-lounge cut (in Onça's feed from 09-22).
+
+Caveats: the worksheet's matcher is lexical, so "already in Onça" can miss a paraphrase; the hits above
+were confirmed by a term search over the whole window, not only the matcher. The App Store leg raised
+no candidate in the window (no outage/complaint spike crossed z≥3). Most single-creator items are
+promotions or how-tos the guards keep letting through: precision, not recall, is the radar's open
+weakness.
+
+**Added 2026-09-27 (judged separately, no kill rule):** Itaú 51 events (1 already in Onça), Bradesco 22
+(4), BTG Pactual 14 (7), Santander 6 (0, 2 from the App Store), Neon 4 (0). Not hand-verified.
