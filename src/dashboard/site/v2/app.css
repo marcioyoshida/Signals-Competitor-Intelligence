@@ -445,6 +445,7 @@ details.fold.chg > summary { padding: var(--s2) var(--s3); font-size: var(--fs-m
 }
 .chg-list { margin: 0; padding-left: 18px; font-size: var(--fs-sm); }
 .chg-line { font-size: var(--fs-sm); line-height: 1.45; }
+.chg-consol { display: flex; flex-direction: column; gap: 4px; }
 .chg-rated { display: flex; flex-direction: column; gap: 4px;
   border-top: 1px solid var(--border); padding-top: var(--s2); }
 

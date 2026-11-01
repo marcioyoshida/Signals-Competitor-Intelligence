@@ -40,6 +40,7 @@ from typing import Any
 
 import boto3
 
+from src.ingest import reg_documents
 from src.synth import feature_store, reg_change
 from src.synth.synthesize import run_at_now, run_date_today
 
@@ -621,7 +622,8 @@ def _instrument_citations(instrument_key: str, label: str,
     return out
 
 
-def build_narrative(cand: dict[str, Any], *, change_record: dict[str, Any] | None = None) -> dict[str, Any]:
+def build_narrative(cand: dict[str, Any], *, change_record: dict[str, Any] | None = None,
+                    consolidated: dict[str, Any] | None = None) -> dict[str, Any]:
     """Heuristic pt-BR regulatory-radar card — sourced instrument, labeled inference."""
     label = cand["label"]
     domain = cand["domain"]
@@ -657,6 +659,7 @@ def build_narrative(cand: dict[str, Any], *, change_record: dict[str, Any] | Non
         self_key=cand["instrument"])
     if changes:
         head += f" Mudanças: {reg_change.summarize_changes(changes)}."
+    head += consolidated_sentence(consolidated)
     tail = (
         " Instrumento e data extraídos da fonte reguladora; o domínio afetado e a "
         "urgência são inferência (não uma avaliação de conformidade por entidade)."
@@ -680,6 +683,8 @@ def build_narrative(cand: dict[str, Any], *, change_record: dict[str, Any] | Non
         "n_changes": len(changes),
         # ADR 009 §3: the LLM change-record (rated), when drafted (radar cards too).
         "change_record": change_record,
+        # #294: the regulator's consolidated text (version, amendments, diff), when tracked.
+        "consolidated": consolidated,
         "deadline": deadline,
         "days_to_deadline": dtd,
         "signature": cand["signature"],
@@ -790,8 +795,62 @@ def regdoc_targets(narratives: list[dict[str, Any]], *, as_of: str | None = None
                     break
             if dou_url:
                 break
-        if dou_url:
+        # #294: an instrument BCB's API serves is fetched there (consolidated text), so it
+        # is a target even when no card cites its DOU page.
+        if dou_url or reg_documents.bcb_target(key):
             out.append({"instrument_key": key, "label": g.get("label"), "url": dou_url})
+    return out
+
+
+#: A stored two-version diff is shown on the card for this long after it was found.
+CONSOLIDATED_DIFF_DAYS = 30
+
+
+def consolidated_for(instrument_key: str, index: dict[str, Any] | None, *,
+                     as_of: str | None = None) -> dict[str, Any] | None:
+    """#294: what the regulator's consolidated text says about this instrument, for its card.
+
+    {source, versao, url, revoked, fetched, amendments (latest 3, newest first), diff} or
+    None. The amendments are BCB's own `Atualizacoes` (sourced, not inference); `diff` is
+    the regdocs section diff between the two latest BCB versions, when found recently."""
+    rec = (index or {}).get(instrument_key) or {}
+    bcb = rec.get("bcb") or {}
+    if not bcb:
+        return None
+    as_of = as_of or run_date_today()
+    diff = None
+    for v in reversed(rec.get("versions") or []):
+        if (v.get("source") or "dou") != "bcb":
+            continue
+        d = v.get("diff")
+        age = _days_between(as_of, v.get("fetched") or "")
+        if d and age is not None and 0 <= age <= CONSOLIDATED_DIFF_DAYS:
+            diff = {"summary": d.get("summary"), "found": v.get("fetched"),
+                    "added": d.get("added"), "removed": d.get("removed"),
+                    "modified": d.get("modified")}
+        break                       # only the latest BCB version counts
+    amendments = list(reversed((bcb.get("amendments") or [])[-3:]))
+    if not amendments and not diff and not bcb.get("revoked"):
+        return None
+    return {"source": "BCB", "versao": bcb.get("versao"), "url": bcb.get("url"),
+            "revoked": bool(bcb.get("revoked")), "fetched": bcb.get("fetched"),
+            "amendments": amendments, "diff": diff}
+
+
+def consolidated_sentence(c: dict[str, Any] | None) -> str:
+    """One narrative sentence for the card (and for the agent that grounds on it)."""
+    if not c:
+        return ""
+    ver = f", versão {c['versao']}" if c.get("versao") else ""
+    out = f" Texto consolidado (BCB{ver})"
+    if c.get("revoked"):
+        out += ": norma revogada ou cancelada"
+    elif c.get("amendments"):
+        a = c["amendments"][0]
+        out += f": última alteração pela {a['act']} — {a['detail'][:200]}"
+    out += "."
+    if c.get("diff") and c["diff"].get("summary"):
+        out += f" Diferença para a versão anterior arquivada: {c['diff']['summary'][:240]}."
     return out
 
 
@@ -823,6 +882,7 @@ def build_lifecycle_card(lc: dict[str, Any]) -> dict[str, Any]:
     head += f" Afeta: {lc['domain']} (exposição provável: {ind_pt})."
     if changes:
         head += f" Mudanças: {reg_change.summarize_changes(changes)}."
+    head += consolidated_sentence(lc.get("consolidated"))
     tail = (" Ciclo derivado do encadeamento de menções ao instrumento na fonte "
             "reguladora — estágio e urgência são inferência; cada menção cita a fonte.")
 
@@ -844,6 +904,7 @@ def build_lifecycle_card(lc: dict[str, Any]) -> dict[str, Any]:
         "n_changes": len(changes),
         # ADR 009 §3: the LLM change-record (rated impact/blast/difficulty), when drafted.
         "change_record": lc.get("change_record"),
+        "consolidated": lc.get("consolidated"),          # #294
         "deadline": deadline,
         "days_to_deadline": dtd,
         "status": lc["status"],
@@ -1049,6 +1110,31 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             print(f"Warning: industry counts unavailable, §3 off: {exc}")
             llm_on = False
 
+    # ADR 009 Phase B (#294): fetch + version the full text of the tracked instruments into
+    # regdocs/ BEFORE the cards are built, so each card can carry what the regulator's
+    # consolidated text says. BCB/CMN norms come from BCB's API, the rest from DOU. No LLM.
+    # Content-hash-cached and time-boxed, so steady-state runs only write changed docs.
+    regdocs = None
+    regdoc_index: dict[str, Any] = {}
+    if os.environ.get("ONCA_REGDOCS", "false").lower() in ("1", "true", "yes"):
+        try:
+            bucket = os.environ.get("ONCA_RAW_BUCKET") or digests_bucket
+            targets = regdoc_targets(recent, as_of=run_date, window=window_days)
+            regdocs = reg_documents.sync_documents(
+                targets, bucket, s3=s3, as_of=run_date,
+                budget_s=_f("ONCA_REGDOCS_BUDGET_S", 120))
+            regdoc_index = regdocs.pop("index", {}) or {}
+            print(f"regdocs: targets={regdocs['targets']} stored={len(regdocs['stored'])} "
+                  f"unchanged={regdocs['unchanged']} skipped={regdocs['skipped']} "
+                  f"deferred={regdocs['deferred']} errors={len(regdocs['errors'])}")
+            for e in regdocs["errors"][:5]:
+                print(f"regdocs error {e['key']}: {e['error']}")
+        except Exception as exc:  # pragma: no cover - best-effort, never blocks
+            print(f"Warning: regdocs sync failed: {exc}")
+
+    def _consolidated(instrument: str) -> dict[str, Any] | None:
+        return consolidated_for(instrument, regdoc_index, as_of=run_date) if regdoc_index else None
+
     keys: list[str] = []
     fired = {c["instrument"] for c in cands}
     for cand in cands:
@@ -1067,7 +1153,9 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                     n_records += 1
             except Exception as exc:  # pragma: no cover
                 print(f"Warning: radar change-record failed: {exc}")
-        key = _write(build_narrative(cand, change_record=rec), digests_bucket, s3)
+        key = _write(build_narrative(cand, change_record=rec,
+                                     consolidated=_consolidated(cand["instrument"])),
+                     digests_bucket, s3)
         if key:
             keys.append(key)
 
@@ -1097,26 +1185,11 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 print(f"Warning: reg change-record drafting failed: {exc}")
         if llm_on:
             print(f"reg change-records: drafted={n_records}")
+        for key_, lc in lifecycles.items():
+            lc["consolidated"] = _consolidated(key_)
         n_lifecycles = publish_lifecycles(lifecycles, digests_bucket, s3=s3, as_of=run_date)
     except Exception as exc:  # pragma: no cover - best-effort
         print(f"Warning: regulatory lifecycle publish failed: {exc}")
-
-    # ADR 009 Phase B: fetch + version the full text of tracked instruments into the
-    # regdocs/ store (the diff enabler). Gated OFF by default (network fetch of DOU pages);
-    # content-hash-cached so steady-state runs only write changed/new docs.
-    regdocs = None
-    if os.environ.get("ONCA_REGDOCS", "false").lower() in ("1", "true", "yes"):
-        try:
-            from src.ingest import reg_documents
-
-            bucket = os.environ.get("ONCA_RAW_BUCKET") or digests_bucket
-            targets = regdoc_targets(recent, as_of=run_date, window=window_days)
-            regdocs = reg_documents.sync_documents(targets, bucket, s3=s3, as_of=run_date)
-            print(f"regdocs: targets={regdocs['targets']} stored={len(regdocs['stored'])} "
-                  f"unchanged={regdocs['unchanged']} skipped={regdocs['skipped']} "
-                  f"errors={len(regdocs['errors'])}")
-        except Exception as exc:  # pragma: no cover - best-effort, never blocks
-            print(f"Warning: regdocs sync failed: {exc}")
 
     return {
         "statusCode": 200,
@@ -1130,7 +1203,10 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 "lifecycles": n_lifecycles,
                 "change_records": n_records,
                 "regdocs": ({"stored": len(regdocs["stored"]), "unchanged": regdocs["unchanged"],
-                             "skipped": regdocs["skipped"], "errors": len(regdocs["errors"])}
+                             "skipped": regdocs["skipped"], "deferred": regdocs["deferred"],
+                             "errors": len(regdocs["errors"]),
+                             "with_consolidated": sum(1 for k in regdoc_index
+                                                      if consolidated_for(k, regdoc_index, as_of=run_date))}
                             if regdocs else None),
                 "instruments": [
                     f"{c['instrument']}"

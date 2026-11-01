@@ -404,6 +404,7 @@ def _project_item(n: dict[str, Any]) -> dict[str, Any]:
         "n_changes": n.get("n_changes"),
         "changes": n.get("changes") or [],
         "change_record": n.get("change_record"),
+        "consolidated": n.get("consolidated"),   # #294: BCB consolidated text (version, amendments)
         "n_developments": n.get("n_developments"),
         "latest_dev_id": n.get("latest_dev_id"),      # thread: the card its latest dev shows
         "latest_dev_date": n.get("latest_dev_date"),

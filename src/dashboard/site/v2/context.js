@@ -1035,7 +1035,27 @@
     const [cls, g, word] = m[d.band] || ["low", "▬", d.band || "—"];
     return `<span class="badge badge--${cls}"><span class="g" aria-hidden="true">${g}</span>dificuldade ${word}</span>`;
   }
-  function hasChange(c) { return !!(c && (c.change_record || c.n_changes || (c.changes || []).length)); }
+  function hasChange(c) {
+    return !!(c && (c.change_record || c.n_changes || (c.changes || []).length || c.consolidated));
+  }
+  /* #294: the regulator's consolidated text: its version, the latest amending acts with the
+     articles each changed (BCB's own list, so sourced, not inference) and, when a new version
+     was archived, the article-level diff against the previous one. */
+  function consolidatedBlock(k) {
+    if (!k) return "";
+    const url = /^https:\/\/www\.bcb\.gov\.br\//.test(k.url || "") ? k.url : "";
+    const head = `<div class="chg-line"><b>Texto consolidado</b> <span class="cvsub">(${esc(k.source || "BCB")}` +
+      `${k.versao ? " · versão " + esc(k.versao) : ""})</span>` +
+      `${url ? ` · <a href="${esc(url)}" target="_blank" rel="noopener">norma no BCB ↗</a>` : ""}</div>`;
+    const revoked = k.revoked ? `<div class="chg-line"><span class="badge badge--crit">revogada ou cancelada</span></div>` : "";
+    const am = (k.amendments || []).length
+      ? `<ul class="chg-list">${k.amendments.map((a) => `<li>${esc(a.act || "")}` +
+          `${a.effective ? ` <span class="cvsub">(a partir de ${esc(U.fmtDate(a.effective))})</span>` : ""}` +
+          `: ${esc(a.detail || "")}</li>`).join("")}</ul>` : "";
+    const diff = k.diff && k.diff.summary
+      ? `<div class="chg-line"><b>Desde a versão anterior arquivada:</b> ${esc(k.diff.summary)}</div>` : "";
+    return `<div class="chg-consol">${head}${revoked}${am}${diff}</div>`;
+  }
   function changePanel(c) {
     if (!hasChange(c)) return "";
     const rec = c.change_record;
@@ -1067,9 +1087,10 @@
         ${surfaces}${drivers}</div>`;
     }
     const n = c.n_changes || changes.length || 0;
+    const count = n ? `${n} ${n === 1 ? "alteração" : "alterações"}` : "texto consolidado";
     return `<details class="fold chg"><summary><span class="tw" aria-hidden="true">▸</span> Mudança regulatória` +
-      `<span class="demoted">— ${n} ${n === 1 ? "alteração" : "alterações"}${rec ? " · impacto avaliado (inferência)" : ""}</span></summary>` +
-      `<div class="chg-bd">${chips}${list}${rated}</div></details>`;
+      `<span class="demoted">— ${count}${rec ? " · impacto avaliado (inferência)" : ""}</span></summary>` +
+      `<div class="chg-bd">${chips}${list}${consolidatedBlock(c.consolidated)}${rated}</div></details>`;
   }
 
   function cardHTML(c, i) {
@@ -1820,7 +1841,7 @@
     // drawer
     wireDrawer, openCard, closeDrawer,
     // panels
-    renderKpis, renderComparar, renderRegulatorio, renderCalendar,
+    renderKpis, renderComparar, renderRegulatorio, renderCalendar, changePanel,
     renderEntrants, renderEntrantsFunnel, renderRisco, renderPix,
     renderFundos, renderSWOT, renderMapa, renderQuadrant, quadrantViable, quadStats,
     // selectors / util

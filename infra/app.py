@@ -1282,6 +1282,11 @@ class OncaPrototypeStack(Stack):
                 "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
                 "ONCA_ENTITIES_TABLE": entities_table.table_name,
                 "ONCA_FEATURE_WINDOW_DAYS": "90",
+                # ADR 009 Phase B (#294): version the tracked norms' full text into regdocs/
+                # (BCB's consolidated text for BCB/CMN norms, DOU otherwise) and put the
+                # regulator's amendment list on each card. No LLM; time-boxed inside the 5 min.
+                "ONCA_REGDOCS": "true",
+                "ONCA_REGDOCS_BUDGET_S": "120",
             },
         )
         digests_bucket.grant_read_write(regulatory_fn)

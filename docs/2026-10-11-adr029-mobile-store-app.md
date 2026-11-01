@@ -1,17 +1,23 @@
 # ADR 029 — Onça in the App Store and Google Play: an Expo shell around the PWA, Sign in with Apple, and store compliance
 
-- Status: **Partly built (2026-11-01)** — the M2/M3 engineering is in code. What remains is
+- Status: **Partly built (2026-11-01, #257/#258 closed)** — the M2/M3 engineering is in code. What remains is
   mostly owner actions, device testing and the gated store release.
   - **Built and closed:** #248 Sign in with Apple (`49f2f84`, `cd761b7`), #249 invite codes
     (`ebb5e50`), #251 account deletion (`9478a36`), #252 privacy inventory (`1377f56`),
     #254/#255 spike and shell (`297fe27`, `d65bf8d`; app in `mobile/apps/onca`), #259 app QA
     (Maestro CI on the Android emulator plus WebKit app-mode Layer 1).
+    - #257 app lock and privacy cover (`ec9dc69`), closed 2026-11-01 after `5e902b6`:
+      - a tenant ceiling, `app_lock_minutes`;
+      - sign-out when the device lock is removed;
+      - Android 13+ app-switcher privacy through a config plugin.
+    - #258 app mode (`e67e995`), closed 2026-11-01 after `5e902b6` and `cc345ee`:
+      `/v2/app-guard.js` removes purchase links on every page the app can reach.
+    - Both were verified live and on mobile QA run 41320611994. Their real-device rows stay
+      in #200.
   - **Built in code, issue still open:**
     - #256 native push (`ec9dc69`, `src/dashboard/push.py`). Android delivery waits on the
       owner's Firebase project and FCM key; `google-services.json` is not in the app yet.
-    - #257 app lock and privacy cover (`ec9dc69`).
-    - #258 app mode, no purchase CTAs, native share (`e67e995`).
-    - All three still need the device pass (#200).
+      It also needs the device pass (#200).
   - **Universal links (#289):** the iOS card-only AASA and the `/c/<id>` share path are live
     (`4aa7fde`, `1eb822c`). Android `assetlinks.json` waits on Play App Signing (#253). This
     replaces the "not built yet" note in *Spike result* row 5.
