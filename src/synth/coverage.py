@@ -248,14 +248,17 @@ def open_issue(gap: dict[str, Any], triage_result: dict[str, Any]) -> str | None
             arr = json.loads(found.stdout)
             if arr:
                 return arr[0].get("url")
-        title = f"Coverage gap: {gap['question'][:70]}"
+        # #295: the repo is PUBLIC and a question is client data, so the issue carries the gap
+        # id, its class and the recommendation, never the question. The question stays in the
+        # private store (coverage_gaps/index.json), shown to operators in /v2/admin.
+        title = f"Coverage gap {gap['id']} ({triage_result['class']})"
         body = (
-            f"Pergunta não respondida pelo agente (ADR 010).\n\n"
-            f"**Pergunta:** {gap['question']}\n"
+            f"Pergunta em domínio não respondida pelo agente (ADR 010). O texto da pergunta fica "
+            f"no store privado (`coverage_gaps/index.json`, painel Pontos cegos em /v2/admin).\n\n"
+            f"**Gap:** `{gap['id']}`\n"
             f"**Classe:** {triage_result['class']}\n"
             f"**Recomendação:** {triage_result['recommendation']}\n"
-            f"**Ocorrências:** {gap.get('count', 1)} · visto por último {gap.get('last_seen')}\n"
-            f"**Entidades resolvidas:** {', '.join(triage_result.get('entities') or []) or '—'}\n\n"
+            f"**Ocorrências:** {gap.get('count', 1)} · visto por último {gap.get('last_seen')}\n\n"
             f"<!-- {marker} -->\n"
             f"_Auto-aberto pelo coverage-gap loop. Remediações de código novo passam por "
             f"revisão humana + CI/CD (AUTO_CODEGEN=off)._"
@@ -371,6 +374,88 @@ def remediate(
                     summary["proposed"] += 1
                 rec["status"] = STATUS_PROPOSED
 
+    index["records"] = records
+    publish(index, bucket, s3=s3)
+    return summary
+
+
+# --- scheduled pass (#295): weekly, capped verify, no issues ----------------
+
+#: Owner exception to "Bedrock is for paying clients only" (2026-11-01, #295): at most this
+#: many Nova Lite re-asks per weekly run, feed cards only (no KB retrieve).
+SCHEDULED_VERIFY_MAX = 15
+
+
+def feed_verifier(feed: dict[str, Any], *,
+                  converser: Callable[..., str | None] | None = None) -> Callable[[str, Any], bool]:
+    """Re-ask the agent over the feed cards (no KB retrieve) and report whether it grounds.
+    The converser defaults to `bedrock_llm.converse`: Nova Lite through the tagged profile."""
+    from src.dashboard import agent_ask
+    if converser is None:
+        from src.synth.bedrock_llm import converse as converser
+
+    def verify(q: str, scope: Any = None) -> bool:
+        res = agent_ask.answer(q, feed=feed, scope=scope or None, converser=converser,
+                               kb_retrieve=None)
+        return bool(res.get("grounded"))
+    return verify
+
+
+def scheduled_pass(
+    bucket: str, *,
+    resolver: Callable[[dict[str, Any]], list[str]] | None = None,
+    known_entity_ids: set[str] | None = None,
+    verifier: Callable[[str, Any], bool] | None = None,
+    autofixer: Callable[[], dict[str, Any]] = safe_autofix,
+    closer: Callable[[str | None], bool] = close_issue,
+    max_verify: int = SCHEDULED_VERIFY_MAX,
+    s3: Any | None = None,
+    today: dt.date | None = None,
+) -> dict[str, Any]:
+    """The weekly pass over open + proposed gaps (ADR 014 next step 1, #295).
+
+    - Triage each gap (deterministic, plus the registry resolver).
+    - Run the bounded, reversible registry backfills once if any gap is auto-fixable (§4).
+    - Re-ask the agent for at most `max_verify` gaps, the least recently verified first.
+      A gap that now grounds is resolved (and its issue closed, when a token is set).
+
+    It never opens an issue: the repo is public and a question is client data. A gap that
+    still doesn't ground just stays open, where "Pontos cegos" shows it."""
+    today = today or dt.date.today()
+    now = today.isoformat()
+    index = load_index(bucket, s3=s3)
+    records = index.get("records") or {}
+    summary: dict[str, Any] = {"triaged": 0, "auto_fixable": 0, "verified": 0, "resolved": 0,
+                               "autofix": None}
+    todo = [r for r in records.values() if r.get("status") in (STATUS_OPEN, STATUS_PROPOSED)]
+    for rec in todo:
+        try:
+            t = triage(rec["question"], resolver=resolver, known_entity_ids=known_entity_ids)
+        except Exception as exc:  # pragma: no cover - one bad gap never stops the pass
+            print(f"Warning: triage {rec.get('id')} failed: {exc}")
+            continue
+        rec["triage"], rec["triaged_at"] = t, now
+        summary["triaged"] += 1
+        if t.get("auto_fixable"):
+            summary["auto_fixable"] += 1
+    if summary["auto_fixable"]:
+        summary["autofix"] = autofixer()
+    if verifier is not None and max_verify > 0:
+        queue = sorted(todo, key=lambda r: (str(r.get("verified_at") or ""), str(r.get("first_seen") or "")))
+        for rec in queue[:max_verify]:
+            try:
+                ok = verifier(rec["question"], rec.get("scope"))
+            except Exception as exc:  # pragma: no cover
+                print(f"Warning: verify {rec.get('id')} failed: {exc}")
+                continue
+            rec["verified_at"] = now
+            summary["verified"] += 1
+            if ok:
+                rec["status"] = STATUS_RESOLVED
+                rec["resolved_at"] = now
+                rec["resolved_by"] = "scheduled"
+                rec["issue_closed"] = bool(rec.get("issue_url")) and closer(rec.get("issue_url"))
+                summary["resolved"] += 1
     index["records"] = records
     publish(index, bucket, s3=s3)
     return summary

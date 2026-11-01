@@ -902,7 +902,7 @@ function renderGaps() {
       <div class="qrow__main">
         <div class="qrow__title">${U.esc(g.question)}</div>
         <div class="qrow__meta">${cls ? `<span class="badge badge--ghost">${U.esc(cls)}</span>` : ""}
-          <span>×${g.count || 1}</span>${issue}</div>
+          <span>×${g.count || 1}</span>${g.verified_at ? `<span>· reverificado em ${U.esc(String(g.verified_at).slice(5).split("-").reverse().join("/"))}, ainda sem resposta</span>` : ""}${issue}</div>
         <div class="qrow__meta gres" data-for="${U.esc(g.id)}"></div>
       </div>
       <div class="qrow__actions">

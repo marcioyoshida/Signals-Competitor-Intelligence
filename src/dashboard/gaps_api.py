@@ -11,6 +11,13 @@ carrying the CloudFront-injected origin secret.
 Routes (under /api/gaps):
   GET  /            list open + proposed gaps (fresh from the store)
   POST /remediate   {id} run remediation for one gap; returns its new status
+
+Scheduled (#295): the weekly EventBridge rule invokes this function directly with the fixed
+input SCHEDULED_EVENT. That runs `coverage.scheduled_pass`: triage, the bounded backfills,
+and a capped re-ask of the agent (Nova Lite, feed cards only; owner exception 2026-11-01).
+It never opens an issue. A Function URL or API
+Gateway request can't produce that event: AWS sets their top-level keys, and the
+caller's payload lives in `body`.
 """
 from __future__ import annotations
 
@@ -71,7 +78,42 @@ def _verifier(site_bucket: str | None):
     return verify
 
 
+SCHEDULED_EVENT = {"coverage_loop": "scheduled"}
+
+
+def _scheduled(event: Any) -> bool:
+    return isinstance(event, dict) and event == SCHEDULED_EVENT
+
+
+def run_scheduled() -> dict[str, Any]:
+    """The weekly pass (#295). Returns its summary; never raises."""
+    bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
+    if not bucket:
+        return {"status": "not configured"}
+    from src.synth import coverage
+    from src.synth.entities import resolve_entities
+
+    verifier = None
+    site = os.environ.get("ONCA_SITE_BUCKET")
+    if site:
+        try:
+            from src.dashboard import agent_ask
+
+            verifier = coverage.feed_verifier(agent_ask._load_feed(site))
+        except Exception as exc:  # pragma: no cover - triage still runs without the verify
+            print(f"Warning: coverage verify unavailable: {exc}")
+    try:
+        summary = coverage.scheduled_pass(bucket, resolver=resolve_entities, verifier=verifier)
+    except Exception as exc:  # pragma: no cover
+        print(f"coverage scheduled pass failed: {exc}")
+        return {"status": "error"}
+    print(f"coverage scheduled pass: {json.dumps(summary, ensure_ascii=False, default=str)}")
+    return {"status": "ok", **summary}
+
+
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
+    if _scheduled(event):
+        return run_scheduled()
     # Auth (Phase C increment 2): a verified Cognito identity (API Gateway JWT
     # authorizer) OR the legacy CloudFront origin secret.
     from src.dashboard.auth import identity_from_event, origin_secret_ok

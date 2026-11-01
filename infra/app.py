@@ -2287,7 +2287,9 @@ class OncaPrototypeStack(Stack):
             runtime=LAMBDA_RUNTIME,
             handler="src.dashboard.gaps_api.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
-            timeout=Duration.seconds(90),
+            # #295: the weekly pass resolves each open gap against the full alias corpus.
+            # Browser calls are still capped at the HTTP API's 30 s.
+            timeout=Duration.seconds(300),
             memory_size=512,
             environment={
                 "PYTHONPATH": "/var/task",
@@ -2323,6 +2325,18 @@ class OncaPrototypeStack(Stack):
                 ],
             )
         )
+        # ADR 014 next step 1 (#295): a weekly coverage-gap pass, Wednesday 10:00 UTC. Triage,
+        # the bounded registry backfills, and a re-ask of the agent capped at 15 gaps (Nova
+        # Lite through the tagged profile, feed cards only): an owner exception, 2026-11-01, to
+        # "Bedrock is for paying clients only". It opens NO issue (public repo). The input is
+        # the fixed event that gaps_api.SCHEDULED_EVENT matches.
+        events.Rule(
+            self,
+            "OncaCoverageGapWeekly",
+            schedule=events.Schedule.cron(minute="0", hour="10", week_day="WED"),
+        ).add_target(targets.LambdaFunction(
+            gaps_fn, retry_attempts=0,
+            event=events.RuleTargetInput.from_object({"coverage_loop": "scheduled"})))
         # NOTE: /api/gaps is CUT OVER to the Cognito-JWT HTTP API below (issue #45),
         # same-origin like /api/ask — no Lambda function URL, no origin secret, no edge
         # basic-auth. Its ONCA_ORIGIN_SECRET env stays only as a fail-closed backstop.
