@@ -29,6 +29,7 @@ def _env(monkeypatch):
     monkeypatch.setenv("ONCA_COGNITO_DOMAIN", "https://auth.example")
     monkeypatch.setenv("ONCA_COGNITO_CLIENT_ID", "cid")
     monkeypatch.setattr(sa, "idle_days", lambda tenant, **k: 5 if tenant == "acme" else 7)
+    monkeypatch.setattr(sa, "_tenant_cfg", lambda tenant, **k: {"app_lock_minutes": 5} if tenant == "acme" else {})
 
 
 def _ev(path, body=None, cookie=None, hdr=True):
@@ -52,6 +53,7 @@ def test_exchange_sets_httponly_cookie_with_tenant_idle_window(monkeypatch):
     assert resp["statusCode"] == 200
     body = json.loads(resp["body"])
     assert body["id_token"] and "refresh_token" not in body and body["idle_days"] == 5
+    assert body["app_lock_minutes"] == 5            # #257: the tenant's app-lock ceiling rides along
     ck = resp["cookies"][0]
     assert ck.startswith("onca_rt=RT;") and "HttpOnly" in ck and "Secure" in ck
     assert "SameSite=Strict" in ck and "Path=/api/session" in ck and "Max-Age=432000" in ck
@@ -107,6 +109,21 @@ def test_idle_days_clamped(monkeypatch):
         monkeypatch.setattr(tenant_config, "get_tenant_config",
                             lambda t, table=None, v=v: {"session_idle_days": v} if v is not None else {})
         assert sa.idle_days("t") == want
+
+
+def test_app_lock_minutes_rounds_down_to_the_apps_choices():
+    """#257: the ceiling is one of the app's 1/5/15; anything else rounds to the STRICTER choice."""
+    for v, want in ((None, None), (1, 1), (5, 5), (15, 15), (10, 5), ("20", 15), (0, 1), (-3, 1), ("x", None)):
+        cfg = {} if v is None else {"app_lock_minutes": v}
+        assert sa.app_lock_minutes("t", cfg=cfg) == want, v
+
+
+def test_reply_omits_app_lock_minutes_without_a_tenant_policy(monkeypatch):
+    monkeypatch.setattr(sa, "_token_post", lambda d: _R(200, {
+        "id_token": _jwt({"sub": "u2", "custom:tenant": "other"}), "refresh_token": "RT", "expires_in": 3600}))
+    resp = sa.lambda_handler(_ev("/api/session/exchange", {
+        "code": "c", "code_verifier": "v", "redirect_uri": "https://onssa.org/exec"}), None)
+    assert "app_lock_minutes" not in json.loads(resp["body"])
 
 
 def _evr(route, body=None, csrf=True):

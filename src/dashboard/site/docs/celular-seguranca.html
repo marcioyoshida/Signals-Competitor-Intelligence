@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="pt-BR" data-theme="dark">
 <head>
+<script src="/v2/app-guard.js"></script>  <!-- #258: no purchase affordance in the store app -->
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Onça no celular — segurança</title>
@@ -83,7 +84,8 @@
           painel e as preferências locais do usuário, e remove a inscrição de alertas do aparelho.</dd>
         <dt>Desligamento remoto</dt>
         <dd>A equipe Onça, a pedido do cliente, encerra todas as sessões de um usuário (sign-out global
-          do Cognito). Na próxima abertura, o app cai na tela de login e apaga os dados locais.</dd>
+          do Cognito; ação <code>revoke_user_sessions</code>). Na próxima abertura, o app cai na tela de login
+          e apaga os dados locais.</dd>
       </dl>
     </div>
   </section>
@@ -144,8 +146,15 @@
       <ul>
         <li>É o mesmo painel da web dentro do app. O login acontece no navegador do sistema, nunca dentro do app.</li>
         <li><b>Bloqueio opcional</b> com Face ID, digital ou a senha do aparelho, após 1, 5 ou 15 minutos fora do
-          app. A biometria fica no aparelho; o Onça só recebe “desbloqueado” ou “não”.</li>
-        <li>Com o bloqueio ativo, a miniatura na troca de apps é neutra e capturas de tela são bloqueadas.</li>
+          app. A biometria fica no aparelho; o Onça só recebe “desbloqueado” ou “não”. O app fecha bloqueado
+          e abre bloqueado.</li>
+        <li><b>Limite por cliente:</b> a sua organização pode definir o tempo máximo (1, 5 ou 15 minutos); o
+          oficial pode escolher um tempo menor, nunca maior.</li>
+        <li>Se a biometria for desativada, vale a senha do aparelho. Se o bloqueio de tela do aparelho for
+          removido, o app <b>não</b> abre sem bloqueio: ele pede para sair, encerra a sessão Onça (inclusive
+          o login no navegador do sistema) e só volta com e-mail e senha.</li>
+        <li>Na troca de apps a miniatura é neutra no iPhone e no Android 13 ou mais recente; em versões
+          anteriores do Android, só com o bloqueio ativo. Com o bloqueio ativo, capturas de tela são bloqueadas.</li>
         <li>Nenhuma compra dentro do app; o plano é gerenciado em onssa.org.</li>
         <li>Um administrador pode encerrar remotamente todas as sessões de um usuário.</li>
       </ul>

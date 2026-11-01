@@ -13,7 +13,8 @@ Three POST routes on the Cognito HTTP API (no JWT authorizer — the cookie IS t
 * ``/api/session/refresh`` — a new ID token from the cookie's refresh token. The cookie's
   ``Max-Age`` is the tenant's idle limit (``session_idle_days`` on onca-tenant-config, default
   ``DEFAULT_IDLE_DAYS``) and is re-issued on every refresh: a sliding inactivity window. The
-  Cognito refresh-token validity (30 days, infra) is the absolute cap.
+  Cognito refresh-token validity (30 days, infra) is the absolute cap. The reply also carries
+  ``app_lock_minutes`` when the tenant sets one (#257): the store app's lock-delay ceiling.
 * ``/api/session/logout`` — revokes the refresh token at Cognito and expires the cookie.
 
 Own sign-in form on /exec (#277, ported from Anteater a888626): Cognito's managed-login page
@@ -107,21 +108,44 @@ def _claims(id_token: str) -> dict[str, Any]:
         return {}
 
 
-def idle_days(tenant: str | None, *, table: Any | None = None) -> int:
-    """The tenant's re-auth-after-inactivity limit in days (#164), clamped to [1, MAX_IDLE_DAYS]."""
-    days: Any = None
-    if tenant:
-        try:
-            from src.dashboard import tenant_config
+def _tenant_cfg(tenant: str | None, *, table: Any | None = None) -> dict[str, Any]:
+    if not tenant:
+        return {}
+    try:
+        from src.dashboard import tenant_config
 
-            days = (tenant_config.get_tenant_config(tenant, table=table) or {}).get("session_idle_days")
-        except Exception as exc:  # pragma: no cover - config read is best-effort
-            print(f"Warning: session idle-days lookup failed: {exc}")
+        return tenant_config.get_tenant_config(tenant, table=table) or {}
+    except Exception as exc:  # pragma: no cover - config read is best-effort
+        print(f"Warning: tenant session-policy lookup failed: {exc}")
+        return {}
+
+
+def idle_days(tenant: str | None, *, table: Any | None = None, cfg: dict[str, Any] | None = None) -> int:
+    """The tenant's re-auth-after-inactivity limit in days (#164), clamped to [1, MAX_IDLE_DAYS]."""
+    days = (cfg if cfg is not None else _tenant_cfg(tenant, table=table)).get("session_idle_days")
     try:
         d = int(days) if days is not None else DEFAULT_IDLE_DAYS
     except (TypeError, ValueError):
         d = DEFAULT_IDLE_DAYS
     return max(1, min(MAX_IDLE_DAYS, d))
+
+
+APP_LOCK_MINUTES = (1, 5, 15)   # the store app's lock choices (mobile/apps/onca bridge.ts LOCK_MINUTES)
+
+
+def app_lock_minutes(tenant: str | None, *, table: Any | None = None,
+                     cfg: dict[str, Any] | None = None) -> int | None:
+    """#257: the tenant's ceiling for the store app's lock delay (``app_lock_minutes`` on
+    onca-tenant-config). A device may lock sooner, never later. None = no tenant policy; a value
+    off the app's scale rounds DOWN to the next choice (stricter), below 1 means 1."""
+    v = (cfg if cfg is not None else _tenant_cfg(tenant, table=table)).get("app_lock_minutes")
+    if v is None:
+        return None
+    try:
+        n = int(v)
+    except (TypeError, ValueError):
+        return None
+    return max([m for m in APP_LOCK_MINUTES if m <= n] or [APP_LOCK_MINUTES[0]])
 
 
 def _token_post(data: dict[str, str]) -> requests.Response:
@@ -138,9 +162,14 @@ def _ok_redirect(uri: str) -> bool:
 
 
 def _session_reply(id_token: str, refresh_token: str, expires_in: Any) -> dict[str, Any]:
-    days = idle_days((_claims(id_token).get("custom:tenant") or None))
-    return _resp(200, {"id_token": id_token, "expires_in": expires_in, "idle_days": days},
-                 [_cookie(refresh_token, days * 86400)])
+    tenant = _claims(id_token).get("custom:tenant") or None
+    cfg = _tenant_cfg(tenant)
+    days = idle_days(tenant, cfg=cfg)
+    body: dict[str, Any] = {"id_token": id_token, "expires_in": expires_in, "idle_days": days}
+    lock = app_lock_minutes(tenant, cfg=cfg)
+    if lock is not None:
+        body["app_lock_minutes"] = lock
+    return _resp(200, body, [_cookie(refresh_token, days * 86400)])
 
 
 def exchange(body: dict[str, Any]) -> dict[str, Any]:

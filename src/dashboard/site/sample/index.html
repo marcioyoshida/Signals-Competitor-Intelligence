@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="pt-BR" data-theme="dark">
 <head>
+<script src="/v2/app-guard.js"></script>  <!-- #258: no purchase affordance in the store app -->
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Onça — Amostra pública: Fundos Imobiliários</title>
@@ -81,7 +82,7 @@
   <section class="section">
     <h3>O que esta amostra não mostra</h3>
     <div class="gate" id="gate"></div>
-    <div class="cta">
+    <div class="cta" data-web-only>
       <a class="btn" href="/pricing.html">Ver planos e preços</a>
     </div>
   </section>
@@ -199,7 +200,7 @@ fetch("/feed.sample.json", { cache: "no-store" })
   .then(render)
   .catch(() => {
     document.getElementById("feed").innerHTML =
-      `<div class="empty">Amostra indisponível no momento. <a href="/pricing.html">Ver planos</a></div>`;
+      `<div class="empty">Amostra indisponível no momento.<span data-web-only> <a href="/pricing.html">Ver planos</a></span></div>`;
     document.getElementById("asof").textContent = "indisponível";
   });
 </script>

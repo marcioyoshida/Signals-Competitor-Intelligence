@@ -298,7 +298,9 @@ def put_tenant_config(
         prior = _table(table).get_item(Key={"tenant_id": str(tenant_id)}).get("Item") or {}
     except Exception:  # pragma: no cover - a read failure must not block provisioning
         prior = {}
-    for k in _BILLING_FIELDS:
+    # Same for the tenant's security policy (#164 idle limit, #257 app-lock ceiling): a re-put
+    # that silently dropped it would loosen the customer's settings without anyone noticing.
+    for k in _BILLING_FIELDS + _POLICY_FIELDS:
         if k in prior and k not in item:
             item[k] = prior[k]
     _table(table).put_item(Item=item)
@@ -306,6 +308,7 @@ def put_tenant_config(
 
 
 _BILLING_FIELDS = ("billing_managed", "subs", "trial_until", "trial_modules")
+_POLICY_FIELDS = ("session_idle_days", "app_lock_minutes")
 
 
 def apply_purchase(tenant_id: str, storefront_tier: str, module: str, action: str, *,

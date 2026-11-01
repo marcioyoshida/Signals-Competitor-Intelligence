@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="pt-BR" data-theme="dark">
 <head>
+<script src="/v2/app-guard.js"></script>  <!-- #258: no purchase affordance in the store app -->
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="robots" content="noindex, nofollow" />
@@ -3346,14 +3347,20 @@ async function renderLockBox(note) {
     box.innerHTML = `<p class="hd-note">Defina um bloqueio de tela (Face ID, digital ou senha) no aparelho para usar o bloqueio do app.</p>`;
     return;
   }
+  // the tenant's ceiling (#257, from /api/session): the person may pick a shorter delay, never longer
+  const max = Number(st.max) || Ctx.appLockMax();
+  const opts = [1, 5, 15].filter(m => !max || m <= max);
+  const cur = opts.includes(st.minutes) ? st.minutes : opts[opts.length - 1];
   box.innerHTML = `<div style="padding:0 var(--s3) var(--s3)">
     <label class="cvsub" style="display:flex;gap:var(--s2);align-items:center;min-height:44px">Bloquear após
-      <select id="lockMin">${[1, 5, 15].map(m => `<option value="${m}" ${m === st.minutes ? "selected" : ""}>${m} min</option>`).join("")}</select>
+      <select id="lockMin">${opts.map(m => `<option value="${m}" ${m === cur ? "selected" : ""}>${m} min</option>`).join("")}</select>
       fora do app</label>
-    <p class="hd-note">Com o bloqueio ativo, o app também esconde o conteúdo na troca de apps e impede capturas de tela.</p>
+    ${max ? `<p class="hd-note">Sua organização definiu no máximo ${max} min.</p>` : ""}
+    <p class="hd-note">Na troca de apps o conteúdo fica oculto (no Android anterior ao 13, só com o bloqueio ativo). Com o bloqueio ativo, o app também impede capturas de tela.</p>
     <button class="btn ${st.enabled ? "" : "btn--primary"} hoje-act" id="lockToggle" type="button">${st.enabled ? "Desativar bloqueio" : "Ativar bloqueio"}</button>
     ${st.enabled ? `<button class="btn hoje-act" id="lockSave" type="button">Salvar tempo</button>` : ""}
-    <span class="hd-note" id="lockMsg">${U.esc(note || "")}</span></div>`;
+    <span class="hd-note" id="lockMsg">${U.esc(note || "")}</span>
+    <p class="hd-note"><a href="/docs/celular-seguranca.html">Como o app protege seus dados</a></p></div>`;
   const set = async (enabled) => {
     const r = await Ctx.askShell("lock:set", { enabled, minutes: Number(box.querySelector("#lockMin").value) }, 120000);
     renderLockBox(r && r.ok ? (enabled ? "bloqueio ativo" : "bloqueio desativado") : ((r && r.reason) || "não foi possível alterar"));

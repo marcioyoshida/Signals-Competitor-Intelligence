@@ -302,6 +302,15 @@ def test_operator_tenants_are_unchanged_and_a_reput_keeps_paid_subscriptions():
     assert cfg["modules"] == ["acquiring", "banking", "insurance"]
 
 
+def test_a_reput_keeps_the_tenants_security_policy():
+    """#164/#257: an operator re-put must not silently loosen the idle limit or the app-lock ceiling."""
+    t = _FakeTable()
+    tc.put_tenant_config("acme", "saas", ["insurance"], table=t)
+    t.items["acme"].update({"session_idle_days": 2, "app_lock_minutes": 1})
+    tc.put_tenant_config("acme", "saas", ["insurance", "banking"], table=t)
+    assert t.items["acme"]["session_idle_days"] == 2 and t.items["acme"]["app_lock_minutes"] == 1
+
+
 def test_self_register_entry_tenant_rejects_blank_email():
     with pytest.raises(ValueError, match="email is required"):
         tc.self_register_entry_tenant("  ", ["crypto"], table=_FakeTable(), federated_table=_FakeFederatedTable())

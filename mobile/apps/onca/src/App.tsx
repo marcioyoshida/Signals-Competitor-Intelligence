@@ -16,13 +16,13 @@ import * as ScreenCapture from "expo-screen-capture";
 import Constants from "expo-constants";
 import {
   ORIGIN, REDIRECT, authBeaconUrl, authFailureMessage, exchangeUrl, injectedFlag, isPurchaseUrl, parseAuthRedirect, parseMessage,
-  incomingCardUrl, replyScript, shouldLock, staysInApp,
+  incomingCardUrl, replyScript, shouldLock, staysInApp, effectiveMinutes, STRANDED_SIGNOUT_JS,
 } from "./bridge.ts";
 import type { AuthOutcome } from "./bridge.ts";
 
 const BG = "#0e1214";
 const ALERTS_TARGET = `${ORIGIN}/exec#hoje-alertas`;
-const LOCK_KEY = "onca.lock";          // {enabled, minutes} — a preference, not a secret
+const LOCK_KEY = "onca.lock";          // {enabled, minutes, max} — a preference, not a secret
 
 // #256: a push shows while the app is open too; Android needs its channel before the first push.
 Notifications.setNotificationHandler({
@@ -48,13 +48,15 @@ async function pushToken(request: boolean): Promise<{ token?: string; reason?: s
   }
 }
 
-type Lock = { enabled: boolean; minutes: number };
+// max = the tenant's ceiling (#257, from /api/session via the page); kept so a cold start honours it
+type Lock = { enabled: boolean; minutes: number; max: number | null };
 async function readLock(): Promise<Lock> {
   try {
     const v = JSON.parse((await SecureStore.getItemAsync(LOCK_KEY)) || "null");
-    if (v && typeof v.enabled === "boolean") return { enabled: v.enabled, minutes: Number(v.minutes) || 5 };
+    if (v && typeof v.enabled === "boolean")
+      return { enabled: v.enabled, minutes: Number(v.minutes) || 5, max: Number(v.max) || null };
   } catch { /* fall through */ }
-  return { enabled: false, minutes: 5 };
+  return { enabled: false, minutes: 5, max: null };
 }
 async function lockAvailable(): Promise<boolean> {
   return (await LocalAuthentication.getEnrolledLevelAsync()) !== LocalAuthentication.SecurityLevel.NONE;
@@ -71,11 +73,15 @@ export default function App() {
 function Shell() {
   const web = useRef<WebView>(null);
   const canGoBack = useRef(false);
-  const lock = useRef<Lock>({ enabled: false, minutes: 5 });
+  const lock = useRef<Lock>({ enabled: false, minutes: 5, max: null });
   const backgroundedAt = useRef<number | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const [locked, setLocked] = useState(false);
   const [covered, setCovered] = useState(false);     // app-switcher privacy screen
+  // #257: the lock is on but the device no longer has a screen lock to verify against. The only
+  // way past is a full sign-out (never "no lock"); strandedOut = the shell started that sign-out.
+  const [stranded, setStranded] = useState(false);
+  const strandedOut = useRef(false);
 
   // navigate INSIDE the same WebView (keeps sessionStorage, where /exec left the PKCE verifier)
   const go = useCallback((url: string) => {
@@ -83,7 +89,24 @@ function Shell() {
   }, []);
   const reply = useCallback((id: number, value: unknown) => web.current?.injectJavaScript(replyScript(id, value)), []);
 
-  const unlock = useCallback(async () => { if (await authenticate()) setLocked(false); }, []);
+  const unlock = useCallback(async () => {
+    if (!(await lockAvailable())) { setStranded(true); return; }
+    if (await authenticate()) setLocked(false);
+  }, []);
+  const signOutStranded = useCallback(() => {
+    strandedOut.current = true;
+    web.current?.injectJavaScript(STRANDED_SIGNOUT_JS);
+  }, []);
+  // the Onça session is gone: only now does the lock preference go (the next person must sign in)
+  const finishStranded = useCallback(async () => {
+    strandedOut.current = false;
+    lock.current = { enabled: false, minutes: lock.current.minutes, max: lock.current.max };
+    await SecureStore.setItemAsync(LOCK_KEY, JSON.stringify(lock.current)).catch(() => {});
+    ScreenCapture.allowScreenCaptureAsync("lock").catch(() => {});
+    go(`${ORIGIN}/exec`);
+    setStranded(false);
+    setLocked(false);
+  }, [go]);
 
   // #257: restore the lock preference; a cold start with the lock on starts locked
   useEffect(() => {
@@ -97,7 +120,8 @@ function Shell() {
     const sub = AppState.addEventListener("change", (st) => {
       if (st === "active") {
         setCovered(false);
-        if (shouldLock(lock.current.enabled, lock.current.minutes, backgroundedAt.current, Date.now())) setLocked(true);
+        const mins = effectiveMinutes(lock.current.minutes, lock.current.max);
+        if (shouldLock(lock.current.enabled, mins, backgroundedAt.current, Date.now())) setLocked(true);
         backgroundedAt.current = null;
       } else {
         setCovered(true);                               // iOS snapshots on "inactive"
@@ -139,7 +163,7 @@ function Shell() {
       case "lock:set": {
         if (!(await lockAvailable())) { reply(m.id, { ok: false, reason: "defina um bloqueio de tela no aparelho primeiro" }); return; }
         if (!(await authenticate())) { reply(m.id, { ok: false, reason: "autenticação cancelada" }); return; }
-        lock.current = { enabled: m.enabled, minutes: m.minutes };
+        lock.current = { enabled: m.enabled, minutes: effectiveMinutes(m.minutes, lock.current.max), max: lock.current.max };
         await SecureStore.setItemAsync(LOCK_KEY, JSON.stringify(lock.current));
         // Android's app-switcher thumbnail is only reliably hidden with FLAG_SECURE (also blocks
         // screenshots), so it is on exactly while the lock is on.
@@ -148,8 +172,21 @@ function Shell() {
         reply(m.id, { ok: true, ...lock.current });
         return;
       }
+      case "lock:policy":
+        // a ceiling only tightens; it needs no authentication (nothing gets weaker)
+        if (lock.current.max !== m.max) {
+          lock.current = { ...lock.current, max: m.max };
+          SecureStore.setItemAsync(LOCK_KEY, JSON.stringify(lock.current)).catch(() => {});
+        }
+        return;
+      case "lock:signedout":
+        if (strandedOut.current) await finishStranded();
+        return;
       case "logout":
-        try { await WebBrowser.openAuthSessionAsync(m.url, REDIRECT, { preferEphemeralSession: true }); } catch { /* still sign out locally */ }
+        // A stranded sign-out also ends the Hosted UI session in the SHARED browser session, so
+        // the next sign-in asks for the password instead of riding a remembered Cognito cookie.
+        try { await WebBrowser.openAuthSessionAsync(m.url, REDIRECT, { preferEphemeralSession: !strandedOut.current }); } catch { /* still sign out locally */ }
+        if (strandedOut.current) { await finishStranded(); return; }
         go(`${ORIGIN}/exec`);
         return;
       case "auth": {
@@ -180,7 +217,7 @@ function Shell() {
         return;
       }
     }
-  }, [go, reply]);
+  }, [go, reply, finishStranded]);
 
   const onShouldStart = useCallback((req: ShouldStartLoadRequest) => {
     if (isPurchaseUrl(req.url)) return false;            // #258: never, not even in the system browser
@@ -235,7 +272,15 @@ function Shell() {
       {locked || covered ? (
         <View style={[StyleSheet.absoluteFill, s.cover]}>
           <Text style={s.brand}>ONÇA</Text>
-          {locked ? (
+          {locked && stranded ? (
+            <>
+              <Text style={s.d}>O bloqueio de tela deste aparelho foi removido, então o Onça não consegue
+                confirmar que é você. Para continuar, saia e entre de novo com a sua conta.</Text>
+              <Pressable style={s.btn} onPress={signOutStranded}>
+                <Text style={s.btnT}>Sair e entrar de novo</Text>
+              </Pressable>
+            </>
+          ) : locked ? (
             <Pressable style={s.btn} onPress={unlock}>
               <Text style={s.btnT}>Desbloquear</Text>
             </Pressable>
@@ -251,7 +296,7 @@ const s = StyleSheet.create({
   web: { flex: 1, backgroundColor: BG },
   hidden: { display: "none" },
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
-  cover: { backgroundColor: BG, alignItems: "center", justifyContent: "center", gap: 24 },
+  cover: { backgroundColor: BG, alignItems: "center", justifyContent: "center", gap: 24, padding: 24 },
   brand: { color: "#e8edf0", fontSize: 28, fontWeight: "700", letterSpacing: 4 },
   t: { color: "#e8edf0", fontSize: 18, fontWeight: "600", marginBottom: 8 },
   d: { color: "#9aa5ad", fontSize: 14, textAlign: "center", marginBottom: 20 },

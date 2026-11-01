@@ -55,7 +55,7 @@ def test_form_talks_to_the_session_broker_and_handles_every_reply():
         assert reply in FORM, reply
     # a password success is handled exactly like the code exchange (one shared function)
     assert "await acceptSession(j);" in CTX and "await acceptSession(r);" in FORM
-    assert "markDeviceSession(j.idle_days)" in CTX.split("async function acceptSession", 1)[1]
+    assert "markDeviceSession(j.idle_days, j.app_lock_minutes)" in CTX.split("async function acceptSession", 1)[1]
     assert "const SI_MIN_PW = 12;" in FORM and "siPwLen(pw) < SI_MIN_PW" in FORM   # checked before calling
 
 

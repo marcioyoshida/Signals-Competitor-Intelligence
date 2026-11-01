@@ -201,7 +201,7 @@
      token (sliding, per-tenant idle limit); /api/session/logout revokes it. Only the
      short-lived ID token lives here, in sessionStorage. */
   const USER_FEED_CACHE = "onca-user-feed";
-  const DEVICE_SESSION_KEY = "onca_u_session";   // {sub, last_active, idle_days} — no token
+  const DEVICE_SESSION_KEY = "onca_u_session";   // {sub, last_active, idle_days, app_lock_minutes} — no token
   function sessionPost(path, body) {
     return fetch("/api/session/" + path, {
       method: "POST", credentials: "same-origin", cache: "no-store",
@@ -209,14 +209,23 @@
       body: JSON.stringify(body || {}),
     });
   }
-  function markDeviceSession(idleDays) {
+  // lockMax: the tenant's app-lock ceiling in minutes (#257), straight from the server reply —
+  // absent = no tenant policy. The store app gets it on every reply, so a policy change (or its
+  // removal) reaches the shell on the next refresh.
+  function markDeviceSession(idleDays, lockMax) {
     const p = decodeJwt(getIdToken() || "") || {};
     if (!p.sub) return;
     let prev = {};
     try { prev = JSON.parse(localStorage.getItem(DEVICE_SESSION_KEY) || "{}"); } catch (e) {}
     const rec = { sub: p.sub, last_active: Date.now(),
-      idle_days: idleDays || (prev.sub === p.sub && prev.idle_days) || 7 };
+      idle_days: idleDays || (prev.sub === p.sub && prev.idle_days) || 7,
+      app_lock_minutes: Number(lockMax) || null };
     try { localStorage.setItem(DEVICE_SESSION_KEY, JSON.stringify(rec)); } catch (e) {}
+    if (APP) toShell({ type: "lock:policy", max: rec.app_lock_minutes });
+  }
+  function appLockMax() {
+    try { return Number(JSON.parse(localStorage.getItem(DEVICE_SESSION_KEY) || "{}").app_lock_minutes) || null; }
+    catch (e) { return null; }
   }
   // Every trace of the signed-in user on this device: token, offline feed, per-user
   // prefs ("onca_u_*" keys), the device-session marker. Called on logout AND when the
@@ -264,7 +273,7 @@
         j = await r.json().catch(() => ({}));
         if (j.id_token) {
           sessionStorage.setItem(TOKEN_KEY, j.id_token);
-          markDeviceSession(j.idle_days);
+          markDeviceSession(j.idle_days, j.app_lock_minutes);
           return "ok";
         }
       }
@@ -312,7 +321,7 @@
     const sub = (decodeJwt(j.id_token) || {}).sub;
     if (prev.sub && prev.sub !== sub) await clearUserData();
     sessionStorage.setItem(TOKEN_KEY, j.id_token);
-    markDeviceSession(j.idle_days);
+    markDeviceSession(j.idle_days, j.app_lock_minutes);
   }
   async function handleAuthCallback() {
     const url = new URL(location.href);
@@ -1715,7 +1724,7 @@
             de capital, reputação, demonstrações financeiras, frameworks por entidade e Pergunte à Onça fazem
             parte do plano SaaS, licenciado por setor.</div>
           <div style="margin-top:var(--s3)">${ctas}</div>
-          <div class="em-d" style="margin-top:var(--s2)"><a href="/pricing.html">Ver planos</a> ·
+          <div class="em-d" style="margin-top:var(--s2)">${APP ? "" : `<a href="/pricing.html">Ver planos</a> · `}
             <a href="/docs/">Guia do plano Entry</a></div></div></div></div></section>`;
     const k = D.kpis || {};
     renderKpis($("entryKpis"), [["Sinais hoje", k.narratives_latest], ["Alertas hoje", k.alerts_latest],
@@ -1807,7 +1816,7 @@
     bootSaaS,
     // feed
     loadScopedFeed, mountGate, setData, indLabel, upgradeHref, billingBannerHTML, bandOf, SAAS_BANDS, comboOf, combosOf,
-    isEntryTier, mountEntryBoard, segmentGateHTML, ENTRY_INDUSTRIES, inApp, appBridge, PLAN_NOTE, shareViaShell, askShell,
+    isEntryTier, mountEntryBoard, segmentGateHTML, ENTRY_INDUSTRIES, inApp, appBridge, PLAN_NOTE, shareViaShell, askShell, appLockMax,
     // drawer
     wireDrawer, openCard, closeDrawer,
     // panels

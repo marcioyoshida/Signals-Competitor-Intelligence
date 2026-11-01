@@ -82,6 +82,9 @@ export function isPurchaseUrl(url: string): boolean {
   const h = hostOf(url);
   if (h === "signals-llc.store" || h === "www.signals-llc.store") return true;
   if (h !== null && IN_APP_HOSTS.has(h) && /^https:\/\/[^/]+\/pricing(\.html)?([?#]|$)/i.test(url)) return true;
+  // /exec?assinar=<module> is the web's purchase confirmation (#187); /exec hides it in app mode,
+  // and the shell refuses the navigation too.
+  if (h !== null && IN_APP_HOSTS.has(h) && /^https:\/\/[^/]+\/exec\/?\?([^#]*&)?assinar=/i.test(url)) return true;
   return /^mailto:/i.test(url) && /subject=[^&]*assinar/i.test(decodeURIComponentSafe(url));
 }
 function decodeURIComponentSafe(s: string): string { try { return decodeURIComponent(s); } catch { return s; } }
@@ -108,7 +111,9 @@ export type PageMessage =
   | { type: "auth" | "logout" | "share"; url: string }
   | { type: "push:token"; id: number; request: boolean }
   | { type: "lock:get"; id: number }
-  | { type: "lock:set"; id: number; enabled: boolean; minutes: number };
+  | { type: "lock:set"; id: number; enabled: boolean; minutes: number }
+  | { type: "lock:policy"; max: number | null }
+  | { type: "lock:signedout" };
 
 export const LOCK_MINUTES = [1, 5, 15] as const;
 
@@ -116,6 +121,10 @@ export function parseMessage(data: string): PageMessage | null {
   try {
     const m = JSON.parse(data);
     if ((m?.type === "auth" || m?.type === "logout") && isHostedUiUrl(m.url)) return { type: m.type, url: m.url };
+    // #257: the tenant's ceiling (from /api/session); null = no tenant policy. Only tightens.
+    if (m?.type === "lock:policy")
+      return { type: "lock:policy", max: (LOCK_MINUTES as readonly number[]).includes(m.max) ? m.max : null };
+    if (m?.type === "lock:signedout") return { type: "lock:signedout" };   // honoured only when the shell asked
     if (m?.type === "share" && isShareUrl(m.url)) return { type: "share", url: m.url };
     const id = Number.isInteger(m?.id) && m.id > 0 ? m.id as number : 0;
     if (!id) return null;
@@ -132,6 +141,29 @@ export function parseMessage(data: string): PageMessage | null {
 export function replyScript(id: number, value: unknown): string {
   return `window.__oncaShell && window.__oncaShell.reply(${Math.trunc(id)}, ${JSON.stringify(value ?? null)}); true;`;
 }
+
+/** #257: the delay that applies — the person's choice, never longer than the tenant's ceiling. */
+export function effectiveMinutes(minutes: number, max: number | null | undefined): number {
+  const m = (LOCK_MINUTES as readonly number[]).includes(minutes) ? minutes : 5;
+  return typeof max === "number" && max > 0 ? Math.min(m, max) : m;
+}
+
+/** #257: run in the page when the lock can no longer be verified (the device screen lock was
+ *  removed). It ends the Onça session instead of dropping the lock: signed in, /exec's own
+ *  logout() revokes the refresh cookie, clears the per-user data and posts "logout" (the shell
+ *  then ends the Hosted UI session too); otherwise, or if that throws, it revokes and clears
+ *  directly and posts "lock:signedout". */
+export const STRANDED_SIGNOUT_JS = `(function(){
+  function post(){ try { window.ReactNativeWebView.postMessage(JSON.stringify({type:"lock:signedout"})); } catch (e) {} }
+  function direct(){
+    fetch("/api/session/logout", {method:"POST", credentials:"same-origin", cache:"no-store",
+      headers:{"content-type":"application/json","x-onca-session":"1"}, body:"{}"})
+      .catch(function(){}).then(function(){ try { sessionStorage.clear(); localStorage.clear(); } catch (e) {} post(); });
+  }
+  var C = window.OncaCtx;
+  if (C && C.isLoggedIn && C.isLoggedIn() && C.logout) { Promise.resolve().then(function(){ return C.logout(); }).catch(direct); return; }
+  direct();
+})(); true;`;
 
 /** #257: lock again after `minutes` in the background; a cold start with the lock on is locked. */
 export function shouldLock(enabled: boolean, minutes: number, backgroundedAt: number | null, now: number): boolean {
