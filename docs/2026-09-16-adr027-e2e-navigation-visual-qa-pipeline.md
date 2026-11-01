@@ -5,7 +5,7 @@
   routing, `0e8355a` resiliency, `7df7df5`/`146a8fe` vision + report), plus the failure alarm
   (`e4cb714`). `OncaQaPipeline` (`infra/qa_pipeline.py`, container Lambda `onca-qa-runner`,
   code in `qa_pipeline/`) runs nightly at 06:00 UTC and succeeded every night from 2026-10-19
-  to 2026-10-28. Differences from the text below:
+  to 2026-10-31. Differences from the text below:
   - The fire-and-forget post-deploy `StartExecution` from `buildspec.yml` was never wired.
     The pipeline runs on the nightly schedule only.
   - The vision check was built on `amazon.nova-pro-v1:0` (the "Nova Pro" below). Hosted
@@ -20,7 +20,8 @@
     Entry-tier `/exec` is the Entry board with no officer suite, so the CSO bands never
     rendered. `379361f` moved it onto `config.officer_suite_persona()` (sovereign `admin`), as
     `23446a6` had done for smoke/routing/resilience. Manual run
-    `vision-persona-fix-20261029T022746Z` captured all three panels.
+    `vision-persona-fix-20261029T022746Z` captured all three panels, and so did every nightly run
+    from 2026-10-29 to 2026-10-31, on Nova Lite with no Nova Pro call.
   - The open questions at the end (one flow per tier, feeding ADR-014) were not taken up.
 
   Prior status: **Proposed** — 2026-09-16. Owner-requested.

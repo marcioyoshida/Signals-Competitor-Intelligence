@@ -1,6 +1,6 @@
 # ADR 029 — Onça in the App Store and Google Play: an Expo shell around the PWA, Sign in with Apple, and store compliance
 
-- Status: **Partly built (2026-10-28)** — the M2/M3 engineering is in code. What remains is
+- Status: **Partly built (2026-11-01)** — the M2/M3 engineering is in code. What remains is
   mostly owner actions, device testing and the gated store release.
   - **Built and closed:** #248 Sign in with Apple (`49f2f84`, `cd761b7`), #249 invite codes
     (`ebb5e50`), #251 account deletion (`9478a36`), #252 privacy inventory (`1377f56`),
@@ -16,12 +16,18 @@
     (`4aa7fde`, `1eb822c`). Android `assetlinks.json` waits on Play App Signing (#253). This
     replaces the "not built yet" note in *Spike result* row 5.
   - **Left, owner or external:**
-    - #253 organization enrolment (D-U-N-S, Play organization account).
+    - #253 organization enrolment. The D-U-N-S for Smart Signals LLC was requested on
+      2026-11-01 through D&B's free route, which allows up to 30 business days. Wyoming approved
+      the name amendment, so the rename no longer blocks it. When the number arrives, the Apple
+      team converts to an organization and one Google Play organization account is opened for the
+      company. The number belongs to the company, so every fork's app publishes through those two
+      accounts.
     - #250 registering `onssa.org` in Apple's Private Email Relay. The SES side (custom MAIL
       FROM, SPF/DKIM) was done on 2026-10-20.
     - #200 real-device rows: Google/Apple sign-in, share, push, lock, all iPhone rows.
     - #260 store release (gated).
-    - New iOS builds wait on the EAS free-plan iOS build quota, which resets on 2026-11-01.
+    - The EAS free-plan iOS build quota reset on 2026-11-01, so new iOS builds are no longer
+      held by it.
   - **Left, engineering:** `assetlinks.json` once #253 provides the signing certificate.
 
   Prior status: **Proposed** — 2026-10-11. Spike #254: **go** for the WebView (2026-10-20, see *Spike result*). Owner-requested: *"Fill the ADR for mobile, raise the stories
@@ -222,7 +228,7 @@ Raised 2026-10-11 as GitHub issues **#248–#260** under epic **#172**, label `m
 3. **#250** — Apple Private Email Relay: register the sending domain so digests and alerts reach relay addresses.
 4. **#251** — Self-service account deletion (in-app and web), plus a public deletion page for Play.
 5. **#252** — Store privacy inventory: App Store nutrition labels and the Play Data safety form.
-6. **#253** — Organization enrolment: Apple team individual → organization (D-U-N-S), Google Play organization account. Owner-run and blocked on the entity rename.
+6. **#253** — Organization enrolment: Apple team individual → organization (D-U-N-S), Google Play organization account. Owner-run. The rename is approved and the D-U-N-S was requested on 2026-11-01.
 7. **#254** — Spike: `/exec` in the fleet Expo shell's WebView. Covers the auth handoff, cookies, App-Bound Domains for the service worker, and offline; a go/no-go decision with the Capacitor fallback.
 8. **#255** — Onça ForkConfig + `apps/onca` Expo skeleton (bundle ID, EAS project, icons, `onca://auth`, universal links + AASA); decide shell extraction vs vendoring.
 9. **#256** — Native push (APNs/FCM) with device registration on Onça's API; `OncaPushNotifier` sends web push and native push, both content-free.
