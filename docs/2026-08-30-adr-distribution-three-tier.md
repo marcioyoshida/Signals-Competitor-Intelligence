@@ -13,7 +13,7 @@
   - **SaaS: the per-tenant scoped dynamic API and dashboard are live** on the one shared
     CloudFront distribution. **Not built:** the CloudFront multi-tenant distribution
     template and per-tenant custom domains (nothing in `infra/`). This is engineering
-    work, but no SaaS tenant has needed it yet.
+    work, but no SaaS tenant has needed it yet. Ticket [#306](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/306) (2026-11-01).
   - **Cross-cutting: built.** `tier ∈ {entry, saas, sovereign}` and a separate `plane`
     (`tenant_config.VALID_TIERS` / `VALID_PLANES`).
   - **Sovereign: not deployable yet.** The addendum's decisions are built, but

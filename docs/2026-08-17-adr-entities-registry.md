@@ -14,7 +14,8 @@
     there is no tenant-facing "manage my competitors" UI.
   - **Left:** engineering work, but demand-gated: whether a per-tenant watchlist
     boost/filter/alerts is still wanted on top of module entitlement is an
-    **owner/product decision** (no paying tenant has asked yet).
+    **owner/product decision** (no paying tenant has asked yet). Ticket [#302](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/302)
+    (2026-11-01), to build once a design partner asks.
   Commercial/multi-tenant/IP-protection concerns for steps 6–7 are recorded in
   [ADR 002](2026-08-18-adr-commercial-multitenancy.md).
 - Supersedes the hardcoded `config/watchlist.yaml` entity lists and the static

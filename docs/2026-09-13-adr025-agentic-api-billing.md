@@ -17,7 +17,8 @@
     - Here: no included-quota check. **Owner decision needed:** the only figure is a
       placeholder in the Storefront ADR ("e.g. Onça SaaS module = 2M tokens/mo"). That ADR
       also rejects a hard cutoff, so past the quota the overage is metered, not refused.
-      Enforcing a quota needs a real number and the metered overage line item.
+      Enforcing a quota needs a real number and the metered overage line item. Onça-side
+      ticket: [#305](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/305) (2026-11-01, blocked on both).
     - The other forks have not been replicated.
   - **Owner:** no paying customer exists to meter (2026-10-25).
 - Canonical design (shared across all six Signals forks) lives in the

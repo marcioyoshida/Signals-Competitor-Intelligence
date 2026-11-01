@@ -8,7 +8,8 @@
   built:** Decision 2, a **Bedrock Guardrail** on the Converse call. No guardrail is attached and
   none exists for Onça in the account. Input is filtered only by the deterministic scope gate,
   its hard-refuse/injection cues, and the prompt rule that card text is data, never
-  instructions. Adding a guardrail is optional engineering work, not a blocker.
+  instructions. Adding a guardrail is optional engineering work, not a blocker. Ticket
+  [#304](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/304) (2026-11-01) waits on the owner's OK for the added cost.
   Prior status: **Implemented (v1, read-only)** — 2026-08-25. Owner-requested.
   `src/dashboard/agent_ask.py` (`OncaAgent` Lambda, `/api/ask/`) + the dashboard
   "Perguntar" panel + `tests/test_agent_ask.py`. Grounds on the published

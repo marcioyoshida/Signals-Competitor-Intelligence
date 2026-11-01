@@ -10,11 +10,12 @@ Serverless endpoint is `InService`. Two items the Addendum deferred have since s
   DRE (#92, `9ee29db`). Doc 4016 was not needed ([ADR 028](2026-09-19-adr028-competitor-financial-statements-acquisition.md)).
 
 **Left (engineering; item 2 also depends on external sources):**
-1. Phase 6 KB-grounding: no code feeds Pilar 3 text into the Bedrock KB.
+1. Phase 6 KB-grounding: no code feeds Pilar 3 text into the Bedrock KB. Ticket [#299](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/299).
 2. Multi-bank Pilar 3 *tone* corpus: still Itaú only via IPE. The other banks' IR PDFs are
-   opaque or bot-blocked, which is an external dependency. KM1 covers the *numbers*.
+   opaque or bot-blocked, which is an external dependency. KM1 covers the *numbers*. Ticket
+   [#301](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/301) (spike first).
 3. The per-metric sanity guards for insurer ROA and small-book NPL: not found in
-   `bcb_fundamentals.py` / `bcb_inadimplencia.py`.
+   `bcb_fundamentals.py` / `bcb_inadimplencia.py`. Ticket [#300](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/300).
 
 **Cost flag for the owner:** FinBERT runs on a hosted SageMaker endpoint that bills per
 invocation. It is not Bedrock, so the Nova-Lite-only policy does not literally apply, but it

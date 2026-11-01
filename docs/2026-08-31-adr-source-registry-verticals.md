@@ -7,7 +7,7 @@ Still bespoke in `lambda_port.py`: the `moves` sources (pix/juros/inf_diario/fia
 `_moves_since_last_run`), `market`, and the side-effecting sec/fatos/new_entrants blocks
 (C1–C2). `SourceSpec` has no `params` (C3) and no `lens=None` store specs (C4), and
 fetch-gating (C5) is not done. C1–C5 are **engineering** work, low priority while only
-the financial-services vertical is deployed. C6 (retire the Anteater fork) has not
+the financial-services vertical is deployed; tracked in [#303](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/303) (2026-11-01). C6 (retire the Anteater fork) has not
 happened: Anteater ships as its own live spin-off repo, so whether to fold it back is an
 **owner decision**, not a pending task. Prior status kept as history:
 Was: ACCEPTED 2026-08-31; **IMPLEMENTED (core) — with named follow-ons.** The
