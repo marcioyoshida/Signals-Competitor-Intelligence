@@ -2295,12 +2295,17 @@ function rowsAxis(list) {
       <span class="hd-note axis-meta" style="white-space:nowrap">${meta.join(" · ")}</span></div>`;
   }).join("");
 }
+// #300: a ratio the sanity guard suppressed (tiny denominator or implausible value).
+function guardNote(reason) {
+  return reason === "base_pequena" ? "n/d (base pequena)" : "n/d (fora da faixa)";
+}
 function rowsFinancials(list) {
   list = (list || []).filter(inSector);
   if (!list.length) return U.empty("Sem fundamentos financeiros no escopo.", "", "○");
   return list.map(r => {
     const roe = r.roe_pct, cls = roe == null ? "low" : (roe < 0 ? "crit" : roe >= 15 ? "ok" : "high");
-    const meta = [r.roa_pct != null ? "ROA " + nf(r.roa_pct) + "%" : null,
+    const g = r.guarded || {};
+    const meta = [r.roa_pct != null ? "ROA " + nf(r.roa_pct) + "%" : (g.roa_pct ? "ROA " + guardNote(g.roa_pct) : null),
                   r.leverage != null ? "alavancagem " + nf(r.leverage) + "x" : null,
                   r.opex_ativo_pct != null ? "opex/ativo " + nf(r.opex_ativo_pct) + "%" : null,
                   r.custo_credito_pct != null ? "custo do crédito " + nf(r.custo_credito_pct) + "%" : null,
@@ -2359,7 +2364,10 @@ function rowsSolvency(list) {
     let npl = "";
     if (r.npl_total != null) {
       const nb = r.npl_band === "elevada" ? "sl-warn" : "sl-ok";
-      npl = ` · <span class="${nb}" title="inadimplência 15+ dias (PF ${r.npl_pf}% · PJ ${r.npl_pj}%)">NPL ${r.npl_total}%${r.npl_band === "elevada" ? " ▲" : ""}</span>`;
+      const segs = [r.npl_pf != null ? `PF ${r.npl_pf}%` : null, r.npl_pj != null ? `PJ ${r.npl_pj}%` : null].filter(Boolean).join(" · ");
+      npl = ` · <span class="${nb}" title="inadimplência 15+ dias${segs ? " (" + segs + ")" : ""}">NPL ${r.npl_total}%${r.npl_band === "elevada" ? " ▲" : ""}</span>`;
+    } else if ((r.npl_guarded || {}).npl_total) {
+      npl = ` · <span title="inadimplência 15+ dias: valor suprimido pelo filtro de sanidade">NPL ${guardNote(r.npl_guarded.npl_total)}</span>`;
     }
     // ADR 022 Phase 5: FinBERT tone (inference). pilar3 = real risk-report text; else solvency-derived.
     let tone = "";

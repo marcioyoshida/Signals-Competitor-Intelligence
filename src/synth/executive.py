@@ -556,6 +556,8 @@ def _fundamentals_rows(feed: dict[str, Any]) -> list[dict[str, Any]]:
                      # #93: market valuation at the latest close — price × CVM share count.
                      "market_cap_bi": round(val["market_cap"] / 1e9, 1) if val.get("market_cap") else None,
                      "pb": val.get("pb"), "pe": val.get("pe"), "price_date": val.get("price_date"),
+                     # #300: {metric: reason} for a ratio the sanity guard suppressed.
+                     "guarded": fu.get("guarded"),
                      **{k: fu.get(k) for k in keys}})
     rows.sort(key=lambda r: r["roe_pct"], reverse=True)
     return rows
@@ -875,6 +877,7 @@ def _solvency_rows(feed: dict[str, Any]) -> list[dict[str, Any]]:
             "npl_pf": ina.get("npl_pf"),
             "npl_pj": ina.get("npl_pj"),
             "npl_band": ina.get("band"),
+            "npl_guarded": ina.get("guarded"),        # #300: suppressed NPL metric -> reason
             "roe_pct": fu.get("roe_pct"),
             "leverage": fu.get("leverage"),
             # Multi-bank Pilar 3 KM1: LCR/NSFR (liquidity — the ADR §1 gap) + band.

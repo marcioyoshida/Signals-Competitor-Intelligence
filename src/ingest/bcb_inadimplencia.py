@@ -18,6 +18,7 @@ import datetime as dt
 import json
 from typing import Any, Callable
 
+from src.synth.ratio_guards import guard_npl
 from src.ingest.bcb_soundness import (_PRUDENCIAL_SUFFIX, _get, fetch_institution_names,
                                       latest_base_date)
 
@@ -119,7 +120,8 @@ def merge(existing: dict[str, Any] | None, records: list[dict[str, Any]], *,
 
 def npl_by_entity(index: dict[str, Any]) -> dict[str, dict[str, Any]]:
     _keys = ("npl_total", "npl_pf", "npl_pj", "band", "carteira_bi", "base_date")
-    return {eid: {k: r.get(k) for k in _keys}
+    # #300: guarded on read, so the stored index keeps the raw ratios for audit.
+    return {eid: guard_npl({k: r.get(k) for k in _keys})
             for eid, r in ((index or {}).get("records") or {}).items() if r.get("npl_total") is not None}
 
 

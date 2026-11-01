@@ -21,6 +21,7 @@ from typing import Any, Callable
 
 import requests
 
+from src.synth.ratio_guards import guard_fundamentals
 from src.ingest.bcb_soundness import (_PRUDENCIAL_SUFFIX, _get, fetch_institution_names,
                                       latest_base_date)
 
@@ -136,7 +137,8 @@ def merge(existing: dict[str, Any] | None, records: list[dict[str, Any]], *,
 def fundamentals_by_entity(index: dict[str, Any]) -> dict[str, dict[str, Any]]:
     _keys = ("roe_pct", "roa_pct", "leverage", "credito_captacoes_pct", "basileia_headroom_pp",
              "carteira_share_pct", "lucro_share_pct", "ativo_bi", "lucro_bi", "base_date")
-    return {eid: {k: r.get(k) for k in _keys}
+    # #300: guarded on read, so the stored index keeps the raw ratios for audit.
+    return {eid: guard_fundamentals({k: r.get(k) for k in _keys})
             for eid, r in ((index or {}).get("records") or {}).items() if r.get("roe_pct") is not None}
 
 
