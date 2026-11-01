@@ -134,6 +134,32 @@ def test_detect_keeps_debtor_filing_directly_without_possessive():
     assert [e["entity"] for e in evs] == ["empresa_x"]
 
 
+def test_detect_drops_a_bank_that_transacted_with_a_party_that_filed():
+    # issue #296 (live 2026-10-02): the RJ is Tradener's; Daycoval financed it and bought its assets
+    items = [
+        {"id": "a", "date": "2026-10-02", "url": "http://x/a", "source": "News",
+         "title": "Banco Daycoval financiou e comprou ativos da Tradener nos 90 dias antes do pedido "
+                  "de recuperação judicial"},
+        {"id": "b", "date": "2026-10-02", "title": "Banco X compra carteira da Varejista Y em recuperação judicial"},
+        {"id": "c", "date": "2026-10-02", "title": "Banco Z antecipou recebíveis dos lojistas antes do pedido de falência da rede"},
+        {"id": "d", "date": "2026-10-02", "title": "BTG adquiriu créditos do grupo após o pedido de recuperação judicial"},
+    ]
+    m = {"a": ["daycoval"], "b": ["banco_x"], "c": ["banco_z"], "d": ["btg"]}
+    assert ds.detect_distress_events(items, resolver=_resolver(m)) == []
+
+
+def test_detect_keeps_a_banks_own_rj_that_mentions_its_book():
+    # over-suppression guard for #296: a bank's OWN RJ, even when it sells its own book
+    items = [
+        {"id": "a", "date": "2026-10-02", "title": "Banco Y pede recuperação judicial e vende carteira de créditos"},
+        {"id": "b", "date": "2026-10-02", "title": "Banco Z entra em recuperação judicial com dívidas de R$ 2 bi"},
+        {"id": "c", "date": "2026-10-02", "title": "Justiça decreta falência do Banco W"},
+    ]
+    m = {"a": ["banco_y"], "b": ["banco_z"], "c": ["banco_w"]}
+    assert [e["entity"] for e in ds.detect_distress_events(items, resolver=_resolver(m))] == [
+        "banco_y", "banco_z", "banco_w"]
+
+
 # --- merge / upsert -------------------------------------------------------
 def test_merge_creates_and_updates_record():
     today = dt.date(2026, 8, 25)

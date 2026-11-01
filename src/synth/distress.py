@@ -250,8 +250,10 @@ def detect_distress_events(
         # of / exposed to a distressed debtor, not the distressed party. (issue #55)
         # Guard 4: counterparty framing — the entity is only a prepositional counterparty
         # (ao/contra/perante/…) of another party's action; the RJ is that party's. (issue #73)
+        # Guard 5: transaction / time-reference framing — the entity did business with a party
+        # that filed; the RJ is that party's. (issue #296)
         if (_actor_headline(norm_title) or _creditor_headline(norm_title)
-                or _counterparty_headline(norm_title)):
+                or _counterparty_headline(norm_title) or _transaction_headline(norm_title)):
             continue
         try:
             entities = resolver(item) or []
@@ -277,6 +279,33 @@ def detect_distress_events(
                 "evidence_id": item.get("id"),
             })
     return out
+
+
+# 5. Transaction / time-reference framing (issue #296) — the tracked entity DID BUSINESS WITH a
+#    party that later filed, and the headline dates that business against the OTHER party's
+#    filing: "Banco Daycoval financiou e comprou ativos da Tradener nos 90 dias antes do pedido
+#    de recuperação judicial". The RJ is Tradener's. Two cues, either is enough:
+#    - a TIME REFERENCE to a filing ("antes/depois do pedido de recuperação", "nos N dias antes
+#      do pedido"): news dates events against someone else's filing, not a bank's own;
+#    - a TRANSACTION with a POSSESSIVE object ("comprou/financiou/adquiriu ... ativos DA <X>").
+#      Only da/do/das/dos, never "de", so "Banco Y em RJ vende carteira de créditos" (its own
+#      book) still counts.
+#    Precision-first, like guards 2–4: attribute to no one.
+_TIME_REF_TO_FILING = re.compile(
+    r"\b(?:antes|depois|apos)\s+d[oa]\s+(?:pedido|processo|ajuizamento)\s+de\s+"
+    r"(?:recuperacao|falencia)"
+    r"|\bnos\s+\d+\s+dias\s+(?:antes|anteriores)"
+)
+_TRANSACTION_WITH_OTHER = re.compile(
+    r"\b(?:financi|compr|adquir|vend|empresto|cede|cedeu|assum|refinanci)\w*\b[^.]{0,40}?"
+    r"\b(?:ativos?|carteiras?|creditos?|dividas?|participac\w+|recebiveis|acoes|imoveis)\s+d[ao]s?\b"
+)
+
+
+def _transaction_headline(norm_title: str) -> bool:
+    """True when the tracked entity is a party that transacted with a distressed company, or
+    the headline dates something against another party's filing (issue #296)."""
+    return bool(_TIME_REF_TO_FILING.search(norm_title) or _TRANSACTION_WITH_OTHER.search(norm_title))
 
 
 def merge_distress(
