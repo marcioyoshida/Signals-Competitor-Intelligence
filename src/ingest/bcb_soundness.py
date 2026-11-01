@@ -30,7 +30,7 @@ from typing import Any, Callable, Iterable
 
 import requests
 
-from src.ingest.bcb_ifdata import fetch_institution_names  # cadastro is tipo-independent
+from src.ingest.bcb_ifdata import _candidate_base_dates, fetch_institution_names  # cadastro is tipo-independent
 
 BASE = "https://olinda.bcb.gov.br/olinda/servico/IFDATA/versao/v1/odata"
 INDEX_KEY = "soundness/index.json"
@@ -98,8 +98,11 @@ def latest_base_date() -> int:
     """Most recent quarter for which the capital report has data (YYYYMM).
 
     Probes with ``$top=1`` (cheap) rather than pulling the whole 33k-row report per candidate, so a
-    flaky endpoint can't turn base-date discovery into a multi-minute retry storm."""
-    for base_date in (202603, 202512, 202509, 202506, 202503, 202412):
+    flaky endpoint can't turn base-date discovery into a multi-minute retry storm.
+
+    #307: candidates come from today's date (``bcb_ifdata._candidate_base_dates``). A hard-coded
+    tuple starting at 202603 froze soundness, fundamentals and NPL at that quarter."""
+    for base_date in _candidate_base_dates():
         try:
             if _get(_capital_url(base_date, top=1), tries=2):
                 return base_date

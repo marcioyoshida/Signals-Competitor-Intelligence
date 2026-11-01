@@ -115,3 +115,23 @@ def test_run_fetches_when_quarter_changed(monkeypatch):
     out = snd.run(bucket="b")
     assert out["status"] == "ok" and out["base_date"] == 202603 and out["mapped"] == 2
     assert captured["n"] == 2
+
+
+def test_latest_base_date_follows_the_calendar_not_a_fixed_list(monkeypatch):
+    """#307: a hard-coded (202603, ...) tuple froze soundness/fundamentals/NPL at 2026-03 even
+    after IF.data published 202606. The candidates now come from today's date."""
+    import datetime as dt
+
+    from src.ingest import bcb_ifdata
+    seen: list[int] = []
+
+    def fake_get(url, tries=2):
+        d = int(url.split("@A=")[1][:6])
+        seen.append(d)
+        return [{"x": 1}] if d <= 202606 else []
+
+    real = bcb_ifdata._candidate_base_dates
+    monkeypatch.setattr(snd, "_candidate_base_dates", lambda: real(dt.date(2026, 11, 1)))
+    monkeypatch.setattr(snd, "_get", fake_get)
+    assert snd.latest_base_date() == 202606
+    assert seen == [202609, 202606]
