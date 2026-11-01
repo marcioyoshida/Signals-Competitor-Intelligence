@@ -1,8 +1,22 @@
 # ADR 014 — Coverage-gap loop: self-improving data coverage from unanswered questions
 
-- Status: **Implemented; scheduled weekly since 2026-11-01 (#295); evidence-backed
-  ingestion detector live (#297).** Next step 2 (`safe_autofix` beyond registry backfills) is
-  not started; it is engineering work with no owner gate.
+- Status: **All three next steps live (2026-11-01):** the weekly schedule (#295), a widened
+  and targeted safe-autofix set (#298), and the evidence-backed ingestion detector (#297).
+  - **Safe-autofix (#298):** `coverage.AUTOFIXES` is the only set the loop may run alone.
+    - Each fix is an idempotent registry backfill from a curated seed or a structured source.
+      Writes are provenance-gated and journaled (ADR 018).
+    - The fixes are ownership, tickers, curation (the news_term fix), certifications (the
+      licence seed) and esg_ise_b3 (fetch the current ISE B3 portfolio and apply it).
+    - `fixes_for` picks them from the gap's evidence: a coverage_gap on authorization gets
+      certifications, one on ESG gets esg_ise_b3, a curation gap gets the trio, and a
+      retrieval gap that names a known entity gets curation.
+    - The weekly pass runs the union once. Remediar runs each fix once per run.
+    - **Excluded by design:** an alias, CNPJ or search term derived from the question text. A
+      wrong term binds a bank to someone else's news (#296).
+  - **Live, 2026-11-01:** none of the 5 open gaps calls for a fix. None names an entity the
+    resolver knows, and the RJ coverage gap needs a source to produce rows. The fixes act on
+    future entity-specific gaps. The ISE B3 fetch checked live returned 68 constituents and 7
+    tracked matches.
   - **Detector (#297):** `src/synth/ingestion_evidence.py` replaces the keyword call. Before,
     every gap was labelled "no source ingests this"; now triage checks what the live feed
     holds.
