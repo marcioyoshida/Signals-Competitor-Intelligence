@@ -18,6 +18,7 @@ EXEC_PUBLIC_URIS: tuple[str, ...] = (
     "/v2/app.js",                     # OncaUI helpers
     "/v2/context.js",                 # Ctx: Cognito PKCE login + scoped feed loader
     "/v2/signin.css",                 # #277 own sign-in form (attached by context.js)
+    "/v2/app-guard.js",               # #258 store app: no purchase affordance (inert in a browser)
     "/exec-sw.js",                    # #162 service worker (root path so it can scope /exec)
     "/v3/manifest.webmanifest",       # #162 web app manifest
     "/v3/icons/icon-192.png",

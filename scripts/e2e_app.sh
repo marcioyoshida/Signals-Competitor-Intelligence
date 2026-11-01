@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Layer 1 of the Onça store-app E2E (#259): /exec in APP MODE (the shell's window.__ONCA_APP__ +
 # a recording ReactNativeWebView) in WebKit — Chromium if WebKit can't launch — against PRODUCTION,
-# signed in as the QA persona (Secrets Manager, read in-process). Tests: tests/e2e_app/.
+# signed in as the QA persona (SSM SecureString /onca/qa-test-credentials, read in-process; #292). Tests: tests/e2e_app/.
 #
 #   scripts/e2e_app.sh                      run the suite now (screenshots in /tmp/onca-e2e/)
 #   scripts/e2e_app.sh -k gate              extra args go to pytest

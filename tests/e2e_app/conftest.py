@@ -17,7 +17,7 @@ Environment:
   ONCA_E2E_PERSONA           QA persona in the /onca/qa-test-credentials SSM parameter (default admin:
                              the only one with the officer tab bar; Entry gets the Entry board)
   ONCA_E2E_OUT               screenshots, default /tmp/onca-e2e
-  AWS_PROFILE                credentials for Secrets Manager (my2027); the secret is read in-process
+  AWS_PROFILE                credentials for SSM (my2027); the SecureString is read in-process
 """
 from __future__ import annotations
 

@@ -121,6 +121,16 @@ def test_every_app_reachable_page_loads_the_guard_first():
         assert head[first_script:].startswith(GUARD), f"{path} ({f.relative_to(SITE)}): app-guard.js must be the first script"
 
 
+def test_the_guard_is_served_without_the_shared_password():
+    """/exec and the public pages load it before anyone signs in: behind the prototype's basic auth
+    it would 401 and do nothing (it did, on the first deploy)."""
+    import sys
+    sys.path.insert(0, str(ROOT / "infra"))
+    import edge_policy
+    assert "/v2/app-guard.js" in edge_policy.EXEC_PUBLIC_URIS
+    assert '"/v2/app-guard.js"' in (ROOT / "infra" / "app.py").read_text(encoding="utf-8")  # invalidated on deploy
+
+
 def test_no_static_purchase_link_outside_web_only_copy():
     """Belt and braces: the guard would rewrite these, but static markup shouldn't rely on it."""
     for path, f in reachable_pages().items():
