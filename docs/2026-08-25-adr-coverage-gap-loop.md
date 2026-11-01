@@ -1,12 +1,27 @@
 # ADR 014 — Coverage-gap loop: self-improving data coverage from unanswered questions
 
-- Status: **Implemented (v1), next steps not started (re-checked 2026-10-28).** All six stages
-  exist in code, and the capture and the "Pontos Cegos" Remediar path are live (`OncaGapsApi`
-  Lambda is deployed). None of the three next steps has shipped. `run_pipeline` has no
-  EventBridge rule or pipeline step, so the loop only runs on demand. `safe_autofix` is still
-  ownership, tickers and curation backfills only. There is no `ingestion_gap` detector. All
-  three are **engineering** work with no owner gate. Was: **Accepted & implemented (v1)** —
-  2026-08-25. Owner-requested.
+- Status: **Implemented; scheduled weekly since 2026-11-01 (#295).** Next steps 2
+  (`safe_autofix` beyond registry backfills) and 3 (an `ingestion_gap` detector) are not started;
+  both are engineering work with no owner gate.
+  - **Schedule (#295):** rule `OncaCoverageGapWeekly` runs `cron(0 10 ? * WED *)` and sends the
+    fixed input `{"coverage_loop": "scheduled"}` to `OncaGapsApi` (timeout 300 s).
+    `coverage.scheduled_pass`:
+    - triages every open or proposed gap;
+    - runs the registry backfills once if any gap is auto-fixable;
+    - re-asks the agent for at most 15 gaps, least recently verified first. It uses Nova Lite
+      through the tagged profile, over feed cards only (no KB retrieve). A gap that now grounds
+      is resolved (`resolved_by: scheduled`).
+  - **Owner exception, 2026-11-01:** this capped re-ask is allowed despite "Bedrock is for paying
+    clients only".
+  - **No retrieval-only probe:** one was tried and dropped. It said "found" for 9 of 9 live gaps,
+    because retrieval nearly always finds some card.
+  - **No public issues:** the pass never opens a GitHub issue. `open_issue` (the CLI path) now
+    writes only the gap id, class and recommendation. The question text is client data, and the
+    repo is public.
+  - **First live run, 2026-11-01:** 11 triaged (1 ingestion, 10 retrieval, 0 auto-fixable), 11
+    re-asked, 8 resolved, 3 still open. A spot check found two of the resolved answers grounded
+    and on topic.
+  Prior status (2026-10-28): implemented (v1), no schedule.
 - When the agent ([ADR 010](2026-08-25-adr-agent-chat-ui.md)) can't answer an *in-domain*
   question, treat it as a data-coverage signal and drive it through:
   **issue creation → assert if current data is enough → decide remediation → implement
