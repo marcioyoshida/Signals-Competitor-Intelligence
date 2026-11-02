@@ -1,7 +1,8 @@
 # ADR 022 — Financial-Soundness (Prudential) Ingestion + Financial-Tone NLP for BCB/CVM Institutions
 
-Status: **Accepted; all remainders shipped (2026-11-02).** Follow-up: [#309](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/309), entity-filtered
-KB retrieval (ADR 010 side).
+Status: **Accepted; all remainders shipped (2026-11-02).** The follow-up, [#309](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/309)
+(entity-filtered KB retrieval, ADR 010 side), also shipped on 2026-11-02 in `2b73e1f`. A question that names a bank now
+retrieves that bank's own Pilar 3 text first. Registry gaps still open: `ALIAS#SAFRA` points at `safra-corretora`, and Stone has no entity.
 **2026-11-02, multi-bank Pilar 3 text shipped ([#301](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/301), Addendum 3):**
 - **Route:** the DASFN qualitative tables (OVA/LIQA/CRA/MRA/IRRBBA/ORA) are the uniform route the
   IR-site PDFs never were.

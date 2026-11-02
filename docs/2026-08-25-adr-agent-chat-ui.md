@@ -10,6 +10,13 @@
   its hard-refuse/injection cues, and the prompt rule that card text is data, never
   instructions. Adding a guardrail is optional engineering work, not a blocker. Ticket
   [#304](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/304) (2026-11-01) waits on the owner's OK for the added cost.
+- **2026-11-02, entity-scoped KB retrieval ([#309](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/309), `2b73e1f`).**
+  When a question names a tracked institution (`named_entities`: every id part as a whole word, or the
+  full label phrase; common-word ids such as Original or Inter only when capitalised; dashboard scope first;
+  at most 2), `_kb_retrieve` first runs one metadata-filtered retrieve per entity (`entity = <id>`), then the
+  usual unfiltered one, and dedupes the merged results. A filter error falls back to unfiltered retrieval.
+  This is vector search only, so there is no added model cost. Before this change, banks' look-alike Pilar 3
+  boilerplate let BTG's chunk outrank Mercado Pago's own text.
   Prior status: **Implemented (v1, read-only)** — 2026-08-25. Owner-requested.
   `src/dashboard/agent_ask.py` (`OncaAgent` Lambda, `/api/ask/`) + the dashboard
   "Perguntar" panel + `tests/test_agent_ask.py`. Grounds on the published
