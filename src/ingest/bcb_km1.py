@@ -78,6 +78,42 @@ def list_km1_resources() -> dict[str, dict[str, Any]]:
     return latest
 
 
+def resolver_name(name: str) -> str:
+    """A DASFN institution name as the resolver can match it. BCB abbreviates "BANCO" to "BCO"
+    ("BCO DO BRASIL S.A.", "BCO BMG S.A."), which no alias carries: live 2026-11-02, BB, BMG and BV
+    resolved only once expanded. "S." is a truncated "S.A." ("BCO VOTORANTIM S.")."""
+    n = re.sub(r"\bBCO\b\.?", "BANCO", name or "")
+    return re.sub(r"\s+S\.\s*$", " S.A.", n).strip()
+
+
+# Industries whose members file Pilar 3 (banks, IPs, DTVMs, CFIs). A resolved entity outside them
+# is a parent or a namesake: "BANCO B3 S.A." resolves to b3, the EXCHANGE (financial-data-analytics),
+# and its bank's Pilar 3 must not bind there (the ADR 017 conglomerate trap).
+PILAR3_INDUSTRIES = frozenset({"banking", "investment-banking", "fintech", "acquiring",
+                               "asset-management", "wealth-management", "consorcio", "crypto"})
+
+
+def registry_industries(entity_id: str) -> list[str] | None:
+    """The entity's industries from the registry; None when unknown (the gate then lets it pass)."""
+    try:
+        from src.synth import entity_registry
+        item = entity_registry.get_entity(entity_id) or {}
+    except Exception:  # pragma: no cover - registry unavailable
+        return None
+    inds = item.get("industries")
+    return list(inds) if inds else None
+
+
+def pilar3_entities(ents: list[str], industries_of: Callable[[str], list[str] | None]) -> list[str]:
+    """Drop resolved ids whose known industries contain no Pilar 3 filer."""
+    out = []
+    for eid in ents:
+        inds = industries_of(eid)
+        if inds is None or PILAR3_INDUSTRIES.intersection(inds):
+            out.append(eid)
+    return out
+
+
 def _find_row(doc: dict[str, Any], code: str) -> dict[str, Any] | None:
     # flat layout (Itaú): the row code is a top-level key
     if isinstance(doc.get(code), dict) and "t" in doc[code]:
@@ -134,7 +170,8 @@ def lcr_band(lcr_pct: float | None) -> str | None:
 
 
 def build(resources: dict[str, dict[str, Any]], *, resolver: Callable[[dict[str, Any]], list[str]],
-          today: dt.date | None = None, limit: int | None = None) -> list[dict[str, Any]]:
+          today: dt.date | None = None, limit: int | None = None,
+          industries_of: Callable[[str], list[str] | None] | None = None) -> list[dict[str, Any]]:
     """Resolve each institution → fetch its latest KM1 → per-entity record (largest LCR-HQLA wins)."""
     today = today or dt.date.today()
     best: dict[str, dict[str, Any]] = {}
@@ -143,9 +180,11 @@ def build(resources: dict[str, dict[str, Any]], *, resolver: Callable[[dict[str,
         if not name:
             continue
         try:
-            ents = resolver({"source": "News", "title": name, "institution": name}) or []
+            q = resolver_name(name)
+            ents = resolver({"source": "News", "title": q, "institution": q}) or []
         except Exception:  # pragma: no cover
             ents = []
+        ents = pilar3_entities(ents, industries_of or registry_industries)
         if not ents:
             continue
         try:

@@ -1,7 +1,15 @@
 """#301 / ADR 022 Phase 6: multi-bank Pilar 3 text from the DASFN qualitative tables."""
 import datetime as dt
 
-from src.ingest import pilar3, pilar3_dasfn as D
+import pytest
+
+from src.ingest import bcb_km1, pilar3, pilar3_dasfn as D
+
+
+@pytest.fixture(autouse=True)
+def _offline_registry(monkeypatch):
+    """No test here may reach the live registry for an entity's industries."""
+    monkeypatch.setattr(bcb_km1, "registry_industries", lambda eid: None)
 
 LONG = ("O gerenciamento do risco de liquidez é de responsabilidade da diretoria de riscos, que observa "
         "a política de gerenciamento de riscos e de capital, a declaração de apetite e os limites de "
@@ -168,3 +176,36 @@ def test_run_lets_the_full_ipe_report_win_over_dasfn_tables(monkeypatch):
     assert res["dasfn_entities"] == 2 and res["entities"] == 2
     assert published["records"]["itau"]["url"] == "https://rad.cvm/x"     # the IPE report kept
     assert published["records"]["bb"]["kind"] == "dasfn"
+
+
+def test_resolver_name_expands_bcb_abbreviations():
+    """Live 2026-11-02: BB, BMG, BV and Safra resolved only with BANCO spelled out."""
+    from src.ingest.bcb_km1 import resolver_name
+    assert resolver_name("BCO DO BRASIL S.A.") == "BANCO DO BRASIL S.A."
+    assert resolver_name("BCO VOTORANTIM S.") == "BANCO VOTORANTIM S.A."
+    assert resolver_name("EBURY BCO DE CÂMBIO S.A.") == "EBURY BANCO DE CÂMBIO S.A."
+    assert resolver_name("BANCO C6 S.A.") == "BANCO C6 S.A."
+    assert resolver_name("BCOB S.A.") == "BCOB S.A."                 # a word, not the abbreviation
+
+
+def test_a_bank_never_binds_to_a_non_filer_namesake():
+    """"BANCO B3 S.A." resolves to b3, the exchange: its Pilar 3 must not land there."""
+    from src.ingest.bcb_km1 import pilar3_entities
+    inds = {"b3": ["financial-data-analytics"], "gm": ["banking"], "neon": ["fintech"]}
+    assert pilar3_entities(["b3", "gm", "neon", "unknown"], inds.get) == ["gm", "neon", "unknown"]
+    recs = D.build({"1": {"name": "BCO B3 S.A.", "year": 2025, "tables": {"ova": "https://b3/ova"}}},
+                   resolver=lambda i: ["b3"], robots=ALLOW, industries_of=inds.get,
+                   fetch=lambda u: {"t": LONG * 3}, sleep=lambda s: None, today=dt.date(2026, 11, 2))
+    assert recs == {}
+
+
+def test_km1_applies_the_same_name_and_industry_rules(monkeypatch):
+    from src.ingest import bcb_km1
+    seen = []
+    monkeypatch.setattr(bcb_km1, "_get", lambda u: {"km1_7": {"t": 0.15}})
+    res = {"1": {"name": "BCO DO BRASIL S.A.", "url": "https://bb/km1", "base_date": 20250630},
+           "2": {"name": "BCO B3 S.A.", "url": "https://b3/km1", "base_date": 20250630}}
+    out = bcb_km1.build(res, resolver=lambda i: seen.append(i["institution"]) or
+                        (["bb"] if "BRASIL" in i["institution"] else ["b3"]),
+                        industries_of={"bb": ["banking"], "b3": ["financial-data-analytics"]}.get)
+    assert seen[0] == "BANCO DO BRASIL S.A." and [r["entity"] for r in out] == ["bb"]

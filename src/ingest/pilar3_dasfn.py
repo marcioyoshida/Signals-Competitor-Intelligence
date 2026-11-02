@@ -171,7 +171,8 @@ def build(resources: dict[str, dict[str, Any]], *, resolver: Callable[[dict[str,
           robots: Robots | None = None, fetch: Callable[[str], Any] = _fetch_json,
           budget_s: float = 240.0, clock: Callable[[], float] = time.monotonic,
           sleep: Callable[[float], None] = time.sleep,
-          today: dt.date | None = None) -> dict[str, dict[str, Any]]:
+          today: dt.date | None = None,
+          industries_of: Callable[[str], list[str] | None] | None = None) -> dict[str, dict[str, Any]]:
     """Resolve each institution to a tracked entity and pull its qualitative prose. Only resolved
     banks are fetched; the budget stops new banks once spent (the rest wait for next month).
 
@@ -190,7 +191,10 @@ def build(resources: dict[str, dict[str, Any]], *, resolver: Callable[[dict[str,
             break
         name = meta.get("name") or ""
         try:
-            ents = resolver({"source": "News", "title": name, "institution": name}) or []
+            from src.ingest.bcb_km1 import pilar3_entities, registry_industries, resolver_name
+            q = resolver_name(name)
+            ents = pilar3_entities(resolver({"source": "News", "title": q, "institution": q}) or [],
+                                   industries_of or registry_industries)
         except Exception:  # pragma: no cover
             ents = []
         year = meta.get("year") or 0
