@@ -525,16 +525,15 @@ def _news_slice(context: Any) -> dict[str, Any]:
     term), so it no longer shares a wall-clock budget with the fixed-cost
     structured sources. News is not written to the corpus, so this path has no
     corpus/state coupling with the structured branch (disjoint diff sources)."""
-    news_lookback = int(os.environ.get("ONCA_NEWS_LOOKBACK_DAYS", "14"))
-    competitors = _csv_env("ONCA_COMPETITORS")
-    news_terms = _csv_env("ONCA_NEWS_WATCHLIST")
-    if os.environ.get("ONCA_NEWS_USE_COMPETITORS", "true").lower() in ("1", "true", "yes"):
+    NP = registry.resolve_params(registry.by_id("news"))   # C3 (#303): the news knobs
+    news_lookback = NP["lookback_days"]
+    competitors = registry.resolve_params(registry.by_id("competitor"))["admins"]
+    news_terms = NP["watchlist"]
+    if NP["use_competitors"]:
         news_terms = list(dict.fromkeys(news_terms + competitors))
     # Derive news terms from the registry (source of truth for tracked entities)
     # so the news set can't drift out of sync with it (the C6/PicPay silence bug).
-    if os.environ.get("ONCA_ENTITIES_TABLE") and os.environ.get(
-        "ONCA_NEWS_USE_REGISTRY", "true"
-    ).lower() in ("1", "true", "yes"):
+    if os.environ.get("ONCA_ENTITIES_TABLE") and NP["use_registry"]:
         try:
             from src.synth import entity_registry
 
@@ -569,7 +568,7 @@ def _news_slice(context: Any) -> dict[str, Any]:
     sector_items: list[dict[str, Any]] = []
     sector_timing: dict[str, Any] = {}
     # (Runs whenever the news lens is configured — news_terms non-empty, as in every deployment.)
-    if news_terms and os.environ.get("ONCA_NEWS_SECTOR_QUERIES", "true").lower() in ("1", "true", "yes"):
+    if news_terms and NP["sector_queries"]:
         queries = registry.news_topic_queries(_active_vertical())
         t0 = time.monotonic()
         try:
@@ -589,7 +588,7 @@ def _news_slice(context: Any) -> dict[str, Any]:
                 news_items = trade_press.fetch_news(
                     news_terms,
                     lookback_days=news_lookback,
-                    max_terms=int(os.environ.get("ONCA_NEWS_MAX_TERMS", "80")),
+                    max_terms=NP["max_terms"],
                     # #135 mode 2: curated per-entity disqualifying phrases for
                     # true homonyms. Best-effort — a registry hiccup must not
                     # take the whole news lens down, it only loses the veto.
@@ -629,10 +628,10 @@ def _news_slice(context: Any) -> dict[str, Any]:
         # #176: sector-query items get their OWN caps on top — measured live 2026-09-27, the
         # first run returned 147 new sector items and, in one shared cap, crowded 18 of 38 new
         # entity items out of `items`. Entity items keep exactly their pre-#176 budget.
-        "items": (_tag_new(_entity_rows(new_news)[: int(os.environ.get("ONCA_NEWS_DIGEST_ITEMS", "150"))])
-                  + _tag_new(_sector_rows(new_news)[: int(os.environ.get("ONCA_NEWS_DIGEST_SECTOR_ITEMS", "80"))])),
-        "context": (_strip_raw(_entity_rows(news_items)[: int(os.environ.get("ONCA_NEWS_DIGEST_CONTEXT", "60"))])
-                    + _strip_raw(_sector_rows(news_items)[: int(os.environ.get("ONCA_NEWS_DIGEST_SECTOR_CONTEXT", "30"))])),
+        "items": (_tag_new(_entity_rows(new_news)[: NP["digest_items"]])
+                  + _tag_new(_sector_rows(new_news)[: NP["digest_sector_items"]])),
+        "context": (_strip_raw(_entity_rows(news_items)[: NP["digest_context"]])
+                    + _strip_raw(_sector_rows(news_items)[: NP["digest_sector_context"]])),
         # Every fetched id (not just the capped items/context) so synth commits
         # the exact set it saw to the trade_press seen-set — the second phase of
         # the deferred diff above. Compact: bare id strings.
@@ -779,42 +778,34 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     _source_health.reset()  # #76: fresh per-run telemetry ledger for the structured path
 
-    lookback_days = int(os.environ.get("ONCA_LOOKBACK_DAYS", "7"))
-    competitors = _csv_env("ONCA_COMPETITORS")
-    competitor_ispb = _csv_env("ONCA_COMPETITOR_ISPB")
-    pix_threshold = float(os.environ.get("ONCA_PIX_MOVE_THRESHOLD_PCT", "15.0"))
-    juros_competitors = _csv_env("ONCA_JUROS_COMPETITORS")
-    juros_modalities = _csv_env("ONCA_JUROS_MODALITIES")
-    juros_use_defaults = os.environ.get("ONCA_JUROS_USE_DEFAULT_MODALITIES", "true").lower() in (
-        "1",
-        "true",
-        "yes",
-    )
-    juros_threshold = float(os.environ.get("ONCA_JUROS_MOVE_THRESHOLD_PCT", "10.0"))
-    ofertas_lookback = int(os.environ.get("ONCA_OFERTAS_LOOKBACK_DAYS", "30"))
-    ofertas_watch = _csv_env("ONCA_OFERTAS_WATCHLIST")
-    if not ofertas_watch and os.environ.get(
-        "ONCA_OFERTAS_USE_COMPETITORS", "true"
-    ).lower() in ("1", "true", "yes"):
+    # C3 (#303): every per-source knob (lookbacks, watchlists, thresholds) is a Param on its
+    # SourceSpec, resolved here from the same deploy-time env vars as before.
+    P = registry.all_params()
+    lookback_days = P["regulatory"]["lookback_days"]
+    competitors = P["competitor"]["admins"]
+    competitor_ispb = P["pix_moves"]["watchlist_ispb"]
+    pix_threshold = P["pix_moves"]["min_pct"]
+    juros_competitors = P["juros_moves"]["institutions"]
+    juros_modalities = P["juros_moves"]["modalities"]
+    juros_use_defaults = P["juros_moves"]["use_default_modalities"]
+    juros_threshold = P["juros_moves"]["min_pct"]
+    ofertas_lookback = P["ofertas"]["lookback_days"]
+    ofertas_watch = P["ofertas"]["watchlist"]
+    if not ofertas_watch and P["ofertas"]["use_competitors"]:
         ofertas_watch = competitors
-    sec_tickers = _csv_env("ONCA_SEC_TICKERS")
-    sec_lookback = int(os.environ.get("ONCA_SEC_LOOKBACK_DAYS", "365"))
-    inf_diario_watch = _csv_env("ONCA_INF_DIARIO_WATCHLIST")
-    if not inf_diario_watch and os.environ.get(
-        "ONCA_INF_DIARIO_USE_COMPETITORS", "true"
-    ).lower() in ("1", "true", "yes"):
+    sec_tickers = P["sec_filings"]["tickers"]
+    sec_lookback = P["sec_filings"]["lookback_days"]
+    inf_diario_watch = P["inf_diario_moves"]["watchlist"]
+    if not inf_diario_watch and P["inf_diario_moves"]["use_competitors"]:
         inf_diario_watch = competitors
-    inf_diario_threshold = float(
-        os.environ.get("ONCA_INF_DIARIO_MOVE_THRESHOLD_PCT", "10.0")
-    )
-    inf_diario_top = os.environ.get("ONCA_INF_DIARIO_TOP_N", "").strip()
-    inf_diario_top_n = int(inf_diario_top) if inf_diario_top else None
+    inf_diario_threshold = P["inf_diario_moves"]["min_pct"]
+    inf_diario_top_n = P["inf_diario_moves"]["top_n"]
 
     # CVM material facts (Fato Relevante / Comunicado ao Mercado). Own watchlist
     # (B3-listed FS names); optionally unioned with the competitors list.
-    fatos_lookback = int(os.environ.get("ONCA_FATOS_LOOKBACK_DAYS", "45"))
-    fatos_watch = _csv_env("ONCA_FATOS_WATCHLIST")
-    if os.environ.get("ONCA_FATOS_USE_COMPETITORS", "true").lower() in ("1", "true", "yes"):
+    fatos_lookback = P["fatos"]["lookback_days"]
+    fatos_watch = P["fatos"]["watchlist"]
+    if P["fatos"]["use_competitors"]:
         fatos_watch = list(dict.fromkeys(fatos_watch + competitors))
     # Derive the structured (Fato Relevante / Comunicado ao Mercado) watchlist from
     # the registry too, so a newly curated B3-listed entity (one carrying a
@@ -822,9 +813,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # derivation below. Structured identity means such an entity resolves from its
     # CVM filing and does not depend on the fragile news-only corroboration gate
     # (nor on an ambiguous place-name brand like "Porto Seguro").
-    if os.environ.get("ONCA_ENTITIES_TABLE") and os.environ.get(
-        "ONCA_FATOS_USE_REGISTRY", "true"
-    ).lower() in ("1", "true", "yes"):
+    if os.environ.get("ONCA_ENTITIES_TABLE") and P["fatos"]["use_registry"]:
         try:
             from src.synth import entity_registry
 
@@ -834,12 +823,12 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             print(f"Fatos terms: {len(reg_fatos)} from registry, {len(fatos_watch)} total")
         except Exception as exc:  # pragma: no cover - best-effort, config still works
             print(f"Warning: registry fatos terms unavailable, using config: {exc}")
-    fatos_categories = _csv_env("ONCA_FATOS_CATEGORIES") or None
+    fatos_categories = P["fatos"]["categories"]
 
     # Diário Oficial (DOU) — SUSEP / CADE / BACEN acts mentioning a competitor.
-    dou_lookback = int(os.environ.get("ONCA_DOU_LOOKBACK_DAYS", "30"))
-    dou_terms = _csv_env("ONCA_DOU_WATCHLIST")
-    if os.environ.get("ONCA_DOU_USE_COMPETITORS", "true").lower() in ("1", "true", "yes"):
+    dou_lookback = P["dou"]["lookback_days"]
+    dou_terms = P["dou"]["watchlist"]
+    if P["dou"]["use_competitors"]:
         dou_terms = list(dict.fromkeys(dou_terms + fatos_watch))
     # Sector-wide DOU topics (#173/#175): per-industry phrases from the declarative industry
     # topic registry (registry.INDUSTRY_TOPICS) — TOPIC terms (industry-tagged, own budget,
@@ -853,7 +842,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     dou_topics: dict[str, list[str]] = {}
     dou_topic_organs: dict[str, list[str]] = {}
-    if os.environ.get("ONCA_DOU_SECTOR_TOPICS", "true").lower() in ("1", "true", "yes"):
+    if P["dou"]["sector_topics"]:
         dou_topics = registry.dou_topic_terms(_active_vertical(), enabled=_topic_enabled)
         dou_topic_organs = {p: o for p, o in registry.dou_topic_organs(_active_vertical()).items()
                             if p in dou_topics}
@@ -869,7 +858,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             dou_topic_organs[_phrase] = list(registry.NORMATIVE_ISSUERS)
         dou_topics = {**_watched, **dou_topics}
     # 19 → 40+ phrases after #188/#189/#195; each is one query (+ walked-back pages, #191).
-    dou_max_topics = int(os.environ.get("ONCA_DOU_MAX_TOPIC_TERMS", "45"))
+    dou_max_topics = P["dou"]["max_topic_terms"]
 
     # Trade-press news is fetched by _news_slice (its own parallel branch); see
     # the mode dispatch at the top of lambda_handler.
@@ -915,7 +904,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             if bucket:
                 from src.synth.entities import resolve_entities
 
-                window = max(1, int(os.environ.get("ONCA_IFDATA_MAX_RESOLVE", "150")))
+                window = max(1, P["market"]["max_resolve"])
                 stats: dict[str, Any] = {}
                 recs = bcb_ifdata.map_to_entities(
                     shares,
@@ -989,16 +978,10 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # Diário) — first run seeds a baseline only. Independently gated from
     # ONCA_ENTITY_DISCOVERY so either can be disabled without the other.
     def _fetch_fiagro() -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
-        fiagro_min_pl = float(os.environ.get("ONCA_FIAGRO_MIN_PL", "50000000"))
-        pl_threshold = float(
-            os.environ.get("ONCA_FIAGRO_PL_MOVE_THRESHOLD_PCT", "15.0")
-        )
-        cotista_threshold = float(
-            os.environ.get("ONCA_FIAGRO_COTISTA_MOVE_THRESHOLD_PCT", "30.0")
-        )
-        reg_lookback = int(
-            os.environ.get("ONCA_FIAGRO_NEW_REG_LOOKBACK_DAYS", "60")
-        )
+        fiagro_min_pl = P["fiagro_moves"]["min_pl"]
+        pl_threshold = P["fiagro_moves"]["pl_min_pct"]
+        cotista_threshold = P["fiagro_moves"]["cotista_min_pct"]
+        reg_lookback = P["fiagro_moves"]["new_reg_lookback_days"]
         fiagro_rows = cvm_fiagro.fetch_fiagro(min_pl=fiagro_min_pl)
         fiagro_pl_moves = _moves_since_last_run(
             "cvm_fiagro_pl",
@@ -1189,9 +1172,9 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             entity_registry.list_entities()
         ) if os.environ.get("ONCA_ENTITIES_TABLE") else {}
         crows = pncp_contratos.fetch_contracts(
-            days_back=int(os.environ.get("ONCA_PNCP_LOOKBACK_DAYS", "2")),
-            max_pages=int(os.environ.get("ONCA_PNCP_MAX_PAGES", "60")),
-            min_valor=float(os.environ.get("ONCA_PNCP_MIN_VALOR", "0")),
+            days_back=P["contracts"]["lookback_days"],
+            max_pages=P["contracts"]["max_pages"],
+            min_valor=P["contracts"]["min_valor"],
         ) if idx else []
         return pncp_contratos.map_to_entities(crows, cnpj_index=idx)
 
@@ -1201,8 +1184,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # SourceSpec + one FETCHERS entry, with no bespoke handler block and no payload edit.
     # (The numeric "moves" sources and the special-shape/side-effecting ones remain bespoke
     # below — they have distinct mechanics; migrating them is the tracked follow-on.)
-    _cade_lookback = int(os.environ.get("ONCA_CADE_LOOKBACK_DAYS", "45"))
-    cvm_normas_lookback = int(os.environ.get("ONCA_CVM_NORMAS_LOOKBACK_DAYS", "30"))
+    _cade_lookback = P["cade"]["lookback_days"]
+    cvm_normas_lookback = P["cvm_normas"]["lookback_days"]
     _FETCHERS: dict[str, Any] = {
         # #175: every regulatory item leaves ingest with severity (+ industries when a covered
         # industry applies) — BCB normativos here, DOU inside dou.fetch_dou.
@@ -1366,7 +1349,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # CVM market-participant registries (E5) — consultores/adm de carteira new-entrant scan.
     # Gated (heavy CVM zip fetch) + seed-suppressed. Non-fintech → surfaces as entrant SIGNALS
     # (entrants lens + Receita enrich), not auto-created, so a fuzzy advisory set never floods.
-    if _entrants_on and os.environ.get("ONCA_INGEST_CVM_PARTICIPANTES", "false").lower() in ("1", "true", "yes"):
+    if _entrants_on and P["new_entrants"]["ingest_cvm_participantes"]:
         try:
             from src.ingest import cvm_participantes
 
@@ -1381,7 +1364,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # SUSEP supervised-entities registry (#77 E1) — insurance/EAPC/capitalização/resseguro new
     # entrants. Gated + seed-suppressed. Insurers aren't fintech → surface as review-gated entrant
     # SIGNALS (entrants lens + Receita enrich), not auto-created, like the CVM-participantes path.
-    if _entrants_on and os.environ.get("ONCA_INGEST_SUSEP", "false").lower() in ("1", "true", "yes"):
+    if _entrants_on and P["new_entrants"]["ingest_susep"]:
         try:
             from src.ingest import susep_entidades
 
@@ -1395,7 +1378,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     # SPA/MF authorized betting operators (#78 E3) — for iGaming the authorized list IS the entrant
     # feed (~82 companies / 188 brands). Gated + seed-suppressed → entrants lens + Receita enrich.
-    if _entrants_on and os.environ.get("ONCA_INGEST_SPA", "false").lower() in ("1", "true", "yes"):
+    if _entrants_on and P["new_entrants"]["ingest_spa"]:
         try:
             from src.ingest import spa_apostas
 
@@ -1409,7 +1392,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     # PREVIC EFPC base-cadastral (#79 E2) — closed-pension new entrants. Direct XLSX (not the dead
     # dados.gov.br token). Gated + seed-suppressed → entrants lens + Receita enrich.
-    if _entrants_on and os.environ.get("ONCA_INGEST_PREVIC", "false").lower() in ("1", "true", "yes"):
+    if _entrants_on and P["new_entrants"]["ingest_previc"]:
         try:
             from src.ingest import previc_efpc
 
@@ -1424,7 +1407,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # Receita Federal enrichment: resolve the brand + controllers behind each new
     # entrant's (otherwise anonymous) CNPJ. Own budget so a slow lookup can't lose
     # the entrants list; only new entrants (bounded volume) are enriched.
-    _enrich_on = os.environ.get("ONCA_RECEITA_ENRICH", "true").lower() in ("1", "true", "yes")
+    _enrich_on = P["new_entrants"]["receita_enrich"]
     if new_entrants and _enrich_on:
         try:
             with _source_budget("Receita QSA", deadline, per_source):
@@ -1441,30 +1424,20 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # Entities registry auto-create (ADR step 3): give each new fintech entrant's
     # CNPJ a registry record so future signals about it (CVM/news/DOU) resolve and
     # cluster with no redeploy. CNPJ-keyed + idempotent; best-effort, never blocks.
-    _autocreate_on = bool(os.environ.get("ONCA_ENTITIES_TABLE")) and os.environ.get(
-        "ONCA_ENTITIES_AUTOCREATE", "true"
-    ).lower() in ("1", "true", "yes")
+    _autocreate_on = bool(os.environ.get("ONCA_ENTITIES_TABLE")) and P["new_entrants"]["autocreate"]
     if not new_entrants and _autocreate_on:
         # Event-driven, same as Receita QSA above: no new entrants means nothing to create.
         _record_health("entities auto-create", ok=True, idle=True)
     if new_entrants and _autocreate_on:
-        fintech_only = os.environ.get(
-            "ONCA_ENTITIES_AUTOCREATE_FINTECH_ONLY", "true"
-        ).lower() in ("1", "true", "yes")
+        fintech_only = P["new_entrants"]["autocreate_fintech_only"]
         # #103: promote NEW non-fintech entrants (insurers/bookmakers/EFPCs/CVM participants)
         # that classify to a confident industry — else they stay signal-only. Off by default.
-        promote_regulated = os.environ.get(
-            "ONCA_ENTITIES_AUTOCREATE_REGULATED", "false"
-        ).lower() in ("1", "true", "yes")
+        promote_regulated = P["new_entrants"]["autocreate_regulated"]
         try:
             with _source_budget("entities auto-create", deadline, per_source):
                 from src.synth import entity_registry
 
-                review_on = os.environ.get("ONCA_ENTITIES_REVIEW", "true").lower() in (
-                    "1",
-                    "true",
-                    "yes",
-                )
+                review_on = P["new_entrants"]["review"]
                 created = 0
                 for e in new_entrants:
                     is_ft = bool(e.get("is_fintech"))

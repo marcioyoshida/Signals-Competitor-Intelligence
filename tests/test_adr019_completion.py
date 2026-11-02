@@ -76,6 +76,55 @@ def test_c2_new_entrants_side_effects_consume_the_loop_result(monkeypatch):
     assert sec["count"] == 3 and sec["new_count"] == 2
 
 
+def test_c3_no_declared_knob_is_read_outside_spec_params():
+    import re
+    from pathlib import Path
+    src = Path(registry.__file__).with_name("lambda_port.py").read_text(encoding="utf-8")
+    # FIAGRO discovery (a registry job, not a source) shares the fund-size floor env var
+    shared = {"ONCA_FIAGRO_MIN_PL"}
+    for spec in registry.SOURCES:
+        for p in spec.params:
+            if p.env in shared:
+                continue
+            assert not re.search(rf'["\']{p.env}["\']', src), (spec.id, p.env)
+
+
+def test_c3_defaults_are_the_established_values():
+    P = registry.all_params({})
+    assert P["regulatory"] == {"lookback_days": 7}
+    assert P["ofertas"] == {"lookback_days": 30, "watchlist": [], "use_competitors": True}
+    assert P["fatos"] == {"lookback_days": 45, "watchlist": [], "use_competitors": True,
+                          "use_registry": True, "categories": None}
+    assert P["dou"] == {"lookback_days": 30, "watchlist": [], "use_competitors": True,
+                        "sector_topics": True, "max_topic_terms": 45}
+    assert P["sec_filings"] == {"tickers": [], "lookback_days": 365}
+    assert P["pix_moves"] == {"watchlist_ispb": [], "min_pct": 15.0}
+    assert P["juros_moves"] == {"institutions": [], "modalities": [], "use_default_modalities": True,
+                                "min_pct": 10.0}
+    assert P["inf_diario_moves"] == {"watchlist": [], "use_competitors": True, "min_pct": 10.0, "top_n": None}
+    assert P["fiagro_moves"] == {"min_pl": 50_000_000.0, "pl_min_pct": 15.0, "cotista_min_pct": 30.0,
+                                 "new_reg_lookback_days": 60}
+    assert P["contracts"] == {"lookback_days": 2, "max_pages": 60, "min_valor": 0.0}
+    assert P["cade"] == {"lookback_days": 45} and P["cvm_normas"] == {"lookback_days": 30}
+    assert P["market"] == {"max_resolve": 150}
+    assert P["news"]["max_terms"] == 80 and P["news"]["digest_items"] == 150
+    ne = P["new_entrants"]
+    assert ne["receita_enrich"] and ne["autocreate"] and ne["autocreate_fintech_only"] and ne["review"]
+    assert not (ne["ingest_susep"] or ne["ingest_spa"] or ne["ingest_previc"] or ne["autocreate_regulated"])
+
+
+def test_c3_param_parsing_matches_the_old_env_reads():
+    env = {"ONCA_COMPETITORS": " ALFA, ,BETA ", "ONCA_FATOS_CATEGORIES": " , ",
+           "ONCA_INF_DIARIO_TOP_N": "  ", "ONCA_OFERTAS_USE_COMPETITORS": "YES",
+           "ONCA_DOU_USE_COMPETITORS": "0", "ONCA_PIX_MOVE_THRESHOLD_PCT": "7.5"}
+    P = registry.all_params(env)
+    assert P["competitor"]["admins"] == ["ALFA", "BETA"]
+    assert P["fatos"]["categories"] is None and P["inf_diario_moves"]["top_n"] is None
+    assert P["ofertas"]["use_competitors"] is True and P["dou"]["use_competitors"] is False
+    assert P["pix_moves"]["min_pct"] == 7.5
+    assert registry.all_params({"ONCA_INF_DIARIO_TOP_N": "20"})["inf_diario_moves"]["top_n"] == 20
+
+
 def test_c2_the_entrant_gate_also_stops_the_supplementary_registries(monkeypatch):
     from src.ingest import susep_entidades
     seen = []

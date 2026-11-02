@@ -17,8 +17,9 @@ Two specs, deliberately split (a small refinement of the ADR's single-spec sketc
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
-from typing import Callable
+from typing import Any, Callable, Mapping
 
 # Verticals (ADR 019). A vertical is the market a deployment serves; the same codebase runs
 # as Onça (financial-services) or as the Anteater sectorial product by setting ONCA_VERTICAL.
@@ -48,6 +49,36 @@ class LensSpec:
 
 
 @dataclass(frozen=True)
+class Param:
+    """C3 (#303): one per-source knob. Its value comes from the deploy-time env var ``env``
+    (set from watchlist.yaml / CDK, unchanged names), parsed exactly as the ingest handler
+    always parsed it:
+
+    ``str`` · ``int`` · ``float`` · ``bool`` ("1"/"true"/"yes", case-insensitive) ·
+    ``csv`` (comma list, blanks dropped) · ``opt_csv`` (csv, empty -> None) ·
+    ``opt_int`` (blank -> None)."""
+    name: str
+    env: str
+    default: Any = None
+    kind: str = "str"
+
+
+def _parse(p: Param, raw: str | None) -> Any:
+    if p.kind == "csv" or p.kind == "opt_csv":
+        vals = [part.strip() for part in (raw if raw is not None else (p.default or "")).split(",")
+                if part.strip()]
+        return (vals or None) if p.kind == "opt_csv" else vals
+    if p.kind == "bool":
+        v = raw if raw is not None else ("true" if p.default else "false")
+        return v.lower() in ("1", "true", "yes")
+    if p.kind == "opt_int":
+        v = (raw if raw is not None else "").strip()
+        return int(v) if v else p.default
+    v = raw if raw is not None else str(p.default)
+    return {"int": int, "float": float}.get(p.kind, str)(v)
+
+
+@dataclass(frozen=True)
 class SourceSpec:
     """One ingestion source: its digest section → lens, plus ingestion metadata."""
     id: str                          # digest section key (e.g. "cade", "pix_moves")
@@ -72,6 +103,8 @@ class SourceSpec:
     key_field: str | None = None
     value_field: str | None = None
     tracked_key: str | None = None
+    # C3 (#303) — the source's knobs (lookbacks, watchlists, thresholds); resolve_params().
+    params: tuple[Param, ...] = ()
 
 
 # --- Lens policy — reproduces candidates.py's LENS_WEIGHT + the three *_LENSES sets ---------
@@ -100,40 +133,97 @@ LENSES: dict[str, LensSpec] = {
 # the rest are the financial-services vertical's current implementations.
 SOURCES: list[SourceSpec] = [
     SourceSpec("regulatory", "regulatory", items_limit=8, context_limit=12,
-               state_key="bcb_normativos", label="BCB normativos", seed_if_empty=False),
+               state_key="bcb_normativos", label="BCB normativos", seed_if_empty=False,
+               params=(Param("lookback_days", "ONCA_LOOKBACK_DAYS", 7, "int"),)),
     SourceSpec("competitor", "funds", resolution="cnpj", items_limit=8, context_limit=12,
-               state_key="cvm_fundos", label="CVM funds", seed_if_empty=False),
+               state_key="cvm_fundos", label="CVM funds", seed_if_empty=False,
+               # the competitor admins also seed other sources' watchlists (use_competitors)
+               params=(Param("admins", "ONCA_COMPETITORS", "", "csv"),)),
     SourceSpec("new_entrants", "entrants", resolution="cnpj", items_limit=8,
-               state_key="bcb_autorizacoes", label="BCB autorizações"),
+               state_key="bcb_autorizacoes", label="BCB autorizações",
+               params=(Param("ingest_cvm_participantes", "ONCA_INGEST_CVM_PARTICIPANTES", False, "bool"),
+                       Param("ingest_susep", "ONCA_INGEST_SUSEP", False, "bool"),
+                       Param("ingest_spa", "ONCA_INGEST_SPA", False, "bool"),
+                       Param("ingest_previc", "ONCA_INGEST_PREVIC", False, "bool"),
+                       Param("receita_enrich", "ONCA_RECEITA_ENRICH", True, "bool"),
+                       Param("autocreate", "ONCA_ENTITIES_AUTOCREATE", True, "bool"),
+                       Param("autocreate_fintech_only", "ONCA_ENTITIES_AUTOCREATE_FINTECH_ONLY", True, "bool"),
+                       Param("autocreate_regulated", "ONCA_ENTITIES_AUTOCREATE_REGULATED", False, "bool"),
+                       Param("review", "ONCA_ENTITIES_REVIEW", True, "bool"))),
     SourceSpec("ofertas", "ofertas", resolution="cnpj",
-               state_key="cvm_ofertas", label="CVM ofertas"),
-    SourceSpec("fatos", "fatos", items_limit=12, state_key="cvm_fatos", label="CVM fatos relevantes"),
-    SourceSpec("dou", "dou", label="Diário Oficial"),
+               state_key="cvm_ofertas", label="CVM ofertas",
+               params=(Param("lookback_days", "ONCA_OFERTAS_LOOKBACK_DAYS", 30, "int"),
+                       Param("watchlist", "ONCA_OFERTAS_WATCHLIST", "", "csv"),
+                       Param("use_competitors", "ONCA_OFERTAS_USE_COMPETITORS", True, "bool"))),
+    SourceSpec("fatos", "fatos", items_limit=12, state_key="cvm_fatos", label="CVM fatos relevantes",
+               params=(Param("lookback_days", "ONCA_FATOS_LOOKBACK_DAYS", 45, "int"),
+                       Param("watchlist", "ONCA_FATOS_WATCHLIST", "", "csv"),
+                       Param("use_competitors", "ONCA_FATOS_USE_COMPETITORS", True, "bool"),
+                       Param("use_registry", "ONCA_FATOS_USE_REGISTRY", True, "bool"),
+                       Param("categories", "ONCA_FATOS_CATEGORIES", "", "opt_csv"))),
+    SourceSpec("dou", "dou", label="Diário Oficial",
+               params=(Param("lookback_days", "ONCA_DOU_LOOKBACK_DAYS", 30, "int"),
+                       Param("watchlist", "ONCA_DOU_WATCHLIST", "", "csv"),
+                       Param("use_competitors", "ONCA_DOU_USE_COMPETITORS", True, "bool"),
+                       Param("sector_topics", "ONCA_DOU_SECTOR_TOPICS", True, "bool"),
+                       Param("max_topic_terms", "ONCA_DOU_MAX_TOPIC_TERMS", 45, "int"))),
     SourceSpec("cvm_normas", "cvm_normas", items_limit=8, context_limit=12,                  # #194
-               state_key="cvm_normas", label="CVM normas/sancionador", seed_if_empty=False),
+               state_key="cvm_normas", label="CVM normas/sancionador", seed_if_empty=False,
+               params=(Param("lookback_days", "ONCA_CVM_NORMAS_LOOKBACK_DAYS", 30, "int"),)),
     SourceSpec("sanctions", "sanctions", resolution="cnpj", verticals=frozenset({ALL}),     # #60
                integration="store", state_key="ceis_cnep", env_flag="ONCA_CEIS_CNEP",
                label="CEIS/CNEP sanctions"),
     SourceSpec("cade", "antitrust", resolution="name", verticals=frozenset({ALL}),          # #61
-               state_key="cade", env_flag="ONCA_CADE", label="CADE antitrust"),
+               state_key="cade", env_flag="ONCA_CADE", label="CADE antitrust",
+               params=(Param("lookback_days", "ONCA_CADE_LOOKBACK_DAYS", 45, "int"),)),
     SourceSpec("contracts", "contracts", resolution="cnpj", integration="store",            # #62
                default_on=False, env_flag="ONCA_PNCP_CONTRATOS", verticals=frozenset({ALL}),
-               state_key="pncp_contratos", label="PNCP contracts"),
-    SourceSpec("news", "news", resolution="text"),
-    SourceSpec("sec_filings", "sec", label="SEC EDGAR"),
+               state_key="pncp_contratos", label="PNCP contracts",
+               params=(Param("lookback_days", "ONCA_PNCP_LOOKBACK_DAYS", 2, "int"),
+                       Param("max_pages", "ONCA_PNCP_MAX_PAGES", 60, "int"),
+                       Param("min_valor", "ONCA_PNCP_MIN_VALOR", 0, "float"))),
+    SourceSpec("news", "news", resolution="text",
+               params=(Param("lookback_days", "ONCA_NEWS_LOOKBACK_DAYS", 14, "int"),
+                       Param("watchlist", "ONCA_NEWS_WATCHLIST", "", "csv"),
+                       Param("use_competitors", "ONCA_NEWS_USE_COMPETITORS", True, "bool"),
+                       Param("use_registry", "ONCA_NEWS_USE_REGISTRY", True, "bool"),
+                       Param("sector_queries", "ONCA_NEWS_SECTOR_QUERIES", True, "bool"),
+                       Param("max_terms", "ONCA_NEWS_MAX_TERMS", 80, "int"),
+                       Param("digest_items", "ONCA_NEWS_DIGEST_ITEMS", 150, "int"),
+                       Param("digest_sector_items", "ONCA_NEWS_DIGEST_SECTOR_ITEMS", 80, "int"),
+                       Param("digest_context", "ONCA_NEWS_DIGEST_CONTEXT", 60, "int"),
+                       Param("digest_sector_context", "ONCA_NEWS_DIGEST_SECTOR_CONTEXT", 30, "int"))),
+    SourceSpec("sec_filings", "sec", label="SEC EDGAR",
+               params=(Param("tickers", "ONCA_SEC_TICKERS", "", "csv"),
+                       Param("lookback_days", "ONCA_SEC_LOOKBACK_DAYS", 365, "int"))),
     SourceSpec("pix_moves", "pix", delta="moves", state_key="bcb_pix", label="BCB Pix",
-               key_field="ispb", value_field="tx_value", tracked_key="institutions_tracked"),
+               key_field="ispb", value_field="tx_value", tracked_key="institutions_tracked",
+               params=(Param("watchlist_ispb", "ONCA_COMPETITOR_ISPB", "", "csv"),
+                       Param("min_pct", "ONCA_PIX_MOVE_THRESHOLD_PCT", "15.0", "float"))),
     SourceSpec("juros_moves", "juros", delta="moves", state_key="bcb_juros", label="BCB juros médios",
-               key_field="move_key", value_field="rate_year", tracked_key="series_tracked"),
+               key_field="move_key", value_field="rate_year", tracked_key="series_tracked",
+               params=(Param("institutions", "ONCA_JUROS_COMPETITORS", "", "csv"),
+                       Param("modalities", "ONCA_JUROS_MODALITIES", "", "csv"),
+                       Param("use_default_modalities", "ONCA_JUROS_USE_DEFAULT_MODALITIES", True, "bool"),
+                       Param("min_pct", "ONCA_JUROS_MOVE_THRESHOLD_PCT", "10.0", "float"))),
     SourceSpec("inf_diario_moves", "inf_diario", delta="moves", state_key="cvm_inf_diario",
                label="CVM Informe Diário", key_field="move_key", value_field="pl",
-               tracked_key="funds_tracked"),
+               tracked_key="funds_tracked",
+               params=(Param("watchlist", "ONCA_INF_DIARIO_WATCHLIST", "", "csv"),
+                       Param("use_competitors", "ONCA_INF_DIARIO_USE_COMPETITORS", True, "bool"),
+                       Param("min_pct", "ONCA_INF_DIARIO_MOVE_THRESHOLD_PCT", "10.0", "float"),
+                       Param("top_n", "ONCA_INF_DIARIO_TOP_N", None, "opt_int"))),
     # FIAGRO agri-funds moves reuse the "funds" lens (deliberately — not a new lens), so one
     # material NEW move scores/alerts like a fresh CVM fund-class filing.
     SourceSpec("fiagro_moves", "funds", delta="moves", resolution="prebound", label="FIAGRO moves",
-               env_flag="ONCA_FIAGRO_SIGNAL", items_limit=12, tracked_key="funds_tracked"),
+               env_flag="ONCA_FIAGRO_SIGNAL", items_limit=12, tracked_key="funds_tracked",
+               params=(Param("min_pl", "ONCA_FIAGRO_MIN_PL", "50000000", "float"),
+                       Param("pl_min_pct", "ONCA_FIAGRO_PL_MOVE_THRESHOLD_PCT", "15.0", "float"),
+                       Param("cotista_min_pct", "ONCA_FIAGRO_COTISTA_MOVE_THRESHOLD_PCT", "30.0", "float"),
+                       Param("new_reg_lookback_days", "ONCA_FIAGRO_NEW_REG_LOOKBACK_DAYS", 60, "int"))),
     SourceSpec("market", "market", resolution="macro", delta="none", integration="store",
-               label="IF.data market"),
+               label="IF.data market",
+               params=(Param("max_resolve", "ONCA_IFDATA_MAX_RESOLVE", 150, "int"),)),
 ]
 
 SPECS: dict[str, SourceSpec] = {s.id: s for s in SOURCES}
@@ -141,6 +231,18 @@ SPECS: dict[str, SourceSpec] = {s.id: s for s in SOURCES}
 
 def by_id(source_id: str) -> SourceSpec:
     return SPECS[source_id]
+
+
+def resolve_params(spec: SourceSpec, environ: Mapping[str, str] | None = None) -> dict[str, Any]:
+    """C3 (#303): ``{param name: value}`` for one source, read from ``environ`` (default: the
+    process env) with each Param's kind and default."""
+    env = os.environ if environ is None else environ
+    return {p.name: _parse(p, env.get(p.env)) for p in spec.params}
+
+
+def all_params(environ: Mapping[str, str] | None = None) -> dict[str, dict[str, Any]]:
+    """``{source id: resolve_params(spec)}`` for every registered source."""
+    return {s.id: resolve_params(s, environ) for s in SOURCES}
 
 
 # --- Vertical taxonomy (ADR 019 Phase 3b) --------------------------------------------------
