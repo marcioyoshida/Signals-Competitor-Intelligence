@@ -169,12 +169,16 @@ def bank_prose(tables: dict[str, str], *, robots: Robots, fetch: Callable[[str],
 
 def build(resources: dict[str, dict[str, Any]], *, resolver: Callable[[dict[str, Any]], list[str]],
           robots: Robots | None = None, fetch: Callable[[str], Any] = _fetch_json,
-          budget_s: float = 240.0, clock: Callable[[], float] = time.monotonic,
+          budget_s: float = 360.0, clock: Callable[[], float] = time.monotonic,
           sleep: Callable[[float], None] = time.sleep,
           today: dt.date | None = None,
-          industries_of: Callable[[str], list[str] | None] | None = None) -> dict[str, dict[str, Any]]:
+          industries_of: Callable[[str], list[str] | None] | None = None,
+          known: set[str] | frozenset[str] = frozenset()) -> dict[str, dict[str, Any]]:
     """Resolve each institution to a tracked entity and pull its qualitative prose. Only resolved
     banks are fetched; the budget stops new banks once spent (the rest wait for next month).
+    Banks whose CNPJ is not in ``known`` (the stored index) go first, so a deferred bank leads the
+    next run instead of always losing to the alphabet (live 2026-11-02: 224 s of a 240 s budget
+    for 28 banks, before the CNPJ fallback added ~35 more).
 
     ``date`` is the reference year's end, capped at today: BMG and Safra publish a "2026" table
     during 2026, and a future date misranks by recency. The KB key uses the year, so the cap
@@ -185,15 +189,14 @@ def build(resources: dict[str, dict[str, Any]], *, resolver: Callable[[dict[str,
     robots = robots or Robots()
     started = clock()
     records: dict[str, dict[str, Any]] = {}
-    for cnpj, meta in sorted(resources.items(), key=lambda kv: kv[1].get("name") or ""):
+    for cnpj, meta in sorted(resources.items(), key=lambda kv: (kv[0] in known, kv[1].get("name") or "")):
         if clock() - started > budget_s:
             print("Info: DASFN Pilar 3 budget spent; remaining banks deferred")
             break
         name = meta.get("name") or ""
         try:
-            from src.ingest.bcb_km1 import pilar3_entities, registry_industries, resolver_name
-            q = resolver_name(name)
-            ents = pilar3_entities(resolver({"source": "News", "title": q, "institution": q}) or [],
+            from src.ingest.bcb_km1 import pilar3_entities, registry_industries, resolve_institution
+            ents = pilar3_entities(resolve_institution(cnpj, name, resolver),
                                    industries_of or registry_industries)
         except Exception:  # pragma: no cover
             ents = []

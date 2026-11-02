@@ -86,6 +86,22 @@ def resolver_name(name: str) -> str:
     return re.sub(r"\s+S\.\s*$", " S.A.", n).strip()
 
 
+def resolve_institution(cnpj: str | None, name: str, resolver: Callable[[dict[str, Any]], list[str]],
+                        by_cnpj: Callable[[str], str | None] | None = None) -> list[str]:
+    """Entity ids for a DASFN institution: by name, else by CNPJ root. Live 2026-11-02, "STONE
+    PAGAMENTOS S.A." resolved to nothing by name (STONE is an ambiguous token, never matched in
+    free text) though its root 16501555 is ``stone``'s. The CNPJ is only a fallback: CNPJ-first
+    would move records that resolve today onto a discovered twin (#149)."""
+    q = resolver_name(name)
+    ents = resolver({"source": "News", "title": q, "institution": q}) or []
+    if ents or not cnpj:
+        return ents
+    if by_cnpj is None:
+        from src.synth.entities import resolve_by_cnpj as by_cnpj
+    eid = by_cnpj(cnpj)
+    return [eid] if eid else []
+
+
 # Industries whose members file Pilar 3 (banks, IPs, DTVMs, CFIs). A resolved entity outside them
 # is a parent or a namesake: "BANCO B3 S.A." resolves to b3, the EXCHANGE (financial-data-analytics),
 # and its bank's Pilar 3 must not bind there (the ADR 017 conglomerate trap).
@@ -180,15 +196,14 @@ def build(resources: dict[str, dict[str, Any]], *, resolver: Callable[[dict[str,
         if not name:
             continue
         try:
-            q = resolver_name(name)
-            ents = resolver({"source": "News", "title": q, "institution": q}) or []
+            ents = resolve_institution(cnpj, name, resolver)
         except Exception:  # pragma: no cover
             ents = []
         ents = pilar3_entities(ents, industries_of or registry_industries)
         if not ents:
             continue
         try:
-            km = extract_km1(_get(meta["url"]))
+            km = extract_km1(_get(meta["url"], tries=2, timeout=25))   # one hanging host must not eat the Lambda
         except Exception as exc:  # pragma: no cover - self-hosted endpoints vary
             print(f"Warning: KM1 fetch failed for {name}: {exc}")
             continue

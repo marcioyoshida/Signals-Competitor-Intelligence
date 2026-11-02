@@ -202,7 +202,7 @@ def test_a_bank_never_binds_to_a_non_filer_namesake():
 def test_km1_applies_the_same_name_and_industry_rules(monkeypatch):
     from src.ingest import bcb_km1
     seen = []
-    monkeypatch.setattr(bcb_km1, "_get", lambda u: {"km1_7": {"t": 0.15}})
+    monkeypatch.setattr(bcb_km1, "_get", lambda u, **k: {"km1_7": {"t": 0.15}})
     res = {"1": {"name": "BCO DO BRASIL S.A.", "url": "https://bb/km1", "base_date": 20250630},
            "2": {"name": "BCO B3 S.A.", "url": "https://b3/km1", "base_date": 20250630}}
     out = bcb_km1.build(res, resolver=lambda i: seen.append(i["institution"]) or

@@ -396,6 +396,13 @@ def put_entity(
                                     "parent", "ownership", "certifications", "attribution_role")
                         if k in entity], source, confidence)
     t.put_item(Item=entity)
+    if parent and parent != entity_id:
+        # A sub-entity never takes its parent's ALIAS# key, whatever the source: "SAFRA" is
+        # the bank, not Safra Corretora (live 2026-11-02, see find_arm_held_aliases).
+        for na in norm:
+            owner = t.get_item(Key={"pk": f"ALIAS#{na}"}).get("Item")
+            if owner and owner.get("entity_id") == parent:
+                foreign.add(na)
     for na in norm:
         if na not in foreign:
             t.put_item(Item={"pk": f"ALIAS#{na}", "type": "alias", "entity_id": entity_id})
@@ -1403,6 +1410,47 @@ def reassign_alias(holder_id: str, key: str, target_id: str, *, source: str = "c
     _log(holder_id, "reassign_alias", source, detail)
     _log(target_id, "reassign_alias", source, {**detail, "from": holder_id})
     return detail
+
+
+def find_arm_held_aliases(entities: Iterable[dict[str, Any]],
+                          alias_owner: dict[str, str]) -> list[dict[str, str]]:
+    """Audit (pure): ALIAS# keys held by a sub-entity (ADR 017 ``parent``) that are its parent's
+    brand. Live 2026-11-02: ``ALIAS#SAFRA`` resolved to ``safra-corretora`` and SANTANDER/NEON/
+    MERCADO PAGO went to their brokerages, 39 keys in all. A key goes back to the parent only if
+    it is the parent's own name (display name or id), the parent carries it as an alias, and it
+    is not the arm's own name (a JV such as ``zurich-santander`` keeps "ZURICH SANTANDER").
+    Returns ``{key, holder, parent}``."""
+    ents = {e["entity_id"]: e for e in entities if e.get("entity_id")}
+    out: list[dict[str, str]] = []
+    for key, holder in sorted(alias_owner.items()):
+        e = ents.get(holder)
+        parent = (e or {}).get("parent")
+        if not e or not parent or parent == holder or parent not in ents:
+            continue
+        p = ents[parent]
+        if key not in set(p.get("aliases") or []):
+            continue
+        # Only the parent's own brand moves. A longer legal name the parent happens to carry
+        # ("SPARTA FIAGRO FUNDO…", "UBS BB CORRETORA DE CAMBIO…") is the arm's identity.
+        if _name_key(key) not in (_name_key(p.get("display_name")), _name_key(parent)):
+            continue
+        if _name_key(key) in (_name_key(e.get("display_name")), _name_key(holder)):
+            continue
+        out.append({"key": key, "holder": holder, "parent": parent})
+    return out
+
+
+def repoint_arm_aliases(table: Any | None = None, *, dry_run: bool = True) -> list[dict[str, str]]:
+    """Give each ``find_arm_held_aliases`` key back to the parent. Only the ALIAS# index item
+    moves; the arm keeps its alias list (its legal name still resolves by CNPJ)."""
+    t = _table(table)
+    owner = {i["pk"][6:]: i["entity_id"] for i in _scan_type(t, "alias") if i.get("entity_id")}
+    found = find_arm_held_aliases(_scan_type(t, "entity"), owner)
+    if not dry_run:
+        for m in found:
+            t.put_item(Item={"pk": f"ALIAS#{m['key']}", "type": "alias", "entity_id": m["parent"]})
+            _log(m["parent"], "repoint_alias", "curated", {"key": m["key"], "from": m["holder"]})
+    return found
 
 
 def add_cnpj_roots(

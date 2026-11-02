@@ -318,12 +318,14 @@ def run(bucket: str | None = None, *, kb_bucket: str | None = None, lookback_day
     # pass the YEAR as the lookback (2026 days), scanning five years of IPE filings.
     rows = cvm_ipe.fetch_material_facts(lookback_days, today=today)
     fresh = build_corpus(rows, resolver=resolve_entities, today=today)
+    stored = load_index(bucket, s3=s3) if bucket else {}
     n_dasfn = 0
     if dasfn:
         from src.ingest import pilar3_dasfn
+        known = {r.get("cnpj") for r in (stored.get("records") or {}).values() if r.get("kind") == "dasfn"}
         try:
             extra = pilar3_dasfn.build(pilar3_dasfn.list_qualitative(pilar3_dasfn.fetch_catalog()),
-                                       resolver=resolve_entities)
+                                       resolver=resolve_entities, known=known)
         except Exception as exc:  # pragma: no cover - the catalog is best-effort
             print(f"Warning: DASFN Pilar 3 failed: {exc}")
             extra = {}
@@ -331,7 +333,7 @@ def run(bucket: str | None = None, *, kb_bucket: str | None = None, lookback_day
         # The full IPE report wins over the DASFN tables for the same bank (merge keeps the newer).
         fresh = merge({"records": extra}, fresh)
         fresh["count"] = len(fresh["records"])
-    idx = merge(load_index(bucket, s3=s3) if bucket else {}, fresh)
+    idx = merge(stored, fresh)
     if bucket and fresh.get("count"):
         publish(idx, bucket, s3=s3)
     kb = promote_to_kb(idx, bucket=kb_bucket, s3=s3) if kb_bucket else []
