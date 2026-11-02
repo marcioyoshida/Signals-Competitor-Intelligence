@@ -999,6 +999,17 @@ def _scope_cards_to_modules(
     return [c for c in cards if _ok(c)]
 
 
+def _accepts_entities(fn: Callable[..., Any]) -> bool:
+    """Whether a kb_retrieve callable takes ``entities=`` (#309). Test stubs and older callers
+    take only the question, and keep working unchanged."""
+    import inspect
+    try:
+        params = inspect.signature(fn).parameters
+    except (TypeError, ValueError):
+        return False
+    return "entities" in params or any(p.kind is p.VAR_KEYWORD for p in params.values())
+
+
 def answer(
     q: str,
     *,
@@ -1079,7 +1090,11 @@ def answer(
     # amendment), not what changed this week — and they aren't scoped to the tenant's window.
     if kb_retrieve is not None and not distress_intent and not alert_intent and mode not in ("digest", "follow-up"):
         try:
-            kb_snippets = kb_retrieve(kb_q) or []
+            named = named_entities(kb_q, feed, scope)
+            if named and _accepts_entities(kb_retrieve):
+                kb_snippets = kb_retrieve(kb_q, entities=named) or []
+            else:
+                kb_snippets = kb_retrieve(kb_q) or []
         except Exception as exc:  # pragma: no cover - KB best-effort
             print(f"Warning: KB retrieve skipped: {exc}")
 
@@ -1274,18 +1289,94 @@ def kb_header(s: dict[str, Any]) -> str:
                                          s.get("title"), s.get("url")) if x)
 
 
-def _kb_retrieve(q: str, *, max_results: int = KB_MAX_RESULTS) -> list[dict[str, Any]]:
+KB_ENTITY_MAX = 2            # filtered retrieves per question (one per named entity)
+# Entity ids that are also everyday words: they scope the KB only when written as a proper noun.
+# Seeded from entities.AMBIGUOUS_TOKENS (kept in sync by a test) plus Portuguese words.
+_COMMON_WORD_IDS = frozenset({"STONE", "NEON", "NOMAD", "NU", "CAIXA", "PREVI", "VALIA", "TRUE",
+                              "ORIGINAL", "INTER", "NEXT", "PAN", "ALFA", "AGORA", "MODAL", "PINE",
+                              "FIBRA", "REDE", "WILL", "BANCO", "CREDITO"})
+KB_ENTITY_RESULTS = 4        # hits per filtered retrieve
+
+
+def _kb_retrieve(q: str, *, max_results: int = KB_MAX_RESULTS,
+                 entities: list[str] | None = None) -> list[dict[str, Any]]:
+    """KB Retrieve (vector search only, no model call).
+
+    #309: when the question names tracked entities, first run one retrieve FILTERED to each
+    entity's documents (sidecar ``entity``), then the unfiltered one. Banks' Pilar 3 boilerplate
+    reads alike, so unfiltered search ranked BTG's credit-risk chunk first for a Mercado Pago
+    question and missed Safra's own text entirely (live 2026-11-02). Filtered hits come first; a
+    filter failure degrades to the unfiltered search."""
     kb_id = os.environ.get("ONCA_KB_ID")
     if not kb_id:
         return []
     import boto3
     client = boto3.client("bedrock-agent-runtime")
-    resp = client.retrieve(
-        knowledgeBaseId=kb_id,
-        retrievalQuery={"text": q[:1000]},
-        retrievalConfiguration={"vectorSearchConfiguration": {"numberOfResults": max_results}},
-    )
-    return kb_snippets_from_results(resp.get("retrievalResults") or [])
+
+    def _retrieve(n: int, flt: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+        cfg: dict[str, Any] = {"numberOfResults": n}
+        if flt:
+            cfg["filter"] = flt
+        return client.retrieve(knowledgeBaseId=kb_id, retrievalQuery={"text": q[:1000]},
+                               retrievalConfiguration={"vectorSearchConfiguration": cfg}
+                               ).get("retrievalResults") or []
+
+    scoped: list[dict[str, Any]] = []
+    for eid in (entities or [])[:KB_ENTITY_MAX]:
+        try:
+            scoped += _retrieve(KB_ENTITY_RESULTS, {"equals": {"key": "entity", "value": eid}})
+        except Exception as exc:  # pragma: no cover - a filter failure must not lose the answer
+            print(f"Warning: entity-filtered KB retrieve skipped ({eid}): {exc}")
+    return kb_snippets_from_results(merge_kb_results(scoped, _retrieve(max_results)))
+
+
+def merge_kb_results(first: list[dict[str, Any]], rest: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """``first`` (entity-filtered hits) ahead of ``rest``, a chunk seen twice kept once."""
+    out, seen = [], set()
+    for r in list(first) + list(rest):
+        loc = ((r.get("location") or {}).get("s3Location") or {}).get("uri") or ""
+        key = (loc, ((r.get("content") or {}).get("text") or "")[:120])
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(r)
+    return out
+
+
+def named_entities(q: str, feed: dict[str, Any], scope: dict[str, Any] | None = None) -> list[str]:
+    """Tracked entity ids the question names, for KB scoping (#309).
+
+    Conservative on purpose: every token of the canonical id ("mercado_pago" needs both
+    "mercado" and "pago"), or the full label as a phrase ("banco do brasil"), never a single
+    generic word, so "o crédito no Brasil" does not scope to BB. Ids of 1–2 characters only match
+    as a whole word ("bb", "c6"). The dashboard's scoped entity comes first. Longest match wins
+    ties, and at most ``KB_ENTITY_MAX`` are returned."""
+    def _plain(t: Any) -> str:
+        return " ".join(re.findall(r"[a-z0-9]+", _fold(t)))
+    fq = f" {_plain(q)} "
+    hits: list[tuple[int, str]] = []
+    for e in (feed.get("entities") or []):
+        eid = str(e.get("entity") or "")
+        if not eid:
+            continue
+        parts = _plain(eid).split()
+        label = _plain(e.get("label") or "")
+        # EVERY part of the id as a whole word: "j-safra" needs the "j", "banco_bv" the "bv".
+        by_id = bool(parts) and all(f" {p} " in fq for p in parts)
+        if by_id and len(parts) == 1 and parts[0].upper() in _COMMON_WORD_IDS:
+            # "o texto original", "inter-relação": a common word names the entity only as a
+            # proper noun.
+            by_id = bool(re.search(rf"(?<![\w-]){re.escape(parts[0])}(?![\w-])", q, re.I)
+                         and re.search(rf"(?<![\w-]){parts[0][0].upper()}", q))
+        by_label = len(label) >= 4 and len(label.split()) > 1 and f" {label} " in fq
+        if by_id or by_label:
+            hits.append((max(len(eid), len(label) if by_label else 0), eid))
+    hits.sort(reverse=True)
+    out = [eid for _, eid in hits]
+    s_ent = str((scope or {}).get("entity") or "")
+    if s_ent:
+        out = [s_ent] + [e for e in out if e != s_ent]
+    return list(dict.fromkeys(out))[:KB_ENTITY_MAX]
 
 
 # DEC-4 (#97): a good precedent is similar AND recent AND has a known-good outcome. Bedrock ranks
@@ -1455,7 +1546,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         # §F Mechanism 1: an officer read also grounds on its own past decisions+outcomes.
         kb_fn = None
         if os.environ.get("ONCA_KB_ID"):
-            kb_fn = (lambda qq: _kb_retrieve(qq) + _kb_precedents(qq, officer)) if officer else _kb_retrieve
+            kb_fn = ((lambda qq, entities=None: _kb_retrieve(qq, entities=entities) + _kb_precedents(qq, officer))
+                     if officer else _kb_retrieve)
         usage: dict[str, int] = {}
 
         def _conv(*a: Any, **kw: Any) -> Any:
