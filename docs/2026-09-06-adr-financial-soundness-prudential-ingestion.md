@@ -1,6 +1,27 @@
 # ADR 022 — Financial-Soundness (Prudential) Ingestion + Financial-Tone NLP for BCB/CVM Institutions
 
-Status: **Accepted and largely built — 1 remainder (2026-11-02).**
+Status: **Accepted; all remainders shipped (2026-11-02).** Follow-up: [#309](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/309), entity-filtered
+KB retrieval (ADR 010 side).
+**2026-11-02, multi-bank Pilar 3 text shipped ([#301](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/301), Addendum 3):**
+- **Route:** the DASFN qualitative tables (OVA/LIQA/CRA/MRA/IRRBBA/ORA) are the uniform route the
+  IR-site PDFs never were.
+- **Live:** **26 institutions** on `corpus="pilar3"` (was 1). Among them are BB, Safra, BTG, C6, BMG,
+  BV, Mercado Pago, Neon, MUFG, HSBC and State Street, plus Itaú via IPE. 23 KB documents were
+  written, and every citation title names its institution.
+- **Resolver fixes:** BCB's "BCO" abbreviation is now expanded, lifting resolution from 52 to 73 of
+  247 DASFN names. KM1 reads the same names, and its mapping went from 7 to 11 banks.
+- **Industry gate:** binding is limited to Pilar 3-filer industries, so "BANCO B3" can't bind to b3,
+  the exchange.
+- **Not covered:**
+  - Nubank and Santander (pointer to a PDF only).
+  - Bradesco and Inter (API 404), PicPay (403), and Agibank (403 to AWS addresses).
+  - ABC, Sicoob and Sicredi (robots.txt 5xx or unreachable, so disallow under RFC 9309).
+  - Pan (tables from 2022).
+  - Stone (no registry entity, #309).
+- **Tone:** `financial_tone` picks up the new corpus on the next monthly ToneTask (12-06). It was not
+  forced, because the FinBERT endpoint bills per call.
+
+Was: 1 remainder (2026-11-02, after #299).
 **2026-11-02, Phase 6 KB-grounding shipped ([#299](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/299)):**
 - **What runs:** a `pilar3` stage in the monthly `OncaFinancials` handler (`bcb_soundness.lambda_handler`).
   - It refreshes the tone corpus from CVM IPE. The lookback is 200 days, merged so a half-yearly
@@ -48,7 +69,7 @@ Serverless endpoint is `InService`. Two items the Addendum deferred have since s
 
 **Left (engineering; item 2 also depends on external sources):**
 1. ~~Phase 6 KB-grounding: no code feeds Pilar 3 text into the Bedrock KB~~ **shipped 2026-11-02**. Ticket [#299](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/299).
-2. Multi-bank Pilar 3 *tone* corpus: still Itaú only via IPE. The other banks' IR PDFs are
+2. ~~Multi-bank Pilar 3 *tone* corpus: still Itaú only via IPE.~~ **Shipped 2026-11-02 via DASFN (Addendum 3).** The other banks' IR PDFs are
    opaque or bot-blocked, which is an external dependency. KM1 covers the *numbers*. Ticket
    [#301](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/301) (spike first).
 3. ~~The per-metric sanity guards for insurer ROA and small-book NPL~~ **shipped 2026-11-02**. Ticket [#300](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/300).
