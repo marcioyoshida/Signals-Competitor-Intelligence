@@ -307,6 +307,13 @@ def _vertical_ok(spec: "registry.SourceSpec") -> bool:
     return registry.ALL in spec.verticals or _active_vertical() in spec.verticals
 
 
+def _fs_jobs_ok() -> bool:
+    """C5 (#303): the registry jobs that grow the financial-services entity universe (prudential
+    solvency, Receita bulk CNAE, entity discovery, the regulated roster promote) are not
+    SourceSpecs but are FS-only: they run only under the FS vertical."""
+    return _active_vertical() == registry.VERTICAL_FS
+
+
 def _source_enabled(spec: "registry.SourceSpec") -> bool:
     """Gate a source on its vertical applicability (ADR 019 Phase 3) then its env flag."""
     if not _vertical_ok(spec):
@@ -525,6 +532,10 @@ def _news_slice(context: Any) -> dict[str, Any]:
     term), so it no longer shares a wall-clock budget with the fixed-cost
     structured sources. News is not written to the corpus, so this path has no
     corpus/state coupling with the structured branch (disjoint diff sources)."""
+    # C5 (#303): the news lens is a registry source like any other; a vertical it does not
+    # serve gets the empty slice and runs no fetch.
+    if not _source_enabled(registry.by_id("news")):
+        return _empty_news_slice()
     NP = registry.resolve_params(registry.by_id("news"))   # C3 (#303): the news knobs
     news_lookback = NP["lookback_days"]
     competitors = registry.resolve_params(registry.by_id("competitor"))["admins"]
@@ -813,7 +824,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # derivation below. Structured identity means such an entity resolves from its
     # CVM filing and does not depend on the fragile news-only corroboration gate
     # (nor on an ambiguous place-name brand like "Porto Seguro").
-    if os.environ.get("ONCA_ENTITIES_TABLE") and P["fatos"]["use_registry"]:
+    if (os.environ.get("ONCA_ENTITIES_TABLE") and P["fatos"]["use_registry"]
+            and _source_enabled(registry.by_id("fatos"))):
         try:
             from src.synth import entity_registry
 
@@ -943,7 +955,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # OncaFinancialsPipeline (Phase 3), not this 3×/day cycle. When enabled it writes the durable
     # soundness/index.json the feed_builder already reads (harmless/no-op when the quarter is
     # unchanged). Best-effort — a failure never touches the rest of the ingest.
-    if os.environ.get("ONCA_SOUNDNESS", "").lower() == "true":
+    if os.environ.get("ONCA_SOUNDNESS", "").lower() == "true" and _fs_jobs_ok():
         try:
             with _source_budget("prudential solvency", deadline, per_source):
                 bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
@@ -1489,7 +1501,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # competitive sets and are bounded (~82 / ~233), so the WHOLE roster is promoted into the
     # Entity Master (not just deltas): resolve→enrich / clean-brand auto-create / propose,
     # budget-capped per run (idempotent by CNPJ, fills over runs). Gated OFF by default.
-    if os.environ.get("ONCA_PROMOTE_REGULATED", "false").lower() in ("1", "true", "yes") \
+    if _fs_jobs_ok() and os.environ.get("ONCA_PROMOTE_REGULATED", "false").lower() in ("1", "true", "yes") \
             and os.environ.get("ONCA_ENTITIES_TABLE"):
         try:
             with _source_budget("regulated roster promote", deadline, per_source):
@@ -1522,7 +1534,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # Athena/Glue step over the full dataset) overrides the live fetch if configured. This is a
     # genuinely heavy fetch (a few hundred MB), so it gets its OWN larger source budget rather
     # than the shared ONCA_SOURCE_TIMEOUT_SEC. Propose-only (ADR 011 §4) throughout.
-    if os.environ.get("ONCA_INGEST_RECEITA_BULK", "false").lower() in ("1", "true", "yes") \
+    if _fs_jobs_ok() and os.environ.get("ONCA_INGEST_RECEITA_BULK", "false").lower() in ("1", "true", "yes") \
             and os.environ.get("ONCA_ENTITIES_TABLE"):
         try:
             _rb_budget = int(os.environ.get("ONCA_RECEITA_SOURCE_TIMEOUT_SEC", "240"))
@@ -1569,7 +1581,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # (set ONCA_ENTITY_DISCOVERY=true). Weekly-ish cost is fine; runs best-effort
     # inside the same budget window as the rest of ingest.
     if (
-        os.environ.get("ONCA_ENTITIES_TABLE")
+        _fs_jobs_ok()
+        and os.environ.get("ONCA_ENTITIES_TABLE")
         and os.environ.get("ONCA_ENTITY_DISCOVERY", "false").lower()
         in ("1", "true", "yes")
     ):
@@ -1870,8 +1883,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # the active vertical (each digest section key IS the source id). Sector-agnostic sources
     # ({all}: sanctions/cade/contracts) survive every vertical; FS-only sources vanish under a
     # sectorial vertical, so synth never fuses them into that vertical's cards. Non-lens
-    # sections (macro/reputation/stores) are untouched. Migrated sources already skip their
-    # fetch via _source_enabled; this also gates the still-bespoke FS fetches' OUTPUT.
+    # sections (macro/reputation/stores) are untouched. Since C1–C5 (#303) every source skips
+    # its FETCH via _source_enabled; this drop only keeps the digest free of empty FS sections.
     _active_ids = {s.id for s in registry.active(_active_vertical())}
     for _sid in [s.id for s in registry.lens_sources()]:   # store sections stay (C4)
         if _sid not in _active_ids:

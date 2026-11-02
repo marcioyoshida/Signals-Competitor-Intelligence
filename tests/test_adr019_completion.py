@@ -155,6 +155,72 @@ def test_c4_stores_are_vertical_gated_by_the_same_path(monkeypatch):
     assert lp._source_enabled(registry.by_id("ans_igr"))               # health insurance
 
 
+# --- C5: under a sector vertical no FS-only source fetches ----------------------------------------
+EVERYTHING_ON = {"ONCA_SOUNDNESS": "true", "ONCA_INGEST_RECEITA_BULK": "true",
+                 "ONCA_ENTITY_DISCOVERY": "true", "ONCA_DISCOVER_BCB": "true",
+                 "ONCA_PROMOTE_REGULATED": "true", "ONCA_INGEST_SUSEP": "true", "ONCA_INGEST_SPA": "true",
+                 "ONCA_INGEST_PREVIC": "true", "ONCA_INGEST_CVM_PARTICIPANTES": "true",
+                 "ONCA_RECLAME_AQUI": "true", "ONCA_ANS_IGR": "true", "ONCA_CONSUMIDOR_GOV": "true",
+                 "ONCA_PNCP_CONTRATOS": "true"}
+# sector-agnostic ({all}) sources and the registry read their CNPJ index needs
+AGNOSTIC = {"macro.selic", "macro.focus", "datajud.fetch", "cade.fetch", "cade.map", "ceis.index",
+            "ceis.fetch", "ceis.map", "ceis.store", "er.list_entities", "consumidor.fetch",
+            "pncp.fetch", "pncp.map", "pncp.store",
+            "corpus"}                                       # the corpus writer (a sink, not a fetch)
+
+
+def _stub_jobs(mp, rec):
+    from src.ingest import (ans_igr, bcb_soundness, consumidor_gov, cvm_fii, cvm_participantes,
+                            pncp_contratos, previc_efpc, receita_bulk, reclame_aqui, spa_apostas,
+                            susep_entidades)
+    from src.synth import entity_discovery as ed
+    mp.setattr(bcb_soundness, "latest_base_date", rec("soundness.date", 202606))
+    mp.setattr(bcb_soundness, "fetch_capital", rec("soundness.fetch", []))
+    mp.setattr(bcb_soundness, "fetch_institution_names", rec("soundness.names", {}))
+    mp.setattr(receita_bulk, "fetch_shard", rec("receita_bulk.fetch", []))
+    mp.setattr(receita_bulk, "propose_candidates", rec("receita_bulk.propose",
+                                                       {"already": 0, "proposed": [], "no_name": 0}))
+    for fn in ("discover_fiagro", "discover_consorcio", "discover_bcb_institutions", "promote_roster"):
+        mp.setattr(ed, fn, rec("discovery." + fn, {}))
+    mp.setattr(cvm_fii, "fetch_fii", rec("fii.fetch", []))
+    mp.setattr(susep_entidades, "fetch_entities", rec("susep.fetch", []))
+    mp.setattr(spa_apostas, "fetch_authorized", rec("spa.fetch", []))
+    mp.setattr(previc_efpc, "fetch_entities", rec("previc.fetch", []))
+    mp.setattr(cvm_participantes, "fetch_participants", rec("participantes.fetch", []))
+    mp.setattr(reclame_aqui, "companies_from_registry", rec("reclame.companies", []))
+    mp.setattr(reclame_aqui, "fetch_reputation", rec("reclame.fetch", []))
+    mp.setattr(ans_igr, "run", rec("ans_igr.run", None))
+    mp.setattr(consumidor_gov, "fetch_indicators", rec("consumidor.fetch", []))
+    mp.setattr(pncp_contratos, "fetch_contracts", rec("pncp.fetch", []))
+    mp.setattr(pncp_contratos, "map_to_entities", rec("pncp.map", lambda rows, cnpj_index=None: rows))
+    mp.setattr(pncp_contratos, "update_store", rec("pncp.store", None))
+
+
+def _names(out):
+    return {json.loads(c)[0] for c in out["calls"]}
+
+
+def test_c5_a_sector_vertical_runs_no_fs_fetch(monkeypatch):
+    fs = _names(_run(monkeypatch, EVERYTHING_ON, after=_stub_jobs))
+    # positive control: under FS every one of these jobs is reached
+    for n in ("soundness.date", "receita_bulk.fetch", "discovery.discover_fiagro", "susep.fetch",
+              "reclame.companies", "ans_igr.run", "pix.fetch", "ifdata.load_index", "autorizacoes.fetch"):
+        assert n in fs, n
+    sector = _names(_run(monkeypatch, {**EVERYTHING_ON, "ONCA_VERTICAL": "pharma"}, after=_stub_jobs))
+    assert sector <= AGNOSTIC, sorted(sector - AGNOSTIC)
+    assert {"macro.selic", "datajud.fetch", "cade.fetch", "consumidor.fetch"} <= sector
+
+
+def test_c5_the_news_slice_fetches_nothing_outside_its_vertical(monkeypatch):
+    from src.ingest import lambda_port as lp
+    called = []
+    monkeypatch.setattr(lp.trade_press, "fetch_news", lambda *a, **k: called.append(1) or [])
+    monkeypatch.setattr(lp.trade_press, "fetch_sector_news", lambda *a, **k: called.append(1) or [])
+    monkeypatch.setenv("ONCA_VERTICAL", "pharma")
+    monkeypatch.setenv("ONCA_NEWS_WATCHLIST", "ALFA")
+    assert lp._news_slice(None) == lp._empty_news_slice() and called == []
+
+
 def test_c2_the_entrant_gate_also_stops_the_supplementary_registries(monkeypatch):
     from src.ingest import susep_entidades
     seen = []
