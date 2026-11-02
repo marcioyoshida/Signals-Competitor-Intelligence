@@ -805,11 +805,33 @@ class OncaPrototypeStack(Stack):
         # Pricing (verified 2026-11-02): the first 10 distribution tenants are in the free tier.
         # `-c multi_tenant_cdn=false` builds the stack without the template (a deploy fallback).
         _mt_on = str(self.node.try_get_context("multi_tenant_cdn") or "true").lower() != "false"
+        # A template distribution only accepts cloudfront-js-2.0 functions (live 2026-11-02
+        # rollback). The live distribution keeps its own functions untouched; the template gets
+        # js-2.0 twins built from the SAME code (2.0 runs the 1.0 ES5 code unchanged).
+        _js2_twins: dict[str, Any] = {}
+
+        def _js2(fn: Any) -> Any:
+            key = fn.node.id
+            if key not in _js2_twins:
+                _js2_twins[key] = cloudfront.Function(
+                    self, key + "Js2",
+                    code=cloudfront.FunctionCode.from_inline(fn.node.default_child.function_code),
+                    runtime=cloudfront.FunctionRuntime.JS_2_0,
+                    comment="js-2.0 twin for the multi-tenant template (#306)")
+            return _js2_twins[key]
+
+        def _js2_assocs(assocs: Any) -> Any:
+            return [cloudfront.FunctionAssociation(function=_js2(a.function), event_type=a.event_type)
+                    for a in assocs or []]
         tenant_cdn = None if not _mt_on else cloudfront.Distribution(
             self,
             "OncaTenantCdn",
             default_root_object="index.html",
-            default_behavior=_default_behavior,
+            default_behavior=cloudfront.BehaviorOptions(
+                origin=site_origin,
+                viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+                function_associations=_js2_assocs(_default_behavior.function_associations),
+            ),
             comment="Onca SaaS multi-tenant template (#306)",
         )
         _tenant_cfn = tenant_cdn.node.default_child if tenant_cdn else None
@@ -845,6 +867,8 @@ class OncaPrototypeStack(Stack):
             """Every path behavior goes on BOTH distributions, in the same order."""
             distribution.add_behavior(path_pattern, origin, **kw)
             if tenant_cdn is not None:
+                if kw.get("function_associations"):
+                    kw = {**kw, "function_associations": _js2_assocs(kw["function_associations"])}
                 tenant_cdn.add_behavior(path_pattern, origin, **kw)
 
         # G5 (#113): the ONE genuinely public path on this distribution — no basic-auth
@@ -2234,8 +2258,12 @@ class OncaPrototypeStack(Stack):
         _gr_profile = "us.guardrail.v1:0"
         # Topic NAMES must match ^[0-9a-zA-Z-_ !?.]+$ (no accents; early validation rejected
         # them live); definitions and examples may stay in Portuguese.
+        # Topics check the QUESTION only (output_enabled=False): an answer about a bank's products
+        # or capital is the product, not advice. Examples name no institution: live v1 blocked
+        # "O que o Itaú mudou esta semana?" because an example said "ações do Itaú".
         _gr_topic = lambda name, definition, examples: bedrock.CfnGuardrail.TopicConfigProperty(  # noqa: E731
-            name=name, definition=definition, examples=examples, type="DENY")
+            name=name, definition=definition, examples=examples, type="DENY",
+            input_enabled=True, input_action="BLOCK", output_enabled=False, output_action="NONE")
         ask_guardrail = bedrock.CfnGuardrail(
             self, "OncaAskGuardrail",
             name="onca-ask-guardrail",
@@ -2250,20 +2278,25 @@ class OncaPrototypeStack(Stack):
                 topics_tier_config=bedrock.CfnGuardrail.TopicsTierConfigProperty(tier_name="STANDARD"),
                 topics_config=[
                     _gr_topic("Recomendacao de investimento pessoal",
-                              "Pedidos de recomendação de investimento para a carteira pessoal de quem pergunta: "
-                              "o que comprar ou vender, quanto aplicar, se deve investir em uma ação, fundo ou cripto.",
-                              ["Devo comprar ações do Itaú?", "Em qual fundo eu deveria investir meu dinheiro?"]),
+                              "Pedido de quem pergunta por uma recomendação sobre o PRÓPRIO dinheiro ou a própria "
+                              "carteira pessoal: se ele deve comprar ou vender um ativo, quanto aplicar, onde investir "
+                              "as suas economias. Não inclui perguntas sobre o que um banco ou empresa fez, lançou, "
+                              "mudou ou reportou, nem sobre indicadores de mercado ou regulação.",
+                              ["Devo comprar essa ação com as minhas economias?", "Onde eu invisto meu dinheiro agora?",
+                               "Vale a pena eu vender meus fundos hoje?"]),
                     _gr_topic("Aconselhamento juridico pessoal",
                               "Pedidos de orientação jurídica para o caso pessoal de quem pergunta: como processar "
                               "alguém, o que fazer em uma ação judicial própria, direitos pessoais em um litígio.",
-                              ["Como eu processo meu banco?", "Tenho direito a indenização no meu caso?"]),
+                              ["Como eu processo a empresa que me cobrou?", "Tenho direito a indenização no meu caso?"]),
                     _gr_topic("Aconselhamento medico",
                               "Pedidos de diagnóstico, tratamento, medicação ou orientação de saúde.",
                               ["Que remédio tomo para dor de cabeça?", "Esses sintomas são graves?"]),
                     _gr_topic("Dados pessoais de individuos",
-                              "Pedidos de dados pessoais de uma pessoa física: CPF, endereço residencial, telefone, "
-                              "e-mail pessoal, renda ou dados de família de executivos ou de qualquer indivíduo.",
-                              ["Qual o CPF do presidente do Itaú?", "Me passe o telefone pessoal do CEO do Nubank"]),
+                              "Pedido de dados pessoais de uma pessoa física identificada: CPF, endereço residencial, "
+                              "telefone ou e-mail pessoal, renda ou família. Não inclui dados de empresas, CNPJ, cargos "
+                              "ou atos públicos de executivos.",
+                              ["Qual o CPF desse executivo?", "Me passe o telefone pessoal do presidente do banco",
+                               "Onde mora o diretor da empresa?"]),
                 ]),
             content_policy_config=bedrock.CfnGuardrail.ContentPolicyConfigProperty(
                 content_filters_tier_config=bedrock.CfnGuardrail.ContentFiltersTierConfigProperty(tier_name="STANDARD"),
@@ -2281,7 +2314,7 @@ class OncaPrototypeStack(Stack):
         # A numbered version pins what the Lambdas call; bump the description to cut a new one.
         ask_guardrail_version = bedrock.CfnGuardrailVersion(
             self, "OncaAskGuardrailV1", guardrail_identifier=ask_guardrail.attr_guardrail_id,
-            description="v1 2026-11-02 (#304)")
+            description="v2 2026-11-02: topics on input only, no institution in examples (#304)")
         _gr_env = {"ONCA_ASK_GUARDRAIL": "true", "ONCA_GUARDRAIL_ID": ask_guardrail.attr_guardrail_id,
                    "ONCA_GUARDRAIL_VERSION": ask_guardrail_version.attr_version}
         _gr_apply = iam.PolicyStatement(

@@ -51,6 +51,21 @@ def guardrail_config() -> dict[str, str] | None:
     return {"id": gid, "version": ver} if gid and ver else None
 
 
+def guardrail_blocked(trace: Any) -> bool:
+    """Does a Converse guardrail trace hold any BLOCKED assessment? (ANONYMIZED is not a block.)
+    Without a trace an intervention is treated as a block (fail closed)."""
+    if not trace:
+        return True
+
+    def walk(o: Any) -> bool:
+        if isinstance(o, dict):
+            return o.get("action") == "BLOCKED" or any(walk(v) for v in o.values())
+        if isinstance(o, list):
+            return any(walk(v) for v in o)
+        return False
+    return walk(trace)
+
+
 def converse(
     prompt: str,
     *,
@@ -115,13 +130,15 @@ def converse(
             kwargs["system"] = [{"text": system}]
         if guardrail:
             kwargs["guardrailConfig"] = {"guardrailIdentifier": guardrail["id"],
-                                         "guardrailVersion": guardrail["version"], "trace": "disabled"}
+                                         "guardrailVersion": guardrail["version"], "trace": "enabled"}
         resp = client.converse(**kwargs)
         if usage_out is not None:
             usage = resp.get("usage") or {}
             usage_out["input_tokens"] = int(usage.get("inputTokens") or 0)
             usage_out["output_tokens"] = int(usage.get("outputTokens") or 0)
-        if resp.get("stopReason") == "guardrail_intervened":
+        # An ANONYMIZE (PII masked in the answer) also reports "guardrail_intervened": only a
+        # BLOCKED assessment is a refusal; a masked answer is returned as masked (live 2026-11-02).
+        if resp.get("stopReason") == "guardrail_intervened" and guardrail_blocked(resp.get("trace")):
             if usage_out is not None:
                 usage_out["guardrail"] = "intervened"
             return None

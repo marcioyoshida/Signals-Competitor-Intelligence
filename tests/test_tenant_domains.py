@@ -68,3 +68,16 @@ def test_template_has_an_explicit_tls12_sni_certificate():
     block = APP[APP.index('"OncaTenantCdn"'):APP.index("def _add_behavior")]
     assert '"DistributionConfig.ViewerCertificate"' in block
     assert '"SslSupportMethod": "sni-only"' in block and '"MinimumProtocolVersion": "TLSv1.2_2021"' in block
+
+
+def test_template_uses_js2_twins_and_leaves_the_live_functions_alone():
+    """Live 2026-11-02: a template distribution only accepts cloudfront-js-2.0 functions."""
+    helper = APP[APP.index("def _js2("):APP.index("def _add_behavior")]
+    assert "runtime=cloudfront.FunctionRuntime.JS_2_0" in helper
+    assert "fn.node.default_child.function_code" in helper
+    tmpl = APP[APP.index('"OncaTenantCdn"'):APP.index("_tenant_cfn = ")]
+    assert "_js2_assocs(_default_behavior.function_associations)" in tmpl
+    add = APP[APP.index("def _add_behavior"):APP.index("def _add_behavior") + 700]
+    assert '_js2_assocs(kw["function_associations"])' in add
+    live = APP[APP.index('auth_fn = cloudfront.Function('):APP.index('auth_fn = cloudfront.Function(') + 300]
+    assert "runtime=" not in live                                     # live function unchanged
