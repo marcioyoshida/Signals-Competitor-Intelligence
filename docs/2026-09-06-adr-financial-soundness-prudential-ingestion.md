@@ -2,7 +2,13 @@
 
 Status: **Accepted; all remainders shipped (2026-11-02).** The follow-up, [#309](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/309)
 (entity-filtered KB retrieval, ADR 010 side), also shipped on 2026-11-02 in `2b73e1f`. A question that names a bank now
-retrieves that bank's own Pilar 3 text first. Registry gaps still open: `ALIAS#SAFRA` points at `safra-corretora`, and Stone has no entity.
+retrieves that bank's own Pilar 3 text first. Registry follow-up, also 2026-11-02 (`cdbdd6e`):
+- **Brand aliases:** 39 brand ALIAS# keys (SAFRA, SANTANDER, MERCADO PAGO, NEON…) pointed at a
+  corretora/pagamentos arm. They now go to the parent (`repoint_arm_aliases`), and `put_entity`
+  prevents a recurrence.
+- **Stone:** Stone *had* an entity. Its DASFN filer, "STONE PAGAMENTOS S.A.", never resolved by name
+  (STONE is an ambiguous token). DASFN and KM1 now fall back to the CNPJ root, which also resolves
+  about 35 more banks.
 **2026-11-02, multi-bank Pilar 3 text shipped ([#301](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/301), Addendum 3):**
 - **Route:** the DASFN qualitative tables (OVA/LIQA/CRA/MRA/IRRBBA/ORA) are the uniform route the
   IR-site PDFs never were.
@@ -18,7 +24,7 @@ retrieves that bank's own Pilar 3 text first. Registry gaps still open: `ALIAS#S
   - Bradesco and Inter (API 404), PicPay (403), and Agibank (403 to AWS addresses).
   - ABC, Sicoob and Sicredi (robots.txt 5xx or unreachable, so disallow under RFC 9309).
   - Pan (tables from 2022).
-  - Stone (no registry entity, #309).
+  - Stone: name unresolved until the CNPJ fallback (`cdbdd6e`).
 - **Tone:** `financial_tone` picks up the new corpus on the next monthly ToneTask (12-06). It was not
   forced, because the FinBERT endpoint bills per call.
 
