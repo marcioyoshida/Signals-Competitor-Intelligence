@@ -27,9 +27,12 @@
       context → deploy → `route`).
     - **Scoping** is identity-based (`/api/feed`), as on onssa.org.
     - **Pricing:** the first 10 tenants are free.
-    - **Left:** the test tenant `tenant-test.onssa.org` (QA tenant) waits on DNS. The shared
-      Cloudflare token is rejected (9109), so its ACM validation CNAME can't be written
-      automatically.
+    - **Test tenant live 2026-11-02:** `tenant-test.onssa.org` → QA tenant
+      (`dt_3LZUTy9L1dSTmQiURocDAsH6ZaS`), CNAME (DNS only) to its connection-group endpoint.
+      Verified: `/`, `/exec`, `/pricing.html` and unauthenticated `/api/feed` answer exactly as on
+      onssa.org; the Hosted UI accepts the tenant callback and still rejects foreign ones; the
+      session broker allows the host. Caveat: site deploys invalidate only the live distribution,
+      so tenant domains serve cached HTML until their TTL expires.
   - **Cross-cutting: built.** `tier ∈ {entry, saas, sovereign}` and a separate `plane`
     (`tenant_config.VALID_TIERS` / `VALID_PLANES`).
   - **Sovereign: not deployable yet.** The addendum's decisions are built, but
