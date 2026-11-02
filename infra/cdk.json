@@ -1,8 +1,15 @@
 {
   "app": "../.venv/bin/python app.py",
   "watch": {
-    "include": ["**"],
-    "exclude": ["README.md", "cdk*.json", "**/__pycache__", "**/*.pyc"]
+    "include": [
+      "**"
+    ],
+    "exclude": [
+      "README.md",
+      "cdk*.json",
+      "**/__pycache__",
+      "**/*.pyc"
+    ]
   },
   "context": {
     "@aws-cdk/core:bootstrapQualifier": "hnb659fds",
@@ -15,6 +22,13 @@
     "qa_pipeline_image_tag": "latest",
     "alertEmail": "marcioyoshida@gmail.com",
     "gdelt_bridge_ready": "1",
-    "gcp_project": "onssa-508623"
+    "gcp_project": "onssa-508623",
+    "tenant_domains": [
+      {
+        "tenant": "qa-internal-admin",
+        "domain": "tenant-test.onssa.org",
+        "cert_arn": "arn:aws:acm:us-east-1:668449743071:certificate/490d924b-906d-40bc-8d15-eaa2ba975d7d"
+      }
+    ]
   }
 }
