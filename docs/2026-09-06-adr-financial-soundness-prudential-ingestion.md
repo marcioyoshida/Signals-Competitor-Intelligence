@@ -1,6 +1,25 @@
 # ADR 022 — Financial-Soundness (Prudential) Ingestion + Financial-Tone NLP for BCB/CVM Institutions
 
-Status: **Accepted and largely built — 2 remainders (2026-11-02).**
+Status: **Accepted and largely built — 1 remainder (2026-11-02).**
+**2026-11-02, Phase 6 KB-grounding shipped ([#299](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/299)):**
+- **What runs:** a `pilar3` stage in the monthly `OncaFinancials` handler (`bcb_soundness.lambda_handler`).
+  - It refreshes the tone corpus from CVM IPE. The lookback is 200 days, merged so a half-yearly
+    filer keeps its last filing. It used to pass the *year* as the lookback.
+  - Behind `ONCA_PILAR3_KB` (on), `pilar3.promote_to_kb` writes each new filing's prose to the KB
+    data-source bucket, as `pilar3/<entity>/<date>.txt` plus a sidecar with the CVM filing URL,
+    name and date. There is one document per filing, even when the registry resolves a bank to
+    two ids.
+  - One ingestion job starts only when something was written.
+- **What it extracts:** `prose_text` drops page headers, the table of contents, template headings
+  and table rows. Numbers stay in KM1.
+- **Why it was needed:** the stage was never scheduled before; the one run was by hand on 09-06.
+  `pypdf` was also missing from the Lambda bundle.
+- **Live:** Itaú 2T26 is in, about 98k characters of prose. A KB retrieve for liquidity risk,
+  risk appetite and ICAAP ranks it first and second (score 0.81–0.88), with the CVM link in the
+  citation header.
+- **Coverage** is what IPE carries (Itaú). Other banks wait on remainder 2 ([#301](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/301)).
+
+Was: 2 remainders (2026-11-02, after #300/#307).
 **2026-11-02:** remainder 3 shipped ([#300](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/300)), and the stores were unfrozen ([#307](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/307)).
 - **#300 ratio guards:** `src/synth/ratio_guards.py` runs on read in `fundamentals_by_entity` /
   `npl_by_entity`, so the stored index keeps the raw values for audit.
@@ -28,7 +47,7 @@ Serverless endpoint is `InService`. Two items the Addendum deferred have since s
   DRE (#92, `9ee29db`). Doc 4016 was not needed ([ADR 028](2026-09-19-adr028-competitor-financial-statements-acquisition.md)).
 
 **Left (engineering; item 2 also depends on external sources):**
-1. Phase 6 KB-grounding: no code feeds Pilar 3 text into the Bedrock KB. Ticket [#299](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/299).
+1. ~~Phase 6 KB-grounding: no code feeds Pilar 3 text into the Bedrock KB~~ **shipped 2026-11-02**. Ticket [#299](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/299).
 2. Multi-bank Pilar 3 *tone* corpus: still Itaú only via IPE. The other banks' IR PDFs are
    opaque or bot-blocked, which is an external dependency. KM1 covers the *numbers*. Ticket
    [#301](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/301) (spike first).
