@@ -43,6 +43,14 @@ DEFAULT_SYNTH_MODEL = os.environ.get(
 FRAMEWORK_MODEL = os.environ.get("ONCA_FRAMEWORK_MODEL_ID", "amazon.nova-lite-v1:0")
 
 
+def guardrail_config() -> dict[str, str] | None:
+    """#304: the Ask guardrail from the environment, or None when it's off or unconfigured."""
+    if os.environ.get("ONCA_ASK_GUARDRAIL", "false").lower() not in ("1", "true", "yes"):
+        return None
+    gid, ver = os.environ.get("ONCA_GUARDRAIL_ID"), os.environ.get("ONCA_GUARDRAIL_VERSION")
+    return {"id": gid, "version": ver} if gid and ver else None
+
+
 def converse(
     prompt: str,
     *,
@@ -52,6 +60,8 @@ def converse(
     usage_out: dict[str, int] | None = None,
     images: list[bytes] | None = None,
     history: list[dict[str, str]] | None = None,
+    guardrail: dict[str, str] | None = None,
+    guard_text: str | None = None,
 ) -> str | None:
     """Return assistant text or None if Bedrock is unavailable/denied.
 
@@ -68,13 +78,20 @@ def converse(
 
     ``history`` (the /exec chat): prior turns as ``[{"role": "user"|"assistant", "text": ...}]``,
     sent as real Converse messages before ``prompt``. It must start with a user turn and
-    alternate; anything else is dropped rather than sent malformed."""
+    alternate; anything else is dropped rather than sent malformed.
+
+    ``guardrail`` (#304) = ``{"id", "version"}`` attaches a Bedrock Guardrail. ``guard_text`` (the
+    user's own question) goes in as the only ``guardContent`` block, so input policies evaluate
+    the question and never the retrieved context. An intervention returns None and sets
+    ``usage_out["guardrail"] = "intervened"``, so the caller can tell it from a Bedrock failure."""
     model_id = model_id or DEFAULT_SYNTH_MODEL
     try:
         client = boto3.client("bedrock-runtime")
         content: list[dict[str, Any]] = [{"text": prompt}]
         for img in images or []:
             content.append({"image": {"format": "png", "source": {"bytes": img}}})
+        if guardrail and guard_text:
+            content.append({"guardContent": {"text": {"text": guard_text}}})
         prior: list[dict[str, Any]] = []
         for i, turn in enumerate(history or []):
             role, text = turn.get("role"), str(turn.get("text") or "").strip()
@@ -96,11 +113,18 @@ def converse(
         }
         if system:
             kwargs["system"] = [{"text": system}]
+        if guardrail:
+            kwargs["guardrailConfig"] = {"guardrailIdentifier": guardrail["id"],
+                                         "guardrailVersion": guardrail["version"], "trace": "disabled"}
         resp = client.converse(**kwargs)
         if usage_out is not None:
             usage = resp.get("usage") or {}
             usage_out["input_tokens"] = int(usage.get("inputTokens") or 0)
             usage_out["output_tokens"] = int(usage.get("outputTokens") or 0)
+        if resp.get("stopReason") == "guardrail_intervened":
+            if usage_out is not None:
+                usage_out["guardrail"] = "intervened"
+            return None
         parts = resp.get("output", {}).get("message", {}).get("content") or []
         texts = [p.get("text") for p in parts if p.get("text")]
         return "\n".join(texts).strip() or None

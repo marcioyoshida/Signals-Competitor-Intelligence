@@ -34,7 +34,7 @@ def _bearer_key(event: dict[str, Any]) -> str:
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     from src.dashboard import api_keys, api_usage
     from src.dashboard.tenant_config import get_tenant_config
-    from src.synth.bedrock_llm import converse
+    from src.synth.bedrock_llm import converse, guardrail_config
 
     raw_key = _bearer_key(event)
     if not raw_key:
@@ -66,10 +66,12 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     if not bucket:
         return _resp(500, {"error": "not configured"})
 
-    usage: dict[str, int] = {}
+    usage: dict[str, Any] = {}
+    guard = guardrail_config()   # #304
 
     def _metered_converse(prompt: str, *, system: str | None = None, max_tokens: int = 800) -> str | None:
-        return converse(prompt, system=system, max_tokens=max_tokens, usage_out=usage)
+        extra = {"guardrail": guard, "guard_text": q} if guard else {}
+        return converse(prompt, system=system, max_tokens=max_tokens, usage_out=usage, **extra)
 
     kb_fn = _kb_retrieve if os.environ.get("ONCA_KB_ID") else None
     try:
@@ -78,18 +80,32 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             q, feed=feed, scope=scope, converser=_metered_converse,
             kb_retrieve=kb_fn, modules=modules, persona=None,
         )
+        if usage.get("guardrail") == "intervened":
+            from src.dashboard.agent_ask import guardrail_refusal
+            result = guardrail_refusal()
     except Exception as exc:  # pragma: no cover - defensive; never leak a stack
         print(f"agent_api error: {exc}")
         return _resp(500, {"error": "internal error"})
 
     total_tokens = int(usage.get("input_tokens", 0)) + int(usage.get("output_tokens", 0))
     # Both best-effort: a metering hiccup must never turn a good answer into a 500.
-    api_usage.record_usage(tenant_id, total_tokens)
+    # #305: past the included quota the answer is still served; the excess is marked overage.
+    quota = api_usage.quota_for(cfg)
+    metered = api_usage.record_usage(tenant_id, total_tokens, quota=quota)
+    if metered is None:                  # nothing metered (no model call) or the write failed
+        cur = api_usage.get_usage(tenant_id)
+        metered = {"period": cur["period"], "tokens_used": cur["tokens_used"], "quota": quota,
+                   "remaining": max(0, quota - cur["tokens_used"]), "overage_tokens": 0}
     api_keys.touch_last_used(row["key_hash"])
 
     result["usage"] = {
         "input_tokens": usage.get("input_tokens", 0),
         "output_tokens": usage.get("output_tokens", 0),
         "total_tokens": total_tokens,
+        "overage_tokens": metered.get("overage_tokens", 0),
     }
-    return _resp(200, result)
+    result["quota"] = {"period": metered["period"], "included_tokens": quota,
+                       "used_tokens": metered["tokens_used"], "remaining_tokens": metered.get("remaining", 0)}
+    out = _resp(200, result)
+    out["headers"].update(api_usage.quota_headers(quota, metered["tokens_used"], metered["period"]))
+    return out

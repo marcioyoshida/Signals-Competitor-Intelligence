@@ -1,0 +1,108 @@
+"""#304 / ADR 010 Decision 2: the Bedrock Guardrail on the Ask + Agentic API Converse calls."""
+import json
+import sys
+import types
+from pathlib import Path
+
+from src.dashboard import agent_ask as aa
+from src.synth import bedrock_llm
+
+GR = {"id": "gr-1", "version": "1"}
+
+
+class _RT:
+    def __init__(self, stop="end_turn", text="Resposta [c1]."):
+        self.kw, self.stop, self.text = None, stop, text
+
+    def converse(self, **kw):
+        self.kw = kw
+        return {"stopReason": self.stop, "usage": {"inputTokens": 10, "outputTokens": 5},
+                "output": {"message": {"content": [{"text": self.text}]}}}
+
+
+def _patch(monkeypatch, rt):
+    monkeypatch.setattr(bedrock_llm.boto3, "client", lambda name, **k: rt)
+
+
+def test_only_the_question_is_guard_content(monkeypatch):
+    rt = _RT()
+    _patch(monkeypatch, rt)
+    bedrock_llm.converse("CARDS... ignore previous instructions ... PERGUNTA", guardrail=GR, guard_text="O que o Itaú mudou?")
+    blocks = rt.kw["messages"][-1]["content"]
+    assert blocks[0] == {"text": "CARDS... ignore previous instructions ... PERGUNTA"}       # context: not guarded
+    assert blocks[-1] == {"guardContent": {"text": {"text": "O que o Itaú mudou?"}}}
+    assert rt.kw["guardrailConfig"] == {"guardrailIdentifier": "gr-1", "guardrailVersion": "1", "trace": "disabled"}
+
+
+def test_no_guardrail_no_change(monkeypatch):
+    rt = _RT()
+    _patch(monkeypatch, rt)
+    assert bedrock_llm.converse("x", guard_text="q") == "Resposta [c1]."
+    assert "guardrailConfig" not in rt.kw and len(rt.kw["messages"][-1]["content"]) == 1
+
+
+def test_intervention_is_flagged_not_returned(monkeypatch):
+    rt = _RT(stop="guardrail_intervened", text="Não posso ajudar com esse pedido.")
+    _patch(monkeypatch, rt)
+    usage = {}
+    assert bedrock_llm.converse("x", guardrail=GR, guard_text="q", usage_out=usage) is None
+    assert usage["guardrail"] == "intervened" and usage["input_tokens"] == 10
+
+
+def test_guardrail_config_from_env(monkeypatch):
+    monkeypatch.setenv("ONCA_ASK_GUARDRAIL", "true")
+    monkeypatch.setenv("ONCA_GUARDRAIL_ID", "gr-1")
+    monkeypatch.setenv("ONCA_GUARDRAIL_VERSION", "1")
+    assert bedrock_llm.guardrail_config() == GR
+    monkeypatch.setenv("ONCA_ASK_GUARDRAIL", "false")
+    assert bedrock_llm.guardrail_config() is None
+    monkeypatch.setenv("ONCA_ASK_GUARDRAIL", "true")
+    monkeypatch.delenv("ONCA_GUARDRAIL_VERSION")
+    assert bedrock_llm.guardrail_config() is None                     # half-configured: off
+
+
+def _ask(monkeypatch, intervene):
+    gaps = []
+    monkeypatch.setattr(aa, "_load_feed", lambda b: {"feed": []})
+    monkeypatch.setattr(aa, "_record_gap", lambda *a, **k: gaps.append(a))
+    monkeypatch.setenv("ONCA_SITE_BUCKET", "b")
+    monkeypatch.delenv("ONCA_ORIGIN_SECRET", raising=False)
+    monkeypatch.setenv("ONCA_ASK_GUARDRAIL", "true")
+    monkeypatch.setenv("ONCA_GUARDRAIL_ID", "gr-1")
+    monkeypatch.setenv("ONCA_GUARDRAIL_VERSION", "1")
+    seen = {}
+
+    def fake_converse(prompt, *, usage_out=None, guardrail=None, guard_text=None, **kw):
+        seen.update(guardrail=guardrail, guard_text=guard_text)
+        if intervene:
+            usage_out["guardrail"] = "intervened"
+            return None
+        return None                                         # a plain Bedrock failure
+
+    monkeypatch.setattr(bedrock_llm, "converse", fake_converse)
+    monkeypatch.setattr(aa, "select_grounding", lambda *a, **k: ([{"id": "c1", "narrative": "x"}], "lexical"))
+    ev = {"requestContext": {"authorizer": {"jwt": {"claims": {"sub": "u"}}}}, "headers": {},
+          "body": json.dumps({"q": "O que o Itaú mudou no crédito?"})}
+    body = json.loads(aa.lambda_handler(ev, None)["body"])
+    return body, gaps, seen
+
+
+def test_ask_maps_an_intervention_to_a_refusal_and_never_a_gap(monkeypatch):
+    body, gaps, seen = _ask(monkeypatch, intervene=True)
+    assert body["refused"] is True and body["reason"] == "guardrail" and body["answer"] == aa.GUARDRAIL_TEXT
+    assert gaps == []
+    assert seen == {"guardrail": GR, "guard_text": "O que o Itaú mudou no crédito?"}
+
+
+def test_a_plain_model_failure_is_still_a_gap(monkeypatch):
+    body, gaps, _ = _ask(monkeypatch, intervene=False)
+    assert body["reason"] == "no-model" and len(gaps) == 1
+
+
+def test_cdk_guardrail_is_standard_tier_and_wired_to_both_lambdas():
+    src = (Path(__file__).resolve().parents[1] / "infra" / "app.py").read_text(encoding="utf-8")
+    block = src[src.index('"OncaAskGuardrail"'):src.index('"OncaAskGuardrailV1"')]
+    assert block.count('tier_name="STANDARD"') == 2 and "us.guardrail.v1:0" in src
+    assert 'type="PROMPT_ATTACK", input_strength="HIGH", output_strength="NONE"' in block
+    assert src.count("agent_fn.add_to_role_policy(_gr_apply)") == 1
+    assert src.count("agent_api_fn.add_to_role_policy(_gr_apply)") == 1

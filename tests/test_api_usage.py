@@ -10,12 +10,13 @@ class _FakeUsageTable:
     def __init__(self) -> None:
         self.items: dict[tuple[str, str], dict[str, Any]] = {}
 
-    def update_item(self, Key, UpdateExpression, ExpressionAttributeValues):
+    def update_item(self, Key, UpdateExpression, ExpressionAttributeValues, ReturnValues=None):
         k = (Key["tenant_id"], Key["period"])
         it = self.items.setdefault(k, {"tokens_used": 0, "calls": 0})
         it["tokens_used"] += ExpressionAttributeValues[":t"]
         it["calls"] += ExpressionAttributeValues[":c"]
         it["updated_at"] = ExpressionAttributeValues[":u"]
+        return {"Attributes": {"tokens_used": it["tokens_used"]}}
 
     def get_item(self, Key):
         it = self.items.get((Key["tenant_id"], Key["period"]))
@@ -41,7 +42,7 @@ def test_record_usage_zero_or_negative_is_a_noop():
 def test_get_usage_defaults_to_zero_for_unseen_tenant():
     t = _FakeUsageTable()
     usage = api_usage.get_usage("nobody-yet", table=t)
-    assert usage == {"period": usage["period"], "tokens_used": 0, "calls": 0}
+    assert usage == {"period": usage["period"], "tokens_used": 0, "calls": 0, "overage_tokens": 0}
 
 
 def test_usage_is_scoped_per_tenant():

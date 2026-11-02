@@ -173,6 +173,20 @@ REFUSAL_TEXT = (
     "semana?\", \"quem está exposto à regra do DICT?\"."
 )
 
+# #304: what a Bedrock Guardrail intervention returns: a refusal (reason "guardrail"), never a
+# coverage gap. The guardrail's own blocked message is not shown; this one says what Onça covers.
+GUARDRAIL_TEXT = (
+    "Não posso ajudar com esse pedido. Respondo sobre o mercado financeiro monitorado pela "
+    "Onça: entidades, setores, regulação, frameworks e o feed. Não dou recomendação de "
+    "investimento pessoal nem dados pessoais de indivíduos."
+)
+
+
+def guardrail_refusal() -> dict[str, Any]:
+    return {"answer": GUARDRAIL_TEXT, "refused": True, "reason": "guardrail", "grounded": False,
+            "citations": []}
+
+
 NO_GROUND_TEXT = (
     "Não tenho esse dado na base da Onça no momento — nenhuma narrativa, tese ou "
     "sinal ingerido corresponde a essa pergunta. Tente outro recorte (entidade, "
@@ -1541,8 +1555,9 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         if tier not in top_tiers and industry in {str(m).strip().lower() for m in modules}:
             modules = [industry]
     try:
-        from src.synth.bedrock_llm import converse
+        from src.synth.bedrock_llm import converse, guardrail_config
         feed = _load_feed(bucket)
+        guard = guardrail_config()   # #304
         # §F Mechanism 1: an officer read also grounds on its own past decisions+outcomes.
         kb_fn = None
         if os.environ.get("ONCA_KB_ID"):
@@ -1551,11 +1566,15 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         usage: dict[str, int] = {}
 
         def _conv(*a: Any, **kw: Any) -> Any:
+            if guard:
+                kw.update(guardrail=guard, guard_text=q)
             return converse(*a, usage_out=usage, **kw)
         result = answer(
             q, feed=feed, scope=scope, converser=_conv,
             kb_retrieve=kb_fn, modules=modules, persona=persona, history=history,
         )
+        if usage.get("guardrail") == "intervened":   # refused, so never captured as a gap below
+            result = guardrail_refusal()
         if officer:
             result["officer"] = officer
         if quota is not None:

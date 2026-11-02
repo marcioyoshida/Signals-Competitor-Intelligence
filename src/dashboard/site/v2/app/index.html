@@ -148,8 +148,11 @@
   function renderApiKeys(data) {
     const body = document.getElementById("apiKeysBody");
     const usage = data.usage || {};
+    // #305: usage against the included quota; past it the API keeps answering and the excess is billed
+    const n = (x) => (x || 0).toLocaleString("pt-BR");
     document.getElementById("apiUsageNote").textContent =
-      `${(usage.tokens_used || 0).toLocaleString("pt-BR")} tokens · ${usage.calls || 0} chamadas · ciclo ${usage.period || "—"}`;
+      `${n(usage.tokens_used)}${usage.quota ? ` de ${n(usage.quota)} tokens incluídos` : " tokens"} · ${usage.calls || 0} chamadas · ciclo ${usage.period || "—"}` +
+      (usage.overage_tokens ? ` · ${n(usage.overage_tokens)} tokens excedentes (cobrados à parte)` : "");
     const rows = (data.keys || []).map((k) => `
       <tr>
         <td>${U.esc(k.label)}</td>

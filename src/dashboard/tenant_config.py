@@ -313,7 +313,8 @@ def put_tenant_config(
 
 _BILLING_FIELDS = ("billing_managed", "subs", "trial_until", "trial_modules")
 _POLICY_FIELDS = ("session_idle_days", "app_lock_minutes")
-_PREF_FIELDS = ("watchlist", "score_weights", "alert_prefs", "prefs_updated_at")
+_PREF_FIELDS = ("watchlist", "score_weights", "alert_prefs", "prefs_updated_at",
+                "custom_domain")   # #306: a SaaS tenant's own domain (scripts/provision_tenant_domain.py)
 
 
 def set_tenant_prefs(tenant_id: str, *, watchlist: list[str] | None = None,

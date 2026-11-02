@@ -80,7 +80,10 @@ def test_happy_path_records_usage_and_touches_key(monkeypatch):
 
     recorded = {}
     monkeypatch.setattr(api_usage, "record_usage",
-                         lambda tenant_id, tokens, table=None: recorded.update(tenant=tenant_id, tokens=tokens))
+                         lambda tenant_id, tokens, quota=None, table=None: recorded.update(
+                             tenant=tenant_id, tokens=tokens, quota=quota) or {
+                             "period": "2026-11", "tokens_used": tokens, "quota": quota,
+                             "remaining": quota - tokens, "overage_tokens": 0})
     touched = {}
     monkeypatch.setattr(api_keys, "touch_last_used",
                          lambda key_hash, table=None: touched.update(hash=key_hash))
@@ -89,8 +92,9 @@ def test_happy_path_records_usage_and_touches_key(monkeypatch):
     assert resp["statusCode"] == 200
     body = json.loads(resp["body"])
     assert body["answer"] == "grounded reply"
-    assert body["usage"] == {"input_tokens": 12, "output_tokens": 34, "total_tokens": 46}
-    assert recorded == {"tenant": "acme", "tokens": 46}
+    assert body["usage"] == {"input_tokens": 12, "output_tokens": 34, "total_tokens": 46, "overage_tokens": 0}
+    assert recorded == {"tenant": "acme", "tokens": 46, "quota": 1_000_000}    # #305: 1M per module
+    assert resp["headers"]["X-Onca-Quota-Remaining"] == str(1_000_000 - 46)
     assert touched == {"hash": "hash123"}
 
 

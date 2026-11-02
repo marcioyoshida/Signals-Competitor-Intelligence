@@ -50,6 +50,10 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     if method == "GET":
         keys = api_keys.list_keys(tenant_id)
         usage = api_usage.get_usage(tenant_id)
+        # #305: usage against the included quota (overage is metered, not refused)
+        from src.dashboard.tenant_config import get_tenant_config
+        quota = api_usage.quota_for(get_tenant_config(tenant_id))
+        usage.update(quota=quota, remaining=max(0, quota - usage["tokens_used"]))
         return _resp(200, {"keys": keys, "usage": usage})
 
     if method == "POST" and path.endswith("/revoke"):

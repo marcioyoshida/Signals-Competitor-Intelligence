@@ -81,7 +81,8 @@ class IdentityPool:
 
 
 def build_identity_pool(stack, suffix: str, *, distribution_domain: str,
-                        email_mutable: bool = False, deletion_protection: bool = False) -> IdentityPool:
+                        email_mutable: bool = False, deletion_protection: bool = False,
+                        extra_hosts: Any = ()) -> IdentityPool:
     """One user pool + IdPs + clients + groups + CDK users, every construct id ending in `suffix`.
 
     suffix "" MUST stay byte-identical to the pre-#262 stack (no new properties on the old pool:
@@ -196,6 +197,8 @@ def build_identity_pool(stack, suffix: str, *, distribution_domain: str,
                 # ADR 029 (#254/#255): the store app signs in through the system browser and
                 # comes back on its own scheme; /exec in the app's WebView does the exchange.
                 "onca://auth",
+                # #306: SaaS tenants' own domains (cdk.json `tenant_domains`), same two paths
+                *[f"https://{h}{p}" for h in extra_hosts for p in ("/", "/exec")],
             ],
             logout_urls=[
                 f"https://{distribution_domain}/",
@@ -205,6 +208,7 @@ def build_identity_pool(stack, suffix: str, *, distribution_domain: str,
                 "https://www.onssa.org/",
                 "https://www.onssa.org/exec",
                 "onca://auth",
+                *[f"https://{h}{p}" for h in extra_hosts for p in ("/", "/exec")],
             ],
         ),
         prevent_user_existence_errors=True,

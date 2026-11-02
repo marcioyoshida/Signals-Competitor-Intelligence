@@ -13,7 +13,7 @@ import yaml
 from edge_policy import apex_public_js, exec_exemption_js, public_paths_js, share_link_js, site_paths_js
 from bedrock_profiles import model_profiles
 from identity import DEMO_TENANTS, build_identity_pool, build_managed_login_branding
-from aws_cdk import App, ArnFormat, CfnOutput, Duration, RemovalPolicy, SecretValue, Size, Stack, Tags
+from aws_cdk import App, ArnFormat, CfnOutput, CfnTag, Duration, RemovalPolicy, SecretValue, Size, Stack, Tags
 from aws_cdk import aws_bedrock as bedrock
 from aws_cdk import aws_apigatewayv2 as apigwv2
 from aws_cdk import aws_certificatemanager as acm
@@ -770,22 +770,23 @@ class OncaPrototypeStack(Stack):
             "arn:aws:acm:us-east-1:668449743071:certificate/2960f6a1-139b-460d-be20-018726f1e146",
         )
         site_origin = cf_origins.S3BucketOrigin.with_origin_access_control(site_bucket)
+        _default_behavior = cloudfront.BehaviorOptions(
+            origin=site_origin,
+            viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+            function_associations=[
+                cloudfront.FunctionAssociation(
+                    function=auth_fn,
+                    event_type=cloudfront.FunctionEventType.VIEWER_REQUEST,
+                )
+            ],
+        )
         distribution = cloudfront.Distribution(
             self,
             "OncaDashboardCdn",
             default_root_object="index.html",
             domain_names=["onssa.org", "www.onssa.org"],
             certificate=onssa_certificate,
-            default_behavior=cloudfront.BehaviorOptions(
-                origin=site_origin,
-                viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-                function_associations=[
-                    cloudfront.FunctionAssociation(
-                        function=auth_fn,
-                        event_type=cloudfront.FunctionEventType.VIEWER_REQUEST,
-                    )
-                ],
-            ),
+            default_behavior=_default_behavior,
             comment="Onca warroom dashboard",
             # Pilot traffic monitor: standard access logs to an auto-provisioned
             # S3 bucket (per-request detail — IP, URI, status, referer).
@@ -793,11 +794,50 @@ class OncaPrototypeStack(Stack):
             log_file_prefix="cf-access/",
         )
 
+        # #306 / ADR 016 (SaaS tier): per-tenant custom domains. A CloudFront MULTI-TENANT
+        # distribution (SaaS Manager, ConnectionMode tenant-only) is the template: it carries the
+        # same default behavior and, through `_add_behavior`, every path behavior below in the same
+        # order, edge auth included. It serves nothing itself; each `tenant_domains` entry (cdk.json
+        # context, written by scripts/provision_tenant_domain.py) becomes a distribution TENANT with
+        # its own domain + ACM certificate. Read scoping is unchanged: /api/feed scopes by the signed-in
+        # identity, exactly as on onssa.org. Multi-tenant distributions can't carry IPv6/PriceClass/
+        # legacy logging settings (IPv6 lives on the connection group), hence the overrides.
+        # Pricing (verified 2026-11-02): the first 10 distribution tenants are in the free tier.
+        tenant_cdn = cloudfront.Distribution(
+            self,
+            "OncaTenantCdn",
+            default_root_object="index.html",
+            default_behavior=_default_behavior,
+            comment="Onca SaaS multi-tenant template (#306)",
+        )
+        _tenant_cfn = tenant_cdn.node.default_child
+        _tenant_cfn.add_property_override("DistributionConfig.ConnectionMode", "tenant-only")
+        _tenant_cfn.add_property_deletion_override("DistributionConfig.IPV6Enabled")
+        tenant_domains = [d for d in (self.node.try_get_context("tenant_domains") or []) if d.get("domain")]
+        for _td in tenant_domains:
+            if not _td.get("cert_arn"):
+                continue   # certificate not issued yet: the tenant is created on a later deploy
+            cloudfront.CfnDistributionTenant(
+                self, "OncaTenant" + "".join(ch for ch in _td["tenant"].title() if ch.isalnum()),
+                distribution_id=tenant_cdn.distribution_id,
+                name=("onca-" + _td["tenant"])[:128],
+                domains=[_td["domain"]],
+                enabled=True,
+                customizations=cloudfront.CfnDistributionTenant.CustomizationsProperty(
+                    certificate=cloudfront.CfnDistributionTenant.CertificateProperty(arn=_td["cert_arn"])),
+                tags=[CfnTag(key="tenant", value=_td["tenant"])],
+            )
+
+        def _add_behavior(path_pattern: str, origin: Any, **kw: Any) -> None:
+            """Every path behavior goes on BOTH distributions, in the same order."""
+            distribution.add_behavior(path_pattern, origin, **kw)
+            tenant_cdn.add_behavior(path_pattern, origin, **kw)
+
         # G5 (#113): the ONE genuinely public path on this distribution — no basic-auth
         # function association, unlike every other behavior here. "A prospect can see a
         # price without asking" (the issue's own done-when) requires a page reachable
         # without credentials; nothing else on this site is.
-        distribution.add_behavior(
+        _add_behavior(
             "/pricing.html",
             site_origin,
             viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
@@ -835,7 +875,7 @@ class OncaPrototypeStack(Stack):
                 "}\n"
             ),
         )
-        distribution.add_behavior(
+        _add_behavior(
             "/sample*",
             site_origin,
             viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
@@ -846,7 +886,7 @@ class OncaPrototypeStack(Stack):
                 )
             ],
         )
-        distribution.add_behavior(
+        _add_behavior(
             "/feed.sample.json",
             site_origin,
             viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
@@ -859,7 +899,7 @@ class OncaPrototypeStack(Stack):
         # #180: the machine-readable front door — /llms.txt, /ai.txt, plus #235 /robots.txt and
         # /sitemap.txt (one "/*.txt" behavior: the site holds no other .txt, test-enforced) and /openapi.json. Public, describe-only.
         for _disc in ("/*.txt", "/openapi.json"):
-            distribution.add_behavior(
+            _add_behavior(
                 _disc,
                 site_origin,
                 viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
@@ -876,7 +916,7 @@ class OncaPrototypeStack(Stack):
         # class as /pricing.html and /sample/*. Static content, no feed to leak, so
         # there is no derive_*-style scoping concern here; the only thing this page
         # must not do is invent numbers, which is a copy discipline, not a code gate.
-        distribution.add_behavior(
+        _add_behavior(
             "/docs*",
             site_origin,
             viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
@@ -906,7 +946,8 @@ class OncaPrototypeStack(Stack):
         # `user_pool` / `user_pool_client` / `oauth_cognito_client`, which are V2's.
         _ident_legacy = build_identity_pool(self, "", distribution_domain=distribution.distribution_domain_name)
         _ident_v2 = build_identity_pool(self, "V2", distribution_domain=distribution.distribution_domain_name,
-                                        email_mutable=True, deletion_protection=True)
+                                        email_mutable=True, deletion_protection=True,
+                                        extra_hosts=[d["domain"] for d in tenant_domains])  # #306
         _ident = _ident_v2
         user_pool, user_pool_client = _ident.pool, _ident.client
         google_idp, apple_idp = _ident.google_idp, _ident.apple_idp
@@ -1904,6 +1945,8 @@ class OncaPrototypeStack(Stack):
             f"arn:aws:cloudfront::{self.account}:distribution/{distribution.distribution_id}"
         )
 
+        _tenant_cdn_arn = f"arn:aws:cloudfront::{self.account}:distribution/{tenant_cdn.distribution_id}"
+
         def _grant_cloudfront_invoke(fn: lambda_.Function, label: str) -> None:
             # `FunctionUrlOrigin.with_origin_access_control` only grants
             # lambda:InvokeFunctionUrl. Since October 2025 AWS also requires
@@ -1921,6 +1964,13 @@ class OncaPrototypeStack(Stack):
                 principal=iam.ServicePrincipal("cloudfront.amazonaws.com"),
                 action="lambda:InvokeFunction",
                 source_arn=_cf_distribution_arn,
+            )
+            # #306: the multi-tenant template signs origin requests as itself
+            fn.add_permission(
+                f"InvokeFromTenantCdn{label}",
+                principal=iam.ServicePrincipal("cloudfront.amazonaws.com"),
+                action="lambda:InvokeFunction",
+                source_arn=_tenant_cdn_arn,
             )
         review_fn = lambda_.Function(
             self,
@@ -1991,7 +2041,7 @@ class OncaPrototypeStack(Stack):
         )
         quotes_url = quotes_fn.add_function_url(auth_type=lambda_.FunctionUrlAuthType.AWS_IAM)
         _grant_cloudfront_invoke(quotes_fn, "Quotes")
-        distribution.add_behavior(
+        _add_behavior(
             "/api/quotes*",
             cf_origins.FunctionUrlOrigin.with_origin_access_control(
                 quotes_url,
@@ -2032,7 +2082,7 @@ class OncaPrototypeStack(Stack):
             auth_type=lambda_.FunctionUrlAuthType.AWS_IAM
         )
         _grant_cloudfront_invoke(run_fn, "Run")
-        distribution.add_behavior(
+        _add_behavior(
             "/api/run/*",
             cf_origins.FunctionUrlOrigin.with_origin_access_control(
                 run_url,
@@ -2081,7 +2131,7 @@ class OncaPrototypeStack(Stack):
         site_bucket.grant_read(act_fn)  # ADR-020 Phase 2: run_integrity_audit reads feed.json
         act_url = act_fn.add_function_url(auth_type=lambda_.FunctionUrlAuthType.AWS_IAM)
         _grant_cloudfront_invoke(act_fn, "Act")
-        distribution.add_behavior(
+        _add_behavior(
             "/api/act*",
             cf_origins.FunctionUrlOrigin.with_origin_access_control(
                 act_url,
@@ -2158,6 +2208,70 @@ class OncaPrototypeStack(Stack):
         resolve_url = resolve_fn.add_function_url(auth_type=lambda_.FunctionUrlAuthType.AWS_IAM)
         CfnOutput(self, "ResolveApiUrl", value=resolve_url.url)
 
+        # #304 / ADR 010 Decision 2: a Bedrock Guardrail on the Ask + Agentic API Converse calls
+        # (owner OK 2026-11-02 for the added per-call cost). STANDARD tier: questions arrive in
+        # Portuguese and the CLASSIC tier covers only English/French/Spanish; STANDARD requires
+        # the cross-Region guardrail profile (no extra charge). Only the user's question is sent
+        # as guardContent, so the prompt-attack filter never sees the retrieved cards. No vague
+        # "out of domain" topic: the deterministic scope gate already refuses those, and a fuzzy
+        # topic would block in-scope questions.
+        _gr_profile = "us.guardrail.v1:0"
+        _gr_topic = lambda name, definition, examples: bedrock.CfnGuardrail.TopicConfigProperty(  # noqa: E731
+            name=name, definition=definition, examples=examples, type="DENY")
+        ask_guardrail = bedrock.CfnGuardrail(
+            self, "OncaAskGuardrail",
+            name="onca-ask-guardrail",
+            description="Onça Ask/Agentic API: personal advice, personal data, prompt attacks, PII in answers (#304)",
+            blocked_input_messaging=(
+                "Não posso ajudar com esse pedido. Pergunte sobre o mercado financeiro monitorado "
+                "pela Onça: entidades, setores, regulação e o feed."),
+            blocked_outputs_messaging="Não posso exibir essa resposta.",
+            cross_region_config=bedrock.CfnGuardrail.GuardrailCrossRegionConfigProperty(
+                guardrail_profile_arn=f"arn:aws:bedrock:{self.region}:{self.account}:guardrail-profile/{_gr_profile}"),
+            topic_policy_config=bedrock.CfnGuardrail.TopicPolicyConfigProperty(
+                topics_tier_config=bedrock.CfnGuardrail.TopicsTierConfigProperty(tier_name="STANDARD"),
+                topics_config=[
+                    _gr_topic("Recomendação de investimento pessoal",
+                              "Pedidos de recomendação de investimento para a carteira pessoal de quem pergunta: "
+                              "o que comprar ou vender, quanto aplicar, se deve investir em uma ação, fundo ou cripto.",
+                              ["Devo comprar ações do Itaú?", "Em qual fundo eu deveria investir meu dinheiro?"]),
+                    _gr_topic("Aconselhamento jurídico pessoal",
+                              "Pedidos de orientação jurídica para o caso pessoal de quem pergunta: como processar "
+                              "alguém, o que fazer em uma ação judicial própria, direitos pessoais em um litígio.",
+                              ["Como eu processo meu banco?", "Tenho direito a indenização no meu caso?"]),
+                    _gr_topic("Aconselhamento médico",
+                              "Pedidos de diagnóstico, tratamento, medicação ou orientação de saúde.",
+                              ["Que remédio tomo para dor de cabeça?", "Esses sintomas são graves?"]),
+                    _gr_topic("Dados pessoais de indivíduos",
+                              "Pedidos de dados pessoais de uma pessoa física: CPF, endereço residencial, telefone, "
+                              "e-mail pessoal, renda ou dados de família de executivos ou de qualquer indivíduo.",
+                              ["Qual o CPF do presidente do Itaú?", "Me passe o telefone pessoal do CEO do Nubank"]),
+                ]),
+            content_policy_config=bedrock.CfnGuardrail.ContentPolicyConfigProperty(
+                content_filters_tier_config=bedrock.CfnGuardrail.ContentFiltersTierConfigProperty(tier_name="STANDARD"),
+                filters_config=[bedrock.CfnGuardrail.ContentFilterConfigProperty(
+                    type="PROMPT_ATTACK", input_strength="HIGH", output_strength="NONE")]),
+            sensitive_information_policy_config=bedrock.CfnGuardrail.SensitiveInformationPolicyConfigProperty(
+                pii_entities_config=[bedrock.CfnGuardrail.PiiEntityConfigProperty(
+                    type=t, action="ANONYMIZE", input_action="NONE", input_enabled=False,
+                    output_action="ANONYMIZE", output_enabled=True) for t in ("EMAIL", "PHONE")],
+                regexes_config=[bedrock.CfnGuardrail.RegexConfigProperty(
+                    name="CPF", description="CPF de pessoa física", pattern=r"\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b",
+                    action="ANONYMIZE", input_action="NONE", input_enabled=False,
+                    output_action="ANONYMIZE", output_enabled=True)]),
+        )
+        # A numbered version pins what the Lambdas call; bump the description to cut a new one.
+        ask_guardrail_version = bedrock.CfnGuardrailVersion(
+            self, "OncaAskGuardrailV1", guardrail_identifier=ask_guardrail.attr_guardrail_id,
+            description="v1 2026-11-02 (#304)")
+        _gr_env = {"ONCA_ASK_GUARDRAIL": "true", "ONCA_GUARDRAIL_ID": ask_guardrail.attr_guardrail_id,
+                   "ONCA_GUARDRAIL_VERSION": ask_guardrail_version.attr_version}
+        _gr_apply = iam.PolicyStatement(
+            actions=["bedrock:ApplyGuardrail"],
+            resources=[ask_guardrail.attr_guardrail_arn] + [
+                f"arn:aws:bedrock:{r}:{self.account}:guardrail-profile/{_gr_profile}"
+                for r in ("us-east-1", "us-east-2", "us-west-2")])
+
         # Agent Q&A (ADR 010): read-only, grounded, curated NL question answering
         # over the tool's own data (feed.json + KB). Same auth model; registered
         # BEFORE the /api/* catch-all (insertion order). It reads the published
@@ -2181,6 +2295,9 @@ class OncaPrototypeStack(Stack):
             },
         )
         site_bucket.grant_read(agent_fn)  # reads feed.json
+        for _k, _v in _gr_env.items():  # #304
+            agent_fn.add_environment(_k, _v)
+        agent_fn.add_to_role_policy(_gr_apply)
         # Ask chat daily cap (docs/2026-10-16-ask-chat-requirements.md): one atomic counter per
         # user per UTC day, expired by TTL. Ephemeral by design — nothing to keep on removal.
         ask_quota_table = dynamodb.Table(
@@ -2242,9 +2359,12 @@ class OncaPrototypeStack(Stack):
             },
         )
         site_bucket.grant_read(agent_api_fn)
+        for _k, _v in _gr_env.items():  # #304
+            agent_api_fn.add_environment(_k, _v)
+        agent_api_fn.add_to_role_policy(_gr_apply)
         tenant_config_table.grant_read_data(agent_api_fn)
         api_keys_table.grant_read_write_data(agent_api_fn)  # lookup (read) + touch_last_used (write)
-        api_usage_table.grant_write_data(agent_api_fn)  # record_usage (ADD)
+        api_usage_table.grant_read_write_data(agent_api_fn)  # record_usage (ADD) + #305 quota read-back
         agent_api_fn.add_to_role_policy(
             iam.PolicyStatement(actions=["bedrock:Retrieve"], resources=[knowledge_base.attr_knowledge_base_arn])
         )
@@ -2455,7 +2575,8 @@ class OncaPrototypeStack(Stack):
                 "ONCA_COGNITO_DOMAIN": _sign_in_base,
                 "ONCA_COGNITO_CLIENT_ID": user_pool_client.user_pool_client_id,
                 "ONCA_TENANT_CONFIG_TABLE": tenant_config_table.table_name,
-                "ONCA_SESSION_EXTRA_HOSTS": distribution.distribution_domain_name,
+                "ONCA_SESSION_EXTRA_HOSTS": ",".join([distribution.distribution_domain_name]
+                                                     + [d["domain"] for d in tenant_domains]),  # #306
             },
         )
         tenant_config_table.grant_read_data(session_fn)  # per-tenant session_idle_days
@@ -2953,7 +3074,7 @@ class OncaPrototypeStack(Stack):
         if google_idp:
             _api_patterns.append("/api/register*")
         for _pat in _api_patterns:
-            distribution.add_behavior(
+            _add_behavior(
                 _pat,
                 _api_origin,
                 viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
@@ -2964,7 +3085,7 @@ class OncaPrototypeStack(Stack):
 
         # /api/* catch-all (review action) — registered AFTER /api/registry/* and
         # /api/run/* so the specific patterns win; everything else under /api/ lands here.
-        distribution.add_behavior(
+        _add_behavior(
             "/api/*",
             cf_origins.FunctionUrlOrigin.with_origin_access_control(
                 review_url,
