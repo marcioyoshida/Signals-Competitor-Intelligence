@@ -262,7 +262,8 @@ def send_sector_digests(feed: dict[str, Any], *, today: str, table: Any | None =
                         modules: Callable[[Any, Any], list[str]] | None = None,
                         scope: Callable[[dict[str, Any], list[str]], dict[str, Any]] | None = None,
                         raw_sender: RawSender | None = None, sender: str | None = None,
-                        base_url: str = BASE_URL, now: dt.datetime | None = None) -> dict[str, int]:
+                        base_url: str = BASE_URL, now: dt.datetime | None = None,
+                        tenant_prefs: Callable[[Any], Any] | None = None) -> dict[str, int]:
     """One email per opted-in user, one section per opted sector ∩ the tenant's licence AT SEND
     TIME (a lapsed sector is skipped silently). A user already sent today is skipped (the
     pipeline runs 3x on a Monday). One user's failure never stops the others."""
@@ -278,6 +279,15 @@ def send_sector_digests(feed: dict[str, Any], *, today: str, table: Any | None =
         from src.dashboard.feed_builder import scope_feed_to_modules as scope
     send = raw_sender or _default_raw_send
     scoped_cache: dict[tuple, dict[str, Any]] = {}
+    if tenant_prefs is None:
+        from src.dashboard.tenant_config import get_tenant_config
+        _tc: dict[Any, Any] = {}
+
+        def tenant_prefs(tenant: Any) -> Any:
+            if tenant not in _tc:   # unconfigured (tests, local runs): no prefs, no lookup
+                _tc[tenant] = (get_tenant_config(tenant)
+                               if tenant and os.environ.get("ONCA_TENANT_CONFIG_TABLE") else None)
+            return _tc[tenant]
     for row in opted_rows(table=t):
         tally["users"] += 1
         try:
@@ -299,6 +309,14 @@ def send_sector_digests(feed: dict[str, Any], *, today: str, table: Any | None =
                 w = by_ind.get(s)                  # exact sector only — never the __all__ fallback
                 if w and w.get("headline"):
                     parts.append((sector_label(s), wd.with_sector_events(w, scoped, sector=s, as_of=today)))
+            # #302: a "Seus concorrentes" section first, when the tenant keeps a watchlist
+            from src.dashboard import watchlist as wl
+            cfg = tenant_prefs(row.get("tenant"))
+            if cfg and cfg.get("watchlist") and wl.alert_prefs_of(cfg)["email"]:
+                in_scope = {r.get("entity") for r in scoped.get("entities") or []}
+                part = wl.digest_part(scoped, [e for e in cfg["watchlist"] if e in in_scope], today=today)
+                if part:
+                    parts.insert(0, ("Seus concorrentes", part))
             if not parts:
                 tally["empty"] += 1
                 continue

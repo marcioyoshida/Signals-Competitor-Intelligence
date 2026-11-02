@@ -1,21 +1,31 @@
 # ADR 001 — Entities registry, per-tenant watchlists, and auto-mapping
 
-- Status: **Accepted — steps 1–5 and 7 shipped; step 6 partly (audit 2026-10-28)**
-  (was: Accepted, steps 1–5 shipped 2026-08-18, 6–7 pending).
+- Status: **Accepted — all steps shipped (step 6 completed 2026-11-02, [#302](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/302))**
+  (was: steps 1–5 shipped 2026-08-18; 7 via ADR 002 Phase C; 6 partly, audit 2026-10-28).
   - **Step 7 (accounts) SHIPPED** via ADR 002 Phase C: Cognito user pool + JWT
     authorizer + dashboard PKCE login (`8cec0b8`, `84a8381`, `7c0a3cd`). Curation of the
     review queue moved off shared basic-auth into `/v2/admin` (`/api/review`, `/api/act`
     `flag_entity`/`revert_entity`, ADR 018).
-  - **Step 6 PARTLY SHIPPED:** `onca-tenant-config` exists (`b602958`,
-    `src/dashboard/tenant_config.py`) but holds *entitlement* (`tier`, `modules[]`,
-    billing), and read-layer personalization is module/industry scoping
-    (`feed_builder.scope_feed_to_modules`). The per-tenant `watchlist` /
-    `score_weights` / `alert_prefs` of §3 are **not built** (no code reads them), and
-    there is no tenant-facing "manage my competitors" UI.
-  - **Left:** engineering work, but demand-gated: whether a per-tenant watchlist
-    boost/filter/alerts is still wanted on top of module entitlement is an
-    **owner/product decision** (no paying tenant has asked yet). Ticket [#302](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/302)
-    (2026-11-01), to build once a design partner asks.
+  - **Step 6 SHIPPED (2026-11-02, #302).** The tenant's priorities live on its own
+    `onca-tenant-config` row, next to the entitlement:
+    - **Fields:** `watchlist` (≤ 25 entity ids), `score_weights` (`watchlist` boost 1–5 and
+      per-lens weights 0–3), `alert_prefs` (`push`, `email`, `only_watchlist`).
+    - **Write:** `set_watchlist` on `/api/act` (self-service via `/api/me/act`, journaled). The
+      tenant is the verified claim, never an argument. Every id must be a registry entity inside
+      the licensed modules, directly or through its ADR 017 parent. `update_item` only, so
+      entitlement and billing are never rewritten, and an operator re-put keeps the prefs.
+    - **Read:** `/api/feed` applies them inside the tenant's scope (`src/dashboard/watchlist.py`).
+      Ids outside today's scope are dropped, so **a watchlist never widens entitlement**. Watched
+      entities list first. Cards get `rank_score` = `threat_score` × lens weight × watchlist
+      boost, and the feed is ordered by it; the displayed threat score is unchanged. The ETag
+      covers the prefs. Nothing reaches the shared `feed.json`.
+    - **Alerts:** the push notifier adds a `watch` event class (alert cards about a watched
+      entity). `only_watchlist` narrows the device's other events to the watched entities, and
+      drops sector-wide ones. The weekly e-mail opens with a "Seus concorrentes" section.
+    - **UI:** "Meus concorrentes" on `/exec` ("Hoje" section, account sheet). Its search covers
+      only the tenant's scoped entities, and watched rows carry a ★.
+    - **Who may edit:** any signed-in member of the organisation; the list is shared by the
+      organisation.
   Commercial/multi-tenant/IP-protection concerns for steps 6–7 are recorded in
   [ADR 002](2026-08-18-adr-commercial-multitenancy.md).
 - Supersedes the hardcoded `config/watchlist.yaml` entity lists and the static

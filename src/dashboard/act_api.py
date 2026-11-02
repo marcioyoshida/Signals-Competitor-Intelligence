@@ -714,6 +714,44 @@ def _act_issue_invite(args: dict[str, Any], actor: str) -> tuple[str, int, dict[
     return "applied", 200, {"invite": inv}
 
 
+# ---- #302 per-tenant watchlist / score weights / alert prefs (ADR 001 §3) ----------------------
+def _act_set_watchlist(args: dict[str, Any], actor: str) -> tuple[str, int, dict[str, Any]]:
+    """apply (self-service): set the caller's OWN tenant's watchlist, score weights and/or alert
+    prefs. Omitted fields stay as they are. A signed-in caller's tenant is the verified claim the
+    handler put in ``args["tenant"]``; only the origin-secret operator (no identity, so no such
+    key) may name ``tenant_id``. Every id must sit inside the tenant's licensed modules."""
+    from src.dashboard import tenant_config, watchlist as wl
+
+    tenant = args.get("tenant") if "tenant" in args else args.get("tenant_id")
+    tenant = str(tenant or "").strip()
+    if not tenant:
+        return "blocked", 403, {"error": "a watchlist belongs to an organisation account"}
+    cfg = tenant_config.get_tenant_config(tenant)
+    if not cfg or not cfg.get("modules"):
+        return "blocked", 403, {"error": "no entitlement"}
+    if not any(k in args for k in ("entity_ids", "score_weights", "alert_prefs")):
+        return "noop", 200, {"watchlist": cfg.get("watchlist") or [],
+                             "score_weights": cfg.get("score_weights") or {},
+                             "alert_prefs": wl.alert_prefs_of(cfg)}
+    try:
+        ids = wl.clean_watchlist(args["entity_ids"]) if "entity_ids" in args else None
+        weights = wl.clean_score_weights(args["score_weights"]) if "score_weights" in args else None
+        alerts = wl.clean_alert_prefs(args["alert_prefs"]) if "alert_prefs" in args else None
+    except ValueError as exc:
+        return "blocked", 400, {"error": str(exc)}
+    if ids:
+        outside = [e for e in ids
+                   if not wl.entitled(e, cfg["modules"], lambda x: entity_registry.get_entity(x))]
+        if outside:
+            return "blocked", 400, {"error": "outside the licensed sectors", "entity_ids": outside}
+    try:
+        saved = tenant_config.set_tenant_prefs(tenant, watchlist=ids, score_weights=weights,
+                                               alert_prefs=alerts)
+    except KeyError:
+        return "blocked", 403, {"error": "no entitlement"}
+    return "applied", 200, {**saved, "alert_prefs": wl.alert_prefs_of(saved)}
+
+
 # report_feedback: the client's free text must not be copied into the curation journal.
 _NO_JOURNAL = frozenset({"record_engagement", "list_product_radar", "report_feedback", "list_feedback"})
 
@@ -764,13 +802,15 @@ _CATALOG: dict[str, tuple[str, Callable[..., tuple[str, int, dict[str, Any]]], s
     "issue_invite": (APPLY, _act_issue_invite, "tenant_id"),
     # #251 self-service account deletion (the caller's own account only)
     "delete_account": (APPLY, _act_delete_account, None),
+    # #302 the tenant's own watchlist / score weights / alert prefs (self-service)
+    "set_watchlist": (APPLY, _act_set_watchlist, None),
 }
 
 # #161: what a NON-elevated tenant identity (Cognito JWT via /api/me/act) may call — the officer's
 # own decision capture and attention telemetry, nothing that touches the registry or pipeline.
 _SELF_SERVICE = frozenset({"record_decision", "set_outcome", "set_board_adoption",
                            "append_reference", "record_engagement", "report_feedback",
-                           "delete_account"})
+                           "delete_account", "set_watchlist"})
 # #251: intents that only ever act on the verified caller — no origin-secret operator, no MCP.
 _SELF_ONLY = frozenset({"delete_account"})
 # of those, the ones that act on an EXISTING decision — tenant-checked before they run

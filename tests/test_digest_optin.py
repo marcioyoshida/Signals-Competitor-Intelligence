@@ -206,3 +206,23 @@ def test_no_sender_configured_sends_nothing(monkeypatch):
 def test_monday_gate_is_untouched():
     assert weekly_digest.should_send("2026-10-05", weekday=0)          # Monday
     assert not weekly_digest.should_send("2026-10-06", weekday=0)      # Tuesday
+
+
+def test_a_watching_tenant_gets_a_seus_concorrentes_section_first():
+    """#302: the tenant's watchlist adds its own section; another tenant's email is unchanged."""
+    feed = {**FEED, "entities": [{"entity": "itau", "label": "Itaú"}],
+            "feed": [{"id": "w", "entity": "itau", "is_alert": True, "date": "2026-10-04",
+                      "narrative": "Itaú muda tarifas", "threat_score": 70}]}
+    t = _T()
+    t.put_item(Item=_row("a", ["banking"]))
+    t.put_item(Item=_row("b", ["banking"], tenant="t2"))
+    sent = []
+    d.send_sector_digests(feed, today="2026-10-05", table=t, modules=lambda tenant, g: ["banking"],
+                          scope=lambda f, m: f, sender="briefing@onssa.org", now=NOW,
+                          raw_sender=lambda s, to, raw: sent.append(
+                              (to, email.message_from_bytes(raw, policy=email.policy.default))),
+                          tenant_prefs=lambda tenant: {"watchlist": ["itau"]} if tenant == "t1" else None)
+    got = {to: m.get_body(("plain",)).get_content() for to, m in sent}
+    assert got["a@x.example"].index("Seus concorrentes") < got["a@x.example"].index("Bancos")
+    assert "Itaú: Itaú muda tarifas" in got["a@x.example"]
+    assert "Seus concorrentes" not in got["b@x.example"]

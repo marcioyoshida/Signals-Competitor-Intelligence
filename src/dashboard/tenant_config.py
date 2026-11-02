@@ -217,6 +217,10 @@ def get_tenant_config(tenant_id: str | None, *, table: Any | None = None) -> dic
         # artifact exchanged during onboarding (infra/tenant_stack.py's
         # `OncaResolveCallerRole`). None for every non-marketplace tenant.
         "resolve_caller_role_arn": item.get("resolve_caller_role_arn") or None,
+        # #302 (ADR 001 §3): the tenant's own priorities, applied to its scoped feed only.
+        "watchlist": [str(e) for e in item.get("watchlist") or []],
+        "score_weights": {str(k): float(v) for k, v in (item.get("score_weights") or {}).items()},
+        "alert_prefs": {str(k): bool(v) for k, v in (item.get("alert_prefs") or {}).items()},
     }
 
 
@@ -300,7 +304,7 @@ def put_tenant_config(
         prior = {}
     # Same for the tenant's security policy (#164 idle limit, #257 app-lock ceiling): a re-put
     # that silently dropped it would loosen the customer's settings without anyone noticing.
-    for k in _BILLING_FIELDS + _POLICY_FIELDS:
+    for k in _BILLING_FIELDS + _POLICY_FIELDS + _PREF_FIELDS:
         if k in prior and k not in item:
             item[k] = prior[k]
     _table(table).put_item(Item=item)
@@ -309,6 +313,38 @@ def put_tenant_config(
 
 _BILLING_FIELDS = ("billing_managed", "subs", "trial_until", "trial_modules")
 _POLICY_FIELDS = ("session_idle_days", "app_lock_minutes")
+_PREF_FIELDS = ("watchlist", "score_weights", "alert_prefs", "prefs_updated_at")
+
+
+def set_tenant_prefs(tenant_id: str, *, watchlist: list[str] | None = None,
+                     score_weights: dict[str, float] | None = None,
+                     alert_prefs: dict[str, bool] | None = None,
+                     table: Any | None = None) -> dict[str, Any]:
+    """#302: write ONLY the preference fields given (already validated by ``watchlist.clean_*``)
+    on an EXISTING tenant row. An update, never a put, so entitlement and billing are untouched.
+    Raises KeyError for an unknown tenant."""
+    from decimal import Decimal
+
+    sets, vals = ["prefs_updated_at = :t"], {":t": _now().isoformat()}
+    if watchlist is not None:
+        sets.append("watchlist = :w"); vals[":w"] = list(watchlist)
+    if score_weights is not None:
+        sets.append("score_weights = :s"); vals[":s"] = {k: Decimal(str(v)) for k, v in score_weights.items()}
+    if alert_prefs is not None:
+        sets.append("alert_prefs = :a"); vals[":a"] = dict(alert_prefs)
+    try:
+        r = _table(table).update_item(
+            Key={"tenant_id": str(tenant_id)}, UpdateExpression="SET " + ", ".join(sets),
+            ConditionExpression="attribute_exists(tenant_id)", ExpressionAttributeValues=vals,
+            ReturnValues="ALL_NEW")
+    except Exception as exc:
+        if "ConditionalCheckFailed" in type(exc).__name__ or "ConditionalCheckFailed" in str(exc):
+            raise KeyError(tenant_id) from None
+        raise
+    item = r.get("Attributes") or {}
+    return {"watchlist": list(item.get("watchlist") or []),
+            "score_weights": {k: float(v) for k, v in (item.get("score_weights") or {}).items()},
+            "alert_prefs": dict(item.get("alert_prefs") or {})}
 
 
 def apply_purchase(tenant_id: str, storefront_tier: str, module: str, action: str, *,

@@ -33,6 +33,8 @@ import os
 import re
 from typing import Any
 
+from src.dashboard import watchlist as wl
+
 TYPES = ("radar", "distress", "regulatory")
 OFFICER_TYPES = {"cso": list(TYPES), "cpo": ["radar"], "cco": ["distress"], "cro": ["regulatory"]}
 DEFAULT_QUIET = (21, 7)          # BRT hours [start, end)
@@ -147,20 +149,22 @@ def modules_for(tenant: str | None, groups: list[str] | None) -> list[str]:
 
 
 def alert_events(scoped: dict[str, Any], types: list[str], *, now: dt.date | None = None,
-                 window_days: int = 3) -> list[tuple[str, str]]:
-    """(type, event_id) for every alert-class event in an ALREADY-SCOPED feed, recent only."""
+                 window_days: int = 3, only: set[str] | None = None) -> list[tuple[str, str]]:
+    """(type, event_id) for every alert-class event in an ALREADY-SCOPED feed, recent only.
+    ``only`` (#302 "só meus concorrentes") keeps entity events about those ids and drops the
+    sector-wide regulatory ones."""
     floor = ((now or dt.date.today()) - dt.timedelta(days=window_days)).isoformat()
     out: list[tuple[str, str]] = []
     if "radar" in types:
         for a in ((scoped.get("product_radar") or {}).get("alerts") or []):
-            if str(a.get("date") or "") >= floor and a.get("id"):
+            if str(a.get("date") or "") >= floor and a.get("id") and (only is None or a.get("entity") in only):
                 out.append(("radar", str(a["id"])))
     if "distress" in types:
         for d in scoped.get("distress") or []:
             key = d.get("id") or f"{d.get('entity')}:{d.get('date')}:{d.get('event') or d.get('kind')}"
-            if str(d.get("date") or "") >= floor:
+            if str(d.get("date") or "") >= floor and (only is None or d.get("entity") in only):
                 out.append(("distress", str(key)))
-    if "regulatory" in types:
+    if "regulatory" in types and only is None:
         for e in scoped.get("sector_events") or []:
             if e.get("severity") in ("critical", "high") and str(e.get("date") or "") >= floor and e.get("id"):
                 out.append(("regulatory", str(e["id"])))
@@ -298,7 +302,8 @@ def api_handler(event: dict[str, Any], context: Any, *, table: Any | None = None
 
 # ---- notifier ---------------------------------------------------------------------------------
 def notify(feed: dict[str, Any], subs: list[dict[str, Any]], *, now: dt.datetime, send: Any,
-           save: Any, drop: Any, bump: Any, scope: Any, modules: Any) -> dict[str, int]:
+           save: Any, drop: Any, bump: Any, scope: Any, modules: Any,
+           tenant_prefs: Any = None) -> dict[str, int]:
     """One pass over every subscription. Pure orchestration — I/O is injected (tests)."""
     tally = {"sent": 0, "skipped_quiet": 0, "capped": 0, "pruned": 0, "failed": 0, "primed": 0}
     today = _today(now)
@@ -308,7 +313,16 @@ def notify(feed: dict[str, Any], subs: list[dict[str, Any]], *, now: dt.datetime
         if not mods:                                   # entitlement gone: stop pinging
             drop(s); tally["pruned"] += 1; bump("pruned")
             continue
-        evs = alert_events(scope(feed, mods), prefs.get("types") or [], now=now.date())
+        sc = scope(feed, mods)
+        # #302: the tenant's watchlist adds its own event class and can narrow the rest
+        cfg = tenant_prefs(s.get("tenant")) if tenant_prefs and s.get("tenant") else None
+        in_scope = {r.get("entity") for r in sc.get("entities") or []} | set(sc.get("entity_attrs") or {})
+        watch = [e for e in (cfg or {}).get("watchlist") or [] if e in in_scope]
+        ap = wl.alert_prefs_of(cfg)
+        only = set(watch) if watch and ap["only_watchlist"] else None
+        evs = alert_events(sc, prefs.get("types") or [], now=now.date(), only=only)
+        if watch and ap["push"]:
+            evs += wl.watch_events(sc, watch, now=now.date())
         seen = set(s.get("seen") or [])
         new = [e for e in evs if f"{e[0]}:{e[1]}" not in seen]
         s["seen"] = sorted(seen | {f"{a}:{b}" for a, b in evs})[-500:]
@@ -368,6 +382,13 @@ def notifier_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     d = _private_key()
     subject = os.environ.get("ONCA_VAPID_SUBJECT", "mailto:contato@onssa.org")
     cache: dict[tuple, list[str]] = {}
+    tcache: dict[str, Any] = {}
+
+    def tenant_prefs(tenant: Any) -> Any:
+        if tenant not in tcache:
+            from src.dashboard.tenant_config import get_tenant_config
+            tcache[tenant] = get_tenant_config(tenant)
+        return tcache[tenant]
 
     def modules(tenant: Any, groups: Any) -> list[str]:
         k = (tenant, tuple(groups or []))
@@ -386,6 +407,7 @@ def notifier_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     tally = notify(feed, subs, now=dt.datetime.now(BRT), send=send,
                    save=lambda s: t.put_item(Item=s), drop=lambda s: t.delete_item(Key={"pk": s["pk"]}),
-                   bump=lambda k: _bump(k, table=t), scope=scope_feed_to_modules, modules=modules)
+                   bump=lambda k: _bump(k, table=t), scope=scope_feed_to_modules, modules=modules,
+                   tenant_prefs=tenant_prefs)
     print(f"push notifier: {tally} over {len(subs)} subscription(s)")
     return tally

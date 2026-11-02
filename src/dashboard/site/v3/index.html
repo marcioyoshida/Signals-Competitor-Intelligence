@@ -571,6 +571,32 @@
   .del .acts .btn { justify-content:center; min-height:46px; font-size:var(--fs-sm); }
   .del .btn[disabled] { opacity:.5; cursor:not-allowed; }
   .del .msg { margin:0; } .del .msg:empty { display:none; } .del .msg.err { color:var(--t-crit); }
+  /* #302 Meus concorrentes: the tenant's watchlist (ranking first, alerts, weekly e-mail) */
+  .wl { display:flex; flex-direction:column; gap:var(--s3); font-size:var(--fs-sm); line-height:1.5; }
+  .wl label, .wl .lbl { font-weight:600; }
+  .wl-chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .wl-chip { display:inline-flex; align-items:center; gap:2px; min-height:36px; padding:0 2px 0 10px; border:1px solid var(--border);
+    border-radius:999px; background:var(--surface-2); color:var(--ink); font-size:var(--fs-sm); }
+  .wl-chip button { min-width:32px; min-height:32px; border:0; border-radius:50%; background:none; color:var(--muted);
+    font:inherit; font-size:16px; cursor:pointer; }
+  .wl-chip button:hover, .wl-chip button:focus-visible { color:var(--t-crit); outline:none; box-shadow:var(--focus); }
+  .wl input[type=search], .wl select { width:100%; box-sizing:border-box; min-height:46px; background:var(--surface-2); color:var(--ink);
+    font:inherit; font-size:16px; border:1px solid var(--border); border-radius:var(--r-sm); padding:9px var(--s3); }
+  .wl input[type=search]:focus, .wl select:focus { outline:none; border-color:var(--primary); box-shadow:var(--focus); }
+  .wl-res { display:flex; flex-direction:column; gap:4px; margin:0; padding:0; list-style:none; }
+  .wl-res:empty { display:none; }
+  .wl-res button { width:100%; display:flex; justify-content:space-between; align-items:center; gap:var(--s2); min-height:44px;
+    padding:8px var(--s3); border:1px solid var(--border); border-radius:var(--r-sm); background:var(--surface); color:var(--ink);
+    font:inherit; text-align:left; cursor:pointer; }
+  .wl-res button:hover, .wl-res button:focus-visible { border-color:var(--primary); outline:none; box-shadow:var(--focus); }
+  .wl-res .add { color:var(--primary); font-weight:700; white-space:nowrap; }
+  .wl .wl-opt { display:flex; gap:var(--s2); align-items:center; min-height:44px; font-weight:400; }
+  .wl-opt input { width:20px; height:20px; accent-color:var(--primary); flex:none; }
+  .wl .acts { display:flex; flex-direction:column; gap:var(--s2); }
+  .wl .acts .btn { justify-content:center; min-height:46px; font-size:var(--fs-sm); }
+  .wl .msg { margin:0; } .wl .msg:empty { display:none; } .wl .msg.err { color:var(--t-crit); }
+  .watch-star { color:var(--primary); margin-right:4px; }
+  .hoje-wl { display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:var(--s3) var(--s4); }
   /* device settings fold at the end of Hoje */
   details.hoje-set { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md); }
   details.hoje-set > summary { list-style:none; cursor:pointer; display:flex; align-items:center; gap:var(--s2);
@@ -1152,6 +1178,7 @@ function openAccount() {
     (secs ? `<div class="acct-secs">${secs}</div>` : `<p class="hd-note">Nenhum setor licenciado para esta conta.</p>`) +
     (Ctx.inApp() ? `<p class="hd-note" style="margin-top:var(--s4)">${U.esc(Ctx.PLAN_NOTE)}</p>` : "") +
     `<div class="acct-acts">` +
+      (canWatch() ? `<button class="btn" type="button" id="acctWl">Meus concorrentes${(D.watchlist || []).length ? ` (${D.watchlist.length})` : ""}</button>` : "") +
       (Ctx.inApp() ? "" : `<button class="btn" type="button" id="acctTheme">Alternar tema claro/escuro</button>`) +
       `<a class="btn" href="/docs/privacy.html">Política de privacidade</a>` +
       `<button class="btn btn--reject" type="button" id="acctOut">Sair desta conta</button></div>` +
@@ -1159,6 +1186,7 @@ function openAccount() {
   const th = document.getElementById("acctTheme"); if (th) th.onclick = () => { U.toggleTheme(); render(); };
   document.getElementById("acctOut").onclick = () => Ctx.logout();
   const del = document.getElementById("acctDel"); if (del) del.onclick = openDeleteAccount;
+  const wlb = document.getElementById("acctWl"); if (wlb) wlb.onclick = openWatchlist;
   openDrawer(null);
 }
 // #251 self-service deletion (App Store 5.1.1(v), Google Play): an explicit step that says what goes
@@ -1210,6 +1238,89 @@ function openDeleteAccount() {
     word.disabled = false; go.disabled = word.value.trim().toUpperCase() !== DELETE_WORD;
   };
   word.focus();
+}
+// --- #302 Meus concorrentes: the organisation's watchlist ----------------------------------------
+// Searches ONLY this tenant's scoped entities (what /api/feed returned), so the list can't reach
+// outside the plan; the server re-checks every id against the licence (set_watchlist).
+const WL_MAX = 25;
+function canWatch() { return !ADMIN && !!(DATA && DATA.tenant); }
+function wlNames() { const m = {}; (DATA.entities || []).forEach(e => { m[e.entity] = e.label || e.entity; }); return m; }
+const wlNorm = (x) => String(x || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+function openWatchlist() {
+  if (!canWatch()) return;
+  const nm = wlNames();
+  const ap = Object.assign({ push: true, email: true, only_watchlist: false }, DATA.alert_prefs || {});
+  const st = { ids: (DATA.watchlist || []).slice(), boost: String((DATA.score_weights || {}).watchlist || 1.5) };
+  const opt = (id, on, txt) => `<label class="wl-opt"><input type="checkbox" id="${id}"${on ? " checked" : ""}>${U.esc(txt)}</label>`;
+  document.getElementById("drTitle").textContent = "Meus concorrentes";
+  document.getElementById("drBody").innerHTML =
+    `<form class="wl" id="wlForm" novalidate>` +
+      `<p class="hd-note" style="margin:0">Eles aparecem primeiro no painel e nos alertas. Só entram empresas dos setores do seu plano; a lista vale para toda a sua organização.</p>` +
+      `<div class="wl-chips" id="wlChips" aria-live="polite"></div>` +
+      `<label for="wlQ">Adicionar empresa</label>` +
+      `<input type="search" id="wlQ" autocomplete="off" spellcheck="false" placeholder="Nome da empresa" aria-controls="wlRes">` +
+      `<ul class="wl-res" id="wlRes"></ul>` +
+      `<label for="wlBoost">Prioridade no ranking</label>` +
+      `<select id="wlBoost"><option value="1.5">Normal</option><option value="2">Alta</option><option value="3">Máxima</option></select>` +
+      `<div><span class="lbl">Alertas</span>` +
+        opt("wlPush", ap.push, "Avisar no celular sobre eles") +
+        opt("wlOnly", ap.only_watchlist, "No celular, só alertas sobre eles") +
+        opt("wlMail", ap.email, "Seção própria no resumo semanal por e-mail") + `</div>` +
+      `<p class="msg" id="wlMsg" role="status" aria-live="polite"></p>` +
+      `<div class="acts"><button class="btn btn--primary" type="submit" id="wlSave">Salvar</button>` +
+        `<button class="btn" type="button" id="wlBack">Voltar</button></div>` +
+    `</form>`;
+  const q = document.getElementById("wlQ"), res = document.getElementById("wlRes"), msg = document.getElementById("wlMsg");
+  const boost = document.getElementById("wlBoost");
+  boost.value = ["1.5", "2", "3"].indexOf(String(Number(st.boost))) >= 0 ? String(Number(st.boost)) : "1.5";
+  const chips = () => {
+    document.getElementById("wlChips").innerHTML = st.ids.length
+      ? st.ids.map(e => `<span class="wl-chip">${U.esc(nm[e] || e)}<button type="button" data-rm="${U.esc(e)}" aria-label="Remover ${U.esc(nm[e] || e)}">×</button></span>`).join("")
+      : `<span class="hd-note">Nenhum concorrente escolhido.</span>`;
+    document.querySelectorAll("#wlChips [data-rm]").forEach(b => b.onclick = () => {
+      st.ids = st.ids.filter(x => x !== b.dataset.rm); chips(); search(); });
+  };
+  const search = () => {
+    const t = wlNorm(q.value.trim());
+    if (t.length < 2) { res.innerHTML = ""; return; }
+    const hits = (DATA.entities || []).filter(e => st.ids.indexOf(e.entity) < 0 &&
+      (wlNorm(e.label).indexOf(t) >= 0 || wlNorm(e.entity).indexOf(t) >= 0)).slice(0, 8);
+    res.innerHTML = hits.length ? hits.map(e => `<li><button type="button" data-add="${U.esc(e.entity)}">` +
+      `<span>${U.esc(e.label || e.entity)}</span><span class="add">${st.ids.length >= WL_MAX ? "limite" : "+ adicionar"}</span></button></li>`).join("")
+      : `<li class="hd-note">Nada encontrado nos setores do seu plano.</li>`;
+    res.querySelectorAll("[data-add]").forEach(b => b.onclick = () => {
+      if (st.ids.length >= WL_MAX) { msg.className = "msg err"; msg.textContent = `No máximo ${WL_MAX} concorrentes.`; return; }
+      st.ids.push(b.dataset.add); q.value = ""; res.innerHTML = ""; msg.textContent = ""; chips(); q.focus(); });
+  };
+  q.oninput = search;
+  chips();
+  document.getElementById("wlBack").onclick = openAccount;
+  document.getElementById("wlForm").onsubmit = async (e) => {
+    e.preventDefault();
+    const go = document.getElementById("wlSave");
+    go.disabled = true; msg.className = "msg"; msg.textContent = "Salvando…";
+    const weights = Object.assign({}, DATA.score_weights || {}, { watchlist: Number(boost.value) });
+    const r = await postAct({ intent: "set_watchlist", args: { entity_ids: st.ids, score_weights: weights,
+      alert_prefs: { push: document.getElementById("wlPush").checked, email: document.getElementById("wlMail").checked,
+                     only_watchlist: document.getElementById("wlOnly").checked } } });
+    go.disabled = false;
+    if (!r || r.outcome !== "applied") {
+      msg.className = "msg err";
+      msg.textContent = (r && r.entity_ids && r.entity_ids.length)
+        ? "Fora dos setores do seu plano: " + r.entity_ids.map(x => nm[x] || x).join(", ")
+        : (r && r.error) || "Não foi possível salvar agora. Tente de novo.";
+      return;
+    }
+    DATA.watchlist = r.watchlist || st.ids; DATA.score_weights = r.score_weights || weights;
+    DATA.alert_prefs = r.alert_prefs || DATA.alert_prefs;
+    msg.textContent = "Salvo. Atualizando o painel…";
+    const fresh = await Ctx.loadScopedFeed({}).catch(() => null);   // server re-ranks with the new list
+    if (fresh && fresh.data && !fresh.error) { DATA = fresh.data; LICENSED = licensedIndustries(DATA); }
+    render();
+    msg.textContent = "Salvo.";
+  };
+  openDrawer(null);
+  q.focus();
 }
 document.getElementById("acctBtn").addEventListener("click", openAccount);
 document.getElementById("whoAmI").addEventListener("click", openAccount);
@@ -1786,7 +1897,7 @@ function rowsCard(list) {
   if (!list.length) return U.empty("Nada no escopo.", "", "○");
   return list.map(r => `<div class="exrow" data-id="${U.esc(r.id)}">
     ${dCell(r.date)}
-    <span class="ent" title="${U.esc(r.entity_label || r.label || "—")}">${U.esc(r.entity_label || r.label || "—")}</span>
+    <span class="ent" title="${U.esc((r.watched ? "Meu concorrente · " : "") + (r.entity_label || r.label || "—"))}">${r.watched ? `<span class="watch-star" aria-label="meu concorrente">★</span>` : ""}${U.esc(r.entity_label || r.label || "—")}</span>
     <span class="ttl" title="${U.esc(r.title || "")}">${U.esc(r.title || "")}</span>
     ${r.macro_note && r.macro_note.text ? `<span class="macro-note-dot" title="${U.esc(r.macro_note.text)}">◐</span>` : ""}
     ${r.threat_score != null ? threatChip(r.threat_score) : ""}</div>`).join("");
@@ -3134,7 +3245,7 @@ const HOJE_LENSES = { cro: ["regulatory", "dou", "cvm_normas"], cco: ["sanctions
                       cpo: ["ofertas", "entrants", "product"] };
 function cardRow(c) {
   return { id: c.id, entity_label: c.entity_label || c.subject_label, date: c.date, threat_score: c.threat_score,
-           industries: c.industries, title: String(c.narrative || c.subject_label || "").slice(0, 170) };
+           industries: c.industries, watched: !!c.watched, title: String(c.narrative || c.subject_label || "").slice(0, 170) };
 }
 function hojeAlerts(officer, since) {
   const lenses = HOJE_LENSES[officer];
@@ -3143,7 +3254,9 @@ function hojeAlerts(officer, since) {
   const cards = (DATA.feed || []).filter(c => c.is_alert && inSector(c) && fresh(c) &&
     (!lenses || (c.lenses || []).some(l => lenses.indexOf(l) !== -1) ||
      (officer === "cro" && String(c.kind || "").indexOf("regulatory") === 0)));
-  cards.sort((a, b) => (b.threat_score || 0) - (a.threat_score || 0));
+  // #302: rank_score = threat × the tenant's weights (watchlist first); the chip still shows the threat
+  const rk = (c) => c.rank_score != null ? c.rank_score : (c.threat_score || 0);
+  cards.sort((a, b) => rk(b) - rk(a));
   const sev = (officer === "cso" || officer === "cro")
     ? (((EX.cro || {}).panels || {}).sector_events || []).filter(e => (e.severity === "critical" || e.severity === "high") && inSectorStrict(e) && String(e.date || "") >= since.slice(0, 10))
     : [];
@@ -3202,6 +3315,13 @@ function renderHoje(el) {
       pri.length ? `<div class="panel__bd--flush">${rowsCard(pri)}</div>` : U.empty("Sem prioridades na janela.", "", "○")) +
     hojeSec("hoje-decisoes", "Decisões pendentes", pendAll.length > pend.length ? `${pend.length} de ${pendAll.length}` : pend.length,
       (pendAll.length === 1 ? "rascunho do fluxo executivo" : "rascunhos do fluxo executivo") + (pendAll.length > pend.length ? " · demais no Painel" : ""), decBody, "flow", "Fluxo executivo");
+  if (canWatch()) {
+    const nm = wlNames(), ids = DATA.watchlist || [];
+    html += hojeSec("hoje-concorrentes", "Meus concorrentes", ids.length || null,
+      ids.length ? "aparecem primeiro no painel e nos alertas" : "escolha quem acompanhar de perto",
+      `<div class="hoje-wl">${ids.map(e => `<span class="wl-chip" style="padding-right:10px">${U.esc(nm[e] || e)}</span>`).join("")}` +
+      `<button class="btn btn--sm" type="button" id="hojeWl">${ids.length ? "Editar" : "Escolher concorrentes"}</button></div>`);
+  }
   if (OFFICER === "cpo") {
     const ev = ((((EX.cpo || {}).panels || {}).product_radar) || DATA.product_radar || {});
     html += hojeSec("hoje-radar", "Radar de produto", null, "mais recente", rowsRadar({ ...ev, events: (ev.events || []).slice(0, 3) }));
@@ -3221,6 +3341,7 @@ function renderHoje(el) {
   if (!STALE) engage("hoje", "open", null);   // not for the cached pre-paint (it re-renders)
   bindRows(el);
   el.querySelectorAll(".traj-f button[data-tv]").forEach(b => b.addEventListener("click", () => askConfirm(b, captureTraj)));
+  const hw = document.getElementById("hojeWl"); if (hw) hw.onclick = openWatchlist;
   document.getElementById("hojeFull").addEventListener("click", (e) => { e.preventDefault(); writeHash({ view: "painel" }); window.scrollTo(0, 0); });
   renderPushBox();
   renderDigestBox();

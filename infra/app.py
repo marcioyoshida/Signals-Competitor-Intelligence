@@ -2071,9 +2071,12 @@ class OncaPrototypeStack(Stack):
                 "ONCA_CURATION_LOG_TABLE": curation_log_table.table_name,
                 "ONCA_SCHEDULE_NAME": "onca-adhoc-run",
                 "ONCA_SITE_BUCKET": site_bucket.bucket_name,  # ADR-020 Phase 2: integrity audit reads feed.json
+                "ONCA_TENANT_CONFIG_TABLE": tenant_config_table.table_name,  # #302 set_watchlist
             },
         )
         entities_table.grant_read_write_data(act_fn)  # resolve_review / rollback / idempotency
+        # #302: set_watchlist reads the entitlement and update_item()s the tenant's own prefs
+        tenant_config_table.grant_read_write_data(act_fn)
         curation_log_table.grant_read_write_data(act_fn)  # ADR 018 audit + rollback-over-journal
         site_bucket.grant_read(act_fn)  # ADR-020 Phase 2: run_integrity_audit reads feed.json
         act_url = act_fn.add_function_url(auth_type=lambda_.FunctionUrlAuthType.AWS_IAM)

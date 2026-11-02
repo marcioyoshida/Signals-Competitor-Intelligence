@@ -142,6 +142,7 @@ def page():
     pw.stop()
 
 
+@pytest.mark.network
 def test_panels_say_nd_with_the_reason(page):
     fin = page.evaluate("""() => rowsFinancials([{entity: "sulamerica", label: "SulAmérica",
         roe_pct: 33.4, roa_pct: null, guarded: {roa_pct: "fora_da_faixa"}}])""")

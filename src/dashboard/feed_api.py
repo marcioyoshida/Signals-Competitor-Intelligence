@@ -25,13 +25,14 @@ def _resp(status: int, body: Any) -> dict[str, Any]:
     }
 
 
-def _etag(s3_etag: str, tenant: Any, tier: Any, modules: list[str], billing: Any, upgrade: Any) -> str:
+def _etag(s3_etag: str, tenant: Any, tier: Any, modules: list[str], billing: Any, upgrade: Any,
+          prefs: Any = None) -> str:
     """#285: a revisit re-downloaded the whole scoped feed (617 KB gzip for a sovereign admin) on
     every open of the PWA, though feed.json changes ~3x/day. The ETag covers everything the
     response depends on: the published object and the caller's entitlement."""
     import hashlib
 
-    basis = json.dumps([s3_etag, tenant, tier, sorted(modules), billing, upgrade],
+    basis = json.dumps([s3_etag, tenant, tier, sorted(modules), billing, upgrade, prefs],
                        sort_keys=True, ensure_ascii=False, default=str)
     return '"' + hashlib.sha256(basis.encode()).hexdigest()[:32] + '"'
 
@@ -74,6 +75,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     tier = None
     modules: list[str] = []
     billing = None
+    cfg: dict[str, Any] | None = None
     if tenant_id:
         cfg = get_tenant_config(tenant_id)
         modules = list((cfg or {}).get("modules") or [])
@@ -98,7 +100,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         s3 = boto3.client("s3")
         upgrade = upgrade_info()
         etag = _etag(s3.head_object(Bucket=bucket, Key="feed.json").get("ETag", ""),
-                     tenant_id, tier, modules, billing, upgrade)
+                     tenant_id, tier, modules, billing, upgrade,
+                     [(cfg or {}).get(k) for k in ("watchlist", "score_weights", "alert_prefs")])
         cache = {"cache-control": "private, no-cache", "etag": etag}
         if etag in _if_none_match(event):
             return {"statusCode": 304, "headers": cache, "body": ""}
@@ -108,6 +111,9 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         # Entry slice at Entry depth, never the full SaaS projection of its module.
         project = scope_feed_for_entry_tenant if tier == "entry" else scope_feed_to_modules
         scoped = project(json.loads(raw), modules)
+        # #302: the tenant's own watchlist / weights, applied inside its scope (never widens it)
+        from src.dashboard.watchlist import apply_to_feed
+        apply_to_feed(scoped, cfg)
         scoped["tenant"] = tenant_id
         scoped["tier"] = tier
         scoped["billing"] = billing
