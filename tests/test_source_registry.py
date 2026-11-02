@@ -22,7 +22,8 @@ def test_candidates_lens_sets_are_derived_from_registry():
 
 def test_collect_signals_sections_come_from_registry():
     # The (section_key, lens) pairs used by _collect_signals equal the registry's, in order.
-    assert r.section_lens_pairs() == [(s.id, s.lens) for s in r.SOURCES]
+    # Store sources (lens None, ADR 019 C4) have no lens section.
+    assert r.section_lens_pairs() == [(s.id, s.lens) for s in r.SOURCES if s.lens is not None]
 
 
 def test_known_lens_policy_snapshot():
@@ -38,7 +39,7 @@ def test_known_lens_policy_snapshot():
 
 def test_every_source_lens_is_defined():
     for s in r.SOURCES:
-        assert s.lens in r.LENSES, f"source {s.id} → undefined lens {s.lens}"
+        assert s.lens is None or s.lens in r.LENSES, f"source {s.id} → undefined lens {s.lens}"
 
 
 def test_shared_lens_sources_kept():
