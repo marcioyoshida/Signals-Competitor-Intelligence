@@ -221,6 +221,10 @@ def get_tenant_config(tenant_id: str | None, *, table: Any | None = None) -> dic
         "watchlist": [str(e) for e in item.get("watchlist") or []],
         "score_weights": {str(k): float(v) for k, v in (item.get("score_weights") or {}).items()},
         "alert_prefs": {str(k): bool(v) for k, v in (item.get("alert_prefs") or {}).items()},
+        # #305: an explicit included API quota (else api_usage.quota_for derives it from modules).
+        # Live 2026-11-02 this field was dropped here, so an override never took effect.
+        "api_quota_tokens": int(item["api_quota_tokens"]) if item.get("api_quota_tokens") else None,
+        "custom_domain": item.get("custom_domain") or None,   # #306
     }
 
 
@@ -314,7 +318,7 @@ def put_tenant_config(
 _BILLING_FIELDS = ("billing_managed", "subs", "trial_until", "trial_modules")
 _POLICY_FIELDS = ("session_idle_days", "app_lock_minutes")
 _PREF_FIELDS = ("watchlist", "score_weights", "alert_prefs", "prefs_updated_at",
-                "custom_domain")   # #306: a SaaS tenant's own domain (scripts/provision_tenant_domain.py)
+                "custom_domain", "api_quota_tokens")   # #306: a SaaS tenant's own domain (scripts/provision_tenant_domain.py)
 
 
 def set_tenant_prefs(tenant_id: str, *, watchlist: list[str] | None = None,

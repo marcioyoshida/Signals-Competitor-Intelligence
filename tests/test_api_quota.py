@@ -88,3 +88,22 @@ def test_api_response_carries_headers_and_is_served_past_the_quota(monkeypatch):
     body = json.loads(r["body"])
     assert body["usage"]["overage_tokens"] == 50 and body["quota"]["used_tokens"] == 150
     assert next(iter(t.rows.values()))["overage"] is True
+
+
+def test_get_tenant_config_carries_the_quota_override():
+    """Live 2026-11-02: get_tenant_config dropped api_quota_tokens, so a 100-token test quota
+    read as the 2M module default."""
+    class _T:
+        items = {}
+
+        def get_item(self, Key):
+            return {"Item": self.items.get(Key["tenant_id"])} if Key["tenant_id"] in self.items else {}
+
+        def put_item(self, Item):
+            self.items[Item["tenant_id"]] = dict(Item)
+    t = _T()
+    t.put_item({"tenant_id": "acme", "tier": "saas", "modules": ["banking", "fintech"], "api_quota_tokens": 100})
+    cfg = tenant_config.get_tenant_config("acme", table=t)
+    assert api_usage.quota_for(cfg) == 100
+    tenant_config.put_tenant_config("acme", "saas", ["banking"], table=t)          # operator re-put keeps it
+    assert api_usage.quota_for(tenant_config.get_tenant_config("acme", table=t)) == 100
