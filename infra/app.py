@@ -803,25 +803,30 @@ class OncaPrototypeStack(Stack):
         # identity, exactly as on onssa.org. Multi-tenant distributions can't carry IPv6/PriceClass/
         # legacy logging settings (IPv6 lives on the connection group), hence the overrides.
         # Pricing (verified 2026-11-02): the first 10 distribution tenants are in the free tier.
-        tenant_cdn = cloudfront.Distribution(
+        # `-c multi_tenant_cdn=false` builds the stack without the template (a deploy fallback).
+        _mt_on = str(self.node.try_get_context("multi_tenant_cdn") or "true").lower() != "false"
+        tenant_cdn = None if not _mt_on else cloudfront.Distribution(
             self,
             "OncaTenantCdn",
             default_root_object="index.html",
             default_behavior=_default_behavior,
             comment="Onca SaaS multi-tenant template (#306)",
         )
-        _tenant_cfn = tenant_cdn.node.default_child
-        _tenant_cfn.add_property_override("DistributionConfig.ConnectionMode", "tenant-only")
-        _tenant_cfn.add_property_deletion_override("DistributionConfig.IPV6Enabled")
+        _tenant_cfn = tenant_cdn.node.default_child if tenant_cdn else None
+        if _tenant_cfn is not None:
+            _tenant_cfn.add_property_override("DistributionConfig.ConnectionMode", "tenant-only")
+            _tenant_cfn.add_property_deletion_override("DistributionConfig.IPV6Enabled")
         # Without a certificate CloudFront defaults to SNI + SSLv3, which it then rejects (live
         # 2026-11-02 rollback). The template carries the onssa.org cert, sni-only, TLS 1.2 (the
         # CloudFormation multi-tenant example's shape); each tenant overrides it with its own.
-        _tenant_cfn.add_property_override("DistributionConfig.ViewerCertificate", {
-            "AcmCertificateArn": onssa_certificate.certificate_arn,
-            "SslSupportMethod": "sni-only",
-            "MinimumProtocolVersion": "TLSv1.2_2021",
-        })
-        tenant_domains = [d for d in (self.node.try_get_context("tenant_domains") or []) if d.get("domain")]
+        if _tenant_cfn is not None:
+            _tenant_cfn.add_property_override("DistributionConfig.ViewerCertificate", {
+                "AcmCertificateArn": onssa_certificate.certificate_arn,
+                "SslSupportMethod": "sni-only",
+                "MinimumProtocolVersion": "TLSv1.2_2021",
+            })
+        tenant_domains = [d for d in (self.node.try_get_context("tenant_domains") or [])
+                          if d.get("domain")] if tenant_cdn else []
         for _td in tenant_domains:
             if not _td.get("cert_arn"):
                 continue   # certificate not issued yet: the tenant is created on a later deploy
@@ -839,7 +844,8 @@ class OncaPrototypeStack(Stack):
         def _add_behavior(path_pattern: str, origin: Any, **kw: Any) -> None:
             """Every path behavior goes on BOTH distributions, in the same order."""
             distribution.add_behavior(path_pattern, origin, **kw)
-            tenant_cdn.add_behavior(path_pattern, origin, **kw)
+            if tenant_cdn is not None:
+                tenant_cdn.add_behavior(path_pattern, origin, **kw)
 
         # G5 (#113): the ONE genuinely public path on this distribution — no basic-auth
         # function association, unlike every other behavior here. "A prospect can see a
@@ -1953,7 +1959,8 @@ class OncaPrototypeStack(Stack):
             f"arn:aws:cloudfront::{self.account}:distribution/{distribution.distribution_id}"
         )
 
-        _tenant_cdn_arn = f"arn:aws:cloudfront::{self.account}:distribution/{tenant_cdn.distribution_id}"
+        _tenant_cdn_arn = (f"arn:aws:cloudfront::{self.account}:distribution/{tenant_cdn.distribution_id}"
+                           if tenant_cdn else None)
 
         def _grant_cloudfront_invoke(fn: lambda_.Function, label: str) -> None:
             # `FunctionUrlOrigin.with_origin_access_control` only grants
@@ -1974,12 +1981,13 @@ class OncaPrototypeStack(Stack):
                 source_arn=_cf_distribution_arn,
             )
             # #306: the multi-tenant template signs origin requests as itself
-            fn.add_permission(
-                f"InvokeFromTenantCdn{label}",
-                principal=iam.ServicePrincipal("cloudfront.amazonaws.com"),
-                action="lambda:InvokeFunction",
-                source_arn=_tenant_cdn_arn,
-            )
+            if _tenant_cdn_arn:
+                fn.add_permission(
+                    f"InvokeFromTenantCdn{label}",
+                    principal=iam.ServicePrincipal("cloudfront.amazonaws.com"),
+                    action="lambda:InvokeFunction",
+                    source_arn=_tenant_cdn_arn,
+                )
         review_fn = lambda_.Function(
             self,
             "OncaReviewAction",

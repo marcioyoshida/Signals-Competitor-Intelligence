@@ -36,7 +36,7 @@ def test_tenants_only_with_an_issued_certificate():
 
 def test_lambda_origins_trust_the_template_too():
     fn = APP[APP.index("def _grant_cloudfront_invoke"):APP.index("review_fn = lambda_.Function(")]
-    assert "source_arn=_cf_distribution_arn" in fn and "source_arn=_tenant_cdn_arn" in fn
+    assert "source_arn=_cf_distribution_arn" in fn and "source_arn=_tenant_cdn_arn" in fn and "if _tenant_cdn_arn:" in fn
 
 
 def test_only_the_live_v2_pool_gets_tenant_callbacks():
