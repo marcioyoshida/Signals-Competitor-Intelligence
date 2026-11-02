@@ -209,3 +209,16 @@ def test_km1_applies_the_same_name_and_industry_rules(monkeypatch):
                         (["bb"] if "BRASIL" in i["institution"] else ["b3"]),
                         industries_of={"bb": ["banking"], "b3": ["financial-data-analytics"]}.get)
     assert seen[0] == "BANCO DO BRASIL S.A." and [r["entity"] for r in out] == ["bb"]
+
+
+def test_the_citation_title_names_the_bank():
+    """A generic risk chunk is only attributable through its header (live: BTG's CRA chunk ranked
+    first for a Mercado Pago question)."""
+    rec = {"entity": "btg", "kind": "dasfn", "company": "BCO BTG PACTUAL S.A.", "year": 2025,
+           "date": "2025-12-31", "url": "https://btg/ova", "subject": "Pilar 3 — 2025"}
+    meta = pilar3.kb_metadata(rec)
+    assert meta["title"].startswith("BCO BTG PACTUAL S.A. — ")
+    from src.dashboard import agent_ask
+    snip = agent_ask.kb_snippets_from_results([{"content": {"text": "O risco de crédito..."},
+        "metadata": meta, "location": {"s3Location": {"uri": "s3://raw/pilar3/btg/dasfn-2025.txt"}}}])
+    assert "BCO BTG PACTUAL S.A." in agent_ask.kb_header(snip[0])

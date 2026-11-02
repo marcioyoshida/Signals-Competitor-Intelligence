@@ -231,6 +231,20 @@ def kb_document(rec: dict[str, Any], prose: str, *, max_chars: int = KB_MAX_CHAR
     return head + prose[:max_chars]
 
 
+def kb_metadata(rec: dict[str, Any]) -> dict[str, Any]:
+    """The sidecar's citable attributes. ``title`` NAMES THE BANK: a 300-token chunk of generic
+    risk boilerplate carries no bank name, and the agent sees only this header (live 2026-11-02, a
+    "Mercado Pago credit risk" retrieve ranked BTG's CRA chunk first). Without the name in the title
+    the model can pin one bank's text on another."""
+    from src.ingest.pilar3_dasfn import DOC_TYPE as _DASFN_DOC_TYPE
+    dasfn = rec.get("kind") == "dasfn"
+    who = rec.get("company") or rec["entity"]
+    return {"source": "BCB-DASFN-Pilar3" if dasfn else KB_SOURCE, "kind": "competitor",
+            "doc_type": _DASFN_DOC_TYPE if dasfn else KB_DOC_TYPE,
+            "date": (rec.get("date") or "")[:10], "url": rec["url"], "entity": rec["entity"],
+            "name": who, "title": f"{who} — {rec.get('subject') or KB_DOC_TYPE}"}
+
+
 def promote_to_kb(index: dict[str, Any], *, bucket: str, s3: Any | None = None,
                   fetch_pages: Callable[..., list[str]] | None = None) -> list[str]:
     """Write each filing in the Pilar 3 index not yet in the KB bucket (+ metadata sidecar).
@@ -267,11 +281,7 @@ def promote_to_kb(index: dict[str, Any], *, bucket: str, s3: Any | None = None,
             continue
         if not prose:
             continue
-        from src.ingest.pilar3_dasfn import DOC_TYPE as _DASFN_DOC_TYPE
-        meta = {"source": "BCB-DASFN-Pilar3" if dasfn else KB_SOURCE, "kind": "competitor",
-                "doc_type": _DASFN_DOC_TYPE if dasfn else KB_DOC_TYPE,
-                "date": (rec.get("date") or "")[:10], "url": rec["url"], "entity": rec["entity"],
-                "name": rec.get("company") or rec["entity"], "title": rec.get("subject")}
+        meta = kb_metadata(rec)
         try:
             s3.put_object(Bucket=bucket, Key=key, Body=kb_document(rec, prose).encode("utf-8"),
                           ContentType="text/plain; charset=utf-8")
