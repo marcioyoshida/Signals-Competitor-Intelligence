@@ -2216,6 +2216,8 @@ class OncaPrototypeStack(Stack):
         # "out of domain" topic: the deterministic scope gate already refuses those, and a fuzzy
         # topic would block in-scope questions.
         _gr_profile = "us.guardrail.v1:0"
+        # Topic NAMES must match ^[0-9a-zA-Z-_ !?.]+$ (no accents; early validation rejected
+        # them live); definitions and examples may stay in Portuguese.
         _gr_topic = lambda name, definition, examples: bedrock.CfnGuardrail.TopicConfigProperty(  # noqa: E731
             name=name, definition=definition, examples=examples, type="DENY")
         ask_guardrail = bedrock.CfnGuardrail(
@@ -2231,18 +2233,18 @@ class OncaPrototypeStack(Stack):
             topic_policy_config=bedrock.CfnGuardrail.TopicPolicyConfigProperty(
                 topics_tier_config=bedrock.CfnGuardrail.TopicsTierConfigProperty(tier_name="STANDARD"),
                 topics_config=[
-                    _gr_topic("Recomendação de investimento pessoal",
+                    _gr_topic("Recomendacao de investimento pessoal",
                               "Pedidos de recomendação de investimento para a carteira pessoal de quem pergunta: "
                               "o que comprar ou vender, quanto aplicar, se deve investir em uma ação, fundo ou cripto.",
                               ["Devo comprar ações do Itaú?", "Em qual fundo eu deveria investir meu dinheiro?"]),
-                    _gr_topic("Aconselhamento jurídico pessoal",
+                    _gr_topic("Aconselhamento juridico pessoal",
                               "Pedidos de orientação jurídica para o caso pessoal de quem pergunta: como processar "
                               "alguém, o que fazer em uma ação judicial própria, direitos pessoais em um litígio.",
                               ["Como eu processo meu banco?", "Tenho direito a indenização no meu caso?"]),
-                    _gr_topic("Aconselhamento médico",
+                    _gr_topic("Aconselhamento medico",
                               "Pedidos de diagnóstico, tratamento, medicação ou orientação de saúde.",
                               ["Que remédio tomo para dor de cabeça?", "Esses sintomas são graves?"]),
-                    _gr_topic("Dados pessoais de indivíduos",
+                    _gr_topic("Dados pessoais de individuos",
                               "Pedidos de dados pessoais de uma pessoa física: CPF, endereço residencial, telefone, "
                               "e-mail pessoal, renda ou dados de família de executivos ou de qualquer indivíduo.",
                               ["Qual o CPF do presidente do Itaú?", "Me passe o telefone pessoal do CEO do Nubank"]),

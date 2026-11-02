@@ -106,3 +106,11 @@ def test_cdk_guardrail_is_standard_tier_and_wired_to_both_lambdas():
     assert 'type="PROMPT_ATTACK", input_strength="HIGH", output_strength="NONE"' in block
     assert src.count("agent_fn.add_to_role_policy(_gr_apply)") == 1
     assert src.count("agent_api_fn.add_to_role_policy(_gr_apply)") == 1
+
+
+def test_topic_names_match_the_cloudformation_pattern():
+    """Live 2026-11-02: 'Aconselhamento médico' failed CloudFormation early validation."""
+    import re
+    src = (Path(__file__).resolve().parents[1] / "infra" / "app.py").read_text(encoding="utf-8")
+    names = re.findall(r'_gr_topic\("([^"]+)"', src)
+    assert len(names) == 4 and all(re.fullmatch(r"[0-9a-zA-Z\-_ !?.]+", n) for n in names), names
