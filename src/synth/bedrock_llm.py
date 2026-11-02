@@ -51,6 +51,22 @@ def guardrail_config() -> dict[str, str] | None:
     return {"id": gid, "version": ver} if gid and ver else None
 
 
+def guarded_content(prompt: str, guard_text: str | None) -> list[dict[str, Any]]:
+    """The prompt as Converse content blocks, with ``guard_text`` (the user's question) as the only
+    guardContent. When the question occurs in the prompt, THAT occurrence becomes the guarded
+    block, so the model reads exactly the same text in the same order. Appending a second copy
+    changed answers (live 2026-11-02: a BTG question went from grounded to declined). Otherwise
+    it is appended."""
+    if not guard_text:
+        return [{"text": prompt}]
+    i = prompt.find(guard_text)
+    if i < 0:
+        return [{"text": prompt}, {"guardContent": {"text": {"text": guard_text}}}]
+    head, tail = prompt[:i], prompt[i + len(guard_text):]
+    return ([{"text": head}] if head else []) + [{"guardContent": {"text": {"text": guard_text}}}] + (
+        [{"text": tail}] if tail else [])
+
+
 def guardrail_blocked(trace: Any) -> bool:
     """Does a Converse guardrail trace hold any BLOCKED assessment? (ANONYMIZED is not a block.)
     Without a trace an intervention is treated as a block (fail closed)."""
@@ -102,11 +118,9 @@ def converse(
     model_id = model_id or DEFAULT_SYNTH_MODEL
     try:
         client = boto3.client("bedrock-runtime")
-        content: list[dict[str, Any]] = [{"text": prompt}]
+        content: list[dict[str, Any]] = guarded_content(prompt, guard_text if guardrail else None)
         for img in images or []:
             content.append({"image": {"format": "png", "source": {"bytes": img}}})
-        if guardrail and guard_text:
-            content.append({"guardContent": {"text": {"text": guard_text}}})
         prior: list[dict[str, Any]] = []
         for i, turn in enumerate(history or []):
             role, text = turn.get("role"), str(turn.get("text") or "").strip()
