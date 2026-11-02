@@ -1,6 +1,24 @@
 # ADR 022 — Financial-Soundness (Prudential) Ingestion + Financial-Tone NLP for BCB/CVM Institutions
 
-Status: **Accepted and largely built — 3 remainders (re-checked 2026-10-28).**
+Status: **Accepted and largely built — 2 remainders (2026-11-02).**
+**2026-11-02:** remainder 3 shipped ([#300](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/300)), and the stores were unfrozen ([#307](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/307)).
+- **#300 ratio guards:** `src/synth/ratio_guards.py` runs on read in `fundamentals_by_entity` /
+  `npl_by_entity`, so the stored index keeps the raw values for audit.
+  - ROA/ROE are suppressed (`base_pequena`) under R$ 100 mi of assets. |ROA| > 15% or |ROE| > 100%
+    is `fora_da_faixa`.
+  - NPL is suppressed under a R$ 100 mi credit book. A total or PF/PJ segment above 50% is an
+    artifact, such as overdue equal to the whole book. A guarded total drops its band and segments.
+  - A suppressed value is not published, because the feed is agent grounding, so it drives no
+    rec, ranking or fragility score. `/exec` shows "n/d (base pequena | fora da faixa)".
+  - On the live 2026-06 base, no major bank changes. High but real NPLs (Crefisa, Neon) are
+    kept. The insurer-arm ROAs and the 100% NPL artifact are suppressed.
+- **#307 frozen quarter:** `bcb_soundness.latest_base_date()` probed a hard-coded tuple starting at
+  202603, so soundness, fundamentals and NPL could never advance. The 10-06 monthly run no-op'd on
+  "quarter unchanged" while IF.data already had 202606. Candidates now come from the calendar. A
+  forced run on 2026-11-02 moved all five stores to **202606**. Pre-run backups are in
+  `backups/<store>/index.2026-11-01.pre-307.json`.
+
+Was: 3 remainders (re-checked 2026-10-28).
 Phases 1–6 and Addendum Tiers 1–3, #16, #17 and KM1 run live on `OncaFinancialsPipeline`.
 The live state machine has these tasks: Soundness, Balancete, CvmStatements, IssuerKpis,
 Tone. The monthly run last SUCCEEDED on 2026-10-06. The `onca-finbert-ptbr` SageMaker
@@ -14,8 +32,7 @@ Serverless endpoint is `InService`. Two items the Addendum deferred have since s
 2. Multi-bank Pilar 3 *tone* corpus: still Itaú only via IPE. The other banks' IR PDFs are
    opaque or bot-blocked, which is an external dependency. KM1 covers the *numbers*. Ticket
    [#301](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/301) (spike first).
-3. The per-metric sanity guards for insurer ROA and small-book NPL: not found in
-   `bcb_fundamentals.py` / `bcb_inadimplencia.py`. Ticket [#300](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/300).
+3. ~~The per-metric sanity guards for insurer ROA and small-book NPL~~ **shipped 2026-11-02**. Ticket [#300](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/300).
 
 **Cost flag for the owner:** FinBERT runs on a hosted SageMaker endpoint that bills per
 invocation. It is not Bedrock, so the Nova-Lite-only policy does not literally apply, but it
