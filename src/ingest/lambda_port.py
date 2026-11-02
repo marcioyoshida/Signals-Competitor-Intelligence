@@ -1065,7 +1065,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # not entity-tied; surfaces as standalone "macro" cards). Best-effort.
     macro_selic: dict[str, Any] | None = None
     macro_focus: list[dict[str, Any]] = []
-    if os.environ.get("ONCA_MACRO", "true").lower() in ("1", "true", "yes"):
+    if _source_enabled(registry.by_id("macro")):
         try:
             with _source_budget("BCB macro", deadline, per_source):
                 macro_selic = bcb_macro.fetch_selic()
@@ -1077,12 +1077,12 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # Party-name-scrubbed public API, so this is a MACRO sector-distress signal
     # (filing volume/trend), not entity-tied (issue #25). Best-effort; off via env.
     distress_summary: dict[str, Any] | None = None
-    if os.environ.get("ONCA_DATAJUD", "true").lower() in ("1", "true", "yes"):
+    if _source_enabled(registry.by_id("datajud")):
         try:
             with _source_budget("DataJud RJ", deadline, per_source):
-                tribs = _csv_env("ONCA_DATAJUD_TRIBUNALS") or list(datajud.DEFAULT_TRIBUNALS)
+                tribs = P["datajud"]["tribunals"] or list(datajud.DEFAULT_TRIBUNALS)
                 distress = datajud.fetch_recuperacao_judicial(
-                    tribs, lookback_days=int(os.environ.get("ONCA_DATAJUD_LOOKBACK_DAYS", "90"))
+                    tribs, lookback_days=P["datajud"]["lookback_days"]
                 )
                 new_distress = _new_since_last_run("datajud_rj", distress, seed_if_empty=True)
                 distress_summary = {
@@ -1097,7 +1097,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # institution (issue #31, the Reclame Aqui alternative). Public Olinda OData,
     # entity-tied; writes a durable bcb_reclamacoes/index.json store. Best-effort.
     bcb_reclamacoes_summary: dict[str, Any] | None = None
-    if os.environ.get("ONCA_BCB_RECLAMACOES", "true").lower() in ("1", "true", "yes"):
+    if _source_enabled(registry.by_id("bcb_reclamacoes")):
         bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
         try:
             with _source_budget("BCB reclamações", deadline, per_source):
@@ -1120,7 +1120,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # the health-plan sub-entities (ADR-017) are registered, since until then almost
     # nothing resolves and the store would just be empty.
     ans_igr_summary: dict[str, Any] | None = None
-    if os.environ.get("ONCA_ANS_IGR", "false").lower() in ("1", "true", "yes"):
+    if _source_enabled(registry.by_id("ans_igr")):
         bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
         try:
             with _source_budget("ANS IGR", deadline, per_source):
@@ -1133,14 +1133,14 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # dados.gov.br catalog ([[gov_dados]]), whose GOV_DADOS_TOKEN is currently rejected, so
     # this is inert until the token is regenerated. Durable store, like bcb_reclamacoes.
     consumidor_gov_summary: dict[str, Any] | None = None
-    if os.environ.get("ONCA_CONSUMIDOR_GOV", "false").lower() in ("1", "true", "yes"):
+    if _source_enabled(registry.by_id("consumidor_gov")):
         bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
         try:
             with _source_budget("consumidor.gov", deadline, per_source):
                 from src.synth.entities import resolve_entities
 
                 rows = consumidor_gov.fetch_indicators(
-                    min_complaints=int(os.environ.get("ONCA_CONSUMIDOR_MIN_COMPLAINTS", "30")))
+                    min_complaints=P["consumidor_gov"]["min_complaints"])
                 recs = consumidor_gov.map_to_entities(rows, resolver=resolve_entities)
                 if recs and bucket:
                     consumidor_gov.update_store(recs, bucket)
@@ -1795,11 +1795,11 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # Default OFF: the public RA origin is Cloudflare-gated (403). Enable only with
     # an authorized/proxied endpoint via ONCA_RA_IOSEARCH (see reclame_aqui docstring).
     reputation_summary: dict[str, Any] | None = None
-    if os.environ.get("ONCA_RECLAME_AQUI", "false").lower() in ("1", "true", "yes"):
+    if _source_enabled(registry.by_id("reclame_aqui")):
         bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
         try:
             with _source_budget("Reclame Aqui", deadline, per_source):
-                ids = _csv_env("ONCA_RA_ENTITY_IDS") or list(reclame_aqui.DEFAULT_ENTITY_IDS)
+                ids = P["reclame_aqui"]["entity_ids"] or list(reclame_aqui.DEFAULT_ENTITY_IDS)
                 comps = reclame_aqui.companies_from_registry(ids)
                 snaps = reclame_aqui.fetch_reputation(comps)
                 if snaps and bucket:
@@ -1873,7 +1873,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # sections (macro/reputation/stores) are untouched. Migrated sources already skip their
     # fetch via _source_enabled; this also gates the still-bespoke FS fetches' OUTPUT.
     _active_ids = {s.id for s in registry.active(_active_vertical())}
-    for _sid in [s.id for s in registry.SOURCES]:
+    for _sid in [s.id for s in registry.lens_sources()]:   # store sections stay (C4)
         if _sid not in _active_ids:
             payload.pop(_sid, None)
 

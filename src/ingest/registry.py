@@ -82,7 +82,8 @@ def _parse(p: Param, raw: str | None) -> Any:
 class SourceSpec:
     """One ingestion source: its digest section → lens, plus ingestion metadata."""
     id: str                          # digest section key (e.g. "cade", "pix_moves")
-    lens: str                        # candidates lens this section feeds
+    lens: str | None                 # candidates lens this section feeds; None = a store/macro
+    #                                  source with no lens section (C4, #303)
     # --- forward-looking (ADR 019 Phases 2–4; NOT consumed in Phase 1) ---
     resolution: str = "text"         # "cnpj" | "name" | "prebound" | "macro" | "text"
     delta: str = "new"               # "new" | "moves" | "store" | "none"
@@ -224,6 +225,27 @@ SOURCES: list[SourceSpec] = [
     SourceSpec("market", "market", resolution="macro", delta="none", integration="store",
                label="IF.data market",
                params=(Param("max_resolve", "ONCA_IFDATA_MAX_RESOLVE", 150, "int"),)),
+    # --- C4 (#303): the non-lens stores. lens=None: no digest lens section and no candidates
+    # lens; they write durable stores / macro blocks the feed reads. Vertical-gated through the
+    # same _source_enabled path as every source. (The IF.data store is `market` above.)
+    SourceSpec("macro", None, resolution="macro", delta="none", integration="macro",
+               verticals=frozenset({ALL}), env_flag="ONCA_MACRO", label="BCB macro"),
+    SourceSpec("datajud", None, resolution="macro", integration="macro", verticals=frozenset({ALL}),
+               env_flag="ONCA_DATAJUD", label="DataJud RJ", state_key="datajud_rj", items_limit=12,
+               params=(Param("tribunals", "ONCA_DATAJUD_TRIBUNALS", "", "csv"),
+                       Param("lookback_days", "ONCA_DATAJUD_LOOKBACK_DAYS", 90, "int"))),
+    SourceSpec("bcb_reclamacoes", None, resolution="name", delta="none", integration="store",
+               env_flag="ONCA_BCB_RECLAMACOES", label="BCB reclamações"),
+    SourceSpec("reclame_aqui", None, resolution="prebound", delta="none", integration="store",
+               default_on=False, env_flag="ONCA_RECLAME_AQUI", label="Reclame Aqui",
+               params=(Param("entity_ids", "ONCA_RA_ENTITY_IDS", "", "csv"),)),
+    SourceSpec("consumidor_gov", None, resolution="name", delta="none", integration="store",
+               default_on=False, env_flag="ONCA_CONSUMIDOR_GOV", verticals=frozenset({ALL}),
+               label="consumidor.gov",
+               params=(Param("min_complaints", "ONCA_CONSUMIDOR_MIN_COMPLAINTS", 30, "int"),)),
+    SourceSpec("ans_igr", None, resolution="cnpj", delta="none", integration="store",
+               default_on=False, env_flag="ONCA_ANS_IGR", verticals=frozenset({VERTICAL_FS, "health"}),
+               label="ANS IGR"),
 ]
 
 SPECS: dict[str, SourceSpec] = {s.id: s for s in SOURCES}
@@ -283,8 +305,13 @@ def backdrop_lenses() -> frozenset[str]:
 
 
 def section_lens_pairs() -> list[tuple[str, str]]:
-    """(digest section key, lens) in order — the _collect_signals `sections` list."""
-    return [(s.id, s.lens) for s in SOURCES]
+    """(digest section key, lens) in order — the _collect_signals `sections` list. Store
+    sources (lens None, C4) have no lens section."""
+    return [(s.id, s.lens) for s in SOURCES if s.lens is not None]
+
+
+def lens_sources() -> list[SourceSpec]:
+    return [s for s in SOURCES if s.lens is not None]
 
 
 def active(vertical: str | None = None) -> list[SourceSpec]:

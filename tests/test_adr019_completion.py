@@ -125,6 +125,36 @@ def test_c3_param_parsing_matches_the_old_env_reads():
     assert registry.all_params({"ONCA_INF_DIARIO_TOP_N": "20"})["inf_diario_moves"]["top_n"] == 20
 
 
+STORES = ("macro", "datajud", "bcb_reclamacoes", "reclame_aqui", "consumidor_gov", "ans_igr")
+
+
+def test_c4_the_non_lens_stores_are_specs_without_a_lens_section():
+    for sid in STORES:
+        spec = registry.by_id(sid)
+        assert spec.lens is None and spec.integration in ("store", "macro") and spec.env_flag
+    assert registry.by_id("market").integration == "store"             # the IF.data store
+    assert not set(STORES) & {sid for sid, _ in registry.section_lens_pairs()}
+    from src.synth import candidates
+    assert not set(STORES) & {sid for sid, _ in candidates._reg.section_lens_pairs()}
+
+
+def test_c4_store_defaults_match_the_old_flags():
+    from src.ingest import lambda_port as lp
+    on = {sid: lp._source_enabled(registry.by_id(sid)) for sid in STORES}
+    assert on == {"macro": True, "datajud": True, "bcb_reclamacoes": True,
+                  "reclame_aqui": False, "consumidor_gov": False, "ans_igr": False}
+
+
+def test_c4_stores_are_vertical_gated_by_the_same_path(monkeypatch):
+    from src.ingest import lambda_port as lp
+    monkeypatch.setenv("ONCA_VERTICAL", "pharma")
+    assert not lp._source_enabled(registry.by_id("bcb_reclamacoes"))   # FS-only store
+    assert lp._source_enabled(registry.by_id("macro"))                 # economy-wide
+    monkeypatch.setenv("ONCA_VERTICAL", "health")
+    monkeypatch.setenv("ONCA_ANS_IGR", "true")
+    assert lp._source_enabled(registry.by_id("ans_igr"))               # health insurance
+
+
 def test_c2_the_entrant_gate_also_stops_the_supplementary_registries(monkeypatch):
     from src.ingest import susep_entidades
     seen = []
