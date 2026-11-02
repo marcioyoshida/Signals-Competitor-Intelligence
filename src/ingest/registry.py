@@ -66,6 +66,12 @@ class SourceSpec:
     seed_if_empty: bool = True       # suppress the first-run flood (False = report all on seed)
     items_limit: int = 10            # _tag_new(new[:items_limit])
     context_limit: int = 15          # _strip_raw(records[:context_limit])
+    # C1 (#303) — delta="moves": the numeric series diffed by _moves_since_last_run, and the
+    # "{…}_tracked" count key of its digest section. key_field None = the fetcher diffs itself
+    # (FIAGRO: two series + a new-registration delta).
+    key_field: str | None = None
+    value_field: str | None = None
+    tracked_key: str | None = None
 
 
 # --- Lens policy — reproduces candidates.py's LENS_WEIGHT + the three *_LENSES sets ---------
@@ -114,13 +120,19 @@ SOURCES: list[SourceSpec] = [
                state_key="pncp_contratos", label="PNCP contracts"),
     SourceSpec("news", "news", resolution="text"),
     SourceSpec("sec_filings", "sec"),
-    SourceSpec("pix_moves", "pix", delta="moves"),
-    SourceSpec("juros_moves", "juros", delta="moves"),
-    SourceSpec("inf_diario_moves", "inf_diario", delta="moves"),
+    SourceSpec("pix_moves", "pix", delta="moves", state_key="bcb_pix", label="BCB Pix",
+               key_field="ispb", value_field="tx_value", tracked_key="institutions_tracked"),
+    SourceSpec("juros_moves", "juros", delta="moves", state_key="bcb_juros", label="BCB juros médios",
+               key_field="move_key", value_field="rate_year", tracked_key="series_tracked"),
+    SourceSpec("inf_diario_moves", "inf_diario", delta="moves", state_key="cvm_inf_diario",
+               label="CVM Informe Diário", key_field="move_key", value_field="pl",
+               tracked_key="funds_tracked"),
     # FIAGRO agri-funds moves reuse the "funds" lens (deliberately — not a new lens), so one
     # material NEW move scores/alerts like a fresh CVM fund-class filing.
-    SourceSpec("fiagro_moves", "funds", delta="moves", resolution="prebound"),
-    SourceSpec("market", "market", resolution="macro"),
+    SourceSpec("fiagro_moves", "funds", delta="moves", resolution="prebound", label="FIAGRO moves",
+               env_flag="ONCA_FIAGRO_SIGNAL", items_limit=12, tracked_key="funds_tracked"),
+    SourceSpec("market", "market", resolution="macro", delta="none", integration="store",
+               label="IF.data market"),
 ]
 
 SPECS: dict[str, SourceSpec] = {s.id: s for s in SOURCES}

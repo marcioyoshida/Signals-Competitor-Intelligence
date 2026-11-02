@@ -363,6 +363,79 @@ def _gated_source(
     return records, new_records
 
 
+def _moves_section(
+    tracked: list[dict[str, Any]],
+    moves: list[dict[str, Any]],
+    spec: "registry.SourceSpec",
+    **extra: Any,
+) -> dict[str, Any]:
+    """C1 (#303): the numeric-moves digest section — ``{<tracked_key>, …extra, move_count,
+    items, context}`` (key order is part of the digest bytes)."""
+    return {
+        spec.tracked_key or "tracked": len(tracked),
+        **extra,
+        "move_count": len(moves),
+        "items": _tag_new(moves[: spec.items_limit]),
+        "context": _strip_raw(tracked[: spec.context_limit]),
+    }
+
+
+def _gated_moves(
+    spec: "registry.SourceSpec",
+    *,
+    deadline: float,
+    per_source: int,
+    fetch: "Any",
+    min_pct: float | None = None,
+    applicable: bool = True,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+    """C1 (#303): run one delta="moves" source: gate → budget → fetch → moves diff.
+
+    ``fetch()`` returns ``(tracked, series, aux)``. ``applicable=False`` (e.g. an empty
+    watchlist) skips the source before its budget, so no state or health row is touched, as
+    before the loop. When ``spec.key_field`` is set,
+    ``series`` is diffed by ``_moves_since_last_run(spec.state_key, …)``; otherwise the fetcher
+    already returns the moves (FIAGRO's two series + new registrations). Returns
+    (tracked, moves, aux); best-effort, a failure degrades to empty."""
+    if not applicable or not _source_enabled(spec):
+        return [], [], {}
+    tracked: list[dict[str, Any]] = []
+    moves: list[dict[str, Any]] = []
+    aux: dict[str, Any] = {}
+    try:
+        with _source_budget(spec.label or spec.id, deadline, per_source):
+            tracked, series, aux = fetch()
+            if spec.key_field:
+                moves = _moves_since_last_run(
+                    spec.state_key or spec.id, series, key_field=spec.key_field,
+                    value_field=spec.value_field, min_pct=float(min_pct or 0.0),
+                )
+            else:
+                moves = series
+    except Exception as exc:  # pragma: no cover - defensive; upstream best-effort
+        print(f"Warning: {spec.label or spec.id} fetch failed: {exc}")
+    return tracked, moves, aux
+
+
+def _gated_static(
+    spec: "registry.SourceSpec",
+    *,
+    deadline: float,
+    per_source: int,
+    fetch: "Any",
+) -> list[dict[str, Any]]:
+    """C1 (#303): a delta="none" source (a snapshot, e.g. the IF.data market top): gate →
+    budget → fetch, no seen-state."""
+    if not _source_enabled(spec):
+        return []
+    try:
+        with _source_budget(spec.label or spec.id, deadline, per_source):
+            return fetch() or []
+    except Exception as exc:  # pragma: no cover - defensive; upstream best-effort
+        print(f"Warning: {spec.label or spec.id} fetch failed: {exc}")
+    return []
+
+
 def _populate_corpus_and_sync(new_docs: list[dict[str, Any]]) -> None:
     """Write new docs to the raw corpus bucket and trigger a KB ingestion sync.
 
@@ -641,6 +714,16 @@ def _official_acts(records: list[dict[str, Any]]) -> dict[str, Any]:
     return {"count": len(acts), "acts": list(acts.values())}
 
 
+# C1 (#303): the structured digest's established section order. Registry-loop sources come
+# first in registry order in the pre-C1 layout; this list pins that layout now that more
+# sections are built in the loop.
+_PAYLOAD_ORDER = (
+    "regulatory", "competitor", "ofertas", "dou", "cvm_normas", "sanctions", "cade", "contracts",
+    "market", "new_entrants", "pix_moves", "juros_moves", "sec_filings", "official_acts",
+    "cvm_ofertas_status", "fatos", "news", "macro", "reputation", "bcb_reclamacoes", "ans_igr",
+    "consumidor_gov", "inf_diario_moves", "fiagro_moves",
+)
+
 # Step Functions caps a task result at 256 KB even with result_path=DISCARD
 # (States.DataLimitExceeded). A failed attempt has already committed the seen-state, so the
 # retry saw 0 new items and the run's new acts never reached a digest (2026-09-27, #188–#195
@@ -799,65 +882,64 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # consumed the whole 900s Lambda budget and produced the ExecutionTimedOut runs.
     # Now: cheap $top=1 date probe, skip entirely once the quarter is fully walked,
     # and otherwise resolve one bounded window per run (cursor in the store).
-    try:
-        with _source_budget("IF.data market", deadline, per_source):
-            bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
-            index = bcb_ifdata.load_index(bucket) if bucket else {}
-            base_date = bcb_ifdata.latest_base_date()
-            cursor, complete = bcb_ifdata.resolve_progress(index, base_date)
-            if complete and index.get("top"):
-                market = index.get("top") or []
-                print(
-                    f"IF.data market: base_date {base_date} already fully resolved "
-                    f"({index.get('count', 0)} entities) — reusing cached top{len(market)}"
-                )
-            else:
-                rows = bcb_ifdata.fetch_institutions(base_date=base_date)
-                names = bcb_ifdata.fetch_institution_names(base_date)
-                shares = bcb_ifdata.market_share(rows, institution_names=names)
-                market = shares[:10]
-                del rows  # ~58MB / 153k rows — free it before the resolver pass
-                # ADR 015 §3: resolve institution names -> entity_id and persist a durable
-                # bcb_ifdata/index.json store so feed_builder can emit entities[].market_
-                # share_pct. Best-effort, mirrors the bcb_reclamacoes store below.
-                if bucket:
-                    from src.synth.entities import resolve_entities
+    # C1 (#303): the IF.data market snapshot is a registry-loop source (delta="none"); its
+    # budget and failure handling come from the loop's _gated_static.
+    def _fetch_market() -> list[dict[str, Any]]:
+        bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
+        index = bcb_ifdata.load_index(bucket) if bucket else {}
+        base_date = bcb_ifdata.latest_base_date()
+        cursor, complete = bcb_ifdata.resolve_progress(index, base_date)
+        if complete and index.get("top"):
+            market = index.get("top") or []
+            print(
+                f"IF.data market: base_date {base_date} already fully resolved "
+                f"({index.get('count', 0)} entities) — reusing cached top{len(market)}"
+            )
+        else:
+            rows = bcb_ifdata.fetch_institutions(base_date=base_date)
+            names = bcb_ifdata.fetch_institution_names(base_date)
+            shares = bcb_ifdata.market_share(rows, institution_names=names)
+            market = shares[:10]
+            del rows  # ~58MB / 153k rows — free it before the resolver pass
+            # ADR 015 §3: resolve institution names -> entity_id and persist a durable
+            # bcb_ifdata/index.json store so feed_builder can emit entities[].market_
+            # share_pct. Best-effort, mirrors the bcb_reclamacoes store below.
+            if bucket:
+                from src.synth.entities import resolve_entities
 
-                    window = max(1, int(os.environ.get("ONCA_IFDATA_MAX_RESOLVE", "150")))
-                    stats: dict[str, Any] = {}
-                    recs = bcb_ifdata.map_to_entities(
-                        shares,
-                        resolver=resolve_entities,
-                        base_date=base_date,
-                        start=cursor,
-                        limit=window,
-                        # Stop cleanly a little before the SIGALRM budget would kill
-                        # the source, so the window's work is persisted and the cursor
-                        # advances (a hard kill here would livelock the walk).
-                        deadline=min(
-                            deadline, time.monotonic() + max(10, int(per_source * 0.7))
-                        ),
-                        stats=stats,
-                    )
-                    nxt = min(cursor + int(stats.get("processed") or window), len(shares))
-                    bcb_ifdata.update_store(
-                        recs,
-                        bucket,
-                        index=index,
-                        progress={
-                            "base_date": base_date,
-                            "cursor": nxt,
-                            "universe": len(shares),
-                            "top": market,
-                        },
-                    )
-                    print(
-                        f"IF.data market: base_date {base_date} resolved "
-                        f"{cursor}-{nxt}/{len(shares)} (+{len(recs)} entities)"
-                    )
-    except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
-        market = []
-        print(f"Warning: IF.data market fetch failed: {exc}")
+                window = max(1, int(os.environ.get("ONCA_IFDATA_MAX_RESOLVE", "150")))
+                stats: dict[str, Any] = {}
+                recs = bcb_ifdata.map_to_entities(
+                    shares,
+                    resolver=resolve_entities,
+                    base_date=base_date,
+                    start=cursor,
+                    limit=window,
+                    # Stop cleanly a little before the SIGALRM budget would kill
+                    # the source, so the window's work is persisted and the cursor
+                    # advances (a hard kill here would livelock the walk).
+                    deadline=min(
+                        deadline, time.monotonic() + max(10, int(per_source * 0.7))
+                    ),
+                    stats=stats,
+                )
+                nxt = min(cursor + int(stats.get("processed") or window), len(shares))
+                bcb_ifdata.update_store(
+                    recs,
+                    bucket,
+                    index=index,
+                    progress={
+                        "base_date": base_date,
+                        "cursor": nxt,
+                        "universe": len(shares),
+                        "top": market,
+                    },
+                )
+                print(
+                    f"IF.data market: base_date {base_date} resolved "
+                    f"{cursor}-{nxt}/{len(shares)} (+{len(recs)} entities)"
+                )
+        return market
 
     # ADR 022 Tier A — prudential SOLVENCY (Índice de Basileia et al.) from IF.data Relatório 5.
     # Gated OFF by default: the ADR §4 home for this quarterly data is the separate MONTHLY
@@ -1317,111 +1399,86 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # the generic value-state move engine (same primitives as Pix/juros/Informe
     # Diário) — first run seeds a baseline only. Independently gated from
     # ONCA_ENTITY_DISCOVERY so either can be disabled without the other.
-    fiagro_rows: list[dict[str, Any]] = []
-    fiagro_pl_moves: list[dict[str, Any]] = []
-    fiagro_cotista_moves: list[dict[str, Any]] = []
-    fiagro_new_regs: list[dict[str, Any]] = []
-    if os.environ.get("ONCA_FIAGRO_SIGNAL", "true").lower() in ("1", "true", "yes"):
-        try:
-            with _source_budget("FIAGRO moves", deadline, per_source):
-                fiagro_min_pl = float(os.environ.get("ONCA_FIAGRO_MIN_PL", "50000000"))
-                pl_threshold = float(
-                    os.environ.get("ONCA_FIAGRO_PL_MOVE_THRESHOLD_PCT", "15.0")
-                )
-                cotista_threshold = float(
-                    os.environ.get("ONCA_FIAGRO_COTISTA_MOVE_THRESHOLD_PCT", "30.0")
-                )
-                reg_lookback = int(
-                    os.environ.get("ONCA_FIAGRO_NEW_REG_LOOKBACK_DAYS", "60")
-                )
-                fiagro_rows = cvm_fiagro.fetch_fiagro(min_pl=fiagro_min_pl)
-                fiagro_pl_moves = _moves_since_last_run(
-                    "cvm_fiagro_pl",
-                    cvm_fiagro.for_pl_moves(fiagro_rows),
-                    key_field="cnpj",
-                    value_field="pl",
-                    min_pct=pl_threshold,
-                )
-                fiagro_cotista_moves = _moves_since_last_run(
-                    "cvm_fiagro_cotistas",
-                    cvm_fiagro.for_cotista_moves(fiagro_rows),
-                    key_field="cnpj",
-                    value_field="cotistas",
-                    min_pct=cotista_threshold,
-                )
-                reg_candidates = cvm_fiagro.for_new_registrations(
-                    fiagro_rows, lookback_days=reg_lookback
-                )
-                fiagro_new_regs = _new_since_last_run(
-                    "cvm_fiagro_newreg", reg_candidates, seed_if_empty=True
-                )
-        except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
-            print(f"Warning: CVM FIAGRO moves fetch failed: {exc}")
-    fiagro_moves_all = fiagro_pl_moves + fiagro_cotista_moves + fiagro_new_regs
-    # Attribute each FIAGRO move to exactly ONE entity by CNPJ — a structured id
-    # that is authoritative. This bypasses the free-text alias matcher, which
-    # over-resolves FIAGRO funds via their shared *administrator* name (dozens of
-    # funds share one DTVM/corretora admin, so a single move would otherwise fan
-    # out to every co-administered fund). Drop a move whose CNPJ isn't yet a
-    # registry entity — there's no subject to attribute it to (discovery adds the
-    # fund later, after which its next move resolves).
-    if fiagro_moves_all:
-        try:
-            from src.synth import entity_registry as _fiagro_reg
+    def _fetch_fiagro() -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+        fiagro_min_pl = float(os.environ.get("ONCA_FIAGRO_MIN_PL", "50000000"))
+        pl_threshold = float(
+            os.environ.get("ONCA_FIAGRO_PL_MOVE_THRESHOLD_PCT", "15.0")
+        )
+        cotista_threshold = float(
+            os.environ.get("ONCA_FIAGRO_COTISTA_MOVE_THRESHOLD_PCT", "30.0")
+        )
+        reg_lookback = int(
+            os.environ.get("ONCA_FIAGRO_NEW_REG_LOOKBACK_DAYS", "60")
+        )
+        fiagro_rows = cvm_fiagro.fetch_fiagro(min_pl=fiagro_min_pl)
+        fiagro_pl_moves = _moves_since_last_run(
+            "cvm_fiagro_pl",
+            cvm_fiagro.for_pl_moves(fiagro_rows),
+            key_field="cnpj",
+            value_field="pl",
+            min_pct=pl_threshold,
+        )
+        fiagro_cotista_moves = _moves_since_last_run(
+            "cvm_fiagro_cotistas",
+            cvm_fiagro.for_cotista_moves(fiagro_rows),
+            key_field="cnpj",
+            value_field="cotistas",
+            min_pct=cotista_threshold,
+        )
+        reg_candidates = cvm_fiagro.for_new_registrations(
+            fiagro_rows, lookback_days=reg_lookback
+        )
+        fiagro_new_regs = _new_since_last_run(
+            "cvm_fiagro_newreg", reg_candidates, seed_if_empty=True
+        )
+        fiagro_moves_all = fiagro_pl_moves + fiagro_cotista_moves + fiagro_new_regs
+        # Attribute each FIAGRO move to exactly ONE entity by CNPJ — a structured id
+        # that is authoritative. This bypasses the free-text alias matcher, which
+        # over-resolves FIAGRO funds via their shared *administrator* name (dozens of
+        # funds share one DTVM/corretora admin, so a single move would otherwise fan
+        # out to every co-administered fund). Drop a move whose CNPJ isn't yet a
+        # registry entity — there's no subject to attribute it to (discovery adds the
+        # fund later, after which its next move resolves).
+        if fiagro_moves_all:
+            try:
+                from src.synth import entity_registry as _fiagro_reg
 
-            _resolved: list[dict[str, Any]] = []
-            for _ev in fiagro_moves_all:
-                _eid = _fiagro_reg.resolve_by_cnpj(str(_ev.get("cnpj") or ""))
-                if _eid:
-                    _ev["_entities"] = [_eid]
-                    _resolved.append(_ev)
-            fiagro_moves_all = _resolved
-        except Exception as exc:  # pragma: no cover - never emit unattributed fan-out
-            print(f"Warning: FIAGRO entity resolution failed, dropping signal: {exc}")
-            fiagro_moves_all = []
+                _resolved: list[dict[str, Any]] = []
+                for _ev in fiagro_moves_all:
+                    _eid = _fiagro_reg.resolve_by_cnpj(str(_ev.get("cnpj") or ""))
+                    if _eid:
+                        _ev["_entities"] = [_eid]
+                        _resolved.append(_ev)
+                fiagro_moves_all = _resolved
+            except Exception as exc:  # pragma: no cover - never emit unattributed fan-out
+                print(f"Warning: FIAGRO entity resolution failed, dropping signal: {exc}")
+                fiagro_moves_all = []
+        return fiagro_rows, fiagro_moves_all, {
+            "pl_move_count": len(fiagro_pl_moves),
+            "cotista_move_count": len(fiagro_cotista_moves),
+            "new_registration_count": len(fiagro_new_regs),
+        }
 
     # Pix traction — month-over-month volume moves (first run seeds baseline only).
-    pix_by_inst: list[dict[str, Any]] = []
-    pix_moves: list[dict[str, Any]] = []
-    try:
-        with _source_budget("BCB Pix", deadline, per_source):
-            pix_rows = bcb_pix.fetch_recent()
-            pix_by_inst = bcb_pix.by_institution(
-                pix_rows, watchlist_ispb=competitor_ispb or None
-            )
-            pix_moves = _moves_since_last_run(
-                "bcb_pix",
-                pix_by_inst,
-                key_field="ispb",
-                value_field="tx_value",
-                min_pct=pix_threshold,
-            )
-    except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
-        print(f"Warning: BCB Pix fetch failed: {exc}")
+    def _fetch_pix() -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+        pix_rows = bcb_pix.fetch_recent()
+        pix_by_inst = bcb_pix.by_institution(
+            pix_rows, watchlist_ispb=competitor_ispb or None
+        )
+        return pix_by_inst, pix_by_inst, {}
 
     # Juros médios — relative rate moves by institution × modality.
-    juros_focus: list[dict[str, Any]] = []
-    juros_moves: list[dict[str, Any]] = []
-    try:
-        with _source_budget("BCB juros médios", deadline, per_source):
-            juros_rows = bcb_juros.fetch_daily()
-            modalities = juros_modalities
-            if not modalities and juros_use_defaults:
-                modalities = list(bcb_juros.DEFAULT_MODALITY_FILTERS)
-            juros_focus = bcb_juros.filter_rates(
-                juros_rows,
-                institutions=juros_competitors or None,
-                modalities=modalities or None,
-            )
-            juros_moves = _moves_since_last_run(
-                "bcb_juros",
-                bcb_juros.for_moves(juros_focus),
-                key_field="move_key",
-                value_field="rate_year",
-                min_pct=juros_threshold,
-            )
-    except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
-        print(f"Warning: BCB juros médios fetch failed: {exc}")
+    def _fetch_juros() -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+        juros_rows = bcb_juros.fetch_daily()
+        modalities = juros_modalities
+        if not modalities and juros_use_defaults:
+            modalities = list(bcb_juros.DEFAULT_MODALITY_FILTERS)
+        juros_focus = bcb_juros.filter_rates(
+            juros_rows,
+            institutions=juros_competitors or None,
+            modalities=modalities or None,
+        )
+        return juros_focus, bcb_juros.for_moves(juros_focus), {}
 
     # CVM ofertas — produced by the registry loop below.
 
@@ -1596,17 +1653,57 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             cade.fetch_atos(lookback_days=_cade_lookback), resolver=_resolve_entities),
         "sanctions": _fetch_sanctions,
         "contracts": _fetch_contracts,
+        # C1 (#303): the numeric moves sources (delta="moves") and the IF.data snapshot.
+        "pix_moves": _fetch_pix,
+        "juros_moves": _fetch_juros,
+        "inf_diario_moves": lambda: (
+            lambda rows: (rows, cvm_inf_diario.for_moves(rows), {}))(
+            cvm_inf_diario.fetch_latest(watchlist_admins=inf_diario_watch, top_n=inf_diario_top_n)),
+        "fiagro_moves": _fetch_fiagro,
+        "market": _fetch_market,
     }
     _STORES: dict[str, Any] = {
         "sanctions": lambda recs: ceis_cnep.update_store(recs, _bucket) if _bucket else None,
         "contracts": lambda recs: pncp_contratos.update_store(recs, _bucket) if _bucket else None,
     }
     _SECTION_EXTRA: dict[str, Any] = {}  # per-source extra keys (e.g. fatos governance_count)
+    # moves: the threshold per source, and whether it has anything to do this run (a source
+    # that is not applicable is skipped before its budget: no state, no health row).
+    _MOVE_MIN_PCT = {"pix_moves": pix_threshold, "juros_moves": juros_threshold,
+                     "inf_diario_moves": inf_diario_threshold}
+    _APPLICABLE = {"inf_diario_moves": bool(inf_diario_watch)}
+    # section extras computed from a moves run: (tracked, aux) -> keys between the tracked
+    # count and move_count
+    _MOVES_EXTRA: dict[str, Any] = {
+        "inf_diario_moves": lambda t, aux: {"as_of": (t[0].get("date") if t else None)},
+        "fiagro_moves": lambda t, aux: {
+            "pl_move_count": aux.get("pl_move_count", 0),
+            "cotista_move_count": aux.get("cotista_move_count", 0),
+            "new_registration_count": aux.get("new_registration_count", 0)},
+    }
+    _STATIC_SECTION: dict[str, Any] = {
+        "market": lambda recs: {"count": len(recs), "items": recs, "context": recs},
+    }
     loop_results: dict[str, tuple[list[dict[str, Any]], list[dict[str, Any]]]] = {}
     loop_sections: dict[str, dict[str, Any]] = {}
     for _spec in registry.active(_active_vertical()):
         _fetch = _FETCHERS.get(_spec.id)
         if _fetch is None:  # not (yet) loop-migrated — handled by a bespoke block
+            continue
+        if _spec.delta == "moves":
+            _tracked, _moves, _aux = _gated_moves(
+                _spec, deadline=deadline, per_source=per_source, fetch=_fetch,
+                min_pct=_MOVE_MIN_PCT.get(_spec.id), applicable=_APPLICABLE.get(_spec.id, True),
+            )
+            loop_results[_spec.id] = (_tracked, _moves)
+            _extra = _MOVES_EXTRA.get(_spec.id)
+            loop_sections[_spec.id] = _moves_section(
+                _tracked, _moves, _spec, **(_extra(_tracked, _aux) if _extra else {}))
+            continue
+        if _spec.delta == "none":
+            _records = _gated_static(_spec, deadline=deadline, per_source=per_source, fetch=_fetch)
+            loop_results[_spec.id] = (_records, [])
+            loop_sections[_spec.id] = _STATIC_SECTION[_spec.id](_records)
             continue
         _records, _new = _gated_source(
             _spec, deadline=deadline, per_source=per_source,
@@ -1740,25 +1837,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as exc:  # pragma: no cover
             print(f"Warning: SEC EDGAR fetch failed: {exc}")
 
-    # CVM Informe Diário — fund AUM moves for watchlisted admins.
-    inf_diario_rows: list[dict[str, Any]] = []
-    inf_diario_moves: list[dict[str, Any]] = []
-    if inf_diario_watch:
-        try:
-            with _source_budget("CVM Informe Diário", deadline, per_source):
-                inf_diario_rows = cvm_inf_diario.fetch_latest(
-                    watchlist_admins=inf_diario_watch,
-                    top_n=inf_diario_top_n,
-                )
-                inf_diario_moves = _moves_since_last_run(
-                    "cvm_inf_diario",
-                    cvm_inf_diario.for_moves(inf_diario_rows),
-                    key_field="move_key",
-                    value_field="pl",
-                    min_pct=inf_diario_threshold,
-                )
-        except Exception as exc:  # pragma: no cover
-            print(f"Warning: CVM Informe Diário fetch failed: {exc}")
+    # CVM Informe Diário — fund AUM moves: a registry-loop source (C1, _fetch_inf_diario).
 
     # Corpus gets document-like signals only (not numeric Pix/juros/AUM moves).
     _populate_corpus_and_sync(
@@ -1772,29 +1851,15 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # Stage B fusion needs more than deltas: after seeding, items[] is often
     # empty while pulls still succeed. Attach compact context samples and
     # tag delta rows with is_new for prioritization.
-    payload = {
-        # ADR 019 — sections for the registry-loop sources (regulatory/competitor/ofertas/
-        # dou/cade/sanctions/contracts) are built IN the loop; splice them in. The bespoke
-        # sources below still build their own sections (special shapes / side effects).
+    sections = {
+        # ADR 019 — sections for the registry-loop sources are built IN the loop; the bespoke
+        # sources below still build their own (special shapes / side effects).
         **loop_sections,
-        "market": {"count": len(market), "items": market, "context": market},
         "new_entrants": {
             "count": len(authorized),
             "new_count": len(new_entrants),
             "items": _tag_new(new_entrants[:8]),
             "context": _strip_raw(new_entrants[:8] or authorized[:5]),
-        },
-        "pix_moves": {
-            "institutions_tracked": len(pix_by_inst),
-            "move_count": len(pix_moves),
-            "items": _tag_new(pix_moves[:10]),
-            "context": _strip_raw(pix_by_inst[:15]),
-        },
-        "juros_moves": {
-            "series_tracked": len(juros_focus),
-            "move_count": len(juros_moves),
-            "items": _tag_new(juros_moves[:10]),
-            "context": _strip_raw(juros_focus[:15]),
         },
         # sec_filings + fatos are still bespoke (corpus write / alias accrual side effects).
         "sec_filings": _lens_section(sec_filings_rows, new_sec, registry.by_id("sec_filings")),
@@ -1824,28 +1889,13 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         "bcb_reclamacoes": bcb_reclamacoes_summary,
         "ans_igr": ans_igr_summary,
         "consumidor_gov": consumidor_gov_summary,  # #63 (default-off, token-gated)
-        "inf_diario_moves": {
-            "funds_tracked": len(inf_diario_rows),
-            "as_of": (inf_diario_rows[0].get("date") if inf_diario_rows else None),
-            "move_count": len(inf_diario_moves),
-            "items": _tag_new(inf_diario_moves[:10]),
-            # Top-by-PL sample for entity fusion (already sorted in fetch_latest).
-            "context": _strip_raw(inf_diario_rows[:15]),
-        },
-        # Agri-funds (FIAGRO) moves — task b. Reuses the "funds" lens (candidates.py
-        # _collect_signals) so a solo material move can alert on its own, the same
-        # as a new CVM fund-class filing.
-        "fiagro_moves": {
-            "funds_tracked": len(fiagro_rows),
-            "pl_move_count": len(fiagro_pl_moves),
-            "cotista_move_count": len(fiagro_cotista_moves),
-            "new_registration_count": len(fiagro_new_regs),
-            "move_count": len(fiagro_moves_all),
-            "items": _tag_new(fiagro_moves_all[:12]),
-            "context": _strip_raw(fiagro_rows[:15]),
-        },
-        "source": "lambda_port",
     }
+    # The digest's key order is part of its bytes (and what synth has always read): assemble
+    # it in the established order, whichever path built each section. A section not in the
+    # list (a newly registered source) goes before the trailing "source" marker.
+    payload = {k: sections.pop(k) for k in _PAYLOAD_ORDER if k in sections}
+    payload.update(sections)
+    payload["source"] = "lambda_port"
 
     # ADR 019 Phase 3 — vertical gating: drop the lens sections of sources not applicable to
     # the active vertical (each digest section key IS the source id). Sector-agnostic sources
