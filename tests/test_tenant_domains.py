@@ -61,3 +61,10 @@ def test_context_upsert_is_one_entry_per_tenant():
 def test_custom_domain_survives_an_operator_reput():
     from src.dashboard import tenant_config as tc
     assert "custom_domain" in tc._PREF_FIELDS
+
+
+def test_template_has_an_explicit_tls12_sni_certificate():
+    """Live 2026-11-02: with no ViewerCertificate CloudFront defaulted to SNI + SSLv3 and refused."""
+    block = APP[APP.index('"OncaTenantCdn"'):APP.index("def _add_behavior")]
+    assert '"DistributionConfig.ViewerCertificate"' in block
+    assert '"SslSupportMethod": "sni-only"' in block and '"MinimumProtocolVersion": "TLSv1.2_2021"' in block

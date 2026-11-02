@@ -813,6 +813,14 @@ class OncaPrototypeStack(Stack):
         _tenant_cfn = tenant_cdn.node.default_child
         _tenant_cfn.add_property_override("DistributionConfig.ConnectionMode", "tenant-only")
         _tenant_cfn.add_property_deletion_override("DistributionConfig.IPV6Enabled")
+        # Without a certificate CloudFront defaults to SNI + SSLv3, which it then rejects (live
+        # 2026-11-02 rollback). The template carries the onssa.org cert, sni-only, TLS 1.2 (the
+        # CloudFormation multi-tenant example's shape); each tenant overrides it with its own.
+        _tenant_cfn.add_property_override("DistributionConfig.ViewerCertificate", {
+            "AcmCertificateArn": onssa_certificate.certificate_arn,
+            "SslSupportMethod": "sni-only",
+            "MinimumProtocolVersion": "TLSv1.2_2021",
+        })
         tenant_domains = [d for d in (self.node.try_get_context("tenant_domains") or []) if d.get("domain")]
         for _td in tenant_domains:
             if not _td.get("cert_arn"):
