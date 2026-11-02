@@ -163,13 +163,15 @@ def extract_km1(doc: Any) -> dict[str, Any]:
         row = _find_row(doc, code)
         v = _num(row.get("t")) if row else None
         pct = round(v * 100, 2) if v is not None else None
-        if pct is not None and not (0 <= pct <= _bounds[metric]):
-            pct = None                      # implausible → bad parse, drop
+        # 0 is "not applicable", not a ratio: Stone (outside the LCR rule) reports LCR 0, which
+        # read as a 0% "crítica" liquidity alarm (live 2026-11-02).
+        if pct is not None and not (0 < pct <= _bounds[metric]):
+            pct = None                      # implausible or not applicable → drop
         out[metric] = pct
     lcr = _find_row(doc, "km1_17")
     if lcr:
         series = [_num(lcr.get(c)) for c in ("t_4", "t_3", "t_2", "t_1", "t")]
-        out["lcr_series_pct"] = [round(s * 100, 1) if s is not None else None for s in series]
+        out["lcr_series_pct"] = [round(s * 100, 1) if s else None for s in series]
         if out.get("lcr_pct") is not None and _num(lcr.get("t_1")) not in (None, 0):
             out["lcr_qoq_pp"] = round(out["lcr_pct"] - _num(lcr.get("t_1")) * 100, 1)
     return out

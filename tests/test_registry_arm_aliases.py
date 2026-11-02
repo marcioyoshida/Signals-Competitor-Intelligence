@@ -76,3 +76,11 @@ def test_banks_missing_from_the_stored_index_are_fetched_first(monkeypatch):
     pilar3_dasfn.build(res, resolver=lambda i: [i["title"][:3].lower()], industries_of=lambda e: None,
                        known={"1", "2"}, sleep=lambda s: None)
     assert seen == ["ZZZ BANCO", "AAA BANCO", "BBB BANCO"]
+
+
+def test_a_zero_km1_ratio_is_not_applicable():
+    """Stone reports LCR 0 (outside the LCR rule): it must not become a 0% "crítica" alarm."""
+    doc = {"km1_7": {"t": 0.1566}, "km1_17": {"t": 0, "t_1": 0, "t_2": 0, "t_3": 0, "t_4": 0}}
+    km = bcb_km1.extract_km1(doc)
+    assert km["basileia_pct"] == 15.66 and km["lcr_pct"] is None and bcb_km1.lcr_band(km["lcr_pct"]) is None
+    assert km["lcr_series_pct"] == [None] * 5 and "lcr_qoq_pp" not in km

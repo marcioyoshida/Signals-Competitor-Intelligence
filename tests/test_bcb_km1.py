@@ -31,7 +31,7 @@ def test_extract_handles_grouped_and_flat_layouts():
 def test_plausibility_guard_drops_bad_parse():
     b = km.extract_km1(_BAD)
     assert b["basileia_pct"] is None      # 1444% → implausible, dropped
-    assert b["lcr_pct"] == 0.0            # 0 is within bounds (kept)
+    assert b["lcr_pct"] is None           # 0 = not applicable (outside the LCR rule), not a 0% LCR
 
 
 def test_list_wrapped_doc():
