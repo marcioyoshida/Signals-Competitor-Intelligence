@@ -143,3 +143,12 @@ def test_cdk_wires_the_financials_lambda_to_the_kb():
     assert "bedrock:StartIngestionJob" in block
     reqs = (Path(__file__).resolve().parents[1] / "requirements.txt").read_text()
     assert "pypdf" in reqs                                        # the Lambda bundle needs it
+
+
+def test_one_document_per_filing_when_a_bank_resolves_to_two_ids():
+    """Live 2026-11-02: itau and itau-unibanco both matched the 2T26 filing -> two KB copies."""
+    rec = {"company": "ITAU UNIBANCO HOLDING S.A.", "date": "2026-08-04", "url": "https://rad.cvm.gov.br/i"}
+    idx = {"records": {"itau-unibanco": {**rec, "entity": "itau-unibanco"}, "itau": {**rec, "entity": "itau"}}}
+    s3 = _S3()
+    assert pilar3.promote_to_kb(idx, bucket="raw", s3=s3, fetch_pages=lambda u: _text_pages()) == [
+        "pilar3/itau/2026-08-04.txt"]

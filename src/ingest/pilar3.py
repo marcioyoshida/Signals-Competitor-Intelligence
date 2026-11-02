@@ -236,9 +236,14 @@ def promote_to_kb(index: dict[str, Any], *, bucket: str, s3: Any | None = None,
         s3 = boto3.client("s3")
     fetch_pages = fetch_pages or (lambda url: fetch_pdf_pages(url, max_pages=KB_MAX_PAGES))
     written: list[str] = []
-    for rec in ((index or {}).get("records") or {}).values():
-        if not rec.get("entity") or not rec.get("url"):
-            continue
+    # One document per FILING: the registry can resolve one bank to several ids (itau and
+    # itau-unibanco both matched Itaú's 2T26 filing on 2026-11-02). Key it to the first id in sort
+    # order, so the choice is the same every run and the existence seen-set holds.
+    by_url: dict[str, dict[str, Any]] = {}
+    for rec in sorted(((index or {}).get("records") or {}).values(), key=lambda r: r.get("entity") or ""):
+        if rec.get("entity") and rec.get("url"):
+            by_url.setdefault(rec["url"], rec)
+    for rec in by_url.values():
         key = kb_key(rec)
         try:
             s3.head_object(Bucket=bucket, Key=key)
