@@ -11,9 +11,25 @@
     The open decision on Entry billing is resolved: a paid R$ 490/month plan with a
     14-day trial (#187, [ADR 024 pricing](2026-09-12-adr024-pricing.md)).
   - **SaaS: the per-tenant scoped dynamic API and dashboard are live** on the one shared
-    CloudFront distribution. **Not built:** the CloudFront multi-tenant distribution
-    template and per-tenant custom domains (nothing in `infra/`). This is engineering
-    work, but no SaaS tenant has needed it yet. Ticket [#306](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/306) (2026-11-01).
+    CloudFront distribution. **Per-tenant custom domains ([#306](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/306)):
+    template live 2026-11-02** (owner OK for a live test subdomain):
+    - **Template:** `OncaTenantCdn` (EMEG5LW1WFOS4) is a CloudFront multi-tenant distribution
+      (SaaS Manager, `tenant-only`) mirroring every behavior of the live one through
+      `_add_behavior`. The live distribution is unchanged.
+    - **Distribution rules** learnt on the way:
+      - no IPv6, PriceClass or legacy logging settings;
+      - an explicit `sni-only` / TLS 1.2 ViewerCertificate (otherwise SNI+SSLv3 is rejected);
+      - only `cloudfront-js-2.0` functions, so the template uses js-2.0 twins of the edge
+        functions while the live functions stay as they are.
+    - **Tenants** come from `infra/cdk.json` `tenant_domains`. They're created once the ACM cert
+      is issued, and their domains join the V2 Cognito callbacks and the session broker's hosts.
+    - **Provisioning:** `scripts/provision_tenant_domain.py` (cert → Cloudflare DNS →
+      context → deploy → `route`).
+    - **Scoping** is identity-based (`/api/feed`), as on onssa.org.
+    - **Pricing:** the first 10 tenants are free.
+    - **Left:** the test tenant `tenant-test.onssa.org` (QA tenant) waits on DNS. The shared
+      Cloudflare token is rejected (9109), so its ACM validation CNAME can't be written
+      automatically.
   - **Cross-cutting: built.** `tier ∈ {entry, saas, sovereign}` and a separate `plane`
     (`tenant_config.VALID_TIERS` / `VALID_PLANES`).
   - **Sovereign: not deployable yet.** The addendum's decisions are built, but

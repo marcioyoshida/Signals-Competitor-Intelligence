@@ -1,15 +1,32 @@
 # ADR 010 — Agent Chat in the dashboard: a curated, grounded Q&A over the tool's own data
 
-- Status: **Concluded (2026-10-28), except Decision 2.** The live `OncaAgent` (`/api/ask/`)
-  was redeployed on 2026-10-25. Since v1 the Ask panel has become a multi-turn chat on `/exec`
-  (`1af0994`, 2026-10-16, `docs/2026-10-16-ask-chat-requirements.md`), with a per-user daily cap
-  (`ONCA_ASK_DAILY_TURNS`, `OncaAskQuota`). Issues #20 and #21 are closed. The write side shipped
-  separately as ADR-020 `/api/act` (`docs/2026-09-04-adr-write-agent-api-officers.md`). **Not
-  built:** Decision 2, a **Bedrock Guardrail** on the Converse call. No guardrail is attached and
-  none exists for Onça in the account. Input is filtered only by the deterministic scope gate,
-  its hard-refuse/injection cues, and the prompt rule that card text is data, never
-  instructions. Adding a guardrail is optional engineering work, not a blocker. Ticket
-  [#304](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/304) (2026-11-01) waits on the owner's OK for the added cost.
+- Status: **Concluded; Decision 2 shipped 2026-11-02 ([#304](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/304), owner OK for the cost).**
+  The live `OncaAgent` (`/api/ask/`) was redeployed on 2026-10-25. Since v1 the Ask panel has become a
+  multi-turn chat on `/exec` (`1af0994`, 2026-10-16, `docs/2026-10-16-ask-chat-requirements.md`), with a
+  per-user daily cap (`ONCA_ASK_DAILY_TURNS`, `OncaAskQuota`). Issues #20 and #21 are closed. The write
+  side shipped separately as ADR-020 `/api/act` (`docs/2026-09-04-adr-write-agent-api-officers.md`).
+  - **Decision 2 shipped:** Bedrock Guardrail `onca-ask-guardrail` (v2) on the Converse calls of
+    `/api/ask` and `/api/v1/agent/ask` (`ONCA_ASK_GUARDRAIL`).
+  - **Tier:** STANDARD, through the `us.guardrail.v1:0` cross-Region profile. Questions arrive in
+    Portuguese, and CLASSIC covers only English/French/Spanish.
+  - **Denied topics, on the question only:** personal investment advice, personal legal advice,
+    medical advice, personal data of individuals.
+  - **Other filters:** PROMPT_ATTACK on the question, which is sent as the only `guardContent`
+    in place, so retrieved cards are never filtered. Email, phone and CPF are anonymised in
+    answers.
+  - **Interventions:** only a BLOCKED assessment becomes a refusal (`reason: "guardrail"`),
+    never a coverage gap. A masked answer is returned masked.
+  - **No "out of domain" topic**, deliberately: the deterministic scope gate already refuses
+    those, and a fuzzy topic blocked in-scope questions.
+  - **Live check** (`scripts/ask_regression.py --probes`): the PII and advice probes are refused
+    by the guardrail, and the injection probe by the scope gate first. No regression question is
+    refused.
+    - v1 refused "O que o Itaú mudou esta semana?", because a topic example named Itaú. Fixed in
+      v2 (topics on input only, no institution in examples), and validated on a throwaway
+      guardrail before deploy.
+    - Known difference: one weak answer is lost. "Estratégia do BTG em banco digital" used to be
+      answered with BTG's liquidity-risk policy, and is now declined. That holds with or without
+      the duplicate question block.
 - **2026-11-02, entity-scoped KB retrieval ([#309](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/309), `2b73e1f`).**
   When a question names a tracked institution (`named_entities`: every id part as a whole word, or the
   full label phrase; common-word ids such as Original or Inter only when capitalised; dashboard scope first;

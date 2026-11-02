@@ -1,7 +1,7 @@
 # ADR 025 — Agentic API billing (pilot fork: Onça)
 
 - Status: **Onça pilot built and live (2026-09-14, 6898b4d); Entry gate live
-  (2026-10-28, bb0f775); quota and billing half not built.** Was: **Proposed** (2026-09-13).
+  (2026-10-28, bb0f775); Onça-side quota + overage live (2026-11-02, #305).** Was: **Proposed** (2026-09-13).
   - **Live:**
     - The `onca-api-keys` and `onca-api-usage` tables.
     - `POST /api/v1/agent/ask`.
@@ -11,14 +11,24 @@
       tenant's key, including a key minted before a downgrade or a lapsed SaaS subscription.
       Listing and revoking still work. Verified live 2026-10-28 with a temporary key for the
       Entry QA tenant. Before the deploy, `onca-api-keys` held 0 rows.
-  - **Engineering left, mostly in the Storefront repo:**
-    - Stripe metered line items and the usage-reporting job. The canonical Storefront
-      ADR is still Proposed, and the shared-table vs. poll-endpoint sub-decision is open.
-    - Here: no included-quota check. **Owner decision needed:** the only figure is a
-      placeholder in the Storefront ADR ("e.g. Onça SaaS module = 2M tokens/mo"). That ADR
-      also rejects a hard cutoff, so past the quota the overage is metered, not refused.
-      Enforcing a quota needs a real number and the metered overage line item. Onça-side
-      ticket: [#305](https://github.com/marcioyoshida/Signals-Competitor-Intelligence/issues/305) (2026-11-01, blocked on both).
+    - **#305 included quota + overage (2026-11-02):**
+      - **Quota:** the owner decision is **1M tokens per licensed module per month**
+        (`api_usage.QUOTA_PER_MODULE`). A tenant's `api_quota_tokens` on its tenant_config row
+        overrides it.
+      - **Past the quota the call is still served.** The part of each call above the quota is
+        ADDed to the month row's `overage_tokens` and sets `overage = true`. The slice is
+        computed from the atomic post-ADD total, so concurrent calls add up exactly.
+      - **Visible to callers:** every answer carries `X-Onca-Quota-Limit`,
+        `X-Onca-Quota-Remaining` and `X-Onca-Quota-Period`, plus a `quota` block, and the
+        `/api/keys` panel shows usage against the quota.
+      - **Abuse ceiling:** the per-key rate limit is unchanged.
+      - **Verified live** with a temporary QA key. The first run found that `get_tenant_config`
+        dropped the override (fixed in ead39f9). The key, the tenant row and the usage row
+        were deleted or restored afterwards.
+  - **Engineering left, in the Storefront repo:**
+    - Stripe metered line items and the usage-reporting job that reads `overage_tokens`. The
+      canonical Storefront ADR is still Proposed, and the shared-table vs. poll-endpoint
+      sub-decision is open.
     - The other forks have not been replicated.
   - **Owner:** no paying customer exists to meter (2026-10-25).
 - Canonical design (shared across all six Signals forks) lives in the
