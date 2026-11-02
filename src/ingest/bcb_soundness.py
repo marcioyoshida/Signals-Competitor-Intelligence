@@ -339,8 +339,22 @@ def lambda_handler(event: dict[str, Any] | None, context: Any) -> dict[str, Any]
         from src.ingest import bcb_km1
         return bcb_km1.run(bucket)
 
+    def _pilar3() -> Any:            # ADR 022 Phase 6 — Pilar 3 tone corpus + KB grounding (#299)
+        from src.ingest import pilar3
+        on = os.environ.get("ONCA_PILAR3_KB", "").lower() in ("1", "true", "yes")
+        kb_bucket = os.environ.get("ONCA_RAW_BUCKET") if on else None
+        res = pilar3.run(bucket, kb_bucket=kb_bucket)
+        kb_id, ds_id = os.environ.get("ONCA_KB_ID"), os.environ.get("ONCA_KB_DATA_SOURCE_ID")
+        if res.get("kb_written") and kb_id and ds_id:
+            import boto3
+            job = boto3.client("bedrock-agent").start_ingestion_job(knowledgeBaseId=kb_id,
+                                                                     dataSourceId=ds_id)
+            res["kb_ingestion_job"] = (job.get("ingestionJob") or {}).get("ingestionJobId")
+        print(f"pilar3: entities={res.get('entities')} kb_written={res.get('kb_keys')}")
+        return res
+
     for key, fn in (("fundamentals", _fundamentals), ("inadimplencia", _inadimplencia),
-                    ("resultados", _resultados), ("km1", _km1)):
+                    ("resultados", _resultados), ("km1", _km1), ("pilar3", _pilar3)):
         _stage(key, fn)
     print(f"soundness handler done in {time.time() - t0:.1f}s")
     return {"statusCode": 200, "body": json.dumps(result, ensure_ascii=False)}

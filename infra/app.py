@@ -3750,10 +3750,25 @@ class OncaPrototypeStack(Stack):
                 "PYTHONPATH": "/var/task",
                 "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
                 "ONCA_ENTITIES_TABLE": entities_table.table_name,
+                # #299 (ADR 022 Phase 6): Pilar 3 risk-report prose -> the KB data source.
+                "ONCA_PILAR3_KB": "true",
+                "ONCA_RAW_BUCKET": raw_bucket.bucket_name,
+                "ONCA_KB_ID": knowledge_base.attr_knowledge_base_id,
+                "ONCA_KB_DATA_SOURCE_ID": data_source.attr_data_source_id,
             },
         )
         digests_bucket.grant_read_write(financials_fn)   # read prior index + write soundness/
         entities_table.grant_read_data(financials_fn)    # resolve_entities reads the registry
+        # #299: write pilar3/<entity>/<date>.txt to the KB bucket; read = the seen-set check
+        # (HEAD on an existing filing), then one ingestion job when something new was written.
+        raw_bucket.grant_read(financials_fn, "pilar3/*")
+        raw_bucket.grant_put(financials_fn, "pilar3/*")
+        financials_fn.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["bedrock:StartIngestionJob"],
+                resources=[knowledge_base.attr_knowledge_base_arn],
+            )
+        )
 
         # ADR 022 Tier B — monthly COSIF balancete trajectory (a 2nd task on the same monthly SM).
         balancete_fn = lambda_.Function(
