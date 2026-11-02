@@ -37,7 +37,8 @@ class _Ctx:
         return 900_000
 
 
-def _run(monkeypatch, env: dict[str, str] | None = None):
+def _run(monkeypatch, env: dict[str, str] | None = None, after=None):
+    """``after(monkeypatch, rec)`` may swap a stub before the handler runs (completion tests)."""
     calls: list[str] = []
     state: list[str] = []
 
@@ -149,6 +150,8 @@ def _run(monkeypatch, env: dict[str, str] | None = None):
     S(lp.ceis_cnep, "map_to_entities", rec("ceis.map", lambda rows, cnpj_index=None: rows))
     S(lp.ceis_cnep, "update_store", rec("ceis.store", None))
 
+    if after is not None:
+        after(monkeypatch, rec)
     out = lp.lambda_handler({"mode": "structured"}, _Ctx())
     assert out["statusCode"] == 200
     return {"digest": put["lambda-digests/golden.json"].decode("utf-8"),

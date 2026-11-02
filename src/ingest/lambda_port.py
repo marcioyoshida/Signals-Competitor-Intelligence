@@ -340,13 +340,19 @@ def _gated_source(
     per_source: int,
     fetch: "Any",
     store: "Any" = None,
+    post: "Any" = None,
+    applicable: bool = True,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Run one registry source: gate → budget → fetch → delta → optional store.
+    """Run one registry source: gate → budget → fetch → delta → optional store → optional post.
 
     ``fetch()`` returns the source's records; ``store(records)`` persists a durable index
-    when the source is store-integrated. Returns (records, new_records). Best-effort — a
-    failure degrades to ([], []) like every other source here."""
-    if not _source_enabled(spec):
+    when the source is store-integrated. ``post(records, new_records)`` (C2, #303) is the
+    source's own side effect on this run's result (SEC content enrichment, the fatos
+    governance sort, the BCB register certifications), run inside the same budget so its
+    timing and telemetry are what they were. ``applicable=False`` (an empty watchlist) skips
+    the source before its budget. Returns (records, new_records). Best-effort — a failure
+    degrades to ([], []) like every other source here."""
+    if not applicable or not _source_enabled(spec):
         return [], []
     records: list[dict[str, Any]] = []
     new_records: list[dict[str, Any]] = []
@@ -358,6 +364,8 @@ def _gated_source(
             )
             if store is not None and records:
                 store(records)
+            if post is not None:
+                post(records, new_records)
     except Exception as exc:  # pragma: no cover - defensive; upstream best-effort
         print(f"Warning: {spec.label or spec.id} fetch failed: {exc}")
     return records, new_records
@@ -965,34 +973,400 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
             print(f"Warning: prudential solvency fetch failed: {exc}")
 
-    # New entrants — authorized-entities registry (seed suppressed on first run).
-    authorized: list[dict[str, Any]] = []
-    new_entrants: list[dict[str, Any]] = []
+
+    # Financial statements (#7) moved OUT of this handler by #145 / ADR 028. They now run
+    # as CvmStatementsTask on the monthly OncaFinancialsPipeline
+    # (`cvm_financials.lambda_handler`). CVM publishes quarterly; downloading a ~30MB
+    # package three times a day against this handler's source budget bought nothing, and
+    # the gate here (`ONCA_FINANCIALS`) was never set in CDK, so it never ran at all.
+    # Deliberately no fallback: two writers to financials/index.json is how a fresh store
+    # gets overwritten by a stale one.
+
+    # FIAGRO agri-funds — PL / cotista moves + newly-registered classes as
+    # narrative-ready signal (task b). Entity discovery above only populates the
+    # registry; without this, 0 agri-funds narratives ever reach synth. Reuses
+    # the generic value-state move engine (same primitives as Pix/juros/Informe
+    # Diário) — first run seeds a baseline only. Independently gated from
+    # ONCA_ENTITY_DISCOVERY so either can be disabled without the other.
+    def _fetch_fiagro() -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+        fiagro_min_pl = float(os.environ.get("ONCA_FIAGRO_MIN_PL", "50000000"))
+        pl_threshold = float(
+            os.environ.get("ONCA_FIAGRO_PL_MOVE_THRESHOLD_PCT", "15.0")
+        )
+        cotista_threshold = float(
+            os.environ.get("ONCA_FIAGRO_COTISTA_MOVE_THRESHOLD_PCT", "30.0")
+        )
+        reg_lookback = int(
+            os.environ.get("ONCA_FIAGRO_NEW_REG_LOOKBACK_DAYS", "60")
+        )
+        fiagro_rows = cvm_fiagro.fetch_fiagro(min_pl=fiagro_min_pl)
+        fiagro_pl_moves = _moves_since_last_run(
+            "cvm_fiagro_pl",
+            cvm_fiagro.for_pl_moves(fiagro_rows),
+            key_field="cnpj",
+            value_field="pl",
+            min_pct=pl_threshold,
+        )
+        fiagro_cotista_moves = _moves_since_last_run(
+            "cvm_fiagro_cotistas",
+            cvm_fiagro.for_cotista_moves(fiagro_rows),
+            key_field="cnpj",
+            value_field="cotistas",
+            min_pct=cotista_threshold,
+        )
+        reg_candidates = cvm_fiagro.for_new_registrations(
+            fiagro_rows, lookback_days=reg_lookback
+        )
+        fiagro_new_regs = _new_since_last_run(
+            "cvm_fiagro_newreg", reg_candidates, seed_if_empty=True
+        )
+        fiagro_moves_all = fiagro_pl_moves + fiagro_cotista_moves + fiagro_new_regs
+        # Attribute each FIAGRO move to exactly ONE entity by CNPJ — a structured id
+        # that is authoritative. This bypasses the free-text alias matcher, which
+        # over-resolves FIAGRO funds via their shared *administrator* name (dozens of
+        # funds share one DTVM/corretora admin, so a single move would otherwise fan
+        # out to every co-administered fund). Drop a move whose CNPJ isn't yet a
+        # registry entity — there's no subject to attribute it to (discovery adds the
+        # fund later, after which its next move resolves).
+        if fiagro_moves_all:
+            try:
+                from src.synth import entity_registry as _fiagro_reg
+
+                _resolved: list[dict[str, Any]] = []
+                for _ev in fiagro_moves_all:
+                    _eid = _fiagro_reg.resolve_by_cnpj(str(_ev.get("cnpj") or ""))
+                    if _eid:
+                        _ev["_entities"] = [_eid]
+                        _resolved.append(_ev)
+                fiagro_moves_all = _resolved
+            except Exception as exc:  # pragma: no cover - never emit unattributed fan-out
+                print(f"Warning: FIAGRO entity resolution failed, dropping signal: {exc}")
+                fiagro_moves_all = []
+        return fiagro_rows, fiagro_moves_all, {
+            "pl_move_count": len(fiagro_pl_moves),
+            "cotista_move_count": len(fiagro_cotista_moves),
+            "new_registration_count": len(fiagro_new_regs),
+        }
+
+    # Pix traction — month-over-month volume moves (first run seeds baseline only).
+    def _fetch_pix() -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+        pix_rows = bcb_pix.fetch_recent()
+        pix_by_inst = bcb_pix.by_institution(
+            pix_rows, watchlist_ispb=competitor_ispb or None
+        )
+        return pix_by_inst, pix_by_inst, {}
+
+    # Juros médios — relative rate moves by institution × modality.
+    def _fetch_juros() -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+        juros_rows = bcb_juros.fetch_daily()
+        modalities = juros_modalities
+        if not modalities and juros_use_defaults:
+            modalities = list(bcb_juros.DEFAULT_MODALITY_FILTERS)
+        juros_focus = bcb_juros.filter_rates(
+            juros_rows,
+            institutions=juros_competitors or None,
+            modalities=modalities or None,
+        )
+        return juros_focus, bcb_juros.for_moves(juros_focus), {}
+
+    # CVM ofertas — produced by the registry loop below.
+
+
+    # Diário Oficial (dou) — produced by the registry loop below.
+
+    # CADE antitrust (#61) — produced by the registry loop below (fetch resolves the merger
+    # parties by name; see the "antitrust" fetcher).
+    from src.synth.entities import resolve_entities as _resolve_entities
+
+    # BCB macro — Copom/Selic decision + weekly Focus expectations (market-wide,
+    # not entity-tied; surfaces as standalone "macro" cards). Best-effort.
+    macro_selic: dict[str, Any] | None = None
+    macro_focus: list[dict[str, Any]] = []
+    if os.environ.get("ONCA_MACRO", "true").lower() in ("1", "true", "yes"):
+        try:
+            with _source_budget("BCB macro", deadline, per_source):
+                macro_selic = bcb_macro.fetch_selic()
+                macro_focus = bcb_macro.fetch_focus()
+        except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
+            print(f"Warning: BCB macro fetch failed: {exc}")
+
+    # DataJud (CNJ) — corporate-distress filings (recuperação judicial / falência).
+    # Party-name-scrubbed public API, so this is a MACRO sector-distress signal
+    # (filing volume/trend), not entity-tied (issue #25). Best-effort; off via env.
+    distress_summary: dict[str, Any] | None = None
+    if os.environ.get("ONCA_DATAJUD", "true").lower() in ("1", "true", "yes"):
+        try:
+            with _source_budget("DataJud RJ", deadline, per_source):
+                tribs = _csv_env("ONCA_DATAJUD_TRIBUNALS") or list(datajud.DEFAULT_TRIBUNALS)
+                distress = datajud.fetch_recuperacao_judicial(
+                    tribs, lookback_days=int(os.environ.get("ONCA_DATAJUD_LOOKBACK_DAYS", "90"))
+                )
+                new_distress = _new_since_last_run("datajud_rj", distress, seed_if_empty=True)
+                distress_summary = {
+                    **datajud.summarize(distress),
+                    "new_count": len(new_distress),
+                    "items": _tag_new(new_distress[:12]),
+                }
+        except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
+            print(f"Warning: DataJud fetch failed: {exc}")
+
+    # BCB complaints ranking — OFFICIAL quarterly consumer-complaints ranking per
+    # institution (issue #31, the Reclame Aqui alternative). Public Olinda OData,
+    # entity-tied; writes a durable bcb_reclamacoes/index.json store. Best-effort.
+    bcb_reclamacoes_summary: dict[str, Any] | None = None
+    if os.environ.get("ONCA_BCB_RECLAMACOES", "true").lower() in ("1", "true", "yes"):
+        bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
+        try:
+            with _source_budget("BCB reclamações", deadline, per_source):
+                from src.synth.entities import resolve_entities
+
+                rows = bcb_reclamacoes.fetch_ranking()
+                recs = bcb_reclamacoes.map_to_entities(rows, resolver=resolve_entities)
+                if recs and bucket:
+                    bcb_reclamacoes.update_store(recs, bucket)
+                bcb_reclamacoes_summary = {
+                    **bcb_reclamacoes.summarize(recs),
+                    "items": recs[:12],
+                }
+        except Exception as exc:  # pragma: no cover - defensive; upstream best-effort
+            print(f"Warning: BCB reclamações fetch failed: {exc}")
+
+    # ANS IGR (#140) — the same reputation shape for saúde suplementar, extending the
+    # signal past BCB-supervised banks. Resolution is CNPJ-only via the ANS cadop bridge;
+    # there is deliberately no name fallback (see ans_igr's docstring). DEFAULT-OFF until
+    # the health-plan sub-entities (ADR-017) are registered, since until then almost
+    # nothing resolves and the store would just be empty.
+    ans_igr_summary: dict[str, Any] | None = None
+    if os.environ.get("ONCA_ANS_IGR", "false").lower() in ("1", "true", "yes"):
+        bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
+        try:
+            with _source_budget("ANS IGR", deadline, per_source):
+                ans_igr_summary = ans_igr.run(bucket)
+        except Exception as exc:  # pragma: no cover - defensive; upstream best-effort
+            print(f"Warning: ANS IGR fetch failed: {exc}")
+
+    # consumidor.gov.br complaints (#63) — cross-industry consumer reputation, the general
+    # form of bcb_reclamacoes. DEFAULT-OFF + token-gated: the source is resolved via the
+    # dados.gov.br catalog ([[gov_dados]]), whose GOV_DADOS_TOKEN is currently rejected, so
+    # this is inert until the token is regenerated. Durable store, like bcb_reclamacoes.
+    consumidor_gov_summary: dict[str, Any] | None = None
+    if os.environ.get("ONCA_CONSUMIDOR_GOV", "false").lower() in ("1", "true", "yes"):
+        bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
+        try:
+            with _source_budget("consumidor.gov", deadline, per_source):
+                from src.synth.entities import resolve_entities
+
+                rows = consumidor_gov.fetch_indicators(
+                    min_complaints=int(os.environ.get("ONCA_CONSUMIDOR_MIN_COMPLAINTS", "30")))
+                recs = consumidor_gov.map_to_entities(rows, resolver=resolve_entities)
+                if recs and bucket:
+                    consumidor_gov.update_store(recs, bucket)
+                consumidor_gov_summary = {**consumidor_gov.summarize(recs), "items": recs[:12]}
+        except Exception as exc:  # pragma: no cover - defensive; upstream best-effort
+            print(f"Warning: consumidor.gov fetch failed: {exc}")
+
+    # CEIS/CNEP federal sanctions (#60) — counterparty-integrity, sector-agnostic. Only
+    # sanctions resolving (CNPJ-root first) to a tracked entity are kept; a durable
+    # sanctions/index.json store holds state and _new_since_last_run drives the delta
+    # (seed-suppressed so the historical backlog does not flood the first run).
+    def _fetch_sanctions() -> list[dict[str, Any]]:
+        from src.synth import entity_registry
+
+        # CNPJ-only resolution — no registry, no signal (a sanction binds to a specific
+        # legal person; see ceis_cnep docstring).
+        idx = ceis_cnep.build_cnpj_index(
+            entity_registry.list_entities()
+        ) if os.environ.get("ONCA_ENTITIES_TABLE") else {}
+        srows = ceis_cnep.fetch_sanctions() if idx else []
+        return ceis_cnep.map_to_entities(srows, cnpj_index=idx)
+
+    _bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
+
+    def _fetch_contracts() -> list[dict[str, Any]]:
+        from src.synth import entity_registry
+
+        idx = ceis_cnep.build_cnpj_index(
+            entity_registry.list_entities()
+        ) if os.environ.get("ONCA_ENTITIES_TABLE") else {}
+        crows = pncp_contratos.fetch_contracts(
+            days_back=int(os.environ.get("ONCA_PNCP_LOOKBACK_DAYS", "2")),
+            max_pages=int(os.environ.get("ONCA_PNCP_MAX_PAGES", "60")),
+            min_valor=float(os.environ.get("ONCA_PNCP_MIN_VALOR", "0")),
+        ) if idx else []
+        return pncp_contratos.map_to_entities(crows, cnpj_index=idx)
+
+    # ADR 019 — the registry-driven ingest loop. Each standard "document" lens source is one
+    # entry in FETCHERS (its fetch, keyed by spec.id); the loop applies vertical gating + the
+    # wall-clock budget + delta + section-building UNIFORMLY. Adding such a source = a
+    # SourceSpec + one FETCHERS entry, with no bespoke handler block and no payload edit.
+    # (The numeric "moves" sources and the special-shape/side-effecting ones remain bespoke
+    # below — they have distinct mechanics; migrating them is the tracked follow-on.)
+    _cade_lookback = int(os.environ.get("ONCA_CADE_LOOKBACK_DAYS", "45"))
+    cvm_normas_lookback = int(os.environ.get("ONCA_CVM_NORMAS_LOOKBACK_DAYS", "30"))
+    _FETCHERS: dict[str, Any] = {
+        # #175: every regulatory item leaves ingest with severity (+ industries when a covered
+        # industry applies) — BCB normativos here, DOU inside dou.fetch_dou.
+        "regulatory": lambda: federal_acts.annotate(bcb_normativos.fetch_recent(days=lookback_days)),
+        "competitor": lambda: cvm_fundos.fetch_funds(watchlist_admins=competitors),
+        "ofertas": lambda: cvm_ofertas.fetch_recent(
+            lookback_days=ofertas_lookback, watchlist=ofertas_watch or None),
+        # #194 (audit R5): CVM legislação (Resoluções/Instruções/Ofícios-Circulares) + the
+        # gov.br/cvm notícias listing (PAS judgments, SRE stop orders, Ofício-Circular
+        # announcements) — the CVM had no normative/enforcement source at all before this.
+        "cvm_normas": lambda: federal_acts.annotate(
+            cvm_normas.fetch_recent(lookback_days=cvm_normas_lookback)),
+        "dou": lambda: (_dou_with_stats(dou.fetch_dou(
+                            dou_terms, lookback_days=dou_lookback, topic_terms=dou_topics,
+                            topic_organs=dou_topic_organs, max_topic_terms=dou_max_topics,
+                            known_instruments=dou_known))
+                        if (dou_terms or dou_topics) else []),
+        "cade": lambda: cade.map_to_entities(
+            cade.fetch_atos(lookback_days=_cade_lookback), resolver=_resolve_entities),
+        "sanctions": _fetch_sanctions,
+        "contracts": _fetch_contracts,
+        # C1 (#303): the numeric moves sources (delta="moves") and the IF.data snapshot.
+        "pix_moves": _fetch_pix,
+        "juros_moves": _fetch_juros,
+        "inf_diario_moves": lambda: (
+            lambda rows: (rows, cvm_inf_diario.for_moves(rows), {}))(
+            cvm_inf_diario.fetch_latest(watchlist_admins=inf_diario_watch, top_n=inf_diario_top_n)),
+        "fiagro_moves": _fetch_fiagro,
+        "market": _fetch_market,
+        # C2 (#303): the side-effecting lens sources; their side effects are _POST hooks.
+        "new_entrants": lambda: bcb_autorizacoes.fetch_authorized(),
+        "fatos": lambda: cvm_ipe.fetch_material_facts(
+            lookback_days=fatos_lookback, watchlist=fatos_watch, categories=fatos_categories),
+        "sec_filings": lambda: sec_filings.fetch_filings(sec_tickers, lookback_days=sec_lookback),
+    }
+
+    def _post_entrants(records: list[dict[str, Any]], new: list[dict[str, Any]]) -> None:
+        # #74/R2: register-VERIFIED certifications for tracked entities (CNPJ-joined; structured
+        # provenance, never demotes a curated cert). Pure-local over the already-fetched rows.
+        try:
+            _certd = bcb_autorizacoes.apply_verified_certifications(records)
+            if _certd:
+                print(f"R2 certifications: verified {len(_certd)} tracked entities from BCB register")
+        except Exception as exc:  # pragma: no cover - never blocks the entrant scan
+            print(f"Warning: R2 certification stamp failed: {exc}")
+
+    def _post_fatos(records: list[dict[str, Any]], new: list[dict[str, Any]]) -> None:
+        # Governance events are the strategic ones — float them to the
+        # front so they survive the digest item cap and reach synth.
+        new.sort(key=lambda f: not f.get("governance"))
+
+    def _post_sec(records: list[dict[str, Any]], new: list[dict[str, Any]]) -> None:
+        # Metadata first (submissions JSON), then primary-document bodies for the
+        # diffed set + a small context sample so digests/corpus carry text not only URLs.
+        # Corpus: full body for genuinely new filings.
+        if new:
+            try:
+                sec_filings.enrich_with_content(new)
+            except _SourceBudgetExceeded:
+                raise
+            except Exception as exc:  # pragma: no cover
+                print(f"Warning: SEC primary-document fetch failed: {exc}")
+        # Digest context: enrich a few recent rows still missing text
+        # (same object refs as new are skipped via skip_existing).
+        context_need = [r for r in records[:15] if not r.get("text")]
+        if context_need:
+            try:
+                sec_filings.enrich_with_content(context_need)
+            except _SourceBudgetExceeded:
+                raise
+            except Exception as exc:  # pragma: no cover
+                print(f"Warning: SEC context content fetch failed: {exc}")
+
+    _POST: dict[str, Any] = {"new_entrants": _post_entrants, "fatos": _post_fatos,
+                             "sec_filings": _post_sec}
+    _STORES: dict[str, Any] = {
+        "sanctions": lambda recs: ceis_cnep.update_store(recs, _bucket) if _bucket else None,
+        "contracts": lambda recs: pncp_contratos.update_store(recs, _bucket) if _bucket else None,
+    }
+    # per-source extra section keys, computed from (records, new) after the post hook
+    _SECTION_EXTRA: dict[str, Any] = {
+        "fatos": lambda recs, new: {"governance_count": sum(1 for f in new if f.get("governance"))},
+    }
+    # sources whose section has a bespoke shape built after the loop (new_entrants: its count
+    # is the BCB register, its items include the supplementary registries)
+    _DEFERRED_SECTION = {"new_entrants"}
+    # moves: the threshold per source, and whether it has anything to do this run (a source
+    # that is not applicable is skipped before its budget: no state, no health row).
+    _MOVE_MIN_PCT = {"pix_moves": pix_threshold, "juros_moves": juros_threshold,
+                     "inf_diario_moves": inf_diario_threshold}
+    _APPLICABLE = {"inf_diario_moves": bool(inf_diario_watch), "fatos": bool(fatos_watch),
+                   "sec_filings": bool(sec_tickers)}
+    # section extras computed from a moves run: (tracked, aux) -> keys between the tracked
+    # count and move_count
+    _MOVES_EXTRA: dict[str, Any] = {
+        "inf_diario_moves": lambda t, aux: {"as_of": (t[0].get("date") if t else None)},
+        "fiagro_moves": lambda t, aux: {
+            "pl_move_count": aux.get("pl_move_count", 0),
+            "cotista_move_count": aux.get("cotista_move_count", 0),
+            "new_registration_count": aux.get("new_registration_count", 0)},
+    }
+    _STATIC_SECTION: dict[str, Any] = {
+        "market": lambda recs: {"count": len(recs), "items": recs, "context": recs},
+    }
+    loop_results: dict[str, tuple[list[dict[str, Any]], list[dict[str, Any]]]] = {}
+    loop_sections: dict[str, dict[str, Any]] = {}
+    for _spec in registry.active(_active_vertical()):
+        _fetch = _FETCHERS.get(_spec.id)
+        if _fetch is None:  # not (yet) loop-migrated — handled by a bespoke block
+            continue
+        if _spec.delta == "moves":
+            _tracked, _moves, _aux = _gated_moves(
+                _spec, deadline=deadline, per_source=per_source, fetch=_fetch,
+                min_pct=_MOVE_MIN_PCT.get(_spec.id), applicable=_APPLICABLE.get(_spec.id, True),
+            )
+            loop_results[_spec.id] = (_tracked, _moves)
+            _extra = _MOVES_EXTRA.get(_spec.id)
+            loop_sections[_spec.id] = _moves_section(
+                _tracked, _moves, _spec, **(_extra(_tracked, _aux) if _extra else {}))
+            continue
+        if _spec.delta == "none":
+            _records = _gated_static(_spec, deadline=deadline, per_source=per_source, fetch=_fetch)
+            loop_results[_spec.id] = (_records, [])
+            loop_sections[_spec.id] = _STATIC_SECTION[_spec.id](_records)
+            continue
+        _records, _new = _gated_source(
+            _spec, deadline=deadline, per_source=per_source,
+            fetch=_fetch, store=_STORES.get(_spec.id), post=_POST.get(_spec.id),
+            applicable=_APPLICABLE.get(_spec.id, True),
+        )
+        loop_results[_spec.id] = (_records, _new)
+        if _spec.id in _DEFERRED_SECTION:
+            continue
+        _sx = _SECTION_EXTRA.get(_spec.id)
+        loop_sections[_spec.id] = _lens_section(
+            _records, _new, _spec, **(_sx(_records, _new) if _sx else {}))
+
+    # Extract for the payload/corpus. A vertical-gated-out source yields ([], []).
+    normativos, new_normativos = loop_results.get("regulatory", ([], []))
+    funds, new_funds = loop_results.get("competitor", ([], []))
+    offerings, new_ofertas = loop_results.get("ofertas", ([], []))
+    dou_acts, new_dou = loop_results.get("dou", ([], []))
+    cvm_normas_acts, new_cvm_normas = loop_results.get("cvm_normas", ([], []))
+    cade_records, new_cade = loop_results.get("cade", ([], []))
+    sanctions_records, new_sanctions = loop_results.get("sanctions", ([], []))
+    contracts_records, new_contracts = loop_results.get("contracts", ([], []))
+    fatos, new_fatos = loop_results.get("fatos", ([], []))
+    sec_filings_rows, new_sec = loop_results.get("sec_filings", ([], []))
+
+    # New entrants (C2, #303): the BCB autorizações fetch, its delta and its register
+    # certifications run in the loop (the "new_entrants" source). The supplementary registries
+    # and every registry side effect below consume that result, in their established order.
+    authorized, new_entrants = loop_results.get("new_entrants", ([], []))
+    new_entrants = list(new_entrants)
     # Full rosters kept for the #103 SPA+SUSEP roster BACKFILL (below); the delta lists
     # above feed the entrant SIGNAL path, these feed Entity-Master promotion.
     susep_rows: list[dict[str, Any]] = []
     spa_rows: list[dict[str, Any]] = []
-    try:
-        with _source_budget("BCB autorizações", deadline, per_source):
-            authorized = bcb_autorizacoes.fetch_authorized()
-            new_entrants = _new_since_last_run(
-                "bcb_autorizacoes", authorized, seed_if_empty=True
-            )
-            # #74/R2: register-VERIFIED certifications for tracked entities (CNPJ-joined; structured
-            # provenance, never demotes a curated cert). Pure-local over the already-fetched rows.
-            try:
-                _certd = bcb_autorizacoes.apply_verified_certifications(authorized)
-                if _certd:
-                    print(f"R2 certifications: verified {len(_certd)} tracked entities from BCB register")
-            except Exception as exc:  # pragma: no cover - never blocks the entrant scan
-                print(f"Warning: R2 certification stamp failed: {exc}")
-    except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
-        print(f"Warning: BCB autorizações fetch failed: {exc}")
+    _entrants_on = _source_enabled(registry.by_id("new_entrants"))
 
     # CVM market-participant registries (E5) — consultores/adm de carteira new-entrant scan.
     # Gated (heavy CVM zip fetch) + seed-suppressed. Non-fintech → surfaces as entrant SIGNALS
     # (entrants lens + Receita enrich), not auto-created, so a fuzzy advisory set never floods.
-    if os.environ.get("ONCA_INGEST_CVM_PARTICIPANTES", "false").lower() in ("1", "true", "yes"):
+    if _entrants_on and os.environ.get("ONCA_INGEST_CVM_PARTICIPANTES", "false").lower() in ("1", "true", "yes"):
         try:
             from src.ingest import cvm_participantes
 
@@ -1007,7 +1381,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # SUSEP supervised-entities registry (#77 E1) — insurance/EAPC/capitalização/resseguro new
     # entrants. Gated + seed-suppressed. Insurers aren't fintech → surface as review-gated entrant
     # SIGNALS (entrants lens + Receita enrich), not auto-created, like the CVM-participantes path.
-    if os.environ.get("ONCA_INGEST_SUSEP", "false").lower() in ("1", "true", "yes"):
+    if _entrants_on and os.environ.get("ONCA_INGEST_SUSEP", "false").lower() in ("1", "true", "yes"):
         try:
             from src.ingest import susep_entidades
 
@@ -1021,7 +1395,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     # SPA/MF authorized betting operators (#78 E3) — for iGaming the authorized list IS the entrant
     # feed (~82 companies / 188 brands). Gated + seed-suppressed → entrants lens + Receita enrich.
-    if os.environ.get("ONCA_INGEST_SPA", "false").lower() in ("1", "true", "yes"):
+    if _entrants_on and os.environ.get("ONCA_INGEST_SPA", "false").lower() in ("1", "true", "yes"):
         try:
             from src.ingest import spa_apostas
 
@@ -1035,7 +1409,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     # PREVIC EFPC base-cadastral (#79 E2) — closed-pension new entrants. Direct XLSX (not the dead
     # dados.gov.br token). Gated + seed-suppressed → entrants lens + Receita enrich.
-    if os.environ.get("ONCA_INGEST_PREVIC", "false").lower() in ("1", "true", "yes"):
+    if _entrants_on and os.environ.get("ONCA_INGEST_PREVIC", "false").lower() in ("1", "true", "yes"):
         try:
             from src.ingest import previc_efpc
 
@@ -1385,344 +1759,6 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             except Exception as exc:  # pragma: no cover - best-effort, never blocks ingest
                 print(f"Warning: NER harvest skipped: {exc}")
 
-    # Financial statements (#7) moved OUT of this handler by #145 / ADR 028. They now run
-    # as CvmStatementsTask on the monthly OncaFinancialsPipeline
-    # (`cvm_financials.lambda_handler`). CVM publishes quarterly; downloading a ~30MB
-    # package three times a day against this handler's source budget bought nothing, and
-    # the gate here (`ONCA_FINANCIALS`) was never set in CDK, so it never ran at all.
-    # Deliberately no fallback: two writers to financials/index.json is how a fresh store
-    # gets overwritten by a stale one.
-
-    # FIAGRO agri-funds — PL / cotista moves + newly-registered classes as
-    # narrative-ready signal (task b). Entity discovery above only populates the
-    # registry; without this, 0 agri-funds narratives ever reach synth. Reuses
-    # the generic value-state move engine (same primitives as Pix/juros/Informe
-    # Diário) — first run seeds a baseline only. Independently gated from
-    # ONCA_ENTITY_DISCOVERY so either can be disabled without the other.
-    def _fetch_fiagro() -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
-        fiagro_min_pl = float(os.environ.get("ONCA_FIAGRO_MIN_PL", "50000000"))
-        pl_threshold = float(
-            os.environ.get("ONCA_FIAGRO_PL_MOVE_THRESHOLD_PCT", "15.0")
-        )
-        cotista_threshold = float(
-            os.environ.get("ONCA_FIAGRO_COTISTA_MOVE_THRESHOLD_PCT", "30.0")
-        )
-        reg_lookback = int(
-            os.environ.get("ONCA_FIAGRO_NEW_REG_LOOKBACK_DAYS", "60")
-        )
-        fiagro_rows = cvm_fiagro.fetch_fiagro(min_pl=fiagro_min_pl)
-        fiagro_pl_moves = _moves_since_last_run(
-            "cvm_fiagro_pl",
-            cvm_fiagro.for_pl_moves(fiagro_rows),
-            key_field="cnpj",
-            value_field="pl",
-            min_pct=pl_threshold,
-        )
-        fiagro_cotista_moves = _moves_since_last_run(
-            "cvm_fiagro_cotistas",
-            cvm_fiagro.for_cotista_moves(fiagro_rows),
-            key_field="cnpj",
-            value_field="cotistas",
-            min_pct=cotista_threshold,
-        )
-        reg_candidates = cvm_fiagro.for_new_registrations(
-            fiagro_rows, lookback_days=reg_lookback
-        )
-        fiagro_new_regs = _new_since_last_run(
-            "cvm_fiagro_newreg", reg_candidates, seed_if_empty=True
-        )
-        fiagro_moves_all = fiagro_pl_moves + fiagro_cotista_moves + fiagro_new_regs
-        # Attribute each FIAGRO move to exactly ONE entity by CNPJ — a structured id
-        # that is authoritative. This bypasses the free-text alias matcher, which
-        # over-resolves FIAGRO funds via their shared *administrator* name (dozens of
-        # funds share one DTVM/corretora admin, so a single move would otherwise fan
-        # out to every co-administered fund). Drop a move whose CNPJ isn't yet a
-        # registry entity — there's no subject to attribute it to (discovery adds the
-        # fund later, after which its next move resolves).
-        if fiagro_moves_all:
-            try:
-                from src.synth import entity_registry as _fiagro_reg
-
-                _resolved: list[dict[str, Any]] = []
-                for _ev in fiagro_moves_all:
-                    _eid = _fiagro_reg.resolve_by_cnpj(str(_ev.get("cnpj") or ""))
-                    if _eid:
-                        _ev["_entities"] = [_eid]
-                        _resolved.append(_ev)
-                fiagro_moves_all = _resolved
-            except Exception as exc:  # pragma: no cover - never emit unattributed fan-out
-                print(f"Warning: FIAGRO entity resolution failed, dropping signal: {exc}")
-                fiagro_moves_all = []
-        return fiagro_rows, fiagro_moves_all, {
-            "pl_move_count": len(fiagro_pl_moves),
-            "cotista_move_count": len(fiagro_cotista_moves),
-            "new_registration_count": len(fiagro_new_regs),
-        }
-
-    # Pix traction — month-over-month volume moves (first run seeds baseline only).
-    def _fetch_pix() -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
-        pix_rows = bcb_pix.fetch_recent()
-        pix_by_inst = bcb_pix.by_institution(
-            pix_rows, watchlist_ispb=competitor_ispb or None
-        )
-        return pix_by_inst, pix_by_inst, {}
-
-    # Juros médios — relative rate moves by institution × modality.
-    def _fetch_juros() -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
-        juros_rows = bcb_juros.fetch_daily()
-        modalities = juros_modalities
-        if not modalities and juros_use_defaults:
-            modalities = list(bcb_juros.DEFAULT_MODALITY_FILTERS)
-        juros_focus = bcb_juros.filter_rates(
-            juros_rows,
-            institutions=juros_competitors or None,
-            modalities=modalities or None,
-        )
-        return juros_focus, bcb_juros.for_moves(juros_focus), {}
-
-    # CVM ofertas — produced by the registry loop below.
-
-    # CVM material facts — Fato Relevante / Comunicado ao Mercado (strategic
-    # disclosures from B3-listed competitors; seed suppressed on first run).
-    fatos: list[dict[str, Any]] = []
-    new_fatos: list[dict[str, Any]] = []
-    if fatos_watch:
-        try:
-            with _source_budget("CVM fatos relevantes", deadline, per_source):
-                fatos = cvm_ipe.fetch_material_facts(
-                    lookback_days=fatos_lookback,
-                    watchlist=fatos_watch,
-                    categories=fatos_categories,
-                )
-                new_fatos = _new_since_last_run("cvm_fatos", fatos, seed_if_empty=True)
-                # Governance events are the strategic ones — float them to the
-                # front so they survive the digest item cap and reach synth.
-                new_fatos.sort(key=lambda f: not f.get("governance"))
-        except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
-            print(f"Warning: CVM fatos relevantes fetch failed: {exc}")
-
-    # Diário Oficial (dou) — produced by the registry loop below.
-
-    # CADE antitrust (#61) — produced by the registry loop below (fetch resolves the merger
-    # parties by name; see the "antitrust" fetcher).
-    from src.synth.entities import resolve_entities as _resolve_entities
-
-    # BCB macro — Copom/Selic decision + weekly Focus expectations (market-wide,
-    # not entity-tied; surfaces as standalone "macro" cards). Best-effort.
-    macro_selic: dict[str, Any] | None = None
-    macro_focus: list[dict[str, Any]] = []
-    if os.environ.get("ONCA_MACRO", "true").lower() in ("1", "true", "yes"):
-        try:
-            with _source_budget("BCB macro", deadline, per_source):
-                macro_selic = bcb_macro.fetch_selic()
-                macro_focus = bcb_macro.fetch_focus()
-        except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
-            print(f"Warning: BCB macro fetch failed: {exc}")
-
-    # DataJud (CNJ) — corporate-distress filings (recuperação judicial / falência).
-    # Party-name-scrubbed public API, so this is a MACRO sector-distress signal
-    # (filing volume/trend), not entity-tied (issue #25). Best-effort; off via env.
-    distress_summary: dict[str, Any] | None = None
-    if os.environ.get("ONCA_DATAJUD", "true").lower() in ("1", "true", "yes"):
-        try:
-            with _source_budget("DataJud RJ", deadline, per_source):
-                tribs = _csv_env("ONCA_DATAJUD_TRIBUNALS") or list(datajud.DEFAULT_TRIBUNALS)
-                distress = datajud.fetch_recuperacao_judicial(
-                    tribs, lookback_days=int(os.environ.get("ONCA_DATAJUD_LOOKBACK_DAYS", "90"))
-                )
-                new_distress = _new_since_last_run("datajud_rj", distress, seed_if_empty=True)
-                distress_summary = {
-                    **datajud.summarize(distress),
-                    "new_count": len(new_distress),
-                    "items": _tag_new(new_distress[:12]),
-                }
-        except Exception as exc:  # pragma: no cover - defensive handling for upstream API issues
-            print(f"Warning: DataJud fetch failed: {exc}")
-
-    # BCB complaints ranking — OFFICIAL quarterly consumer-complaints ranking per
-    # institution (issue #31, the Reclame Aqui alternative). Public Olinda OData,
-    # entity-tied; writes a durable bcb_reclamacoes/index.json store. Best-effort.
-    bcb_reclamacoes_summary: dict[str, Any] | None = None
-    if os.environ.get("ONCA_BCB_RECLAMACOES", "true").lower() in ("1", "true", "yes"):
-        bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
-        try:
-            with _source_budget("BCB reclamações", deadline, per_source):
-                from src.synth.entities import resolve_entities
-
-                rows = bcb_reclamacoes.fetch_ranking()
-                recs = bcb_reclamacoes.map_to_entities(rows, resolver=resolve_entities)
-                if recs and bucket:
-                    bcb_reclamacoes.update_store(recs, bucket)
-                bcb_reclamacoes_summary = {
-                    **bcb_reclamacoes.summarize(recs),
-                    "items": recs[:12],
-                }
-        except Exception as exc:  # pragma: no cover - defensive; upstream best-effort
-            print(f"Warning: BCB reclamações fetch failed: {exc}")
-
-    # ANS IGR (#140) — the same reputation shape for saúde suplementar, extending the
-    # signal past BCB-supervised banks. Resolution is CNPJ-only via the ANS cadop bridge;
-    # there is deliberately no name fallback (see ans_igr's docstring). DEFAULT-OFF until
-    # the health-plan sub-entities (ADR-017) are registered, since until then almost
-    # nothing resolves and the store would just be empty.
-    ans_igr_summary: dict[str, Any] | None = None
-    if os.environ.get("ONCA_ANS_IGR", "false").lower() in ("1", "true", "yes"):
-        bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
-        try:
-            with _source_budget("ANS IGR", deadline, per_source):
-                ans_igr_summary = ans_igr.run(bucket)
-        except Exception as exc:  # pragma: no cover - defensive; upstream best-effort
-            print(f"Warning: ANS IGR fetch failed: {exc}")
-
-    # consumidor.gov.br complaints (#63) — cross-industry consumer reputation, the general
-    # form of bcb_reclamacoes. DEFAULT-OFF + token-gated: the source is resolved via the
-    # dados.gov.br catalog ([[gov_dados]]), whose GOV_DADOS_TOKEN is currently rejected, so
-    # this is inert until the token is regenerated. Durable store, like bcb_reclamacoes.
-    consumidor_gov_summary: dict[str, Any] | None = None
-    if os.environ.get("ONCA_CONSUMIDOR_GOV", "false").lower() in ("1", "true", "yes"):
-        bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
-        try:
-            with _source_budget("consumidor.gov", deadline, per_source):
-                from src.synth.entities import resolve_entities
-
-                rows = consumidor_gov.fetch_indicators(
-                    min_complaints=int(os.environ.get("ONCA_CONSUMIDOR_MIN_COMPLAINTS", "30")))
-                recs = consumidor_gov.map_to_entities(rows, resolver=resolve_entities)
-                if recs and bucket:
-                    consumidor_gov.update_store(recs, bucket)
-                consumidor_gov_summary = {**consumidor_gov.summarize(recs), "items": recs[:12]}
-        except Exception as exc:  # pragma: no cover - defensive; upstream best-effort
-            print(f"Warning: consumidor.gov fetch failed: {exc}")
-
-    # CEIS/CNEP federal sanctions (#60) — counterparty-integrity, sector-agnostic. Only
-    # sanctions resolving (CNPJ-root first) to a tracked entity are kept; a durable
-    # sanctions/index.json store holds state and _new_since_last_run drives the delta
-    # (seed-suppressed so the historical backlog does not flood the first run).
-    def _fetch_sanctions() -> list[dict[str, Any]]:
-        from src.synth import entity_registry
-
-        # CNPJ-only resolution — no registry, no signal (a sanction binds to a specific
-        # legal person; see ceis_cnep docstring).
-        idx = ceis_cnep.build_cnpj_index(
-            entity_registry.list_entities()
-        ) if os.environ.get("ONCA_ENTITIES_TABLE") else {}
-        srows = ceis_cnep.fetch_sanctions() if idx else []
-        return ceis_cnep.map_to_entities(srows, cnpj_index=idx)
-
-    _bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
-
-    def _fetch_contracts() -> list[dict[str, Any]]:
-        from src.synth import entity_registry
-
-        idx = ceis_cnep.build_cnpj_index(
-            entity_registry.list_entities()
-        ) if os.environ.get("ONCA_ENTITIES_TABLE") else {}
-        crows = pncp_contratos.fetch_contracts(
-            days_back=int(os.environ.get("ONCA_PNCP_LOOKBACK_DAYS", "2")),
-            max_pages=int(os.environ.get("ONCA_PNCP_MAX_PAGES", "60")),
-            min_valor=float(os.environ.get("ONCA_PNCP_MIN_VALOR", "0")),
-        ) if idx else []
-        return pncp_contratos.map_to_entities(crows, cnpj_index=idx)
-
-    # ADR 019 — the registry-driven ingest loop. Each standard "document" lens source is one
-    # entry in FETCHERS (its fetch, keyed by spec.id); the loop applies vertical gating + the
-    # wall-clock budget + delta + section-building UNIFORMLY. Adding such a source = a
-    # SourceSpec + one FETCHERS entry, with no bespoke handler block and no payload edit.
-    # (The numeric "moves" sources and the special-shape/side-effecting ones remain bespoke
-    # below — they have distinct mechanics; migrating them is the tracked follow-on.)
-    _cade_lookback = int(os.environ.get("ONCA_CADE_LOOKBACK_DAYS", "45"))
-    cvm_normas_lookback = int(os.environ.get("ONCA_CVM_NORMAS_LOOKBACK_DAYS", "30"))
-    _FETCHERS: dict[str, Any] = {
-        # #175: every regulatory item leaves ingest with severity (+ industries when a covered
-        # industry applies) — BCB normativos here, DOU inside dou.fetch_dou.
-        "regulatory": lambda: federal_acts.annotate(bcb_normativos.fetch_recent(days=lookback_days)),
-        "competitor": lambda: cvm_fundos.fetch_funds(watchlist_admins=competitors),
-        "ofertas": lambda: cvm_ofertas.fetch_recent(
-            lookback_days=ofertas_lookback, watchlist=ofertas_watch or None),
-        # #194 (audit R5): CVM legislação (Resoluções/Instruções/Ofícios-Circulares) + the
-        # gov.br/cvm notícias listing (PAS judgments, SRE stop orders, Ofício-Circular
-        # announcements) — the CVM had no normative/enforcement source at all before this.
-        "cvm_normas": lambda: federal_acts.annotate(
-            cvm_normas.fetch_recent(lookback_days=cvm_normas_lookback)),
-        "dou": lambda: (_dou_with_stats(dou.fetch_dou(
-                            dou_terms, lookback_days=dou_lookback, topic_terms=dou_topics,
-                            topic_organs=dou_topic_organs, max_topic_terms=dou_max_topics,
-                            known_instruments=dou_known))
-                        if (dou_terms or dou_topics) else []),
-        "cade": lambda: cade.map_to_entities(
-            cade.fetch_atos(lookback_days=_cade_lookback), resolver=_resolve_entities),
-        "sanctions": _fetch_sanctions,
-        "contracts": _fetch_contracts,
-        # C1 (#303): the numeric moves sources (delta="moves") and the IF.data snapshot.
-        "pix_moves": _fetch_pix,
-        "juros_moves": _fetch_juros,
-        "inf_diario_moves": lambda: (
-            lambda rows: (rows, cvm_inf_diario.for_moves(rows), {}))(
-            cvm_inf_diario.fetch_latest(watchlist_admins=inf_diario_watch, top_n=inf_diario_top_n)),
-        "fiagro_moves": _fetch_fiagro,
-        "market": _fetch_market,
-    }
-    _STORES: dict[str, Any] = {
-        "sanctions": lambda recs: ceis_cnep.update_store(recs, _bucket) if _bucket else None,
-        "contracts": lambda recs: pncp_contratos.update_store(recs, _bucket) if _bucket else None,
-    }
-    _SECTION_EXTRA: dict[str, Any] = {}  # per-source extra keys (e.g. fatos governance_count)
-    # moves: the threshold per source, and whether it has anything to do this run (a source
-    # that is not applicable is skipped before its budget: no state, no health row).
-    _MOVE_MIN_PCT = {"pix_moves": pix_threshold, "juros_moves": juros_threshold,
-                     "inf_diario_moves": inf_diario_threshold}
-    _APPLICABLE = {"inf_diario_moves": bool(inf_diario_watch)}
-    # section extras computed from a moves run: (tracked, aux) -> keys between the tracked
-    # count and move_count
-    _MOVES_EXTRA: dict[str, Any] = {
-        "inf_diario_moves": lambda t, aux: {"as_of": (t[0].get("date") if t else None)},
-        "fiagro_moves": lambda t, aux: {
-            "pl_move_count": aux.get("pl_move_count", 0),
-            "cotista_move_count": aux.get("cotista_move_count", 0),
-            "new_registration_count": aux.get("new_registration_count", 0)},
-    }
-    _STATIC_SECTION: dict[str, Any] = {
-        "market": lambda recs: {"count": len(recs), "items": recs, "context": recs},
-    }
-    loop_results: dict[str, tuple[list[dict[str, Any]], list[dict[str, Any]]]] = {}
-    loop_sections: dict[str, dict[str, Any]] = {}
-    for _spec in registry.active(_active_vertical()):
-        _fetch = _FETCHERS.get(_spec.id)
-        if _fetch is None:  # not (yet) loop-migrated — handled by a bespoke block
-            continue
-        if _spec.delta == "moves":
-            _tracked, _moves, _aux = _gated_moves(
-                _spec, deadline=deadline, per_source=per_source, fetch=_fetch,
-                min_pct=_MOVE_MIN_PCT.get(_spec.id), applicable=_APPLICABLE.get(_spec.id, True),
-            )
-            loop_results[_spec.id] = (_tracked, _moves)
-            _extra = _MOVES_EXTRA.get(_spec.id)
-            loop_sections[_spec.id] = _moves_section(
-                _tracked, _moves, _spec, **(_extra(_tracked, _aux) if _extra else {}))
-            continue
-        if _spec.delta == "none":
-            _records = _gated_static(_spec, deadline=deadline, per_source=per_source, fetch=_fetch)
-            loop_results[_spec.id] = (_records, [])
-            loop_sections[_spec.id] = _STATIC_SECTION[_spec.id](_records)
-            continue
-        _records, _new = _gated_source(
-            _spec, deadline=deadline, per_source=per_source,
-            fetch=_fetch, store=_STORES.get(_spec.id),
-        )
-        loop_results[_spec.id] = (_records, _new)
-        loop_sections[_spec.id] = _lens_section(
-            _records, _new, _spec, **_SECTION_EXTRA.get(_spec.id, {}))
-
-    # Extract for the payload/corpus. A vertical-gated-out source yields ([], []).
-    normativos, new_normativos = loop_results.get("regulatory", ([], []))
-    funds, new_funds = loop_results.get("competitor", ([], []))
-    offerings, new_ofertas = loop_results.get("ofertas", ([], []))
-    dou_acts, new_dou = loop_results.get("dou", ([], []))
-    cvm_normas_acts, new_cvm_normas = loop_results.get("cvm_normas", ([], []))
-    cade_records, new_cade = loop_results.get("cade", ([], []))
-    sanctions_records, new_sanctions = loop_results.get("sanctions", ([], []))
-    contracts_records, new_contracts = loop_results.get("contracts", ([], []))
-
     # CVM ofertas status-change detection (#194, audit R5 B3) — `offerings` above is the
     # id-existence diff (`detect_new`); an offering whose status FLIPS to suspensa/revogada
     # after it was already seen never re-alerts there. This is a second, categorical diff
@@ -1802,40 +1838,6 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as exc:  # pragma: no cover - defensive; unofficial upstream
             print(f"Warning: Reclame Aqui fetch failed: {exc}")
 
-    # SEC EDGAR — US-listed payments/fintech disclosures (seed on first run).
-    # Metadata first (submissions JSON), then primary-document bodies for the
-    # diffed set + a small context sample so digests/corpus carry text not only URLs.
-    sec_filings_rows: list[dict[str, Any]] = []
-    new_sec: list[dict[str, Any]] = []
-    if sec_tickers:
-        try:
-            with _source_budget("SEC EDGAR", deadline, per_source):
-                sec_filings_rows = sec_filings.fetch_filings(
-                    sec_tickers, lookback_days=sec_lookback
-                )
-                new_sec = _new_since_last_run(
-                    "sec_filings", sec_filings_rows, seed_if_empty=True
-                )
-                # Corpus: full body for genuinely new filings.
-                if new_sec:
-                    try:
-                        sec_filings.enrich_with_content(new_sec)
-                    except _SourceBudgetExceeded:
-                        raise
-                    except Exception as exc:  # pragma: no cover
-                        print(f"Warning: SEC primary-document fetch failed: {exc}")
-                # Digest context: enrich a few recent rows still missing text
-                # (same object refs as new_sec are skipped via skip_existing).
-                context_need = [r for r in sec_filings_rows[:15] if not r.get("text")]
-                if context_need:
-                    try:
-                        sec_filings.enrich_with_content(context_need)
-                    except _SourceBudgetExceeded:
-                        raise
-                    except Exception as exc:  # pragma: no cover
-                        print(f"Warning: SEC context content fetch failed: {exc}")
-        except Exception as exc:  # pragma: no cover
-            print(f"Warning: SEC EDGAR fetch failed: {exc}")
 
     # CVM Informe Diário — fund AUM moves: a registry-loop source (C1, _fetch_inf_diario).
 
@@ -1861,8 +1863,6 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             "items": _tag_new(new_entrants[:8]),
             "context": _strip_raw(new_entrants[:8] or authorized[:5]),
         },
-        # sec_filings + fatos are still bespoke (corpus write / alias accrual side effects).
-        "sec_filings": _lens_section(sec_filings_rows, new_sec, registry.by_id("sec_filings")),
         # CVM ofertas status changes (#194, audit R5 B3) — categorical diff, not a registry-loop
         # source (it re-diffs the "ofertas" fetch above rather than fetching independently).
         # #198: EVERY new classified official act (medium+), uncapped and compact — the lens
@@ -1875,10 +1875,6 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             "items": _tag_new(new_ofertas_status[:8]),
             "context": _strip_raw(new_ofertas_status[:12]),
         },
-        "fatos": _lens_section(
-            fatos, new_fatos, registry.by_id("fatos"),
-            governance_count=sum(1 for f in new_fatos if f.get("governance")),
-        ),
         # In "all" mode news is fetched inline here; in "structured" mode the news
         # slice is empty and the parallel news branch supplies it (overlaid at synth).
         "news": _news_slice(context) if mode == "all" else _empty_news_slice(),

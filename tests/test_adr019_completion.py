@@ -35,3 +35,53 @@ def test_c1_an_empty_watchlist_touches_no_state(monkeypatch):
     assert _calls(out, "infd.fetch") == []
     assert not any("cvm_inf_diario" in s for s in out["state"])
     assert json.loads(out["digest"])["inf_diario_moves"]["as_of"] is None
+
+
+# --- C2: side-effecting lens sources in the loop ---------------------------------------------------
+def test_c2_sec_enriches_the_new_filings_and_the_context_inside_its_run(monkeypatch):
+    out = _run(monkeypatch)
+    enr = [c[1][0] for c in _calls(out, "sec.enrich")]
+    assert [r["id"] for r in enr[0]] == ["sec-0", "sec-1"]             # the new filings first
+    sec = json.loads(out["digest"])["sec_filings"]
+    assert sec["items"] and all(i.get("text") for i in sec["items"])   # section built after it
+    none = _run(monkeypatch, {"ONCA_SEC_TICKERS": ""})
+    assert _calls(none, "sec.fetch") == [] and not any("sec_filings" in s for s in none["state"])
+
+
+def test_c2_fatos_governance_first_and_alias_accrual_after_the_loop(monkeypatch):
+    out = _run(monkeypatch)
+    names = [c[1][1] for c in _calls(out, "er.accumulate")]
+    assert ["Co0"] in names and ["Co1"] in names                       # new_fatos -> alias accrual
+    none = _run(monkeypatch, {"ONCA_FATOS_WATCHLIST": "", "ONCA_FATOS_USE_COMPETITORS": "false",
+                              "ONCA_FATOS_USE_REGISTRY": "false"})
+    assert _calls(none, "fatos.fetch") == [] and not any("cvm_fatos" in s for s in none["state"])
+
+
+def test_c2_the_fatos_post_hook_floats_governance_events(monkeypatch):
+    from src.ingest import lambda_port as lp
+
+    def swap(mp, rec):
+        mp.setattr(lp.cvm_ipe, "fetch_material_facts", rec("fatos.fetch", [
+            {"id": "f-a", "company": "A", "governance": False}, {"id": "f-b", "company": "B", "governance": True}]))
+    fatos = json.loads(_run(monkeypatch, after=swap)["digest"])["fatos"]
+    assert [i["id"] for i in fatos["items"]] == ["f-b", "f-a"] and fatos["governance_count"] == 1
+
+
+def test_c2_new_entrants_side_effects_consume_the_loop_result(monkeypatch):
+    out = _run(monkeypatch)
+    assert [r["id"] for r in _calls(out, "autorizacoes.certs")[0][1][0]] == ["ent-0", "ent-1", "ent-2"]
+    assert [r["id"] for r in _calls(out, "receita.enrich")[0][1][0]] == ["ent-0", "ent-1"]
+    assert sorted(c[1][0]["id"] for c in _calls(out, "er.auto_create")) == ["ent-0", "ent-1"]
+    sec = json.loads(out["digest"])["new_entrants"]
+    assert sec["count"] == 3 and sec["new_count"] == 2
+
+
+def test_c2_the_entrant_gate_also_stops_the_supplementary_registries(monkeypatch):
+    from src.ingest import susep_entidades
+    seen = []
+    monkeypatch.setattr(susep_entidades, "fetch_entities", lambda: seen.append(1) or [])
+    _run(monkeypatch, {"ONCA_INGEST_SUSEP": "true"})
+    assert seen == [1]
+    seen.clear()
+    out = _run(monkeypatch, {"ONCA_INGEST_SUSEP": "true", "ONCA_NEW_ENTRANTS": "false"})
+    assert seen == [] and _calls(out, "autorizacoes.fetch") == [] and _calls(out, "receita.enrich") == []
