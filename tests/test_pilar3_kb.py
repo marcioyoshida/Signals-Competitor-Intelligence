@@ -100,7 +100,7 @@ def test_run_passes_a_lookback_not_the_year(monkeypatch):
     from src.ingest import cvm_ipe
     seen = {}
     monkeypatch.setattr(cvm_ipe, "fetch_material_facts", lambda lb, **k: seen.setdefault("lb", lb) and [])
-    pilar3.run(None)
+    pilar3.run(None, dasfn=False)
     assert seen["lb"] == 200
 
 

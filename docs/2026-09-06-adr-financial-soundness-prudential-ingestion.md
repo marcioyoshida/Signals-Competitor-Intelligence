@@ -519,3 +519,56 @@ NSFR) with a "Liquidez sob X" rec.
 is partial — self-hosted endpoints vary (some 404/503, odd structure → degrade to null); it's the
 **quantitative** KM1, so the **narrative tone** corpus still needs the IR PDFs (Bradesco verified,
 others opaque) — multi-bank *tone* remains partial, so #17 sharpens only as tone coverage grows.
+
+## Addendum 3 (2026-11-02) — Multi-bank Pilar 3 *text* via the DASFN qualitative tables (#301)
+
+Addendum 2 concluded that multi-bank *narrative* still needed IR-site PDFs. The #301 spike found a
+better route. DASFN registers the **qualitative** Pilar 3 tables as well as KM1:
+- OVA, overview: 681 registrations.
+- LIQA, liquidity.
+- CRA, credit.
+- MRA, market.
+- IRRBBA, interest rate in the banking book.
+- ORA, operational.
+- Plus CCRA and SECA.
+
+Each is a prose field in the bank's own JSON (Res. BCB 54/20). The spike checked three routes: the
+DASFN tables, CVM IPE (2025–2026, every category) and the IR-site PDFs. robots.txt is read per host
+under RFC 9309: a 2xx file is obeyed, a 4xx means unrestricted, and a 5xx or an unreachable host
+means disallow.
+
+| Bank | Route used | robots.txt | Result (2026-11-02) |
+|---|---|---|---|
+| Itaú | CVM IPE (full PDF, `pilar3.py`) | n/a (CVM) | 2T26 report, ~98k chars. Its DASFN tables are only a pointer to the PDF |
+| BB | DASFN (6 tables, 2025) | 403 → unrestricted | ~59k chars |
+| Safra | DASFN (6 tables, 2026) | 200, allowed | ~52k chars |
+| C6 | DASFN (6 tables, 2025) | 404 → unrestricted | ~49k chars |
+| Stone | DASFN (6 tables, 2025) | 404 | ~45k chars |
+| BMG | DASFN (5 tables, 2026; ORA 504) | 404 | ~41k chars |
+| BTG | DASFN (6 tables, 2025) | 200, allowed | ~34k chars |
+| BV (Votorantim) | DASFN (6 tables, 2025) | 404 | ~32k chars |
+| Mercado Pago | DASFN (6 tables, 2025) | 200, allowed | ~29k chars |
+| Agibank | DASFN (6 tables, 2025) | 404 | ~21k chars |
+| Pan | DASFN | 404 | **skipped:** the latest tables are 2022, older than `MAX_AGE_YEARS=2` |
+| Nubank, Santander | none | — | **pointer only** ("see our Pilar 3 PDF"); no IPE filing. The PDF is on the IR site with opaque URLs, so it was not pursued |
+| Bradesco, Inter | none | 404 | DASFN API returns **404** for every year; no IPE Pilar 3 filing |
+| PicPay | none | 404 | API **403** |
+| ABC Brasil, Sicoob | none | **5xx** | **excluded:** an unreachable robots.txt means disallow |
+| Sicredi | none | unreachable | **excluded** (same rule; the API host also times out) |
+| Daycoval | none | 200 | The registered "URL" is an HTML page, not JSON |
+| Caixa, XP | none | — | Not registered for qualitative tables |
+| BB (IPE) | — | — | Files a risk-management *policy* on IPE, not a Pilar 3 report. Not used |
+
+**Built (`src/ingest/pilar3_dasfn.py`, wired into `pilar3.run`):**
+- **Catalog and selection:** the DASFN catalog gives, per institution, the latest year of each
+  table, with `/v2/` winning a tie. The year is read from the `YYYY1231` reference date, not a
+  filing stamp.
+- **Which banks:** only resolved, tracked banks are fetched, within a 240 s budget.
+- **Failures:** a per-host circuit breaker stops one hanging host from spending the budget.
+- **Skipped content:** pointer-only tables (under 600 chars) are dropped.
+- **Dates:** the record date is the year end capped at today (BMG and Safra publish a "2026" table
+  in 2026). The KB key is `pilar3/<entity>/dasfn-<year>.txt`, so the cap never changes it.
+- **Tone:** each bank becomes a `kind="dasfn"` record in `pilar3/index.json`, so `financial_tone`
+  reads its own risk prose (`corpus="pilar3"`) instead of `solvency_facts`.
+- **KB:** the prose goes to the KB with the DASFN JSON URL as its citation. The full IPE report wins
+  over DASFN tables for the same bank.

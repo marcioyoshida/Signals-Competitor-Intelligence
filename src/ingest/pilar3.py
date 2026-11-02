@@ -194,8 +194,11 @@ def publish(index: dict[str, Any], bucket: str, *, s3: Any | None = None) -> str
     import boto3
 
     s3 = s3 or boto3.client("s3")
+    # In-memory fields (``_prose``) never reach the index: the KB holds the text.
+    clean = {**index, "records": {e: {k: v for k, v in r.items() if not k.startswith("_")}
+                                  for e, r in (index.get("records") or {}).items()}}
     s3.put_object(Bucket=bucket, Key=INDEX_KEY,
-                  Body=json.dumps(index, ensure_ascii=False, indent=2).encode("utf-8"),
+                  Body=json.dumps(clean, ensure_ascii=False, indent=2).encode("utf-8"),
                   ContentType="application/json")
     return f"s3://{bucket}/{INDEX_KEY}"
 
@@ -208,6 +211,8 @@ KB_MAX_PAGES = 200
 
 
 def kb_key(rec: dict[str, Any]) -> str:
+    if rec.get("kind") == "dasfn":         # annual tables: keyed by year, so a capped date is stable
+        return f"{KB_PREFIX}{rec['entity']}/dasfn-{rec.get('year')}.txt"
     date = (rec.get("date") or "")[:10] or "sem-data"
     return f"{KB_PREFIX}{rec['entity']}/{date}.txt"
 
@@ -217,7 +222,9 @@ def kb_document(rec: dict[str, Any], prose: str, *, max_chars: int = KB_MAX_CHAR
     its subject in the sidecar metadata, and the document never starts with "From " (the KB's
     mailbox sniff rejects such a .txt)."""
     who = rec.get("company") or rec.get("entity")
-    head = (f"Relatório de Gerenciamento de Riscos e Capital (Pilar 3) — {who}\n"
+    title = ("Pilar 3 — tabelas qualitativas de gerenciamento de riscos" if rec.get("kind") == "dasfn"
+             else "Relatório de Gerenciamento de Riscos e Capital (Pilar 3)")
+    head = (f"{title} — {who}\n"
             f"Documento: {rec.get('subject') or KB_DOC_TYPE}\n"
             f"Data de entrega à CVM: {(rec.get('date') or '')[:10]}\n"
             f"Fonte: {rec.get('url') or ''}\n\n")
@@ -244,6 +251,9 @@ def promote_to_kb(index: dict[str, Any], *, bucket: str, s3: Any | None = None,
         if rec.get("entity") and rec.get("url"):
             by_url.setdefault(rec["url"], rec)
     for rec in by_url.values():
+        dasfn = rec.get("kind") == "dasfn"
+        if dasfn and not rec.get("_prose"):
+            continue                       # a stored DASFN record: its prose is only in this run
         key = kb_key(rec)
         try:
             s3.head_object(Bucket=bucket, Key=key)
@@ -251,13 +261,15 @@ def promote_to_kb(index: dict[str, Any], *, bucket: str, s3: Any | None = None,
         except Exception:
             pass
         try:
-            prose = prose_text(fetch_pages(rec["url"]))
+            prose = rec["_prose"] if dasfn else prose_text(fetch_pages(rec["url"]))
         except Exception as exc:  # pragma: no cover - network/PDF
             print(f"Warning: pilar3 KB fetch failed for {rec['entity']}: {exc}")
             continue
         if not prose:
             continue
-        meta = {"source": KB_SOURCE, "kind": "competitor", "doc_type": KB_DOC_TYPE,
+        from src.ingest.pilar3_dasfn import DOC_TYPE as _DASFN_DOC_TYPE
+        meta = {"source": "BCB-DASFN-Pilar3" if dasfn else KB_SOURCE, "kind": "competitor",
+                "doc_type": _DASFN_DOC_TYPE if dasfn else KB_DOC_TYPE,
                 "date": (rec.get("date") or "")[:10], "url": rec["url"], "entity": rec["entity"],
                 "name": rec.get("company") or rec["entity"], "title": rec.get("subject")}
         try:
@@ -285,9 +297,10 @@ def merge(existing: dict[str, Any] | None, fresh: dict[str, Any]) -> dict[str, A
 
 
 def run(bucket: str | None = None, *, kb_bucket: str | None = None, lookback_days: int = 200,
-        today: dt.date | None = None, s3: Any | None = None) -> dict[str, Any]:
-    """Refresh the tone corpus from CVM IPE, then (when ``kb_bucket`` is set) promote any new
-    filing's prose into the KB data source. The caller starts the ingestion job."""
+        today: dt.date | None = None, s3: Any | None = None, dasfn: bool = True) -> dict[str, Any]:
+    """Refresh the tone corpus from CVM IPE (the full Pilar 3 PDF) and from the DASFN qualitative
+    tables (#301, the other banks), then (when ``kb_bucket`` is set) promote any new filing's prose
+    into the KB data source. The caller starts the ingestion job."""
     from src.ingest import cvm_ipe
     from src.synth.entities import resolve_entities
 
@@ -295,12 +308,25 @@ def run(bucket: str | None = None, *, kb_bucket: str | None = None, lookback_day
     # pass the YEAR as the lookback (2026 days), scanning five years of IPE filings.
     rows = cvm_ipe.fetch_material_facts(lookback_days, today=today)
     fresh = build_corpus(rows, resolver=resolve_entities, today=today)
+    n_dasfn = 0
+    if dasfn:
+        from src.ingest import pilar3_dasfn
+        try:
+            extra = pilar3_dasfn.build(pilar3_dasfn.list_qualitative(pilar3_dasfn.fetch_catalog()),
+                                       resolver=resolve_entities)
+        except Exception as exc:  # pragma: no cover - the catalog is best-effort
+            print(f"Warning: DASFN Pilar 3 failed: {exc}")
+            extra = {}
+        n_dasfn = len(extra)
+        # The full IPE report wins over the DASFN tables for the same bank (merge keeps the newer).
+        fresh = merge({"records": extra}, fresh)
+        fresh["count"] = len(fresh["records"])
     idx = merge(load_index(bucket, s3=s3) if bucket else {}, fresh)
     if bucket and fresh.get("count"):
         publish(idx, bucket, s3=s3)
     kb = promote_to_kb(idx, bucket=kb_bucket, s3=s3) if kb_bucket else []
-    return {"status": "ok", "filings": len(find_filings(rows)), "entities": idx.get("count"),
-            "kb_written": len(kb), "kb_keys": kb}
+    return {"status": "ok", "filings": len(find_filings(rows)), "dasfn_entities": n_dasfn,
+            "entities": idx.get("count"), "kb_written": len(kb), "kb_keys": kb}
 
 
 def lambda_handler(event: dict[str, Any] | None, context: Any) -> dict[str, Any]:
