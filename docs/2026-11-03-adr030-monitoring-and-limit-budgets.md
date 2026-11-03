@@ -114,6 +114,20 @@ the real handler and checks the payload budget.
 - The notifier adds it to the Teams, Slack or email message, and OK (recovery) is sent too.
 - Alarm names are explicit (`Onca-…`) instead of CloudFormation-generated.
 
+### 7. Prove delivery, not just wiring
+
+The first delivery test found that **no alarm had ever reached anyone**. The notifier returned
+`teams/slack/email = None` because `ONCA_ALERT_EMAIL_FROM` and `ONCA_ALERT_EMAIL_TO` were set
+neither in the environment nor in `/onca/api-key`. Every pipeline-failure and stale-feed alarm
+since #109 was dropped without a trace. `alertEmail` sat unused in `cdk.json`.
+
+- The notifier now sends from `alertas@onssa.org` (SES-verified domain, production access) to
+  the stack's `alertEmail`.
+- A test fails if the channel is ever unset again.
+- **Rule for every fork:** after wiring alarms, invoke the notifier with a test message and
+  check that its delivery report shows a real send (an SES message id or a webhook 2xx).
+  `AlarmActions` being set proves nothing.
+
 ## Fleet adoption checklist
 
 1. List the signed-in user's path end to end, including identity-provider triggers. Put one
@@ -125,6 +139,8 @@ the real handler and checks the payload budget.
    every 4 h. It writes `ops/canary/latest.json` for Fleet Monitor.
 5. Add guard tests for memory floors, timeouts and alarm membership.
 6. Route alarms through your existing notifier with descriptions; send OK as well.
+7. Send one test alert and confirm it arrives (layer 7). Repeat after every change to the
+   notifier or its configuration.
 
 ## Costs
 
