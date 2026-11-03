@@ -263,3 +263,13 @@ into stories. #260 stays the gated go/no-go for public store publication.
 
 Publication (#260) starts when its gate is met **and** #311–#317 are done.
 
+**Status 2026-11-03 (d527b10, deployed):**
+- **Done and closed:** #312, #314, #315, #318, #319.
+- **Built, owner steps left:** #311 (`EXPO_TOKEN` secret and a dry run), #313 (create the reviewer
+  login), #316 (Firebase/FCM, Play organization).
+- **#317 blocked:** the iOS provisioning profile predates the Associated Domains entitlement, so
+  build 0.2.0 (5) failed at signing. An interactive `eas build` with an Apple sign-in syncs the
+  capability.
+- Bridge 4: the shell passes `version` and `build`. `/api/session/app` carries health events and
+  the minimum-version policy.
+
