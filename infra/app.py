@@ -1047,6 +1047,7 @@ class OncaPrototypeStack(Stack):
         # a password-only pool has no path that could ever reach a user with no tenant claim. See
         # lambda_pretoken.py for the full "why" (custom:tenant is immutable and Cognito creates a
         # federated user's record with no attribute list this app controls).
+        pretoken_fn = None   # ADR 030 alarms reference it when Google login is wired
         if google_idp:
             federated_map_table = dynamodb.Table(
                 self, "OncaFederatedTenantMapTable",
@@ -1925,6 +1926,8 @@ class OncaPrototypeStack(Stack):
         # runs don't re-send the same brief (the pipeline runs 3x/day).
         digests_bucket.grant_put(feed_fn)
         site_bucket.grant_put(feed_fn)
+        # ADR 030: HEAD the previous feed.json for the FeedGrowthPct size watch
+        site_bucket.grant_read(feed_fn, "feed.json")
         entities_table.grant_read_data(feed_fn)
         # weekly_digest reads Teams/Slack webhook URLs + email addresses from the shared
         # api-key secret when not set via env (same pattern as GOV_DADOS_TOKEN/ONCA_TAVILY_TOKEN).
@@ -2887,6 +2890,7 @@ class OncaPrototypeStack(Stack):
         # (self_sign_up_enabled=False), so there's no path to an authenticated-but-
         # unprovisioned identity without it, and this Lambda needs federated_map_table,
         # which itself only exists inside the `if google_idp:` block above.
+        self_register_fn = None   # ADR 030 sign-in alarm
         if google_idp:
             self_register_fn = lambda_.Function(
                 self,
@@ -4202,6 +4206,152 @@ class OncaPrototypeStack(Stack):
             schedule=events.Schedule.cron(minute="0", hour="6", day="6"),
             enabled=True,
         ).add_target(targets.SfnStateMachine(financials_pipeline))
+
+        # --- ADR 030: monitoring — alarms on the user paths, size watch, authenticated canary ---
+        # Both 2026-11-03 incidents (a Google login 500, a feed over Lambda's 6 MB response cap)
+        # reached the owner before any alarm: only the pipeline and the feed heartbeat were
+        # watched. The stack is close to CloudFormation's 500-resource limit, so related signals
+        # share one metric-math alarm (<= 10 metrics each) instead of an alarm per function.
+        _alarm_action = cw_actions.SnsAction(alerts_topic)
+
+        def _alarm(cid: str, description: str, expression: str, metrics: dict[str, cloudwatch.IMetric],
+                   threshold: float, *, period: Duration = Duration.minutes(5), evaluations: int = 1,
+                   below: bool = False, missing: cloudwatch.TreatMissingData = cloudwatch.TreatMissingData.NOT_BREACHING,
+                   ) -> cloudwatch.Alarm:
+            a = cloudwatch.Alarm(
+                self, cid, alarm_name=f"Onca-{cid.removeprefix('OncaAlarm')}",
+                alarm_description=description,
+                metric=cloudwatch.MathExpression(expression=expression, using_metrics=metrics, period=period),
+                threshold=threshold, evaluation_periods=evaluations,
+                comparison_operator=(cloudwatch.ComparisonOperator.LESS_THAN_THRESHOLD if below else
+                                     cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD),
+                treat_missing_data=missing,
+            )
+            a.add_alarm_action(_alarm_action)
+            a.add_ok_action(_alarm_action)
+            return a
+
+        _5m = Duration.minutes(5)
+
+        def _errs(fns: dict[str, Any], throttles: tuple[str, ...] = ()) -> dict[str, cloudwatch.IMetric]:
+            m: dict[str, cloudwatch.IMetric] = {
+                f"e{k}": f.metric_errors(period=_5m, statistic="Sum") for k, f in fns.items() if f}
+            m.update({f"t{k}": fns[k].metric_throttles(period=_5m, statistic="Sum") for k in throttles if fns.get(k)})
+            return m
+
+        _signin = _errs({"pre": pretoken_fn, "ses": session_fn, "oau": oauth_fn, "reg": self_register_fn},
+                        ("pre", "ses"))
+        _alarm("OncaAlarmSignInErrors",
+               "ADR 030: a sign-in Lambda (pre-token trigger, session broker, OAuth, self-register) "
+               "failed or was throttled. A pre-token failure blocks EVERY login.",
+               " + ".join(f"FILL({k},0)" for k in _signin), _signin, 1)
+        _data = _errs({"fee": feed_api_fn, "ask": agent_fn, "aap": agent_api_fn, "act": act_fn,
+                       "psh": push_api_fn, "mcp": mcp_fn, "ibi": ibis_fn}, ("fee", "ask"))
+        _alarm("OncaAlarmUserApiErrors",
+               "ADR 030: a user-facing API Lambda (feed, Ask, Agentic API, act, push, MCP, Ibis hook) "
+               "failed, timed out, hit the 6 MB response cap, or was throttled.",
+               " + ".join(f"FILL({k},0)" for k in _data), _data, 1)
+        if pretoken_fn:
+            _alarm("OncaAlarmPreTokenSlow",
+                   "ADR 030: the pre-token trigger's slowest run passed 3 s. Cognito allows 5 s, then "
+                   "retries; past that a Google login returns HTTP 500 (2026-11-03).",
+                   "p", {"p": pretoken_fn.metric_duration(period=Duration.hours(1), statistic="Maximum")},
+                   3000, period=Duration.hours(1))
+        _api_dims = {"ApiId": auth_api.api_id}
+        _alarm("OncaAlarmApi5xx",
+               "ADR 030: the HTTP API behind /api/* answered 5xx (handled 500s included, which the "
+               "Lambda error metric does not count).",
+               "FILL(x,0)", {"x": cloudwatch.Metric(namespace="AWS/ApiGateway", metric_name="5xx",
+                                                     dimensions_map=_api_dims, period=_5m, statistic="Sum")}, 1)
+        _cf_dims = {"DistributionId": distribution.distribution_id, "Region": "Global"}
+        _alarm("OncaAlarmCdn5xx",
+               "ADR 030: onssa.org served 5 or more 5xx responses in 5 minutes (origin, S3, edge "
+               "functions or API).",
+               "FILL(req,0) * FILL(rate,0) / 100",
+               {"req": cloudwatch.Metric(namespace="AWS/CloudFront", metric_name="Requests",
+                                         dimensions_map=_cf_dims, period=_5m, statistic="Sum"),
+                "rate": cloudwatch.Metric(namespace="AWS/CloudFront", metric_name="5xxErrorRate",
+                                          dimensions_map=_cf_dims, period=_5m, statistic="Average")}, 5)
+        _alarm("OncaAlarmFeedResponseSize",
+               "ADR 030 size watch: a /api/feed response passed 4 MB (Lambda's cap is 6 MB; "
+               "2026-11-03 outage). Trim the feed or page it per module before it grows further.",
+               "s", {"s": cloudwatch.Metric(namespace="Onca", metric_name="FeedResponseBytes",
+                                            dimensions_map={"Service": "FeedApi"},
+                                            period=Duration.hours(1), statistic="Maximum")},
+               4_000_000, period=Duration.hours(1))
+        _alarm("OncaAlarmFeedGrowth",
+               "ADR 030 size watch: feed.json grew or shrank more than 30% in one publish. A jump "
+               "risks the response cap; a drop usually means a source returned nothing.",
+               "ABS(g)", {"g": cloudwatch.Metric(namespace="Onca", metric_name="FeedGrowthPct",
+                                                 period=Duration.hours(1), statistic="Maximum")},
+               30, period=Duration.hours(1))
+        _alarm("OncaAlarmFinancialsPipeline",
+               "ADR 030: the monthly financials pipeline (Basileia, balancete, CVM, FinBERT tone) "
+               "failed or timed out.",
+               "FILL(f,0) + FILL(t,0)",
+               {"f": financials_pipeline.metric_failed(period=Duration.days(1), statistic="Sum"),
+                "t": financials_pipeline.metric_timed_out(period=Duration.days(1), statistic="Sum")},
+               1, period=Duration.days(1))
+        _cert_arns = [onssa_certificate.certificate_arn] + ([_auth_cert] if _auth_cert else []) + [
+            d["cert_arn"] for d in tenant_domains if d.get("cert_arn")]
+        _certs = {f"c{i}": cloudwatch.Metric(namespace="AWS/CertificateManager", metric_name="DaysToExpiry",
+                                            dimensions_map={"CertificateArn": arn},
+                                            period=Duration.days(1), statistic="Minimum")
+                  for i, arn in enumerate(_cert_arns[:10])}
+        _alarm("OncaAlarmCertExpiry",
+               "ADR 030: an onssa.org certificate expires within 30 days, so ACM's automatic renewal "
+               "has stalled (usually a removed DNS validation CNAME in Cloudflare).",
+               "MIN([" + ",".join(_certs) + "])", _certs, 30, period=Duration.days(1), below=True)
+        _alarm("OncaAlarmSesBounce",
+               "ADR 030: SES bounce rate above 5% (SES pauses sending at 10%: digests and alerts "
+               "would stop).",
+               "b", {"b": cloudwatch.Metric(namespace="AWS/SES", metric_name="Reputation.BounceRate",
+                                            period=Duration.hours(1), statistic="Maximum")},
+               0.05, period=Duration.hours(1))
+
+        canary_fn = lambda_.Function(
+            self, "OncaCanary",
+            runtime=LAMBDA_RUNTIME,
+            handler="src.dashboard.canary.lambda_handler",
+            code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
+            timeout=Duration.seconds(120),
+            memory_size=512,
+            environment={
+                "PYTHONPATH": "/var/task",
+                "ONCA_CANARY_FEED_FN": feed_api_fn.function_name,
+                "ONCA_CANARY_PRETOKEN_FN": pretoken_fn.function_name if pretoken_fn else "",
+                # the widest tenant (largest feed) and the outside-reviewer tenant
+                "ONCA_CANARY_TENANTS": "owner-all-sectors,directory-reviewer",
+                "ONCA_CANARY_ORIGIN": "https://onssa.org",
+                "ONCA_CANARY_EXTRA_HOSTS": ",".join(d["domain"] for d in tenant_domains),
+                "ONCA_STACK_NAME": self.stack_name,
+                "ONCA_DIGESTS_BUCKET": digests_bucket.bucket_name,
+            },
+        )
+        feed_api_fn.grant_invoke(canary_fn)
+        if pretoken_fn:
+            pretoken_fn.grant_invoke(canary_fn)
+        digests_bucket.grant_put(canary_fn, "ops/canary/*")
+        canary_fn.add_to_role_policy(iam.PolicyStatement(
+            actions=["cloudformation:ListStackResources"], resources=[self.stack_id]))
+        canary_fn.add_to_role_policy(iam.PolicyStatement(
+            actions=["cloudwatch:PutMetricData"], resources=["*"],
+            conditions={"StringEquals": {"cloudwatch:namespace": "Onca/Canary"}}))
+        events.Rule(self, "OncaCanarySchedule", schedule=events.Schedule.rate(Duration.hours(4)),
+                    ).add_target(targets.LambdaFunction(canary_fn, retry_attempts=0))
+        # One alarm for both failure modes: a failed check, or no run at all in 6 h (every 6 h
+        # window holds at least one 4-hourly run).
+        _alarm("OncaAlarmCanary",
+               "ADR 030: the authenticated canary failed a check (feed as a signed-in tenant, Google "
+               "pre-token timing, public routes, session broker -> Cognito, stack resource budget), "
+               "or did not run. Report: s3://<digests>/ops/canary/latest.json.",
+               "IF(FILL(runs,0) < 1, 1, FILL(failed,0))",
+               {"runs": cloudwatch.Metric(namespace="Onca/Canary", metric_name="CanaryRun",
+                                          period=Duration.hours(6), statistic="Sum"),
+                "failed": cloudwatch.Metric(namespace="Onca/Canary", metric_name="ChecksFailed",
+                                            period=Duration.hours(6), statistic="Maximum")},
+               1, period=Duration.hours(6), missing=cloudwatch.TreatMissingData.BREACHING)
+        CfnOutput(self, "CanaryFunctionName", value=canary_fn.function_name)
 
         CfnOutput(
             self,

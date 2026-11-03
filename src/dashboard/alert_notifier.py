@@ -27,7 +27,9 @@ def _headline(msg: dict[str, Any]) -> str:
     icon = _ICON.get(state, "⚠️")
     name = msg.get("AlarmName") or "Onca alarm"
     reason = msg.get("NewStateReason") or ""
-    return f"{icon} {name} — {state}: {reason}"
+    # ADR 030 alarms carry a description saying what broke and where to look
+    what = msg.get("AlarmDescription") or ""
+    return f"{icon} {name} — {state}: {what + ' ' if what else ''}{reason}"
 
 
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:

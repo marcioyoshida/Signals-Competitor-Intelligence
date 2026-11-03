@@ -44,6 +44,16 @@ def _compress(out: dict[str, Any], event: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def emit_size_metric(raw_bytes: int, response_bytes: int) -> None:
+    """ADR 030 size watch: CloudWatch embedded-metric line (no API call, no IAM). The alarm
+    fires at 4 MB of response payload, well before Lambda's 6 MB cap."""
+    print(json.dumps({"_aws": {"Timestamp": int(__import__("time").time() * 1000), "CloudWatchMetrics": [{
+        "Namespace": "Onca", "Dimensions": [["Service"]],
+        "Metrics": [{"Name": "FeedResponseBytes", "Unit": "Bytes"},
+                    {"Name": "FeedResponseRawBytes", "Unit": "Bytes"}]}]},
+        "Service": "FeedApi", "FeedResponseBytes": response_bytes, "FeedResponseRawBytes": raw_bytes}))
+
+
 def _etag(s3_etag: str, tenant: Any, tier: Any, modules: list[str], billing: Any, upgrade: Any,
           prefs: Any = None) -> str:
     """#285: a revisit re-downloaded the whole scoped feed (617 KB gzip for a sovereign admin) on
@@ -139,7 +149,10 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         scoped["upgrade"] = upgrade
         out = _resp(200, scoped)
         out["headers"].update(cache)
-        return _compress(out, event)
+        raw_len = len(out["body"].encode("utf-8"))
+        out = _compress(out, event)
+        emit_size_metric(raw_len, len(out["body"]))
+        return out
     except Exception as exc:  # pragma: no cover - read-only, best-effort
         print(f"feed_api error: {exc}")
         return _resp(500, {"error": "feed unavailable"})

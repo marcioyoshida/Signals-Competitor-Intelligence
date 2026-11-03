@@ -1947,6 +1947,17 @@ def _load_fw_updates_by_narrative(digests_bucket: str) -> dict[str, dict[str, li
         return {}
 
 
+def feed_size_metrics(new_bytes: int, prev_bytes: int | None) -> list[dict[str, Any]]:
+    """ADR 030 size watch: feed.json size, and its change against the previous publish. A jump
+    or a drop over 30% in one run pages: on 2026-11-02 a run took feed.json to 7.2 MB and the
+    widest tenant's /api/feed went past Lambda's 6 MB response cap; a sudden drop is lost data."""
+    out = [{"MetricName": "FeedJsonBytes", "Value": new_bytes, "Unit": "Bytes"}]
+    if prev_bytes:
+        out.append({"MetricName": "FeedGrowthPct", "Unit": "Percent",
+                    "Value": round((new_bytes - prev_bytes) * 100.0 / prev_bytes, 2)})
+    return out
+
+
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """Build feed.json from recent narratives and publish it to the site bucket."""
     digests_bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
@@ -2236,6 +2247,10 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     if site_bucket:
         s3 = boto3.client("s3")
         try:
+            prev_bytes = s3.head_object(Bucket=site_bucket, Key=FEED_KEY)["ContentLength"]
+        except Exception:  # noqa: BLE001 - first publish, or no read grant: no growth figure
+            prev_bytes = None
+        try:
             s3.put_object(
                 Bucket=site_bucket,
                 Key=FEED_KEY,
@@ -2251,7 +2266,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             try:
                 boto3.client("cloudwatch").put_metric_data(
                     Namespace="Onca",
-                    MetricData=[{"MetricName": "FeedPublished", "Value": 1, "Unit": "Count"}],
+                    MetricData=[{"MetricName": "FeedPublished", "Value": 1, "Unit": "Count"},
+                                *feed_size_metrics(len(body), prev_bytes)],
                 )
             except Exception as exc:  # pragma: no cover - metric emission is best-effort
                 print(f"Warning: FeedPublished metric skipped: {exc}")
