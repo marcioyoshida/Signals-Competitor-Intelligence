@@ -12,9 +12,16 @@ no identity, or a provisioned-but-empty tenant, gets nothing.
 """
 from __future__ import annotations
 
+import base64
+import gzip
 import json
 import os
 from typing import Any
+
+# Lambda caps a response at 6 MB; an all-modules tenant's scoped feed passed it (live
+# 2026-11-03: feed.json 7.2 MB -> 413 RequestEntityTooLarge -> "feed indisponível (HTTP 500)").
+# Gzip whenever the client takes it, and always above this size (JSON shrinks ~10x).
+GZIP_ALWAYS_ABOVE = 1_000_000
 
 
 def _resp(status: int, body: Any) -> dict[str, Any]:
@@ -23,6 +30,18 @@ def _resp(status: int, body: Any) -> dict[str, Any]:
         "headers": {"content-type": "application/json", "cache-control": "no-store"},
         "body": json.dumps(body, ensure_ascii=False, default=str),
     }
+
+
+def _compress(out: dict[str, Any], event: dict[str, Any]) -> dict[str, Any]:
+    body = out["body"].encode("utf-8")
+    h = {str(k).lower(): v for k, v in ((event or {}).get("headers") or {}).items()}
+    if "gzip" not in str(h.get("accept-encoding") or "") and len(body) <= GZIP_ALWAYS_ABOVE:
+        return out
+    out["body"] = base64.b64encode(gzip.compress(body, compresslevel=6)).decode("ascii")
+    out["isBase64Encoded"] = True
+    out["headers"]["content-encoding"] = "gzip"
+    out["headers"]["vary"] = "accept-encoding"
+    return out
 
 
 def _etag(s3_etag: str, tenant: Any, tier: Any, modules: list[str], billing: Any, upgrade: Any,
@@ -120,7 +139,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         scoped["upgrade"] = upgrade
         out = _resp(200, scoped)
         out["headers"].update(cache)
-        return out
+        return _compress(out, event)
     except Exception as exc:  # pragma: no cover - read-only, best-effort
         print(f"feed_api error: {exc}")
         return _resp(500, {"error": "feed unavailable"})

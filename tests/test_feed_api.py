@@ -136,3 +136,38 @@ def test_unchanged_feed_revalidates_with_304_and_no_body(monkeypatch):
     monkeypatch.setattr(tc, "get_tenant_config", lambda t: {"tier": "saas", "modules": ["fintech"]})
     other = feed_api.lambda_handler({**ev, "headers": {"if-none-match": etag}}, None)
     assert other["statusCode"] == 200 and other["headers"]["etag"] != etag
+
+
+def _gunzip(r):
+    import base64
+    import gzip
+    assert r["isBase64Encoded"] is True and r["headers"]["content-encoding"] == "gzip"
+    return json.loads(gzip.decompress(base64.b64decode(r["body"])))
+
+
+def test_a_feed_over_lambdas_6mb_cap_is_gzipped(monkeypatch):
+    """Live 2026-11-03: feed.json reached 7.2 MB and an all-modules tenant's response hit Lambda's
+    6 MB limit (413 -> 'feed indisponível (HTTP 500)'). Even a client that sends no
+    Accept-Encoding gets gzip above GZIP_ALWAYS_ABOVE."""
+    import src.dashboard.tenant_config as tc
+
+    monkeypatch.setattr(tc, "get_tenant_config", lambda t: {"tier": "saas", "modules": ["banking"]})
+    monkeypatch.setenv("ONCA_SITE_BUCKET", "b")
+    feed = _feed()
+    feed["entity_attrs"]["itau"]["blob"] = "x" * 7_000_000
+    _patch_s3(monkeypatch, feed)
+    r = feed_api.lambda_handler(_ev({"sub": "u", "custom:tenant": "acme"}), None)
+    assert r["statusCode"] == 200 and len(r["body"]) < 6_000_000
+    assert _gunzip(r)["tenant"] == "acme"
+
+
+def test_small_feed_gzips_only_when_the_client_accepts_it(monkeypatch):
+    import src.dashboard.tenant_config as tc
+
+    monkeypatch.setattr(tc, "get_tenant_config", lambda t: {"tier": "saas", "modules": ["banking"]})
+    monkeypatch.setenv("ONCA_SITE_BUCKET", "b")
+    _patch_s3(monkeypatch, _feed())
+    plain = feed_api.lambda_handler(_ev({"sub": "u", "custom:tenant": "acme"}), None)
+    assert "isBase64Encoded" not in plain and json.loads(plain["body"])["tenant"] == "acme"
+    ev = {**_ev({"sub": "u", "custom:tenant": "acme"}), "headers": {"Accept-Encoding": "gzip, br"}}
+    assert _gunzip(feed_api.lambda_handler(ev, None))["tenant"] == "acme"
