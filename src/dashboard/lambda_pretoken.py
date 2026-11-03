@@ -45,7 +45,13 @@ from __future__ import annotations
 
 import os
 
+import boto3
+
 FEDERATED_TABLE = os.environ.get("ONCA_FEDERATED_MAP_TABLE", "")
+# Loaded at init, not on the first Google login: Cognito allows this trigger 5 s, and importing
+# boto3 + building a client inside a 128 MB invocation took ~7 s (live 2026-11-03, a Google
+# login 500'd). Init runs with burst CPU; the client is reused while the environment is warm.
+_DDB = boto3.client("dynamodb") if FEDERATED_TABLE else None
 
 
 def lambda_handler(event, context):
@@ -81,9 +87,7 @@ def lambda_handler(event, context):
     if not (email or sub) or not FEDERATED_TABLE:
         return event
 
-    import boto3
-
-    ddb = boto3.client("dynamodb")
+    ddb = _DDB or boto3.client("dynamodb")
     # #249: an invite links the identity's SUB (a Hide-My-Email relay address can't match the
     # corporate e-mail an operator mapped) — that link wins; the e-mail map is the fallback.
     item = (ddb.get_item(TableName=FEDERATED_TABLE, Key={"email": {"S": "sub#" + sub}}).get("Item")

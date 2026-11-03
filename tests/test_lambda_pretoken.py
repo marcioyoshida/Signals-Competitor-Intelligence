@@ -147,3 +147,14 @@ def test_apple_sign_in_without_email_verified_still_maps():
          mock.patch.object(lambda_pretoken, "FEDERATED_TABLE", "onca-federated-tenant-map"):
         out = lambda_pretoken.lambda_handler(ev, None)
     assert out["response"]["claimsOverrideDetails"]["claimsToAddOrOverride"]["custom:tenant"] == "acme"
+
+
+def test_pretoken_has_cpu_for_cognitos_5s_budget():
+    """Live 2026-11-03: at 128 MB a Google login spent ~7 s importing boto3 inside the trigger
+    (Cognito allows 5 s), and /exec returned HTTP 500. boto3 is loaded at init now."""
+    from pathlib import Path
+    src = Path(lambda_pretoken.__file__).read_text(encoding="utf-8")
+    assert "\nimport boto3\n" in src and "_DDB = boto3.client" in src
+    app = (Path(__file__).resolve().parents[1] / "infra" / "app.py").read_text(encoding="utf-8")
+    block = app[app.index('"OncaPreTokenGenFn"'):app.index('"OncaPreTokenGenFn"') + 700]
+    assert "memory_size=512" in block

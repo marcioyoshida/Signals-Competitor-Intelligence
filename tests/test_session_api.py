@@ -235,3 +235,28 @@ def test_session_lambda_may_run_the_admin_password_flow():
     assert '"cognito-idp:AdminInitiateAuth"' in stack and '"cognito-idp:AdminRespondToAuthChallenge"' in stack
     for route in ("password", "new-password", "forgot", "reset"):
         assert f'"/api/session/{route}"' in stack, route
+
+
+def test_a_slow_cognito_is_a_504_not_a_500(monkeypatch):
+    """Live 2026-11-03: a Google login hit the 10 s read timeout on /oauth2/token (slow Pre Token
+    trigger + Cognito's retry) and the unhandled ReadTimeout surfaced as HTTP 500 on /exec."""
+    import requests
+
+    def slow(d):
+        raise requests.exceptions.ReadTimeout("read timed out")
+    monkeypatch.setattr(sa, "_token_post", slow)
+    r = sa.lambda_handler(_ev("/api/session/exchange", {"code": "c", "code_verifier": "v",
+                                                         "redirect_uri": "https://onssa.org/exec"}), None)
+    assert r["statusCode"] == 504 and "try again" in json.loads(r["body"])["error"]
+    r = sa.lambda_handler(_ev("/api/session/refresh", cookie="rt"), None)
+    assert r["statusCode"] == 504
+
+
+def test_token_timeout_outlasts_cognito_trigger_retries_and_fits_the_lambda():
+    import re
+    connect, read = sa.TOKEN_TIMEOUT
+    assert read >= 15
+    app = (Path(__file__).resolve().parents[1] / "infra" / "app.py").read_text(encoding="utf-8")
+    block = app[app.index('"OncaSessionApi"'):app.index('"OncaSessionApi"') + 600]
+    lam = int(re.search(r"timeout=Duration\.seconds\((\d+)\)", block).group(1))
+    assert connect + read < lam < 30

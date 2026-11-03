@@ -57,6 +57,10 @@ MAX_IDLE_DAYS = 30  # = the Cognito refresh-token validity (infra/app.py)
 _ALLOWED_HOSTS = {"onssa.org", "www.onssa.org"}
 # ADR 029 (#254/#255): the store app's native redirect. Exactly this URI — never a scheme wildcard.
 APP_REDIRECT = "onca://auth"
+# Cognito gives the Pre Token Generation trigger 5 s and retries it, so a slow trigger can hold
+# /oauth2/token well past 10 s (live 2026-11-03: a Google login 500'd at a 10 s read timeout).
+# Stays under the Lambda's own timeout (infra/app.py).
+TOKEN_TIMEOUT = (5, 20)
 
 
 def _resp(status: int, body: dict[str, Any], cookies: list[str] | None = None) -> dict[str, Any]:
@@ -150,7 +154,7 @@ def app_lock_minutes(tenant: str | None, *, table: Any | None = None,
 
 def _token_post(data: dict[str, str]) -> requests.Response:
     return requests.post(f"{os.environ['ONCA_COGNITO_DOMAIN']}/oauth2/token", data=data,
-                         headers={"content-type": "application/x-www-form-urlencoded"}, timeout=10)
+                         headers={"content-type": "application/x-www-form-urlencoded"}, timeout=TOKEN_TIMEOUT)
 
 
 def _ok_redirect(uri: str) -> bool:
@@ -316,10 +320,15 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         return _resp(403, {"error": "forbidden"})
     path = str(event.get("rawPath") or "").rstrip("/")
     route = path.rsplit("/", 1)[-1]
-    if route in _BODY_ROUTES:
-        return _BODY_ROUTES[route](_body(event))
-    if path.endswith("/refresh"):
-        return refresh(event)
+    try:
+        if route in _BODY_ROUTES:
+            return _BODY_ROUTES[route](_body(event))
+        if path.endswith("/refresh"):
+            return refresh(event)
+    except requests.exceptions.RequestException as exc:
+        # Cognito slow or unreachable: an answer the page can show ("try again"), not a bare 500.
+        print(f"[session] {route}: Cognito {type(exc).__name__}")
+        return _resp(504, {"error": "sign-in service timed out, try again"})
     if path.endswith("/logout"):
         return logout(event)
     return _resp(404, {"error": "not found"})

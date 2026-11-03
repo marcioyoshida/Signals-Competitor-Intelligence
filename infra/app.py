@@ -1067,7 +1067,9 @@ class OncaPrototypeStack(Stack):
                 handler="src.dashboard.lambda_pretoken.lambda_handler",
                 code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
                 timeout=Duration.seconds(10),
-                memory_size=128,
+                # 128 MB took ~7 s to load boto3 on a Google login, past Cognito's 5 s trigger
+                # budget (live 2026-11-03 HTTP 500 on /exec). 512 MB = 4x the CPU.
+                memory_size=512,
                 environment={"ONCA_FEDERATED_MAP_TABLE": federated_map_table.table_name},
             )
             federated_map_table.grant_read_data(pretoken_fn)
@@ -2619,7 +2621,8 @@ class OncaPrototypeStack(Stack):
             runtime=LAMBDA_RUNTIME,
             handler="src.dashboard.session_api.lambda_handler",
             code=lambda_.Code.from_asset(str(LAMBDA_ASSET)),
-            timeout=Duration.seconds(15),
+            # > session_api.TOKEN_TIMEOUT (5 s connect + 20 s read), < the HTTP API's 30 s cap
+            timeout=Duration.seconds(28),
             memory_size=256,
             environment={
                 "PYTHONPATH": "/var/task",
