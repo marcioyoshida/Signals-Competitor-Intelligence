@@ -242,3 +242,24 @@ Raised 2026-10-11 as GitHub issues **#248–#260** under epic **#172**, label `m
 11. **#258** — App mode: hide purchase/upgrade CTAs, open external links in the system browser, native share sheet for card links.
 12. **#259** — App QA: Android emulator flows in CI, plus a TestFlight/internal-track device checklist extending #200.
 13. **#260** — Store release (gated): listings, screenshots, review notes, a reviewer demo tenant, and the 4.2 justification. Supersedes #171.
+
+## Production-app roadmap (2026-11-03): milestone *Mobile M5 — Production app*
+
+After M3 (shell + TestFlight/internal builds), the gap to a supported production app is split
+into stories. #260 stays the gated go/no-go for public store publication.
+
+| Story | What it adds | Gate / dependency |
+|---|---|---|
+| #311 | Release pipeline: semver + remote build numbers, EAS `production`/`preview` channels, `expo-updates` OTA with `runtimeVersion: appVersion`, manual-dispatch workflow that checks the EAS free-plan quota first | none |
+| #312 | Observability: native crash reporting, `/exec` app-mode error beacon (status/route only), crash-free alarm into ADR 030, app-mode canary check | none |
+| #313 | Store reviewer tenant + login (taken out of #260): internal-excluded, password only in SSM, in the canary and `scripts/auth_smoke.py` | none |
+| #314 | Listings PT-BR/EN, scripted screenshots from the reviewer tenant, URLs, rating; assets versioned in `mobile/apps/onca/store/` | #313 |
+| #315 | App Privacy / Data safety from `docs/store-privacy-inventory.md`, export compliance, content rating, LGPD; a test pins permissions/SDKs to the inventory | #312 (new data flows) |
+| #316 | Android: FCM, Play App Signing, `assetlinks.json` (#289), testing tracks, device pass | owner Firebase, #253 |
+| #317 | iOS external TestFlight beta with real-iPhone sign-off (#200, #256, #289, #250 rows), 2 weeks clean | #311 |
+| #318 | Minimum supported app version: soft banner / hard block, unknown version never hard | none |
+| #319 | Release and incident runbook: phased release, rollback (halt, OTA republish), review-reply templates, support, credential inventory (names only) | none |
+| #320 | Private MDM distribution (Apple Business Manager custom app, Managed Google Play) | gated like #260; #253 |
+
+Publication (#260) starts when its gate is met **and** #311–#317 are done.
+
