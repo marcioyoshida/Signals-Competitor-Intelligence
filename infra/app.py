@@ -3797,6 +3797,11 @@ class OncaPrototypeStack(Stack):
             environment={
                 "PYTHONPATH": "/var/task",
                 "ONCA_DASHBOARD_URL": "https://d37aa8gtuqquoe.cloudfront.net/exec",
+                # ADR 030: until 2026-11-03 no channel was configured (neither env nor the
+                # /onca/api-key parameter held these), so every alarm since #109 went nowhere.
+                # onssa.org is an SES-verified domain; the recipient is the stack's alertEmail.
+                "ONCA_ALERT_EMAIL_FROM": "alertas@onssa.org",
+                "ONCA_ALERT_EMAIL_TO": self.node.try_get_context("alertEmail") or "",
             },
         )
         # Same channel-config lookup as feed_fn's weekly digest (env, falling back to the

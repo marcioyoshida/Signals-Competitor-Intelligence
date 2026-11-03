@@ -221,3 +221,14 @@ def test_the_real_feed_for_the_widest_tenant_fits_the_payload_budget():
     out = feed_api._compress(feed_api._resp(200, scoped), {"headers": {}})
     payload = len(json.dumps(out).encode())
     assert payload < canary.FEED_PAYLOAD_BUDGET, payload
+
+
+def test_alerts_have_an_email_channel():
+    """2026-11-03: the notifier reported teams/slack/email all None — alarms since #109 were
+    delivered nowhere. The alert Lambda now carries a sender on a verified domain and the
+    stack's alertEmail as recipient."""
+    block = APP[APP.index('"OncaAlertNotifier"'):APP.index('"OncaAlertNotifier"') + 1200]
+    assert '"ONCA_ALERT_EMAIL_FROM": "alertas@onssa.org"' in block
+    assert '"ONCA_ALERT_EMAIL_TO": self.node.try_get_context("alertEmail")' in block
+    import json as _j
+    assert _j.loads((ROOT / "infra" / "cdk.json").read_text())["context"].get("alertEmail")
