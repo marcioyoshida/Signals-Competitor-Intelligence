@@ -38,3 +38,11 @@ def test_screenshot_sizes():
             w, h = struct.unpack(">II", f.read_bytes()[16:24])
             assert (w, h) == size, (f.name, w, h)
             assert max(w, h) <= 2 * min(w, h) or dev.startswith("iphone")     # Play: at most 2:1
+
+
+def test_release_workflow_update_names_its_environment():
+    """#311 dry run 2026-11-03: `eas update --non-interactive` refuses to run without --environment."""
+    wf = (ROOT / ".github" / "workflows" / "mobile-release.yml").read_text()
+    upd = wf[wf.index("- name: OTA update"):wf.index("- name: Quota guard")]
+    assert '--environment "${{ inputs.profile }}"' in upd and "--non-interactive" in upd
+    assert "on:\n  workflow_dispatch:" in wf and "push:" not in wf.split("jobs:")[0]   # manual only

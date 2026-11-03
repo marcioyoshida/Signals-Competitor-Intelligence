@@ -65,7 +65,7 @@ jobs:
           MSG: ${{ inputs.message }}          # via env, never interpolated into the script
         run: |
           test -n "$MSG" || { echo "::error::an update needs a message"; exit 1; }
-          npx eas-cli@latest update --channel "${{ inputs.profile }}" --message "$MSG" \
+          npx eas-cli@latest update --channel "${{ inputs.profile }}" --environment "${{ inputs.profile }}" --message "$MSG" \
             --platform "${{ inputs.platform }}" --non-interactive
       - name: Quota guard
         if: inputs.kind == 'build'
