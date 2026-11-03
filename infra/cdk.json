@@ -29,6 +29,16 @@
         "domain": "tenant-test.onssa.org",
         "cert_arn": "arn:aws:acm:us-east-1:668449743071:certificate/490d924b-906d-40bc-8d15-eaa2ba975d7d"
       }
-    ]
+    ],
+    "app_min_versions": {
+      "ios": {
+        "soft": "0.0.0",
+        "hard": "0.0.0"
+      },
+      "android": {
+        "soft": "0.0.0",
+        "hard": "0.0.0"
+      }
+    }
   }
 }

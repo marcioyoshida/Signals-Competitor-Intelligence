@@ -164,6 +164,9 @@ def lambda_handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]
     elif path == "/.well-known/apple-app-site-association":   # #289 universal links (same behavior)
         from src.dashboard.app_links import aasa_response
         route, out = path, aasa_response()
+    elif path == "/.well-known/assetlinks.json":             # #316 Android App Links (same behavior)
+        from src.dashboard.app_links import assetlinks_response
+        route, out = path, assetlinks_response()
     elif path == "/oauth/jwks.json":
         route, out = path, build().jwks()
     elif path in FLOW:

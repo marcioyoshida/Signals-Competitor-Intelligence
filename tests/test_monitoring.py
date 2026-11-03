@@ -39,6 +39,9 @@ class _R:
     def __init__(self, status, content=b""):
         self.status_code, self.content = status, content
 
+    def json(self):
+        return json.loads(self.content or b"{}")
+
 
 class _Http:
     def __init__(self, routes, session=401):
@@ -49,6 +52,8 @@ class _Http:
 
     def post(self, url, **kw):
         self.posts.append((url, kw))
+        if url.endswith("/api/session/app"):
+            return _R(200, b'{"ok": true, "update": "ok"}')
         return _R(self.session, b'{"error": "code exchange refused"}')
 
 
@@ -70,7 +75,8 @@ ENV = {"ONCA_CANARY_FEED_FN": "feed", "ONCA_CANARY_PRETOKEN_FN": "pre",
        "ONCA_CANARY_EXTRA_HOSTS": "tenant-test.onssa.org"}
 PAGE = _R(200, b"x" * 20_000)
 ROUTES = {"https://onssa.org/exec": PAGE, "https://onssa.org/api/feed": _R(401, b"{}"),
-          "https://tenant-test.onssa.org/exec": PAGE}
+          "https://tenant-test.onssa.org/exec": PAGE,
+          "https://onssa.org/v2/app-guard.js": _R(200, b"... /api/session/app ...")}
 WARM = "REPORT RequestId: x Duration: 9.1 ms Billed Duration: 10 ms Memory Size: 512 MB"
 
 
@@ -84,7 +90,7 @@ def test_healthy_run_passes_every_check():
     assert all(c["ok"] for c in checks), [c for c in checks if not c["ok"]]
     assert set(_by(checks)) == {"feed:owner-all-sectors", "feed:directory-reviewer", "pretoken",
                                 "http:onssa.org/exec", "http:onssa.org/api/feed",
-                                "http:tenant-test.onssa.org/exec", "session", "stack"}
+                                "http:tenant-test.onssa.org/exec", "session", "app", "stack"}
 
 
 def test_the_two_2026_11_03_incidents_fail_the_canary():
@@ -126,6 +132,23 @@ def test_session_and_stack_checks():
     assert canary.check_session(http.post, "https://onssa.org")["ok"]
     assert http.posts[0][1]["headers"]["x-onca-session"] == "1"
     assert not canary.check_stack(_Cfn(490), "S")["ok"]
+
+
+def test_operator_only_rollups_leaking_into_a_tenant_feed_fail_the_canary():
+    lam = _Lam({"app-store-review": 3})
+    real = lam.invoke
+
+    def leaky(FunctionName, Payload, LogType=None):
+        r = real(FunctionName, Payload, LogType)
+        out = json.loads(r["Payload"].read())
+        body = json.loads(gzip.decompress(base64.b64decode(out["body"])))
+        body["tenant_usage"] = {"rows": [1]}
+        out["body"] = base64.b64encode(gzip.compress(json.dumps(body).encode())).decode()
+        r["Payload"] = io.BytesIO(json.dumps(out).encode())
+        return r
+    lam.invoke = leaky
+    c = canary.check_feed(lam, "feed", "app-store-review")
+    assert not c["ok"] and c["leaked"] == ["tenant_usage"]
 
 
 def test_the_synthetic_google_user_can_never_map_to_a_tenant():

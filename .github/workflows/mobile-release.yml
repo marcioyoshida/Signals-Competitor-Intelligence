@@ -1,0 +1,79 @@
+# #311 (ADR 029, milestone Mobile M5): the store app's release pipeline. MANUAL ONLY: it never runs
+# on push. Order: the mobile-qa gate (unit, Maestro on an emulator) -> EAS quota guard -> either an
+# OTA update (JS-only change, same runtime version) or a store build (+ optional submit).
+#
+# Needs the repository secret EXPO_TOKEN (an Expo access token of the `marcioy` account, created by
+# the owner). The EAS free plan is shared by every app on that account: scripts/quota-guard.mjs
+# refuses a build that would leave fewer than 2 builds per platform for the others.
+name: mobile-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      kind:
+        description: "update = OTA (JS only) · build = new store build"
+        type: choice
+        options: [update, build]
+        default: update
+      platform:
+        type: choice
+        options: [ios, android, all]
+        default: ios
+      profile:
+        description: "EAS profile / update channel"
+        type: choice
+        options: [preview, production]
+        default: preview
+      submit:
+        description: "build only: submit to TestFlight / Play internal after the build"
+        type: boolean
+        default: false
+      message:
+        description: "update only: what changed (shown in EAS)"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-release
+  cancel-in-progress: false
+
+jobs:
+  qa:
+    uses: ./.github/workflows/mobile-qa.yml
+    secrets: inherit
+
+  release:
+    needs: qa
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults: { run: { working-directory: mobile/apps/onca } }
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: npm, cache-dependency-path: mobile/apps/onca/package-lock.json }
+      - run: npm ci --no-audit --no-fund
+      - name: Expo token present
+        run: test -n "$EXPO_TOKEN" || { echo "::error::EXPO_TOKEN repository secret is missing"; exit 1; }
+      - name: OTA update
+        if: inputs.kind == 'update'
+        env:
+          MSG: ${{ inputs.message }}          # via env, never interpolated into the script
+        run: |
+          test -n "$MSG" || { echo "::error::an update needs a message"; exit 1; }
+          npx eas-cli@latest update --channel "${{ inputs.profile }}" --message "$MSG" \
+            --platform "${{ inputs.platform }}" --non-interactive
+      - name: Quota guard
+        if: inputs.kind == 'build'
+        run: |
+          P="${{ inputs.platform }}"; [ "$P" = all ] && P="ios android"
+          npx eas-cli@latest account:usage marcioy --json | node scripts/quota-guard.mjs $P
+      - name: Store build
+        if: inputs.kind == 'build'
+        run: |
+          npx eas-cli@latest build --profile "${{ inputs.profile }}" --platform "${{ inputs.platform }}" \
+            --non-interactive --wait ${{ inputs.submit && inputs.profile == 'production' && '--auto-submit' || '' }}

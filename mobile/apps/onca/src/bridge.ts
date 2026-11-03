@@ -9,9 +9,36 @@ export const COGNITO_LEGACY_ORIGIN = "https://onca-668449743071.auth.us-east-1.a
 /** Origins the WebView may render. Everything else opens in the system browser. */
 const IN_APP_HOSTS = new Set(["onssa.org", "www.onssa.org"]);
 
+/** Bridge 4 (#312/#318): the flag also carries the app version and build, which /v2/app-guard.js
+ *  reports with health events and checks against the minimum supported version. */
+export const BRIDGE = 4;
+
+export type AppInfo = { version?: string | null; build?: string | number | null };
+
+/** A store version ("1.2.3") or null; a build number as a non-negative integer or null. */
+export function cleanAppInfo(info: AppInfo = {}): { version: string | null; build: number | null } {
+  const v = typeof info.version === "string" && /^\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(info.version) ? info.version : null;
+  const n = Number(info.build);
+  return { version: v, build: Number.isInteger(n) && n >= 0 && n <= 100000 ? n : null };
+}
+
 /** Injected before /exec loads: tells context.js it runs inside the app (and which redirect). */
-export function injectedFlag(platform: string): string {
-  return `window.__ONCA_APP__ = ${JSON.stringify({ redirectUri: REDIRECT, platform, bridge: 3 })}; true;`;
+export function injectedFlag(platform: string, info: AppInfo = {}): string {
+  const { version, build } = cleanAppInfo(info);
+  return `window.__ONCA_APP__ = ${JSON.stringify({ redirectUri: REDIRECT, platform, bridge: BRIDGE, version, build })}; true;`;
+}
+
+/** #312: the body of a health event to POST /api/session/app (the same contract as app-guard.js).
+ *  Only enums, version and build: a crash's message or stack never leaves the device. */
+export function appEventBody(kind: "start" | "fatal", platform: string, info: AppInfo = {}): string {
+  const { version, build } = cleanAppInfo(info);
+  return JSON.stringify({ kind, source: "shell", platform: platform === "ios" || platform === "android" ? platform : "other",
+    version, build, bridge: BRIDGE });
+}
+
+/** The app's user agent suffix: "OncaApp/<version>" (store version, or 0 when unknown). */
+export function userAgentSuffix(info: AppInfo = {}): string {
+  return `OncaApp/${cleanAppInfo(info).version ?? "0"}`;
 }
 
 function query(url: string): Record<string, string> {

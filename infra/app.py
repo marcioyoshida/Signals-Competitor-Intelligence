@@ -6,6 +6,7 @@ later be extended to S3/DynamoDB persistence.
 from __future__ import annotations
 
 import base64
+import json
 import os
 from pathlib import Path
 
@@ -2640,12 +2641,16 @@ class OncaPrototypeStack(Stack):
         # #277 own sign-in form on /exec: the password side runs here (ADMIN_USER_PASSWORD_AUTH +
         # the invited user's first-password challenge); forgot/reset are public Cognito calls.
         session_fn.add_environment("ONCA_USER_POOL_ID", user_pool.user_pool_id)
+        # #318: minimum supported store-app version per platform (soft banner / hard block)
+        session_fn.add_environment("ONCA_APP_MIN_VERSIONS", json.dumps(
+            self.node.try_get_context("app_min_versions") or {}, sort_keys=True))
         user_pool.grant(session_fn, "cognito-idp:AdminInitiateAuth",
                         "cognito-idp:AdminRespondToAuthChallenge")
         _session_integ = apigwv2_int.HttpLambdaIntegration("SessionInteg", session_fn)
         for _spath in ("/api/session/exchange", "/api/session/refresh", "/api/session/logout",
                        "/api/session/password", "/api/session/new-password",
-                       "/api/session/forgot", "/api/session/reset"):
+                       "/api/session/forgot", "/api/session/reset",
+                       "/api/session/app"):              # #312/#318 store-app health + min version
             auth_api.add_routes(path=_spath, methods=[apigwv2.HttpMethod.POST],
                                 integration=_session_integ)
         # #167 content-free push alerts. The VAPID private key is a SecureString created out of
@@ -2867,6 +2872,9 @@ class OncaPrototypeStack(Stack):
         tenant_config_table.grant_read_data(mcp_fn)
         agent_fn.grant_invoke(mcp_fn)    # `ask` / A2A → the same grounded, tenant-scoped /api/ask
         act_fn.grant_invoke(mcp_fn)      # /mcp/ops → the same authorized, journaled /api/act
+        # #316: Play App Signing + upload key fingerprints for /.well-known/assetlinks.json (empty = 404)
+        oauth_fn.add_environment("ONCA_ANDROID_CERT_SHA256",
+                                 ",".join(self.node.try_get_context("android_cert_sha256") or []))
         _oauth_integ = apigwv2_int.HttpLambdaIntegration("OAuthInteg", oauth_fn)
         for _opath in ("/oauth/{proxy+}", "/.well-known/{proxy+}"):
             auth_api.add_routes(path=_opath, methods=[apigwv2.HttpMethod.GET, apigwv2.HttpMethod.POST],
@@ -4314,6 +4322,16 @@ class OncaPrototypeStack(Stack):
                                             period=Duration.hours(1), statistic="Maximum")},
                0.05, period=Duration.hours(1))
 
+        _app_ev = {k: cloudwatch.Metric(namespace="Onca/App", metric_name="AppEvents",
+                                         dimensions_map={"Kind": kind}, period=Duration.hours(6), statistic="Sum")
+                   for k, kind in (("st", "start"), ("fa", "fatal"), ("er", "error"))}
+        _alarm("OncaAlarmAppHealth",
+               "ADR 030 / #312: the store app is unhealthy: crash-free launches under 99% (with 10+ "
+               "launches in 6 h) or 25+ page/API errors in 6 h. Logs Insights on the session Lambda: "
+               "filter Kind, group by version/route.",
+               "IF(FILL(st,0) >= 10 AND FILL(fa,0) / FILL(st,1) > 0.01, 1, IF(FILL(er,0) >= 25, 1, 0))",
+               _app_ev, 1, period=Duration.hours(6))
+
         canary_fn = lambda_.Function(
             self, "OncaCanary",
             runtime=LAMBDA_RUNTIME,
@@ -4325,8 +4343,8 @@ class OncaPrototypeStack(Stack):
                 "PYTHONPATH": "/var/task",
                 "ONCA_CANARY_FEED_FN": feed_api_fn.function_name,
                 "ONCA_CANARY_PRETOKEN_FN": pretoken_fn.function_name if pretoken_fn else "",
-                # the widest tenant (largest feed) and the outside-reviewer tenant
-                "ONCA_CANARY_TENANTS": "owner-all-sectors,directory-reviewer",
+                # the widest tenant (largest feed), the outside-reviewer tenant, the store reviewer (#313)
+                "ONCA_CANARY_TENANTS": "owner-all-sectors,directory-reviewer,app-store-review",
                 "ONCA_CANARY_ORIGIN": "https://onssa.org",
                 "ONCA_CANARY_EXTRA_HOSTS": ",".join(d["domain"] for d in tenant_domains),
                 "ONCA_STACK_NAME": self.stack_name,

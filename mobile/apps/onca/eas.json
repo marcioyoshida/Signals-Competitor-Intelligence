@@ -8,7 +8,8 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
-      }
+      },
+      "channel": "preview"
     },
     "e2e": {
       "withoutCredentials": true,
@@ -18,10 +19,12 @@
       },
       "android": {
         "buildType": "apk"
-      }
+      },
+      "channel": "e2e"
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "channel": "production"
     }
   },
   "submit": {

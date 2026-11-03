@@ -5,11 +5,13 @@ name: mobile-qa
 
 on:
   workflow_dispatch:
+  workflow_call:          # #311: the release workflow runs the same gate first
   push:
     branches: [main]
     paths:
       - "mobile/**"
       - "src/dashboard/site/v2/context.js"
+      - "src/dashboard/site/v2/app-guard.js"
       - ".github/workflows/mobile-qa.yml"
 
 permissions:

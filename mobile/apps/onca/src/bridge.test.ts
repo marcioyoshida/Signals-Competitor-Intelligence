@@ -31,7 +31,7 @@ test("page messages: only auth/logout to our own Hosted UI", () => {
 });
 
 test("injected flag is what context.js checks for", () => {
-  assert.match(injectedFlag("ios"), /window\.__ONCA_APP__ = \{"redirectUri":"onca:\/\/auth","platform":"ios","bridge":3\}/);
+  assert.match(injectedFlag("ios"), /window\.__ONCA_APP__ = \{"redirectUri":"onca:\/\/auth","platform":"ios","bridge":4,"version":null,"build":null\}/);
 });
 
 import { isPurchaseUrl, isShareUrl } from "./bridge.ts";
@@ -120,6 +120,22 @@ test("#289 share messages: both card-link forms, nothing else", () => {
     assert.deepEqual(parseMessage(JSON.stringify({ type: "share", url: u })), { type: "share", url: u });
   }
   assert.equal(parseMessage(JSON.stringify({ type: "share", url: "https://onssa.org/c/0123456789abcdef?x=1" })), null);
-  assert.match(injectedFlag("android"), /"bridge":3/);
+  assert.match(injectedFlag("android"), /"bridge":4/);
 });
 
+
+import { appEventBody, cleanAppInfo, userAgentSuffix } from "./bridge.ts";
+
+test("bridge 4 carries a clean version and build (#312/#318)", () => {
+  assert.match(injectedFlag("ios", { version: "0.2.0", build: "7" }), /"bridge":4,"version":"0.2.0","build":7/);
+  assert.deepEqual(cleanAppInfo({ version: "1.0.0-beta<script>", build: "x" }), { version: null, build: null });
+  assert.equal(userAgentSuffix({ version: "0.2.0" }), "OncaApp/0.2.0");
+  assert.equal(userAgentSuffix({}), "OncaApp/0");
+});
+
+test("a health event carries enums, version and build only — never error text", () => {
+  const b = JSON.parse(appEventBody("fatal", "ios", { version: "0.2.0", build: 7 }));
+  assert.deepEqual(Object.keys(b).sort(), ["bridge", "build", "kind", "platform", "source", "version"]);
+  assert.equal(b.kind, "fatal"); assert.equal(b.source, "shell");
+  assert.equal(JSON.parse(appEventBody("start", "web")).platform, "other");
+});

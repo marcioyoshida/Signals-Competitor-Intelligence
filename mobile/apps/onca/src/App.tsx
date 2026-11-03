@@ -14,15 +14,44 @@ import * as LocalAuthentication from "expo-local-authentication";
 import * as SecureStore from "expo-secure-store";
 import * as ScreenCapture from "expo-screen-capture";
 import Constants from "expo-constants";
+import * as Application from "expo-application";
 import {
   ORIGIN, REDIRECT, authBeaconUrl, authFailureMessage, exchangeUrl, injectedFlag, isPurchaseUrl, parseAuthRedirect, parseMessage,
   incomingCardUrl, replyScript, shouldLock, staysInApp, effectiveMinutes, STRANDED_SIGNOUT_JS,
+  appEventBody, userAgentSuffix,
 } from "./bridge.ts";
 import type { AuthOutcome } from "./bridge.ts";
 
 const BG = "#0e1214";
 const ALERTS_TARGET = `${ORIGIN}/exec#hoje-alertas`;
 const LOCK_KEY = "onca.lock";          // {enabled, minutes, max} — a preference, not a secret
+const FATAL_KEY = "onca.lastFatal";    // #312: "1" when the JS crashed; reported on the next launch
+const APP_INFO = { version: Application.nativeApplicationVersion, build: Application.nativeBuildVersion };
+
+// #312: crash-free sessions. A fatal JS error is only flagged on the device (a request started
+// while the app dies rarely completes) and reported once, on the next launch. Launches are
+// counted by /v2/app-guard.js ("start"), so the shell never sends one.
+function sendAppEvent(kind: "start" | "fatal"): Promise<unknown> {
+  return fetch(`${ORIGIN}/api/session/app`, {
+    method: "POST", headers: { "content-type": "application/json", "x-onca-session": "1" },
+    body: appEventBody(kind, Platform.OS, APP_INFO),
+  }).catch(() => null);
+}
+type GlobalErrorUtils = { getGlobalHandler(): (e: unknown, fatal?: boolean) => void;
+                          setGlobalHandler(h: (e: unknown, fatal?: boolean) => void): void };
+const EU = (globalThis as unknown as { ErrorUtils?: GlobalErrorUtils }).ErrorUtils;
+if (EU) {
+  const previous = EU.getGlobalHandler();
+  EU.setGlobalHandler((err, fatal) => {
+    if (fatal) {
+      SecureStore.setItemAsync(FATAL_KEY, "1").catch(() => {});
+    }
+    previous(err, fatal);
+  });
+}
+SecureStore.getItemAsync(FATAL_KEY).then((v) => {
+  if (v === "1") { SecureStore.deleteItemAsync(FATAL_KEY).catch(() => {}); sendAppEvent("fatal"); }
+}).catch(() => {});
 
 // #256: a push shows while the app is open too; Android needs its channel before the first push.
 Notifications.setNotificationHandler({
@@ -253,7 +282,7 @@ function Shell() {
         ref={web}
         style={[s.web, failed ? s.hidden : null]}
         source={{ uri: source }}
-        injectedJavaScriptBeforeContentLoaded={injectedFlag(Platform.OS)}
+        injectedJavaScriptBeforeContentLoaded={injectedFlag(Platform.OS, APP_INFO)}
         onMessage={onMessage}
         onShouldStartLoadWithRequest={onShouldStart}
         onOpenWindow={(e) => { const u = e.nativeEvent.targetUrl; if (u && !isPurchaseUrl(u)) Linking.openURL(u).catch(() => {}); }}
@@ -267,7 +296,7 @@ function Shell() {
         pullToRefreshEnabled
         setSupportMultipleWindows
         originWhitelist={["https://*", "about:*"]}
-        applicationNameForUserAgent="OncaApp/0.1"
+        applicationNameForUserAgent={userAgentSuffix(APP_INFO)}
       />
       {locked || covered ? (
         <View style={[StyleSheet.absoluteFill, s.cover]}>

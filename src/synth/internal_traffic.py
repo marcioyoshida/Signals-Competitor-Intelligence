@@ -6,7 +6,8 @@ executivo" attention lists), so they can't disagree about what counts as a clien
 - the QA personas' tenants (`qa-internal-*`): the OncaQaPipeline and nav tests sign in on every run;
 - the operator (`operator` tenant, and the opkey operator mode, which writes `actor="operator"`
   with no tenant at all: 2,273 automated "Hoje" opens in W41 alone);
-- the owner's own all-sectors tenant: the owner using the product is not demand.
+- the owner's own all-sectors tenant: the owner using the product is not demand;
+- the store reviewer tenant (#313): Apple and Google reviewers are not customers.
 
 Live 2026-10-18: 7,974 engagement events since 09-06, 0 from a client — the Engagement score sat at
 10/10 on automation alone.
@@ -16,7 +17,7 @@ from __future__ import annotations
 from typing import Any
 
 INTERNAL_TENANT_PREFIXES = ("qa-internal-",)
-INTERNAL_TENANTS = {"operator", "owner-all-sectors"}
+INTERNAL_TENANTS = {"operator", "owner-all-sectors", "app-store-review"}
 INTERNAL_ACTORS = {"operator"}
 
 

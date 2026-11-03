@@ -53,5 +53,97 @@
   }).observe(doc.documentElement, { childList: true, subtree: true });
   if (doc.readyState !== "loading") scrub(doc.documentElement);
   else doc.addEventListener("DOMContentLoaded", function () { scrub(doc.documentElement); });
-  global.__oncaAppGuard = { isPurchase: isPurchase, NOTE: NOTE };
+  // ---- #312 health + #318 minimum version (ADR 029 / ADR 030) ------------------------------
+  // POST /api/session/app: enums, the app version/build, and for errors only an /api route and a
+  // status code. Never message text, a URL query, a token or anything on the screen.
+  var INFO = global.__ONCA_APP__ || {};
+  var PLATFORM = INFO.platform === "ios" || INFO.platform === "android" ? INFO.platform : "other";
+  var sent = 0;
+  function report(body) {
+    if (sent >= 10) return Promise.resolve(null);            // per page: a broken page can't flood
+    sent += 1;
+    var payload = { platform: PLATFORM, version: INFO.version, build: INFO.build, bridge: INFO.bridge };
+    for (var k in body) payload[k] = body[k];
+    try {
+      return origFetch("/api/session/app", { method: "POST", credentials: "same-origin", cache: "no-store",
+        keepalive: true, headers: { "content-type": "application/json", "x-onca-session": "1" },
+        body: JSON.stringify(payload) }).then(function (r) { return r.ok ? r.json() : null; })
+        .catch(function () { return null; });
+    } catch (e) { return Promise.resolve(null); }
+  }
+  function apiRoute(input) {
+    var u; try { u = new URL(typeof input === "string" ? input : input.url, global.location.href); } catch (e) { return null; }
+    return u.origin === global.location.origin && /^\/api\//.test(u.pathname) && !/^\/api\/session\/app/.test(u.pathname)
+      ? u.pathname : null;
+  }
+  var origFetch = global.fetch ? global.fetch.bind(global) : null;
+  if (origFetch) {
+    global.fetch = function (input, init) {
+      var route = apiRoute(input);
+      var p = origFetch(input, init);
+      if (!route) return p;
+      return p.then(function (r) {
+        if (r.status >= 500) report({ kind: "error", source: "api", route: route, status: r.status });
+        return r;
+      }, function (err) {
+        if (!(err && err.name === "AbortError")) report({ kind: "error", source: "api", route: route, status: 0 });
+        throw err;
+      });
+    };
+  }
+  global.addEventListener("error", function () { report({ kind: "error", source: "page" }); });
+  global.addEventListener("unhandledrejection", function () { report({ kind: "error", source: "page" }); });
+
+  // one "start" per WebView session (= an app launch); its reply carries the version verdict
+  function onVerdict(v) {
+    if (!v || !v.update || v.update === "ok") return;
+    var store = typeof v.store === "string" && /^https:\/\/(apps\.apple\.com|play\.google\.com)\//.test(v.store) ? v.store : null;
+    var show = function () {
+      if (v.update === "soft") {
+        try { if (localStorage.getItem("onca_update_soft") === new Date().toISOString().slice(0, 10)) return; } catch (e) {}
+      }
+      var hard = v.update === "hard";
+      var box = doc.createElement("div");
+      box.className = hard ? "onca-update onca-update-hard" : "onca-update";
+      box.setAttribute("role", hard ? "alertdialog" : "status");
+      box.innerHTML = '<p class="onca-update-t"></p><div class="onca-update-a"></div>';
+      box.querySelector(".onca-update-t").textContent = hard
+        ? "Esta vers\u00e3o do app n\u00e3o \u00e9 mais suportada. Atualize o On\u00e7a para continuar."
+        : "H\u00e1 uma nova vers\u00e3o do app On\u00e7a.";
+      var actions = box.querySelector(".onca-update-a");
+      if (store) {
+        var a = doc.createElement("a"); a.href = store; a.target = "_blank"; a.rel = "noopener";
+        a.className = "onca-update-btn"; a.textContent = "Atualizar"; actions.appendChild(a);
+      }
+      var b = doc.createElement("button"); b.type = "button"; b.className = "onca-update-sec";
+      b.textContent = hard ? "Sair" : "Agora n\u00e3o";
+      b.onclick = function () {
+        if (hard) { var C = global.OncaCtx; if (C && C.logout) C.logout(); return; }
+        try { localStorage.setItem("onca_update_soft", new Date().toISOString().slice(0, 10)); } catch (e) {}
+        box.remove();
+      };
+      actions.appendChild(b);
+      doc.body.appendChild(box);
+    };
+    if (doc.body) show(); else doc.addEventListener("DOMContentLoaded", show);
+  }
+  var css2 = doc.createElement("style");
+  css2.textContent = ".onca-update{position:fixed;left:12px;right:12px;bottom:calc(76px + env(safe-area-inset-bottom));z-index:2147483646;" +
+    "background:#1a2226;color:#e8edf0;border:1px solid #2c383e;border-radius:12px;padding:14px 16px;font:15px/1.4 system-ui,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.4)}" +
+    ".onca-update-hard{inset:0;border-radius:0;border:0;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:32px;background:#0e1214}" +
+    ".onca-update-t{margin:0 0 12px}.onca-update-a{display:flex;gap:12px;flex-wrap:wrap;justify-content:center}" +
+    ".onca-update-btn,.onca-update-sec{min-height:44px;padding:0 18px;border-radius:8px;font:600 15px system-ui,sans-serif;display:inline-flex;align-items:center;text-decoration:none;cursor:pointer}" +
+    ".onca-update-btn{background:#3ec39a;color:#06231b;border:0}.onca-update-sec{background:transparent;color:#e8edf0;border:1px solid #3a474d}";
+  (doc.head || doc.documentElement).appendChild(css2);
+  var started = false;
+  try { started = sessionStorage.getItem("onca_app_started") === "1"; sessionStorage.setItem("onca_app_started", "1"); } catch (e) {}
+  // the verdict holds for the whole app session: a hard block re-appears on every page
+  var VKEY = "onca_app_verdict";
+  if (!started) report({ kind: "start", source: "page" }).then(function (v) {
+    try { if (v) sessionStorage.setItem(VKEY, JSON.stringify({ update: v.update, store: v.store })); } catch (e) {}
+    onVerdict(v);
+  });
+  else { try { onVerdict(JSON.parse(sessionStorage.getItem(VKEY) || "null")); } catch (e) {} }
+
+  global.__oncaAppGuard = { isPurchase: isPurchase, NOTE: NOTE, report: report, onVerdict: onVerdict };
 })(typeof window !== "undefined" ? window : this);

@@ -1,6 +1,6 @@
 {
   "name": "onca-mobile",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "main": "index.ts",
   "scripts": {
@@ -9,11 +9,13 @@
   },
   "dependencies": {
     "expo": "~57.0.31",
+    "expo-application": "~57.0.3",
     "expo-constants": "~57.0.22",
     "expo-local-authentication": "~57.0.3",
     "expo-notifications": "~57.0.24",
     "expo-screen-capture": "~57.0.4",
     "expo-secure-store": "~57.0.4",
+    "expo-updates": "~57.0.26",
     "expo-web-browser": "~57.0.3",
     "react": "19.2.3",
     "react-native": "0.86.3",

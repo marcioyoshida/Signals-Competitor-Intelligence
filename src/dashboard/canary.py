@@ -13,6 +13,7 @@ regression shows up as a failed check hours or weeks before users see an error:
   pretoken        no error, billed duration < PRETOKEN_BUDGET_MS (Cognito allows 5 s)
   http:<path>     public routes answer as expected (page 200, API 401 unauthenticated)
   session         the broker reaches Cognito and refuses a dummy code (401) within budget
+  app             the store app's /api/session/app route answers and app-guard.js is served (#312)
   stack           CloudFormation resources < STACK_RESOURCE_BUDGET (the hard limit is 500)
 
 Emits `Onca/Canary` CanaryRun=1 and ChecksFailed=n (one alarm covers both a failure and a
@@ -34,6 +35,7 @@ PRETOKEN_BUDGET_MS = 3_000             # Cognito gives a trigger 5 s, then retri
 SESSION_BUDGET_S = 8.0                 # the broker waits up to 20 s; a healthy exchange is < 1 s
 STACK_RESOURCE_BUDGET = 485            # CloudFormation's hard limit is 500 per stack
 REPORT_KEY = "ops/canary/latest.json"
+OPERATOR_ONLY_KEYS = ("mobile_usage", "tenant_usage")
 
 Check = dict[str, Any]
 
@@ -61,10 +63,12 @@ def check_feed(lam: Any, fn: str, tenant: str) -> Check:
         body = out.get("body") or ""
         feed = json.loads(gzip.decompress(base64.b64decode(body)) if out.get("isBase64Encoded") else body)
         items = len(feed.get("feed") or [])
+        # operator-only rollups must reach no tenant (#165/#288; #313: never the store reviewer)
+        leaked = [k for k in OPERATOR_ONLY_KEYS if feed.get(k)]
         ok = (out.get("statusCode") == 200 and feed.get("tenant") == tenant and items > 0
-              and len(payload) < FEED_PAYLOAD_BUDGET)
+              and len(payload) < FEED_PAYLOAD_BUDGET and not leaked)
         return _check(name, ok, status=out.get("statusCode"), items=items, payload_bytes=len(payload),
-                      budget_bytes=FEED_PAYLOAD_BUDGET)
+                      budget_bytes=FEED_PAYLOAD_BUDGET, leaked=leaked)
     except Exception as exc:  # noqa: BLE001 - a canary reports, never raises
         return _check(name, False, error=f"{type(exc).__name__}: {exc}"[:200])
 
@@ -131,6 +135,22 @@ def check_stack(cfn: Any, stack: str) -> Check:
         return _check("stack", False, error=f"{type(exc).__name__}: {exc}"[:200])
 
 
+def check_app(http: Any, origin: str) -> Check:
+    """#312/#318: the store app's health/version route answers, and app-guard.js (first script of
+    every app-reachable page) is served to an app user agent."""
+    try:
+        r = http.post(f"{origin}/api/session/app", timeout=15,
+                      headers={"x-onca-session": "1", "content-type": "application/json"},
+                      data=json.dumps({"kind": "probe", "platform": "ios", "version": "0.0.1"}))
+        body = r.json() if r.status_code == 200 else {}
+        g = http.get(f"{origin}/v2/app-guard.js", timeout=15, headers={"user-agent": "OncaApp/canary"})
+        ok = (r.status_code == 200 and body.get("update") in ("ok", "soft", "hard")
+              and g.status_code == 200 and b"api/session/app" in g.content)
+        return _check("app", ok, status=r.status_code, update=body.get("update"), guard=g.status_code)
+    except Exception as exc:  # noqa: BLE001
+        return _check("app", False, error=f"{type(exc).__name__}: {exc}"[:200])
+
+
 def run(env: dict[str, str], lam: Any, cfn: Any, http: Any) -> list[Check]:
     origin = env.get("ONCA_CANARY_ORIGIN", "https://onssa.org").rstrip("/")
     checks: list[Check] = []
@@ -143,6 +163,7 @@ def run(env: dict[str, str], lam: Any, cfn: Any, http: Any) -> list[Check]:
     for host in [h.strip() for h in env.get("ONCA_CANARY_EXTRA_HOSTS", "").split(",") if h.strip()]:
         checks.append(check_http(http.get, f"https://{host}/exec", 200, min_bytes=10_000))
     checks.append(check_session(http.post, origin))
+    checks.append(check_app(http, origin))
     if env.get("ONCA_STACK_NAME"):
         checks.append(check_stack(cfn, env["ONCA_STACK_NAME"]))
     return checks

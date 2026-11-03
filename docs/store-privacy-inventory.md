@@ -31,7 +31,9 @@ Stripe, Google, Apple and Expo receive data only as processors acting for Onça.
 | **Questions to Ask Onça.** | Sent to Amazon Bedrock to answer, not stored with identity. The transcript stays in the tab's `sessionStorage`. `OncaAskQuota` daily counter (TTL 3 days). | Counter only | App functionality | Counter 3 days | Counter yes |
 | **Unanswered questions.** First turn only. | S3 `coverage_gaps/index.json`: text and counts, **no identity** (`src/synth/coverage.py`) | **No** | Fixing coverage gaps. May become a public issue. | 12 months after last asked | Not applicable (not linked) |
 | **Connected AI apps (MCP/A2A).** Which app, when, last use; hashed tokens. | `OncaOAuth` (TTL) | Yes | App functionality | Token TTLs (1 h / 30 d) | Revoked |
-| **Site access logs.** IP, URL with query string, time, user agent (the app adds `OncaApp/0.1`), referrer. Includes the app's sign-in beacon `?app_auth=` (e-mails masked). | CloudFront standard logs, `cf-access/` | No: no user id, and IP only | Security; Marco Civil art. 15 obligation | 365 days (lifecycle `privacy-cf-access-365d`) | Expire on their own |
+| **Site access logs.** IP, URL with query string, time, user agent (the app adds `OncaApp/<version>`), referrer. Includes the app's sign-in beacon `?app_auth=` (e-mails masked). | CloudFront standard logs, `cf-access/` | No: no user id, and IP only | Security; Marco Civil art. 15 obligation | 365 days (lifecycle `privacy-cf-access-365d`) | Expire on their own |
+| **App health events (#312).** Kind (`start` / `fatal` / `error`), platform, app version and build, bridge version; for an error only the `/api/…` route and HTTP status. **Never** error text, a URL query, a token, an e-mail, a user id or screen content. A crash is flagged on the device and sent on the next launch. | `POST /api/session/app` → CloudWatch embedded metrics `Onca/App` + session Lambda log (`src/dashboard/app_health.py`) | **No** | Diagnostics: crash-free launches, failing API routes (ADR 030 alarm) | 90 days (logs) | Not applicable (not linked) |
+| **Update check (#311).** On launch the app asks Expo's update service (`u.expo.dev`) for a newer JavaScript bundle on its channel: platform, runtime version, channel and the installed update id, plus the IP. No user data. | Expo (service provider) | No | Deliver bug fixes without a store release | Expo's service logs | Not applicable |
 | **Invite abuse counter.** Raw IP. | Federated map `rl#ip#<ip>#<hour>` (`invites.py:115`) | No | Rate-limit invite redemption | 2 hours (TTL) | Expires on its own |
 | **Server logs.** Errors and counters. Never question text, tokens, passwords, e-mails or user ids (the one raw-sub log line was removed in #252). | CloudWatch | No | Diagnostics | 90 days | Expire on their own |
 | **Billing.** Plan, modules, status, Stripe event ids. **No card data.** **The app has no purchase path.** CTAs are hidden in app mode (#258), and purchase URLs are blocked even in the system browser. | `OncaTenantConfig.subs`, `BILLING#` rows | Organization, not user | Billing; tax law | Tax-law period | Stays with the organization |
@@ -44,16 +46,21 @@ Backups are never used to restore a deleted account (stated in the policy and on
 
 **Not collected:** location (precise or coarse; IP is never mapped to a location), contacts,
 photos and files, health, financial account or card data, browsing history, advertising ID,
-crash reports, audio, messages.
+audio, messages. Crash *reports* in the usual sense (stack traces, device state) are not collected:
+the app sends only the fact that it crashed, with its version (#312).
 
 ## 2. Tracking: **No**. No ATT prompt.
 
 Verified 2026-10-20:
 - **App dependencies** (`mobile/apps/onca/package.json` and the lockfile): expo, expo-constants,
   expo-local-authentication, expo-notifications, expo-screen-capture, expo-secure-store,
-  expo-web-browser, react, react-native, react-native-safe-area-context, react-native-webview.
+  expo-web-browser, react, react-native, react-native-safe-area-context, react-native-webview;
+  since 2026-11-03 (#311/#312) also expo-application (reads the app's own version) and
+  expo-updates (OTA bundles from Expo, see section 1).
   - None is an analytics, ads, attribution or crash SDK: no Firebase, Sentry, Bugsnag,
-    Crashlytics, expo-insights, expo-updates telemetry, AdSupport or AppTrackingTransparency.
+    Crashlytics, expo-insights, AdSupport or AppTrackingTransparency.
+  - Section 7 lists every dependency; `tests/test_store_privacy_inventory.py` fails when the app
+    gains one that section 7 doesn't list.
 - **Web app:** only same-origin scripts and styles (`/v2/app.js`, `/v2/context.js`,
   `/v2/app.css`), with system fonts.
   - No third-party script, font, tag manager or CDN.
@@ -83,6 +90,8 @@ For every type below: **Used for tracking: No.**
 | User Content → **Other User Content** (decision rationale and outcome notes) | Yes | App Functionality |
 | User Content → **Other User Content**, second entry *if* Apple lets the same type carry both a linked and a not-linked declaration; otherwise keep only the linked one above (unanswered questions, stored without identity) | No | App Functionality |
 | Diagnostics → **Other Diagnostic Data** (site access logs) | No | App Functionality |
+| Diagnostics → **Crash Data** (the app reports *that* it crashed, with its version; #312) | No | App Functionality |
+| Diagnostics → **Performance Data** (failing API route + status; #312) | No | App Functionality |
 
 Answer **Not collected** for:
 - Health & Fitness, Financial Info, Location, Sensitive Info, Contacts, Browsing History and
@@ -117,6 +126,7 @@ Notes for the reviewer field, if asked:
 | App activity → **Other user-generated content** (decision notes, reports) | Yes | Optional | No | App functionality |
 | App activity → **In-app search history** | No. Ask questions are processed to answer, not stored with identity. | — | — | — |
 | App info and performance → **Diagnostics** (access logs) | Yes | Required | No | App functionality, Fraud prevention, security and compliance |
+| App info and performance → **Crash logs** (crash flag + version only, #312) | Yes | Required (automatic) | No | App functionality |
 | Device or other IDs (push token) | Yes | Optional (only when alerts are on) | No | App functionality |
 
 Everything else is **not collected**:
@@ -124,7 +134,7 @@ Everything else is **not collected**:
   Other info;
 - Financial info (all), Health and fitness, Messages, Photos and videos, Audio, Files and docs,
   Calendar, Contacts, Location (approximate and precise);
-- Web browsing, Installed apps, Crash logs.
+- Web browsing, Installed apps.
 
 ## 5. Owner steps
 
@@ -143,3 +153,45 @@ Everything else is **not collected**:
 - Two empty, orphaned contact-mail buckets (`…contactmailbucket…-j3anwi05tvue` and
   `…-ppbiwsc7fk1f`, no lifecycle) were deleted 2026-10-23. The only contact-mail bucket is the
   stack's `…-ny4niagkiuzf`.
+
+## 7. Dependencies, permissions and other store forms (#315, 2026-11-03)
+
+**Every runtime dependency of the app** (`mobile/apps/onca/package.json`). A test pins this list.
+
+| Package | Why | Data it touches |
+|---|---|---|
+| expo | runtime | none of its own |
+| expo-application | reads the app's version and build (#312/#318) | none sent by itself |
+| expo-constants | the EAS project id for push | none |
+| expo-local-authentication | app lock (#257); Face ID / fingerprint stays in the OS | none |
+| expo-notifications | content-free push (#256), opt-in | the device push token |
+| expo-screen-capture | hides the app-switcher thumbnail while locked | none |
+| expo-secure-store | app-lock preference, the crash flag | on device only |
+| expo-updates | OTA JavaScript updates (#311) | see "Update check" in section 1 |
+| expo-web-browser | sign-in in the system browser | none |
+| react, react-native | UI runtime | none |
+| react-native-safe-area-context | layout | none |
+| react-native-webview | renders onssa.org/exec | the web app's own data (section 1) |
+
+**Permissions the app asks for:** notifications (only when alerts are turned on), Face ID /
+biometrics (only when the lock is turned on; usage string in `app.json`). No location, camera,
+microphone, contacts, photos or tracking permission.
+
+**Export compliance:** `ITSAppUsesNonExemptEncryption = false` in `app.json` (standard HTTPS/TLS
+only, exempt), so App Store Connect no longer asks on each upload. Play: no export questionnaire.
+
+**Content rating.** IARC (Play) and Apple's age rating. Answers: no violence, sexual content,
+profanity, controlled substances, gambling or simulated gambling (Onça *reports* on betting
+regulation as a business sector; it offers no betting), no user-to-user communication, no
+location sharing, no purchases. Expected result: Apple 4+, IARC "Everyone / Livre". Category:
+Business (primary), Finance (secondary).
+
+**Account deletion** is declared in both stores: in-app (*Sua conta → Excluir minha conta*, #251)
+and the web URL `https://onssa.org/docs/excluir-conta.html`.
+
+**Sign in with Apple** (guideline 4.8) is offered next to Google on the sign-in sheet; confirm on
+each production build (#317 device pass).
+
+**LGPD:** the privacy policy (`/docs/privacy.html`, PT and EN) names the app's health events and
+the update check, with retention.
+

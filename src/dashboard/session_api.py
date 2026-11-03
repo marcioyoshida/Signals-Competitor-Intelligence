@@ -331,4 +331,12 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         return _resp(504, {"error": "sign-in service timed out, try again"})
     if path.endswith("/logout"):
         return logout(event)
+    if route == "app":
+        # #312/#318: store-app health events + the minimum supported version (no token needed)
+        from src.dashboard import app_health
+        raw = event.get("body") or ""
+        if len(raw) > 2048:
+            return _resp(413, {"error": "too large"})
+        status, out = app_health.handle(_body(event))
+        return _resp(status, out)
     return _resp(404, {"error": "not found"})
