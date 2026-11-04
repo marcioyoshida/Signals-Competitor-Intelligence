@@ -19,3 +19,7 @@ infra/cdk.out/
 
 # local FinBERT model cache (ADR 022 pilot)
 .hf_cache/
+
+# Firebase client config (#316) — injected by EAS, never committed
+google-services.json
+GoogleService-Info.plist
