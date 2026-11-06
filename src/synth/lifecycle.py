@@ -70,8 +70,11 @@ def apply_gate(feed: dict[str, Any]) -> dict[str, Any]:
         a = attrs.setdefault(eid, {})
         a["lifecycle"] = v
         if v["gated"]:
+            # the industry-inferred badge AND a register-stamped "… em funcionamento" (R2 stamps
+            # are additive and outlive the institution: MW IP kept one after its 10-29 liquidation)
             a["certifications"] = [c for c in (a.get("certifications") or [])
-                                   if not (isinstance(c, dict) and c.get("basis") == "industry")]
+                                   if not (isinstance(c, dict) and c.get("basis") == "industry")
+                                   and "em funcionamento" not in str(c)]
     swot = feed.get("swot") or {}
     for eid in gated & set(swot):
         sb = swot[eid] or {}

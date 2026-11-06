@@ -275,7 +275,8 @@ def _feed():
         "distress": distress.list_records(idx),
         "entity_attrs": {"will_bank": {"label": "Will Bank", "certifications": [
             {"label": "Autorização BCB", "source": "BCB", "basis": "industry"},
-            {"label": "Autorização BCB", "source": "BCB", "basis": "register"}]}},
+            {"label": "Autorização BCB", "source": "BCB", "basis": "register"},
+            "BCB · Financeira · em funcionamento"]}},
         "swot": {"will_bank": {"label": "Will Bank", "counts": {"S": 1, "W": 1, "O": 1, "T": 0},
                                "dimensions": {"S": [{"text": "s", "status": "active"}],
                                               "W": [{"text": "w", "status": "active"}],
