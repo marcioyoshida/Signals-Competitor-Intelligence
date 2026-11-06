@@ -172,6 +172,57 @@ def classify_distress(title: str) -> str | None:
     return None
 
 
+# #365: STATUS mentions — once a regime is decreed, the news stops saying "decreta liquidação"
+# and names the standing status instead ("Liquidante do Banco Master diz…", "FGC paga credores
+# do Will Bank", "Will Bank quebrou"). These never CREATE a record (a status phrase is weaker
+# than an event and "quebra"/"credores" have everyday senses); they only refresh an entity's
+# EXISTING trusted resolution / falência record.
+_STATUS_PATTERNS = [re.compile(p) for p in (
+    r"\bliquidante\s+d[oa]s?\b",
+    r"\binterventor\s+d[oa]s?\b",
+    r"\bmassa\s+(?:liquidanda|falida)\b",
+    r"\bem\s+liquidacao\b",
+    r"\bliquidad[oa]s?\s+pelo\s+(?:banco central|bc|bacen)\b",
+    r"\bcredores\s+d[oa]s?\b(?=.*\b(?:fgc|liquid\w*)\b)|\b(?:fgc|liquid\w*)\b.*\bcredores\s+d[oa]s?\b",
+    r"\b(?:quebra|colapso)\s+d[oa]s?\b",
+    r"\b(?:quebrou|faliu)\b",
+)]
+STATUS_REFRESH_KINDS = frozenset({"liquidacao_extrajudicial", "intervencao", "raet", "falencia"})
+
+
+def status_mention(title: str) -> bool:
+    """True when a headline refers to a standing resolution / bankruptcy STATUS (#365)."""
+    t = _norm(title)
+    return bool(t) and any(rx.search(t) for rx in _STATUS_PATTERNS)
+
+
+def refresh_status(index: dict[str, Any], mentions: list[dict[str, Any]]) -> int:
+    """Fold status mentions into EXISTING own, trusted resolution / falência records only:
+    ``status_mentions`` count (new evidence ids), ``last_status_*`` and ``last_seen``. Never
+    creates a record and never adds a confidence source. Returns records touched."""
+    touched = 0
+    recs = index.get("records") or {}
+    for m in mentions:
+        for rec in recs.values():
+            if (rec.get("entity") != m.get("entity") or (rec.get("role") or "self") != "self"
+                    or rec.get("kind") not in STATUS_REFRESH_KINDS
+                    or rec.get("confidence") not in TRUSTED_CONFIDENCE):
+                continue
+            ev_id = m.get("evidence_id") or m.get("url") or m.get("title")
+            seen = list(rec.get("status_evidence") or [])
+            if ev_id in seen:
+                continue
+            rec["status_evidence"] = (seen + [ev_id])[-5:]
+            rec["status_mentions"] = int(rec.get("status_mentions") or 0) + 1
+            if str(m.get("date") or "") >= str(rec.get("last_status_date") or ""):
+                rec.update(last_status_date=m.get("date"), last_status_title=m.get("title"),
+                           last_status_url=m.get("url"))
+            if str(m.get("date") or "") > str(rec.get("last_seen") or ""):
+                rec["last_seen"] = m["date"]
+            touched += 1
+    return touched
+
+
 def distress_span(title: str) -> tuple[str, int, int] | None:
     """``(kind, start, end)`` of the first distress phrase in the accent-folded title, or None.
     #355 uses it as a subject-position guard: an untracked name counts only when it is the
@@ -295,6 +346,7 @@ def detect_distress_events(
     resolver: Callable[[dict[str, Any]], list[str]],
     today: dt.date | None = None,
     unresolved: list[dict[str, Any]] | None = None,
+    status: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Scan news items for distress headlines that resolve to a tracked entity.
 
@@ -309,6 +361,19 @@ def detect_distress_events(
         title = item.get("title") or item.get("subject") or ""
         kind = classify_distress(title)
         if not kind:
+            # #365: a status mention — passes the same guards, resolved, refresh-only.
+            if status is not None and status_mention(title):
+                nt = _norm(title)
+                if not (_actor_headline(nt) or _creditor_headline(nt)
+                        or _counterparty_headline(nt) or _transaction_headline(nt)):
+                    try:
+                        ents = [e for e in (resolver(item) or []) if e not in NON_DISTRESS_SUBJECTS]
+                    except Exception:  # pragma: no cover
+                        ents = []
+                    for eid in ents:
+                        status.append({"entity": eid, "title": title.strip(), "url": item.get("url"),
+                                       "date": str(item.get("date") or today.isoformat())[:10],
+                                       "evidence_id": item.get("id")})
             continue
         norm_title = _norm(title)
         # Guard 2: action-over-distress headlines have an ambiguous subject — the
@@ -390,7 +455,9 @@ def _src_entry(ev: dict[str, Any]) -> dict[str, Any]:
 
 # Optional per-event fields carried onto a record (set-once unless the event has a value).
 _CARRY = ("role", "subject", "subject_name", "cnpj", "segment", "matched_via", "brand",
-          "group_of", "correspondent_of", "correspondent_checked", "promoted_to", "review_id")
+          "group_of", "correspondent_of", "correspondent_checked", "promoted_to", "review_id",
+          # #362: official resolution-regime facts (BCB "Regimes de resolução")
+          "regime_id", "regime_status", "regime_end", "act", "responsavel")
 
 
 def _fold_event(records: dict[str, dict[str, Any]], key: str, ev: dict[str, Any]) -> None:
@@ -438,6 +505,12 @@ def _fold_event(records: dict[str, dict[str, Any]], key: str, ev: dict[str, Any]
     for f in _CARRY:
         if ev.get(f) not in (None, "", []):
             rec[f] = ev[f]
+    # #362: a standing official fact (an ACTIVE BCB regime) is re-observed every run — dated at
+    # its decree, but alive while the regulator still lists it (no TTL expiry, no new mention).
+    obs = ev.get("observed")
+    if obs and str(obs) > str(rec.get("last_seen") or ""):
+        rec["last_seen"] = str(obs)[:10]
+        rec["observed"] = str(obs)[:10]
 
 
 def record_key(ev: dict[str, Any]) -> str:
@@ -642,7 +715,9 @@ def update_from_digest(
         from src.synth.entities import resolve_entities as resolver  # lazy
     items = _digest_items(digest)
     unresolved: list[dict[str, Any]] = []
-    events = detect_distress_events(items, resolver=resolver, today=today, unresolved=unresolved)
+    status: list[dict[str, Any]] = []
+    events = detect_distress_events(items, resolver=resolver, today=today, unresolved=unresolved,
+                                    status=status)
     index = load_index(bucket, s3=s3)
     watched: dict[str, Any] = {"tracked": [], "untracked": [], "summary": {}}
     import os
@@ -664,12 +739,14 @@ def update_from_digest(
         print(f"Warning: distress watch skipped: {exc}")
     merged = merge_distress(index, events + (watched.get("tracked") or []), today=today,
                             untracked=watched.get("untracked") or [])
+    refreshed = refresh_status(merged, status)  # #365: after the merge, so a regime just seen counts
     publish(merged, bucket, s3=s3)
     by_kind: dict[str, int] = {}
     for e in events:
         by_kind[e["source_kind"]] = by_kind.get(e["source_kind"], 0) + 1
     return {"new_events": len(events), "records": merged.get("count", 0),
             "untracked": merged.get("untracked_count", 0), "by_source": by_kind,
+            "status_mentions": len(status), "status_refreshed": refreshed,
             "watch": watched.get("summary") or {}}
 
 

@@ -2047,6 +2047,15 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         product_intel.enrich_feed(feed)
     except Exception as exc:  # pragma: no cover - best-effort, read-only
         print(f"Warning: product enrichment skipped: {exc}")
+    # #364: lifecycle gate — a liquidated / bankrupt / intervened entity gets no growth
+    # frameworks and no industry-inferred BCB badge. After the enrichment above (which adds the
+    # badge) and before the executive block (which re-projects SWOT/TOWS into officer panels).
+    try:
+        from src.synth import lifecycle
+
+        lifecycle.apply_gate(feed)
+    except Exception as exc:  # pragma: no cover - best-effort
+        print(f"Warning: lifecycle gate skipped: {exc}")
     # SURF-8: expected-but-absent signals (ADR-003 silence axis) as a cross-officer quiet-alert.
     # Read-only projection at feed-build — NOT written to narratives/, so it never resets an
     # entity's freshness (the feedback loop the silence pipeline guards against).

@@ -23,6 +23,7 @@
    "[\"er.fatos_terms\", [], {}]",
    "[\"er.group_merges\", [], {}]",
    "[\"er.list_entities\", [], {}]",
+   "[\"er.list_entities\", [], {}]",
    "[\"er.propose_news_safe\", [\"eid-ent-0\", \"Brand\"], {}]",
    "[\"er.propose_news_safe\", [\"eid-ent-1\", \"Brand\"], {}]",
    "[\"er.resolve_by_cnpj\", [\"11111111000100\"], {}]",
@@ -57,6 +58,7 @@
    "[\"reclam.fetch\", [], {}]",
    "[\"reclam.map\", [[{\"date\": \"2026-10-20\", \"entity\": \"e\", \"id\": \"rec-0\", \"period\": \"2026T2\", \"rank\": 1, \"text\": \"rec text 0\", \"title\": \"rec title 0\"}, {\"date\": \"2026-10-21\", \"entity\": \"e\", \"id\": \"rec-1\", \"period\": \"2026T2\", \"rank\": 1, \"text\": \"rec text 1\", \"title\": \"rec title 1\"}]], {\"resolver\": \"<fn resolve_entities>\"}]",
    "[\"reclam.store\", [[{\"date\": \"2026-10-20\", \"entity\": \"e\", \"id\": \"rec-0\", \"period\": \"2026T2\", \"rank\": 1, \"text\": \"rec text 0\", \"title\": \"rec title 0\"}, {\"date\": \"2026-10-21\", \"entity\": \"e\", \"id\": \"rec-1\", \"period\": \"2026T2\", \"rank\": 1, \"text\": \"rec text 1\", \"title\": \"rec title 1\"}], \"digests\"], {}]",
+   "[\"regimes.update\", [\"digests\"], {\"match_names\": []}]",
    "[\"sec.enrich\", [[{\"date\": \"2026-10-20\", \"id\": \"sec-0\", \"text\": \"sec text 0\", \"title\": \"sec title 0\"}, {\"date\": \"2026-10-21\", \"id\": \"sec-1\", \"text\": \"sec text 1\", \"title\": \"sec title 1\"}]], {}]",
    "[\"sec.fetch\", [[\"STNE\", \"PAGS\"]], {\"lookback_days\": 365}]"
   ],

@@ -1267,6 +1267,22 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 print(f"BCB register state: {bcb_autorizacoes.update_register_state(records, _bucket)}")
             except Exception as exc:  # pragma: no cover - never blocks the entrant scan
                 print(f"Warning: BCB register snapshot/exit diff failed: {exc}")
+            # #362: official BCB resolution regimes (liquidação / intervenção / RAET) — the
+            # distress watch turns this snapshot into regulatory records (the Will Bank miss).
+            try:
+                from src.ingest import bcb_regimes
+
+                try:  # tracked names drive the (bounded) history detail fetch
+                    from src.synth import entity_registry as _er
+
+                    _names = {bcb_regimes.legal_key(a) for e in _er.list_entities()
+                              for a in [e.get("display_name"), *(e.get("aliases") or [])] if a}
+                except Exception as exc:  # pragma: no cover - registry best-effort
+                    print(f"Warning: regime history names unavailable: {exc}")
+                    _names = None
+                print(f"BCB resolution regimes: {bcb_regimes.update_state(_bucket, match_names=_names)}")
+            except Exception as exc:  # pragma: no cover - never blocks the entrant scan
+                print(f"Warning: BCB resolution regimes fetch failed: {exc}")
 
     def _post_fatos(records: list[dict[str, Any]], new: list[dict[str, Any]]) -> None:
         # Governance events are the strategic ones — float them to the

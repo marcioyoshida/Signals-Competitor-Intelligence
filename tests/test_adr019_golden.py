@@ -99,6 +99,8 @@ def _run(monkeypatch, env: dict[str, str] | None = None, after=None):
     # new entrants + side effects
     S(lp.bcb_autorizacoes, "fetch_authorized", rec("autorizacoes.fetch", _recs("ent", 3, is_fintech=True, name="Ent Co")))
     S(lp.bcb_autorizacoes, "apply_verified_certifications", rec("autorizacoes.certs", []))
+    from src.ingest import bcb_regimes  # #362: resolution regimes snapshot (network + S3)
+    S(bcb_regimes, "update_state", rec("regimes.update", {"active": 0}))
     S(lp.receita_cnpj, "enrich_entrants", rec("receita.enrich", lambda rows: [r.setdefault("trade_name", "Brand") for r in rows]))
     from src.synth import entity_registry as er
     S(er, "auto_create_from_entrant", rec("er.auto_create", lambda e, confidence=None: "eid-" + e["id"]))

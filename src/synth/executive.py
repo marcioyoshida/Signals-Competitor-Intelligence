@@ -594,7 +594,10 @@ def _posture_rows(feed: dict[str, Any]) -> list[dict[str, Any]]:
     tows = feed.get("tows") or {}
     labels = _labels(feed)
     rows: list[dict[str, Any]] = []
+    attrs = feed.get("entity_attrs") or {}
     for ent in set(swot) | set(tows):
+        if ((attrs.get(ent) or {}).get("lifecycle") or {}).get("gated"):
+            continue  # #364: a liquidated / bankrupt institution has no strategic posture
         sb = swot.get(ent) or {}
         counts = sb.get("counts") or {}
         dims = sb.get("dimensions") or {}

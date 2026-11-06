@@ -370,6 +370,10 @@ def attach_correspondents(
             # the correspondent's own name must carry the brand as a word (contains() is loose)
             if f" {head} " not in " " + re.sub(r"[^a-z0-9 ]+", " ", _fold(row.get("NomeCorrespondente"))) + " ":
                 continue
+            # #362: an official regime names one CNPJ — only THAT company's contracts count
+            # ("Frente", "Trustee", "Pleno" are everyday words in other correspondents' names).
+            if ev.get("matched_via") == "bcb_regime" and _root8(row.get("CnpjCorrespondente")) != ev.get("cnpj"):
+                continue
             eid = cnpj_index.get(_root8(row.get("CnpjContratante")) or "")
             if not eid or eid == ev.get("entity"):
                 continue
@@ -458,7 +462,186 @@ def controller_siblings(
     return out
 
 
+# --- #362 BCB resolution regimes --------------------------------------------------------------
+
+REGIMES_KEY = "reference/bcb_regimes.json"
+HISTORY_YEARS = 5
+REGIME_PAGE = "https://www.bcb.gov.br/estabilidadefinanceira/resolucao"
+
+
+def _regime_event(row: dict[str, Any], kind: str, cnpj_index: dict[str, str], *, date: str,
+                  title: str, status: str, observed: str | None) -> dict[str, Any]:
+    root = str(row.get("cnpj") or "")[:8]
+    name = str(row.get("name") or root)
+    ev = {
+        "entity": cnpj_index.get(root), "kind": kind, "label": distress.label_for(kind),
+        "date": date, "title": title, "url": row.get("act_url") or REGIME_PAGE,
+        "source": "BCB-Regimes", "source_kind": "regulatory", "publisher": "bcb.gov.br",
+        "evidence_id": f"bcb-regime:{row.get('id')}:{kind}", "role": "self",
+        "subject_name": name, "cnpj": root, "segment": row.get("segment"),
+        "matched_via": "bcb_regime", "brand": _brand_of(name),
+        "regime_id": row.get("id"), "regime_status": status, "act": row.get("act"),
+        "responsavel": row.get("responsavel"), "regime_end": row.get("end"),
+    }
+    if observed:
+        ev["observed"] = observed
+    return ev
+
+
+def regime_events(doc: dict[str, Any] | None, cnpj_index: dict[str, str], *,
+                  today: dt.date) -> list[dict[str, Any]]:
+    """Regulatory distress events from the BCB resolution-regimes snapshot.
+
+    - an ACTIVE regime → its kind (liquidação / intervenção / RAET), dated at the decree and
+      ``observed`` today, so the record stays live while the BCB still lists it (Banco Rural
+      has been in liquidação since 2013 — far past the store TTL);
+    - a CLOSED regime → the same record marked with its closure reason and no longer
+      refreshed; a closure by conversion into falência is also a ``falencia`` event.
+    """
+    from src.ingest import bcb_regimes
+
+    out: list[dict[str, Any]] = []
+    doc = doc or {}
+    for row in (doc.get("active") or {}).values():
+        kind = row.get("kind")
+        if not kind or not row.get("start"):
+            continue
+        what = distress.label_for(kind)
+        act = f" ({row['act']})" if row.get("act") else ""
+        out.append(_regime_event(row, kind, cnpj_index, date=row["start"],
+                                 title=f"{row.get('name')}: {what} decretada pelo Banco Central{act}",
+                                 status="ativo", observed=today.isoformat()))
+    # closed regimes we watched close + history details (#362 history: bound ONLY by an exact
+    # CNPJ of a tracked entity, and only when recent — an old homonym never attaches)
+    floor = (today - dt.timedelta(days=365 * HISTORY_YEARS)).isoformat()
+    history = [r for r in (doc.get("history_detail") or {}).values()
+               if str(r.get("cnpj") or "")[:8] in cnpj_index
+               and max(str(r.get("end") or ""), str(r.get("start") or "")) >= floor]
+    for row in list((doc.get("closed") or {}).values()) + history:
+        kind = row.get("kind")
+        if not kind or not row.get("start"):
+            continue
+        sit = str(row.get("situacao") or "Encerrado")
+        end = row.get("end") or row.get("left_active_on") or today.isoformat()
+        out.append(_regime_event(row, kind, cnpj_index, date=row["start"],
+                                 title=f"{row.get('name')}: {distress.label_for(kind)} — {sit}",
+                                 status=sit, observed=None))
+        if bcb_regimes.is_falencia_closure(sit):
+            out.append(_regime_event(row, "falencia", cnpj_index, date=str(end)[:10],
+                                     title=f"{row.get('name')}: regime convertido em falência",
+                                     status=sit, observed=None))
+    return out
+
+
+def regime_cnpj_matches(doc: dict[str, Any] | None,
+                        entities: list[dict[str, Any]]) -> list[tuple[str, str, str]]:
+    """#363: ``(entity_id, cnpj_root, via)`` for tracked entities WITHOUT a CNPJ that a regime
+    institution names exactly. Two precise rules, never a fuzzy brand:
+
+    - legal name minus its legal-form tail == an alias / display name ("BANCO MASTER S/A" ↔
+      "Banco Master");
+    - the institution's own e-mail or site domain label == the alias with its spaces removed,
+      >= 6 chars ("liquidacao@willbank.com.br" ↔ "Will Bank").
+
+    A regime that matches more than one entity, or an entity matched by more than one regime,
+    is dropped (ambiguous)."""
+    rows = list(((doc or {}).get("active") or {}).values()) + list(((doc or {}).get("closed") or {}).values())
+    by_name: dict[str, set[str]] = {}
+    by_slug: dict[str, set[str]] = {}
+    for e in entities:
+        if e.get("cnpj_roots") or not e.get("entity_id"):
+            continue
+        for a in [e.get("display_name"), e.get("news_term"), *(e.get("aliases") or [])]:
+            if not a:
+                continue
+            k = _legal_name_key(a)
+            if k:
+                by_name.setdefault(k, set()).add(e["entity_id"])
+            slug = re.sub(r"[^a-z0-9]", "", _fold(a))
+            if len(slug) >= 6:
+                by_slug.setdefault(slug, set()).add(e["entity_id"])
+    def _labels(row: dict[str, Any]) -> set[str]:
+        out = set()
+        for v in (row.get("emails"), row.get("site")):
+            for dom in re.findall(r"(?:@|//|www\.)([a-z0-9-]+)\.(?:com|net|org|b)", _fold(v)):
+                out.add(dom.replace("-", ""))
+        return out
+
+    # a domain shared by several institutions (a liquidator's mailbox serves the whole Master
+    # group: bancomaster.com.br on 5 regimes) identifies none of them
+    dom_use: dict[str, int] = {}
+    for row in rows:
+        for lab in _labels(row):
+            dom_use[lab] = dom_use.get(lab, 0) + 1
+    found: dict[str, dict[str, set[str]]] = {}
+    for row in rows:
+        root = str(row.get("cnpj") or "")[:8]
+        if len(root) < 8:
+            continue
+        hits: set[tuple[str, str]] = set()
+        for eid in by_name.get(_legal_name_key(row.get("name") or ""), set()):
+            hits.add((eid, "legal_name"))
+        for lab in _labels(row):
+            if dom_use.get(lab) == 1:
+                for eid in by_slug.get(lab, set()):
+                    hits.add((eid, "domain"))
+        if len({h[0] for h in hits}) == 1:
+            for eid, via in hits:
+                found.setdefault(eid, {}).setdefault(via, set()).add(root)
+    out: list[tuple[str, str, str]] = []
+    for eid, vias in sorted(found.items()):
+        for via in ("legal_name", "domain"):  # an exact legal name outranks a domain
+            roots = vias.get(via) or set()
+            if roots:
+                if len(roots) == 1:
+                    out.append((eid, next(iter(roots)), via))
+                break
+    return out
+
+
+# --- #366 controller propagation ---------------------------------------------------------------
+
+def controlled_group_events(events: list[dict[str, Any]],
+                            entities: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """A tracked entity's OFFICIAL own distress (regulatory / curated source) → a ``group`` row
+    for every tracked entity that lists it among its registry ``controllers`` (Will Bank ←
+    Banco Master). Matched by exact alias / display name; never "itself insolvent"."""
+    names: dict[str, set[str]] = {}
+    for e in entities:
+        for a in [e.get("display_name"), e.get("news_term"), e.get("entity_id"), *(e.get("aliases") or [])]:
+            if a:
+                names.setdefault(_legal_name_key(str(a).replace("_", " ")), set()).add(e["entity_id"])
+    controlled: dict[str, set[str]] = {}
+    for e in entities:
+        for c in e.get("controllers") or []:
+            ids = names.get(_legal_name_key(c)) or set()
+            if len(ids) == 1:
+                controlled.setdefault(next(iter(ids)), set()).add(e["entity_id"])
+    out: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for ev in events:
+        eid = ev.get("entity")
+        if (not eid or (ev.get("role") or "self") != "self" or ev.get("kind") not in GROUP_KINDS
+                or ev.get("source_kind") not in ("regulatory", "curated")):
+            continue
+        for sub in sorted(controlled.get(eid) or ()):
+            if sub == eid or (sub, ev["kind"]) in seen:
+                continue
+            seen.add((sub, ev["kind"]))
+            g = {k: v for k, v in ev.items() if k not in ("correspondent_of", "correspondent_checked",
+                                                          "observed")}
+            g.update(entity=sub, role="group", group_of=eid, label=_label(ev["kind"], "group"),
+                     matched_via="controller_registry")
+            if ev.get("observed"):
+                g["observed"] = ev["observed"]
+            out.append(g)
+    return out
+
+
 # --- #358 BCB register exits -----------------------------------------------------------------
+# #361: an exit is a FACT about the register, not distress — the first live exits (2026-11-06)
+# were cooperative MERGERS (Acredicoop → Viacredi). Exits stay in distress/registry_exits.json;
+# an exit caused by a resolution regime reaches the store through regime_events instead.
 
 def exit_events(exits: Iterable[dict[str, Any]], cnpj_index: dict[str, str]) -> list[dict[str, Any]]:
     """One ``saida_cadastro_bcb`` event per institution that left the register. Regulatory
@@ -505,6 +688,7 @@ def run(
     exits: list[dict[str, Any]],
     signal_fn: Callable[[str, dict[str, Any]], Any] | None = None,
     today: dt.date | None = None,
+    regimes: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Pure-ish orchestration (every side effect injected). Returns
     ``{"tracked": [...], "untracked": [...], "summary": {...}}``."""
@@ -534,7 +718,9 @@ def run(
                     except Exception as exc:  # pragma: no cover
                         print(f"Warning: review signal failed: {exc}")
         summary["promoted"] = promote(wide, promote_fn=promote_fn) if promote_fn else []
-    wide += exit_events(exits, cnpj_index)
+    # #361: register exits are NOT distress (mergers); #362: official resolution regimes are.
+    regime = regime_events(regimes, cnpj_index, today=today)
+    wide += regime
     if correspondent_lookup:
         prev = {**(index.get("untracked") or {}), **(index.get("records") or {})}
         summary["correspondent_links"] = attach_correspondents(
@@ -542,10 +728,14 @@ def run(
     tracked = [e for e in wide if e.get("entity")]
     untracked = [e for e in wide if not e.get("entity")]
     siblings = controller_siblings(own_events + tracked, qsa or {})
-    for e in wide + siblings:
+    controlled = controlled_group_events(own_events + tracked, entities)  # #366
+    for e in wide + siblings + controlled:
         e.pop("_profile", None)
     summary.update(tracked=len(tracked), untracked=len(untracked), group_siblings=len(siblings),
-                   exits=len(exits or []))
+                   exits=len(exits or []), regimes=len(regime),
+                   regimes_tracked=sum(1 for e in regime if e.get("entity")),
+                   controlled_group=len(controlled))
+    siblings += controlled
     return {"tracked": tracked + siblings, "untracked": untracked, "summary": summary}
 
 
@@ -570,6 +760,18 @@ def run_live(
             entities = []
     snap = _s3_json(bucket, BCB_SNAPSHOT_KEY, s3)
     exits_doc = _s3_json(bucket, EXITS_KEY, s3)
+    regimes = _s3_json(bucket, REGIMES_KEY, s3)
+    # #363: a tracked entity with no CNPJ that a regime names exactly gets its CNPJ root
+    # (never stolen from another entity — add_cnpj_roots refuses), so the regime binds to it.
+    for eid, root, via in regime_cnpj_matches(regimes, entities):
+        try:
+            if entity_registry.add_cnpj_roots(eid, [root], source=f"bcb_regimes:{via}"):
+                print(f"Distress watch: CNPJ {root} attached to {eid} ({via}, BCB resolution regime)")
+                for e in entities:
+                    if e.get("entity_id") == eid:
+                        e["cnpj_roots"] = sorted(set(e.get("cnpj_roots") or []) | {root})
+        except Exception as exc:  # pragma: no cover - registry best-effort
+            print(f"Warning: CNPJ backfill for {eid} failed: {exc}")
     qsa = _s3_json(bucket, QSA_KEY, s3)
     from src.ingest import bcb_correspondentes
 
@@ -584,4 +786,5 @@ def run_live(
         exits=exits_doc.get("exits") or [],
         signal_fn=entity_registry.record_review_signal,
         today=today,
+        regimes=regimes,
     )

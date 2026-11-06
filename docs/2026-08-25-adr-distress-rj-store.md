@@ -174,3 +174,48 @@ Reverted (backups under `backups/distress/` and `backups/registry/`), then four 
 4. Fund vehicles and non-regulated review candidates match by full legal name only.
 
 The re-run in a live dry run returns exactly one event: Euro17, as a group, with correspondents Daycoval and Votorantim.
+
+### Addendum 2026-11-06 — official resolution regimes and the lifecycle gate (#361–#366)
+
+**Trigger: the Will Bank miss.** BCB put Will Financeira (Will Bank) into liquidação extrajudicial by Ato do Presidente nº 1376 on 2026-01-21. Banco Master, its controller, went in by Ato nº 1369 on 2025-11-18. Both banks were tracked (curated since 08-30), yet the store held nothing for them, because:
+- the decrees predate the store and the 30-day sweep;
+- the later news names the standing status, not the event ("Liquidante do Banco Master…", "credores do Will Bank");
+- neither entity had a CNPJ.
+
+Worse, the feed showed both as growing competitors:
+- an Ansoff "Will Bank expanding by integrating Mastercard" at 0.9 (the source was Mastercard settling its card bills in liquidation);
+- SWOT opportunities;
+- a "Lançamento de produto" behavioral front;
+- an industry-inferred "Autorização BCB" badge.
+
+- **#362 Official source.** BCB "Regimes de resolução" (`bcb.gov.br/estabilidadefinanceira/resolucao`; `/api/` is allowed by robots.txt).
+  - `regime_resolucao_ativo?filtro=(Situacao eq 'Ativo')` lists the 25 active regimes. `Regesp_Internet/Detalhamento?identificador=` gives CNPJ, type, decree date, act, liquidator and status.
+  - `src/ingest/bcb_regimes.py` keeps `reference/bcb_regimes.json` (structured ingest). A regime that leaves the list is re-read once for its closure reason; a conversion into falência is a `falencia` event.
+  - The synth watch emits `regulatory` events dated at the decree and **re-observed** every run while active (`observed` → `last_seen`), so a decades-old liquidation such as Banco Rural (2013) never expires by TTL.
+  - **History** uses the BCB's own closed-status lists (1,146 regimes across 19 closed statuses, incl. 375 "Encerrado (Falência.)"), refreshed weekly.
+    - Details are fetched only for names equal to a tracked entity's.
+    - A detail binds only by the entity's own CNPJ, within 5 years.
+    - An Internet Archive fallback was not needed.
+  - Correspondent fan-out for a regime requires the regime's exact CNPJ.
+- **#361 Register exits are not distress.** The first exits (3 cooperatives) were mergers, e.g. Acredicoop → Viacredi. Exits stay in `distress/registry_exits.json`; a regime-caused exit reaches the store as its regime.
+- **#363 CNPJ backfill.** For tracked entities with no CNPJ, a root is attached on one of two exact matches:
+  - the legal name minus its legal-form tail equals an alias ("BANCO MASTER S/A" ↔ Banco Master);
+  - the institution's own e-mail or site domain equals the alias without spaces ("willbank.com.br" ↔ Will Bank), counted only when no other regime shares the domain. The Master group shares its liquidator's `bancomaster.com.br` across 5 regimes.
+
+  A legal-name match outranks a domain match, `add_cnpj_roots` never steals a root, and an ambiguous match binds nothing.
+- **#366 Controllers.** An entity's official own distress (regulatory or curated source) adds a `group` row to every tracked entity listing it in `controllers` (Will Bank ← Banco Master).
+- **#365 Status mentions.** "liquidante/interventor do X", "massa liquidanda/falida", "em liquidação", "credores do X" + FGC/liquid…, "quebra/colapso do X", "quebrou/faliu". These pass the same guards but only refresh an EXISTING own trusted liquidação, intervenção, RAET or falência record (`status_mentions`, `last_status_*`). They never create one or add a confidence source.
+- **#364 Lifecycle gate** (`src/synth/lifecycle.py`, at feed build).
+  - Applies to an entity's own trusted, still-active liquidação, falência or intervenção.
+  - Sets `entity_attrs[e].lifecycle`.
+  - Withholds SWOT S/O and its proposals, TOWS, Ansoff, BCG, Four Corners and behavioral cards.
+  - Drops the industry-inferred BCB badge and the CSO posture row.
+  - RAET is labelled but not gated, since operations continue.
+
+**Verified in a read-only live dry run on 2026-11-06, before any write.** Every match was read:
+- 25 active regimes;
+- tracked: Banco Master (legal name), Will Bank (own domain), MW IP (existing CNPJ);
+- Will Bank's group row via Banco Master;
+- 22 untracked official liquidations;
+- one correspondent link (Portocred → PAN, exact CNPJ);
+- one history name match (a 1987 DTVM), correctly not bound.
