@@ -102,3 +102,62 @@ rising + here are the names" view.
 - (3) **NOT built.** No DataJud × distress join exists in `executive.py` or
   `feed_builder.py`. DataJud stays the macro trend only.
 - B and (3) are optional engineering work with no owner gate and no open ticket.
+
+## Addendum, 2026-11-06: beyond the tracked registry (milestone "Distress coverage", #354–#359)
+
+**Trigger.** Onça missed the Grupo Euro17 recuperação judicial. Facts: TJSP, filed around
+2026-10-16; R$ 1,72 bi across eight companies; NeoFeed exclusive on 2026-10-22. An audit on
+2026-11-05 found the 2026-10-28 "Concluded" status hid four breaks:
+
+1. **Fetched, then dropped.** NeoFeed is an outlet feed, but `fetch_news` keeps an outlet item
+   only when it names a tracked term. The RJ headline never reached `detect_distress_events`.
+2. **Tracked-only by design.** The group's BCB-authorised SCD (cnpj root 59855096) had sat in
+   the review queue since 2026-09-03, blocked by the prominence gate. Even a fetched headline
+   could not resolve.
+3. **Inert surfaces.** `_trusted_distress` admitted only `confidence == "confirmed"`, which no
+   producer writes, so every executive insolvency tile read 0. Feed rows had no `date`, so
+   distress push alerts never fired.
+4. **The store never held a true record.** Every record it ever had was a false positive,
+   later purged (#33, #55, #73, #296). On 2026-11-05 it held 0 records.
+
+**Decisions.**
+- **#354 Sweep.** Every fetched outlet headline, plus four distress topic queries, is
+  classified. Distress headlines ride the news slice as `distress_items`: compact, capped at 60,
+  outside the seen-set. The classifier adds `liquidacao_extrajudicial`, `intervencao` and `raet`.
+- **#355 Wide resolution** (`src/synth/distress_watch.py`). A headline that passes guards 1–5
+  but names no tracked entity is matched against three sources: the BCB register snapshot, the
+  pending `discovery` reviews, and tracked entities with `news_search=False`. Precision rules:
+  - the name must be the clause subject (before the phrase, or its *da/do/de* object after it);
+  - a legal-name match means the institution itself (`role: self`);
+  - a brand match requires a distinctive head (at least 5 characters or alphanumeric, not
+    generic) owned by at most 3 CNPJ roots. It yields `role: group` unless a segment cue
+    follows the brand ("Euro17 SCD").
+
+  Results go to an `untracked` map keyed by CNPJ root. A matched structured candidate is
+  **promoted**: distress overrides the prominence gate, the review is approved with
+  `decided_by: distress_override`, and the record moves onto the new entity.
+- **#356 Group linkage.** A group record is keyed `<entity>#group:<kind>` and labelled "Grupo
+  econômico em …". It never merges into, or outranks, the entity's own record. Tracked entities
+  that share a PF sócio (same name and masked doc in `graph/watchlist_qsa.json`) get a group row
+  too.
+- **#357 Correspondents.** Each distinctive brand gets one lookup in BCB
+  `Informes_Correspondentes`, once per record. Contracting tracked banks get a `correspondent`
+  row (tenant-scoped to the bank) and a CCO risk-register line (`terceiro`). Trusted confidence
+  only.
+- **#358 Register exits.** The ingest keeps `reference/bcb_institutions.json` and diffs it run
+  over run. Exits go to `distress/registry_exits.json`. A resource that shrank by more than 5% is
+  treated as a partial fetch and skipped. Synth records exits as `saida_cadastro_bcb` with
+  `regulatory` confidence; this is a fact about the listing, not a cause.
+- **#359 Review queue.** Approving a `discovery` review used to create nothing, because
+  `_apply_review` had no branch for it; that is fixed. Producers append `signals`, and the
+  queue, the admin API and the feed read in signal-score order, with `stale` for signal-less
+  items older than 60 days. The ranking is computed at read time; no live data is rewritten.
+
+**Guardrail unchanged.** Board and executive surfaces state only own-entity distress at
+regulatory, curated or corroborated confidence. Group and correspondent rows are third-party
+risk, never "the entity is insolvent".
+
+**Verified offline.** In a live dry run on 2026-11-06 the sweep kept 25 headlines out of 643.
+Only "Grupo Euro17 pede recuperação judicial" matched a BCB institution (EURO17 SCD, `group`).
+Non-financial RJs (Aeris, Chilli Beans, Kitchens) matched nothing. The correspondent lookup
+returned Votorantim and Daycoval. `tests/test_distress_watch.py` has 20 tests.
