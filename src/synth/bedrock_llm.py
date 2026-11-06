@@ -93,6 +93,7 @@ def converse(
     history: list[dict[str, str]] | None = None,
     guardrail: dict[str, str] | None = None,
     guard_text: str | None = None,
+    target: Any = None,
 ) -> str | None:
     """Return assistant text or None if Bedrock is unavailable/denied.
 
@@ -114,7 +115,15 @@ def converse(
     ``guardrail`` (#304) = ``{"id", "version"}`` attaches a Bedrock Guardrail. ``guard_text`` (the
     user's own question) goes in as the only ``guardContent`` block, so input policies evaluate
     the question and never the retrieved context. An intervention returns None and sets
-    ``usage_out["guardrail"] = "intervened"``, so the caller can tell it from a Bedrock failure."""
+    ``usage_out["guardrail"] = "intervened"``, so the caller can tell it from a Bedrock failure.
+
+    ``target`` (#346, BYOK): a ``client_model.Target`` naming the tenant's own model. None or a
+    hosted target runs this Bedrock path unchanged. A client target never falls back to hosted:
+    its failure returns None with ``usage_out["model_error"]`` set to a reader-facing code."""
+    if target is not None and not getattr(target, "hosted", True):
+        return _converse_client(prompt, target=target, system=system, max_tokens=max_tokens,
+                                usage_out=usage_out, images=images, history=history,
+                                guardrail=guardrail, guard_text=guard_text)
     model_id = model_id or DEFAULT_SYNTH_MODEL
     try:
         client = boto3.client("bedrock-runtime")
@@ -162,3 +171,36 @@ def converse(
     except Exception as exc:  # pragma: no cover
         print(f"Warning: Bedrock Converse failed ({model_id}): {exc}")
         return None
+
+
+def _converse_client(prompt: str, *, target: Any, system: str | None, max_tokens: int,
+                     usage_out: dict[str, Any] | None, images: list[bytes] | None,
+                     history: list[dict[str, str]] | None, guardrail: dict[str, str] | None,
+                     guard_text: str | None) -> str | None:
+    """#346: one call on the tenant's own model. Same return contract as the hosted path (text or
+    None); the reason for a None is in ``usage_out``: ``guardrail = "intervened"`` (#349 parity,
+    standalone ApplyGuardrail on the question and on the answer) or ``model_error = <code>``."""
+    from src.synth import client_model as cm
+
+    usage = usage_out if usage_out is not None else {}
+    usage.update(provider=target.provider, model=target.model, client_billed=True)
+    if guardrail and guard_text:
+        blocked, _ = cm.apply_guardrail(guardrail, guard_text, "INPUT")
+        if blocked:
+            usage["guardrail"] = "intervened"
+            return None
+    try:
+        text, used = cm.anthropic_converse(target, prompt, system=system, max_tokens=max_tokens,
+                                           history=history, images=images)
+    except cm.ModelError as exc:
+        usage["model_error"] = exc.code
+        # The code only: never the tenant, the key or the prompt.
+        print(f"Warning: client model failed ({target.provider}/{target.model}): {exc.code}")
+        return None
+    usage.update(used)
+    if guardrail and text:
+        blocked, text = cm.apply_guardrail(guardrail, text, "OUTPUT")
+        if blocked:
+            usage["guardrail"] = "intervened"
+            return None
+    return text or None

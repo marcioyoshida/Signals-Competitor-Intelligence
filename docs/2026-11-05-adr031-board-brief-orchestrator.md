@@ -128,6 +128,27 @@ contract says otherwise. This is an open question for M3.
   in a public registry.
 - `/exec`: a read-only board pack view.
 
+### Client model (BYOK, #345)
+
+A run's model calls go to the tenant's own model when it has connected one; hosted Nova Lite
+stays the default for trials. Stories #346–#353.
+
+- **One switch, tenant paths only.** `bedrock_llm.converse(target=…)` routes a call to the
+  tenant's model (`client_model.Target`). Only tenant-request paths resolve a target (Ask, the
+  agent API, then `board_brief`); pipeline and synthesis output is shared by every tenant and
+  stays hosted.
+- **No fallback to hosted.** A failing client model returns a reader-facing code
+  (`model_key_rejected`, `model_no_credit`, `model_no_access`, `model_key_needs_workspace`,
+  `model_unavailable`, `model_refused`), never a Nova answer in its place. The code is not a
+  coverage gap.
+- **Guardrail parity.** Outside Bedrock, the same guardrail runs standalone (`ApplyGuardrail`) on
+  the question before the call and on the answer after it, and fails closed.
+- **Billing.** Client-billed tokens are reported, but they don't draw the included API quota.
+  The spend gate (#329) treats a connected model as satisfying it.
+- Status 2026-11-05: #346 (switch + Anthropic invoker) and #349 (guardrail parity) are in code
+  but dark. No tenant can connect a key until the sealed store (#347) lands, and the SDK
+  joins the Lambda asset with #347.
+
 ### Evaluation harness
 
 Fixed packs replayed in dry-run mode. Scores: citation validity (every claim resolves to a

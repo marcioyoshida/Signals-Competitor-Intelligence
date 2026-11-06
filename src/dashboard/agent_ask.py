@@ -1554,6 +1554,13 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         tier = str((cfg or {}).get("tier") or "").lower()
         if tier not in top_tiers and industry in {str(m).strip().lower() for m in modules}:
             modules = [industry]
+    # #346 BYOK: a tenant that connected its own model is answered on it, never on hosted Nova.
+    from src.synth import client_model
+    try:
+        target = client_model.resolve_target(getattr(identity, "tenant", None),
+                                             loader=client_model.tenant_loader())
+    except client_model.ModelError as exc:
+        return _resp(200, client_model.error_result(exc.code))
     try:
         from src.synth.bedrock_llm import converse, guardrail_config
         feed = _load_feed(bucket)
@@ -1568,6 +1575,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         def _conv(*a: Any, **kw: Any) -> Any:
             if guard:
                 kw.update(guardrail=guard, guard_text=q)
+            if target is not None:      # hosted calls keep their exact pre-BYOK signature
+                kw["target"] = target
             return converse(*a, usage_out=usage, **kw)
         result = answer(
             q, feed=feed, scope=scope, converser=_conv,
@@ -1575,6 +1584,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         )
         if usage.get("guardrail") == "intervened":   # refused, so never captured as a gap below
             result = guardrail_refusal()
+        elif usage.get("model_error"):   # the client's model failed: its error, not a data gap
+            result = client_model.error_result(str(usage["model_error"]))
         if officer:
             result["officer"] = officer
         if quota is not None:
@@ -1583,12 +1594,15 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         print(json.dumps({"ask_usage": {
             "tenant": getattr(identity, "tenant", None), "tier": getattr(identity, "tier", None),
             "in": usage.get("input_tokens", 0), "out": usage.get("output_tokens", 0),
-            "history": len(history), "reason": result.get("reason")}}))
+            "history": len(history), "reason": result.get("reason"),
+            "provider": usage.get("provider", "hosted"), "model": usage.get("model"),
+            "client_billed": bool(usage.get("client_billed"))}}))
         # Coverage-gap loop (capture stage): an IN-DOMAIN question that produced no
         # grounded answer is a data gap — record it for triage/remediation. An
         # off-domain refusal is not a gap. Best-effort; never breaks the response.
         # A chat follow-up ("por quê?") is not a standalone question — not a coverage gap.
-        if not result.get("refused") and not result.get("grounded") and not history:
+        if (not result.get("refused") and not result.get("grounded") and not history
+                and result.get("reason") != "client-model-error"):
             _record_gap(q, scope, result.get("reason") or "no-grounding")
         return _resp(200, result)
     except Exception as exc:  # pragma: no cover - defensive; never leak a stack

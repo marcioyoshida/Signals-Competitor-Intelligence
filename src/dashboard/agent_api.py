@@ -68,9 +68,17 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     usage: dict[str, Any] = {}
     guard = guardrail_config()   # #304
+    # #346 BYOK: a tenant that connected its own model is answered on it, never on hosted Nova.
+    from src.synth import client_model
+    try:
+        target = client_model.resolve_target(tenant_id, loader=client_model.tenant_loader())
+    except client_model.ModelError as exc:
+        return _resp(200, client_model.error_result(exc.code))
 
     def _metered_converse(prompt: str, *, system: str | None = None, max_tokens: int = 800) -> str | None:
-        extra = {"guardrail": guard, "guard_text": q} if guard else {}
+        extra: dict[str, Any] = {"guardrail": guard, "guard_text": q} if guard else {}
+        if target is not None:          # hosted calls keep their exact pre-BYOK signature
+            extra["target"] = target
         return converse(prompt, system=system, max_tokens=max_tokens, usage_out=usage, **extra)
 
     kb_fn = _kb_retrieve if os.environ.get("ONCA_KB_ID") else None
@@ -83,15 +91,20 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         if usage.get("guardrail") == "intervened":
             from src.dashboard.agent_ask import guardrail_refusal
             result = guardrail_refusal()
+        elif usage.get("model_error"):
+            result = client_model.error_result(str(usage["model_error"]))
     except Exception as exc:  # pragma: no cover - defensive; never leak a stack
         print(f"agent_api error: {exc}")
         return _resp(500, {"error": "internal error"})
 
     total_tokens = int(usage.get("input_tokens", 0)) + int(usage.get("output_tokens", 0))
+    # #346/#353: tokens on the tenant's OWN model are on the tenant's bill, so they don't draw the
+    # included quota (that would charge overage for tokens Onça never paid). Still reported below.
+    client_billed = bool(usage.get("client_billed"))
     # Both best-effort: a metering hiccup must never turn a good answer into a 500.
     # #305: past the included quota the answer is still served; the excess is marked overage.
     quota = api_usage.quota_for(cfg)
-    metered = api_usage.record_usage(tenant_id, total_tokens, quota=quota)
+    metered = api_usage.record_usage(tenant_id, 0 if client_billed else total_tokens, quota=quota)
     if metered is None:                  # nothing metered (no model call) or the write failed
         cur = api_usage.get_usage(tenant_id)
         metered = {"period": cur["period"], "tokens_used": cur["tokens_used"], "quota": quota,
@@ -104,6 +117,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         "total_tokens": total_tokens,
         "overage_tokens": metered.get("overage_tokens", 0),
     }
+    if client_billed:                   # hosted responses keep the published shape
+        result["usage"].update(provider=usage.get("provider"), client_billed=True)
     result["quota"] = {"period": metered["period"], "included_tokens": quota,
                        "used_tokens": metered["tokens_used"], "remaining_tokens": metered.get("remaining", 0)}
     out = _resp(200, result)
