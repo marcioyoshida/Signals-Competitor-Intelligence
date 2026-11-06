@@ -50,11 +50,29 @@ def _threat(card: dict[str, Any]) -> float:
     return v * 100 if v <= 1 else v
 
 
+def _third_party_distress(feed: dict[str, Any]) -> list[dict[str, Any]]:
+    """#356/#357: trusted distress of an entity's ECONOMIC GROUP or of a CORRESPONDENT it
+    contracts — a third-party risk for the entity's compliance officer, never the entity's own
+    insolvency (kept out of `_trusted_distress` and its tiles)."""
+    from src.synth.distress import TRUSTED_CONFIDENCE
+
+    return [d for d in (feed.get("distress") or [])
+            if d.get("confidence") in TRUSTED_CONFIDENCE and d.get("entity")
+            and d.get("role") in ("group", "correspondent")]
+
+
 def _trusted_distress(feed: dict[str, Any]) -> list[dict[str, Any]]:
     """Distress safe for an executive/board surface: CONFIRMED confidence only. `reported`
     news distress carries #33 counterparty mis-attribution risk (a bank named in a retailer's
     RJ news must never show as itself insolvent)."""
-    return [d for d in (feed.get("distress") or []) if d.get("confidence") == "confirmed"]
+    # The store grades regulatory / curated / corroborated / reported — it never wrote
+    # "confirmed", so this gate admitted NOTHING and every executive insolvency tile read 0
+    # (found 2026-11-05, Euro17 audit). Trusted = anything but a single-outlet report.
+    from src.synth.distress import TRUSTED_CONFIDENCE
+
+    return [d for d in (feed.get("distress") or [])
+            if d.get("confidence") in TRUSTED_CONFIDENCE and d.get("entity")
+            and (d.get("role") or "self") == "self"]  # #356/#357 group/correspondent rows: not "itself insolvent"
 
 
 def _recent_window(dates: list[str]) -> tuple[set[str], set[str]]:
@@ -1212,6 +1230,10 @@ def build_cco(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         + [{"kind": "distress", "label": labels.get(d.get("entity"), d.get("entity")),
           "detail": d.get("label"), "industries": _industries_of(feed, d.get("entity")),
           "severity": "high"} for d in distress]
+        + [{"kind": "terceiro", "label": labels.get(d.get("entity"), d.get("entity")),
+            "detail": f"{d.get('label')} — {d.get('correspondent') or d.get('subject_name') or ''}".rstrip(" —"),
+            "industries": _industries_of(feed, d.get("entity")), "severity": "med"}
+           for d in _third_party_distress(feed)][:8]
         + [{"kind": "reputacao", "label": r["label"], "detail": _rep_detail(r),
             "industries": r["industries"], "severity": "med"} for r in rep_rows[:8]]
         + [{"kind": "integridade", "label": (i.get("entity_id") or i.get("card_id") or "—"),

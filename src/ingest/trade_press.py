@@ -411,6 +411,80 @@ def merge_sector_news(entity_items: list[dict[str, Any]],
     return out
 
 
+# --- #354 distress sweep -----------------------------------------------------------------------
+# `fetch_news` keeps an outlet item only when its headline names a TRACKED term, so "Grupo Euro17
+# pede recuperação judicial" (NeoFeed, 2026-10-22) was fetched and discarded: Euro17 was parked
+# in the review queue. The sweep re-reads EVERY fetched headline (the outlet `direct_sink`) plus a
+# few distress topic queries and keeps the ones that classify as distress, whatever they name.
+# Resolution (tracked entity / BCB register / review queue) happens later, in synth's distress
+# watch, under the same defamation guards as the tracked store.
+DISTRESS_QUERIES = (
+    "pede recuperação judicial",
+    "recuperação judicial financeira OR securitizadora OR fintech OR banco",
+    "liquidação extrajudicial Banco Central",
+    "falência decretada financeira OR banco OR securitizadora",
+)
+DISTRESS_SWEEP_MAX = 60  # ~250 B/row compact; the news task result stays well under 256 KB
+_SWEEP_FIELDS = ("id", "title", "url", "date", "source", "publisher", "company", "name")
+
+
+def distress_sweep(
+    candidates: Iterable[dict[str, Any]],
+    *,
+    known: Iterable[dict[str, Any]] = (),
+    lookback_days: int = DEFAULT_LOOKBACK_DAYS,
+    today: dt.date | None = None,
+    max_items: int = DISTRESS_SWEEP_MAX,
+) -> list[dict[str, Any]]:
+    """Distress-classified headlines among ``candidates`` that are not already in ``known``
+    (the entity/sector items, which the distress miner reads anyway). Compact rows, newest
+    first, ``query_kind: "distress"``; capped (the news task result shares Step Functions'
+    256 KB limit)."""
+    from src.synth.distress import classify_distress  # pure, stdlib-only
+
+    today = today or dt.date.today()
+    cutoff = today - dt.timedelta(days=lookback_days)
+    have: set[str] = set()
+    for r in known or []:
+        have.update(_dedup_keys(r))
+    out: list[dict[str, Any]] = []
+    for r in candidates or []:
+        kind = classify_distress(r.get("title") or "")
+        if not kind:
+            continue
+        date = _parse_date(r.get("date"))
+        if not date or date < cutoff:
+            continue
+        keys = _dedup_keys(r)
+        if any(k in have for k in keys):
+            continue
+        have.update(keys)
+        row = {k: r.get(k) for k in _SWEEP_FIELDS if r.get(k) is not None}
+        row.update(query_kind="distress", distress_kind=kind)
+        out.append(row)
+    out.sort(key=lambda r: r.get("date") or "", reverse=True)
+    return out[:max_items]
+
+
+def fetch_distress_queries(
+    queries: Iterable[str] = DISTRESS_QUERIES,
+    *,
+    lookback_days: int = DEFAULT_LOOKBACK_DAYS,
+    today: dt.date | None = None,
+    fetcher: Callable[[str], bytes] | None = None,
+    pause_sec: float = 0.3,
+) -> list[dict[str, Any]]:
+    """Google News items for the distress topic queries (unfiltered — the sweep classifies)."""
+    fetch = fetcher or _fetch_rss_query
+    out: list[dict[str, Any]] = []
+    for q in queries:
+        content = fetch(q)
+        out.extend(_parse(content, q) if content else [])
+        if pause_sec and content:
+            time.sleep(pause_sec)
+    return out
+
+
 def _title_key(title: Any) -> str:
     return "t:" + re.sub(r"[^A-Z0-9]+", "", _fold(title or ""))
 

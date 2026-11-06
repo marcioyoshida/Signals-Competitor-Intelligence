@@ -184,6 +184,10 @@ def test_news_slice_carries_sector_items_with_their_own_budget(monkeypatch):
     monkeypatch.setattr(lambda_port, "_source_budget", spy_budget)
     monkeypatch.setattr(lambda_port.trade_press, "fetch_news", lambda terms, **k: [dict(entity_item)])
     monkeypatch.setattr(lambda_port.trade_press, "fetch_sector_news", fake_sector)
+    # #354: the distress sweep runs in its own (third) budget; its queries are faked here
+    monkeypatch.setattr(lambda_port.trade_press, "fetch_distress_queries", lambda **k: [
+        {"id": "news:d1", "title": "Grupo Euro17 pede recuperação judicial", "url": "http://u/3",
+         "publisher": "NeoFeed", "date": dt.date.today().isoformat()}])
     monkeypatch.setattr(lambda_port, "_new_since_last_run",
                         lambda source, docs, seed_if_empty=False, commit=True: docs)
     monkeypatch.setenv("ONCA_NEWS_WATCHLIST", "Caixa")
@@ -191,7 +195,10 @@ def test_news_slice_carries_sector_items_with_their_own_budget(monkeypatch):
     monkeypatch.setenv("ONCA_NEWS_MAX_TERMS", "1")
 
     sl = lambda_port._news_slice(None)
-    assert budgets == ["Sector news", "Trade press"]
+    assert budgets == ["Sector news", "Trade press", "Distress sweep"]
+    # the untracked distress headline rides along, outside items/context and the seen-set
+    assert [d["id"] for d in sl["distress_items"]] == ["news:d1"]
+    assert "news:d1" not in sl["fetched_ids"]
     assert seen_queries == registry.news_topic_queries()
     assert sl["count"] == 2 and sorted(sl["fetched_ids"]) == ["news:e1", "news:s1"]
     by_id = {i["id"]: i for i in sl["items"]}

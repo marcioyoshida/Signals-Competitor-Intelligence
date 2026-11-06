@@ -614,6 +614,20 @@ def _news_slice(context: Any) -> dict[str, Any]:
         n = trade_press.prefer_direct_links(sector_items, outlet_items)
         print(f"Sector news: {n} Google News link(s) swapped for the outlet's own")
     news_items = trade_press.merge_sector_news(news_items, sector_items)
+    # #354 distress sweep: every fetched outlet headline + the distress topic queries, kept when
+    # it classifies as distress EVEN IF it names no tracked entity (resolved in synth's distress
+    # watch). Its own small budget; never touches the seen-set (the distress store dedups).
+    distress_items: list[dict[str, Any]] = []
+    if news_terms and os.environ.get("ONCA_DISTRESS_SWEEP", "on") != "off":
+        try:
+            with _source_budget("Distress sweep", deadline, min(per_source, 45)):
+                queried = trade_press.fetch_distress_queries(lookback_days=news_lookback)
+                distress_items = trade_press.distress_sweep(
+                    outlet_items + queried, known=news_items, lookback_days=news_lookback)
+            print(f"Distress sweep: {len(distress_items)} headline(s) "
+                  f"from {len(outlet_items)} outlet + {len(queried)} query items")
+        except Exception as exc:  # pragma: no cover - best-effort, like every source
+            print(f"Warning: distress sweep failed: {exc}")
     if news_items:
         try:
             # Deferred commit (issue #23): compute the fresh set but do NOT
@@ -647,6 +661,8 @@ def _news_slice(context: Any) -> dict[str, Any]:
         # the exact set it saw to the trade_press seen-set — the second phase of
         # the deferred diff above. Compact: bare id strings.
         "fetched_ids": [d["id"] for d in news_items if isinstance(d, dict) and d.get("id")],
+        # #354: compact distress headlines (any subject), read only by the distress miner.
+        "distress_items": distress_items,
     }
 
 
@@ -1243,6 +1259,13 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 print(f"R2 certifications: verified {len(_certd)} tracked entities from BCB register")
         except Exception as exc:  # pragma: no cover - never blocks the entrant scan
             print(f"Warning: R2 certification stamp failed: {exc}")
+        # #358: register snapshot + EXIT diff (an institution leaving "em funcionamento"). The
+        # snapshot is also the distress watch's wide index for untracked institutions (#355).
+        if _bucket:
+            try:
+                print(f"BCB register state: {bcb_autorizacoes.update_register_state(records, _bucket)}")
+            except Exception as exc:  # pragma: no cover - never blocks the entrant scan
+                print(f"Warning: BCB register snapshot/exit diff failed: {exc}")
 
     def _post_fatos(records: list[dict[str, Any]], new: list[dict[str, Any]]) -> None:
         # Governance events are the strategic ones — float them to the

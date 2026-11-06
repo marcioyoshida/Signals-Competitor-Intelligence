@@ -1231,7 +1231,7 @@ function buildRiskRows() {
   });
   const distressByEntity = {};
   (DATA.distress || []).forEach(d => {
-    if (!d.entity) return;
+    if (!d.entity || (d.role && d.role !== "self")) return;  // #356/#357: group/correspondent rows aren't the entity's own
     const prev = distressByEntity[d.entity];
     if (!prev || (DISTRESS_SEVERITY[d.kind] || 0) > (DISTRESS_SEVERITY[prev.kind] || 0))
       distressByEntity[d.entity] = d;
@@ -1461,7 +1461,7 @@ function renderRegCalendar() {
 function buildMapaRows() {
   const distressByEntity = {};
   (DATA.distress || []).forEach(d => {
-    if (!d.entity) return;
+    if (!d.entity || (d.role && d.role !== "self")) return;  // #356/#357: group/correspondent rows aren't the entity's own
     const prev = distressByEntity[d.entity];
     if (!prev || (DISTRESS_SEVERITY[d.kind] || 0) > (DISTRESS_SEVERITY[prev.kind] || 0))
       distressByEntity[d.entity] = d;

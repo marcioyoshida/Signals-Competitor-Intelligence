@@ -190,6 +190,114 @@ def apply_verified_certifications(
     return changed
 
 
+# --- #358 register EXITS ---------------------------------------------------------------------
+# This module only ever saw ENTRANTS. An institution that leaves "em funcionamento" (cancelled
+# authorisation, liquidação extrajudicial, merger) produced no event at all. Each run now keeps a
+# compact snapshot (cnpj root → name/segment/resource) and diffs it against the previous one.
+SNAPSHOT_KEY = "reference/bcb_institutions.json"
+EXITS_KEY = "distress/registry_exits.json"
+# A resource whose row count fell by more than this share is treated as a PARTIAL fetch (BCB
+# pagination/outage), and the diff for it is skipped — a false "exit" would be a false claim.
+MAX_SHRINK = 0.05
+EXITS_KEEP_DAYS = 120
+
+
+def _root(v: Any) -> str | None:
+    d = "".join(ch for ch in str(v or "") if ch.isdigit())
+    return d[:8] if len(d) >= 8 else None
+
+
+def snapshot(records: list[dict[str, Any]], as_of: str) -> dict[str, Any]:
+    """Compact register snapshot: ``{"as_of", "counts": {resource: n}, "institutions": {root: row}}``."""
+    inst: dict[str, dict[str, Any]] = {}
+    counts: dict[str, int] = {}
+    for r in records or []:
+        root = _root(r.get("cnpj"))
+        res = str(r.get("registry") or "?")
+        counts[res] = counts.get(res, 0) + 1
+        if not root or root in inst:
+            continue
+        inst[root] = {"cnpj": root, "name": r.get("name"), "license_class": r.get("license_class"),
+                      "entity_type": r.get("entity_type"), "registry": res,
+                      "uf": r.get("uf"), "municipio": r.get("municipio")}
+    return {"as_of": as_of, "counts": counts, "institutions": inst}
+
+
+def diff_exits(prev: dict[str, Any] | None, cur: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
+    """``(exits, skipped_resources)``: institutions in ``prev`` but not in ``cur``, dated
+    ``cur["as_of"]``. A resource that shrank by more than ``MAX_SHRINK`` (or vanished) is skipped
+    whole. No previous snapshot → no exits (first run seeds)."""
+    if not prev or not prev.get("institutions"):
+        return [], []
+    pc, cc = prev.get("counts") or {}, cur.get("counts") or {}
+    skipped = [res for res, n in pc.items()
+               if n and (cc.get(res, 0) < n * (1 - MAX_SHRINK))]
+    now = cur.get("institutions") or {}
+    exits = []
+    for root, row in (prev.get("institutions") or {}).items():
+        if root in now or row.get("registry") in skipped:
+            continue
+        exits.append({**row, "date": cur.get("as_of"), "last_seen_in_register": prev.get("as_of")})
+    return exits, skipped
+
+
+def merge_exits(doc: dict[str, Any] | None, exits: list[dict[str, Any]], as_of: str) -> dict[str, Any]:
+    """Durable exits log (dedup by cnpj root, first exit date kept, pruned after
+    ``EXITS_KEEP_DAYS``). An institution that RE-appears is dropped from the log by the caller."""
+    import datetime as dt
+
+    by = {x["cnpj"]: x for x in ((doc or {}).get("exits") or []) if x.get("cnpj")}
+    for x in exits:
+        by.setdefault(x["cnpj"], x)
+    floor = (dt.date.fromisoformat(as_of[:10]) - dt.timedelta(days=EXITS_KEEP_DAYS)).isoformat()
+    kept = sorted((x for x in by.values() if str(x.get("date") or "") >= floor),
+                  key=lambda x: str(x.get("date") or ""), reverse=True)
+    return {"as_of": as_of, "count": len(kept), "exits": kept}
+
+
+def update_register_state(records: list[dict[str, Any]], bucket: str, *, s3: Any = None,
+                          as_of: str | None = None) -> dict[str, Any]:
+    """Persist the snapshot, diff it against the previous one, fold exits into the durable log.
+    Best-effort at the call site; never runs on an empty fetch."""
+    import datetime as dt
+    import json
+
+    import boto3
+
+    if not records:
+        return {"skipped": "empty fetch"}
+    s3 = s3 or boto3.client("s3")
+    as_of = as_of or dt.date.today().isoformat()
+
+    def _get(key: str) -> dict[str, Any]:
+        try:
+            return json.loads(s3.get_object(Bucket=bucket, Key=key)["Body"].read())
+        except Exception:
+            return {}
+
+    def _put(key: str, doc: dict[str, Any]) -> None:
+        s3.put_object(Bucket=bucket, Key=key, ContentType="application/json",
+                      Body=json.dumps(doc, ensure_ascii=False).encode("utf-8"))
+
+    prev = _get(SNAPSHOT_KEY)
+    cur = snapshot(records, as_of)
+    exits, skipped = diff_exits(prev, cur)
+    log = _get(EXITS_KEY)
+    # an institution back in the register is no longer an exit
+    log["exits"] = [x for x in (log.get("exits") or []) if x.get("cnpj") not in cur["institutions"]]
+    log = merge_exits(log, exits, as_of)
+    if skipped:  # keep the previous rows of a partially-fetched resource in the snapshot
+        for root, row in (prev.get("institutions") or {}).items():
+            if row.get("registry") in skipped:
+                cur["institutions"].setdefault(root, row)
+                cur["counts"][row["registry"]] = max(cur["counts"].get(row["registry"], 0),
+                                                     (prev.get("counts") or {}).get(row["registry"], 0))
+    _put(SNAPSHOT_KEY, cur)
+    _put(EXITS_KEY, log)
+    return {"institutions": len(cur["institutions"]), "new_exits": len(exits),
+            "exits_logged": log["count"], "skipped_resources": skipped}
+
+
 def inspect(resource: str | None = None) -> None:
     """One-shot schema check against a live EntitySet."""
     resource = resource or DEFAULT_RESOURCES[0]

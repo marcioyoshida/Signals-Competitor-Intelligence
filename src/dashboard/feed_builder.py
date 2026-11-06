@@ -1377,7 +1377,9 @@ def load_pending_reviews(*, limit: int = 50) -> list[dict[str, Any]]:
             return names[eid]
 
         out: list[dict[str, Any]] = []
-        for r in entity_registry.list_reviews(status="pending")[:limit]:
+        # #359: fresh-signal order (a parked candidate that just hit an RJ headline leads),
+        # not oldest-first — with ~1.5k pending, the oldest slice was all anyone saw.
+        for r in entity_registry.list_reviews(status="pending", ranked=True)[:limit]:
             out.append(
                 {
                     "review_id": r.get("review_id"),
@@ -1391,6 +1393,9 @@ def load_pending_reviews(*, limit: int = 50) -> list[dict[str, Any]]:
                     "hint": r.get("hint"),
                     "confidence": r.get("confidence"),
                     "created_at": r.get("created_at"),
+                    "signal_score": r.get("signal_score"),
+                    "signals": (r.get("signals") or [])[-3:],
+                    "stale": r.get("stale"),
                 }
             )
         return out

@@ -93,6 +93,30 @@ DISTRESS_KINDS: dict[str, dict[str, Any]] = {
         "label": "Recuperação Extrajudicial",
         "patterns": [r"recuperacao extrajudicial"],
     },
+    # #354: the BCB resolution regimes (Lei 6.024/1974). Checked before RJ/falência — a
+    # liquidation headline often mentions a later "falência" as an outcome. Deliberately NO
+    # bare "liquidacao" (asset/financial-settlement sense) and NO bare "intervencao".
+    "liquidacao_extrajudicial": {
+        "label": "Liquidação Extrajudicial",
+        "patterns": [
+            r"liquidacao extrajudicial",
+            r"\bdecret\w+\s+(?:a\s+)?liquidacao\b",
+            r"\bem\s+liquidacao\b(?=.*\b(?:banco central|bc|bacen)\b)",
+        ],
+    },
+    "raet": {
+        "label": "Regime de Administração Especial Temporária (RAET)",
+        "patterns": [r"regime de administracao especial temporaria", r"\braet\b"],
+    },
+    "intervencao": {
+        "label": "Intervenção do Banco Central",
+        "patterns": [
+            r"\bdecret\w+\s+(?:a\s+)?intervencao\b",
+            r"\bintervencao\b(?=.*\b(?:banco central|bc|bacen)\b)",
+            r"\b(?:banco central|bacen)\b.*\bintervencao\b",
+            r"\bsob\s+intervencao\b",
+        ],
+    },
     "recuperacao_judicial": {
         "label": "Recuperação Judicial",
         "patterns": [
@@ -112,7 +136,23 @@ DISTRESS_KINDS: dict[str, dict[str, Any]] = {
             r"massa falida",
         ],
     },
+    # #358: not a headline kind — an institution that left the BCB "em funcionamento"
+    # register between two snapshots. A FACT about the register, never an interpretation
+    # (it may be a cancellation, a liquidation or a merger).
+    "saida_cadastro_bcb": {
+        "label": "Deixou de constar como em funcionamento no BCB",
+        "patterns": [],
+    },
 }
+
+# Headline classification order: most specific first.
+_CLASSIFY_ORDER = ("recuperacao_extrajudicial", "liquidacao_extrajudicial", "raet",
+                   "intervencao", "recuperacao_judicial", "falencia")
+
+# Severity for entity_status (higher = worse). Group-level records (#356) and correspondent
+# rows (#357) never outrank an entity's OWN record.
+SEVERITY = {"falencia": 6, "liquidacao_extrajudicial": 6, "raet": 5, "intervencao": 5,
+            "recuperacao_judicial": 4, "recuperacao_extrajudicial": 3, "saida_cadastro_bcb": 2}
 
 _COMPILED = {
     kind: [re.compile(p) for p in spec["patterns"]]
@@ -125,11 +165,24 @@ def classify_distress(title: str) -> str | None:
     t = _norm(title)
     if not t:
         return None
-    for kind in ("recuperacao_extrajudicial", "recuperacao_judicial", "falencia"):
+    for kind in _CLASSIFY_ORDER:
         for rx in _COMPILED[kind]:
             if rx.search(t):
                 return kind
     return None
+
+
+def distress_span(title: str) -> tuple[str, int, int] | None:
+    """``(kind, start, end)`` of the first distress phrase in the accent-folded title, or None.
+    #355 uses it as a subject-position guard: an untracked name counts only when it is the
+    clause subject — named BEFORE the phrase ("Grupo X pede recuperação judicial") or as its
+    genitive object right AFTER it ("decreta liquidação extrajudicial da X")."""
+    t = _norm(title)
+    kind = classify_distress(title)
+    if not kind:
+        return None
+    ms = sorted((m for rx in _COMPILED[kind] for m in [rx.search(t)] if m), key=lambda m: m.start())
+    return (kind, ms[0].start(), ms[0].end()) if ms else (kind, 0, 0)
 
 
 # --- subject binding (defamation guard) -----------------------------------
@@ -224,16 +277,31 @@ def label_for(kind: str) -> str:
     return DISTRESS_KINDS.get(kind, {}).get("label", kind)
 
 
+# Mid-sentence form ("Grupo econômico em …", "Correspondente em …").
+_PHRASES = {"recuperacao_judicial": "recuperação judicial",
+            "recuperacao_extrajudicial": "recuperação extrajudicial",
+            "falencia": "falência", "liquidacao_extrajudicial": "liquidação extrajudicial",
+            "raet": "RAET", "intervencao": "intervenção do Banco Central",
+            "saida_cadastro_bcb": "saída do cadastro do BCB"}
+
+
+def phrase_for(kind: str) -> str:
+    return _PHRASES.get(kind, label_for(kind).lower())
+
+
 def detect_distress_events(
     news_items: Iterable[dict[str, Any]],
     *,
     resolver: Callable[[dict[str, Any]], list[str]],
     today: dt.date | None = None,
+    unresolved: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Scan news items for distress headlines that resolve to a tracked entity.
 
     Returns one event per (entity, item): a title must both classify as distress
     AND resolve to at least one registry entity — a bare mention never qualifies.
+    #355: a headline that classifies, passes every guard, but resolves to NO tracked entity
+    is appended to ``unresolved`` (when given) for the wider distress watch.
     """
     today = today or dt.date.today()
     out: list[dict[str, Any]] = []
@@ -262,6 +330,8 @@ def detect_distress_events(
         # Guard 1: market operators / regulators are never the distressed party.
         entities = [e for e in entities if e not in NON_DISTRESS_SUBJECTS]
         if not entities:
+            if unresolved is not None:
+                unresolved.append(item)
             continue
         date = str(item.get("date") or today.isoformat())[:10]
         src = item.get("source") or "News"
@@ -308,107 +378,193 @@ def _transaction_headline(norm_title: str) -> bool:
     return bool(_TIME_REF_TO_FILING.search(norm_title) or _TRANSACTION_WITH_OTHER.search(norm_title))
 
 
+def _src_entry(ev: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "kind": ev.get("source_kind") or source_kind(ev.get("source")),
+        "source": ev.get("source"),
+        "publisher": ev.get("publisher") or _publisher(ev.get("url")),
+        "url": ev.get("url"),
+        "date": ev["date"],
+    }
+
+
+# Optional per-event fields carried onto a record (set-once unless the event has a value).
+_CARRY = ("role", "subject", "subject_name", "cnpj", "segment", "matched_via", "brand",
+          "group_of", "correspondent_of", "correspondent_checked", "promoted_to", "review_id")
+
+
+def _fold_event(records: dict[str, dict[str, Any]], key: str, ev: dict[str, Any]) -> None:
+    date = ev["date"]
+    rec = records.get(key)
+    ev_id = ev.get("evidence_id")
+    if rec is None:
+        sources = [_src_entry(ev)]
+        rec = records[key] = {
+            "entity": ev.get("entity"),
+            "kind": ev["kind"],
+            "label": ev["label"],
+            "first_seen": date,
+            "last_seen": date,
+            "latest_title": ev["title"],
+            "latest_url": ev.get("url"),
+            "mentions": 1,
+            "sources": sources,
+            "confidence": compute_confidence(sources),
+            "evidence": [e for e in [ev_id] if e][:5],
+        }
+    else:
+        # #354: the distress sweep re-reads the same headline every run within its lookback,
+        # so a mention counts only when its evidence id is NEW (an id-less event still counts).
+        if not ev_id or ev_id not in (rec.get("evidence") or []):
+            rec["mentions"] = int(rec.get("mentions", 0)) + 1
+        if date < rec.get("first_seen", date):
+            rec["first_seen"] = date
+        if date >= rec.get("last_seen", ""):
+            rec["last_seen"] = date
+            rec["latest_title"] = ev["title"]
+            rec["latest_url"] = ev.get("url")
+            rec["label"] = ev["label"]
+        # Accumulate a NEW independent source (dedup by kind+publisher) and
+        # re-grade confidence — this is the double-validation upgrade path.
+        sources = list(rec.get("sources") or [])
+        ent = _src_entry(ev)
+        if not any(s.get("kind") == ent["kind"] and s.get("publisher") == ent["publisher"]
+                   for s in sources):
+            sources.append(ent)
+        rec["sources"] = sources[:8]
+        rec["confidence"] = compute_confidence(rec["sources"])
+        if ev_id and ev_id not in (rec.get("evidence") or []):
+            rec["evidence"] = ((rec.get("evidence") or []) + [ev_id])[-5:]
+    for f in _CARRY:
+        if ev.get(f) not in (None, "", []):
+            rec[f] = ev[f]
+
+
+def record_key(ev: dict[str, Any]) -> str:
+    """The index key of a TRACKED event: own records ``<entity>#<kind>``; a group (#356) or
+    correspondent row ``<entity>#<role>:<kind>`` so it never merges into the entity's own."""
+    role = ev.get("role") or "self"
+    return f"{ev['entity']}#{ev['kind']}" if role == "self" else f"{ev['entity']}#{role}:{ev['kind']}"
+
+
+def untracked_key(ev: dict[str, Any]) -> str:
+    """#355: an untracked institution is keyed by its CNPJ root when known, else its brand."""
+    subj = ev.get("cnpj") and f"cnpj:{ev['cnpj']}" or f"brand:{ev.get('brand') or ev.get('subject')}"
+    return f"{subj}#{ev['kind']}"
+
+
 def merge_distress(
     existing: dict[str, Any] | None,
     events: list[dict[str, Any]],
     *,
     today: dt.date | None = None,
     ttl_days: int = DEFAULT_TTL_DAYS,
+    untracked: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Upsert distress events into the index, keyed by (entity, kind).
 
     Keeps first_seen/last_seen, latest title/url, an evidence sample and a mention
     count; prunes records untouched for `ttl_days`. Escalation to `falencia` is
     tracked as its own record (a company can appear under both).
+
+    #355: ``untracked`` events (institutions not in the registry, resolved against the BCB
+    register / review queue) fold into a separate ``untracked`` map, keyed by CNPJ root.
+    A group-level event (#356, ``role: group``) is keyed ``<entity>#group:<kind>`` so it
+    never merges into — or masquerades as — the entity's OWN record.
     """
     today = today or dt.date.today()
     idx = dict(existing or {})
     records: dict[str, dict[str, Any]] = dict(idx.get("records") or {})
-
-    def _src_entry(ev: dict[str, Any]) -> dict[str, Any]:
-        return {
-            "kind": ev.get("source_kind") or source_kind(ev.get("source")),
-            "source": ev.get("source"),
-            "publisher": ev.get("publisher") or _publisher(ev.get("url")),
-            "url": ev.get("url"),
-            "date": ev["date"],
-        }
+    other: dict[str, dict[str, Any]] = dict(idx.get("untracked") or {})
 
     for ev in events:
-        key = f"{ev['entity']}#{ev['kind']}"
-        date = ev["date"]
-        rec = records.get(key)
-        if rec is None:
-            sources = [_src_entry(ev)]
-            records[key] = {
-                "entity": ev["entity"],
-                "kind": ev["kind"],
-                "label": ev["label"],
-                "first_seen": date,
-                "last_seen": date,
-                "latest_title": ev["title"],
-                "latest_url": ev.get("url"),
-                "mentions": 1,
-                "sources": sources,
-                "confidence": compute_confidence(sources),
-                "evidence": [e for e in [ev.get("evidence_id")] if e][:5],
-            }
-        else:
-            rec["mentions"] = int(rec.get("mentions", 0)) + 1
-            if date < rec.get("first_seen", date):
-                rec["first_seen"] = date
-            if date >= rec.get("last_seen", ""):
-                rec["last_seen"] = date
-                rec["latest_title"] = ev["title"]
-                rec["latest_url"] = ev.get("url")
-                rec["label"] = ev["label"]
-            # Accumulate a NEW independent source (dedup by kind+publisher) and
-            # re-grade confidence — this is the double-validation upgrade path.
-            sources = list(rec.get("sources") or [])
-            ent = _src_entry(ev)
-            if not any(s.get("kind") == ent["kind"] and s.get("publisher") == ent["publisher"]
-                       for s in sources):
-                sources.append(ent)
-            rec["sources"] = sources[:8]
-            rec["confidence"] = compute_confidence(rec["sources"])
-            ev_id = ev.get("evidence_id")
-            if ev_id and ev_id not in (rec.get("evidence") or []):
-                rec["evidence"] = ((rec.get("evidence") or []) + [ev_id])[-5:]
+        _fold_event(records, record_key(ev), ev)
+    for ev in untracked or []:
+        _fold_event(other, untracked_key(ev), ev)
 
     # Prune stale records (nothing referenced them within the TTL window).
     cutoff = (today - dt.timedelta(days=ttl_days)).isoformat()
-    pruned = {
-        k: r for k, r in records.items()
-        if str(r.get("last_seen") or "") >= cutoff
-    }
 
-    return {
+    def _live(m: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+        return {k: r for k, r in m.items() if str(r.get("last_seen") or "") >= cutoff}
+
+    pruned, pruned_other = _live(records), _live(other)
+    out = {
         "as_of": today.isoformat(),
         "count": len(pruned),
         "records": pruned,
     }
+    if pruned_other or "untracked" in idx:
+        out["untracked"] = pruned_other
+        out["untracked_count"] = len(pruned_other)
+    for k in ("exits_seen",):  # #358 bookkeeping survives a merge
+        if k in idx:
+            out[k] = idx[k]
+    return out
 
 
 # --- entity-facing accessor ----------------------------------------------
 
+def _rank(rec: dict[str, Any]) -> tuple[int, int]:
+    own = 1 if (rec.get("role") or "self") == "self" else 0
+    return own, SEVERITY.get(rec.get("kind"), 0)
+
+
 def entity_status(index: dict[str, Any], entity_id: str) -> dict[str, Any] | None:
     """The most severe active distress record for an entity, or None.
 
-    Severity: falência > recuperação judicial > extrajudicial.
+    Severity: falência / liquidação > RAET / intervenção > RJ > extrajudicial > register
+    exit. An entity's OWN record always outranks a group (#356) or correspondent (#357) one.
     """
-    rank = {"falencia": 3, "recuperacao_judicial": 2, "recuperacao_extrajudicial": 1}
     best: dict[str, Any] | None = None
     for rec in (index.get("records") or {}).values():
         if rec.get("entity") != entity_id:
             continue
-        if best is None or rank.get(rec.get("kind"), 0) > rank.get(best.get("kind"), 0):
+        if best is None or _rank(rec) > _rank(best):
             best = rec
     return best
 
 
+# Confidence grades an executive / board surface may state as fact (the #33 guardrail):
+# a single-outlet `reported` headline stays off them.
+TRUSTED_CONFIDENCE = frozenset({"regulatory", "curated", "corroborated", "confirmed"})
+
+
+def _with_ids(rec: dict[str, Any], key: str, tracked: bool) -> dict[str, Any]:
+    r = dict(rec)
+    # `date` + a stable `id` = the FIRST sighting: push (alert_events) fires once per event,
+    # not again on every later mention. Before, records had no `date`, so push never fired.
+    r.setdefault("date", r.get("first_seen"))
+    r["id"] = f"distress:{key}:{r.get('first_seen')}"
+    r["tracked"] = tracked
+    r.setdefault("role", "self")
+    return r
+
+
 def list_records(index: dict[str, Any]) -> list[dict[str, Any]]:
-    """Flat, sorted (most-recent first) list of distress records for the feed."""
-    recs = list((index.get("records") or {}).values())
+    """Flat, sorted (most-recent first) list of distress records for the feed.
+
+    #357: a record with ``correspondent_of`` links fans out one extra row per contracting
+    TRACKED institution (``entity`` = that bank, ``role: correspondent``), so a tenant scoped
+    to the bank sees its correspondent's distress. #355: untracked institutions carry
+    ``entity: None`` and ``tracked: False`` — visible on the unscoped (owner/curator) feed only.
+    """
+    recs: list[dict[str, Any]] = []
+    for src, tracked in (("records", True), ("untracked", False)):
+        for k, r in (index.get(src) or {}).items():
+            base = _with_ids(r, k, tracked)
+            if not tracked:
+                base["entity"] = None
+            recs.append(base)
+            for link in r.get("correspondent_of") or []:
+                row = dict(base)
+                row.update(entity=link.get("entity"), role="correspondent", tracked=True,
+                           correspondent=link.get("correspondente"),
+                           correspondent_cnpj=link.get("cnpj"),
+                           subject_name=r.get("subject_name") or r.get("entity"),
+                           label=f"Correspondente em {phrase_for(r.get('kind') or '')}",
+                           id=f"{base['id']}:corr:{link.get('entity')}")
+                recs.append(row)
     recs.sort(key=lambda r: str(r.get("last_seen") or ""), reverse=True)
     return recs
 
@@ -440,6 +596,28 @@ def publish(index: dict[str, Any], bucket: str, *, s3: Any | None = None) -> str
     return f"s3://{bucket}/{INDEX_KEY}"
 
 
+def _digest_items(digest: dict[str, Any]) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    news = digest.get("news") if isinstance(digest, dict) else None
+    if isinstance(news, dict):
+        # #354: distress_items = the sweep over EVERY fetched headline (incl. outlet items
+        # naming no tracked term) — the Euro17 RJ headline was fetched and dropped before.
+        items += ((news.get("items") or []) + (news.get("context") or [])
+                  + (news.get("distress_items") or []))
+    fatos = digest.get("fatos") if isinstance(digest, dict) else None
+    if isinstance(fatos, dict):
+        items += (fatos.get("items") or []) + (fatos.get("context") or [])
+    seen: set[str] = set()
+    out = []
+    for it in items:
+        k = str(it.get("id") or it.get("url") or it.get("title") or "")
+        if k and k in seen:
+            continue
+        seen.add(k)
+        out.append(it)
+    return out
+
+
 def update_from_digest(
     digest: dict[str, Any],
     bucket: str,
@@ -447,6 +625,7 @@ def update_from_digest(
     resolver: Callable[[dict[str, Any]], list[str]] | None = None,
     s3: Any | None = None,
     today: dt.date | None = None,
+    watch: Callable[..., dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """End-to-end distress update from a run's digest.
 
@@ -454,24 +633,44 @@ def update_from_digest(
     issuer's own regulator-filed RJ, `regulatory` confidence) AND the **news**
     stream (which adds `reported`/`corroborated` coverage, incl. private companies
     CVM never sees). Merges into the durable index and persists. Best-effort.
+
+    #355–#358: ``watch(unresolved, own_events, index)`` (default: ``distress_watch.run_live``
+    when ``s3`` access is available) resolves the headlines no tracked entity matched, adds
+    group / correspondent / register-exit events, and may promote parked candidates.
     """
     if resolver is None:
         from src.synth.entities import resolve_entities as resolver  # lazy
-    items: list[dict[str, Any]] = []
-    news = digest.get("news") if isinstance(digest, dict) else None
-    if isinstance(news, dict):
-        items += (news.get("items") or []) + (news.get("context") or [])
-    fatos = digest.get("fatos") if isinstance(digest, dict) else None
-    if isinstance(fatos, dict):
-        items += (fatos.get("items") or []) + (fatos.get("context") or [])
-    events = detect_distress_events(items, resolver=resolver, today=today)
+    items = _digest_items(digest)
+    unresolved: list[dict[str, Any]] = []
+    events = detect_distress_events(items, resolver=resolver, today=today, unresolved=unresolved)
     index = load_index(bucket, s3=s3)
-    merged = merge_distress(index, events, today=today)
+    watched: dict[str, Any] = {"tracked": [], "untracked": [], "summary": {}}
+    import os
+
+    if watch is None and os.environ.get("ONCA_ENTITIES_TABLE") and \
+            os.environ.get("ONCA_DISTRESS_WATCH", "on") != "off":
+        import boto3
+
+        from src.synth import distress_watch
+
+        _s3 = s3 or boto3.client("s3")
+
+        def watch(u, own, idx):  # noqa: E306 - the live default
+            return distress_watch.run_live(u, own, idx, bucket, s3=_s3, today=today)
+    try:
+        if watch is not None:
+            watched = watch(unresolved, events, index) or watched
+    except Exception as exc:  # pragma: no cover - the watch is additive, never fatal
+        print(f"Warning: distress watch skipped: {exc}")
+    merged = merge_distress(index, events + (watched.get("tracked") or []), today=today,
+                            untracked=watched.get("untracked") or [])
     publish(merged, bucket, s3=s3)
     by_kind: dict[str, int] = {}
     for e in events:
         by_kind[e["source_kind"]] = by_kind.get(e["source_kind"], 0) + 1
-    return {"new_events": len(events), "records": merged.get("count", 0), "by_source": by_kind}
+    return {"new_events": len(events), "records": merged.get("count", 0),
+            "untracked": merged.get("untracked_count", 0), "by_source": by_kind,
+            "watch": watched.get("summary") or {}}
 
 
 # Back-compat: news-only entry (kept; callers/tests may still use it).

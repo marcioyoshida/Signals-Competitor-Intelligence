@@ -1580,14 +1580,99 @@ def propose_review(
     return rid
 
 
-def list_reviews(status: str | None = "pending", table: Any | None = None) -> list[dict[str, Any]]:
-    """Return review items (default: pending), oldest first."""
+def list_reviews(status: str | None = "pending", table: Any | None = None, *,
+                 ranked: bool = False) -> list[dict[str, Any]]:
+    """Return review items (default: pending), oldest first — or, ``ranked`` (#359), by fresh
+    signal score first, then oldest first, each carrying ``signal_score`` / ``stale``."""
     items = [
         r for r in _scan_type(_table(table), "review")
         if status is None or r.get("status") == status
     ]
     items.sort(key=lambda r: r.get("created_at") or "")
-    return items
+    return rank_reviews(items) if ranked else items
+
+
+# --- #359 review triage: fresh signals first ----------------------------------------------
+# 1,462 pending reviews (2026-11-05) ordered oldest-first meant a parked candidate that suddenly
+# turned up in an RJ headline (Euro17) was row ~900 of a list nobody reads. Producers now append
+# ``signals`` to the pending review they matched; the queue reads in signal order.
+SIGNAL_WEIGHTS = {"distress": 10.0, "enforcement": 8.0, "dou": 4.0, "news": 2.0}
+SIGNAL_HALF_LIFE_DAYS = 30.0
+STALE_AFTER_DAYS = 60
+MAX_SIGNALS = 12
+
+
+def review_signal_score(item: dict[str, Any], *, today: _dt.date | None = None) -> float:
+    """Sum of signal weights, halved every ``SIGNAL_HALF_LIFE_DAYS`` of signal age."""
+    today = today or _dt.date.today()
+    score = 0.0
+    for sg in item.get("signals") or []:
+        try:
+            age = (today - _dt.date.fromisoformat(str(sg.get("date"))[:10])).days
+        except ValueError:
+            age = 0
+        score += SIGNAL_WEIGHTS.get(str(sg.get("kind")), 1.0) * 0.5 ** (max(age, 0) / SIGNAL_HALF_LIFE_DAYS)
+    return round(score, 3)
+
+
+def rank_reviews(items: list[dict[str, Any]], *, today: _dt.date | None = None) -> list[dict[str, Any]]:
+    """Copies of ``items`` with ``signal_score`` and ``stale`` (no signal and older than
+    ``STALE_AFTER_DAYS``), ordered by score desc, then age (oldest first). Read-time only — the
+    stored items are never rewritten for ranking."""
+    today = today or _dt.date.today()
+    floor = (today - _dt.timedelta(days=STALE_AFTER_DAYS)).isoformat()
+    out = []
+    for r in items:
+        x = dict(r)
+        x["signal_score"] = review_signal_score(r, today=today)
+        x["stale"] = x["signal_score"] == 0 and str(r.get("created_at") or "") < floor
+        out.append(x)
+    out.sort(key=lambda r: (-r["signal_score"], r.get("created_at") or ""))
+    return out
+
+
+def record_review_signal(review_id: str, signal: dict[str, Any], *,
+                         table: Any | None = None) -> bool:
+    """Append a fresh-evidence signal (``{kind, ref, date, label}``) to a PENDING review,
+    dedup by (kind, ref). Returns True when added."""
+    t = _table(table)
+    item = t.get_item(Key={"pk": f"REVIEW#{review_id}"}).get("Item")
+    if not item or item.get("status") != "pending":
+        return False
+    sigs = list(item.get("signals") or [])
+    key = (str(signal.get("kind")), str(signal.get("ref")))
+    if any((str(x.get("kind")), str(x.get("ref"))) == key for x in sigs):
+        return False
+    sigs.append({k: str(v) for k, v in signal.items() if v is not None})
+    item["signals"] = sigs[-MAX_SIGNALS:]
+    item["last_signal_at"] = _now_iso()
+    t.put_item(Item=item)
+    return True
+
+
+def create_from_profile(profile: dict[str, Any], *, source: str = "discovery",
+                        reason: str = "", table: Any | None = None) -> str | None:
+    """#359/#355: create a tracked entity from a structured discovery profile (the payload a
+    BCB/SUSEP/SPA producer queued). ``news_search`` stays False — many institution brands are
+    generic, so news reaches it through the structured CNPJ path and the distress watch.
+    Idempotent: an entity already owning the CNPJ root is returned instead of duplicated."""
+    eid = str(profile.get("entity_id") or "").strip()
+    if not eid:
+        return None
+    roots = [str(r)[:8] for r in (profile.get("cnpj_roots") or []) if r]
+    for r in roots:
+        owner = resolve_by_cnpj(r, table=table)
+        if owner:
+            return owner
+    if get_entity(eid, table=table):
+        return eid
+    put_entity(eid, profile.get("display_name") or eid, profile.get("aliases") or [],
+               cnpj_roots=roots, industries=list(profile.get("industries") or []),
+               confidence=str(profile.get("confidence") or "structured"),
+               news_search=False, source=source, table=table)
+    _log(eid, "created", source, {"reason": reason or "review_approved",
+                                   "license_class": profile.get("license_class")})
+    return eid
 
 
 def _apply_review(
@@ -1613,6 +1698,24 @@ def _apply_review(
     elif kind == "news_safe" and item.get("entity_id"):
         # promote a vetted new entity so its bare brand resolves from news/DOU
         set_news_safe(item["entity_id"], True, table=table)
+    elif kind == "discovery":
+        # #359: this branch was missing — approving a discovery proposal marked it approved and
+        # created NOTHING. A structured profile (BCB/SUSEP/SPA producer) becomes the entity; a
+        # news-only surface becomes a curated entity a curator vetted.
+        pl = item.get("payload") or {}
+        prof = dict(pl.get("profile") or {})
+        if not prof and (item.get("proposed") or pl.get("surface")):
+            name = str(item.get("proposed") or pl.get("surface"))
+            prof = {"entity_id": re.sub(r"[^a-z0-9]+", "-", normalize_alias(name).lower()).strip("-"),
+                    "display_name": name, "aliases": [name],
+                    "industries": [pl["industry"]] if pl.get("industry") else [],
+                    "confidence": "curated"}
+        if (payload or {}).get("industries"):
+            prof["industries"] = list(payload["industries"])
+        eid = create_from_profile(prof, source="curated" if prof.get("confidence") == "curated"
+                                  else "discovery", reason="review_approved", table=table)
+        if eid:
+            item["entity_id"] = eid
     elif kind == "industry" and item.get("entity_id"):
         # curator picks the industry module(s) for an entrant we couldn't classify
         chosen = list((payload or {}).get("industries") or [])
@@ -1644,6 +1747,10 @@ def resolve_review(
         _apply_review(item, table=t, payload=payload)
     item["status"] = decision
     item["decided_at"] = _now_iso()
+    if (payload or {}).get("decided_by"):
+        item["decided_by"] = str(payload["decided_by"])  # e.g. distress_override (#355)
+        if payload.get("evidence"):
+            item["decided_evidence"] = str(payload["evidence"])
     t.put_item(Item=item)
     return item
 

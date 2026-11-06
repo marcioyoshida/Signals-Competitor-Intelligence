@@ -223,7 +223,7 @@ def _entities(method: str, rest: list[str], event: dict[str, Any], reg: Any) -> 
 
 def _reviews(method: str, rest: list[str], event: dict[str, Any], reg: Any) -> dict[str, Any]:
     if not rest and method == "GET":
-        items = reg.list_reviews(status="pending")
+        items = reg.list_reviews(status="pending", ranked=True)  # #359 fresh signals first
         return _resp(200, {"reviews": items, "count": len(items)})
     if rest and method == "POST":
         body = _body(event) or {}
