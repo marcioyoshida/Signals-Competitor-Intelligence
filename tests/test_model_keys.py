@@ -167,8 +167,9 @@ def test_runtime_failures_stamp_key_errors_only(store):
 def test_verify_is_one_minimal_call():
     from types import SimpleNamespace
     seen = {}
-    client = SimpleNamespace(beta=SimpleNamespace(messages=SimpleNamespace(
-        create=lambda **kw: seen.update(kw))))
+    # The plain Messages call (no fallback beta): it exists on both the Anthropic and the Bedrock
+    # Mantle clients.
+    client = SimpleNamespace(messages=SimpleNamespace(create=lambda **kw: seen.update(kw)))
     cm.verify(cm.Target(provider=cm.ANTHROPIC_KEY, model="claude-sonnet-5-5", api_key=KEY), client=client)
     assert seen["max_tokens"] == 16 and seen["model"] == "claude-sonnet-5-5"
 

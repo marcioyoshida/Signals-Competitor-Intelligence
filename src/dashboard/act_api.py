@@ -785,7 +785,12 @@ def _model_gate(args: dict[str, Any], *, manage: bool
 
 def _act_model_status(args: dict[str, Any], actor: str) -> tuple[str, int, dict[str, Any]]:
     """apply (self-service, read-only): the organisation's own-model connection (never the key),
-    the allowed models, the acknowledgement text and whether the caller may manage it."""
+    the allowed models, the acknowledgement text and whether the caller may manage it. A model
+    admin also gets what their own Bedrock role must trust (#350): Onça's broker principal and
+    the tenant's external id (created on first view, then fixed)."""
+    import os
+
+    from src.dashboard import tenant_config
     from src.synth import client_model as cm, model_keys
 
     tenant, blocked = _model_gate(args, manage=False)
@@ -793,9 +798,22 @@ def _act_model_status(args: dict[str, Any], actor: str) -> tuple[str, int, dict[
         return blocked
     _t, manage, _c = _model_scope(args)
     conn = model_keys.connection(tenant)
-    return "noop", 200, {"connection": conn.public() if conn else None, "can_manage": manage,
-                         "models": [{"model": k, "label": v["label"]} for k, v in cm.MODELS.items()],
-                         "default_model": cm.DEFAULT_MODEL, "acknowledgement": model_keys.ACKNOWLEDGEMENT}
+    out: dict[str, Any] = {
+        "connection": conn.public() if conn else None, "can_manage": manage,
+        "models": [{"model": k, "label": v["label"], "provider": v["provider"]}
+                   for k, v in cm.MODELS.items()],
+        "default_model": cm.DEFAULT_MODEL, "acknowledgement": model_keys.ACKNOWLEDGEMENT,
+        "acknowledgements": model_keys.ACKNOWLEDGEMENTS}
+    broker = os.environ.get(cm.BROKER_ROLE_ENV, "")
+    if manage and broker:
+        try:
+            out["bedrock"] = {"principal": broker,
+                              "external_id": tenant_config.ensure_model_external_id(tenant),
+                              "regions": list(cm.BEDROCK_REGIONS),
+                              "template_url": "/docs/onca-bedrock-role.yaml"}
+        except Exception as exc:  # noqa: BLE001 - the status still renders without it
+            print(f"Warning: external id unavailable: {type(exc).__name__}")
+    return "noop", 200, out
 
 
 def _act_connect_model(args: dict[str, Any], actor: str) -> tuple[str, int, dict[str, Any]]:
@@ -803,13 +821,23 @@ def _act_connect_model(args: dict[str, Any], actor: str) -> tuple[str, int, dict
     verified with a real call before it is sealed and stored, and is never returned."""
     from src.synth import client_model as cm, model_keys
 
+    from src.dashboard import tenant_config
+
     tenant, blocked = _model_gate(args, manage=True)
     if blocked:
         return blocked
+    model = str(args.get("model") or cm.DEFAULT_MODEL)
     try:
-        conn = model_keys.connect(tenant, api_key=str(args.get("api_key") or ""),
-                                  model=str(args.get("model") or cm.DEFAULT_MODEL), actor=actor,
-                                  acknowledged=_truthy(args.get("acknowledged")))
+        if cm.MODELS.get(model, {}).get("provider") == cm.BEDROCK_ROLE:     # #350
+            conn = model_keys.connect_role(
+                tenant, role_arn=str(args.get("role_arn") or ""),
+                region=str(args.get("region") or ""), model=model, actor=actor,
+                external_id=tenant_config.ensure_model_external_id(tenant),
+                acknowledged=_truthy(args.get("acknowledged")))
+        else:
+            conn = model_keys.connect(tenant, api_key=str(args.get("api_key") or ""),
+                                      model=model, actor=actor,
+                                      acknowledged=_truthy(args.get("acknowledged")))
     except ValueError as exc:
         return "blocked", 400, {"error": str(exc)}
     except cm.ModelError as exc:

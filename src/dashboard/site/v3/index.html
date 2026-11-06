@@ -601,11 +601,12 @@
   .bk p { margin:0; }
   .bk-state { padding:var(--s3) var(--s4); border:1px solid var(--border); border-radius:var(--r-sm); background:var(--surface-2); }
   .bk-state .kv { margin:var(--s2) 0 0; }
+  .bk-state .mono { overflow-wrap:anywhere; }
   .bk-state .bk-on { font-weight:700; color:var(--ink); }
   .bk-err { color:var(--t-crit); font-weight:600; }
-  .bk input[type=password], .bk select { width:100%; box-sizing:border-box; min-height:46px; background:var(--surface-2); color:var(--ink);
+  .bk input[type=password], .bk input[type=text], .bk select { width:100%; box-sizing:border-box; min-height:46px; background:var(--surface-2); color:var(--ink);
     font:inherit; border:1px solid var(--border); border-radius:var(--r-sm); padding:0 var(--s3); }
-  .bk input[type=password]:focus, .bk select:focus { outline:none; border-color:var(--primary); box-shadow:var(--focus); }
+  .bk input[type=password]:focus, .bk input[type=text]:focus, .bk select:focus { outline:none; border-color:var(--primary); box-shadow:var(--focus); }
   .bk .bk-ack { display:flex; gap:var(--s2); align-items:flex-start; font-weight:400; color:var(--ink-2); }
   .bk .bk-ack input { width:20px; height:20px; margin-top:2px; accent-color:var(--primary); flex:none; }
   .bk .acts { display:flex; flex-direction:column; gap:var(--s2); }
@@ -1237,33 +1238,54 @@ async function openOwnModel() {
 function renderOwnModel(S, editing) {
   const c = S.connection, manage = !!S.can_manage, models = S.models || [];
   const when = (x) => x ? U.esc(U.fmtDate(x)) : "—";
+  const isRole = (m) => ((models.find(x => x.model === m) || {}).provider) === "bedrock_role";
+  const ackOf = (m) => (S.acknowledgements || {})[(models.find(x => x.model === m) || {}).provider] || S.acknowledgement || "";
+  const cred = c && c.provider === "bedrock_role"
+    ? `<dt>Papel (IAM role)</dt><dd class="mono">${U.esc(c.role_arn)}</dd><dt>Região</dt><dd class="mono">${U.esc(c.region)}</dd>`
+    : c ? `<dt>Chave</dt><dd class="mono">•••• ${U.esc(c.last4)}</dd>` : "";
   const state = c
     ? `<div class="bk-state"><div class="bk-on">Conectado: ${U.esc(c.label || c.model)}</div>` +
-        `<dl class="kv"><dt>Chave</dt><dd class="mono">•••• ${U.esc(c.last4)}</dd>` +
-        `<dt>Conectada em</dt><dd>${when(c.connected_at)}</dd>` +
+        `<dl class="kv">${cred}` +
+        `<dt>Conectado em</dt><dd>${when(c.connected_at)}</dd>` +
         `<dt>Último teste ok</dt><dd>${when(c.verified_at)}</dd></dl>` +
         (c.last_error ? `<p class="bk-err">${U.esc(c.last_error_message || c.last_error)}</p>` : "") +
       `</div>`
     : `<div class="bk-state"><div class="bk-on">Usando o modelo da Onça</div>` +
-        `<p class="hd-note">Conecte a chave de API da sua organização para que o chat responda com o seu modelo, cobrado na sua conta do provedor.</p></div>`;
-  const form = manage && (editing || !c)
-    ? `<label for="bkModel">Modelo</label><select id="bkModel">` +
-        models.map(m => `<option value="${U.esc(m.model)}"${m.model === (c ? c.model : S.default_model) ? " selected" : ""}>${U.esc(m.label)}</option>`).join("") +
+        `<p class="hd-note">Conecte o modelo da sua organização (uma chave de API Anthropic ou o Amazon Bedrock da sua conta AWS) para que o chat responda com ele, cobrado na sua conta.</p></div>`;
+  // #350: what the client's own Bedrock role must trust; shown only to model admins.
+  const B = S.bedrock;
+  const roleBox = B
+    ? `<div class="bk-state" id="bkRoleBox"><p>No Amazon Bedrock da sua conta, crie um papel que confie na Onça com este external id ` +
+        `(<a href="${U.esc(B.template_url)}" download>modelo CloudFormation</a>), habilite o acesso ao modelo no console do Bedrock e cole o ARN do papel abaixo.</p>` +
+        `<dl class="kv"><dt>Principal da Onça</dt><dd class="mono">${U.esc(B.principal)}</dd>` +
+        `<dt>External id</dt><dd class="mono">${U.esc(B.external_id)}</dd></dl></div>` +
+      `<label for="bkRole">ARN do papel (IAM role)</label>` +
+      `<input type="text" id="bkRole" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="arn:aws:iam::123456789012:role/onca-bedrock-access">` +
+      `<label for="bkRegion">Região</label><select id="bkRegion">` +
+        (B.regions || []).map(r => `<option value="${U.esc(r)}"${r === "sa-east-1" ? " selected" : ""}>${U.esc(r)}</option>`).join("") +
       `</select>` +
+      `<p class="hd-note">Em sa-east-1 o Bedrock usa roteamento global: o processamento pode ocorrer fora do Brasil.</p>`
+    : `<p class="bk-err">O Amazon Bedrock da sua conta não está habilitado aqui.</p>`;
+  const keyBox =
       `<label for="bkKey">Chave de API (Anthropic)</label>` +
       `<input type="password" id="bkKey" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk-ant-…">` +
-      `<label class="bk-ack"><input type="checkbox" id="bkAck"><span>${U.esc(S.acknowledgement || "")}</span></label>` +
-      `<p class="hd-note">Testamos a chave com uma chamada real antes de guardá-la. Ela fica cifrada; mostramos só os 4 últimos caracteres.</p>`
+      `<p class="hd-note">Testamos a chave com uma chamada real antes de guardá-la. Ela fica cifrada; mostramos só os 4 últimos caracteres.</p>`;
+  const chosen = c ? c.model : S.default_model;
+  const form = manage && (editing || !c)
+    ? `<label for="bkModel">Modelo</label><select id="bkModel">` +
+        models.map(m => `<option value="${U.esc(m.model)}"${m.model === chosen ? " selected" : ""}>${U.esc(m.label)}</option>`).join("") +
+      `</select><div id="bkCred">${isRole(chosen) ? roleBox : keyBox}</div>` +
+      `<label class="bk-ack"><input type="checkbox" id="bkAck"><span id="bkAckTxt">${U.esc(ackOf(chosen))}</span></label>`
     : "";
   const acts = !manage ? "" : (editing || !c)
-    ? `<button class="btn btn--primary" type="submit" id="bkGo" disabled>${c ? "Trocar chave" : "Conectar"}</button>` +
+    ? `<button class="btn btn--primary" type="submit" id="bkGo" disabled>${c ? "Trocar conexão" : "Conectar"}</button>` +
       (c ? `<button class="btn" type="button" id="bkCancel">Cancelar</button>` : "")
     : `<button class="btn" type="button" id="bkTest">Testar conexão</button>` +
-      `<button class="btn" type="button" id="bkEdit">Trocar chave…</button>` +
+      `<button class="btn" type="button" id="bkEdit">Trocar conexão…</button>` +
       `<button class="btn btn--reject" type="button" id="bkDel">Remover e voltar ao modelo da Onça</button>`;
   document.getElementById("drBody").innerHTML =
     `<form class="bk" id="bkForm" novalidate autocomplete="off">` + state +
-      (manage ? "" : `<p class="hd-note">Só um administrador do modelo da sua organização conecta ou troca a chave. ` +
+      (manage ? "" : `<p class="hd-note">Só um administrador do modelo da sua organização conecta ou troca o modelo. ` +
         `Para incluir alguém, escreva para <a href="mailto:contato@onssa.org">contato@onssa.org</a>.</p>`) +
       form + `<p class="msg" id="bkMsg" role="status" aria-live="polite"></p>` +
       `<div class="acts">${acts}<button class="btn" type="button" id="bkBack">Voltar</button></div>` +
@@ -1273,22 +1295,31 @@ function renderOwnModel(S, editing) {
   document.getElementById("bkBack").onclick = openAccount;
   const cancel = document.getElementById("bkCancel"); if (cancel) cancel.onclick = () => renderOwnModel(S, false);
   const edit = document.getElementById("bkEdit"); if (edit) edit.onclick = () => renderOwnModel(S, true);
-  const key = document.getElementById("bkKey"), ack = document.getElementById("bkAck"), go = document.getElementById("bkGo");
-  if (key && ack && go) {
-    const ready = () => { go.disabled = !(key.value.trim() && ack.checked); };
-    key.oninput = ready; ack.onchange = ready;
+  const sel = document.getElementById("bkModel"), ack = document.getElementById("bkAck"), go = document.getElementById("bkGo");
+  if (sel && ack && go) {
+    const field = () => document.getElementById(isRole(sel.value) ? "bkRole" : "bkKey");
+    const ready = () => { const f = field(); go.disabled = !(f && f.value.trim() && ack.checked); };
+    const wire = () => { const f = field(); if (f) f.oninput = ready; ready(); };
+    sel.onchange = () => {
+      document.getElementById("bkCred").innerHTML = isRole(sel.value) ? roleBox : keyBox;
+      document.getElementById("bkAckTxt").textContent = ackOf(sel.value);
+      ack.checked = false; wire();
+    };
+    ack.onchange = ready; wire();
     document.getElementById("bkForm").onsubmit = async (e) => {
       e.preventDefault();
       if (go.disabled) return;
-      const apiKey = key.value.trim(), model = document.getElementById("bkModel").value;
-      key.value = ""; go.disabled = true; key.disabled = true;   // the key never stays on the page
-      say("Testando a chave com o provedor…");
-      const r = await modelAct("connect_model", { api_key: apiKey, model, acknowledged: ack.checked });
+      const model = sel.value, f = field(), args = { model, acknowledged: ack.checked };
+      if (isRole(model)) { args.role_arn = f.value.trim(); args.region = document.getElementById("bkRegion").value; }
+      else { args.api_key = f.value.trim(); f.value = ""; }   // the key never stays on the page
+      go.disabled = true; f.disabled = true;
+      say(isRole(model) ? "Assumindo o papel e testando o modelo na sua conta…" : "Testando a chave com o provedor…");
+      const r = await modelAct("connect_model", args);
       if (r.ok && r.j.connection) { renderOwnModel(Object.assign({}, S, { connection: r.j.connection }), false);
-        document.getElementById("bkMsg").textContent = "Modelo conectado. As próximas perguntas usam a sua chave."; return; }
-      key.disabled = false; ready();
+        document.getElementById("bkMsg").textContent = "Modelo conectado. As próximas perguntas usam o seu modelo."; return; }
+      f.disabled = false; ready();
       say(r.j.error || "Não foi possível conectar agora. Tente de novo em instantes.", true);
-      key.focus();
+      f.focus();
     };
   } else {
     document.getElementById("bkForm").onsubmit = (e) => e.preventDefault();
@@ -1306,12 +1337,12 @@ function renderOwnModel(S, editing) {
   const del = document.getElementById("bkDel");
   if (del) del.onclick = async () => {
     // two taps, no window.confirm (the app's WebView doesn't reliably show JS dialogs)
-    if (del.dataset.armed !== "1") { del.dataset.armed = "1"; del.textContent = "Confirmar remoção da chave";
+    if (del.dataset.armed !== "1") { del.dataset.armed = "1"; del.textContent = "Confirmar remoção";
       say("As próximas perguntas voltam a usar o modelo da Onça."); return; }
     del.disabled = true; say("Removendo…");
     const r = await modelAct("disconnect_model");
     if (r.ok) { renderOwnModel(Object.assign({}, S, { connection: null }), false);
-      document.getElementById("bkMsg").textContent = "Chave removida. O chat voltou a usar o modelo da Onça."; return; }
+      document.getElementById("bkMsg").textContent = "Modelo removido. O chat voltou a usar o modelo da Onça."; return; }
     del.disabled = false; say((r.j && r.j.error) || "Não foi possível remover agora.", true);
   };
 }

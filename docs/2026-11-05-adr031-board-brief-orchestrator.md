@@ -154,8 +154,28 @@ stays the default for trials. Stories #346–#353.
   `connect_model`, `test_model` and `disconnect_model` for the tenant's `model_admins` only. That
   list holds verified e-mails and an operator sets it (`set_model_admins`), because connecting
   sends the tenant's questions to a third party. It starts empty, so no one can connect by default.
-- Status 2026-11-06: #346 is live but dark. #347 adds the store, the intents and the SDK in the
-  Lambda asset. The account-page UI is #348.
+- **The client's own Bedrock (#350).** A second provider, `bedrock_role`: Claude in Amazon
+  Bedrock in the client's AWS account, called with the SDK's `AnthropicBedrockMantle` client
+  (Messages API on Bedrock, IAM action `bedrock-mantle:CreateInference`, model
+  `anthropic.claude-sonnet-5-5`). The client's role trusts exactly one Onça principal: the
+  fixed-name broker role `onca-client-model-broker` (RETAIN; a re-created role gets a new unique
+  id and every client trust policy would stop matching). The Lambdas assume the broker, and the
+  broker assumes the client role with the tenant's **external id**. Onça generates that id once
+  per tenant (`tenant_config.ensure_model_external_id`); it is never taken from a request, which
+  is the confused-deputy guard. The broker may assume a role only with an external id. The row
+  stores the role ARN, region and external id. None of them is secret, so there is no KMS
+  envelope. Assumed credentials are reused in a warm container until shortly before expiry,
+  but the row is read on every call, so a disconnect still stops the next call.
+  - Codes: `model_role_denied` means the client's trust policy or external id refused. A
+    broker failure is Onça's own fault and returns `model_unavailable`.
+  - Fallback: Bedrock has no server-side refusal fallback, so a decline there is
+    `model_refused`.
+  - Client setup: the template is published at `/docs/onca-bedrock-role.yaml`; it grants
+    inference only, on the allowed model.
+  - Region caveat: in `sa-east-1` Claude on Bedrock is global routing only, so in-country
+    processing is not available there today. The drawer says so.
+- Status 2026-11-06: #346–#348 are live. #350 is built; its live check needs a pilot's AWS
+  account, because Onça's own account is rejected as a client account.
 
 ### Evaluation harness
 

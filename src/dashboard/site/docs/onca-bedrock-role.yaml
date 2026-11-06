@@ -1,0 +1,62 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Onça Setorial - IAM role that lets Onça call Claude in Amazon Bedrock in YOUR AWS account
+  ("Modelo próprio", BYOK #350). Onça assumes this role with your organisation's external id,
+  then makes Messages API calls on the Bedrock model you allow. The calls run and are billed in
+  your account; CloudTrail records them under the session name "onca-<your tenant>".
+  Before connecting, enable model access for Claude Sonnet 5.5 in the Amazon Bedrock console.
+
+Parameters:
+  ExternalId:
+    Type: String
+    Description: The external id shown in Onça (Conta > Modelo próprio > Amazon Bedrock da sua conta).
+    AllowedPattern: "onca-[0-9a-f]{32}"
+  OncaPrincipal:
+    Type: String
+    Description: The one Onça principal this role trusts. Keep the default.
+    Default: arn:aws:iam::668449743071:role/onca-client-model-broker
+  ModelId:
+    Type: String
+    Description: The Bedrock model Onça may call. Keep the default unless Onça tells you otherwise.
+    Default: anthropic.claude-sonnet-5-5
+    AllowedValues:
+      - anthropic.claude-sonnet-5-5
+  RoleName:
+    Type: String
+    Default: onca-bedrock-access
+
+Resources:
+  OncaBedrockRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref RoleName
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Ref OncaPrincipal
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      Policies:
+        - PolicyName: onca-bedrock-inference
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # Inference only, on the one allowed model. No model management, no API keys
+              # (bearer tokens), no other AWS service.
+              - Sid: InvokeAllowedModel
+                Effect: Allow
+                Action: bedrock-mantle:CreateInference
+                Resource: !Sub arn:${AWS::Partition}:bedrock-mantle:*:${AWS::AccountId}:project/*
+                Condition:
+                  StringEquals:
+                    bedrock-mantle:Model: !Ref ModelId
+
+Outputs:
+  RoleArn:
+    Description: Paste this into Onça (Conta > Modelo próprio > Amazon Bedrock da sua conta).
+    Value: !GetAtt OncaBedrockRole.Arn
