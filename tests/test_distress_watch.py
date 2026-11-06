@@ -211,9 +211,9 @@ def test_correspondents_client_builds_a_bounded_filter():
 
 def test_controller_siblings_share_a_pf_socio_not_a_director():
     qsa = {"entities": {
-        "a": {"socios": [{"name": "IK C ALBUQUERQUE", "doc_mask": "***123456**", "qual": "Sócio-Administrador"}]},
-        "b": {"socios": [{"name": "IK C ALBUQUERQUE", "doc_mask": "***123456**", "qual": "Sócio"}]},
-        "c": {"socios": [{"name": "IK C ALBUQUERQUE", "doc_mask": "***123456**", "qual": "Diretor"}]},
+        "a": {"socios": [{"name": "FULANO DE TAL", "doc_mask": "***123456**", "qual": "Sócio-Administrador"}]},
+        "b": {"socios": [{"name": "FULANO DE TAL", "doc_mask": "***123456**", "qual": "Sócio"}]},
+        "c": {"socios": [{"name": "FULANO DE TAL", "doc_mask": "***123456**", "qual": "Diretor"}]},
     }}
     own = [{"entity": "a", "kind": "recuperacao_judicial", "label": "Recuperação Judicial", "role": "self",
             "date": "2026-10-22", "title": "t"}]
