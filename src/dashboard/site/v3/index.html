@@ -595,6 +595,23 @@
   .wl .acts { display:flex; flex-direction:column; gap:var(--s2); }
   .wl .acts .btn { justify-content:center; min-height:46px; font-size:var(--fs-sm); }
   .wl .msg { margin:0; } .wl .msg:empty { display:none; } .wl .msg.err { color:var(--t-crit); }
+  /* #348 BYOK: the organisation's own model (Modelo próprio) */
+  .bk { display:flex; flex-direction:column; gap:var(--s3); font-size:var(--fs-sm); line-height:1.5; }
+  .bk label, .bk .lbl { font-weight:600; }
+  .bk p { margin:0; }
+  .bk-state { padding:var(--s3) var(--s4); border:1px solid var(--border); border-radius:var(--r-sm); background:var(--surface-2); }
+  .bk-state .kv { margin:var(--s2) 0 0; }
+  .bk-state .bk-on { font-weight:700; color:var(--ink); }
+  .bk-err { color:var(--t-crit); font-weight:600; }
+  .bk input[type=password], .bk select { width:100%; box-sizing:border-box; min-height:46px; background:var(--surface-2); color:var(--ink);
+    font:inherit; border:1px solid var(--border); border-radius:var(--r-sm); padding:0 var(--s3); }
+  .bk input[type=password]:focus, .bk select:focus { outline:none; border-color:var(--primary); box-shadow:var(--focus); }
+  .bk .bk-ack { display:flex; gap:var(--s2); align-items:flex-start; font-weight:400; color:var(--ink-2); }
+  .bk .bk-ack input { width:20px; height:20px; margin-top:2px; accent-color:var(--primary); flex:none; }
+  .bk .acts { display:flex; flex-direction:column; gap:var(--s2); }
+  .bk .acts .btn { justify-content:center; min-height:46px; font-size:var(--fs-sm); }
+  .bk .btn[disabled] { opacity:.5; cursor:not-allowed; }
+  .bk .msg { margin:0; } .bk .msg:empty { display:none; } .bk .msg.err { color:var(--t-crit); }
   .watch-star { color:var(--primary); margin-right:4px; }
   .hoje-wl { display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:var(--s3) var(--s4); }
   /* device settings fold at the end of Hoje */
@@ -1179,6 +1196,7 @@ function openAccount() {
     (Ctx.inApp() ? `<p class="hd-note" style="margin-top:var(--s4)">${U.esc(Ctx.PLAN_NOTE)}</p>` : "") +
     `<div class="acct-acts">` +
       (canWatch() ? `<button class="btn" type="button" id="acctWl">Meus concorrentes${(D.watchlist || []).length ? ` (${D.watchlist.length})` : ""}</button>` : "") +
+      (canWatch() ? `<button class="btn" type="button" id="acctModel">Modelo próprio (IA)</button>` : "") +
       (Ctx.inApp() ? "" : `<button class="btn" type="button" id="acctTheme">Alternar tema claro/escuro</button>`) +
       `<a class="btn" href="/docs/privacy.html">Política de privacidade</a>` +
       `<button class="btn btn--reject" type="button" id="acctOut">Sair desta conta</button></div>` +
@@ -1187,7 +1205,115 @@ function openAccount() {
   document.getElementById("acctOut").onclick = () => Ctx.logout();
   const del = document.getElementById("acctDel"); if (del) del.onclick = openDeleteAccount;
   const wlb = document.getElementById("acctWl"); if (wlb) wlb.onclick = openWatchlist;
+  const mdb = document.getElementById("acctModel"); if (mdb) mdb.onclick = openOwnModel;
   openDrawer(null);
+}
+// --- #348 BYOK: the organisation's own model (ADR 031, #345) ----------------------------------
+// Status for every member; connect / test / replace / remove for the organisation's model admins
+// (the server decides, from the verified e-mail). The key field is write-only: never pre-filled,
+// never echoed, cleared the moment it's read. Without a connected model, answers use Onça's model.
+async function modelAct(intent, args) {
+  let r = null, j = {};
+  try {
+    r = await actFetch(JSON.stringify({ intent, args: args || {} }));
+    j = await r.json().catch(() => ({}));
+  } catch (err) { r = null; }
+  return { ok: !!(r && r.ok), j };
+}
+async function openOwnModel() {
+  if (!canWatch()) return;
+  document.getElementById("drTitle").textContent = "Modelo próprio";
+  document.getElementById("drBody").innerHTML = `<p class="hd-note">Carregando…</p>`;
+  const st = await modelAct("model_status");
+  if (!st.ok) {
+    document.getElementById("drBody").innerHTML =
+      `<div class="bk"><p class="bk-err">${U.esc(st.j.error || "Não foi possível consultar agora. Tente de novo em instantes.")}</p>` +
+      `<div class="acts"><button class="btn" type="button" id="bkBack">Voltar</button></div></div>`;
+    document.getElementById("bkBack").onclick = openAccount;
+    return;
+  }
+  renderOwnModel(st.j, false);
+}
+function renderOwnModel(S, editing) {
+  const c = S.connection, manage = !!S.can_manage, models = S.models || [];
+  const when = (x) => x ? U.esc(U.fmtDate(x)) : "—";
+  const state = c
+    ? `<div class="bk-state"><div class="bk-on">Conectado: ${U.esc(c.label || c.model)}</div>` +
+        `<dl class="kv"><dt>Chave</dt><dd class="mono">•••• ${U.esc(c.last4)}</dd>` +
+        `<dt>Conectada em</dt><dd>${when(c.connected_at)}</dd>` +
+        `<dt>Último teste ok</dt><dd>${when(c.verified_at)}</dd></dl>` +
+        (c.last_error ? `<p class="bk-err">${U.esc(c.last_error_message || c.last_error)}</p>` : "") +
+      `</div>`
+    : `<div class="bk-state"><div class="bk-on">Usando o modelo da Onça</div>` +
+        `<p class="hd-note">Conecte a chave de API da sua organização para que o chat responda com o seu modelo, cobrado na sua conta do provedor.</p></div>`;
+  const form = manage && (editing || !c)
+    ? `<label for="bkModel">Modelo</label><select id="bkModel">` +
+        models.map(m => `<option value="${U.esc(m.model)}"${m.model === (c ? c.model : S.default_model) ? " selected" : ""}>${U.esc(m.label)}</option>`).join("") +
+      `</select>` +
+      `<label for="bkKey">Chave de API (Anthropic)</label>` +
+      `<input type="password" id="bkKey" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk-ant-…">` +
+      `<label class="bk-ack"><input type="checkbox" id="bkAck"><span>${U.esc(S.acknowledgement || "")}</span></label>` +
+      `<p class="hd-note">Testamos a chave com uma chamada real antes de guardá-la. Ela fica cifrada; mostramos só os 4 últimos caracteres.</p>`
+    : "";
+  const acts = !manage ? "" : (editing || !c)
+    ? `<button class="btn btn--primary" type="submit" id="bkGo" disabled>${c ? "Trocar chave" : "Conectar"}</button>` +
+      (c ? `<button class="btn" type="button" id="bkCancel">Cancelar</button>` : "")
+    : `<button class="btn" type="button" id="bkTest">Testar conexão</button>` +
+      `<button class="btn" type="button" id="bkEdit">Trocar chave…</button>` +
+      `<button class="btn btn--reject" type="button" id="bkDel">Remover e voltar ao modelo da Onça</button>`;
+  document.getElementById("drBody").innerHTML =
+    `<form class="bk" id="bkForm" novalidate autocomplete="off">` + state +
+      (manage ? "" : `<p class="hd-note">Só um administrador do modelo da sua organização conecta ou troca a chave. ` +
+        `Para incluir alguém, escreva para <a href="mailto:contato@onssa.org">contato@onssa.org</a>.</p>`) +
+      form + `<p class="msg" id="bkMsg" role="status" aria-live="polite"></p>` +
+      `<div class="acts">${acts}<button class="btn" type="button" id="bkBack">Voltar</button></div>` +
+    `</form>`;
+  const msg = document.getElementById("bkMsg");
+  const say = (t, err) => { msg.className = "msg" + (err ? " err" : ""); msg.textContent = t; };
+  document.getElementById("bkBack").onclick = openAccount;
+  const cancel = document.getElementById("bkCancel"); if (cancel) cancel.onclick = () => renderOwnModel(S, false);
+  const edit = document.getElementById("bkEdit"); if (edit) edit.onclick = () => renderOwnModel(S, true);
+  const key = document.getElementById("bkKey"), ack = document.getElementById("bkAck"), go = document.getElementById("bkGo");
+  if (key && ack && go) {
+    const ready = () => { go.disabled = !(key.value.trim() && ack.checked); };
+    key.oninput = ready; ack.onchange = ready;
+    document.getElementById("bkForm").onsubmit = async (e) => {
+      e.preventDefault();
+      if (go.disabled) return;
+      const apiKey = key.value.trim(), model = document.getElementById("bkModel").value;
+      key.value = ""; go.disabled = true; key.disabled = true;   // the key never stays on the page
+      say("Testando a chave com o provedor…");
+      const r = await modelAct("connect_model", { api_key: apiKey, model, acknowledged: ack.checked });
+      if (r.ok && r.j.connection) { renderOwnModel(Object.assign({}, S, { connection: r.j.connection }), false);
+        document.getElementById("bkMsg").textContent = "Modelo conectado. As próximas perguntas usam a sua chave."; return; }
+      key.disabled = false; ready();
+      say(r.j.error || "Não foi possível conectar agora. Tente de novo em instantes.", true);
+      key.focus();
+    };
+  } else {
+    document.getElementById("bkForm").onsubmit = (e) => e.preventDefault();
+  }
+  const test = document.getElementById("bkTest");
+  if (test) test.onclick = async () => {
+    test.disabled = true; say("Testando…");
+    const r = await modelAct("test_model");
+    const S2 = Object.assign({}, S, { connection: (r.j && r.j.connection) || S.connection });
+    renderOwnModel(S2, false);
+    const m2 = document.getElementById("bkMsg");
+    if (r.ok && r.j.ok) { m2.textContent = "Conexão ok."; }
+    else { m2.className = "msg err"; m2.textContent = (r.j && r.j.error) || "O teste falhou. Tente de novo em instantes."; }
+  };
+  const del = document.getElementById("bkDel");
+  if (del) del.onclick = async () => {
+    // two taps, no window.confirm (the app's WebView doesn't reliably show JS dialogs)
+    if (del.dataset.armed !== "1") { del.dataset.armed = "1"; del.textContent = "Confirmar remoção da chave";
+      say("As próximas perguntas voltam a usar o modelo da Onça."); return; }
+    del.disabled = true; say("Removendo…");
+    const r = await modelAct("disconnect_model");
+    if (r.ok) { renderOwnModel(Object.assign({}, S, { connection: null }), false);
+      document.getElementById("bkMsg").textContent = "Chave removida. O chat voltou a usar o modelo da Onça."; return; }
+    del.disabled = false; say((r.j && r.j.error) || "Não foi possível remover agora.", true);
+  };
 }
 // #251 self-service deletion (App Store 5.1.1(v), Google Play): an explicit step that says what goes
 // and what stays, a typed confirmation, then POST /api/me/act `delete_account` — the server takes
