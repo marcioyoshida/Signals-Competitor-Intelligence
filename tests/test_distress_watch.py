@@ -63,16 +63,19 @@ def test_classifier_knows_the_bcb_resolution_regimes():
 def test_sweep_keeps_untracked_distress_headlines_and_dedups_known():
     outlet = [
         {"id": "news:a", "title": EURO_TITLE, "url": "https://neofeed.com.br/a",
-         "date": "2026-10-22", "source": "News", "publisher": "NeoFeed", "raw": "x" * 500},
+         "date": "2026-10-22", "source": "News", "publisher": "NeoFeed", "raw": "x" * 500,
+         "company": "pede recuperação judicial"},
         {"id": "news:b", "title": "Nubank lança cartão", "date": "2026-10-22"},
         {"id": "news:c", "title": "Banco Master pede recuperação judicial", "date": "2026-10-22"},
-        {"id": "news:d", "title": "Antiga falência", "date": "2026-01-01"},  # outside lookback
+        {"id": "news:d", "title": "Antiga falência", "date": "2026-09-01"},  # outside 30-day lookback
+        {"id": "news:e", "title": "Banco Y decreta falência", "date": "2026-10-01"},  # inside it
     ]
     known = [{"id": "news:c", "title": "Banco Master pede recuperação judicial"}]
     out = trade_press.distress_sweep(outlet, known=known, today=TODAY)
-    assert [r["id"] for r in out] == ["news:a"]
+    assert [r["id"] for r in out] == ["news:a", "news:e"]
     assert out[0]["query_kind"] == "distress" and out[0]["distress_kind"] == "recuperacao_judicial"
     assert "raw" not in out[0]  # compact: the news task result shares SFN's 256 KB
+    assert "company" not in out[0] and "name" not in out[0]  # query text is not an entity
 
 
 def test_fetch_distress_queries_parses_each_query():

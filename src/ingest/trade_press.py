@@ -424,15 +424,21 @@ DISTRESS_QUERIES = (
     "liquidação extrajudicial Banco Central",
     "falência decretada financeira OR banco OR securitizadora",
 )
+# A low-radar event is often noticed late (Euro17: published 2026-10-22, aged out of the 14-day
+# news window before the sweep shipped). Distress records dedup by evidence id, so re-reading a
+# month of headlines inflates nothing.
+DISTRESS_LOOKBACK_DAYS = 30
 DISTRESS_SWEEP_MAX = 60  # ~250 B/row compact; the news task result stays well under 256 KB
-_SWEEP_FIELDS = ("id", "title", "url", "date", "source", "publisher", "company", "name")
+# NO company/name: a query item carries the QUERY text there ("liquidação extrajudicial Banco
+# Central"), which a resolver could read as an entity. The distress watch resolves from the title.
+_SWEEP_FIELDS = ("id", "title", "url", "date", "source", "publisher")
 
 
 def distress_sweep(
     candidates: Iterable[dict[str, Any]],
     *,
     known: Iterable[dict[str, Any]] = (),
-    lookback_days: int = DEFAULT_LOOKBACK_DAYS,
+    lookback_days: int = DISTRESS_LOOKBACK_DAYS,
     today: dt.date | None = None,
     max_items: int = DISTRESS_SWEEP_MAX,
 ) -> list[dict[str, Any]]:

@@ -621,9 +621,10 @@ def _news_slice(context: Any) -> dict[str, Any]:
     if news_terms and os.environ.get("ONCA_DISTRESS_SWEEP", "on") != "off":
         try:
             with _source_budget("Distress sweep", deadline, min(per_source, 45)):
-                queried = trade_press.fetch_distress_queries(lookback_days=news_lookback)
+                d_lookback = max(news_lookback, trade_press.DISTRESS_LOOKBACK_DAYS)
+                queried = trade_press.fetch_distress_queries(lookback_days=d_lookback)
                 distress_items = trade_press.distress_sweep(
-                    outlet_items + queried, known=news_items, lookback_days=news_lookback)
+                    outlet_items + queried, known=news_items, lookback_days=d_lookback)
             print(f"Distress sweep: {len(distress_items)} headline(s) "
                   f"from {len(outlet_items)} outlet + {len(queried)} query items")
         except Exception as exc:  # pragma: no cover - best-effort, like every source
