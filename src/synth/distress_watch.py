@@ -137,8 +137,11 @@ def build_wide_index(
         prof = payload.get("profile") or {}
         name = str(prof.get("raw_name") or rv.get("proposed") or payload.get("surface") or "")
         brand = _brand_of(name) or _fold(rv.get("proposed") or "").strip() or None
+        # Live 2026-11-06: a Receita-CNAE candidate ("NORDESTE SAUDE EMPRESARIAL") head-matched
+        # "Fábrica de pás eólicas do Nordeste". Only a REGULATED-register profile may match by
+        # brand head (and be auto-promoted); the rest match by full legal name only.
         _add({"via": "review_queue", "name": name, "brand": brand,
-              "head": (brand or "").split(" ")[0] or None,
+              "head": ((brand or "").split(" ")[0] or None) if _regulated_profile(payload) else None,
               "cnpj": _root8(payload.get("cnpj") or (prof.get("cnpj_roots") or [None])[0]),
               "segment": prof.get("license_class"), "review_id": rv.get("review_id"),
               "profile": prof or None})
@@ -148,10 +151,23 @@ def build_wide_index(
         name = str(e.get("display_name") or "")
         brand = _fold(name).strip() or None
         roots = e.get("cnpj_roots") or []
+        vehicle = bool(set(e.get("industries") or []) & _VEHICLE_INDUSTRIES)
         _add({"via": "tracked", "name": name, "brand": brand,
-              "head": (brand or "").split(" ")[0] or None,
+              "head": None if vehicle else ((brand or "").split(" ")[0] or None),
               "cnpj": _root8(roots[0]) if roots else None, "entity_id": e["entity_id"]})
     return {"legal": legal, "heads": heads}
+
+
+# Fund vehicles carry descriptive names ("Energy Resort FII") — never a brand-head match.
+_VEHICLE_INDUSTRIES = frozenset({"agri-funds", "real-estate-funds"})
+# Registers whose discovery profiles are structured institutions (auto-promotable).
+_REGULATED_SOURCES = frozenset({"bcb_autorizacoes", "susep", "susep_entidades", "spa_apostas"})
+
+
+def _regulated_profile(payload: dict[str, Any]) -> bool:
+    prof = payload.get("profile") or {}
+    src = str(prof.get("source") or payload.get("source") or "")
+    return src in _REGULATED_SOURCES and bool(prof.get("entity_id")) and bool(prof.get("license_class"))
 
 
 def _owners(cands: list[dict[str, Any]]) -> set[str]:
@@ -173,6 +189,14 @@ def match_headline(title: str, index: dict[str, Any]) -> list[tuple[dict[str, An
     after = m.group(1) if m else ""
     subject = re.sub(r"[^a-z0-9 ]+", " ", before + " | " + after)
     subject = " " + re.sub(r"\s+", " ", subject).strip() + " "
+    # Where a brand HEAD may sit (live 2026-11-06: "Aeris ENERGY recorre…" and "fábrica … do
+    # NORDESTE pede…" bound to unrelated names): at the start of the clause that carries the
+    # distress (after the last , ; : or an exclusivo-style tag), right after "grupo", or as the
+    # first word of the genitive object after the phrase. Never mid-noun-phrase.
+    clause = re.split(r"[,;:|]", before)[-1]
+    clause = re.sub(r"^\s*(?:exclusivo|urgente|analise|opiniao)\s*", "", re.sub(r"[^a-z0-9 ,;:|]+", " ", clause))
+    head_slots = {w for w in [(clause.split() or [""])[0], (after.split() or [""])[0]] if w}
+    head_slots |= set(re.findall(r"\bgrupo\s+([a-z0-9]+)", re.sub(r"[^a-z0-9 ]+", " ", before + " " + after)))
     out: list[tuple[dict[str, Any], str]] = []
     seen: set[int] = set()
     # 1) legal name → the institution itself
@@ -186,7 +210,7 @@ def match_headline(title: str, index: dict[str, Any]) -> list[tuple[dict[str, An
         return out
     # 2) distinctive brand head → its economic group (or itself, with a segment cue)
     for head, cands in (index.get("heads") or {}).items():
-        if not _distinctive(head) or f" {head} " not in subject:
+        if not _distinctive(head) or head not in head_slots:
             continue
         if len(_owners(cands)) > MAX_BRAND_OWNERS:
             continue  # one brand, many institutions — ambiguous, attribute to no one
@@ -287,6 +311,10 @@ def registry_promote_fn(table: Any | None = None) -> Callable[[dict[str, Any], s
 
     def _fn(ev: dict[str, Any], key: str) -> str | None:
         if ev.get("review_id"):
+            # only a regulated-register profile is auto-promoted (live 2026-11-06: a Receita-CNAE
+            # candidate was approved by a false match) — anything else stays a curator decision
+            if not _regulated_profile({"profile": ev.get("_profile") or {}}):
+                return None
             item = entity_registry.resolve_review(
                 ev["review_id"], "approved", table=table,
                 payload={"decided_by": "distress_override", "evidence": ev.get("url")})
@@ -354,6 +382,39 @@ def attach_correspondents(
             ev["correspondent_of"] = sorted(links.values(), key=lambda x: x["entity"])
             n += 1
     return n
+
+
+MAX_COMMON_COMPANIES = 5
+
+
+def drop_common_brands(events: list[dict[str, Any]], *,
+                       lookup: Callable[[str], list[dict[str, Any]]]) -> list[dict[str, Any]]:
+    """Drop brand-matched (group) events whose head is an ordinary word: the BCB correspondent
+    register is a broad corpus of Brazilian company names, and a head carried by more than
+    ``MAX_COMMON_COMPANIES`` distinct correspondent companies is not a brand (live 2026-11-06:
+    "energy", "nordeste"). Legal-name matches (role self, via legal key) are kept. A lookup
+    failure keeps nothing for that head — precision first."""
+    verdict: dict[str, bool] = {}
+    out = []
+    for ev in events:
+        if ev.get("role") != "group" or ev.get("matched_via") == "bcb_register_exit":
+            out.append(ev)
+            continue
+        head = (ev.get("brand") or "").split(" ")[0]
+        if head not in verdict:
+            try:
+                rows = lookup(head.upper()) or []
+                cos = {r.get("CnpjCorrespondente") for r in rows
+                       if f" {head} " in " " + re.sub(r"[^a-z0-9 ]+", " ", _fold(r.get("NomeCorrespondente"))) + " "}
+                verdict[head] = len(cos) <= MAX_COMMON_COMPANIES
+            except Exception as exc:  # pragma: no cover - best-effort network
+                print(f"Warning: brand commonness check for {head} failed: {exc}")
+                verdict[head] = False
+        if verdict[head]:
+            out.append(ev)
+        else:
+            print(f"Distress watch: dropped common-word brand '{head}' ({ev.get('title', '')[:80]})")
+    return out
 
 
 # --- #356 shared-controller siblings ---------------------------------------------------------
@@ -460,6 +521,10 @@ def run(
         for ev in wide:
             if not ev.get("entity") and ev.get("cnpj") in cnpj_index:
                 ev["entity"] = cnpj_index[ev["cnpj"]]
+        if correspondent_lookup:
+            wide = drop_common_brands(wide, lookup=correspondent_lookup)
+        elif any(e.get("role") == "group" for e in wide):
+            wide = [e for e in wide if e.get("role") != "group"]  # can't vet a brand → no group claims
         if signal_fn:
             for ev in wide:
                 if ev.get("review_id"):

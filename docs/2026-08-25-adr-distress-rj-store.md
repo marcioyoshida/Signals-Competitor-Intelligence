@@ -161,3 +161,16 @@ risk, never "the entity is insolvent".
 Only "Grupo Euro17 pede recuperação judicial" matched a BCB institution (EURO17 SCD, `group`).
 Non-financial RJs (Aeris, Chilli Beans, Kitchens) matched nothing. The correspondent lookup
 returned Votorantim and Daycoval. `tests/test_distress_watch.py` has 20 tests.
+
+**First live run, 2026-11-06 03:11 UTC: two false positives, caught and purged before any feed rebuild.**
+- "Aeris Energy recorre a recuperação extrajudicial" was bound to a tracked FII (Energy Resort) through the word "energy".
+- "Fábrica de pás eólicas do Nordeste pede RJ" was bound to a Receita-CNAE review candidate (Nordeste Saúde Empresarial). That candidate was auto-approved, but no entity was created because its profile had no `entity_id`.
+- Both fanned out to unrelated "ENERGY …" / "NORDESTE …" correspondents.
+
+Reverted (backups under `backups/distress/` and `backups/registry/`), then four rules were added:
+1. A brand head binds only at the start of the distress clause, after "Grupo", or as the first word of the genitive object.
+2. A head carried by more than 5 distinct companies in the BCB correspondent register is an ordinary word, so the match is attributed to no one. With no way to vet a brand, no group claim is made.
+3. Only a regulated-register profile (BCB/SUSEP/SPA, with `entity_id` and a licence class) is auto-promoted.
+4. Fund vehicles and non-regulated review candidates match by full legal name only.
+
+The re-run in a live dry run returns exactly one event: Euro17, as a group, with correspondents Daycoval and Votorantim.

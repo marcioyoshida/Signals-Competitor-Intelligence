@@ -126,7 +126,7 @@ def _review(table, cnpj="59855096"):
     prof = {"entity_id": "euro17", "display_name": "Euro17", "auto_ok": True,
             "raw_name": EURO_SCD["name"], "aliases": [EURO_SCD["name"], "Euro17"],
             "cnpj_roots": [cnpj], "industries": ["fintech"], "license_class": "Crédito Direto (SCD)",
-            "confidence": "structured"}
+            "confidence": "structured", "source": "bcb_autorizacoes"}  # the live profile shape
     er.propose_review("discovery", key="euro17", proposed="Euro17", reason="prominence_gate",
                       confidence="structured",
                       payload={"profile": prof, "source": "bcb_autorizacoes", "cnpj": cnpj}, table=table)
@@ -354,3 +354,58 @@ def test_update_from_digest_reads_swept_items_and_runs_the_watch():
     assert rec["role"] == "group" and rec["matched_via"] == "bcb_register"
     rows = distress.list_records(idx)
     assert {r["entity"] for r in rows} == {None, "daycoval", "votorantim"}
+
+
+# --- live false positives, 2026-11-06 (first live run) -----------------------------------------
+
+def _noisy_corr(head):
+    # a common word: many unrelated correspondents carry it
+    return [{"CnpjContratante": "00000000", "CnpjCorrespondente": str(i),
+             "NomeCorrespondente": f"EMPRESA {i} {head} LTDA"} for i in range(9)]
+
+
+def test_mid_phrase_and_genitive_modifier_heads_do_not_bind():
+    idx = w.build_wide_index([{"name": "ENERGY PAGAMENTOS S.A.", "cnpj": "36969658",
+                               "license_class": "Instituição de Pagamento"},
+                              {"name": "NORDESTE CREDITO SCD S.A.", "cnpj": "03773153",
+                               "license_class": "Crédito Direto (SCD)"}])
+    assert w.match_headline("Aeris Energy recorre a recuperação extrajudicial de R$ 1,5 bi", idx) == []
+    assert w.match_headline("FÁBRICA DE PÁS EÓLICAS DO NORDESTE PEDE RECUPERAÇÃO JUDICIAL", idx) == []
+    # the true shapes still bind
+    assert w.match_headline("Energy pede recuperação judicial", idx)
+    assert w.match_headline("EXCLUSIVO: Com dívida de R$ 1,72 bilhão, Grupo Nordeste pede recuperação judicial", idx)
+
+
+def test_receita_and_fund_candidates_never_head_match_or_promote():
+    reviews = [{"kind": "discovery", "status": "pending", "review_id": "discovery:receita_03773153",
+                "proposed": "NORDESTE SAUDE EMPRESARIAL",
+                "payload": {"cnpj": "03773153", "source": "receita_bulk",
+                            "profile": {"cnae": "6550200", "source": "receita_bulk"}}}]
+    ents = [{"entity_id": "energy-resort", "display_name": "Energy Resort", "news_search": False,
+             "industries": ["real-estate-funds"], "cnpj_roots": ["36969658"]}]
+    idx = w.build_wide_index([], reviews, ents)
+    assert idx["heads"] == {}
+    assert w.match_headline("Nordeste pede recuperação judicial", idx) == []
+    t = FakeTable()
+    t.put_item(Item={"pk": "REVIEW#discovery:receita_03773153", "status": "pending", "kind": "discovery",
+                     "review_id": "discovery:receita_03773153", "payload": reviews[0]["payload"]})
+    fn = w.registry_promote_fn(table=t)
+    assert fn({"review_id": "discovery:receita_03773153",
+               "_profile": reviews[0]["payload"]["profile"]}, "k") is None
+    assert t.items["REVIEW#discovery:receita_03773153"]["status"] == "pending"  # untouched
+
+
+def test_common_word_brand_is_dropped_by_the_correspondent_corpus():
+    idx = w.build_wide_index([{"name": "ENERGY PAGAMENTOS S.A.", "cnpj": "36969658",
+                               "license_class": "Instituição de Pagamento"}])
+    out = w.run([_item("Grupo Energy pede recuperação judicial")], [], {}, entities=ENTITIES,
+                bcb_rows=[{"name": "ENERGY PAGAMENTOS S.A.", "cnpj": "36969658",
+                           "license_class": "Instituição de Pagamento"}],
+                reviews_fn=lambda: [], promote_fn=None, correspondent_lookup=_noisy_corr,
+                qsa={}, exits=[], today=TODAY)
+    assert out["tracked"] == [] and out["untracked"] == []
+    # without a way to vet the brand, no group claim is made at all
+    out = w.run([_item("Grupo Euro17 pede recuperação judicial")], [], {}, entities=ENTITIES,
+                bcb_rows=[EURO_SCD], reviews_fn=lambda: [], promote_fn=None,
+                correspondent_lookup=None, qsa={}, exits=[], today=TODAY)
+    assert out["untracked"] == []
