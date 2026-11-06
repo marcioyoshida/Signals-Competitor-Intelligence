@@ -1586,6 +1586,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             result = guardrail_refusal()
         elif usage.get("model_error"):   # the client's model failed: its error, not a data gap
             result = client_model.error_result(str(usage["model_error"]))
+            client_model.record_failure(target, str(usage["model_error"]))
         if officer:
             result["officer"] = officer
         if quota is not None:

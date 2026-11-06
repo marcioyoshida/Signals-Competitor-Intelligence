@@ -343,6 +343,8 @@ def ops_tools(elevated: bool) -> list[dict[str, Any]]:
 
     out = []
     for intent, (cls, handler, _subj) in act_api._CATALOG.items():
+        if intent in act_api._NO_MCP:      # #347: a secret-bearing intent is never a tool
+            continue
         doc = " ".join(str(handler.__doc__ or "").split())
         read_only = intent.startswith("list_")
         out.append({
@@ -366,7 +368,7 @@ def call_ops_tool(name: str, args: dict[str, Any], ctx: Context) -> dict[str, An
         return _text({"isError": True, "message": "As ferramentas de operação exigem uma conta de operador Onça."})
     from src.dashboard import act_api
 
-    if name not in act_api._CATALOG:
+    if name not in act_api._CATALOG or name in act_api._NO_MCP:
         return _text({"isError": True, "message": "Unknown tool: %s" % name})
     key = str((args or {}).get("idempotency_key") or "").strip()
     if len(key) < 8:

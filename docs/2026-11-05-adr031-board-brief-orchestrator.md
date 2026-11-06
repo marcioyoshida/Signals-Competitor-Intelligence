@@ -145,9 +145,17 @@ stays the default for trials. Stories #346–#353.
   the question before the call and on the answer after it, and fails closed.
 - **Billing.** Client-billed tokens are reported, but they don't draw the included API quota.
   The spend gate (#329) treats a connected model as satisfying it.
-- Status 2026-11-05: #346 (switch + Anthropic invoker) and #349 (guardrail parity) are in code
-  but dark. No tenant can connect a key until the sealed store (#347) lands, and the SDK
-  joins the Lambda asset with #347.
+- **Key store (#347).** Table `OncaModelKeys` holds one row per tenant. The key is sealed under a
+  dedicated KMS key (rotation on). The encryption context is `{onca-tenant, onca-purpose=model-key}`
+  and every IAM grant is conditioned on that purpose. The key is verified with a real call before
+  it is stored. Only the last 4 characters are shown, and the key is scrubbed from the act journal.
+  `connect_model` is never an MCP tool.
+- **Who may manage it.** Intents on `/api/me/act`: `model_status` for any member;
+  `connect_model`, `test_model` and `disconnect_model` for the tenant's `model_admins` only. That
+  list holds verified e-mails and an operator sets it (`set_model_admins`), because connecting
+  sends the tenant's questions to a third party. It starts empty, so no one can connect by default.
+- Status 2026-11-06: #346 is live but dark. #347 adds the store, the intents and the SDK in the
+  Lambda asset. The account-page UI is #348.
 
 ### Evaluation harness
 

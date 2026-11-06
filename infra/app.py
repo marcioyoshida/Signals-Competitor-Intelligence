@@ -2435,6 +2435,36 @@ class OncaPrototypeStack(Stack):
             )
         )
 
+        # #347 BYOK (ADR 031): a tenant's own model API key, sealed under a dedicated KMS key
+        # (src/synth/model_keys.py). One row per tenant; the plaintext exists only between
+        # kms:Decrypt and the SDK client. Every KMS grant is conditioned on the model-key purpose
+        # in the encryption context. Act connects (Encrypt) and tests (Decrypt); Ask and the agent
+        # API decrypt to answer and stamp a key-level failure on the row.
+        model_key_kms = kms.Key(
+            self, "OncaModelKeyKms",
+            description="Onça BYOK: seals tenants' own model API keys (#347)",
+            enable_key_rotation=True,
+            removal_policy=RemovalPolicy.RETAIN,
+        )
+        model_keys_table = dynamodb.Table(
+            self, "OncaModelKeys",
+            partition_key=dynamodb.Attribute(name="tenant_id", type=dynamodb.AttributeType.STRING),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.RETAIN,
+            deletion_protection=True,
+            point_in_time_recovery_specification=dynamodb.PointInTimeRecoverySpecification(
+                point_in_time_recovery_enabled=True
+            ),
+        )
+        _model_key_purpose = {"StringEquals": {"kms:EncryptionContext:onca-purpose": "model-key"}}
+        for _fn, _actions in ((act_fn, ["kms:Encrypt", "kms:Decrypt"]),
+                              (agent_fn, ["kms:Decrypt"]), (agent_api_fn, ["kms:Decrypt"])):
+            _fn.add_environment("ONCA_MODEL_KEYS_TABLE", model_keys_table.table_name)
+            _fn.add_environment("ONCA_MODEL_KEY_KMS", model_key_kms.key_arn)
+            model_keys_table.grant_read_write_data(_fn)
+            _fn.add_to_role_policy(iam.PolicyStatement(
+                actions=_actions, resources=[model_key_kms.key_arn], conditions=_model_key_purpose))
+
         # Agentic API key admin (self-service): a tenant's own logged-in user manages
         # ONLY its own tenant's keys — gated by the SAME Cognito-JWT authorizer as
         # /api/ask, tenant resolved from the verified identity, never the request.

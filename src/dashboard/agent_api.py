@@ -93,6 +93,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             result = guardrail_refusal()
         elif usage.get("model_error"):
             result = client_model.error_result(str(usage["model_error"]))
+            client_model.record_failure(target, str(usage["model_error"]))
     except Exception as exc:  # pragma: no cover - defensive; never leak a stack
         print(f"agent_api error: {exc}")
         return _resp(500, {"error": "internal error"})

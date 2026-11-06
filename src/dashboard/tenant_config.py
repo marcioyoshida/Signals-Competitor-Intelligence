@@ -318,7 +318,8 @@ def put_tenant_config(
 _BILLING_FIELDS = ("billing_managed", "subs", "trial_until", "trial_modules")
 _POLICY_FIELDS = ("session_idle_days", "app_lock_minutes")
 _PREF_FIELDS = ("watchlist", "score_weights", "alert_prefs", "prefs_updated_at",
-                "custom_domain", "api_quota_tokens")   # #306: a SaaS tenant's own domain (scripts/provision_tenant_domain.py)
+                "custom_domain", "api_quota_tokens",   # #306: a SaaS tenant's own domain (scripts/provision_tenant_domain.py)
+                "model_admins")   # #347: who may connect the tenant's own model (BYOK)
 
 
 def set_tenant_prefs(tenant_id: str, *, watchlist: list[str] | None = None,
@@ -350,6 +351,31 @@ def set_tenant_prefs(tenant_id: str, *, watchlist: list[str] | None = None,
     return {"watchlist": list(item.get("watchlist") or []),
             "score_weights": {k: float(v) for k, v in (item.get("score_weights") or {}).items()},
             "alert_prefs": dict(item.get("alert_prefs") or {})}
+
+
+def set_model_admins(tenant_id: str, emails: list[str], *, table: Any | None = None) -> list[str]:
+    """#347: the e-mails allowed to connect, test or remove the tenant's own model key. Set by an
+    operator (contract-level: connecting sends the tenant's questions to a third party). An
+    update on an EXISTING row; raises KeyError for an unknown tenant, ValueError for a bad e-mail."""
+    clean = sorted({str(e).strip().lower() for e in emails or [] if str(e).strip()})
+    bad = [e for e in clean if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", e)]
+    if bad:
+        raise ValueError(f"not an e-mail: {bad}")
+    try:
+        _table(table).update_item(
+            Key={"tenant_id": str(tenant_id)}, UpdateExpression="SET model_admins = :m",
+            ConditionExpression="attribute_exists(tenant_id)", ExpressionAttributeValues={":m": clean})
+    except Exception as exc:
+        if "ConditionalCheckFailed" in type(exc).__name__ or "ConditionalCheckFailed" in str(exc):
+            raise KeyError(tenant_id) from None
+        raise
+    return clean
+
+
+def is_model_admin(cfg: dict[str, Any] | None, email: str | None) -> bool:
+    """#347: may this signed-in user manage the tenant's own model key?"""
+    e = str(email or "").strip().lower()
+    return bool(e) and e in {str(x).strip().lower() for x in (cfg or {}).get("model_admins") or []}
 
 
 def apply_purchase(tenant_id: str, storefront_tier: str, module: str, action: str, *,

@@ -232,9 +232,49 @@ def apply_guardrail(guardrail: dict[str, str], text: str, source: str, *, client
 
 
 def tenant_loader() -> Callable[[str], Target | None] | None:
-    """The reader of a tenant's sealed key. None until the key store lands (#347): no tenant can
-    have connected a model yet, so every call resolves to hosted."""
-    return None
+    """The reader of a tenant's sealed key (#347), or None where the store isn't configured (local
+    runs, the pipeline Lambdas): there, every call is hosted. A store failure becomes a visible
+    ``model_unavailable``, never None, because None would mean answering on hosted Nova."""
+    from src.synth import model_keys
+    if not model_keys.configured():
+        return None
+
+    def load(tenant: str) -> Target | None:
+        try:
+            return model_keys.load_target(tenant)
+        except Exception as exc:  # noqa: BLE001
+            print(f"Warning: model-key store failed: {type(exc).__name__}")
+            raise ModelError(UNAVAILABLE, "the key store could not be read") from None
+    return load
+
+
+def record_failure(target: Target | None, code: str) -> None:
+    """Stamp a key-level failure on the tenant's row so the account sheet can show it (#348).
+    A transient ``model_unavailable`` and a per-question refusal say nothing about the key."""
+    if target is None or not target.tenant or code in (UNAVAILABLE, REFUSED):
+        return
+    from src.synth import model_keys
+    if model_keys.configured():
+        model_keys.record_check(target.tenant, error=code)
+
+
+def verify(target: Target, *, client: Any = None) -> None:
+    """One minimal real call: it proves the key, the model and the account's credit (a chat
+    subscription surfaces here as ``model_no_credit``). Raises :class:`ModelError`."""
+    if target.model not in MODELS:
+        raise ModelError(NO_ACCESS, "model not on the allow-list")
+    if client is None:
+        try:
+            import anthropic
+        except ImportError as exc:
+            raise ModelError(UNAVAILABLE, "client model support is not installed") from exc
+        client = anthropic.Anthropic(api_key=target.api_key, timeout=TIMEOUT_S, max_retries=0)
+    try:
+        client.beta.messages.create(model=target.model, max_tokens=16,
+                                    messages=[{"role": "user", "content": "Reply with OK."}],
+                                    output_config={"effort": EFFORT})
+    except Exception as exc:  # noqa: BLE001 - classified, never swallowed
+        raise _classify(exc) from None
 
 
 def error_result(code: str) -> dict[str, Any]:

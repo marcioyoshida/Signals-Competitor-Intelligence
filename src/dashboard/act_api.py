@@ -752,6 +752,135 @@ def _act_set_watchlist(args: dict[str, Any], actor: str) -> tuple[str, int, dict
     return "applied", 200, {**saved, "alert_prefs": wl.alert_prefs_of(saved)}
 
 
+# ---- #347 BYOK: the tenant's own model key (src/synth/model_keys.py) ---------------------------
+def _model_scope(args: dict[str, Any]) -> tuple[str, bool, dict[str, Any] | None]:
+    """(tenant, may_manage, cfg). A signed-in caller's tenant is the verified claim the handler put
+    in ``args["tenant"]``; they may manage the key only if their e-mail is on the tenant's
+    ``model_admins`` list (or they're an elevated operator). Only the origin-secret operator (no
+    identity) may name ``tenant_id``."""
+    from src.dashboard import tenant_config
+
+    identified = "tenant" in args
+    tenant = str((args.get("tenant") if identified else args.get("tenant_id")) or "").strip()
+    cfg = tenant_config.get_tenant_config(tenant) if tenant else None
+    manage = bool(args.get("_elevated")) or tenant_config.is_model_admin(cfg, args.get("_email"))
+    return tenant, manage, cfg
+
+
+def _model_gate(args: dict[str, Any], *, manage: bool
+                ) -> tuple[str, tuple[str, int, dict[str, Any]] | None]:
+    from src.synth import model_keys
+
+    tenant, may_manage, cfg = _model_scope(args)
+    if not tenant or not cfg:
+        return "", ("blocked", 403, {"error": "o modelo próprio pertence a uma conta de organização"})
+    if not model_keys.configured():
+        return "", ("blocked", 503, {"error": "conectar um modelo próprio não está habilitado aqui"})
+    if manage and not may_manage:
+        return "", ("blocked", 403, {"reason": "not-model-admin",
+                                     "error": "só um administrador do modelo da sua organização "
+                                              "pode conectar, testar ou remover a chave"})
+    return tenant, None
+
+
+def _act_model_status(args: dict[str, Any], actor: str) -> tuple[str, int, dict[str, Any]]:
+    """apply (self-service, read-only): the organisation's own-model connection (never the key),
+    the allowed models, the acknowledgement text and whether the caller may manage it."""
+    from src.synth import client_model as cm, model_keys
+
+    tenant, blocked = _model_gate(args, manage=False)
+    if blocked:
+        return blocked
+    _t, manage, _c = _model_scope(args)
+    conn = model_keys.connection(tenant)
+    return "noop", 200, {"connection": conn.public() if conn else None, "can_manage": manage,
+                         "models": [{"model": k, "label": v["label"]} for k, v in cm.MODELS.items()],
+                         "default_model": cm.DEFAULT_MODEL, "acknowledgement": model_keys.ACKNOWLEDGEMENT}
+
+
+def _act_connect_model(args: dict[str, Any], actor: str) -> tuple[str, int, dict[str, Any]]:
+    """apply (model admin): connect or replace the organisation's own model key. The key is
+    verified with a real call before it is sealed and stored, and is never returned."""
+    from src.synth import client_model as cm, model_keys
+
+    tenant, blocked = _model_gate(args, manage=True)
+    if blocked:
+        return blocked
+    try:
+        conn = model_keys.connect(tenant, api_key=str(args.get("api_key") or ""),
+                                  model=str(args.get("model") or cm.DEFAULT_MODEL), actor=actor,
+                                  acknowledged=_truthy(args.get("acknowledged")))
+    except ValueError as exc:
+        return "blocked", 400, {"error": str(exc)}
+    except cm.ModelError as exc:
+        return "blocked", 400, {"reason": exc.code, "error": cm.MESSAGES.get(exc.code, "")}
+    except Exception as exc:  # noqa: BLE001 - KMS/DynamoDB: the type only, never the args
+        print(f"Warning: connect_model store failed: {type(exc).__name__}")
+        return "blocked", 503, {"reason": cm.UNAVAILABLE, "error": "não foi possível guardar a "
+                                "chave agora; tente de novo em instantes"}
+    return "applied", 200, {"connection": conn.public()}
+
+
+def _act_test_model(args: dict[str, Any], actor: str) -> tuple[str, int, dict[str, Any]]:
+    """apply (model admin): one minimal real call on the stored key; stamps the result."""
+    from src.synth import client_model as cm, model_keys
+
+    tenant, blocked = _model_gate(args, manage=True)
+    if blocked:
+        return blocked
+    try:
+        target = model_keys.load_target(tenant)
+    except Exception as exc:  # noqa: BLE001
+        print(f"Warning: model-key store failed: {type(exc).__name__}")
+        return "blocked", 503, {"reason": cm.UNAVAILABLE, "error": cm.MESSAGES[cm.UNAVAILABLE]}
+    if target is None:
+        return "noop", 404, {"error": "nenhum modelo próprio conectado"}
+    try:
+        cm.verify(target)
+    except cm.ModelError as exc:
+        if exc.code != cm.UNAVAILABLE:      # a transient outage says nothing about the key
+            model_keys.record_check(tenant, error=exc.code)
+        conn = model_keys.connection(tenant)
+        return "applied", 200, {"ok": False, "reason": exc.code, "error": cm.MESSAGES.get(exc.code, ""),
+                                "connection": conn.public() if conn else None}
+    model_keys.record_check(tenant)
+    conn = model_keys.connection(tenant)
+    return "applied", 200, {"ok": True, "connection": conn.public() if conn else None}
+
+
+def _act_disconnect_model(args: dict[str, Any], actor: str) -> tuple[str, int, dict[str, Any]]:
+    """apply (model admin): remove the organisation's own model key; answers go back to Onça's
+    hosted model on the next question."""
+    from src.synth import model_keys
+
+    tenant, blocked = _model_gate(args, manage=True)
+    if blocked:
+        return blocked
+    return ("applied" if model_keys.disconnect(tenant) else "noop"), 200, {"connection": None}
+
+
+def _act_set_model_admins(args: dict[str, Any], actor: str) -> tuple[str, int, dict[str, Any]]:
+    """apply (operator): who in a tenant may manage its own model key (``emails``, replaces)."""
+    from src.dashboard import tenant_config
+
+    tenant = str(args.get("tenant_id") or "").strip()
+    try:
+        admins = tenant_config.set_model_admins(tenant, _as_list(args.get("emails")))
+    except KeyError:
+        return "blocked", 404, {"error": "unknown tenant"}
+    except ValueError as exc:
+        return "blocked", 400, {"error": str(exc)}
+    return "applied", 200, {"tenant_id": tenant, "model_admins": admins}
+
+
+# #347: args that must never reach the journal or an idempotency replay (a model API key).
+_SECRET_ARGS = ("api_key",)
+# #347: intents that carry a secret are never offered as MCP tools: a key typed into an agent
+# conversation is a key in a transcript.
+_NO_MCP = frozenset({"connect_model"})
+_MODEL_INTENTS = frozenset({"model_status", "connect_model", "test_model", "disconnect_model"})
+
+
 # report_feedback: the client's free text must not be copied into the curation journal.
 _NO_JOURNAL = frozenset({"record_engagement", "list_product_radar", "report_feedback", "list_feedback"})
 
@@ -804,13 +933,19 @@ _CATALOG: dict[str, tuple[str, Callable[..., tuple[str, int, dict[str, Any]]], s
     "delete_account": (APPLY, _act_delete_account, None),
     # #302 the tenant's own watchlist / score weights / alert prefs (self-service)
     "set_watchlist": (APPLY, _act_set_watchlist, None),
+    # #347 BYOK: the organisation's own model key (status: members; the rest: model admins)
+    "model_status": (APPLY, _act_model_status, None),
+    "connect_model": (APPLY, _act_connect_model, None),
+    "test_model": (APPLY, _act_test_model, None),
+    "disconnect_model": (APPLY, _act_disconnect_model, None),
+    "set_model_admins": (APPLY, _act_set_model_admins, "tenant_id"),   # operator only
 }
 
 # #161: what a NON-elevated tenant identity (Cognito JWT via /api/me/act) may call — the officer's
 # own decision capture and attention telemetry, nothing that touches the registry or pipeline.
 _SELF_SERVICE = frozenset({"record_decision", "set_outcome", "set_board_adoption",
                            "append_reference", "record_engagement", "report_feedback",
-                           "delete_account", "set_watchlist"})
+                           "delete_account", "set_watchlist", *_MODEL_INTENTS})
 # #251: intents that only ever act on the verified caller — no origin-secret operator, no MCP.
 _SELF_ONLY = frozenset({"delete_account"})
 # of those, the ones that act on an EXISTING decision — tenant-checked before they run
@@ -869,6 +1004,9 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         # the tenant is the VERIFIED claim, never a client-supplied arg; idempotency keys are
         # per-caller so one tenant can never replay (and read) another's stored result
         args["tenant"] = identity.tenant
+        if intent in _MODEL_INTENTS:     # #347: the model-admin check reads a VERIFIED e-mail only
+            verified = str((auth._claims(event) or {}).get("email_verified")).lower() == "true"
+            args["_email"], args["_elevated"] = (identity.email if verified else None), elevated
         if idem:
             idem = f"{identity.sub}:{idem}"
         if not elevated and intent in _ON_DECISION:
@@ -909,7 +1047,15 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         if prior is not None:
             return _resp(prior["status"], {**prior["result"], "idempotent_replay": True})
 
+    if identity is None and intent in _MODEL_INTENTS:
+        args["_elevated"] = elevated     # the origin-secret operator names tenant_id
     outcome, status, detail = handler(args, actor)
+    # #347: a secret never reaches the journal or the replay store; the last 4 identify it.
+    for k in _SECRET_ARGS:
+        if k in args:
+            args[k] = "…" + str(args[k] or "")[-4:]
+    for k in ("_email", "_elevated"):
+        args.pop(k, None)
     subject = str(args.get(subject_key)) if subject_key and args.get(subject_key) else _ACT_SUBJECT
     if intent in _SELF_ONLY:
         from src.dashboard.account import user_hash
