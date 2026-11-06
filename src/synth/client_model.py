@@ -39,13 +39,16 @@ BEDROCK_ROLE = "bedrock_role"
 
 #: A model may be connected only after it is measured on Onça's Ask regression (#352). Sonnet 5.5
 #: is CORAX's measured model (faithfulness 33/41, 0 inversions); Onça's own run is #352.
+#: ``profile``: the passing artifact of ``scripts/model_eval.py`` (eval/model-profiles/), or None
+#: while the model is not measured on Onça yet (it needs a real key: the owner's or a pilot's).
 MODELS: dict[str, dict[str, Any]] = {
     "claude-sonnet-5-5": {"provider": ANTHROPIC_KEY, "label": "Claude Sonnet 5.5",
-                          "input_per_1m": 2.00, "output_per_1m": 10.00},
+                          "input_per_1m": 2.00, "output_per_1m": 10.00, "profile": None},
     # #350: the same model in the client's own Bedrock (Bedrock prices it; the bill is theirs).
     # The client enables model access for it in their Bedrock console (it is not "open" access).
     "anthropic.claude-sonnet-5-5": {"provider": BEDROCK_ROLE,
-                                    "label": "Claude Sonnet 5.5 (Amazon Bedrock da sua conta)"},
+                                    "label": "Claude Sonnet 5.5 (Amazon Bedrock da sua conta)",
+                                    "profile": None},
 }
 DEFAULT_MODEL = "claude-sonnet-5-5"
 #: One Ask is ONE model call inside API Gateway's 29 s; KB retrieval runs before it. Thinking is
@@ -177,9 +180,14 @@ def _classify(exc: Exception) -> ModelError:
 
 
 def _messages(prompt: str, history: list[dict[str, str]] | None,
-              images: list[bytes] | None) -> list[dict[str, Any]]:
+              images: list[bytes] | None, context: str | None = None) -> list[dict[str, Any]]:
     """Same history rule as the hosted path: user/assistant alternating from a user turn, else
-    dropped; the last prior turn must be the assistant's."""
+    dropped; the last prior turn must be the assistant's.
+
+    ``context`` (#351): a FROZEN context pack (the board brief's facts, reused across a run's
+    15-25 calls). It goes first in the final user turn with a cache breakpoint after it, so the
+    prefix system + pack is cached and only the question differs between calls. It stays a user
+    block, never part of ``system``: the pack is retrieved data, not operator instructions."""
     prior: list[dict[str, Any]] = []
     for i, turn in enumerate(history or []):
         role, text = turn.get("role"), str(turn.get("text") or "").strip()
@@ -193,6 +201,8 @@ def _messages(prompt: str, history: list[dict[str, str]] | None,
         {"type": "image", "source": {"type": "base64", "media_type": "image/png",
                                      "data": base64.standard_b64encode(img).decode()}}
         for img in images or []]
+    if context:
+        content.append({"type": "text", "text": context, "cache_control": {"type": "ephemeral"}})
     content.append({"type": "text", "text": prompt})
     return prior + [{"role": "user", "content": content}]
 
@@ -279,16 +289,18 @@ def _create(client: Any, target: Target, **kwargs: Any) -> Any:
 
 def anthropic_converse(target: Target, prompt: str, *, system: str | None = None,
                        max_tokens: int = 800, history: list[dict[str, str]] | None = None,
-                       images: list[bytes] | None = None, client: Any = None
-                       ) -> tuple[str, dict[str, Any]]:
+                       images: list[bytes] | None = None, client: Any = None,
+                       context: str | None = None) -> tuple[str, dict[str, Any]]:
     """One call on the tenant's own model (its Anthropic key or its own Bedrock). Returns
-    (text, usage); raises :class:`ModelError`."""
+    (text, usage); raises :class:`ModelError`. ``context``: a frozen pack, cached (#351);
+    a pack under the model's minimum cacheable prefix (512 tokens on Sonnet 5.5) is simply
+    not cached, with no error."""
     if target.model not in MODELS or MODELS[target.model]["provider"] != target.provider:
         raise ModelError(NO_ACCESS, "model not on the allow-list")
     if client is None:
         client = _client_for(target)
     kwargs: dict[str, Any] = {"max_tokens": max(int(max_tokens), MIN_MAX_TOKENS),
-                              "messages": _messages(prompt, history, images)}
+                              "messages": _messages(prompt, history, images, context)}
     if system:
         kwargs["system"] = system
     try:

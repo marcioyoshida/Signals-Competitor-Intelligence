@@ -42,7 +42,8 @@ def test_record_usage_zero_or_negative_is_a_noop():
 def test_get_usage_defaults_to_zero_for_unseen_tenant():
     t = _FakeUsageTable()
     usage = api_usage.get_usage("nobody-yet", table=t)
-    assert usage == {"period": usage["period"], "tokens_used": 0, "calls": 0, "overage_tokens": 0}
+    assert usage == {"period": usage["period"], "tokens_used": 0, "calls": 0, "overage_tokens": 0,
+                     "client_tokens": 0, "client_calls": 0}           # #353
 
 
 def test_usage_is_scoped_per_tenant():

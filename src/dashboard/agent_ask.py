@@ -1597,7 +1597,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             "in": usage.get("input_tokens", 0), "out": usage.get("output_tokens", 0),
             "history": len(history), "reason": result.get("reason"),
             "provider": usage.get("provider", "hosted"), "model": usage.get("model"),
-            "client_billed": bool(usage.get("client_billed"))}}))
+            "client_billed": bool(usage.get("client_billed")),
+            "cache_read": usage.get("cache_read", 0), "cache_write": usage.get("cache_write", 0)}}))
         # Coverage-gap loop (capture stage): an IN-DOMAIN question that produced no
         # grounded answer is a data gap — record it for triage/remediation. An
         # off-domain refusal is not a gap. Best-effort; never breaks the response.

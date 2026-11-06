@@ -800,7 +800,8 @@ def _act_model_status(args: dict[str, Any], actor: str) -> tuple[str, int, dict[
     conn = model_keys.connection(tenant)
     out: dict[str, Any] = {
         "connection": conn.public() if conn else None, "can_manage": manage,
-        "models": [{"model": k, "label": v["label"], "provider": v["provider"]}
+        "models": [{"model": k, "label": v["label"], "provider": v["provider"],
+                    "measured": bool(v.get("profile"))}      # #352
                    for k, v in cm.MODELS.items()],
         "default_model": cm.DEFAULT_MODEL, "acknowledgement": model_keys.ACKNOWLEDGEMENT,
         "acknowledgements": model_keys.ACKNOWLEDGEMENTS}

@@ -11,6 +11,11 @@ modules (owner decision 2026-11-02: 1M tokens per module per month). Past the qu
 call is still SERVED (ADR 025 rejects a hard cutoff; the per-key rate limit stays the abuse
 ceiling). The part of each call above the quota is ADDed to ``overage_tokens`` and the
 month's row is flagged ``overage = true``: that is what the Storefront usage reporter bills.
+
+#353 (BYOK): a call answered by the tenant's OWN model (client-billed) is recorded in separate
+counters, ``client_tokens``/``client_calls``. It never adds to ``tokens_used``, so it never
+draws the included quota or becomes overage: Onça didn't pay for those tokens. The counters keep
+it visible to cost reports and abuse review.
 """
 from __future__ import annotations
 
@@ -51,6 +56,24 @@ def overage_slice(used_after: int, tokens: int, quota: int) -> int:
     """How much of THIS call's ``tokens`` fell above the quota, given the atomic post-ADD total.
     Each concurrent call sees its own ``used_after``, so the slices add up exactly."""
     return max(0, min(int(tokens), int(used_after) - int(quota)))
+
+
+def record_client_usage(tenant_id: str, tokens: int, *, provider: str = "", model: str = "",
+                        table: Any | None = None) -> None:
+    """#353: meter a client-billed call (the tenant's own model) apart from the quota.
+    Best-effort, like :func:`record_usage`."""
+    if tokens <= 0:
+        return
+    try:
+        _table(table).update_item(
+            Key={"tenant_id": str(tenant_id), "period": _period()},
+            UpdateExpression="ADD client_tokens :t, client_calls :c SET updated_at = :u, "
+                             "client_provider = :p, client_model = :m",
+            ExpressionAttributeValues={
+                ":t": int(tokens), ":c": 1, ":p": str(provider or ""), ":m": str(model or ""),
+                ":u": datetime.datetime.now(datetime.timezone.utc).isoformat()})
+    except Exception as exc:  # pragma: no cover
+        print(f"Warning: record_client_usage failed: {type(exc).__name__}")
 
 
 def record_usage(tenant_id: str, tokens: int, *, quota: int | None = None,
@@ -105,6 +128,8 @@ def get_usage(tenant_id: str, period: str | None = None, *, table: Any | None = 
         "tokens_used": int((item or {}).get("tokens_used") or 0),
         "calls": int((item or {}).get("calls") or 0),
         "overage_tokens": int((item or {}).get("overage_tokens") or 0),
+        "client_tokens": int((item or {}).get("client_tokens") or 0),     # #353
+        "client_calls": int((item or {}).get("client_calls") or 0),
     }
 
 

@@ -106,6 +106,9 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # #305: past the included quota the answer is still served; the excess is marked overage.
     quota = api_usage.quota_for(cfg)
     metered = api_usage.record_usage(tenant_id, 0 if client_billed else total_tokens, quota=quota)
+    if client_billed:      # #353: visible to cost reports, never against the quota
+        api_usage.record_client_usage(tenant_id, total_tokens, provider=str(usage.get("provider") or ""),
+                                      model=str(usage.get("model") or ""))
     if metered is None:                  # nothing metered (no model call) or the write failed
         cur = api_usage.get_usage(tenant_id)
         metered = {"period": cur["period"], "tokens_used": cur["tokens_used"], "quota": quota,

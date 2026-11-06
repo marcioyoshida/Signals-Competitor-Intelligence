@@ -94,6 +94,7 @@ def converse(
     guardrail: dict[str, str] | None = None,
     guard_text: str | None = None,
     target: Any = None,
+    context: str | None = None,
 ) -> str | None:
     """Return assistant text or None if Bedrock is unavailable/denied.
 
@@ -119,15 +120,22 @@ def converse(
 
     ``target`` (#346, BYOK): a ``client_model.Target`` naming the tenant's own model. None or a
     hosted target runs this Bedrock path unchanged. A client target never falls back to hosted:
-    its failure returns None with ``usage_out["model_error"]`` set to a reader-facing code."""
+    its failure returns None with ``usage_out["model_error"]`` set to a reader-facing code.
+
+    ``context`` (#351): a frozen context pack sent before ``prompt``. On a client model it is
+    cached (``usage_out`` gets ``cache_read``/``cache_write``); on hosted Nova it is simply
+    sent as a separate text block ahead of the question (Nova is not cached here)."""
     if target is not None and not getattr(target, "hosted", True):
         return _converse_client(prompt, target=target, system=system, max_tokens=max_tokens,
                                 usage_out=usage_out, images=images, history=history,
-                                guardrail=guardrail, guard_text=guard_text)
+                                guardrail=guardrail, guard_text=guard_text, context=context)
     model_id = model_id or DEFAULT_SYNTH_MODEL
     try:
         client = boto3.client("bedrock-runtime")
-        content: list[dict[str, Any]] = guarded_content(prompt, guard_text if guardrail else None)
+        # The pack is its own block in front, so the guarded question is always found in the
+        # question text, never inside the pack (#351).
+        content: list[dict[str, Any]] = ([{"text": context}] if context else []) + guarded_content(
+            prompt, guard_text if guardrail else None)
         for img in images or []:
             content.append({"image": {"format": "png", "source": {"bytes": img}}})
         prior: list[dict[str, Any]] = []
@@ -176,7 +184,7 @@ def converse(
 def _converse_client(prompt: str, *, target: Any, system: str | None, max_tokens: int,
                      usage_out: dict[str, Any] | None, images: list[bytes] | None,
                      history: list[dict[str, str]] | None, guardrail: dict[str, str] | None,
-                     guard_text: str | None) -> str | None:
+                     guard_text: str | None, context: str | None = None) -> str | None:
     """#346: one call on the tenant's own model. Same return contract as the hosted path (text or
     None); the reason for a None is in ``usage_out``: ``guardrail = "intervened"`` (#349 parity,
     standalone ApplyGuardrail on the question and on the answer) or ``model_error = <code>``."""
@@ -191,7 +199,7 @@ def _converse_client(prompt: str, *, target: Any, system: str | None, max_tokens
             return None
     try:
         text, used = cm.anthropic_converse(target, prompt, system=system, max_tokens=max_tokens,
-                                           history=history, images=images)
+                                           history=history, images=images, context=context)
     except cm.ModelError as exc:
         usage["model_error"] = exc.code
         # The code only: never the tenant, the key or the prompt.

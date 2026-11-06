@@ -174,8 +174,25 @@ stays the default for trials. Stories #346–#353.
     inference only, on the allowed model.
   - Region caveat: in `sa-east-1` Claude on Bedrock is global routing only, so in-country
     processing is not available there today. The drawer says so.
-- Status 2026-11-06: #346–#348 are live. #350 is built; its live check needs a pilot's AWS
-  account, because Onça's own account is rejected as a client account.
+- **Prompt caching (#351).** `converse(context=…)` takes a frozen context pack. On a client
+  model the pack is the first block of the final user turn, with a cache breakpoint after it.
+  Calls reuse the system + pack prefix, and only the question after it changes. The pack is
+  never part of `system`, because it is retrieved data, not operator instructions. On hosted
+  Nova the pack is sent as its own block ahead of the question, so the guarded question is never
+  matched inside the pack. Ask does not use this. Its system prompt (~300 tokens) is under Sonnet
+  5.5's 512-token minimum and the grounding changes per question, so caching would only add the
+  write premium. The first user is `board_brief` (#321). `usage_out` and `ask_usage` carry
+  `cache_read`/`cache_write`.
+- **Measure before connecting (#352).** `config/model_eval_bar.json` fixes the pass bar before
+  any run. `scripts/model_eval.py` runs the Ask regression and the guardrail probes on a QA
+  tenant connected to the model under test. It refuses a tenant that answers on hosted Nova and
+  writes `eval/model-profiles/<model>-<date>.json`. Each `MODELS` entry carries `profile` (None
+  until measured), and `model_status` reports `measured`.
+- **Client-billed metering (#353).** The agent API records client-billed calls in
+  `client_tokens`/`client_calls` (with provider and model) on the usage row. They never add to
+  `tokens_used`, so they never draw the quota or overage. The board spend gate is part of #329.
+- Status 2026-11-06: #346–#348 and #350 are live. #350's live check needs a pilot's AWS
+  account, because Onça's own account is rejected as a client account. #351–#353 are built.
 
 ### Evaluation harness
 

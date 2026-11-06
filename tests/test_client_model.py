@@ -295,9 +295,14 @@ def test_agent_api_answers_on_the_client_model_without_drawing_the_quota(monkeyp
     monkeypatch.setattr(api_usage, "record_usage",
                         lambda tenant_id, tokens, quota=None, table=None: drawn.append(tokens) or None)
     monkeypatch.setattr(api_usage, "get_usage", lambda t: {"period": "2026-11", "tokens_used": 0})
+    client = []
+    monkeypatch.setattr(api_usage, "record_client_usage",
+                        lambda tenant_id, tokens, **k: client.append((tenant_id, tokens, k)))
 
     body = json.loads(aapi.lambda_handler(
         {"headers": {"authorization": "Bearer sk_onca_x"}, "body": json.dumps({"q": "hi"})}, None)["body"])
     assert seen["tenant"] == "acme" and drawn == [0]
+    # #353: metered apart from the quota, with the provider and the model that served
+    assert client == [("acme", 46, {"provider": cm.ANTHROPIC_KEY, "model": T.model})]
     assert body["usage"]["total_tokens"] == 46 and body["usage"]["client_billed"] is True
     assert body["usage"]["provider"] == cm.ANTHROPIC_KEY
