@@ -321,6 +321,25 @@ append-only pile. A clean ADR-006 follow-up when picked up.
   - they are on-signal only for **current_strategy** and **capabilities**. Any other corner drops radar ids, even with `ONCA_FRAMEWORK_SIGNAL_GATE=0`;
   - they never make an entity eligible, because `MIN_EVIDENCE` counts narratives only;
   - the LLM prompt reads the event's change text transiently. The proposal keeps the radar id plus a label-only `radar_evidence` line ("Itaú — lançamento (YouTube oficial, 04/11/2026)"), which the vetting queue shows next to confidence.
-  - On 11-08, 130 entities already had pending Four Corners proposals, including 6 of the 7 radar entities. So radar evidence appears only as those proposals are vetted and entities re-enter the queue.
+  - On 11-08, 130 entities already had Four Corners proposals, including 6 of the 7 radar entities. *Corrected the same day:* drafted entities never re-enter the queue (`proposed_entities` includes approved proposals), so as built this path was inert. The next addendum adds the refresh.
 - **Radar-backed cards never count as own-track evidence.** Ansoff, BCG, Four Corners, PESTLE, Porter and 7S skip narratives flagged `radar_backed` when grouping by entity. The first such card is the product-cadence comparative card (ADR 003 addendum, #374). This keeps the #32 own-track rule intact.
-- Ansoff's own radar wiring is still #369. The retention design it asked for is settled as option (a): id plus labels only.
+- Ansoff's own radar wiring is #369 (next addendum). The retention design it asked for is settled as option (a): id plus labels only.
+
+## Addendum — Ansoff radar evidence and the radar refresh (2026-11-08, #369 #373)
+
+- **Ansoff (#369).** It receives the same confirmed `launch`/`feature` events as Four Corners, through the shared `radar_evidence.evidence_items`: axis `product_radar`, score 0.3, at most 4 items (`ONCA_ANSOFF_MAX_RADAR`).
+  - They are on-signal only for **product_dev** (`DIM_SIGNALS["product_dev"]` axis set). Penetration, market development and diversification drop radar ids, even with the signal gate off.
+  - They never make an entity eligible.
+  - The proposal keeps the radar id plus a label-only `radar_evidence` line. `narrative_id` prefers a narrative id.
+  - Approved bullets copy only `evidence` ids into `swot/curated.json` (`curate._curated_bullet`), so nothing from YouTube is persisted.
+- **Why a refresh was needed.** Ansoff and Four Corners draft an entity **once**: `proposed_entities` includes approved proposals.
+  - All six confirmed-radar entities that have narratives (btg, c6, itau, nubank, picpay, santander) were drafted on 08-23/24.
+  - Neon has no narratives in the 90-day window.
+  - So radar evidence could never reach a draft. The first scheduled run on 11-08 09:45Z confirmed it: 0 errors and 0 radar-backed proposals.
+- **Refresh (`radar_evidence.refresh_entities`).** An already-drafted entity is re-admitted when both hold:
+  - its newest proposal (or its last refresh attempt) is at least `ONCA_RADAR_REFRESH_MIN_AGE_DAYS` old (60);
+  - a confirmed launch or feature is dated after it.
+  Entities are ordered newest launch first, at most `ONCA_RADAR_REFRESH_MAX` per run (2). Each attempt is recorded under `radar_refreshed` in the proposals document, so a redraft that yields nothing does not repeat every run. Eligibility is otherwise unchanged: a refreshed entity still needs `MIN_EVIDENCE` narratives.
+- **Off by default (`ONCA_RADAR_REFRESH=1` to enable).** Each refresh costs one LLM draft, and Bedrock spend is reserved for paying clients, so this is an owner decision.
+  - The 11-08 dry run, read-only on live data, would refresh the same six entities in both frameworks: santander, nubank, itau, btg, picpay, c6.
+  - That is about 12 drafts once, spread over the day's runs at 2 per framework per run, then none for an entity until 60 days pass or the radar sees a newer launch.

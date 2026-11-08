@@ -117,3 +117,72 @@ def prompt_claim(ev: dict[str, Any]) -> str:
     title = str(ev.get("title") or "").strip()
     return f"{claim(ev)}: {title[:120]}" if title else claim(ev)
 
+
+RADAR_AXIS = "product_radar"
+
+
+def evidence_items(events: list[dict[str, Any]], *, limit: int, score: float) -> list[dict[str, Any]]:
+    """Confirmed radar events as a framework's evidence items (#369, #373).
+
+    ``claim`` carries the change text for the PROMPT only (transient); proposals persist
+    just the radar id plus the label-only ``radar_label`` (see ``framework_radar_refs``)."""
+    return [{"id": ev["id"], "claim": prompt_claim(ev), "date": ev.get("date"),
+             "axis": RADAR_AXIS, "lenses": ["produto"], "threat_score": score,
+             "radar_label": claim(ev)} for ev in events[:limit]]
+
+
+# --- Re-analysis of already-proposed entities (#369/#373) -------------------------------
+# Ansoff and Four Corners draft an entity ONCE (`proposed_entities` includes approved
+# proposals), and every confirmed-radar entity was drafted in Aug 2026 — so radar evidence
+# alone could never reach them. A refresh re-admits an entity when a confirmed launch /
+# feature is newer than its newest proposal AND that proposal is old. It costs one LLM draft
+# per refreshed entity, so it is OFF unless ``ONCA_RADAR_REFRESH=1`` (owner decision).
+REFRESH_KEY = "radar_refreshed"
+
+
+def refresh_enabled() -> bool:
+    return os.environ.get("ONCA_RADAR_REFRESH", "0") in ("1", "true", "True")
+
+
+def _age_days(as_of: str, d: str) -> int:
+    import datetime as dt
+    try:
+        return (dt.date.fromisoformat(as_of[:10]) - dt.date.fromisoformat(str(d)[:10])).days
+    except ValueError:
+        return -1
+
+
+def refresh_entities(store: dict[str, Any], radar_events: list[dict[str, Any]], *, as_of: str,
+                     min_age_days: int | None = None, max_n: int | None = None) -> list[str]:
+    """Entities a framework may draft again because the radar saw them ship something new.
+
+    ``store`` is the framework's proposals document. An entity qualifies when it already has
+    a proposal, its newest proposal (or prior refresh attempt, ``store[REFRESH_KEY]``) is at
+    least ``min_age_days`` old, and a confirmed launch/feature is dated after it. Newest
+    radar activity first, at most ``max_n``. Pure."""
+    min_age = int(os.environ.get("ONCA_RADAR_REFRESH_MIN_AGE_DAYS", "60")) if min_age_days is None else min_age_days
+    cap = int(os.environ.get("ONCA_RADAR_REFRESH_MAX", "2")) if max_n is None else max_n
+    newest: dict[str, str] = {}
+    for p in (store or {}).get("proposals") or []:
+        ent, d = p.get("entity"), str(p.get("created") or p.get("date") or "")[:10]
+        if ent and d and d > newest.get(ent, ""):
+            newest[ent] = d
+    for ent, d in ((store or {}).get(REFRESH_KEY) or {}).items():
+        if ent in newest and str(d)[:10] > newest[ent]:
+            newest[ent] = str(d)[:10]
+    latest_launch: dict[str, str] = {}
+    for ev in confirmed_events({"events": radar_events or []}, types=PRODUCT_TYPES):
+        ent, d = ev["entity"], str(ev["date"])[:10]
+        if ent in newest and d > newest[ent] and _age_days(as_of, newest[ent]) >= min_age:
+            latest_launch[ent] = max(d, latest_launch.get(ent, ""))
+    return [e for e, _ in sorted(latest_launch.items(), key=lambda x: (x[1], x[0]), reverse=True)][:cap]
+
+
+def mark_refreshed(store: dict[str, Any], entities: list[str], as_of: str) -> dict[str, Any]:
+    """The ``REFRESH_KEY`` map with this run's refresh attempts recorded, so an entity whose
+    redraft yields nothing is not re-drafted every run (the min-age clock restarts)."""
+    out = dict((store or {}).get(REFRESH_KEY) or {})
+    for e in entities:
+        out[e] = as_of[:10]
+    return out
+

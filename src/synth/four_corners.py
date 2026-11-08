@@ -43,7 +43,7 @@ from src.synth.framework_common import fz
 # ADR #34 — per-dimension evidence binding (axis OR lens). See framework_common.
 # #373: confirmed CPO-radar launches/features are evidence for what the competitor is doing
 # (current_strategy) and can ship (capabilities) — and nowhere else.
-RADAR_AXIS = "product_radar"
+RADAR_AXIS = radar_evidence.RADAR_AXIS
 RADAR_CORNERS = frozenset({"current_strategy", "capabilities"})
 MAX_RADAR_EVIDENCE = int(os.environ.get("ONCA_FOUR_CORNERS_MAX_RADAR", "4"))
 RADAR_SCORE = 0.3  # never outranks CVM/regulatory evidence
@@ -114,16 +114,9 @@ def _collect_evidence_ids(narratives: list[dict[str, Any]], *, max_claims: int |
 
 
 def radar_evidence_items(events: list[dict[str, Any]], *, limit: int = MAX_RADAR_EVIDENCE) -> list[dict[str, Any]]:
-    """#373: confirmed launch/feature radar events as Four Corners evidence items.
-
-    The ``claim`` carries the event's change text for the PROMPT only (transient); the
-    proposal persists just the radar id plus a label-only ``radar_evidence`` entry."""
-    out = []
-    for ev in events[:limit]:
-        out.append({"id": ev["id"], "claim": radar_evidence.prompt_claim(ev), "date": ev.get("date"),
-                    "axis": RADAR_AXIS, "lenses": ["produto"], "threat_score": RADAR_SCORE,
-                    "radar_label": radar_evidence.claim(ev)})
-    return out
+    """#373: confirmed launch/feature radar events as Four Corners evidence items (the
+    shared projection in ``radar_evidence.evidence_items``; prompt-only change text)."""
+    return radar_evidence.evidence_items(events, limit=limit, score=RADAR_SCORE)
 
 
 def eligible_entities(
@@ -348,15 +341,20 @@ def proposed_entities(bucket: str, *, s3: Any) -> frozenset[str]:
 
 
 def publish(
-    proposals: list[dict[str, Any]], bucket: str, *, s3: Any, as_of: str
+    proposals: list[dict[str, Any]], bucket: str, *, s3: Any, as_of: str,
+    refreshed: list[str] | None = None,
 ) -> dict[str, int]:
-    prev = _load_json(bucket, FOUR_CORNERS_PROPOSALS_KEY, s3).get("proposals", [])
+    doc = _load_json(bucket, FOUR_CORNERS_PROPOSALS_KEY, s3)
+    prev = doc.get("proposals", [])
     merged = swot_reconcile.merge_proposals(prev, proposals)
     now = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
+    out = {"generated_at": now, "as_of": as_of, "proposals": merged}
+    marks = radar_evidence.mark_refreshed(doc, refreshed or [], as_of)
+    if marks:
+        out[radar_evidence.REFRESH_KEY] = marks
     s3.put_object(
         Bucket=bucket, Key=FOUR_CORNERS_PROPOSALS_KEY,
-        Body=json.dumps({"generated_at": now, "as_of": as_of,
-                         "proposals": merged}, ensure_ascii=False).encode("utf-8"),
+        Body=json.dumps(out, ensure_ascii=False).encode("utf-8"),
         ContentType="application/json", CacheControl="no-cache",
     )
     return {
@@ -382,7 +380,13 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     entity_keys = set((index.get("entities") or {}).keys())
     beliefs = swot_reconcile.load_beliefs(digests_bucket, entity_keys, s3=s3)
     narratives = feature_store.load_history(digests_bucket, window, s3=s3)
-    already = proposed_entities(digests_bucket, s3=s3)
+    prior_store = _load_json(digests_bucket, FOUR_CORNERS_PROPOSALS_KEY, s3)
+    already = frozenset(p.get("entity") for p in prior_store.get("proposals", []) if p.get("entity"))
+    radar_events = radar_evidence.confirmed_events(radar_evidence.load(digests_bucket, s3=s3),
+                                                   types=radar_evidence.PRODUCT_TYPES)
+    # #369/#373: re-admit an already-drafted entity the radar saw ship something new (opt-in)
+    refreshed = (radar_evidence.refresh_entities(prior_store, radar_events, as_of=run_date)
+                 if radar_evidence.refresh_enabled() else [])
 
     try:
         from src.synth.entity_registry import entity_industry_map
@@ -393,15 +397,14 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     proposals = analyze_corners(
         beliefs, narratives, industries_map,
         run_date=run_date, draft_fn=llm_draft,
-        already_proposed=already,
+        already_proposed=already - set(refreshed),
         financial_ctx_by_ent=framework_common.financial_context_map(digests_bucket, s3=s3),
-        radar_events=radar_evidence.confirmed_events(radar_evidence.load(digests_bucket, s3=s3),
-                                                     types=radar_evidence.PRODUCT_TYPES),
+        radar_events=radar_events,
     )
 
     counts = {"proposals": 0, "proposals_new": 0, "proposals_pending": 0}
     try:
-        counts = publish(proposals, digests_bucket, s3=s3, as_of=run_date)
+        counts = publish(proposals, digests_bucket, s3=s3, as_of=run_date, refreshed=refreshed)
     except Exception as exc:
         print(f"Warning: Four Corners publish failed: {exc}")
 
@@ -412,6 +415,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             "as_of": run_date,
             "entities_eligible": len(entity_keys),
             "already_proposed": len(already),
+            "radar_refreshed": refreshed,
             "proposals_found": len(proposals),
             "run_at": run_at_now(),
             **counts,

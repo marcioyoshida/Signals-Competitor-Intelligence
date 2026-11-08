@@ -829,7 +829,7 @@ function queueItems() {
       target: p.target_text, infer: true,
       meta: [p.kind === "stale" ? `sem corroboração há ${p.days_stale} dias`
              : `confiança ${Math.round((p.confidence || 0) * 100)}%`, U.fmtDate(p.date),
-             // #373: radar-backed evidence shows its source + confidence (label-only)
+             // #369/#373: radar-backed evidence shows its source + confidence (label-only)
              (p.radar_evidence || []).length ? "radar: " + p.radar_evidence.map(r => r.label).join("; ") : ""] });
   });
   (DATA.graph_proposals || []).forEach(p => {

@@ -30,7 +30,7 @@ from typing import Any, Callable
 
 import boto3
 
-from src.synth import feature_store, swot_reconcile, swot_store
+from src.synth import feature_store, radar_evidence, swot_reconcile, swot_store
 from src.synth.bedrock_llm import FRAMEWORK_MODEL, converse
 from src.synth.synthesize import ENTITY_LABELS, run_at_now, run_date_today
 
@@ -42,10 +42,17 @@ from src.synth import framework_common
 from src.synth.framework_common import fz
 
 # ADR #34 — per-dimension evidence binding (axis OR lens). See framework_common.
+# #369: confirmed CPO-radar launches/features (official channel or >= 2 channels) are
+# evidence for product development — and for no other vector.
+RADAR_AXIS = radar_evidence.RADAR_AXIS
+RADAR_VECTORS = frozenset({"product_dev"})
+MAX_RADAR_EVIDENCE = int(os.environ.get("ONCA_ANSOFF_MAX_RADAR", "4"))
+RADAR_SCORE = 0.3  # never outranks CVM/regulatory evidence
+
 DIM_SIGNALS = {
     "penetration":     (fz("comparative"), fz("market", "pix")),
     "market_dev":      (fz(),              fz("entrants", "news")),
-    "product_dev":     (fz(),              fz("ofertas", "fatos", "pix")),
+    "product_dev":     (fz(RADAR_AXIS),    fz("ofertas", "fatos", "pix")),
     "diversification": (fz("ecosystem"),   fz("fatos")),
 }
 
@@ -241,8 +248,16 @@ def classify_moves(
     max_entities: int = MAX_ENTITIES,
     min_conf: float = MIN_CONF,
     min_evidence: int = MIN_EVIDENCE,
+    radar_events: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    """Pure: beliefs + narratives -> Ansoff proposals. No I/O."""
+    """Pure: beliefs + narratives (+ #369 confirmed radar launches) -> Ansoff proposals.
+
+    Radar evidence never makes an entity eligible (``eligible_entities`` counts narratives
+    only) and can only support a product_dev move. No I/O."""
+    radar_by_ent: dict[str, list[dict[str, Any]]] = {}
+    for ev in radar_evidence.confirmed_events({"events": radar_events or []},
+                                              types=radar_evidence.PRODUCT_TYPES):
+        radar_by_ent.setdefault(ev["entity"], []).append(ev)
     by_ent: dict[str, list[dict[str, Any]]] = {}
     for n in narratives:
         # #374: a radar-backed derived card never counts as own-track evidence (MIN_EVIDENCE)
@@ -261,6 +276,9 @@ def classify_moves(
         label = belief.get("label") or _entity_label(ent)
         swot_bullets = _active_swot(belief)
         evidence = _collect_evidence_ids(by_ent.get(ent, []))
+        evidence += radar_evidence.evidence_items(radar_by_ent.get(ent, []),
+                                                  limit=MAX_RADAR_EVIDENCE, score=RADAR_SCORE)
+        radar_ids = {e["id"]: e["radar_label"] for e in evidence if e.get("axis") == RADAR_AXIS}
         industries = industries_map.get(ent, [])
 
         _fctx = (financial_ctx_by_ent or {}).get(ent)
@@ -272,6 +290,8 @@ def classify_moves(
             if mv["confidence"] < min_conf:
                 continue
             ev_ids = framework_common.on_signal_ids(mv["evidence"], evidence, mv["vector"], DIM_SIGNALS)
+            if mv["vector"] not in RADAR_VECTORS:  # holds even with the signal gate switched off
+                ev_ids = [i for i in ev_ids if i not in radar_ids]
             if not ev_ids:
                 continue
             proposals.append({
@@ -285,7 +305,9 @@ def classify_moves(
                 "target_text": None,
                 "text": mv["text"],
                 "evidence": ev_ids,
-                "narrative_id": ev_ids[0] if ev_ids else None,
+                # #369: label-only source line for radar evidence (vetting UI); no YouTube data.
+                "radar_evidence": [{"id": i, "label": radar_ids[i]} for i in ev_ids if i in radar_ids],
+                "narrative_id": next((i for i in ev_ids if i not in radar_ids), ev_ids[0]),
                 "date": run_date,
                 "confidence": round(mv["confidence"], 2),
                 "stance_conf": round(mv["confidence"], 2),
@@ -309,15 +331,20 @@ def proposed_entities(bucket: str, *, s3: Any) -> frozenset[str]:
 
 
 def publish(
-    proposals: list[dict[str, Any]], bucket: str, *, s3: Any, as_of: str
+    proposals: list[dict[str, Any]], bucket: str, *, s3: Any, as_of: str,
+    refreshed: list[str] | None = None,
 ) -> dict[str, int]:
-    prev = _load_json(bucket, ANSOFF_PROPOSALS_KEY, s3).get("proposals", [])
+    doc = _load_json(bucket, ANSOFF_PROPOSALS_KEY, s3)
+    prev = doc.get("proposals", [])
     merged = swot_reconcile.merge_proposals(prev, proposals)
     now = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
+    out = {"generated_at": now, "as_of": as_of, "proposals": merged}
+    marks = radar_evidence.mark_refreshed(doc, refreshed or [], as_of)
+    if marks:
+        out[radar_evidence.REFRESH_KEY] = marks
     s3.put_object(
         Bucket=bucket, Key=ANSOFF_PROPOSALS_KEY,
-        Body=json.dumps({"generated_at": now, "as_of": as_of,
-                         "proposals": merged}, ensure_ascii=False).encode("utf-8"),
+        Body=json.dumps(out, ensure_ascii=False).encode("utf-8"),
         ContentType="application/json", CacheControl="no-cache",
     )
     return {
@@ -343,7 +370,13 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     entity_keys = set((index.get("entities") or {}).keys())
     beliefs = swot_reconcile.load_beliefs(digests_bucket, entity_keys, s3=s3)
     narratives = feature_store.load_history(digests_bucket, window, s3=s3)
-    already = proposed_entities(digests_bucket, s3=s3)
+    prior_store = _load_json(digests_bucket, ANSOFF_PROPOSALS_KEY, s3)
+    already = frozenset(p.get("entity") for p in prior_store.get("proposals", []) if p.get("entity"))
+    radar_events = radar_evidence.confirmed_events(radar_evidence.load(digests_bucket, s3=s3),
+                                                   types=radar_evidence.PRODUCT_TYPES)
+    # #369: re-admit an already-drafted entity the radar saw ship something new (opt-in)
+    refreshed = (radar_evidence.refresh_entities(prior_store, radar_events, as_of=run_date)
+                 if radar_evidence.refresh_enabled() else [])
 
     try:
         from src.synth.entity_registry import entity_industry_map
@@ -354,13 +387,14 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     proposals = classify_moves(
         beliefs, narratives, industries_map,
         run_date=run_date, draft_fn=llm_draft,
-        already_proposed=already,
+        already_proposed=already - set(refreshed),
         financial_ctx_by_ent=framework_common.financial_context_map(digests_bucket, s3=s3),
+        radar_events=radar_events,
     )
 
     counts = {"proposals": 0, "proposals_new": 0, "proposals_pending": 0}
     try:
-        counts = publish(proposals, digests_bucket, s3=s3, as_of=run_date)
+        counts = publish(proposals, digests_bucket, s3=s3, as_of=run_date, refreshed=refreshed)
     except Exception as exc:
         print(f"Warning: Ansoff publish failed: {exc}")
 
@@ -371,6 +405,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             "as_of": run_date,
             "entities_eligible": len(entity_keys),
             "already_proposed": len(already),
+            "radar_refreshed": refreshed,
             "proposals_found": len(proposals),
             "run_at": run_at_now(),
             **counts,

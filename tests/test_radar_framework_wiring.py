@@ -346,3 +346,155 @@ def test_threat_history_mean_skips_radar_backed_cards():
     out = feed_builder._attach_threat_history({"itau": {}}, hist, {})
     h = out["itau"][feed_builder.THREAT_HISTORY_KEY]
     assert h["n"] == 1 and h["mean"] == 40.0
+
+
+# --- #369 Ansoff product_dev ------------------------------------------------------------------
+def _draft_vectors_cite_radar(label, industries, swot_bullets, evidence, **_):
+    radar_i = [i for i, e in enumerate(evidence) if e["id"].startswith("radar:")]
+    assert all("Pix parcelado" in evidence[i]["claim"] for i in radar_i)  # prompt sees the change
+    return [{"vector": v, "text": f"{label} {v}.", "confidence": 0.8, "evidence": radar_i}
+            for v in ansoff.DIMENSIONS]
+
+
+def test_ansoff_radar_only_supports_product_dev(monkeypatch):
+    monkeypatch.setenv("ONCA_FRAMEWORK_SIGNAL_GATE", "0")  # holds even with the gate off
+    out = ansoff.classify_moves({}, _fc_narr("itau", 3), {}, run_date=AS_OF,
+                                draft_fn=_draft_vectors_cite_radar, radar_events=[_ev("itau")])
+    assert [p["dimension"] for p in out] == ["product_dev"]
+    p = out[0]
+    assert p["evidence"] == ["radar:itau-launch-2026-11-05"]
+    assert p["narrative_id"] == "radar:itau-launch-2026-11-05"
+    assert p["radar_evidence"] == [{"id": "radar:itau-launch-2026-11-05",
+                                    "label": "Itau — lançamento (YouTube oficial, 05/11/2026)"}]
+    _no_youtube_data(p)
+
+
+def test_ansoff_radar_passes_the_signal_gate_for_product_dev_only():
+    out = ansoff.classify_moves({}, _fc_narr("itau", 3), {}, run_date=AS_OF,
+                                draft_fn=_draft_vectors_cite_radar, radar_events=[_ev("itau")])
+    assert [p["dimension"] for p in out] == ["product_dev"]
+
+
+def test_ansoff_mixed_evidence_prefers_a_narrative_as_narrative_id():
+    def _draft(label, industries, swot_bullets, evidence, **_):
+        return [{"vector": "product_dev", "text": "x.", "confidence": 0.8,
+                 "evidence": list(range(len(evidence)))[::-1]}]
+    out = ansoff.classify_moves({}, _fc_narr("itau", 3), {}, run_date=AS_OF, draft_fn=_draft,
+                                radar_events=[_ev("itau")])
+    assert out[0]["evidence"][0].startswith("radar:")
+    assert not out[0]["narrative_id"].startswith("radar:")
+
+
+def test_ansoff_radar_never_makes_an_entity_eligible_and_drops_unconfirmed():
+    many = [_ev("itau", date=d) for d in ("2026-11-01", "2026-11-02", "2026-11-03")]
+    assert ansoff.classify_moves({}, _fc_narr("itau", 2), {}, run_date=AS_OF,
+                                 draft_fn=_draft_vectors_cite_radar, radar_events=many) == []
+    seen = {}
+
+    def _spy(label, industries, swot_bullets, evidence, **_):
+        seen["ids"] = [e["id"] for e in evidence]
+        return []
+    ansoff.classify_moves({}, _fc_narr("itau", 3), {}, run_date=AS_OF, draft_fn=_spy,
+                          radar_events=[_ev("itau", conf="criador único"),
+                                        _ev("itau", "price", eid="radar:p"),
+                                        _ev("itau", conf="corroborado", n_ch=3, eid="radar:c")])
+    assert [i for i in seen["ids"] if i.startswith("radar:")] == ["radar:c"]
+
+
+def test_ansoff_without_radar_unchanged():
+    def _draft(label, industries, swot_bullets, evidence, **_):
+        return [{"vector": "product_dev", "text": "x.", "confidence": 0.8, "evidence": [0]}]
+    out = ansoff.classify_moves({}, _fc_narr("itau", 3), {}, run_date=AS_OF, draft_fn=_draft)
+    assert out[0]["radar_evidence"] == [] and out[0]["narrative_id"] == out[0]["evidence"][0]
+
+
+# --- #369/#373 refresh of already-drafted entities ------------------------------------------------
+def _store(created_by_ent, marks=None):
+    doc = {"proposals": [{"id": f"p-{e}", "entity": e, "created": d, "status": "approved"}
+                         for e, d in created_by_ent.items()]}
+    if marks:
+        doc[radar_evidence.REFRESH_KEY] = marks
+    return doc
+
+
+def test_refresh_needs_old_proposal_and_newer_confirmed_launch():
+    store = _store({"itau": "2026-08-23", "nubank": "2026-10-20", "btg": "2026-08-23",
+                    "c6": "2026-08-24"})
+    evs = [_ev("itau", date="2026-11-05"), _ev("nubank", date="2026-11-06"),
+           _ev("btg", conf="criador único"), _ev("neon"), _ev("c6", "outage")]
+    # nubank too recent; btg single-creator; neon never drafted (normal path); c6 not a launch
+    assert radar_evidence.refresh_entities(store, evs, as_of=AS_OF, min_age_days=60, max_n=2) == ["itau"]
+
+
+def test_refresh_orders_by_newest_launch_caps_and_respects_prior_attempts():
+    store = _store({"itau": "2026-08-23", "btg": "2026-08-23", "c6": "2026-08-24"},
+                   marks={"c6": "2026-10-30"})
+    evs = [_ev("itau", date="2026-11-03"), _ev("btg", date="2026-11-06"), _ev("c6", date="2026-11-07")]
+    assert radar_evidence.refresh_entities(store, evs, as_of=AS_OF, min_age_days=60, max_n=2) == ["btg", "itau"]
+    assert radar_evidence.refresh_entities(store, evs, as_of=AS_OF, min_age_days=60, max_n=1) == ["btg"]
+    marks = radar_evidence.mark_refreshed(store, ["btg"], AS_OF)
+    assert marks == {"c6": "2026-10-30", "btg": AS_OF}
+    store[radar_evidence.REFRESH_KEY] = marks
+    assert radar_evidence.refresh_entities(store, evs, as_of=AS_OF, min_age_days=60, max_n=2) == ["itau"]
+
+
+def test_refresh_off_by_default(monkeypatch):
+    monkeypatch.delenv("ONCA_RADAR_REFRESH", raising=False)
+    assert radar_evidence.refresh_enabled() is False
+    monkeypatch.setenv("ONCA_RADAR_REFRESH", "1")
+    assert radar_evidence.refresh_enabled() is True
+
+
+def _handler_env(monkeypatch, mod, key, prior):
+    puts = {}
+
+    class _Body:
+        def __init__(self, b):
+            self.b = b
+
+        def read(self):
+            return self.b
+
+    class _S3:
+        def get_object(self, Bucket, Key):
+            if Key == key:
+                return {"Body": _Body(json.dumps(prior).encode())}
+            raise KeyError(Key)
+
+        def put_object(self, Bucket, Key, Body, **kw):
+            puts[Key] = json.loads(Body)
+
+    drafted = []
+
+    def _draft(label, industries, swot_bullets, evidence, **_):
+        drafted.append(label)
+        return []
+    monkeypatch.setenv("ONCA_DIGESTS_BUCKET", "b")
+    monkeypatch.setattr(mod.boto3, "client", lambda *_: _S3())
+    monkeypatch.setattr(mod.feature_store, "load_history", lambda *a, **k: _fc_narr("itau", 3))
+    monkeypatch.setattr(mod.swot_reconcile, "load_beliefs", lambda *a, **k: {})
+    monkeypatch.setattr(mod.framework_common, "financial_context_map", lambda *a, **k: {})
+    monkeypatch.setattr(mod, "llm_draft", _draft)
+    monkeypatch.setattr(mod, "run_date_today", lambda: AS_OF)
+    from src.synth import entity_registry
+    monkeypatch.setattr(entity_registry, "entity_industry_map", lambda *a, **k: {})  # no live table
+    monkeypatch.setattr(radar_evidence, "load", lambda *a, **k: _radar([_ev("itau")]))
+    return puts, drafted
+
+
+def test_handlers_redraft_refreshed_entity_only_when_enabled(monkeypatch):
+    for mod, key in ((ansoff, ansoff.ANSOFF_PROPOSALS_KEY),
+                     (four_corners, four_corners.FOUR_CORNERS_PROPOSALS_KEY)):
+        prior = _store({"itau": "2026-08-23"})
+        monkeypatch.delenv("ONCA_RADAR_REFRESH", raising=False)
+        puts, drafted = _handler_env(monkeypatch, mod, key, prior)
+        body = json.loads(mod.lambda_handler({}, None)["body"])
+        assert drafted == [] and body["radar_refreshed"] == []
+        assert radar_evidence.REFRESH_KEY not in puts[key]
+
+        monkeypatch.setenv("ONCA_RADAR_REFRESH", "1")
+        puts, drafted = _handler_env(monkeypatch, mod, key, prior)
+        body = json.loads(mod.lambda_handler({}, None)["body"])
+        assert len(drafted) == 1 and body["radar_refreshed"] == ["itau"], mod.__name__
+        assert puts[key][radar_evidence.REFRESH_KEY] == {"itau": AS_OF}
+        assert puts[key]["proposals"] == prior["proposals"]  # nothing new, history kept
