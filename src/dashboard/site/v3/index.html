@@ -138,7 +138,28 @@
   .sc-lbl { fill:var(--ink-2); font-size:11px; font-variant-numeric:tabular-nums;
     paint-order:stroke; stroke:var(--surface); stroke-width:3px; stroke-linejoin:round; }
   .sc-lbl-lead { stroke:var(--border-2); stroke-width:1; }
-  .sc-whisker { stroke-width:1.75; stroke-linecap:round; }
+  .scatter { position:relative; }
+  .scatter svg.sc-zoomed { touch-action:none; cursor:grab; }
+  .scatter svg.sc-zoomed:active { cursor:grabbing; }
+  .sc-bg { fill:transparent; }
+  .sc-tgrid { stroke:var(--border-2); stroke-width:.5; opacity:.55; }
+  .sc-tick { fill:var(--muted); font-size:10px; font-variant-numeric:tabular-nums; }
+  .sc-cross line { stroke:var(--ink-2); stroke-width:.8; stroke-dasharray:3 2; pointer-events:none; }
+  .sc-cross rect { fill:var(--ink); pointer-events:none; }
+  .sc-cross text { fill:var(--surface); font-size:10px; font-weight:600; font-variant-numeric:tabular-nums; pointer-events:none; }
+  .sc-tools { display:flex; align-items:center; justify-content:flex-end; gap:6px; margin-bottom:var(--s2); }
+  .sc-hint { font-size:var(--fs-micro); color:var(--muted); margin-right:auto; }
+  .sc-btn { min-width:30px; height:28px; padding:0 10px; border:1px solid var(--border); border-radius:6px;
+    background:var(--surface); color:var(--ink); font:inherit; font-size:var(--fs-sm); cursor:pointer; }
+  .sc-btn:hover:not(:disabled) { border-color:var(--ink-2); }
+  .sc-btn:disabled { opacity:.45; cursor:default; }
+  .sc-tip { position:absolute; z-index:5; pointer-events:none; display:flex; flex-direction:column; gap:2px;
+    min-width:190px; max-width:260px; padding:8px 10px; background:var(--surface); color:var(--ink-2);
+    border:1px solid var(--border); border-radius:8px; box-shadow:var(--shadow-1); font-size:var(--fs-sm);
+    font-variant-numeric:tabular-nums; }
+  .sc-tip[hidden] { display:none; }
+  .sc-tip b { color:var(--ink); }
+  .sc-tip strong { color:var(--ink); } .sc-tip strong.up { color:var(--t-high); } .sc-tip strong.down { color:var(--ok); }
   .sc-ax  { fill:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.5px; }
   .sc-quad { fill:var(--muted); font-size:10px; letter-spacing:.4px; opacity:.7; }
   .sc-legend { margin-top:var(--s2); display:flex; flex-wrap:wrap; align-items:center;
@@ -2189,53 +2210,73 @@ function declutterLabels(cands) {
   });
   return placed;
 }
-function scatterMap(list) {
-  list = (list || []).filter(inSector).filter(d => d && d.entity);
-  if (!list.length) return U.empty("Sem dados de posição na janela.", "", "○");
-  // Phone: a 720-wide viewBox shrunk into ~340px draws 5px labels — use a narrow canvas instead
-  // (labels stay ~10px) and name only the top 6 by ameaça; tooltips still carry every dot.
-  const narrow = (document.documentElement.clientWidth || window.innerWidth) <= 640;
-  const W = narrow ? 360 : 720, H = narrow ? 320 : 380, padL = narrow ? 34 : 46, padR = narrow ? 10 : 18, padT = 18, padB = 40;
+// Zoom + hover readout (owner ask 2026-11-08: "zoomable, show measurement when hovering").
+// The map re-renders in DATA space on zoom (not a CSS/SVG transform), so dots keep their
+// pixel radius, labels stay 11px and re-declutter for the visible window, and the axis ticks
+// re-step — zooming into a dense fintech cluster actually separates it. State lives per
+// rendered map (data-sc id); one set of delegated listeners serves every map, so a board
+// re-render needs no re-wiring.
+// The per-dot "delta whisker" arrows were removed the same day: momentum IS recent − prior
+// (executive._momentum), so an arrow from last week's ameaça to this week's only restated the
+// x-axis sign — every dot right of 0 pointed up, every dot left of it down, in every quadrant.
+// A real trajectory (where the dot sat on the map a week ago) needs a third 7-day window the
+// 14-date feed does not carry; the tooltip shows last week's ameaça instead.
+const SC = { seq: 0, maps: {} };
+const scNum = (v, d = 1) => Number(v).toLocaleString("pt-BR", { maximumFractionDigits: d, minimumFractionDigits: 0 });
+const scSigned = v => (v > 0 ? "+" : v < 0 ? "−" : "") + scNum(Math.abs(v));
+function scStep(span) {
+  const raw = span / 5, p = Math.pow(10, Math.floor(Math.log10(raw)));
+  return [1, 2, 2.5, 5, 10].map(k => k * p).find(s => s >= raw) || 10 * p;
+}
+function scTicks(a, b) {
+  const s = scStep(b - a), out = [];
+  for (let t = Math.ceil(a / s - 1e-9) * s; t <= b + 1e-9; t += s) out.push(Math.round(t * 1000) / 1000);
+  return out;
+}
+function scIsFull(st) {
+  const v = st.view, f = st.full;
+  return v.x0 <= f.x0 + 1e-9 && v.x1 >= f.x1 - 1e-9 && v.y0 <= f.y0 + 1e-9 && v.y1 >= f.y1 - 1e-9;
+}
+function scSvg(id) {
+  const st = SC.maps[id], list = st.list, v = st.view, narrow = st.narrow;
+  const W = narrow ? 360 : 720, H = narrow ? 330 : 392, padL = narrow ? 44 : 50, padR = narrow ? 10 : 18, padT = 18, padB = 46;
   const iw = W - padL - padR, ih = H - padT - padB;
-  const M = Math.max(5, Math.ceil(Math.max(...list.map(d => Math.abs(d.momentum || 0)))));
-  const x = m => padL + ((m + M) / (2 * M)) * iw;
-  const y = a => padT + (1 - Math.max(0, Math.min(100, a)) / 100) * ih;
-  const x0 = x(0), y50 = y(50);
+  const x = m => padL + ((m - v.x0) / (v.x1 - v.x0)) * iw;
+  const y = a => padT + (1 - (a - v.y0) / (v.y1 - v.y0)) * ih;
+  st.geo = { W, H, padL, padT, iw, ih };
+  const full = scIsFull(st);
   const maxSize = Math.max(1, ...list.map(d => d.size_bi || 0));
   const rFor = d => d.size_bi == null ? SC_R_UNKNOWN
     : SC_R_MIN + Math.sqrt(d.size_bi / maxSize) * (SC_R_MAX - SC_R_MIN);
-  // Delta whisker: a short stem + arrowhead attached to the OUTSIDE of each dot's own edge,
-  // pointing toward last week's ameaça (`prior`, the same 7-day-prior window _momentum() already
-  // computes server-side) vs this week's (`recent`) — the one-week "movement from last position"
-  // ask, grounded only in fields the feed already carries. Anchored at the dot's edge (r + 2) and
-  // scaled/capped by the size of the move, NOT drawn between the literal prior/recent pixel
-  // positions — a bubble's own radius (4–24px here) would otherwise swallow a same-length stem
-  // whole for anything but the smallest dots, hiding the arrowhead entirely.
-  const whiskers = list.filter(d => d.prior != null && d.recent != null && Math.abs(d.recent - d.prior) >= 0.5)
-    .map(d => {
-      const cx = x(d.momentum || 0), cy = y(d.recent || 0), r = rFor(d);
-      const worse = d.recent > d.prior;             // higher ameaça = worse
-      const dir = worse ? -1 : 1;                    // worse -> up (smaller y); better -> down
-      const col = worse ? "var(--t-crit)" : "var(--ok)";
-      const mag = Math.min(22, 8 + Math.abs(d.recent - d.prior) * 0.9);
-      const baseY = cy + dir * (r + 2), tipY = cy + dir * (r + 2 + mag);
-      return `<line class="sc-whisker" x1="${cx.toFixed(1)}" y1="${baseY.toFixed(1)}" ` +
-        `x2="${cx.toFixed(1)}" y2="${tipY.toFixed(1)}" stroke="${col}" stroke-opacity=".6"/>` +
-        `<path d="M${(cx - 3.5).toFixed(1)} ${tipY.toFixed(1)} L${(cx + 3.5).toFixed(1)} ${tipY.toFixed(1)} ` +
-        `L${cx.toFixed(1)} ${(tipY + dir * 6).toFixed(1)} Z" fill="${col}" fill-opacity=".8"/>`;
-    }).join("");
+  st.rFor = rFor;
+  const inView = d => (d.momentum || 0) >= v.x0 && (d.momentum || 0) <= v.x1 && (d.recent || 0) >= v.y0 && (d.recent || 0) <= v.y1;
+  const clip = `${id}-clip`;
+  const cx0 = Math.max(padL, Math.min(padL + iw, x(0))), cy50 = Math.max(padT, Math.min(padT + ih, y(50)));
+  const danger = (cx0 < padL + iw && cy50 > padT)
+    ? `<rect class="sc-danger" x="${cx0.toFixed(1)}" y="${padT}" width="${(padL + iw - cx0).toFixed(1)}" height="${(cy50 - padT).toFixed(1)}"/>` : "";
+  const xt = scTicks(v.x0, v.x1), yt = scTicks(v.y0, v.y1);
+  const grid =
+    yt.map(t => `<line class="sc-tgrid" x1="${padL}" y1="${y(t).toFixed(1)}" x2="${padL + iw}" y2="${y(t).toFixed(1)}"/>` +
+      `<text class="sc-tick" x="${padL - 5}" y="${(y(t) + 3.5).toFixed(1)}" text-anchor="end">${scNum(t)}</text>`).join("") +
+    xt.map(t => `<line class="sc-tgrid" x1="${x(t).toFixed(1)}" y1="${padT}" x2="${x(t).toFixed(1)}" y2="${padT + ih}"/>` +
+      `<text class="sc-tick" x="${x(t).toFixed(1)}" y="${padT + ih + 13}" text-anchor="middle">${t > 0 ? "+" : t < 0 ? "−" : ""}${scNum(Math.abs(t))}</text>`).join("") +
+    (v.y0 < 50 && v.y1 > 50 ? `<line class="sc-grid" x1="${padL}" y1="${y(50).toFixed(1)}" x2="${padL + iw}" y2="${y(50).toFixed(1)}"/>` : "") +
+    (v.x0 < 0 && v.x1 > 0 ? `<line class="sc-grid" x1="${x(0).toFixed(1)}" y1="${padT}" x2="${x(0).toFixed(1)}" y2="${padT + ih}"/>` : "");
+  // All four quadrants named (only at the full view — zoomed, the ticks say where you are).
+  const quads = full ? [
+    [padL + iw - 6, padT + 14, "end", "ameaça alta · acelerando"], [padL + 6, padT + 14, "start", "ameaça alta · recuando"],
+    [padL + iw - 6, padT + ih - 7, "end", "ameaça baixa · acelerando"], [padL + 6, padT + ih - 7, "start", "ameaça baixa · recuando"],
+  ].map(([qx, qy, an, t]) => `<text class="sc-quad" x="${qx}" y="${qy}" text-anchor="${an}">${t}</text>`).join("") : "";
   // Paint largest bubbles first (underneath) so small/unknown-size competitors on top stay visible.
-  const painted = [...list].sort((a, b) => (b.size_bi || 0) - (a.size_bi || 0));
-  const dots = painted.map(d => {
-    const cx = x(d.momentum || 0), cy = y(d.recent || 0), r = rFor(d), known = d.size_bi != null;
-    const sizeTxt = known ? `R$ ${d.size_bi.toLocaleString("pt-BR", { maximumFractionDigits: 0 })} bi em ativos`
-      : "sem dado de ativos";
-    const deltaTxt = d.prior != null ? ` · ${d.recent > d.prior ? "subiu" : d.recent < d.prior ? "caiu" : "estável"} vs semana anterior (${d.prior})` : "";
-    return `<circle class="sc-dot${known ? "" : " sc-dot--nd"}" cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(1)}" ` +
-      `fill="${entityColor(d.entity)}" fill-opacity="${known ? ".85" : ".6"}">` +
-      `<title>${U.esc(d.label)} · ameaça ${d.recent} · momentum ${d.momentum > 0 ? "+" : ""}${d.momentum}${deltaTxt} · ${sizeTxt}</title></circle>`;
+  const painted = list.map((d, i) => [d, i]).filter(([d]) => inView(d)).sort((a, b) => (b[0].size_bi || 0) - (a[0].size_bi || 0));
+  const dots = painted.map(([d, i]) => {
+    const known = d.size_bi != null;
+    return `<circle class="sc-dot${known ? "" : " sc-dot--nd"}" data-i="${i}" cx="${x(d.momentum || 0).toFixed(1)}" ` +
+      `cy="${y(d.recent || 0).toFixed(1)}" r="${rFor(d).toFixed(1)}" fill="${entityColor(d.entity)}" fill-opacity="${known ? ".85" : ".6"}"/>`;
   }).join("");
-  const labelCands = [...list].sort((a, b) => (b.recent || 0) - (a.recent || 0)).slice(0, narrow ? 6 : 10).map(d => {
+  // Phone: name only the top 6 by ameaça at full view; zoomed in there is room for more.
+  const nLabels = full ? (narrow ? 6 : 10) : (narrow ? 10 : 18);
+  const labelCands = painted.map(([d]) => d).sort((a, b) => (b.recent || 0) - (a.recent || 0)).slice(0, nLabels).map(d => {
     const cx = x(d.momentum || 0), cy = y(d.recent || 0), end = cx > W - (narrow ? 110 : 150);
     // Offset from the DOT'S OWN EDGE, not a flat px — a flat +9 sits inside any bubble whose
     // radius exceeds 9 (r ranges 4–24 here), starting the label on top of its own circle.
@@ -2243,28 +2284,170 @@ function scatterMap(list) {
     return { x: cx + (end ? -off : off), y: cy + 3.5, anchor: end ? "end" : "start",
       dotX: cx, dotY: cy, text: (d.label || "").slice(0, narrow ? 16 : 22) };
   });
-  const placedLabels = declutterLabels(labelCands);
-  const labels = placedLabels.map(c => {
+  const labels = declutterLabels(labelCands).map(c => {
     const lead = Math.abs(c.py - c.y) > 2.5
       ? `<line class="sc-lbl-lead" x1="${c.dotX.toFixed(1)}" y1="${c.dotY.toFixed(1)}" x2="${c.x.toFixed(1)}" y2="${c.py.toFixed(1)}"/>` : "";
     return lead + `<text class="sc-lbl" x="${c.x.toFixed(1)}" y="${c.py.toFixed(1)}" text-anchor="${c.anchor}">${U.esc(c.text)}</text>`;
   }).join("");
-  return `<div class="scatter"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" ` +
+  const hidden = list.length - painted.length;
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" class="${full ? "" : "sc-zoomed"}" ` +
     `aria-label="Mapa competitivo: ameaça por momentum, tamanho = ativos totais">` +
-    `<rect class="sc-danger" x="${x0}" y="${padT}" width="${padL + iw - x0}" height="${y50 - padT}"/>` +
-    `<line class="sc-grid" x1="${padL}" y1="${y50}" x2="${padL + iw}" y2="${y50}"/>` +
-    `<line class="sc-grid" x1="${x0}" y1="${padT}" x2="${x0}" y2="${padT + ih}"/>` +
-    `<rect class="sc-frame" x="${padL}" y="${padT}" width="${iw}" height="${ih}"/>` +
-    `<text class="sc-quad" x="${padL + iw - 6}" y="${padT + 14}" text-anchor="end">ameaça alta · acelerando</text>` +
-    whiskers + dots + labels +
-    `<text class="sc-ax" x="${padL + iw}" y="${H - 10}" text-anchor="end">${narrow ? "recua ← momentum → acelera" : "momentum — recua ← 0 → acelera"}</text>` +
-    `<text class="sc-ax" transform="rotate(-90 14 ${padT + ih / 2})" x="14" y="${padT + ih / 2}" text-anchor="middle">ameaça (0–100)</text>` +
-    `</svg><div class="sc-legend">` +
+    `<defs><clipPath id="${clip}"><rect x="${padL}" y="${padT}" width="${iw}" height="${ih}"/></clipPath></defs>` +
+    `<rect class="sc-bg" x="${padL}" y="${padT}" width="${iw}" height="${ih}"/>` +
+    danger + grid + `<rect class="sc-frame" x="${padL}" y="${padT}" width="${iw}" height="${ih}"/>` + quads +
+    `<g clip-path="url(#${clip})">${dots}${labels}</g>` +
+    `<g class="sc-cross" visibility="hidden"><line class="sc-cx"/><line class="sc-cy"/>` +
+    `<g class="sc-bx"><rect rx="3"/><text text-anchor="middle"/></g><g class="sc-by"><rect rx="3"/><text text-anchor="end"/></g></g>` +
+    `<text class="sc-ax" x="${padL + iw}" y="${H - 8}" text-anchor="end">${narrow ? "recua ← momentum → acelera" : "momentum — recua ← 0 → acelera"}</text>` +
+    `<text class="sc-ax" transform="rotate(-90 10 ${padT + ih / 2})" x="10" y="${padT + ih / 2}" text-anchor="middle">ameaça (0–100)</text>` +
+    (hidden > 0 ? `<text class="sc-tick" x="${padL}" y="${H - 8}">${hidden} fora do zoom</text>` : "") +
+    `</svg>`;
+}
+function scatterMap(list) {
+  list = (list || []).filter(inSector).filter(d => d && d.entity);
+  if (!list.length) return U.empty("Sem dados de posição na janela.", "", "○");
+  const id = "sc" + (++SC.seq);
+  Object.keys(SC.maps).forEach(k => { if (Number(k.slice(2)) < SC.seq - 6) delete SC.maps[k]; });
+  // +8% headroom so the most extreme dot is not cut in half by the frame.
+  const M = Math.max(5, Math.ceil(Math.max(...list.map(d => Math.abs(d.momentum || 0))) * 1.08 + 0.5));
+  const full = { x0: -M, x1: M, y0: 0, y1: 100 };
+  const narrow = (document.documentElement.clientWidth || window.innerWidth) <= 640;
+  SC.maps[id] = { list, full, view: Object.assign({}, full), narrow };
+  return `<div class="scatter" data-sc="${id}">` +
+    `<div class="sc-tools" role="group" aria-label="Zoom do mapa">` +
+    `<span class="sc-hint">${narrow ? "+/− para zoom · arraste para mover" : "Ctrl + roda (ou pinça) para zoom · duplo clique aproxima · arraste para mover"}</span>` +
+    `<button type="button" class="sc-btn" data-sc-zoom="out" aria-label="Afastar" disabled>−</button>` +
+    `<button type="button" class="sc-btn" data-sc-zoom="in" aria-label="Aproximar">+</button>` +
+    `<button type="button" class="sc-btn" data-sc-zoom="reset" disabled>Ajustar</button></div>` +
+    `<div class="sc-plot">${scSvg(id)}</div><div class="sc-tip" hidden></div>` +
+    `<div class="sc-legend">` +
     `<span>cor = concorrente (posição vertical é a ameaça — eixo Y)</span>` +
-    `<span>traço = variação vs semana anterior</span>` +
+    `<span>momentum = ameaça média dos últimos 7 dias − 7 dias anteriores</span>` +
     `<span>tamanho da bolha = ativos totais (R$ bi) · IF.data/CVM · pontilhado = sem dado</span>` +
     `</div></div>`;
 }
+function scRedraw(root, st) {
+  root.querySelector(".sc-plot").innerHTML = scSvg(root.dataset.sc);
+  const full = scIsFull(st);
+  root.querySelector('[data-sc-zoom="out"]').disabled = full;
+  root.querySelector('[data-sc-zoom="reset"]').disabled = full;
+  root.querySelector(".sc-tip").hidden = true;
+}
+function scClamp(st, v) {
+  const f = st.full, minX = Math.max(1, (f.x1 - f.x0) / 40), minY = 5;
+  let w = Math.min(f.x1 - f.x0, Math.max(minX, v.x1 - v.x0)), h = Math.min(f.y1 - f.y0, Math.max(minY, v.y1 - v.y0));
+  let x0 = Math.min(Math.max(v.x0, f.x0), f.x1 - w), y0 = Math.min(Math.max(v.y0, f.y0), f.y1 - h);
+  return { x0, x1: x0 + w, y0, y1: y0 + h };
+}
+function scZoom(root, factor, at) {
+  const st = SC.maps[root.dataset.sc]; if (!st) return;
+  const v = st.view, c = at || { m: (v.x0 + v.x1) / 2, a: (v.y0 + v.y1) / 2 };
+  st.view = scClamp(st, { x0: c.m - (c.m - v.x0) * factor, x1: c.m + (v.x1 - c.m) * factor,
+                          y0: c.a - (c.a - v.y0) * factor, y1: c.a + (v.y1 - c.a) * factor });
+  scRedraw(root, st);
+}
+// Pointer → viewBox units → data units (the SVG scales uniformly: width 100%, height auto).
+function scAt(root, st, e) {
+  const svg = root.querySelector("svg"), r = svg.getBoundingClientRect(), g = st.geo, v = st.view;
+  const sx = (e.clientX - r.left) * g.W / r.width, sy = (e.clientY - r.top) * g.H / r.height;
+  const inPlot = sx >= g.padL && sx <= g.padL + g.iw && sy >= g.padT && sy <= g.padT + g.ih;
+  return { sx, sy, inPlot, m: v.x0 + (sx - g.padL) / g.iw * (v.x1 - v.x0), a: v.y1 - (sy - g.padT) / g.ih * (v.y1 - v.y0) };
+}
+function scCross(root, st, sx, sy, m, a) {
+  const cr = root.querySelector(".sc-cross"); if (!cr) return;
+  if (sx == null) { cr.setAttribute("visibility", "hidden"); return; }
+  const g = st.geo, set = (el, o) => Object.keys(o).forEach(k => el.setAttribute(k, o[k]));
+  set(cr.querySelector(".sc-cx"), { x1: sx, x2: sx, y1: sy, y2: g.padT + g.ih });
+  set(cr.querySelector(".sc-cy"), { x1: g.padL, x2: sx, y1: sy, y2: sy });
+  const bx = cr.querySelector(".sc-bx"), by = cr.querySelector(".sc-by");
+  bx.querySelector("text").textContent = scSigned(Math.round(m * 10) / 10);
+  set(bx.querySelector("text"), { x: sx, y: g.padT + g.ih + 13 });
+  set(bx.querySelector("rect"), { x: sx - 22, y: g.padT + g.ih + 3, width: 44, height: 14 });
+  by.querySelector("text").textContent = scNum(Math.max(0, Math.min(100, a)));
+  set(by.querySelector("text"), { x: g.padL - 5, y: sy + 3.5 });
+  set(by.querySelector("rect"), { x: g.padL - 36, y: sy - 7, width: 34, height: 14 });
+  cr.setAttribute("visibility", "visible");
+}
+function scTip(root, st, d, e) {
+  const tip = root.querySelector(".sc-tip");
+  if (!d) { tip.hidden = true; return; }
+  const dlt = d.prior != null ? Math.round((d.recent - d.prior) * 10) / 10 : null;
+  tip.innerHTML = `<b>${U.esc(d.label)}</b>` +
+    `<span>Ameaça <strong>${scNum(d.recent)}</strong>` +
+    (d.prior != null ? ` · semana anterior ${scNum(d.prior)}` : "") + `</span>` +
+    `<span>Momentum <strong class="${dlt > 0 ? "up" : dlt < 0 ? "down" : ""}">${scSigned(d.momentum || 0)}</strong>` +
+    `${dlt > 0 ? " · acelerando" : dlt < 0 ? " · recuando" : " · estável"}</span>` +
+    `<span>${d.size_bi != null ? `Ativos R$ ${d.size_bi.toLocaleString("pt-BR", { maximumFractionDigits: 0 })} bi` : "Ativos: sem dado (IF.data/CVM)"}</span>`;
+  tip.hidden = false;
+  const R = root.getBoundingClientRect(), tw = tip.offsetWidth, th = tip.offsetHeight;
+  let left = e.clientX - R.left + 14, top = e.clientY - R.top + 14;
+  if (left + tw > R.width - 4) left = e.clientX - R.left - tw - 14;
+  if (top + th > R.height - 4) top = e.clientY - R.top - th - 14;
+  tip.style.left = Math.max(4, left) + "px"; tip.style.top = Math.max(4, top) + "px";
+}
+(function scWire() {
+  const rootOf = e => e.target && e.target.closest && e.target.closest(".scatter[data-sc]");
+  let drag = null, raf = 0;
+  document.addEventListener("click", e => {
+    const dot = e.target.closest && e.target.closest(".scatter[data-sc] .sc-dot");
+    if (dot) {   // touch has no hover: a tap shows the same readout
+      const root = rootOf(e), st = SC.maps[root.dataset.sc], d = st && st.list[Number(dot.getAttribute("data-i"))];
+      if (d) { scCross(root, st, Number(dot.getAttribute("cx")), Number(dot.getAttribute("cy")), d.momentum || 0, d.recent || 0); scTip(root, st, d, e); }
+      return;
+    }
+    const b = e.target.closest && e.target.closest("[data-sc-zoom]"); if (!b) return;
+    const root = rootOf(e), st = root && SC.maps[root.dataset.sc]; if (!st) return;
+    const k = b.getAttribute("data-sc-zoom");
+    if (k === "reset") { st.view = Object.assign({}, st.full); scRedraw(root, st); }
+    else scZoom(root, k === "in" ? 0.5 : 2);
+  });
+  document.addEventListener("wheel", e => {
+    if (!(e.ctrlKey || e.metaKey)) return;                 // a plain wheel keeps scrolling the page
+    const root = rootOf(e), st = root && SC.maps[root.dataset.sc];
+    if (!st || !(e.target.closest && e.target.closest("svg"))) return;
+    e.preventDefault();
+    const p = scAt(root, st, e); if (!p.inPlot) return;
+    scZoom(root, Math.min(2, Math.max(0.5, Math.exp(e.deltaY * 0.01))), p);
+  }, { passive: false });
+  document.addEventListener("dblclick", e => {
+    const root = rootOf(e), st = root && SC.maps[root.dataset.sc];
+    if (!st || !(e.target.closest && e.target.closest("svg"))) return;
+    const p = scAt(root, st, e); if (p.inPlot) { e.preventDefault(); scZoom(root, e.shiftKey ? 2 : 0.5, p); }
+  });
+  document.addEventListener("pointerdown", e => {
+    const root = rootOf(e), st = root && SC.maps[root.dataset.sc];
+    if (!st || scIsFull(st) || e.button || !(e.target.closest && e.target.closest("svg"))) return;
+    drag = { root, st, x: e.clientX, y: e.clientY, v: Object.assign({}, st.view), moved: false };
+  });
+  document.addEventListener("pointermove", e => {
+    if (drag) {
+      const { root, st } = drag, r = root.querySelector("svg").getBoundingClientRect(), g = st.geo;
+      const dm = (e.clientX - drag.x) * g.W / r.width / g.iw * (drag.v.x1 - drag.v.x0);
+      const da = (e.clientY - drag.y) * g.H / r.height / g.ih * (drag.v.y1 - drag.v.y0);
+      if (Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y) > 3) drag.moved = true;
+      if (!drag.moved) return;
+      st.view = scClamp(st, { x0: drag.v.x0 - dm, x1: drag.v.x1 - dm, y0: drag.v.y0 + da, y1: drag.v.y1 + da });
+      if (!raf) raf = requestAnimationFrame(() => { raf = 0; if (drag) scRedraw(drag.root, drag.st); });
+      return;
+    }
+    const root = rootOf(e), st = root && SC.maps[root.dataset.sc];
+    document.querySelectorAll(".scatter[data-sc]").forEach(o => { if (o !== root) { scCross(o, SC.maps[o.dataset.sc] || {}); const t = o.querySelector(".sc-tip"); if (t) t.hidden = true; } });
+    if (!st || !st.geo || !(e.target.closest && e.target.closest(".sc-plot"))) { if (root && st) { scCross(root, st); scTip(root, st, null); } return; }
+    const dot = e.target.closest(".sc-dot");
+    if (dot) {
+      const d = st.list[Number(dot.getAttribute("data-i"))];
+      scCross(root, st, Number(dot.getAttribute("cx")), Number(dot.getAttribute("cy")), d.momentum || 0, d.recent || 0);
+      scTip(root, st, d, e);
+      return;
+    }
+    const p = scAt(root, st, e);
+    scTip(root, st, null);
+    if (p.inPlot) scCross(root, st, p.sx, p.sy, p.m, p.a); else scCross(root, st);
+  });
+  const end = () => { drag = null; };
+  document.addEventListener("pointerup", end);
+  document.addEventListener("pointercancel", end);
+})();
 // Threat timeline (v1 → CSO): per-competitor ameaça trajectory across the run's dates,
 // computed client-side from the feed (daily mean threat per entity). Top movers by momentum.
 function sparkline(series, macroIdx) {
