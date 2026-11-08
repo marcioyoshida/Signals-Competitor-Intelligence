@@ -34,3 +34,10 @@ def test_axes_carry_tick_values_and_all_four_quadrants_are_named():
     assert "function scTicks(" in JS and 'class="sc-tick"' in JS
     for q in ("ameaça alta · acelerando", "ameaça alta · recuando", "ameaça baixa · acelerando", "ameaça baixa · recuando"):
         assert q in JS, q
+
+
+def test_trails_are_real_trajectories_from_last_weeks_position():
+    # (prior_momentum, prior) -> (momentum, recent): drawn only when the feed carries the history.
+    assert "x(d.prior_momentum), py = y(d.prior)" in JS and 'class="sc-trail"' in JS
+    assert "d.prior_momentum != null" in JS and "list.some(d => d.prior_momentum != null)" in JS
+    assert "data-sc-trail" in JS and "rastro = posição há uma semana" in JS and "Há uma semana:" in JS

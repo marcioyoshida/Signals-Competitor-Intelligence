@@ -363,6 +363,47 @@ def build_macro(
     return {"selic": selic, "focus": focus, "cards": cards, "gdelt_macro": headlines}
 
 
+#: entity_attrs[eid][THREAT_HISTORY_KEY] = {"mean", "n", "from", "to"}: the entity's mean threat
+#: (0–100, executive scale) over the days BEFORE the feed window. It rides on entity_attrs so
+#: every per-tenant projection scopes it with the entity (by_key), and the Entry projection
+#: drops it. Read by executive._momentum for the Mapa Competitivo trajectory
+#: (``prior_momentum``: where the dot sat a week ago).
+THREAT_HISTORY_KEY = "threat_w3"
+
+
+def _threat_100(v: Any) -> float:
+    t = _score(v)
+    return t * 100 if t <= 1 else t
+
+
+def _attach_threat_history(entity_attrs: dict[str, Any] | None,
+                           history: list[dict[str, Any]] | None,
+                           canon: dict[str, str]) -> dict[str, Any] | None:
+    """A copy of entity_attrs with THREAT_HISTORY_KEY on every REGISTERED entity that has
+    narratives in ``history``. Never adds an entity the registry does not hold."""
+    if not entity_attrs or not history:
+        return entity_attrs
+    acc: dict[str, list[Any]] = {}
+    for n in history:
+        if not isinstance(n, dict):
+            continue
+        x = _project_item(n)
+        _canonicalize_item(x, canon)
+        e = x.get("entity")
+        if not e or e not in entity_attrs or not x.get("date"):
+            continue
+        a = acc.setdefault(e, [0.0, 0, x["date"], x["date"]])
+        a[0] += _threat_100(x.get("threat_score"))
+        a[1] += 1
+        a[2], a[3] = min(a[2], x["date"]), max(a[3], x["date"])
+    if not acc:
+        return entity_attrs
+    out = dict(entity_attrs)
+    for e, (tot, n, d0, d1) in acc.items():
+        out[e] = {**(out[e] or {}), THREAT_HISTORY_KEY: {"mean": round(tot / n, 2), "n": n, "from": d0, "to": d1}}
+    return out
+
+
 def _project_item(n: dict[str, Any]) -> dict[str, Any]:
     """Project one narrative (or thread card) into a feed item — one shared schema."""
     # Legacy narratives (persisted before threat_factors) carry a stale, saturated
@@ -605,6 +646,7 @@ def build_feed(
     inadimplencia: dict[str, dict[str, Any]] | None = None,
     resultados: dict[str, dict[str, Any]] | None = None,
     pilar3_km1: dict[str, dict[str, Any]] | None = None,
+    history_narratives: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Pure aggregation: narratives -> feed payload. No I/O.
 
@@ -640,6 +682,7 @@ def build_feed(
     canon = _canonical_map(entity_attrs)
     for x in items + thread_items:
         _canonicalize_item(x, canon)
+    entity_attrs = _attach_threat_history(entity_attrs, history_narratives, canon)
 
     items.sort(key=lambda x: (x["date"], x["threat_score"]), reverse=True)
     dates = sorted({x["date"] for x in items if x["date"]})
@@ -1121,7 +1164,8 @@ def derive_entry_feed(
             "feed": feed_items,
             "entities": entities,
             "entity_attrs": {
-                e: {**a, "industries": scrub_industries((a or {}).get("industries"))}
+                e: {**{k: v for k, v in (a or {}).items() if k != THREAT_HISTORY_KEY},
+                    "industries": scrub_industries((a or {}).get("industries"))}
                 for e, a in attrs.items()
                 if e in entry_entities
             },
@@ -1333,9 +1377,31 @@ def load_recent_narratives(
     s3: Any | None = None,
 ) -> list[dict[str, Any]]:
     """Read narrative objects for the last window_days from narratives/{date}/."""
+    return [n for _, n in _load_narratives_by_date(bucket, _recent_dates(window_days), s3=s3)]
+
+
+def load_narrative_history(
+    bucket: str,
+    window_days: int = 14,
+    history_days: int = 21,
+    *,
+    s3: Any | None = None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """(the feed window's narratives, the narratives of the days BEFORE it up to history_days).
+
+    One listing pass. Only the window is published as cards; the older slice feeds the Mapa
+    Competitivo trajectory (``THREAT_HISTORY_KEY``), so the published feed, its counts and the
+    Ask grounding stay a 14-day window."""
+    window = _recent_dates(window_days)
+    rows = _load_narratives_by_date(bucket, window | _recent_dates(max(history_days, window_days)), s3=s3)
+    return [n for d, n in rows if d in window], [n for d, n in rows if d not in window]
+
+
+def _load_narratives_by_date(
+    bucket: str, wanted: set[str], *, s3: Any | None = None,
+) -> list[tuple[str, dict[str, Any]]]:
     s3 = s3 or boto3.client("s3")
-    wanted = _recent_dates(window_days)
-    out: list[dict[str, Any]] = []
+    out: list[tuple[str, dict[str, Any]]] = []
     paginator = s3.get_paginator("list_objects_v2")
     for page in paginator.paginate(Bucket=bucket, Prefix=NARRATIVES_PREFIX):
         for obj in page.get("Contents") or []:
@@ -1348,7 +1414,7 @@ def load_recent_narratives(
                 continue
             try:
                 body = s3.get_object(Bucket=bucket, Key=key)["Body"].read()
-                out.append(json.loads(body.decode("utf-8")))
+                out.append((parts[1], json.loads(body.decode("utf-8"))))
             except Exception as exc:  # pragma: no cover - skip unreadable objects
                 print(f"Warning: skip narrative {key}: {exc}")
     return out
@@ -1968,11 +2034,17 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     digests_bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
     site_bucket = os.environ.get("ONCA_SITE_BUCKET")
     window_days = int(os.environ.get("ONCA_FEED_WINDOW_DAYS", "14"))
+    # The week before the window: Mapa Competitivo trajectory only, never published as cards.
+    history_days = int(os.environ.get("ONCA_FEED_HISTORY_DAYS", "21"))
 
     if not digests_bucket:
         return {"statusCode": 200, "body": json.dumps({"status": "no_digests_bucket"})}
 
-    narratives = load_recent_narratives(digests_bucket, window_days)
+    try:
+        narratives, history = load_narrative_history(digests_bucket, window_days, history_days)
+    except Exception as exc:  # pragma: no cover - the trajectory is best-effort; the feed is not
+        print(f"Warning: narrative history skipped: {exc}")
+        narratives, history = load_recent_narratives(digests_bucket, window_days), []
     # Attach the frameworks each narrative CHANGED on its run — a framework strip
     # shows only when this ticket actually moved that framework (a bullet whose
     # change-date matches the card's run date), not merely because the entity has a
@@ -2027,6 +2099,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         inadimplencia=_load_inadimplencia(digests_bucket),
         resultados=_load_resultados(digests_bucket),
         pilar3_km1=_load_km1(digests_bucket),
+        history_narratives=history,
     )
     # ADR 018 Phase 3: continuous integrity audit over the registry + this feed —
     # operator-facing findings (scoped OUT of the entry/tenant slices below).

@@ -142,6 +142,10 @@
   .scatter svg.sc-zoomed { touch-action:none; cursor:grab; }
   .scatter svg.sc-zoomed:active { cursor:grabbing; }
   .sc-bg { fill:transparent; }
+  .sc-trail line { stroke-width:1.5; stroke-opacity:.65; pointer-events:none; }
+  .sc-trail circle { fill:var(--surface); stroke-width:1.5; pointer-events:none; }
+  .sc-trail path { fill-opacity:.85; pointer-events:none; }
+  .sc-btn[aria-pressed="false"] { color:var(--muted); text-decoration:line-through; }
   .sc-tgrid { stroke:var(--border-2); stroke-width:.5; opacity:.55; }
   .sc-tick { fill:var(--muted); font-size:10px; font-variant-numeric:tabular-nums; }
   .sc-cross line { stroke:var(--ink-2); stroke-width:.8; stroke-dasharray:3 2; pointer-events:none; }
@@ -2219,8 +2223,12 @@ function declutterLabels(cands) {
 // The per-dot "delta whisker" arrows were removed the same day: momentum IS recent − prior
 // (executive._momentum), so an arrow from last week's ameaça to this week's only restated the
 // x-axis sign — every dot right of 0 pointed up, every dot left of it down, in every quadrant.
-// A real trajectory (where the dot sat on the map a week ago) needs a third 7-day window the
-// 14-date feed does not carry; the tooltip shows last week's ameaça instead.
+// The trajectory "rastro" that replaced them is real: the feed builder now reads the week BEFORE
+// the 14-day window (entity_attrs.threat_w3, never published as cards) and _momentum ships
+// `prior_momentum` = prior − that week's mean, i.e. the momentum the entity had a week ago. So
+// last week's dot sat at (prior_momentum, prior) and the trail runs from there to now — it can
+// point anywhere (a high-threat bank decelerating moves LEFT, not just up/down). No history for
+// an entity → no trail, never a guessed one.
 const SC = { seq: 0, maps: {} };
 const scNum = (v, d = 1) => Number(v).toLocaleString("pt-BR", { maximumFractionDigits: d, minimumFractionDigits: 0 });
 const scSigned = v => (v > 0 ? "+" : v < 0 ? "−" : "") + scNum(Math.abs(v));
@@ -2269,6 +2277,17 @@ function scSvg(id) {
   ].map(([qx, qy, an, t]) => `<text class="sc-quad" x="${qx}" y="${qy}" text-anchor="${an}">${t}</text>`).join("") : "";
   // Paint largest bubbles first (underneath) so small/unknown-size competitors on top stay visible.
   const painted = list.map((d, i) => [d, i]).filter(([d]) => inView(d)).sort((a, b) => (b[0].size_bi || 0) - (a[0].size_bi || 0));
+  // Trail: hollow ring at last week's position → line → arrowhead touching the dot's edge.
+  const trails = !st.trails ? "" : painted.filter(([d]) => d.prior_momentum != null && d.prior != null).map(([d]) => {
+    const px = x(d.prior_momentum), py = y(d.prior), cx = x(d.momentum || 0), cy = y(d.recent || 0), r = rFor(d);
+    const dx = cx - px, dy = cy - py, L = Math.hypot(dx, dy);
+    if (L < r + 8) return "";                                      // moved less than its own size
+    const ux = dx / L, uy = dy / L, ex = cx - ux * (r + 2), ey = cy - uy * (r + 2), col = entityColor(d.entity);
+    const hx = ex - ux * 7, hy = ey - uy * 7, nx = -uy * 3.5, ny = ux * 3.5;
+    return `<g class="sc-trail"><circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="2.5" stroke="${col}"/>` +
+      `<line x1="${px.toFixed(1)}" y1="${py.toFixed(1)}" x2="${hx.toFixed(1)}" y2="${hy.toFixed(1)}" stroke="${col}"/>` +
+      `<path d="M${ex.toFixed(1)} ${ey.toFixed(1)} L${(hx + nx).toFixed(1)} ${(hy + ny).toFixed(1)} L${(hx - nx).toFixed(1)} ${(hy - ny).toFixed(1)} Z" fill="${col}"/></g>`;
+  }).join("");
   const dots = painted.map(([d, i]) => {
     const known = d.size_bi != null;
     return `<circle class="sc-dot${known ? "" : " sc-dot--nd"}" data-i="${i}" cx="${x(d.momentum || 0).toFixed(1)}" ` +
@@ -2295,7 +2314,7 @@ function scSvg(id) {
     `<defs><clipPath id="${clip}"><rect x="${padL}" y="${padT}" width="${iw}" height="${ih}"/></clipPath></defs>` +
     `<rect class="sc-bg" x="${padL}" y="${padT}" width="${iw}" height="${ih}"/>` +
     danger + grid + `<rect class="sc-frame" x="${padL}" y="${padT}" width="${iw}" height="${ih}"/>` + quads +
-    `<g clip-path="url(#${clip})">${dots}${labels}</g>` +
+    `<g clip-path="url(#${clip})">${trails}${dots}${labels}</g>` +
     `<g class="sc-cross" visibility="hidden"><line class="sc-cx"/><line class="sc-cy"/>` +
     `<g class="sc-bx"><rect rx="3"/><text text-anchor="middle"/></g><g class="sc-by"><rect rx="3"/><text text-anchor="end"/></g></g>` +
     `<text class="sc-ax" x="${padL + iw}" y="${H - 8}" text-anchor="end">${narrow ? "recua ← momentum → acelera" : "momentum — recua ← 0 → acelera"}</text>` +
@@ -2309,13 +2328,16 @@ function scatterMap(list) {
   const id = "sc" + (++SC.seq);
   Object.keys(SC.maps).forEach(k => { if (Number(k.slice(2)) < SC.seq - 6) delete SC.maps[k]; });
   // +8% headroom so the most extreme dot is not cut in half by the frame.
-  const M = Math.max(5, Math.ceil(Math.max(...list.map(d => Math.abs(d.momentum || 0))) * 1.08 + 0.5));
+  const M = Math.max(5, Math.ceil(Math.max(...list.map(d => Math.max(Math.abs(d.momentum || 0),
+    Math.abs(d.prior_momentum || 0)))) * 1.08 + 0.5));
   const full = { x0: -M, x1: M, y0: 0, y1: 100 };
   const narrow = (document.documentElement.clientWidth || window.innerWidth) <= 640;
-  SC.maps[id] = { list, full, view: Object.assign({}, full), narrow };
+  const hasTrail = list.some(d => d.prior_momentum != null);
+  SC.maps[id] = { list, full, view: Object.assign({}, full), narrow, trails: hasTrail };
   return `<div class="scatter" data-sc="${id}">` +
     `<div class="sc-tools" role="group" aria-label="Zoom do mapa">` +
     `<span class="sc-hint">${narrow ? "+/− para zoom · arraste para mover" : "Ctrl + roda (ou pinça) para zoom · duplo clique aproxima · arraste para mover"}</span>` +
+    (hasTrail ? `<button type="button" class="sc-btn" data-sc-trail aria-pressed="true">Rastro</button>` : "") +
     `<button type="button" class="sc-btn" data-sc-zoom="out" aria-label="Afastar" disabled>−</button>` +
     `<button type="button" class="sc-btn" data-sc-zoom="in" aria-label="Aproximar">+</button>` +
     `<button type="button" class="sc-btn" data-sc-zoom="reset" disabled>Ajustar</button></div>` +
@@ -2323,6 +2345,7 @@ function scatterMap(list) {
     `<div class="sc-legend">` +
     `<span>cor = concorrente (posição vertical é a ameaça — eixo Y)</span>` +
     `<span>momentum = ameaça média dos últimos 7 dias − 7 dias anteriores</span>` +
+    (hasTrail ? `<span>rastro = posição há uma semana (○) → agora</span>` : "") +
     `<span>tamanho da bolha = ativos totais (R$ bi) · IF.data/CVM · pontilhado = sem dado</span>` +
     `</div></div>`;
 }
@@ -2377,6 +2400,7 @@ function scTip(root, st, d, e) {
     (d.prior != null ? ` · semana anterior ${scNum(d.prior)}` : "") + `</span>` +
     `<span>Momentum <strong class="${dlt > 0 ? "up" : dlt < 0 ? "down" : ""}">${scSigned(d.momentum || 0)}</strong>` +
     `${dlt > 0 ? " · acelerando" : dlt < 0 ? " · recuando" : " · estável"}</span>` +
+    (d.prior_momentum != null ? `<span>Há uma semana: ameaça ${scNum(d.prior)} · momentum ${scSigned(d.prior_momentum)}</span>` : "") +
     `<span>${d.size_bi != null ? `Ativos R$ ${d.size_bi.toLocaleString("pt-BR", { maximumFractionDigits: 0 })} bi` : "Ativos: sem dado (IF.data/CVM)"}</span>`;
   tip.hidden = false;
   const R = root.getBoundingClientRect(), tw = tip.offsetWidth, th = tip.offsetHeight;
@@ -2393,6 +2417,12 @@ function scTip(root, st, d, e) {
     if (dot) {   // touch has no hover: a tap shows the same readout
       const root = rootOf(e), st = SC.maps[root.dataset.sc], d = st && st.list[Number(dot.getAttribute("data-i"))];
       if (d) { scCross(root, st, Number(dot.getAttribute("cx")), Number(dot.getAttribute("cy")), d.momentum || 0, d.recent || 0); scTip(root, st, d, e); }
+      return;
+    }
+    const t = e.target.closest && e.target.closest("[data-sc-trail]");
+    if (t) {
+      const root = rootOf(e), st = root && SC.maps[root.dataset.sc]; if (!st) return;
+      st.trails = !st.trails; t.setAttribute("aria-pressed", String(st.trails)); scRedraw(root, st);
       return;
     }
     const b = e.target.closest && e.target.closest("[data-sc-zoom]"); if (!b) return;

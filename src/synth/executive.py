@@ -245,9 +245,17 @@ def _group_roots(feed: dict[str, Any]) -> dict[str, str]:
     return out
 
 
+def _threat_history(feed: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """{entity: {"mean", "n", ...}} — mean threat over the days BEFORE the feed window
+    (feed_builder.THREAT_HISTORY_KEY on entity_attrs). Empty when the feed carries none."""
+    return {e: a["threat_w3"] for e, a in (feed.get("entity_attrs") or {}).items()
+            if isinstance(a, dict) and isinstance(a.get("threat_w3"), dict) and a["threat_w3"].get("n")}
+
+
 def _momentum(cards: list[dict[str, Any]], dates: list[str],
               labels: dict[str, str], *, sizes: dict[str, float] | None = None,
-              rollup: dict[str, str] | None = None) -> list[dict[str, Any]]:
+              rollup: dict[str, str] | None = None,
+              history: dict[str, dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     """Per-entity competitor momentum = recent-window avg threat − prior-window avg threat.
 
     With `rollup` ({child -> group root}), a conglomerate's sub-entities aggregate INTO the
@@ -256,9 +264,25 @@ def _momentum(cards: list[dict[str, Any]], dates: list[str],
     union of its members' industries, so a group shows up on every sector map it actually
     operates in — through its corretora on investment-banking, its funds on real-estate-funds
     — which is the honest read of a conglomerate's competitive footprint.
+
+    With `history` (``_threat_history``: mean threat over the week BEFORE the prior window),
+    each row also carries ``prior_momentum`` = prior − that week's mean: the momentum the entity
+    had a week ago, so the map can draw where the dot sat then (x = prior_momentum, y = prior)
+    and a real trajectory to now. None when the entity has no prior-window card or no history —
+    never a fabricated 0.
     """
     recent, prior = _recent_window(dates)
     roll = rollup or {}
+    hist: dict[str, list[float]] = {}
+    for e, h in (history or {}).items():
+        try:
+            n, mean = int(h.get("n") or 0), float(h.get("mean"))
+        except (TypeError, ValueError):
+            continue
+        if n > 0:
+            a = hist.setdefault(roll.get(e, e), [0.0, 0])
+            a[0] += mean * n
+            a[1] += n
     acc: dict[str, dict[str, list[float]]] = {}
     inds: dict[str, set[str]] = {}
     for c in cards:
@@ -278,8 +302,11 @@ def _momentum(cards: list[dict[str, Any]], dates: list[str],
             continue
         rec = sum(w["recent"]) / len(w["recent"])
         pri = sum(w["prior"]) / len(w["prior"]) if w["prior"] else rec
+        h = hist.get(e)
+        prior_mom = round(pri - h[0] / h[1], 1) if (h and h[1] and w["prior"]) else None
         out.append({"entity": e, "label": labels.get(e, e), "recent": round(rec, 1),
                     "prior": round(pri, 1), "momentum": round(rec - pri, 1),
+                    "prior_momentum": prior_mom,
                     "industries": sorted(inds.get(e, set())),
                     # None (not 0) when unknown — the client must fall back to a default
                     # bubble size, never render "no data" as "zero assets".
@@ -661,7 +688,7 @@ def build_cso(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     moves = [c for c in news if _is_move(c)]
     capital_rows = _capital_rows(feed, labels)
     momentum = _momentum(cards, dates, labels, sizes=_asset_size_index(feed),
-                         rollup=_group_roots(feed))
+                         rollup=_group_roots(feed), history=_threat_history(feed))
 
     def agg(slug):
         sc = [c for c in cards if _in_industry(c, slug)]

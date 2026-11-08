@@ -1003,3 +1003,49 @@ def test_entry_industry_summary_counts_the_entry_slice():
     assert row["narratives_latest"] == entry["kpis"]["narratives_latest"]
     assert row["alerts"] == sum(1 for c in entry["feed"] if c.get("is_alert"))
     assert row["covered"] is True  # coverage flags are pipeline facts, kept
+
+
+# --- Mapa Competitivo trajectory: the week before the window (owner ask 2026-11-08) ---------
+def test_narrative_history_splits_the_window_from_the_week_before(monkeypatch):
+    import datetime as dt
+
+    class _FixedDate(dt.date):
+        @classmethod
+        def today(cls):
+            return cls(2026, 8, 21)
+
+    monkeypatch.setattr(feed_builder.dt, "date", _FixedDate)
+    s3 = _FakeS3({
+        "narratives/2026-08-20/w.json": json.dumps(_narr("w", "itau", "2026-08-20", 0.9)).encode(),
+        "narratives/2026-08-05/h.json": json.dumps(_narr("h", "itau", "2026-08-05", 0.5)).encode(),
+        "narratives/2026-07-20/old.json": json.dumps(_narr("old", "itau", "2026-07-20", 0.1)).encode(),
+    })
+    win, hist = feed_builder.load_narrative_history("b", 14, 21, s3=s3)
+    assert [n["id"] for n in win] == ["w"] and [n["id"] for n in hist] == ["h"]   # 07-20 > 21 days
+
+
+def test_history_rides_on_registered_entity_attrs_only_and_never_becomes_cards():
+    attrs = {"itau": {"label": "Itaú", "industries": ["banking"]}}
+    hist = [_narr("h1", "itau", "2026-08-05", 0.5), _narr("h2", "itau", "2026-08-06", 0.7),
+            _narr("h3", "ghost", "2026-08-06", 0.9)]
+    feed = feed_builder.build_feed([_narr("w", "itau", "2026-08-20", 0.9)], entity_attrs=attrs,
+                                   history_narratives=hist)
+    assert [c["id"] for c in feed["feed"]] == ["w"]                     # history is not published
+    h = feed["entity_attrs"]["itau"][feed_builder.THREAT_HISTORY_KEY]
+    assert h == {"mean": 60.0, "n": 2, "from": "2026-08-05", "to": "2026-08-06"}
+    assert "ghost" not in feed["entity_attrs"]                          # never adds an entity
+    assert feed_builder.THREAT_HISTORY_KEY not in attrs["itau"]          # input not mutated
+
+
+def test_history_is_scoped_with_the_entity_and_dropped_from_entry():
+    attrs = {"itau": {"label": "Itaú", "industries": ["banking"]},
+             "porto": {"label": "Porto", "industries": ["insurance"]}}
+    hist = [_narr("h1", "itau", "2026-08-05", 0.5), _narr("h2", "porto", "2026-08-05", 0.5)]
+    feed = feed_builder.build_feed([_narr("w", "itau", "2026-08-20", 0.9)], entity_attrs=attrs,
+                                   history_narratives=hist)
+    scoped = feed_builder.scope_feed_to_modules(feed, ["banking"])
+    assert "porto" not in scoped["entity_attrs"]
+    assert feed_builder.THREAT_HISTORY_KEY in scoped["entity_attrs"]["itau"]
+    entry = feed_builder.derive_entry_feed(feed, industries=("banking",))
+    for a in (entry.get("entity_attrs") or {}).values():
+        assert feed_builder.THREAT_HISTORY_KEY not in a

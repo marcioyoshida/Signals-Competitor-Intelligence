@@ -855,3 +855,37 @@ def test_display_strings_carry_no_english_decimals():
     assert ex["cso"]["panels"]["capital_moves"][0]["delta_pct"] == 200.0
     mom = {m["entity"]: m for m in ex["cso"]["panels"]["momentum"]}["itau"]
     assert isinstance(mom["momentum"], float) and mom["momentum"] == 46.5
+
+
+def test_momentum_carries_last_weeks_momentum_for_a_real_trajectory():
+    # owner ask 2026-11-08: arrows that show where the dot sat a week ago. momentum = recent −
+    # prior, so last week's momentum = prior − the week before (entity_attrs.threat_w3).
+    cards = [{"entity": "itau", "date": d, "threat_score": t}
+             for d, t in [("2026-09-01", 0.4), ("2026-09-08", 0.6)]]
+    dates = [f"2026-09-{i:02d}" for i in range(1, 15)]
+    rows = executive._momentum(cards, dates, {"itau": "Itaú"},
+                               history={"itau": {"mean": 30.0, "n": 3}})
+    assert rows[0]["prior"] == 40.0 and rows[0]["momentum"] == 20.0
+    assert rows[0]["prior_momentum"] == 10.0                         # 40 − 30
+    none = executive._momentum(cards, dates, {"itau": "Itaú"})
+    assert none[0]["prior_momentum"] is None                         # no history: no fabricated 0
+    only_recent = executive._momentum([cards[1]], dates, {"itau": "Itaú"},
+                                      history={"itau": {"mean": 30.0, "n": 3}})
+    assert only_recent[0]["prior_momentum"] is None                  # no prior-window card
+
+
+def test_last_weeks_momentum_rolls_up_with_the_group_weighted_by_count():
+    cards = [{"entity": "btg", "date": "2026-09-01", "threat_score": 0.5},
+             {"entity": "btg", "date": "2026-09-08", "threat_score": 0.5}]
+    dates = [f"2026-09-{i:02d}" for i in range(1, 15)]
+    rows = executive._momentum(cards, dates, {"btg": "BTG"}, rollup={"btg-asset": "btg"},
+                               history={"btg": {"mean": 40.0, "n": 1}, "btg-asset": {"mean": 20.0, "n": 3}})
+    assert rows[0]["prior_momentum"] == 25.0                         # 50 − (40·1 + 20·3)/4
+
+
+def test_build_executive_reads_the_history_from_entity_attrs():
+    feed = _feed()
+    for a in feed["entity_attrs"].values():
+        a["threat_w3"] = {"mean": 10.0, "n": 2}
+    mom = executive.build_executive(feed)["cso"]["panels"]["momentum"]
+    assert mom and all("prior_momentum" in m for m in mom)
