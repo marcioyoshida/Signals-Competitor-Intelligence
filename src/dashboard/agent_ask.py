@@ -462,7 +462,9 @@ def build_messages(
         "6. Responda em português do Brasil, conciso e direto.\n"
         "7. Recuperação judicial / extrajudicial / falência: trate como FATO somente "
         "cards cujo id começa com distress:. Nunca atribua insolvência à entidade de "
-        "um card de notícia só porque o texto menciona o processo de OUTRA empresa."
+        "um card de notícia só porque o texto menciona o processo de OUTRA empresa.\n"
+        "8. Números com data: comece pelo valor mais recente e diga a data-base dele; "
+        "um valor anterior só entra depois, como comparação, com a data dele."
     )
     if persona:
         system = f"{persona}\n\n{system}"
@@ -771,6 +773,18 @@ def _quarter(v: Any) -> str:
     return f"{m.group(2)}T{m.group(1)}" if m else (str(v) if v else "—")
 
 
+def _base_month_key(v: Any) -> int:
+    """202606 → 202606; anything else → 0 (sorts oldest)."""
+    s = str(v or "")
+    return int(s) if len(s) == 6 and s.isdigit() else 0
+
+
+def _quarter_key(v: Any) -> int:
+    """"2026-3" → 202609 (the quarter's last month, comparable with an IF.data data-base)."""
+    m = re.fullmatch(r"(\d{4})-([1-4])", str(v or ""))
+    return int(m.group(1)) * 100 + int(m.group(2)) * 3 if m else 0
+
+
 def bank_metric_cards(feed: dict[str, Any]) -> list[dict[str, Any]]:
     """Project the per-entity BCB metrics feed_builder stamps on feed.entities (ADR 022) into
     citable cards. Live 11-06: "Qual o índice de Basileia do Bradesco?" was model-declined because
@@ -787,34 +801,62 @@ def bank_metric_cards(feed: dict[str, Any]) -> list[dict[str, Any]]:
         base = {"entity": ent, "entity_label": label, "entities": [ent],
                 "is_alert": False, "threat_score": None}
         s = e.get("soundness") or {}
+        k1 = e.get("pilar3_km1") or {}
+        # #368: IF.data and KM1 both carry Basileia and leverage, at different base dates. Each shared
+        # figure is stated ONCE, in the more recent card, with the older one after it as a dated
+        # comparison (ties → IF.data, the BCB-computed 2-decimal figure). Two cards each holding a
+        # "current" Basileia let the model pick whichever ranked first (live 11-08: the 06/2026 one).
+        s_when, k_when = _base_month_key(s.get("base_date")), _quarter_key(k1.get("trimestre"))
+        km1_newer = k_when > s_when
+        s_date, k_date = _base_month(s.get("base_date")), _quarter(k1.get("trimestre"))
+        lead: dict[str, tuple[str, float, str]] = {}   # metric → (card, value, "anterior" note)
+        for m, sk, kk, digs in (("basileia", "indice_basileia", "basileia_pct", 2),
+                                ("alavancagem", "razao_alavancagem", "leverage_pct", 2)):
+            sv, kv = s.get(sk), k1.get(kk)
+            if sv is not None and kv is not None:
+                lead[m] = (("km1", kv, f"anterior: {_num(sv, digs)}% em {s_date}, BCB IF.data") if km1_newer
+                           else ("prud", sv, f"anterior: {_num(kv, digs)}% em {k_date}, Pilar 3 KM1")
+                           if k_when < s_when else ("prud", sv, ""))
+            elif sv is not None:
+                lead[m] = ("prud", sv, "")
+            elif kv is not None:
+                lead[m] = ("km1", kv, "")
+
+        def _stated(card: str, m: str, name: str, when: str) -> list[str]:
+            if lead.get(m, ("",))[0] != card:
+                return []
+            _, v, prior = lead[m]
+            return [f"{name} {_num(v)}% ({when}{'; ' + prior if prior else ''})"]
+
+        cross = bool(s and k1 and any(n for _, _, n in lead.values()))
         if s.get("indice_basileia") is not None:
-            parts = [f"Índice de Basileia {_num(s['indice_basileia'])}%"]
+            parts = _stated("prud", "basileia", "Índice de Basileia", s_date)
             for k, name in (("capital_nivel_i", "Índice de Capital Nível I"),
-                            ("capital_principal", "Índice de Capital Principal"),
-                            ("razao_alavancagem", "Razão de Alavancagem"),
-                            ("indice_imobilizacao", "Índice de Imobilização")):
+                            ("capital_principal", "Índice de Capital Principal")):
                 if s.get(k) is not None:
                     parts.append(f"{name} {_num(s[k])}%")
-            parts.append(f"folga sobre o mínimo regulatório de 10,5%: "
-                         f"{_num(s['indice_basileia'] - 10.5)} p.p.")
+            parts += _stated("prud", "alavancagem", "Razão de Alavancagem", s_date)
+            if s.get("indice_imobilizacao") is not None:
+                parts.append(f"Índice de Imobilização {_num(s['indice_imobilizacao'])}%")
+            if lead.get("basileia", ("",))[0] == "prud":
+                parts.append(f"folga sobre o mínimo regulatório de 10,5%: "
+                             f"{_num(s['indice_basileia'] - 10.5)} p.p.")
             if s.get("band"):
                 parts.append(f"faixa de solidez: {s['band']}")
+            cites = [{"url": IFDATA_URL}] + ([{"url": DASFN_URL}] if cross and not km1_newer else [])
             out.append({**base,
                 "id": f"prud:{ent}:{s.get('base_date')}",
-                "date": _base_month(s.get("base_date")),
+                "date": s_date,
                 "lenses": ["financials", "prudencial"],
                 "narrative": (f"{label} — solvência / capital regulatório (Basileia), conglomerado "
                               f"prudencial (BCB IF.data, Relatório 5 'Informações de Capital', "
-                              f"data-base {_base_month(s.get('base_date'))}): " + "; ".join(parts) + "."),
-                "citations": [{"url": IFDATA_URL}],
+                              f"data-base {s_date}): " + "; ".join(parts) + "."),
+                "citations": cites,
             })
-        k1 = e.get("pilar3_km1") or {}
         if k1.get("basileia_pct") is not None or k1.get("lcr_pct") is not None:
-            parts = []
-            if k1.get("basileia_pct") is not None:
-                parts.append(f"Índice de Basileia {_num(k1['basileia_pct'])}%")
-            if k1.get("leverage_pct") is not None:
-                parts.append(f"Razão de Alavancagem {_num(k1['leverage_pct'])}%")
+            # no headroom here: KM1 publishes whole percents, so "16 − 10,5" would be false precision.
+            parts = _stated("km1", "basileia", "Índice de Basileia", k_date)
+            parts += _stated("km1", "alavancagem", "Razão de Alavancagem", k_date)
             if k1.get("lcr_pct") is not None:
                 lcr = f"liquidez de curto prazo (LCR) {_num(k1['lcr_pct'])}%"
                 if k1.get("band_lcr"):
@@ -824,14 +866,14 @@ def bank_metric_cards(feed: dict[str, Any]) -> list[dict[str, Any]]:
                 parts.append(lcr)
             if k1.get("nsfr_pct") is not None:
                 parts.append(f"liquidez estrutural (NSFR) {_num(k1['nsfr_pct'])}%")
-            q = _quarter(k1.get("trimestre"))
+            cites = [{"url": DASFN_URL}] + ([{"url": IFDATA_URL}] if cross and km1_newer else [])
             out.append({**base,
                 "id": f"km1:{ent}:{k1.get('trimestre')}",
-                "date": q,
+                "date": k_date,
                 "lenses": ["financials", "prudencial", "liquidez"],
                 "narrative": (f"{label} — Pilar 3, tabela KM1 (indicadores prudenciais publicados pela "
-                              f"instituição; BCB DASFN, {q}): " + "; ".join(parts) + "."),
-                "citations": [{"url": DASFN_URL}],
+                              f"instituição; BCB DASFN, {k_date}): " + "; ".join(parts) + "."),
+                "citations": cites,
             })
         f = e.get("fundamentals") or {}
         npl = e.get("inadimplencia") or {}

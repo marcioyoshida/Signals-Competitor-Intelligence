@@ -39,12 +39,56 @@ def test_bank_metric_cards_carry_basileia_with_source_and_date():
     cards = {c["id"]: c for c in aa.bank_metric_cards(_feed())}
     assert set(cards) == {"prud:banco_x:202606", "km1:banco_x:2026-3", "fund:banco_x:202606"}
     p = cards["prud:banco_x:202606"]["narrative"]
-    assert "Índice de Basileia 15,56%" in p and "data-base 06/2026" in p and "5,06 p.p." in p
+    assert "data-base 06/2026" in p and "Capital Nível I 12,85%" in p and "faixa de solidez: sólido" in p
     k = cards["km1:banco_x:2026-3"]["narrative"]
-    assert "Índice de Basileia 16%" in k and "3T2026" in k and "(LCR) 145%" in k
+    assert "3T2026" in k and "(LCR) 145%" in k
     f = cards["fund:banco_x:202606"]["narrative"]
     assert "ROE 13,1% a.a." in f and "inferência" in f and "R$ 2.015,2 bi" in f and "15+ dias 2,74%" in f
     assert all(c["citations"] and c["entities"] == ["banco_x"] for c in cards.values())
+
+
+def _two_sources(s_base, k_tri):
+    feed = _feed()
+    e = feed["entities"][0]
+    e["soundness"]["base_date"], e["pilar3_km1"]["trimestre"] = s_base, k_tri
+    return {c["id"].split(":")[0]: c for c in aa.bank_metric_cards(feed)}
+
+
+def test_newer_km1_leads_basileia_and_older_ifdata_follows_as_comparison():
+    c = _two_sources(202606, "2026-3")
+    k, p = c["km1"]["narrative"], c["prud"]["narrative"]
+    assert "Índice de Basileia 16% (3T2026; anterior: 15,56% em 06/2026, BCB IF.data)" in k
+    assert "Razão de Alavancagem 7% (3T2026; anterior: 6,79% em 06/2026" in k
+    assert "Basileia 1" not in p and "Alavancagem" not in p and "folga" not in p   # stated once
+    assert "folga" not in k                                     # whole-percent KM1: no false precision
+    assert {x["url"] for x in c["km1"]["citations"]} == {aa.DASFN_URL, aa.IFDATA_URL}
+
+
+def test_newer_ifdata_leads_and_km1_follows():
+    c = _two_sources(202609, "2026-2")
+    k, p = c["km1"]["narrative"], c["prud"]["narrative"]
+    assert "Índice de Basileia 15,56% (09/2026; anterior: 16% em 2T2026, Pilar 3 KM1)" in p
+    assert "folga sobre o mínimo regulatório de 10,5%: 5,06 p.p." in p
+    assert "Basileia" not in k.split("):", 1)[1] and "(LCR) 145%" in k
+    assert {x["url"] for x in c["prud"]["citations"]} == {aa.IFDATA_URL, aa.DASFN_URL}
+
+
+def test_same_base_date_states_the_ifdata_figure_once_without_comparison():
+    c = _two_sources(202609, "2026-3")
+    assert "Índice de Basileia 15,56% (09/2026)" in c["prud"]["narrative"]
+    assert "anterior" not in c["prud"]["narrative"] and "Basileia" not in c["km1"]["narrative"].split("):", 1)[1]
+
+
+def test_single_source_states_its_own_figure():
+    feed = _feed()
+    feed["entities"][0].pop("pilar3_km1")
+    c = {x["id"].split(":")[0]: x for x in aa.bank_metric_cards(feed)}
+    assert "Índice de Basileia 15,56% (06/2026)" in c["prud"]["narrative"] and "km1" not in c
+
+
+def test_system_prompt_asks_for_the_most_recent_figure_first():
+    system, _ = aa.build_messages("q", [])
+    assert "comece pelo valor mais recente" in system
 
 
 def test_entity_without_metrics_gets_no_card():
