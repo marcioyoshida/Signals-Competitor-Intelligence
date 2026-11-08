@@ -390,7 +390,9 @@ def _attach_threat_history(entity_attrs: dict[str, Any] | None,
         x = _project_item(n)
         _canonicalize_item(x, canon)
         e = x.get("entity")
-        if not e or e not in entity_attrs or not x.get("date"):
+        # radar-backed cards are skipped by executive._cards (#371–#375): the prior window must
+        # average the same card set, or prior_momentum compares two different populations
+        if not e or e not in entity_attrs or not x.get("date") or x.get("radar_backed"):
             continue
         a = acc.setdefault(e, [0.0, 0, x["date"], x["date"]])
         a[0] += _threat_100(x.get("threat_score"))

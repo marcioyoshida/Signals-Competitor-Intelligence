@@ -336,3 +336,13 @@ def test_time_gated_handler_logs_shadow_outcomes(monkeypatch):
     assert body["outcomes"]["launch_precursor"]["open"] == 1
     assert puts[predictive.OUTCOMES_KEY]["rows"][0]["shadow"] is True
     assert not [k for k in puts if k.startswith("narratives/")]  # nothing published
+
+
+def test_threat_history_mean_skips_radar_backed_cards():
+    from src.dashboard import feed_builder
+    hist = [{"id": "a", "entity": "itau", "run_date": "2026-10-20", "threat_score": 0.4, "threat_factors": {"x": 1}},
+            {"id": "b", "entity": "itau", "run_date": "2026-10-21", "threat_score": 0.9, "threat_factors": {"x": 1},
+             "radar_backed": True}]
+    out = feed_builder._attach_threat_history({"itau": {}}, hist, {})
+    h = out["itau"][feed_builder.THREAT_HISTORY_KEY]
+    assert h["n"] == 1 and h["mean"] == 40.0
