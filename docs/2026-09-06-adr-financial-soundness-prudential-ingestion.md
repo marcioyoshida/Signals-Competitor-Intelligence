@@ -600,3 +600,23 @@ means disallow.
   reads its own risk prose (`corpus="pilar3"`) instead of `solvency_facts`.
 - **KB:** the prose goes to the KB with the DASFN JSON URL as its citation. The full IPE report wins
   over DASFN tables for the same bank.
+
+## Addendum 4 (2026-11-08): the Ask agent grounds on the per-entity metrics (#367)
+
+**Gap.** Tiers A/1/2 and KM1 were stamped on `feed.entities[]` (`soundness`, `fundamentals`,
+`inadimplencia`, `pilar3_km1`), but `agent_ask` never turned them into cards. On 11-06 the hosted
+model declined "Qual o índice de Basileia do Bradesco?". The figure was in the feed (15,56%), but
+the prompt held only Itaú/Bari Basel figures from KB Pilar 3 prose, so declining was correct.
+
+**Decision.** `agent_ask.bank_metric_cards(feed)` projects up to three citable **per-entity**
+cards. Being per-entity, the subject is the institution itself, and no figure can be pinned on
+another bank (the grounding over-read trap).
+- `prud:<id>:<base>`: IF.data capital report (Basileia, Nível I, Capital Principal, alavancagem,
+  imobilização, headroom over 10,5%, band). It cites the IF.data page.
+- `km1:<id>:<trimestre>`: Pilar 3 KM1 (Basileia, alavancagem, LCR with band/QoQ, NSFR). It cites DASFN.
+- `fund:<id>:<base>`: ROE/ROA labelled *anualizados pela Onça, inferência*, plus 15+ day
+  delinquency labelled as broader than the 90-day measure.
+
+Each card carries its base date in the text. `balancete` and `resultados` stay out until their
+units are labelled for an answer. Verified live on hosted Nova (banking scope): "O índice de
+Basileia do Bradesco é de 15,56% [prud:bradesco:202606]".
