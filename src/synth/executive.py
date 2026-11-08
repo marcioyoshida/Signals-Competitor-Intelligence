@@ -31,7 +31,10 @@ _REG_KINDS = ("regulatory_lifecycle", "regulatory_fusion")
 
 # --- shared helpers -------------------------------------------------------------------
 def _cards(feed: dict[str, Any]) -> list[dict[str, Any]]:
-    return [c for c in (feed.get("feed") or []) if isinstance(c, dict)]
+    # #371–#375: a derived card that exists only because CPO-radar (YouTube) evidence widened its
+    # gate is `radar_backed`; Ameaça/Manchetes/Sinais/Movimentos/Momentum stay narrative-driven
+    # (owner, 2026-11-08), so the executive panels never read it. It stays in the feed itself.
+    return [c for c in (feed.get("feed") or []) if isinstance(c, dict) and not c.get("radar_backed")]
 
 
 def _in_industry(item: dict[str, Any], slug: str | None) -> bool:

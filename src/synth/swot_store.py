@@ -109,7 +109,9 @@ def feeds(narrative: dict[str, Any]) -> Iterator[tuple[str, str, str, str | None
         ent = narrative.get("entity")
         coh = hint.get("cohort")
         if ent and coh:
-            yield ent, hint["dimension"], f"peer:{coh}", _industry_label(coh)
+            # #374: product cadence (CPO radar) is its own claim, not the threat-level peer bullet
+            base = "cadence" if hint.get("basis") == "product_cadence" else "peer"
+            yield ent, hint["dimension"], f"{base}:{coh}", _industry_label(coh)
     elif axis == "cohort" and hint.get("dimension"):
         coh = hint.get("cohort")
         label = narrative.get("cohort_label") or _industry_label(coh or "")
@@ -139,6 +141,11 @@ def _bullet_text(base_key: str, dim: str, ctx: str | None) -> str:
         return (f"Supera os pares em {ctx} — força competitiva relativa sustentada."
                 if dim == "S" else
                 f"Fica atrás dos pares em {ctx} — fraqueza relativa.")
+    if base_key.startswith("cadence:"):
+        return (f"Lança produtos e funcionalidades em ritmo acima dos pares em {ctx} "
+                f"(radar de produto: YouTube oficial ou de 2+ canais)."
+                if dim == "S" else
+                f"Ritmo de lançamentos abaixo dos pares em {ctx} (radar de produto).")
     if base_key.startswith("sector:"):
         return (f"Opera em um setor em aquecimento ({ctx}) — intensidade competitiva crescente."
                 if dim == "T" else

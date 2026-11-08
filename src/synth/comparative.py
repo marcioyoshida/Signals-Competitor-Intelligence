@@ -31,7 +31,7 @@ from typing import Any
 
 import boto3
 
-from src.synth import feature_store, longitudinal
+from src.synth import feature_store, longitudinal, radar_evidence
 from src.synth.fmt_br import num, signed
 from src.synth.synthesize import ENTITY_LABELS, run_at_now, run_date_today
 
@@ -44,6 +44,14 @@ PEER_Z = 1.5           # |peer_z| beyond this is an outlier
 MIN_GAP = 0.1          # ... and the absolute gap vs the cohort mean must be material
 RECENCY_DAYS = 7       # the entity must be reasonably current (not stale)
 COOLDOWN_DAYS = 7      # re-emit suppression: only a worse tier re-fires within this
+
+# #374 product cadence (CPO radar): confirmed launch/feature events per entity vs its cohort.
+CADENCE_SIGNAL = "product_cadence"
+CADENCE_WINDOW_DAYS = 14   # = the radar's own event window (latest.json); inside YouTube's 30 days
+CADENCE_MIN_EVENTS = 3     # an outperformer must have shipped at least this many confirmed changes
+CADENCE_MIN_STD = 1.0      # counts are small integers: floor the cohort spread at one event
+CADENCE_STABLE_DAYS = 7    # ... and must ALSO be an outlier in the snapshot this many days back
+CADENCE_SCORE = 0.3        # context for SWOT, never a top alert
 
 
 def _f(env: str, default: float) -> float:
@@ -70,11 +78,13 @@ def _industry_label(slug: str) -> str:
         return slug
 
 
-def prior_outliers(narratives: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+def prior_outliers(narratives: list[dict[str, Any]], *, cadence: bool = False) -> dict[str, dict[str, Any]]:
     """Most-recent prior comparative card per entity: {entity: {run_date, tier, direction}}."""
     out: dict[str, dict[str, Any]] = {}
     for n in narratives:
         if not isinstance(n, dict) or n.get("axis") != AXIS:
+            continue
+        if (n.get("signal") == CADENCE_SIGNAL) != cadence:  # #374: separate cooldowns
             continue
         ent = n.get("entity")
         rd = feature_store._date_of(n)
@@ -267,6 +277,130 @@ def build_narrative(cand: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def cadence_counts(radar: dict[str, Any], *, as_of: str, window: int) -> dict[str, list[dict[str, Any]]]:
+    """{entity: confirmed launch/feature events in the window} for every radar-COVERED entity
+    (an entity the radar tracks with no event counts as 0; untracked entities are absent)."""
+    covered = {p.get("entity") for p in (radar or {}).get("products") or []
+               if isinstance(p, dict) and p.get("entity")}
+    out: dict[str, list[dict[str, Any]]] = {e: [] for e in covered}
+    for ev in radar_evidence.confirmed_events(radar, types=radar_evidence.PRODUCT_TYPES):
+        g = longitudinal._days_between(as_of, ev["date"])
+        if g is not None and 0 <= g <= window and ev["entity"] in out:
+            out[ev["entity"]].append(ev)
+    return out
+
+
+def cadence_outliers(
+    radar: dict[str, Any], industry_map: dict[str, list[str]], *, as_of: str,
+) -> dict[str, dict[str, Any]]:
+    """Pure: {entity: best (cohort, z, count, mean)} for cadence OUTPERFORMERS only.
+
+    No Weakness side on purpose: few videos is not evidence a competitor isn't shipping."""
+    window = int(_f("ONCA_COMPARATIVE_CADENCE_WINDOW_DAYS", CADENCE_WINDOW_DAYS))
+    min_peers = int(_f("ONCA_COMPARATIVE_MIN_PEERS", MIN_PEERS))
+    z_thr = _f("ONCA_COMPARATIVE_Z", PEER_Z)
+    min_events = int(_f("ONCA_COMPARATIVE_CADENCE_MIN_EVENTS", CADENCE_MIN_EVENTS))
+    counts = cadence_counts(radar, as_of=as_of, window=window)
+    cohorts: dict[str, list[str]] = {}
+    for ent in counts:
+        for slug in industry_map.get(ent) or []:
+            cohorts.setdefault(slug, []).append(ent)
+    out: dict[str, dict[str, Any]] = {}
+    for slug, members in cohorts.items():
+        if len(members) < min_peers:
+            continue
+        vals = [len(counts[m]) for m in members]
+        mean = sum(vals) / len(vals)
+        std = max((sum((v - mean) ** 2 for v in vals) / len(vals)) ** 0.5, CADENCE_MIN_STD)
+        for m in members:
+            n = len(counts[m])
+            z = (n - mean) / std
+            if n < min_events or z < z_thr:
+                continue
+            if m not in out or z > out[m]["peer_z"]:
+                out[m] = {"cohort": slug, "peer_z": round(z, 2), "count": n,
+                          "cohort_mean": round(mean, 2), "peers": len(members),
+                          "events": counts[m], "window": window}
+    return out
+
+
+def nominate_cadence(
+    radar: dict[str, Any], prior_radar: dict[str, Any], industry_map: dict[str, list[str]], *,
+    as_of: str, prior_as_of: str, recent_narratives: list[dict[str, Any]] | None = None,
+    cooldown_days: int | None = None,
+) -> list[dict[str, Any]]:
+    """Pure: cadence outliers that ALSO stood out in the snapshot ~a week earlier (one upload
+    burst never makes a Strength), minus those still inside their cooldown."""
+    cooldown_days = int(cooldown_days if cooldown_days is not None
+                        else _f("ONCA_COMPARATIVE_COOLDOWN_DAYS", COOLDOWN_DAYS))
+    now = cadence_outliers(radar, industry_map, as_of=as_of)
+    before = cadence_outliers(prior_radar, industry_map, as_of=prior_as_of) if prior_radar else {}
+    prior = prior_outliers(recent_narratives or [], cadence=True)
+    out = []
+    for ent, c in now.items():
+        if ent not in before:
+            continue
+        tier = peer_tier(abs(c["peer_z"]))
+        prev = prior.get(ent)
+        if prev is not None:
+            g = longitudinal._days_between(as_of, prev["run_date"])
+            if g is not None and g < cooldown_days and tier <= prev["tier"]:
+                continue
+        evs = c["events"]
+        out.append({**c, "entity": ent, "peer_tier": tier,
+                    "label": evs[0].get("product_label") or ENTITY_LABELS.get(ent, str(ent).title()),
+                    "cohort_label": _industry_label(c["cohort"]),
+                    "events": [radar_evidence.label_only(e) for e in evs],
+                    "prior_count": before[ent]["count"]})
+    out.sort(key=lambda c: c["peer_z"], reverse=True)
+    return out
+
+
+def build_cadence_narrative(cand: dict[str, Any]) -> dict[str, Any]:
+    """Label-only pt-BR card (no YouTube text): S hint on its own `cadence:` SWOT claim."""
+    evs = cand["events"]
+    n_launch = sum(1 for e in evs if e.get("type") == "launch")
+    launches = f"{n_launch} lançamento{'' if n_launch == 1 else 's'}"
+    head = (
+        f"Comparativo setorial — ritmo de produto: {cand['label']} registrou {cand['count']} "
+        f"lançamentos/funcionalidades confirmados em {cand['window']} dias ({launches}), "
+        f"contra média de {num(float(cand['cohort_mean']), 1)} entre {cand['peers']} pares de "
+        f"{cand['cohort_label']} acompanhados pelo radar (z setorial={signed(float(cand['peer_z']))}; "
+        f"{cand['prior_count']} na leitura de {CADENCE_STABLE_DAYS} dias antes)."
+    )
+    tail = (
+        " Fonte: radar de produto (YouTube oficial ou de 2+ canais) — mede ritmo de lançamentos "
+        "visíveis, não participação de mercado; inferência relativa, não um fato novo."
+    )
+    run = run_date_today()
+    return {
+        "id": f"comparative-cadence-{cand['entity']}",
+        "kind": "comparative", "axis": AXIS, "subject_type": "entity",
+        "signal": CADENCE_SIGNAL, "direction": "outperform",
+        "entity": cand["entity"], "entities": [cand["entity"]],
+        "lenses": ["produto"], "is_alert": False, "is_inference": True,
+        "radar_backed": True,
+        "threat_score": CADENCE_SCORE,
+        "threat_factors": {"peer_z": cand["peer_z"], "count": cand["count"],
+                           "cohort_mean": cand["cohort_mean"], "peers": cand["peers"],
+                           "peer_tier": cand["peer_tier"], "basis": CADENCE_SIGNAL},
+        "threat_score_note": "estimated_v1_comparative_cadence",
+        "peer_tier": cand["peer_tier"], "peer_z": cand["peer_z"], "cohort": cand["cohort"],
+        "swot_hint": {"dimension": "S", "sign": "+", "cohort": cand["cohort"],
+                      "peer_z": cand["peer_z"], "basis": CADENCE_SIGNAL},
+        "narrative": head + tail,
+        "citations": [radar_evidence.citation(e) for e in evs[:5]],
+        "source_ids": [],
+        "mode": "derived", "run_date": run, "run_at": run_at_now(), "as_of": run,
+        "data_as_of": {"radar_window_days": cand["window"]},
+    }
+
+
+def _days_ago(as_of: str, days: int) -> str:
+    import datetime as _dt
+    return (_dt.date.fromisoformat(as_of[:10]) - _dt.timedelta(days=days)).isoformat()
+
+
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """Recompute fresh features, emit peer-cohort outlier narratives."""
     digests_bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
@@ -310,6 +444,29 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             normalized.add(ent)
     retracted = _retract_same_day(digests_bucket, s3, run_date, normalized)
 
+    # #374 product cadence from the CPO radar (separate card, separate SWOT claim).
+    cadence_keys: list[str] = []
+    cadence_retracted: list[str] = []
+    try:
+        radar = radar_evidence.load(digests_bucket, s3=s3)
+        if radar:
+            prior_as_of = _days_ago(run_date, CADENCE_STABLE_DAYS)
+            prior_radar = radar_evidence.load_snapshot(digests_bucket, prior_as_of, s3=s3)
+            imap = feature_store.load_industry_map()
+            ccands = nominate_cadence(radar, prior_radar, imap, as_of=run_date,
+                                      prior_as_of=prior_as_of, recent_narratives=recent)
+            for cand in ccands:
+                key = _write(build_cadence_narrative(cand), digests_bucket, s3)
+                if key:
+                    cadence_keys.append(key)
+            still = set(cadence_outliers(radar, imap, as_of=run_date))
+            gone = {e for e in cadence_counts(radar, as_of=run_date, window=CADENCE_WINDOW_DAYS)
+                    if e not in still}
+            cadence_retracted = _retract_same_day(digests_bucket, s3, run_date, gone,
+                                                  prefix="comparative-cadence-")
+    except Exception as exc:  # pragma: no cover - radar is optional evidence
+        print(f"Warning: product-cadence comparison skipped: {exc}")
+
     return {
         "statusCode": 200,
         "body": json.dumps(
@@ -322,15 +479,18 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 "entities": [f"{c['entity']}:{c['direction']}({c['cohort']})" for c in cands],
                 "keys": keys,
                 "retracted": sorted(retracted),
+                "cadence_keys": cadence_keys,
+                "cadence_retracted": cadence_retracted,
             }
         ),
     }
 
 
-def _retract_same_day(bucket: str, s3: Any, run_date: str, normalized: set[str]) -> list[str]:
+def _retract_same_day(bucket: str, s3: Any, run_date: str, normalized: set[str],
+                      prefix: str = "comparative-") -> list[str]:
     out: list[str] = []
     for ent in sorted(normalized):
-        key = f"{feature_store.NARRATIVES_PREFIX}{run_date}/comparative-{ent}.json"
+        key = f"{feature_store.NARRATIVES_PREFIX}{run_date}/{prefix}{ent}.json"
         try:
             s3.head_object(Bucket=bucket, Key=key)
         except Exception:

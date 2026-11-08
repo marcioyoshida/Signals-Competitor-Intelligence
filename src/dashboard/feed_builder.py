@@ -450,6 +450,9 @@ def _project_item(n: dict[str, Any]) -> dict[str, Any]:
         "latest_dev_id": n.get("latest_dev_id"),      # thread: the card its latest dev shows
         "latest_dev_date": n.get("latest_dev_date"),
         "current_stage": n.get("current_stage"),
+        # #371–#375: the card's gate passed only with CPO-radar (YouTube) evidence — the
+        # executive panels skip it (synth/executive._cards); the feed and SWOT keep it.
+        "radar_backed": bool(n.get("radar_backed")),
         "pattern": n.get("pattern"),  # behavioral axis: drumbeat / multi_front
         "relation": n.get("relation"),  # relational axis: co_mention / convergence / dispute
         "horizon_days": n.get("horizon_days"),  # predictive axis: forecast window

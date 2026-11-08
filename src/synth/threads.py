@@ -85,6 +85,13 @@ EVENT_TYPES: dict[str, dict[str, Any]] = {
     "breach": {"label": "Incidente de segurança / vazamento",
         "patterns": [r"vazamento", r"dados vazad", r"invasao", r"\bataque", r"hacker",
                      r"ransomware", r"incidente de seguranca"]},
+    # #375: a service failure customers feel. Specific phrasings only — a bare "instabilidade"
+    # is usually macro/financial news, not an app or Pix failure.
+    "service_outage": {"label": "Instabilidade / falha de serviço",
+        "patterns": [r"fora do ar", r"instabilidade (no|do|nos|em|n[ao]s?) ?(app|aplicativo|sistema|pix|servic|plataforma)",
+                     r"falhas? (no|do|nos|em|n[ao]) ?(app|aplicativo|sistema|pix|servic|plataforma)",
+                     r"\bpane (no|do|nos|em|n[ao])", r"indisponibilidade (do|no|de|da|n[ao]) ?(app|aplicativo|sistema|servic|pix|plataforma)",
+                     r"\bapp (caiu|travou|fora)", r"clientes sem acesso"]},
     "funding": {"label": "Captação / oferta",
         "patterns": [r"captac", r"oferta de acoes", r"\bipo\b", r"follow-on", r"\baporte",
                      r"\brodada\b", r"levantou r\$", r"emissao de cotas", r"capta r\$"]},
@@ -158,10 +165,45 @@ def _entity_label(entity: str, n: dict[str, Any]) -> str:
             or str(entity).replace("_", " ").title())
 
 
+RADAR_EVENT_TYPE = "service_outage"
+RADAR_YT_SCORE = 0.5       # a confirmed YouTube outage/complaint: below ALERT_PEAK on its own
+RADAR_APPSTORE_SCORE = 0.7  # an App Store review spike (count >= 10 AND z >= 3): alert-grade
+
+
+def radar_developments(radar: dict[str, Any] | None, *, as_of: str, window: int) -> list[dict[str, Any]]:
+    """#375: CPO-radar failure evidence as ``service_outage`` developments (label-only).
+
+    Confirmed YouTube ``outage``/``complaint`` events (official channel or >= 2 channels) are
+    NOT alertable — creators talking about a failure never page an executive on their own.
+    App Store baseline alerts are alertable. Nothing from YouTube is kept but the radar id and
+    Onça's labels (YouTube API terms, 30-day deletion)."""
+    from src.synth import radar_evidence
+
+    out: list[dict[str, Any]] = []
+    evs = radar_evidence.confirmed_events(radar or {}, types=radar_evidence.FAILURE_TYPES)
+    for ev, score, alertable in ([(e, RADAR_YT_SCORE, False) for e in evs]
+                                 + [(a, RADAR_APPSTORE_SCORE, True)
+                                    for a in radar_evidence.appstore_alerts(radar or {})]):
+        gap = _days_between(as_of, ev["date"])
+        if gap is None or not 0 <= gap <= window:
+            continue
+        out.append({
+            "entity": ev["entity"], "label": ev.get("product_label"),
+            "date": str(ev["date"])[:10], "narrative_id": ev["id"],
+            "summary": f"Radar de produto: {radar_evidence.claim(ev)}.",
+            "threat_score": score,
+            "citations": [radar_evidence.citation(ev)], "source_ids": [],
+            "is_alert": False, "radar": True, "alertable": alertable,
+        })
+    return out
+
+
 def build_threads(
-    narratives: list[dict[str, Any]], *, as_of: str | None = None, window: int = 90
+    narratives: list[dict[str, Any]], *, as_of: str | None = None, window: int = 90,
+    radar: dict[str, Any] | None = None,
 ) -> dict[str, dict[str, Any]]:
-    """Pure: activity narratives -> {incident_id: thread doc}. Deterministic, no I/O."""
+    """Pure: activity narratives (+ #375 radar failure evidence) -> {incident_id: thread doc}.
+    Deterministic, no I/O."""
     as_of = as_of or run_date_today()
     close_days = int(_f("ONCA_THREAD_CLOSE_DAYS", CLOSE_DAYS))
     min_dev = int(_f("ONCA_THREAD_MIN_DEVELOPMENTS", MIN_DEVELOPMENTS))
@@ -203,12 +245,35 @@ def build_threads(
         for lens in n.get("lenses") or []:
             g["lenses"].add(lens)
 
+    # #375: radar failure evidence joins (entity, service_outage). A narrative development
+    # keeps its date (the radar citation rides along); radar fills dates no narrative covers.
+    for rd in radar_developments(radar, as_of=as_of, window=window):
+        ent = rd["entity"]
+        g = groups.setdefault((ent, RADAR_EVENT_TYPE), {
+            "entity": ent, "event_type": RADAR_EVENT_TYPE,
+            "label": _entity_label(ent, {"label": rd.get("label")}), "devs": {}, "lenses": set()})
+        dev = g["devs"].get(rd["date"])
+        if dev is None:
+            g["devs"][rd["date"]] = {k: v for k, v in rd.items() if k not in ("entity", "label")}
+        elif dev.get("radar"):  # two radar items on one day: keep the alert-grade one
+            if rd["alertable"] and not dev.get("alertable"):
+                rd = {**rd, "citations": rd["citations"] + dev["citations"]}
+                g["devs"][rd["date"]] = {k: v for k, v in rd.items() if k not in ("entity", "label")}
+            else:
+                dev["citations"] = dev["citations"] + rd["citations"]
+        else:
+            dev["citations"] = dev["citations"] + rd["citations"]
+            dev["alertable"] = True
+
     out: dict[str, dict[str, Any]] = {}
     for (ent, et), g in groups.items():
         devs = sorted(g["devs"].values(), key=lambda d: d["date"])
         dates = {d["date"] for d in devs}
         if len(devs) < min_dev or len(dates) < min_dates:
             continue
+        narr_devs = [d for d in devs if not d.get("radar")]
+        radar_backed = (len(narr_devs) < min_dev or len({d["date"] for d in narr_devs}) < min_dates)
+        alert_devs = [d for d in devs if not d.get("radar") or d.get("alertable")]
         first_seen, last_updated = devs[0]["date"], devs[-1]["date"]
         peak = max(d["threat_score"] for d in devs)
         latest = devs[-1]["threat_score"]
@@ -234,6 +299,9 @@ def build_threads(
             "n_dates": len(dates),
             "peak_threat": round(peak, 3),
             "latest_threat": round(latest, 3),
+            # #375: only narrative / App Store developments can raise the alert.
+            "alert_peak": round(max((d["threat_score"] for d in alert_devs), default=0.0), 3),
+            "radar_backed": radar_backed,
             "lenses": sorted(g["lenses"]),
             "developments": devs,
         }
@@ -265,7 +333,8 @@ def build_card(thread: dict[str, Any]) -> dict[str, Any]:
     """A feed-ready narrative-like card for one incident thread (grounded, labeled)."""
     devs = thread["developments"]
     score = _thread_score(thread)
-    alert = thread["status"] != "resolved" and thread["peak_threat"] >= _f("ONCA_THREAD_ALERT_PEAK", ALERT_PEAK)
+    alert_peak = thread.get("alert_peak", thread["peak_threat"])
+    alert = thread["status"] != "resolved" and alert_peak >= _f("ONCA_THREAD_ALERT_PEAK", ALERT_PEAK)
     latest_summary = (devs[-1]["summary"] or "").strip()
 
     def _fmt(d: str) -> str:
@@ -299,6 +368,7 @@ def build_card(thread: dict[str, Any]) -> dict[str, Any]:
         "lenses": list(thread["lenses"]),
         "is_alert": alert,
         "is_inference": True,
+        "radar_backed": bool(thread.get("radar_backed")),
         "threat_score": score,
         "threat_factors": {
             "n_developments": thread["n_developments"],
@@ -366,7 +436,9 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     run_date = run_date_today()
 
     narratives = feature_store.load_history(digests_bucket, window, s3=s3)
-    threads = build_threads(narratives, as_of=run_date, window=window)
+    from src.synth import radar_evidence
+    radar = radar_evidence.load(digests_bucket, s3=s3)
+    threads = build_threads(narratives, as_of=run_date, window=window, radar=radar)
 
     published = None
     try:
@@ -389,6 +461,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             "window_days": window,
             "threads": len(threads),
             "by_status": by_status,
+            "radar_backed": sorted(t for t, th in threads.items() if th.get("radar_backed")),
             "index_cards": n_cards,
             "published": published,
         }),

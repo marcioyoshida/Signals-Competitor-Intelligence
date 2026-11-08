@@ -390,3 +390,44 @@ table ships (the highest-value/highest-risk axes review-gated; the input-gated a
 honest, tested, self-activating mechanisms). Pipeline order: ingest→feature→synth→
 silence→longitudinal→comparative→thematic→regulatory→cohort→swot→swot_reconcile→
 threads→behavioral→relational→operatives→predictive→ecosystem→feed.
+
+## Addendum — CPO-radar evidence in the derived axes (2026-11-08, #371 #372 #374 #375)
+
+The CPO Product Radar (#159) now feeds four derived axes through ONE reader,
+`src/synth/radar_evidence.py`. These rules are shared with #369 (Ansoff) and #373 (Four Corners):
+
+- **Confirmed events only.** A radar event counts only when it comes from an official channel (`oficial`) or 2+ channels (`corroborado`) and resolves to an entity. Single-creator events stay out.
+- **Never a narrative, never a gate on its own.** Radar items are not activity narratives. The feature store's activity, behavioral and silence inputs never see them.
+- **`radar_backed` flag.** A derived card whose gate passes only because of radar items carries `radar_backed: true`:
+  - `synth/executive._cards` drops it, so Ameaça, Manchetes, Sinais emergentes, Movimentos and Momentum stay narrative-driven (owner, 2026-11-08);
+  - the strategy frameworks don't count it toward `MIN_EVIDENCE`;
+  - it stays in the feed, in SWOT and in Ask.
+- **YouTube API terms (delete within 30 days).** Durable stores keep only the radar event id plus Onça's labels (entity, product, type, confidence, channel count, date). This applies to narratives, `threads/`, proposals and `predictive/outcomes.json`. They never keep the video title or description, the classifier's change text, URLs or channel names. Theme tagging and LLM prompts may read the change text transiently while the event is in the radar's own window. This is option (a) of #369.
+- **Kill switch.** `ONCA_RADAR_EVIDENCE=0` turns all of it off.
+
+Per axis:
+
+- **Thematic (#371).**
+  - A confirmed event tagged to an existing theme adds its entity to the distinct-competitor gate (`MIN_ENTITIES`). It never counts as a mention, so `MIN_MENTIONS` counts narratives only.
+  - The radar never opens a theme that no narrative touches.
+  - Radar citations come after the narrative ones.
+- **Threads (#375).**
+  - New event type `service_outage`, placed after `breach` in the taxonomy. Its patterns are specific phrasings ("fora do ar", "instabilidade no app/Pix/sistema") because a bare "instabilidade" is usually macro news.
+  - Confirmed YouTube `outage`/`complaint` events become developments scored 0.5 and can't alert.
+  - App Store baseline alerts score 0.7 and can alert.
+  - A thread built only from radar developments is `radar_backed` and never alerts (`alert_peak`).
+  - On a date that already has a narrative development, the narrative wins and the radar citation rides along.
+  - Live delta vs the old taxonomy on 11-08: +1 thread (`nubank--service_outage`), and `nubank--expansion` drops from 20 to 19 developments.
+- **Comparative — product cadence (#374).**
+  - Counts confirmed launch/feature events in 14 days per radar-covered entity against its industry cohort (`MIN_PEERS` 3, z ≥ `PEER_Z`, at least 3 events, std floor of 1).
+  - **Outperform only.** Few videos is not evidence of not shipping.
+  - **Stability.** The entity must also be an outlier in the radar snapshot from 7 days earlier.
+  - The card is `comparative-cadence-<entity>`, `signal: product_cadence`, `radar_backed`, scored 0.3. It has its own cooldown, separate from the threat peer card.
+  - The SWOT S hint lands on a separate claim, `cadence:<cohort>` (ADR 004), not on `peer:`.
+  - Live on 11-08: Itaú (banking, 6 events, z +1,8) and Nubank (fintech, 4 events, z +1,9), both stable against 11-01.
+- **Predictive (#372).**
+  - The radar is an **outcome label, never a precursor input**: `leading_indicators` doesn't read it, which is tested.
+  - While the axis is time-gated, the Lambda computes precursors in **shadow** (`ONCA_PREDICTIVE_SHADOW`, default on) and keeps `predictive/outcomes.json`.
+  - There is one open row per (entity, `launch_precursor`). A row resolves `hit` on the first confirmed radar launch/feature or launch narrative inside (fired, fired + 30 d]. It resolves `miss` once the horizon passes.
+  - The summary reports precision per signal. Nothing is published.
+  - 11-08: 19 shadow precursors open.

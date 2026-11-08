@@ -312,3 +312,15 @@ assertions from little data — against §Context's OSINT-feasibility / no-fabri
 mostly absorbed by the parallelized pipeline (#10 — the framework fan-out already runs
 concurrently). Net: crisper, confidence-evolving, self-retiring frameworks instead of an
 append-only pile. A clean ADR-006 follow-up when picked up.
+
+## Addendum — CPO-radar evidence in Four Corners, and radar-backed cards (2026-11-08, #373 #374)
+
+- **Four Corners (#373).** Confirmed CPO-radar `launch`/`feature` events (official channel or 2+ channels) are added to an entity's evidence:
+  - axis `product_radar`, lens `produto`, score 0.3, at most 4 items (`ONCA_FOUR_CORNERS_MAX_RADAR`);
+  - they appear **after** the narrative evidence;
+  - they are on-signal only for **current_strategy** and **capabilities**. Any other corner drops radar ids, even with `ONCA_FRAMEWORK_SIGNAL_GATE=0`;
+  - they never make an entity eligible, because `MIN_EVIDENCE` counts narratives only;
+  - the LLM prompt reads the event's change text transiently. The proposal keeps the radar id plus a label-only `radar_evidence` line ("Itaú — lançamento (YouTube oficial, 04/11/2026)"), which the vetting queue shows next to confidence.
+  - On 11-08, 130 entities already had pending Four Corners proposals, including 6 of the 7 radar entities. So radar evidence appears only as those proposals are vetted and entities re-enter the queue.
+- **Radar-backed cards never count as own-track evidence.** Ansoff, BCG, Four Corners, PESTLE, Porter and 7S skip narratives flagged `radar_backed` when grouping by entity. The first such card is the product-cadence comparative card (ADR 003 addendum, #374). This keeps the #32 own-track rule intact.
+- Ansoff's own radar wiring is still #369. The retention design it asked for is settled as option (a): id plus labels only.

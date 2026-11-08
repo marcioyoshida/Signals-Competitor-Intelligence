@@ -29,7 +29,7 @@ from typing import Any, Callable
 
 import boto3
 
-from src.synth import feature_store, swot_reconcile, swot_store
+from src.synth import feature_store, radar_evidence, swot_reconcile, swot_store
 from src.synth.bedrock_llm import FRAMEWORK_MODEL, converse
 from src.synth.synthesize import ENTITY_LABELS, run_at_now, run_date_today
 
@@ -41,11 +41,18 @@ from src.synth import framework_common
 from src.synth.framework_common import fz
 
 # ADR #34 — per-dimension evidence binding (axis OR lens). See framework_common.
+# #373: confirmed CPO-radar launches/features are evidence for what the competitor is doing
+# (current_strategy) and can ship (capabilities) — and nowhere else.
+RADAR_AXIS = "product_radar"
+RADAR_CORNERS = frozenset({"current_strategy", "capabilities"})
+MAX_RADAR_EVIDENCE = int(os.environ.get("ONCA_FOUR_CORNERS_MAX_RADAR", "4"))
+RADAR_SCORE = 0.3  # never outranks CVM/regulatory evidence
+
 DIM_SIGNALS = {
     "drivers":          (fz("behavioral"),               fz("fatos")),
     "assumptions":      (fz("thematic"),                 fz("news")),
-    "current_strategy": (fz("comparative"),              fz("ofertas")),
-    "capabilities":     (fz(),                           fz("market", "funds", "inf_diario")),
+    "current_strategy": (fz("comparative", RADAR_AXIS),  fz("ofertas")),
+    "capabilities":     (fz(RADAR_AXIS),                 fz("market", "funds", "inf_diario")),
     "response_profile": (fz("predictive", "behavioral"), fz()),
 }
 
@@ -103,6 +110,19 @@ def _collect_evidence_ids(narratives: list[dict[str, Any]], *, max_claims: int |
                     "threat_score": _score(n.get("threat_score"))})
         if len(out) >= max_claims:
             break
+    return out
+
+
+def radar_evidence_items(events: list[dict[str, Any]], *, limit: int = MAX_RADAR_EVIDENCE) -> list[dict[str, Any]]:
+    """#373: confirmed launch/feature radar events as Four Corners evidence items.
+
+    The ``claim`` carries the event's change text for the PROMPT only (transient); the
+    proposal persists just the radar id plus a label-only ``radar_evidence`` entry."""
+    out = []
+    for ev in events[:limit]:
+        out.append({"id": ev["id"], "claim": radar_evidence.prompt_claim(ev), "date": ev.get("date"),
+                    "axis": RADAR_AXIS, "lenses": ["produto"], "threat_score": RADAR_SCORE,
+                    "radar_label": radar_evidence.claim(ev)})
     return out
 
 
@@ -245,11 +265,20 @@ def analyze_corners(
     max_entities: int = MAX_ENTITIES,
     min_conf: float = MIN_CONF,
     min_evidence: int = MIN_EVIDENCE,
+    radar_events: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    """Pure: beliefs + narratives -> Four Corners proposals. No I/O."""
+    """Pure: beliefs + narratives (+ #373 confirmed radar launches) -> Four Corners proposals.
+
+    Radar evidence never makes an entity eligible (``eligible_entities`` counts narratives
+    only) and can only support current_strategy / capabilities assessments. No I/O."""
+    radar_by_ent: dict[str, list[dict[str, Any]]] = {}
+    for ev in radar_evidence.confirmed_events({"events": radar_events or []},
+                                              types=radar_evidence.PRODUCT_TYPES):
+        radar_by_ent.setdefault(ev["entity"], []).append(ev)
     by_ent: dict[str, list[dict[str, Any]]] = {}
     for n in narratives:
-        if not isinstance(n, dict):
+        # #374: a radar-backed derived card never counts as own-track evidence (MIN_EVIDENCE)
+        if not isinstance(n, dict) or n.get("radar_backed"):
             continue
         ent = n.get("entity")
         if ent:
@@ -264,6 +293,8 @@ def analyze_corners(
         label = belief.get("label") or _entity_label(ent)
         swot_bullets = _active_swot(belief)
         evidence = _collect_evidence_ids(by_ent.get(ent, []))
+        evidence += radar_evidence_items(radar_by_ent.get(ent, []))
+        radar_ids = {e["id"]: e["radar_label"] for e in evidence if e.get("axis") == RADAR_AXIS}
         industries = industries_map.get(ent, [])
 
         _fctx = (financial_ctx_by_ent or {}).get(ent)
@@ -275,6 +306,8 @@ def analyze_corners(
             if c["confidence"] < min_conf:
                 continue
             ev_ids = framework_common.on_signal_ids(c["evidence"], evidence, c["corner"], DIM_SIGNALS)
+            if c["corner"] not in RADAR_CORNERS:  # holds even with the signal gate switched off
+                ev_ids = [i for i in ev_ids if i not in radar_ids]
             if not ev_ids:
                 continue
             proposals.append({
@@ -289,7 +322,9 @@ def analyze_corners(
                 "text": c["text"],
                 "is_inference": c["corner"] == "response_profile",
                 "evidence": ev_ids,
-                "narrative_id": ev_ids[0] if ev_ids else None,
+                # #373: label-only source line for radar evidence (vetting UI); no YouTube data.
+                "radar_evidence": [{"id": i, "label": radar_ids[i]} for i in ev_ids if i in radar_ids],
+                "narrative_id": next((i for i in ev_ids if i not in radar_ids), ev_ids[0]),
                 "date": run_date,
                 "confidence": round(c["confidence"], 2),
                 "stance_conf": round(c["confidence"], 2),
@@ -360,6 +395,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         run_date=run_date, draft_fn=llm_draft,
         already_proposed=already,
         financial_ctx_by_ent=framework_common.financial_context_map(digests_bucket, s3=s3),
+        radar_events=radar_evidence.confirmed_events(radar_evidence.load(digests_bucket, s3=s3),
+                                                     types=radar_evidence.PRODUCT_TYPES),
     )
 
     counts = {"proposals": 0, "proposals_new": 0, "proposals_pending": 0}

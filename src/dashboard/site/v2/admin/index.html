@@ -828,7 +828,9 @@ function queueItems() {
       title: `<b>${U.esc(labelFor(p.entity))}</b> · ${U.esc(kindPt)} <span class="badge badge--ghost">${U.esc(dim)}</span> — ${U.esc(p.text)}`,
       target: p.target_text, infer: true,
       meta: [p.kind === "stale" ? `sem corroboração há ${p.days_stale} dias`
-             : `confiança ${Math.round((p.confidence || 0) * 100)}%`, U.fmtDate(p.date)] });
+             : `confiança ${Math.round((p.confidence || 0) * 100)}%`, U.fmtDate(p.date),
+             // #373: radar-backed evidence shows its source + confidence (label-only)
+             (p.radar_evidence || []).length ? "radar: " + p.radar_evidence.map(r => r.label).join("; ") : ""] });
   });
   (DATA.graph_proposals || []).forEach(p => {
     out.push({ id: p.id, kind: "graph", tag: "Grafo", tagClass: "info",

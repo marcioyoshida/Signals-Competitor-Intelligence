@@ -116,6 +116,104 @@ def leading_indicators(
     return out
 
 
+# #372 — outcome labels for validation. The CPO radar is used ONLY to label whether a
+# launch_precursor was followed by a launch; leading_indicators() never reads it (a label
+# that leaks into its own feature validates nothing).
+OUTCOMES_KEY = "predictive/outcomes.json"
+OUTCOME_SIGNALS = ("launch_precursor",)
+
+
+def _plus_days(d: str, days: int) -> str:
+    import datetime as _dt
+    return (_dt.date.fromisoformat(d[:10]) + _dt.timedelta(days=days)).isoformat()
+
+
+def _launch_evidence(entity: str, after: str, until: str, radar: dict[str, Any],
+                     narratives: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Launch evidence strictly after ``after`` and up to ``until`` (label-only)."""
+    from src.synth import radar_evidence, threads
+
+    out: list[dict[str, Any]] = []
+    for ev in radar_evidence.confirmed_events(radar or {}, types=radar_evidence.PRODUCT_TYPES,
+                                              entities={entity}):
+        if after < ev["date"][:10] <= until:
+            out.append({**radar_evidence.label_only(ev), "basis": "product_radar"})
+    for n in narratives:
+        if (isinstance(n, dict) and n.get("entity") == entity
+                and feature_store.is_activity_narrative(n)
+                and threads.primary_event_type(n) == "product_launch"):
+            d = feature_store._date_of(n)
+            if d and after < d <= until:
+                out.append({"id": n.get("id"), "date": d, "basis": "narrative"})
+    return sorted(out, key=lambda e: (e.get("date") or "", e.get("id") or ""))
+
+
+def update_outcomes(
+    log: dict[str, Any] | None, indicators: list[dict[str, Any]], *, as_of: str,
+    radar: dict[str, Any] | None, narratives: list[dict[str, Any]], shadow: bool,
+) -> dict[str, Any]:
+    """Pure: open a row per new precursor, resolve open rows to hit / miss, summarise.
+
+    One OPEN row per (entity, signal): a precursor that keeps firing daily is one prediction.
+    A row resolves ``hit`` on the first launch evidence inside (fired, fired + horizon], or
+    ``miss`` once the horizon has passed without any."""
+    rows = [dict(r) for r in (log or {}).get("rows") or []]
+    open_keys = {(r["entity"], r["signal"]) for r in rows if r.get("status") == "open"}
+    for ind in indicators:
+        if ind.get("signal") not in OUTCOME_SIGNALS:
+            continue
+        k = (ind["entity"], ind["signal"])
+        if k in open_keys:
+            continue
+        open_keys.add(k)
+        rows.append({"id": f"{ind['entity']}:{ind['signal']}:{as_of}", "entity": ind["entity"],
+                     "signal": ind["signal"], "fired": as_of,
+                     "horizon_days": int(ind.get("horizon_days") or 30),
+                     "shadow": shadow, "status": "open"})
+    for r in rows:
+        if r.get("status") != "open":
+            continue
+        until = _plus_days(r["fired"], r["horizon_days"])
+        ev = _launch_evidence(r["entity"], r["fired"], min(until, as_of), radar or {}, narratives)
+        if ev:
+            r.update(status="hit", resolved=as_of, evidence=ev[:5])
+        elif as_of > until:
+            r.update(status="miss", resolved=as_of)
+    summary: dict[str, Any] = {}
+    for sig in OUTCOME_SIGNALS:
+        mine = [r for r in rows if r["signal"] == sig]
+        hit = sum(1 for r in mine if r["status"] == "hit")
+        miss = sum(1 for r in mine if r["status"] == "miss")
+        summary[sig] = {"open": sum(1 for r in mine if r["status"] == "open"), "hit": hit,
+                        "miss": miss,
+                        "precision": round(hit / (hit + miss), 3) if hit + miss else None}
+    return {"as_of": as_of, "rows": rows, "summary": summary,
+            "note": "rótulos de resultado (radar de produto + notícias de lançamento); "
+                    "validação do eixo preditivo, não previsão publicada"}
+
+
+def _record_outcomes(bucket: str, s3: Any, indicators: list[dict[str, Any]], *, as_of: str,
+                     narratives: list[dict[str, Any]], shadow: bool) -> dict[str, Any] | None:
+    """Best-effort read-modify-write of the outcome log; returns the summary."""
+    if os.environ.get("ONCA_PREDICTIVE_OUTCOMES", "1") in ("0", "false", "False"):
+        return None
+    from src.synth import radar_evidence
+    try:
+        try:
+            log = json.loads(s3.get_object(Bucket=bucket, Key=OUTCOMES_KEY)["Body"].read())
+        except Exception:
+            log = {}
+        new = update_outcomes(log, indicators, as_of=as_of, narratives=narratives, shadow=shadow,
+                              radar=radar_evidence.load(bucket, s3=s3))
+        s3.put_object(Bucket=bucket, Key=OUTCOMES_KEY,
+                      Body=json.dumps(new, ensure_ascii=False, indent=1).encode("utf-8"),
+                      ContentType="application/json")
+        return new["summary"]
+    except Exception as exc:  # pragma: no cover - validation log is best-effort
+        print(f"Warning: predictive outcome log failed: {exc}")
+        return None
+
+
 _SIGNAL_PT = {
     "momentum_buildup": "momentum em construção — tende a sustentar/intensificar atividade",
     "launch_precursor": "precursor de lançamento — autorização recente + expansão",
@@ -156,15 +254,25 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     need = int(_f("ONCA_PREDICTIVE_MIN_HISTORY_DAYS", MIN_HISTORY_DAYS))
 
     if not _enabled() or depth < need:
-        # ADR: time-gated — accrues as history accumulates. Honest no-op until then.
+        # ADR: time-gated — accrues as history accumulates. Nothing is published; #372 still
+        # computes the precursors in SHADOW and labels their outcomes so validation can start.
+        outcomes = None
+        if os.environ.get("ONCA_PREDICTIVE_SHADOW", "1") not in ("0", "false", "False"):
+            features = feature_store.build_features(
+                narratives, as_of=run_date, industry_map=feature_store.load_industry_map())
+            outcomes = _record_outcomes(digests_bucket, s3, leading_indicators(features, narratives),
+                                        as_of=run_date, narratives=narratives, shadow=True)
         return {"statusCode": 200, "body": json.dumps({
             "status": "time_gated", "as_of": run_date, "enabled": _enabled(),
             "history_depth_days": depth, "required_days": need, "run_at": run_at_now(),
+            "outcomes": outcomes,
         })}
 
     features = feature_store.build_features(
         narratives, as_of=run_date, industry_map=feature_store.load_industry_map())
     inds = leading_indicators(features, narratives)
+    outcomes = _record_outcomes(digests_bucket, s3, inds, as_of=run_date,
+                                narratives=narratives, shadow=False)
     keys = []
     for ind in inds:
         key = f"{feature_store.NARRATIVES_PREFIX}{run_date}/{build_card(ind)['id']}.json"
@@ -178,4 +286,5 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     return {"statusCode": 200, "body": json.dumps({
         "status": "ok", "as_of": run_date, "history_depth_days": depth,
         "indicators": len(inds), "emitted": len(keys), "run_at": run_at_now(),
+        "outcomes": outcomes,
     })}

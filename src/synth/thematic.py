@@ -37,7 +37,7 @@ from typing import Any
 
 import boto3
 
-from src.synth import feature_store
+from src.synth import feature_store, radar_evidence
 from src.synth.synthesize import ENTITY_LABELS, run_at_now, run_date_today
 
 AXIS = "thematic"
@@ -192,26 +192,47 @@ def _recent_activity(narratives: list[dict[str, Any]], as_of: str, recency: int)
 
 
 def theme_groups(
-    narratives: list[dict[str, Any]], *, as_of: str, recency: int
+    narratives: list[dict[str, Any]], *, as_of: str, recency: int,
+    radar_events: list[dict[str, Any]] | None = None,
 ) -> dict[str, dict[str, Any]]:
-    """Aggregate recent activity by theme: distinct entities, mentions, drivers."""
+    """Aggregate recent activity by theme: distinct entities, mentions, drivers.
+
+    #371: confirmed CPO-radar events (``radar_evidence.confirmed_events``) inside the same
+    recency window add their entity to the distinct-competitor gate ONLY — they never count
+    as mentions, so a current still needs MIN_MENTIONS narrative cards. Tagging reads the
+    event's change text transiently; the group keeps the radar event itself for citation."""
     groups: dict[str, dict[str, Any]] = {}
+
+    def _group(theme: str) -> dict[str, Any]:
+        return groups.setdefault(theme, {"entities": {}, "narrative_entities": set(), "mentions": 0,
+                                         "cards": [], "radar": [], "lenses": set(), "latest": ""})
+
     for n in _recent_activity(narratives, as_of, recency):
         ent = n.get("entity")
         label = n.get("entity_label") or n.get("label")
         for theme in themes_of(n):
-            g = groups.setdefault(
-                theme, {"entities": {}, "mentions": 0, "cards": [], "lenses": set(), "latest": ""}
-            )
+            g = _group(theme)
             g["mentions"] += 1
             if ent:  # only real entities count toward the distinct-competitor gate
                 g["entities"].setdefault(ent, label or ENTITY_LABELS.get(ent, str(ent).title()))
+                g["narrative_entities"].add(ent)
             for lens in n.get("lenses") or []:
                 g["lenses"].add(lens)
             d = feature_store._date_of(n)
             if d > g["latest"]:
                 g["latest"] = d
             g["cards"].append(n)
+    for ev in radar_events or []:
+        gap = _days_between(as_of, ev.get("date") or "")
+        if gap is None or not 0 <= gap <= recency:
+            continue
+        ent = ev["entity"]
+        for theme in themes_of({"narrative": f"{ev.get('title') or ''} {ev.get('reason') or ''}"}):
+            g = groups.get(theme)
+            if g is None:  # no narrative touches this theme: radar alone never opens one
+                continue
+            g["entities"].setdefault(ent, ev.get("product_label") or ENTITY_LABELS.get(ent, str(ent).title()))
+            g["radar"].append(ev)
     return groups
 
 
@@ -220,6 +241,7 @@ def nominate(
     *,
     as_of: str | None = None,
     cooldown_days: int | None = None,
+    radar_events: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Pure gate: recent narratives -> sector-current candidates (no I/O)."""
     as_of = as_of or run_date_today()
@@ -231,7 +253,7 @@ def nominate(
     min_mentions = int(_f("ONCA_THEMATIC_MIN_MENTIONS", MIN_MENTIONS))
     recency = int(_f("ONCA_THEMATIC_RECENCY_DAYS", RECENCY_DAYS))
 
-    groups = theme_groups(narratives, as_of=as_of, recency=recency)
+    groups = theme_groups(narratives, as_of=as_of, recency=recency, radar_events=radar_events)
     prior = prior_currents(narratives)
 
     out: list[dict[str, Any]] = []
@@ -254,10 +276,19 @@ def nominate(
             reverse=True,
         )[:MAX_DRIVERS]
 
+        # Radar participants that no narrative names — the only entities the radar adds.
+        narr_ents = g["narrative_entities"]
+        radar = [ev for ev in g["radar"] if ev["entity"] not in narr_ents]
+        radar = sorted({ev["id"]: ev for ev in radar}.values(),
+                       key=lambda ev: (ev.get("confidence") != "oficial", -(ev.get("n_channels") or 0)))
         out.append(
             {
                 "theme": theme,
                 "display": THEMES[theme]["display"],
+                "radar": [radar_evidence.label_only(ev) for ev in radar],
+                "radar_entities": sorted({ev["entity"] for ev in radar}),
+                # #371: the current exists only because the radar widened the entity gate.
+                "radar_backed": len(narr_ents) < min_entities,
                 "dim": THEMES[theme]["dim"],
                 "entities": sorted(ents),
                 "entity_labels": [ents[e] for e in sorted(ents)],
@@ -322,6 +353,8 @@ def build_narrative(cand: dict[str, Any]) -> dict[str, Any]:
     for d in drivers:
         source_ids.extend(d.get("source_ids") or [])
 
+    radar = cand.get("radar") or []
+    citations += [radar_evidence.citation(ev) for ev in radar]
     named = ", ".join(labels[:6]) + ("…" if len(labels) > 6 else "")
     head = (
         f"Corrente setorial — {display}: {n_ent} concorrentes se movimentaram neste "
@@ -330,6 +363,10 @@ def build_narrative(cand: dict[str, Any]) -> dict[str, Any]:
     lead = (drivers[0].get("narrative") or "").strip() if drivers else ""
     if lead:
         head += f" Destaque: {lead[:240]}"
+    if radar:
+        r_labels = sorted({ev.get("product_label") or ev["entity"] for ev in radar})
+        head += (f" Radar de produto (YouTube oficial ou de 2+ canais) também registra "
+                 f"{', '.join(r_labels)} neste tema.")
     tail = (
         " Índice agregado a partir da atividade de vários concorrentes (inferência "
         "de corrente setorial, não um fato novo de uma entidade) — os sinais citados "
@@ -357,6 +394,8 @@ def build_narrative(cand: dict[str, Any]) -> dict[str, Any]:
         },
         "threat_score_note": "estimated_v1_thematic",
         "theme_tier": cand["theme_tier"],
+        "radar_backed": bool(cand.get("radar_backed")),
+        "radar_entities": list(cand.get("radar_entities") or []),
         "swot_hint": swot_hint(cand),
         "narrative": head + tail,
         "citations": citations,
@@ -380,7 +419,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     run_date = run_date_today()
 
     recent = feature_store.load_history(digests_bucket, window_days, s3=s3)
-    cands = nominate(recent, as_of=run_date)
+    radar_events = radar_evidence.confirmed_events(radar_evidence.load(digests_bucket, s3=s3))
+    cands = nominate(recent, as_of=run_date, radar_events=radar_events)
 
     keys: list[str] = []
     fired = {c["theme"] for c in cands}
@@ -395,7 +435,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     min_entities = int(_f("ONCA_THEMATIC_MIN_ENTITIES", MIN_ENTITIES))
     min_mentions = int(_f("ONCA_THEMATIC_MIN_MENTIONS", MIN_MENTIONS))
     recency = int(_f("ONCA_THEMATIC_RECENCY_DAYS", RECENCY_DAYS))
-    groups = theme_groups(recent, as_of=run_date, recency=recency)
+    groups = theme_groups(recent, as_of=run_date, recency=recency, radar_events=radar_events)
     qualifying = {
         t for t, g in groups.items()
         if len(g["entities"]) >= min_entities and g["mentions"] >= min_mentions
@@ -413,6 +453,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 "nominated": len(cands),
                 "emitted": len(keys),
                 "themes": [f"{c['theme']}({c['entity_count']})" for c in cands],
+                "radar_events": len(radar_events),
+                "radar_backed": [c["theme"] for c in cands if c.get("radar_backed")],
                 "keys": keys,
                 "retracted": sorted(retracted),
             }

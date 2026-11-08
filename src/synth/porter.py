@@ -261,7 +261,8 @@ def analyze_forces(
     """Pure: beliefs + narratives -> Porter proposals. No I/O."""
     by_ent: dict[str, list[dict[str, Any]]] = {}
     for n in narratives:
-        if not isinstance(n, dict):
+        # #374: a radar-backed derived card never counts as own-track evidence (MIN_EVIDENCE)
+        if not isinstance(n, dict) or n.get("radar_backed"):
             continue
         ent = n.get("entity")
         if ent:
