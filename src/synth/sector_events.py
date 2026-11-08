@@ -69,6 +69,7 @@ CHANGE_LABEL = {
     "illegal": "ilegalidade",
     "revocation": "revogação",
     "new_framework": "novo marco regulatório",
+    "court_ruling": "decisão judicial",
     "act": "ato normativo",
 }
 
@@ -246,24 +247,157 @@ def instrument_refs(text: Any) -> list[str]:
     return out
 
 
+# --- court rulings (11-08: the TRF-3 story split in two and labelled "proibição") ------------
+# A court that lifts or reinstates a measure is a sector development of its own kind: its
+# headline carries "proibição"/"suspensão" only as the OBJECT of the ruling ("autoriza retorno de
+# três bets após proibição", "suspende liminar"). Labelling it a ban told agents the opposite.
+_COURT = re.compile(r"\b(?:justica|tribunal|trf\d|tj[a-z]{2}|stf|stj|supremo|desembargador\w*|juiz\w*"
+                    r"|liminar|decisao|fux|court|judge)\b")
+_RULING_RESTORE = re.compile(
+    r"\bvolta(?:m)? a (?:proibir|bloquear|suspender)\b|\bvoltam? a ser (?:bloquead|proibid|suspens)\w*"
+    r"|\bsuspende\w* (?:a |o )?(?:liminar|decisao)\b|\bcass(?:a|am|ou)\b|\brestabelec\w*"
+    r"|\bmodifica\w* (?:a )?decisao\b|\bmant(?:em|eve|ida|ido|er)\b|\bconfirm\w* (?:a )?proib"
+    r"|\bsuspende\w* (?:a |o )?autorizac")
+_RULING_RELEASE = re.compile(
+    r"\bliber(?:a|am|ou|aram|ad[ao]s?)\b|\bautoriz(?:a|am|ou|aram|ad[ao]s?)\b|\bretorno\b|\bretomada\b"
+    r"|\bvolt(?:a|am|ar) a (?:funcionar|operar)\b|\bderrub\w* (?:a |o )?(?:proib|suspens|mp|medida)")
+RULING_LABEL = {"release": "liberação", "restore": "nova proibição / manutenção"}
+
+
+def _norm(text: Any) -> str:
+    """Folded text with TRF-3 / TRF 3 / TRF3 collapsed (a court name, not a number)."""
+    return re.sub(r"\btrf[\s-]?(\d)\b", r"trf\1", _fold(text))
+
+
+def court_ruling_of(text: Any) -> str | None:
+    """``"restore"`` / ``"release"`` when the headline reports a court ruling ON A MEASURE — the
+    measure must be named ("após proibição", "suspende liminar"); a ruling on contracts or fees
+    ("STJ libera encerramento de contas") is not a regulatory change of the sector."""
+    t = _norm(text)
+    if not _COURT.search(t) or change_type_of(t) is None:
+        return None
+    if _RULING_RESTORE.search(t):
+        return "restore"
+    if _RULING_RELEASE.search(t):
+        return "release"
+    return None
+
+
+# --- direct report vs background mention (11-08: three catch-all "ban" events) --------------
+# Six weeks after MP 1.394 most betting headlines say "proibição" only as a backdrop ("Abras
+# aponta alta do consumo após proibição das bets"). Such a headline proves the ban EXISTS — it
+# can corroborate the ban while nothing else does (09-25/26) — but it is not a new change.
+_BACKGROUND_LEAD = re.compile(
+    r"(?:\bapos|\bdepois d[aeo]s?|\bdesde|\bcom|\bsem|\bcontra|\bsobre|\bdiante d[aeo]s?|\bem meio a"
+    r"|\bpos|\bmant(?:er|em|eve)|\bcontesta\w*|\bpor|\bpara|\bconta d[ao]|\bfim d[ao]|\bcomo|\bque)"
+    r"\s+(?:a |o |as |os |de |da |do )?$")
+_ENACT_LEAD = re.compile(r"\b(?:anuncia\w*|decret\w*|determin\w*|oficializ\w*|public\w*|aprov\w*"
+                         r"|sanciona\w*|assin\w*|edit\w*|confirma\w*)\s+(?:a |o |as |os )?$")
+_STATE_AUX = re.compile(r"\b(?:estao|esta|sao|seguem|continuam|permanecem)\s+$")
+# "após Lula proibir", "desde que as bets foram proibidas": the change as a time reference.
+_SINCE = re.compile(r"\b(?:apos|depois d\w*|desde)\b(?:\s+\S+){0,4}\s*$")
+_INFINITIVE = re.compile(r"^(?:proibir|suspender|revogar|banir|vedar|proibi-l\w+)$")
+_EXPLAINER = re.compile(r"^\s*(?:como|entenda|o que|por que|porque|quem|qual|quais|veja|saiba)\b|\?")
+_NOUN_FORM = re.compile(r"^(?:proibic|suspens[ao]|revogac|baniment|vedac|medida provisoria|novo marco"
+                        r"|nova regulamentacao)")
+_PARTICIPLE = re.compile(r"^(?:proibid|suspens[ao]s|suspens[ao]$|banid|vedad|revogad)")
+# An industry acting on its own ("Bancos suspendem venda de títulos…", "Bets suspendem parceria")
+# names the sector as the SUBJECT of the change verb — a business decision, not a regulator's.
+_SELF_ACTION = re.compile(r"^\s*(?:os |as )?(?:" + "|".join(p for v in INDUSTRY_TERMS.values() for p in v)
+                          + r")\s+(?:suspend\w*|proibem|vetam|banem|revogam|cancelam|encerram)\b")
+
+
+def _self_action(t: str) -> bool:
+    return bool(_SELF_ACTION.match(t))
+
+
+def mention_of(text: Any) -> str:
+    """``"direct"`` when the headline REPORTS a change (a verb — "proíbe", "ficam proibidos",
+    "anuncia proibição" — or a court ruling); ``"background"`` when it only refers to one that
+    already happened (a noun after "após/desde/com…", "proibidas por Lula", an explainer)."""
+    t = _norm(text)
+    if court_ruling_of(t):
+        return "direct"
+    if _EXPLAINER.search(t):
+        return "background"
+    hits = [m for _, rx in _STRONG for m in rx.finditer(t)]
+    for m in hits:
+        word, before = m.group(0), t[:m.start()]
+        if _SINCE.search(before):
+            continue  # "após Lula proibir", "desde que … foram proibidas"
+        if _NOUN_FORM.match(word) or (_PARTICIPLE.match(word) and not re.search(
+                r"\b(?:ficam|ficou|ficaram|fica|foram|foi|passam a ser|passa a ser|serao)\s+$", before)):
+            if _ENACT_LEAD.search(before):
+                return "direct"
+            continue  # a noun / adjective: the change as backdrop
+        if _INFINITIVE.match(word) or _BACKGROUND_LEAD.search(before) or _STATE_AUX.search(before):
+            continue  # "Proibir bets é…", "depois de proibir", "por que devemos proibir"
+        return "direct"
+    return "background"
+
+
+_TOPIC_STOP = set((
+    "a o as os de da do das dos e em no na nos nas um uma uns umas para por pelo pela pelos pelas com "
+    "sem sobre apos ate que se ao aos e ser sao foi seu sua seus suas mais menos ja nao sim ou como "
+    "entre contra desde depois antes diante meio isso esse essa este esta ele ela eles elas lhe "
+    "governo lula federal brasil brasileiro brasileira brasileiros pais setor mercado empresa empresas "
+    "diz dizem afirma segundo entenda veja news hoje agora novo nova novos novas ainda pode podem vai "
+    "sera serao ter tem tinha apos medida provisoria mp the of and in to for on").split())
+
+
+def topic_tokens(text: Any) -> set[str]:
+    """Distinctive content tokens of a headline: no sector noun, no change verb, no stop word,
+    stemmed to 5 letters, plus ``@court``/``@release``/``@restore`` concept marks."""
+    raw = str(text or "")
+    if " - " in raw and len(raw.rsplit(" - ", 1)[1]) <= 40:   # Google News " - Publisher" suffix
+        raw = raw.rsplit(" - ", 1)[0]
+    t = _norm(raw)
+    marks: set[str] = set()
+    ruling = court_ruling_of(t)
+    if ruling:
+        marks |= {"@court", f"@{ruling}"}
+    for rx in list(_INDUSTRY_RE.values()) + [r for _, r in _STRONG]:
+        t = rx.sub(" ", t)
+    words = re.findall(r"[a-z0-9]+", t)
+    return marks | {w[:5] for w in words if (len(w) >= 3 or w.isdigit()) and w not in _TOPIC_STOP}
+
+
+def topic_match(a: set[str], b: set[str]) -> bool:
+    """Same story: two shared content tokens, or one plus a shared concept — two court rulings
+    sharing "trf3" are one story even when one LIFTS and the other REINSTATES (11-06/07)."""
+    lex = {x for x in a & b if not x.startswith("@")}
+    concept = {x for x in a & b if x.startswith("@")}
+    return len(lex) >= 2 or (len(lex) >= 1 and bool(concept))
+
+
 def assess_headline(title: Any, *, industries: Iterable[str] | None = None,
                     company: str | None = None) -> dict[str, Any]:
     """Classify one news headline. Returns ``{"verdict": "report"|"rejected"|"irrelevant",
-    "industries", "change_type", "reason"}``. ``industries`` are the item's own tags (a #176
-    sector-query item); otherwise the sector must be NAMED in the headline."""
+    "industries", "change_type", "reason", "mention", "ruling"}``. ``industries`` are the item's
+    own tags (a #176 sector-query item); otherwise the sector must be NAMED in the headline."""
     tagged = [str(i) for i in (industries or []) if i]
     inds = list(dict.fromkeys(tagged + industries_in_text(title)))
-    ctype = change_type_of(title)
+    ruling = court_ruling_of(title)
+    ctype = "court_ruling" if ruling else change_type_of(title)
+    base = {"industries": inds, "change_type": ctype, "mention": None, "ruling": ruling}
     if not inds:
-        return {"verdict": "irrelevant", "industries": [], "change_type": ctype,
+        return {**base, "verdict": "irrelevant", "industries": [],
                 "reason": "no sector named" if ctype else "no change vocabulary"}
     if not ctype:
-        return {"verdict": "irrelevant", "industries": inds, "change_type": None,
-                "reason": "no change vocabulary"}
-    why = rejection_reason(title, company=company)
+        return {**base, "verdict": "irrelevant", "reason": "no change vocabulary"}
+    if ruling:
+        # a ruling LIFTS or REINSTATES — the negation guard ("restabelece", "derruba") is its
+        # very content, so only the poll / demand / hypothetical guards apply.
+        t = _fold(title)
+        why = ("poll" if _POLL_MARK.search(t) or _PCT_OPINION.search(t) else
+               "demand" if _DEMAND.search(t) else "hypothetical" if _HYPOTHETICAL.search(t) else None)
+    else:
+        why = rejection_reason(title, company=company)
+        if not why and _self_action(_fold(title)):
+            why = "industry_action"
     if why:
-        return {"verdict": "rejected", "industries": inds, "change_type": ctype, "reason": why}
-    return {"verdict": "report", "industries": inds, "change_type": ctype, "reason": None}
+        return {**base, "verdict": "rejected", "reason": why}
+    return {**base, "verdict": "report", "reason": None, "mention": mention_of(title)}
 
 
 def publisher_key(item: dict[str, Any]) -> str:
@@ -425,6 +559,7 @@ def _news_source(item: dict[str, Any], assessment: dict[str, Any]) -> dict[str, 
             "url": item.get("url"), "date": str(item.get("date") or "")[:10],
             "publisher": item.get("publisher"), "publisher_key": publisher_key(item),
             "change_type": assessment.get("change_type"),
+            "mention": assessment.get("mention"), "ruling": assessment.get("ruling"),
             "industries": assessment.get("industries") or [],
             "query_kind": item.get("query_kind") or "entity"}
 
@@ -474,12 +609,29 @@ def _refresh(ev: dict[str, Any]) -> dict[str, Any]:
         # A press-only event never claims more than the press did: its title is a verbatim
         # headline and its severity tops out at "high" (critical needs the act itself).
         ev["severity"] = "high" if ctype in ("ban", "suspension", "illegal") else "medium"
-        lead = news[0] if news else {}
+        # the lead is the earliest report that best states the shared story (not the
+        # alphabetically first one — "AGU vai recorrer…" led the TRF-3 ruling)
+        first = [s for s in news if s.get("date") == min(x.get("date") or "" for x in news)]
+        toks = [topic_tokens(s.get("title")) for s in news]
+        lead = max(first, key=lambda s: sum(len(topic_tokens(s.get("title")) & t) for t in toks),
+                   default={})
         ev["title"] = lead.get("title") or ""
         ev["summary"] = (f"{pt_count(len(outlets), 'veículo independente relata', 'veículos independentes relatam')} "
                          f"{CHANGE_LABEL.get(ctype, 'mudança regulatória')} no setor — "
                          f"relato de imprensa, sem ato oficial ingerido.")
         ev["date"] = min((s.get("date") or "9999" for s in news), default=ev.get("date"))
+        if ctype == "court_ruling":
+            dirs = Counter(court_ruling_of(s.get("title")) for s in news)
+            ev["rulings"] = {k: dirs[k] for k in ("release", "restore") if dirs[k]}
+            if len(ev["rulings"]) > 1:
+                # 11-08 TRF-3: "libera três casas" and "volta a proibir" on the same day. Both
+                # are real reports of successive rulings; say so instead of picking one.
+                ev["summary"] += (" Relatos divergentes: " + " × ".join(
+                    f"{RULING_LABEL[k]} ({v})" for k, v in ev["rulings"].items())
+                    + " — decisão em disputa; confirme nas fontes.")
+        else:
+            ev.pop("rulings", None)
+        ev["contested"] = len(ev.get("rulings") or {}) > 1
     ev["change_label"] = CHANGE_LABEL.get(ev["change_type"], "mudança regulatória")
     ev["last_evidence"] = max((s.get("date") or "" for s in srcs), default=ev.get("date"))
     ev["industries"] = [ev["industry"]]
@@ -501,13 +653,34 @@ def _in_window(ev: dict[str, Any], date: str) -> bool:
     return -2 <= (d - e).days <= MERGE_WINDOW_DAYS
 
 
+def _is_generic(srcs: Iterable[dict[str, Any]]) -> bool:
+    """Every news source only REFERS to the change (background mention, nothing specific)."""
+    return all(mention_of(s.get("title")) == "background" for s in srcs if s.get("kind") == "news")
+
+
+def _story_match(title: Any, srcs: list[dict[str, Any]]) -> bool:
+    """Does a headline tell the SAME story as a press-born event / cluster? A background mention
+    matches only a generic one ("the ban"); a direct report must share its topic with one of the
+    cluster's direct reports (11-08: INSS portabilidade ≠ a Texas data-center bond sale)."""
+    news = [s for s in srcs if s.get("kind") == "news"]
+    if mention_of(title) == "background":
+        return _is_generic(news)
+    mine = topic_tokens(title)
+    direct = [s for s in news if mention_of(s.get("title")) == "direct"]
+    return any(topic_match(mine, topic_tokens(s.get("title"))) for s in direct)
+
+
 def _find_event(events: list[dict[str, Any]], industry: str, *, date: str,
                 refs: Iterable[str] = (), change_type: str | None = None,
-                allow_window: bool = True) -> dict[str, Any] | None:
+                allow_window: bool = True, title: Any = None) -> dict[str, Any] | None:
     """An item joins an event by an explicit instrument reference; failing that (news only,
     ``allow_window``) by the date window, but ONLY an event of the same kind of change.
     Live dry run 2026-09-27: a bare industry+window fallback merged routine SPA editais de
-    citação into the MP 1.394 ban (dating it 09-24) and a CMN FIDC rule into MP 1.393."""
+    citação into the MP 1.394 ban (dating it 09-24) and a CMN FIDC rule into MP 1.393.
+
+    ``title`` (news): a PRESS-BORN event must also tell the same story (``_story_match``) —
+    11-08: industry+type+window alone let a bond-sale story corroborate an INSS rule and let
+    one "ban" event absorb 123 unrelated betting headlines. Official events keep the window rule."""
     refs = set(refs)
     same = [e for e in events if e.get("industry") == industry]
     if refs:
@@ -516,8 +689,44 @@ def _find_event(events: list[dict[str, Any]], industry: str, *, date: str,
                 return e
     if not allow_window or not change_type:
         return None
-    cands = [e for e in same if _in_window(e, date) and e.get("change_type") == change_type]
+    cands = [e for e in same if _in_window(e, date) and e.get("change_type") == change_type
+             and (title is None or e.get("n_official")
+                  or _story_match(title, e.get("sources") or []))]
     return max(cands, key=lambda e: e.get("date") or "") if cands else None
+
+
+#: One measure is reported as a ban, a suspension of operations or revoked licences ("saques
+#: desde a suspensão pelo governo" is MP 1.394's aftermath too).
+RESTRICTIONS = ("ban", "suspension", "illegal", "revocation")
+
+
+def _aftermath_of(events: list[dict[str, Any]], industry: str, change_type: str,
+                  date: str) -> dict[str, Any] | None:
+    """The earlier event a background mention refers to: same sector and kind of change, dated
+    on/before the mention. "após proibição das bets" six weeks on is MP 1.394's aftermath."""
+    if change_type not in RESTRICTIONS:
+        return None  # "novo marco" commentary has no single act it is the backdrop of
+    d = _d(date)
+    prior = [e for e in events if e.get("industry") == industry and e.get("change_type") in RESTRICTIONS
+             and d and _d(e.get("date")) and _d(e.get("date")) <= d + dt.timedelta(days=2)]
+    return min(prior, key=lambda e: e.get("date") or "") if prior else None
+
+
+def cluster_pending(rows: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+    """Group one industry's pending reports into stories: same kind of change, first report
+    within MERGE_WINDOW_DAYS, and the same story (``_story_match``). Before 11-08 every pending
+    row of an industry was promoted as ONE event once two outlets existed."""
+    clusters: list[list[dict[str, Any]]] = []
+    for r in sorted(rows, key=lambda r: (r.get("date") or "", str(r.get("id") or ""))):
+        home = next((c for c in clusters
+                     if c[0].get("change_type") == r.get("change_type")
+                     and _in_window({"date": c[0].get("date")}, r.get("date") or "")
+                     and _story_match(r.get("title"), [{**x, "kind": "news"} for x in c])), None)
+        if home is None:
+            clusters.append([r])
+        else:
+            home.append(r)
+    return clusters
 
 
 def _attach(ev: dict[str, Any], src: dict[str, Any], run_date: str) -> bool:
@@ -589,7 +798,7 @@ def build_events(
     events: list[dict[str, Any]] = repair_events(list(store.get("events") or []))
     pending: list[dict[str, Any]] = list(store.get("pending") or [])
     report: dict[str, Any] = {"official": 0, "reports": [], "rejected": [], "created": [],
-                              "updated": []}
+                              "updated": [], "aftermath": []}
 
     def _ok(ind: str) -> bool:
         return covered is None or ind in covered
@@ -680,11 +889,19 @@ def build_events(
                                   "industries": a["industries"], "change_type": a["change_type"]})
         for ind in [i for i in a["industries"] if _ok(i)]:
             refs = instrument_refs(src["title"])
-            ev = _find_event(events, ind, date=src["date"], refs=refs, change_type=a["change_type"])
+            ev = _find_event(events, ind, date=src["date"], refs=refs, change_type=a["change_type"],
+                             title=src["title"])
             if ev is not None:
                 if _attach(ev, src, run_date):
                     _mark(ev, False)
                 continue
+            if a.get("mention") == "background":
+                prior = _aftermath_of(events, ind, a["change_type"], src["date"])
+                if prior is not None:
+                    # a backdrop to a change already on record — never a new event of its own
+                    report["aftermath"].append({"title": src["title"], "industry": ind,
+                                                "event": prior["id"], "publisher": src["publisher"]})
+                    continue
             if not any(p.get("id") == src["id"] and p.get("industry") == ind for p in pending):
                 pending.append({**src, "industry": ind})
 
@@ -695,22 +912,27 @@ def build_events(
     for p in pending:
         by_ind.setdefault(p["industry"], []).append(p)
     promoted: set[tuple[str, str]] = set()
-    for ind, rows in by_ind.items():
-        rows.sort(key=lambda r: r.get("date") or "")
-        if len({r.get("publisher_key") for r in rows}) < MIN_OUTLETS:
-            continue
-        srcs = [{k: v for k, v in r.items() if k != "industry"} for r in rows]
-        ctype = Counter(r.get("change_type") for r in rows).most_common(1)[0][0]
-        ev = _new_event(ind, f"{ctype}-{rows[0].get('date')}", srcs, run_date)
-        existing = next((e for e in events if e["id"] == ev["id"]), None)
-        if existing:
-            for s in srcs:
-                _attach(existing, s, run_date)
-            _mark(existing, False)
-        else:
-            events.append(ev)
-            _mark(ev, True)
-        promoted |= {(ind, r.get("id")) for r in rows}
+    for ind, all_rows in by_ind.items():
+        for rows in cluster_pending(all_rows):
+            if len({r.get("publisher_key") for r in rows}) < MIN_OUTLETS:
+                continue
+            srcs = [{k: v for k, v in r.items() if k != "industry"} for r in rows]
+            ctype = rows[0].get("change_type")
+            ev = _new_event(ind, f"{ctype}-{rows[0].get('date')}", srcs, run_date)
+            existing = next((e for e in events if e["id"] == ev["id"]), None)
+            if existing is not None and not existing.get("n_official") and \
+                    _story_match(rows[0].get("title"), existing.get("sources") or []):
+                for s in srcs:
+                    _attach(existing, s, run_date)
+                _mark(existing, False)
+            else:
+                if existing is not None:
+                    # same type + date, different story: never merge by an id collision
+                    ev["id"] = _event_id(ind, f"{ctype}-{rows[0].get('date')}-"
+                                              + hashlib.sha1(str(rows[0].get("id")).encode()).hexdigest()[:6])
+                events.append(ev)
+                _mark(ev, True)
+            promoted |= {(ind, r.get("id")) for r in rows}
     pending = [p for p in pending if (p["industry"], p.get("id")) not in promoted]
 
     # 4) retention.
@@ -724,6 +946,62 @@ def build_events(
     store = {"as_of": run_date, "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
              "events": events, "pending": pending, "window_days": MERGE_WINDOW_DAYS}
     return store, report
+
+
+def recluster(store: dict[str, Any] | None, *, today: dt.date | None = None
+              ) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Re-derive every PRESS-BORN event (and the pending queue) under the current join rules —
+    one-shot repair for stores built before 11-08 (catch-all "ban" events, false corroboration,
+    one story split in two). Official events are kept exactly as stored. Their news is replayed
+    day by day (``today`` = the item's date), so pending expiry and the merge window behave as
+    they would have live. Returns (new store, report{old→new mapping, dropped sources})."""
+    today = today or dt.date.today()
+    base = json.loads(json.dumps(store or {}))
+    events = repair_events(list(base.get("events") or []))
+    official = [e for e in events if e.get("n_official")]
+    press = [e for e in events if not e.get("n_official")]
+    items: dict[tuple[str, str], dict[str, Any]] = {}
+    seen_in: dict[tuple[str, str], list[str]] = {}
+    for ev in press:
+        for s in ev.get("sources") or []:
+            if s.get("kind") != "news":
+                continue
+            key = (ev["industry"], str(s.get("id") or s.get("url")))
+            items.setdefault(key, {"id": s.get("id"), "title": s.get("title"), "url": s.get("url"),
+                                   "date": s.get("date"), "publisher": s.get("publisher"),
+                                   "query_kind": "sector", "industries": [ev["industry"]]})
+            seen_in.setdefault(key, []).append(ev["id"])
+    for p in base.get("pending") or []:
+        key = (p.get("industry"), str(p.get("id") or p.get("url")))
+        items.setdefault(key, {"id": p.get("id"), "title": p.get("title"), "url": p.get("url"),
+                               "date": p.get("date"), "publisher": p.get("publisher"),
+                               "query_kind": "sector", "industries": [p.get("industry")]})
+    work: dict[str, Any] = {"events": official, "pending": []}
+    by_day: dict[str, list[dict[str, Any]]] = {}
+    for it in items.values():
+        by_day.setdefault(str(it.get("date") or today.isoformat())[:10], []).append(it)
+    rejected, aftermath = [], []
+    for day in sorted(by_day):
+        d = min(_d(day) or today, today)
+        work, rep = build_events(work, [], sorted(by_day[day], key=lambda i: str(i.get("id"))), today=d)
+        rejected += rep["rejected"]
+        aftermath += rep["aftermath"]
+    work, _ = build_events(work, [], [], today=today)
+    old_meta = {e["id"]: e for e in press}
+    mapping = []
+    for ev in work["events"]:
+        if ev.get("n_official"):
+            continue
+        olds = sorted({o for s in ev["sources"]
+                       for o in seen_in.get((ev["industry"], str(s.get("id") or s.get("url"))), [])})
+        if olds:  # keep when Onça first saw it, not the replay date
+            ev["first_seen"] = min(old_meta[o].get("first_seen") or "9999" for o in olds)
+            ev["last_seen"] = max(old_meta[o].get("last_seen") or "" for o in olds)
+        mapping.append({"id": ev["id"], "from": olds})
+    work["as_of"] = base.get("as_of") or today.isoformat()
+    return work, {"official_kept": len(official), "press_before": len(press),
+                  "press_after": len(mapping), "mapping": mapping,
+                  "rejected": rejected, "aftermath": aftermath}
 
 
 # --- affected entities + feed projection ---------------------------------------------------

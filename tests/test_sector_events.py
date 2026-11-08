@@ -398,3 +398,134 @@ def test_a_lifted_measure_never_upgrades_a_press_suspension_event():
     from src.synth import sector_events as se
     assert se.rejection_reason("Revertida suspensão da oferta de CRI da OPEA Securitizadora") == "negated"
     assert se.rejection_reason("CVM restabelece registro de oferta") == "negated"
+
+
+# --- 11-08: clustering defects found in the live store (fixture = live slice, read-only copy) --
+LIVE_1108 = _load("live_2026-11-08_clusters.json")
+DAY_1108 = dt.date(2026, 11, 8)
+
+
+def _news(id_, title, date, publisher, ind="betting"):
+    return {"id": id_, "title": title, "date": date, "publisher": publisher, "query_kind": "sector",
+            "industries": [ind], "url": f"https://{publisher.lower().replace(' ', '')}.example/{id_}"}
+
+
+def test_unrelated_banking_story_never_corroborates_the_inss_rule():
+    # Defect 1: "Bancos suspendem venda de títulos para data center no Texas" was the second
+    # outlet of "Bancos ficam proibidos de embutir novo contrato na portabilidade do INSS".
+    inss = _news("inss", "Bancos ficam proibidos de embutir novo contrato na portabilidade do INSS",
+                 "2026-10-22", "Mix Vale", "banking")
+    texas = _news("texas", "Bancos suspendem venda de títulos para data center no Texas ligado à "
+                           "Anthropic - Bloomberg News", "2026-10-28", "TradingView", "banking")
+    assert se.assess_headline(texas["title"])["reason"] == "industry_action"   # banks' own decision
+    store, _ = se.build_events({}, [], [inss], today=dt.date(2026, 10, 22))
+    store, _ = se.build_events(store, [], [texas], today=dt.date(2026, 10, 28))
+    assert store["events"] == []                                # one outlet ≠ corroborated
+    # even if both were plain reports of one industry, different stories never pool
+    other = _news("rate", "Governo proíbe bancos de cobrar tarifa sobre saque do FGTS", "2026-10-25",
+                  "Folha", "banking")
+    store, _ = se.build_events(store, [], [other], today=dt.date(2026, 10, 28))
+    assert store["events"] == [] and {p["id"] for p in store["pending"]} == {"inss", "rate"}
+
+
+def test_pending_promotion_clusters_by_story_not_by_industry():
+    rows = [_news("a1", "Bancos ficam proibidos de embutir novo contrato na portabilidade do INSS", "2026-10-22", "A", "banking"),
+            _news("b1", "Governo proíbe bancos de cobrar tarifa sobre saque do FGTS", "2026-10-23", "B", "banking"),
+            _news("a2", "INSS: bancos ficam proibidos de embutir contrato novo na portabilidade", "2026-10-23", "C", "banking")]
+    store, rep = se.build_events({}, [], rows, today=dt.date(2026, 10, 23))
+    assert len(store["events"]) == 1
+    ev = store["events"][0]
+    assert {s["id"] for s in ev["sources"]} == {"a1", "a2"} and ev["n_outlets"] == 2
+    assert [p["id"] for p in store["pending"]] == ["b1"]
+
+
+@pytest.mark.parametrize("title,mention", [
+    ("Abras aponta alta do consumo após proibição das bets no país", "background"),
+    ("Proibidas por Lula no Brasil, bets seguem atraindo apostadores no Telegram", "background"),
+    ("Governo acelera caça às bets ilegais e já derrubou 47 mil sites desde a proibição", "background"),
+    ("Brasileiros compram mais alimentos após Lula proibir as bets, aponta Abras", "background"),
+    ("Proibir bets é política de segurança pública", "background"),
+    ("Governo proíbe bets no Brasil; apostadores têm até 5 de outubro para retirar dinheiro", "direct"),
+    ("Lula anuncia proibição das bets no Brasil: entenda a medida", "direct"),
+    ("Bancos ficam proibidos de embutir novo contrato na portabilidade do INSS", "direct"),
+])
+def test_background_mention_vs_direct_report(title, mention):
+    assert se.mention_of(title) == mention
+
+
+@pytest.mark.parametrize("title,ruling", [
+    ("Justiça autoriza retorno de três bets após proibição do governo Lula", "release"),
+    ("TRF-3 libera três casas de apostas após suspensão de MP para empresa", "release"),
+    ("TRF3 suspende liminar: Casa de Apostas, Betsul e Jogo Online voltam a ser bloqueadas", "restore"),
+    ("TRF3 modifica decisão de desembargadora e volta a proibir bets", "restore"),
+    ("Fux mantém proibição das bets e marca audiência com governo e clubes", "restore"),
+    ("Nova decisão do STJ libera encerramento de contas do Nubank, Itaú e outros bancos", None),  # no measure
+    ("Bets buscam reverter proibição de Lula no STF", None),                                      # an attempt
+])
+def test_court_rulings_are_their_own_change_type(title, ruling):
+    assert se.court_ruling_of(title) == ruling
+    if ruling:
+        a = se.assess_headline(title)
+        assert a["verdict"] == "report" and a["change_type"] == "court_ruling"
+
+
+def test_live_recluster_fixes_the_three_defects_and_leaves_official_events_alone():
+    before = copy.deepcopy(LIVE_1108)
+    after, rep = se.recluster(LIVE_1108, today=DAY_1108)
+    assert LIVE_1108 == before                                    # pure: caller's copy untouched
+    ids = {e["id"]: e for e in after["events"]}
+    # official events (incl. the Res. BCB 590 pair the 11-09 demo cites) are byte-identical
+    for e in before["events"]:
+        if e["n_official"]:
+            assert json.dumps(ids[e["id"]]["sources"], sort_keys=True) == json.dumps(e["sources"], sort_keys=True)
+    # 1) the INSS rule is no longer "corroborated" by the Texas bond story
+    assert "sector_event:banking:ban-2026-10-22" not in ids
+    assert not any(e["industry"] == "banking" and not e["n_official"] for e in after["events"])
+    # 2) the TRF-3 story is ONE court-ruling event, flagged as contested, not "proibição"
+    trf = [e for e in after["events"] if e["industry"] == "betting" and e["date"] == "2026-11-06"]
+    assert len(trf) == 1
+    trf = trf[0]
+    assert trf["change_type"] == "court_ruling" and trf["change_label"] == "decisão judicial"
+    assert trf["contested"] and set(trf["rulings"]) == {"release", "restore"}
+    titles = {s["title"] for s in trf["sources"]}
+    assert {"Justiça autoriza retorno de três bets após proibição do governo Lula",
+            "TRF-3 libera três casas de apostas após suspensão de MP para empresa",
+            "TRF3 modifica decisão de desembargadora e volta a proibir bets"} <= titles
+    assert not any("Telegram" in t or "Clubes de futebol" in t for t in titles)   # aftermath stays out
+    assert "Relatos divergentes" in trf["summary"]
+    # 3) no catch-all: no press event holds more than a dozen sources, and the "após proibição"
+    #    backdrop is recorded as MP 1.394's aftermath instead of a new "ban"
+    assert "sector_event:betting:ban-2026-10-27" not in ids
+    assert max(len(e["sources"]) for e in after["events"] if not e["n_official"]) <= 12
+    assert not any(e["change_type"] == "ban" and not e["n_official"] for e in after["events"])
+    assert {r["event"] for r in rep["aftermath"]} == {"sector_event:betting:mp-1394"}
+    # every news source sits in at most one event per industry
+    seen = [(e["industry"], s["id"]) for e in after["events"] for s in e["sources"] if s["kind"] == "news"]
+    assert len(seen) == len(set(seen))
+
+
+def test_recluster_is_idempotent():
+    once, _ = se.recluster(LIVE_1108, today=DAY_1108)
+    twice, _ = se.recluster(once, today=DAY_1108)
+    strip = lambda st: [(e["id"], sorted(s["id"] for s in e["sources"]), e["confidence"]) for e in st["events"]]
+    assert strip(once) == strip(twice)
+
+
+def test_new_backdrop_news_after_the_fix_attaches_nowhere_new():
+    after, _ = se.recluster(LIVE_1108, today=DAY_1108)
+    n = len(after["events"])
+    late = [_news("t1", "Bets clandestinas continuam atraindo apostadores no Telegram após proibição",
+                  "2026-11-09", "Veja"),
+            _news("t2", "Clubes de futebol buscam período de transição após proibição das bets", "2026-11-09", "Lance")]
+    store, rep = se.build_events(after, [], late, today=dt.date(2026, 11, 9))
+    assert len(store["events"]) == n and store["pending"] == after["pending"]
+    assert len(rep["aftermath"]) == 2
+
+
+def test_same_type_same_day_different_story_gets_its_own_id():
+    rows = [_news("x1", "Governo proíbe bancos de cobrar tarifa sobre saque do FGTS", "2026-10-25", "A", "banking"),
+            _news("x2", "Governo proíbe bancos de cobrar tarifa do saque FGTS", "2026-10-25", "B", "banking"),
+            _news("y1", "BC proíbe bancos de oferecer crédito consignado por telefone", "2026-10-25", "C", "banking"),
+            _news("y2", "Banco Central proíbe bancos de vender consignado por telefone", "2026-10-25", "D", "banking")]
+    store, _ = se.build_events({}, [], rows, today=dt.date(2026, 10, 25))
+    assert len(store["events"]) == 2 and len({e["id"] for e in store["events"]}) == 2

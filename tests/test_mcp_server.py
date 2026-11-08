@@ -110,6 +110,9 @@ def test_regulatory_events_are_scoped_and_official_act_first():
     gn = by_url["https://news.google.com/rss/articles/abc"]
     assert gn["label"] == "O GLOBO" and gn["via"] == "Google Notícias"
     assert "via" not in by_url["https://www.in.gov.br/mp"]
+    # 11-08: corroboration travels as data so an agent can weigh it
+    ev = p["events"][0]
+    assert {"confidence", "outlets", "contested"} <= set(ev) and ev["contested"] is False
 
 
 def test_ask_passes_scope_and_validates_length():

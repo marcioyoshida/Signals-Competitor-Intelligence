@@ -265,6 +265,11 @@ def regulatory_events(scoped: dict[str, Any], industry: str | None, days: int,
         rows.append({"date": e.get("date"), "industries": inds, "title": e.get("title"),
                      "summary": str(e.get("summary") or "")[:420], "change": e.get("change_label"),
                      "severity": e.get("severity"), "affected_entities": e.get("n_affected"),
+                     # 11-08: how sure we are travels as data, not only inside the summary —
+                     # "official" (act ingested) / "corroborated" (≥2 outlets, same story) /
+                     # "reported"; ``contested`` = the outlets report opposite court rulings.
+                     "confidence": e.get("confidence"), "outlets": e.get("n_outlets"),
+                     "contested": bool(e.get("contested")),
                      "url": (official or srcs or [{}])[0].get("url"),
                      "sources": [_event_source(s) for s in srcs[:6]]})
     rows.sort(key=lambda r: (str(r.get("date") or ""), r.get("severity") == "critical"), reverse=True)
