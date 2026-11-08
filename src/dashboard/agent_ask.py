@@ -199,7 +199,7 @@ NO_GROUND_TEXT = (
 def _card_blob(card: dict[str, Any]) -> str:
     parts = [
         card.get("narrative"), card.get("entity_label"), card.get("subject_label"),
-        card.get("entity"), " ".join(card.get("entities") or []),
+        card.get("entity"), " ".join(str(e) for e in (card.get("entities") or []) if e),
         " ".join(card.get("lenses") or []), card.get("threat_score_note"),
     ]
     return _fold(" ".join(str(p) for p in parts if p))
@@ -667,15 +667,22 @@ def distress_cards(feed: dict[str, Any]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for rec in (feed.get("distress") or []):
         ent = rec.get("entity")
-        label = labels.get(ent, ent)
         kind_label = rec.get("label") or "Distress"
         title = rec.get("latest_title") or ""
+        if ent:
+            label, cid, ents = labels.get(ent, ent), f"distress:{ent}:{rec.get('kind')}", [ent]
+        else:
+            # #355 untracked institution (entity None): named by its own legal name and keyed by CNPJ
+            # root. `entities: [None]` crashed _card_blob for every unscoped (operator) Ask.
+            label = rec.get("subject_name") or rec.get("brand") or "Instituição não monitorada"
+            cid = f"distress:cnpj:{rec.get('cnpj') or label}:{rec.get('kind')}"
+            ents = []
         out.append({
-            "id": f"distress:{ent}:{rec.get('kind')}",
+            "id": cid,
             "date": rec.get("last_seen"),
             "entity": ent,
             "entity_label": label,
-            "entities": [ent],
+            "entities": ents,
             "lenses": ["distress"],
             "is_alert": rec.get("kind") == "falencia",
             "threat_score": None,
@@ -735,6 +742,139 @@ def financials_cards(feed: dict[str, Any]) -> list[dict[str, Any]]:
                           f"{r.get('period')}): " + "; ".join(parts) + "."),
             "citations": [{"url": r["source_url"]}] if r.get("source_url") else [],
         })
+    return out
+
+
+IFDATA_URL = "https://www3.bcb.gov.br/ifdata/"
+DASFN_URL = "https://olinda.bcb.gov.br/olinda/servico/DASFN/versao/v1/odata"
+
+
+def _num(v: Any, digits: int = 2) -> str:
+    """pt-BR number without false precision: 16.0 → "16", 15.56 → "15,56", 2015.2 → "2.015,2"."""
+    if not isinstance(v, (int, float)):
+        return "—"
+    s = f"{v:,.{digits}f}"
+    if "." in s:
+        s = s.rstrip("0").rstrip(".")
+    return s.replace(",", "_").replace(".", ",").replace("_", ".")
+
+
+def _base_month(v: Any) -> str:
+    """202606 → "06/2026" (IF.data data-base)."""
+    s = str(v or "")
+    return f"{s[4:6]}/{s[:4]}" if len(s) == 6 and s.isdigit() else (s or "—")
+
+
+def _quarter(v: Any) -> str:
+    """"2026-3" → "3T2026" (Pilar 3 trimestre)."""
+    m = re.fullmatch(r"(\d{4})-([1-4])", str(v or ""))
+    return f"{m.group(2)}T{m.group(1)}" if m else (str(v) if v else "—")
+
+
+def bank_metric_cards(feed: dict[str, Any]) -> list[dict[str, Any]]:
+    """Project the per-entity BCB metrics feed_builder stamps on feed.entities (ADR 022) into
+    citable cards. Live 11-06: "Qual o índice de Basileia do Bradesco?" was model-declined because
+    entities[].soundness (15,56%) and pilar3_km1 (16%) never reached the Ask pool — the prompt had
+    Basileia for Itaú and Bari only. Per-entity cards: the subject is the entity itself, so no fact
+    here can be pinned on a different institution. `balancete`/`resultados` stay out (raw-unit
+    series; not labelled for an answer yet)."""
+    out: list[dict[str, Any]] = []
+    for e in (feed.get("entities") or []):
+        ent = e.get("entity")
+        if not ent:
+            continue
+        label = e.get("label") or ent
+        base = {"entity": ent, "entity_label": label, "entities": [ent],
+                "is_alert": False, "threat_score": None}
+        s = e.get("soundness") or {}
+        if s.get("indice_basileia") is not None:
+            parts = [f"Índice de Basileia {_num(s['indice_basileia'])}%"]
+            for k, name in (("capital_nivel_i", "Índice de Capital Nível I"),
+                            ("capital_principal", "Índice de Capital Principal"),
+                            ("razao_alavancagem", "Razão de Alavancagem"),
+                            ("indice_imobilizacao", "Índice de Imobilização")):
+                if s.get(k) is not None:
+                    parts.append(f"{name} {_num(s[k])}%")
+            parts.append(f"folga sobre o mínimo regulatório de 10,5%: "
+                         f"{_num(s['indice_basileia'] - 10.5)} p.p.")
+            if s.get("band"):
+                parts.append(f"faixa de solidez: {s['band']}")
+            out.append({**base,
+                "id": f"prud:{ent}:{s.get('base_date')}",
+                "date": _base_month(s.get("base_date")),
+                "lenses": ["financials", "prudencial"],
+                "narrative": (f"{label} — solvência / capital regulatório (Basileia), conglomerado "
+                              f"prudencial (BCB IF.data, Relatório 5 'Informações de Capital', "
+                              f"data-base {_base_month(s.get('base_date'))}): " + "; ".join(parts) + "."),
+                "citations": [{"url": IFDATA_URL}],
+            })
+        k1 = e.get("pilar3_km1") or {}
+        if k1.get("basileia_pct") is not None or k1.get("lcr_pct") is not None:
+            parts = []
+            if k1.get("basileia_pct") is not None:
+                parts.append(f"Índice de Basileia {_num(k1['basileia_pct'])}%")
+            if k1.get("leverage_pct") is not None:
+                parts.append(f"Razão de Alavancagem {_num(k1['leverage_pct'])}%")
+            if k1.get("lcr_pct") is not None:
+                lcr = f"liquidez de curto prazo (LCR) {_num(k1['lcr_pct'])}%"
+                if k1.get("band_lcr"):
+                    lcr += f" (faixa {k1['band_lcr']})"
+                if k1.get("lcr_qoq_pp") is not None:
+                    lcr += f", {_num(k1['lcr_qoq_pp'], 1)} p.p. no trimestre"
+                parts.append(lcr)
+            if k1.get("nsfr_pct") is not None:
+                parts.append(f"liquidez estrutural (NSFR) {_num(k1['nsfr_pct'])}%")
+            q = _quarter(k1.get("trimestre"))
+            out.append({**base,
+                "id": f"km1:{ent}:{k1.get('trimestre')}",
+                "date": q,
+                "lenses": ["financials", "prudencial", "liquidez"],
+                "narrative": (f"{label} — Pilar 3, tabela KM1 (indicadores prudenciais publicados pela "
+                              f"instituição; BCB DASFN, {q}): " + "; ".join(parts) + "."),
+                "citations": [{"url": DASFN_URL}],
+            })
+        f = e.get("fundamentals") or {}
+        npl = e.get("inadimplencia") or {}
+        parts = []
+        if f.get("roe_pct") is not None:
+            parts.append(f"ROE {_num(f['roe_pct'], 1)}% a.a.")
+        if f.get("roa_pct") is not None:
+            parts.append(f"ROA {_num(f['roa_pct'])}% a.a.")
+        if f.get("leverage") is not None:
+            parts.append(f"alavancagem (ativo/PL) {_num(f['leverage'], 1)}x")
+        if f.get("credito_captacoes_pct") is not None:
+            parts.append(f"crédito/captações {_num(f['credito_captacoes_pct'], 1)}%")
+        if f.get("carteira_share_pct") is not None:
+            parts.append(f"participação na carteira de crédito do sistema {_num(f['carteira_share_pct'])}%")
+        if f.get("lucro_share_pct") is not None:
+            parts.append(f"participação no lucro do sistema {_num(f['lucro_share_pct'])}%")
+        if f.get("ativo_bi") is not None:
+            parts.append(f"ativo total R$ {_num(f['ativo_bi'], 1)} bi")
+        if f.get("lucro_bi") is not None:
+            parts.append(f"lucro líquido acumulado no ano R$ {_num(f['lucro_bi'], 1)} bi")
+        if npl.get("npl_total") is not None:
+            n = f"inadimplência 15+ dias {_num(npl['npl_total'])}% da carteira"
+            sub = [f"{k.upper()} {_num(npl[k2])}%" for k, k2 in (("pf", "npl_pf"), ("pj", "npl_pj"))
+                   if npl.get(k2) is not None]
+            if sub:
+                n += f" ({', '.join(sub)})"
+            if npl.get("band"):
+                n += f", faixa {npl['band']}"
+            if f and npl.get("base_date") and npl.get("base_date") != f.get("base_date"):
+                n += f", data-base {_base_month(npl['base_date'])}"
+            parts.append(n)
+        if parts:
+            bd = f.get("base_date") or npl.get("base_date")
+            out.append({**base,
+                "id": f"fund:{ent}:{bd}",
+                "date": _base_month(bd),
+                "lenses": ["financials", "rentabilidade"],
+                "narrative": (f"{label} — rentabilidade e risco de crédito (BCB IF.data, conglomerado "
+                              f"prudencial, data-base {_base_month(bd)}; ROE/ROA anualizados pela Onça a "
+                              f"partir do lucro acumulado no ano — inferência; inadimplência 15+ dias é "
+                              f"mais ampla que a de 90 dias): " + "; ".join(parts) + "."),
+                "citations": [{"url": IFDATA_URL}],
+            })
     return out
 
 
@@ -1051,7 +1191,7 @@ def answer(
     # per-entity classification facts (ADR-013: ownership/certifications).
     feed_cards = (list(feed.get("feed") or []) + distress_cards(feed)
                   + entity_fact_cards(feed) + reputation_cards(feed)
-                  + financials_cards(feed) + product_radar_cards(feed)
+                  + financials_cards(feed) + bank_metric_cards(feed) + product_radar_cards(feed)
                   + sector_event_cards(feed) + enforcement_cards(feed))
     if modules is not None:
         feed_cards = _scope_cards_to_modules(feed_cards, feed, modules)
