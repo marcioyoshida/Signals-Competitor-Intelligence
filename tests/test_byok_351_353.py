@@ -172,6 +172,7 @@ def test_every_allow_listed_model_names_its_profile_and_a_named_profile_passed()
         if spec["profile"]:
             prof = json.loads((root / spec["profile"]).read_text(encoding="utf-8"))
             assert prof["model"] == model and prof["verdict"]["pass"] is True
+            assert prof["provider"] == spec["provider"], model  # measured on the same route
 
 
 def test_every_probe_passes_the_scope_gate_so_it_reaches_the_model():

@@ -43,7 +43,9 @@ BEDROCK_ROLE = "bedrock_role"
 #: while the model is not measured on Onça yet (it needs a real key: the owner's or a pilot's).
 MODELS: dict[str, dict[str, Any]] = {
     "claude-sonnet-5-5": {"provider": ANTHROPIC_KEY, "label": "Claude Sonnet 5.5",
-                          "input_per_1m": 2.00, "output_per_1m": 10.00, "profile": None},
+                          "input_per_1m": 2.00, "output_per_1m": 10.00,
+                          # #352: bar v2 PASS on 2026-11-07 (Anthropic key, qa-internal-admin)
+                          "profile": "eval/model-profiles/claude-sonnet-5-5-2026-11-07-probes-bar2.json"},
     # #350: the same model in the client's own Bedrock (Bedrock prices it; the bill is theirs).
     # The client enables model access for it in their Bedrock console (it is not "open" access).
     "anthropic.claude-sonnet-5-5": {"provider": BEDROCK_ROLE,
