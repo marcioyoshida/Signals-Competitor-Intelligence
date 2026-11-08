@@ -4,7 +4,7 @@ Runs the Ask regression (``scripts/ask_regression.py``: 10 in-scope questions + 
 probes) through the deployed OncaAgent Lambda on a QA tenant whose OWN model is connected, then
 scores the rows against the bar in ``config/model_eval_bar.json``, which is fixed before the run.
 
-  python -m scripts.model_eval --tenant qa-byok-eval [--dry]
+  python -m scripts.model_eval --tenant qa-byok-eval [--dry] [--probes-only]
 
 - It refuses to run unless the tenant has a client model connected (``model_status`` via the act
   Lambda), so its rows can never mix with hosted Nova rows. The artifact names that model.
@@ -74,6 +74,17 @@ def connected_model(status: dict[str, Any]) -> dict[str, str] | None:
     return {"model": str(c["model"]), "provider": str(c["provider"])}
 
 
+def latest_artifact(target: dict[str, str], out: Path = OUT) -> Path | None:
+    """The newest full-run artifact (one with regression rows) for the same model and provider."""
+    best = None
+    for p in sorted(out.glob(f"{target['model']}-*.json")):
+        d = json.loads(p.read_text(encoding="utf-8"))
+        if d.get("provider") == target["provider"] and d.get("model") == target["model"] \
+                and not d.get("regression_from") and any(r.get("kind") == "regression" for r in d.get("rows", [])):
+            best = p if best is None or d.get("date", "") >= json.loads(best.read_text(encoding="utf-8")).get("date", "") else best
+    return best
+
+
 def main(argv: list[str] | None = None) -> int:
     import boto3
 
@@ -82,6 +93,9 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--tenant", required=True, help="a QA tenant with the model under test connected")
     ap.add_argument("--dry", action="store_true", help="check the connection and the bar; no model calls")
+    ap.add_argument("--probes-only", action="store_true",
+                    help="re-run only the guardrail probes; the regression rows come from the latest "
+                         "artifact of the same model and provider (named in the new artifact)")
     a = ap.parse_args(argv)
     bar = load_bar()
     lam = boto3.client("lambda", region_name="us-east-1")
@@ -90,10 +104,20 @@ def main(argv: list[str] | None = None) -> int:
         print(f"refusing: tenant {a.tenant} has no client model connected (rows would be hosted Nova)")
         return 2
     print(json.dumps({"tenant": a.tenant, **target, "bar_version": bar["version"]}))
+    base = None
+    if a.probes_only:
+        base = latest_artifact(target)
+        if base is None:
+            print(f"refusing: no earlier artifact for {target['model']} to take regression rows from")
+            return 2
+        print(f"regression rows from {base.relative_to(ROOT)}")
     if a.dry:
         return 0
     rows = []
-    for kind, q in [("regression", q) for q in ar.QUESTIONS] + list(ar.PROBES):
+    if base is not None:
+        rows = [r for r in json.loads(base.read_text(encoding="utf-8"))["rows"] if r["kind"] == "regression"]
+    asks = [] if base is not None else [("regression", q) for q in ar.QUESTIONS]
+    for kind, q in asks + list(ar.PROBES):
         b = ar.ask(q, a.tenant, lam)
         rows.append({"kind": kind, "q": q[:80], "reason": b.get("reason"), "refused": b.get("refused"),
                      "grounded": b.get("grounded"), "citations": len(b.get("citations") or []),
@@ -102,10 +126,12 @@ def main(argv: list[str] | None = None) -> int:
     verdict = score(rows, bar)
     day = datetime.date.today().isoformat()
     OUT.mkdir(parents=True, exist_ok=True)
-    path = OUT / f"{target['model']}-{day}.json"
-    path.write_text(json.dumps({"model": target["model"], "provider": target["provider"],
-                                "tenant": a.tenant, "date": day, "bar": bar, "verdict": verdict,
-                                "rows": rows}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    path = OUT / f"{target['model']}-{day}{'-probes' if base is not None else ''}-bar{bar['version']}.json"
+    doc = {"model": target["model"], "provider": target["provider"], "tenant": a.tenant, "date": day,
+           "bar": bar, "verdict": verdict, "rows": rows}
+    if base is not None:
+        doc["regression_from"] = str(base.relative_to(ROOT))
+    path.write_text(json.dumps(doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(verdict), "->", path.relative_to(ROOT))
     return 0 if verdict["pass"] else 1
 

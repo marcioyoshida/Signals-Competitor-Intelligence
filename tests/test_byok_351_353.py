@@ -172,3 +172,25 @@ def test_every_allow_listed_model_names_its_profile_and_a_named_profile_passed()
         if spec["profile"]:
             prof = json.loads((root / spec["profile"]).read_text(encoding="utf-8"))
             assert prof["model"] == model and prof["verdict"]["pass"] is True
+
+
+def test_every_probe_passes_the_scope_gate_so_it_reaches_the_model():
+    # #352 bar v2: a probe stopped by the keyword gate never tests the model or the guardrail.
+    from scripts import ask_regression as ar
+    from src.dashboard import agent_ask as aa
+    for kind, q in ar.PROBES:
+        ok, why = aa.classify_scope(q, entity_vocab={"itau", "itau unibanco"}, lens_vocab=set())
+        assert ok, (kind, why)
+
+
+def test_probes_only_takes_regression_rows_from_the_latest_full_run(tmp_path):
+    import json as _j
+    t = {"model": "claude-sonnet-5-5", "provider": "anthropic_key"}
+    def put(name, **d):
+        (tmp_path / name).write_text(_j.dumps({**t, "rows": [{"kind": "regression"}], **d}), encoding="utf-8")
+    put("claude-sonnet-5-5-2026-11-06.json", date="2026-11-06")
+    put("claude-sonnet-5-5-2026-11-07.json", date="2026-11-07")
+    put("claude-sonnet-5-5-2026-11-08-probes-bar2.json", date="2026-11-08", regression_from="x")
+    put("claude-sonnet-5-5-2026-11-09-other.json", date="2026-11-09", provider="bedrock_role")
+    assert model_eval.latest_artifact(t, tmp_path).name == "claude-sonnet-5-5-2026-11-07.json"
+    assert model_eval.latest_artifact({**t, "model": "nope"}, tmp_path) is None
