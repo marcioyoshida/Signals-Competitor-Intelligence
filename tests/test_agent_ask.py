@@ -1001,6 +1001,10 @@ def test_doubled_citation_label_is_normalized():
     assert aa.tidy_citations("x [card_id:card_id:sector_event:fintech:resolucao-bcb-590].") == \
         "x [sector_event:fintech:resolucao-bcb-590]."
     assert aa.tidy_citations("x [card_id: card: kb:0]") == "x [kb:0]"
+    # a label on every list item (live 11-09)
+    assert aa.tidy_citations("x [card_id:kb:0, card_id:sector_event:banking:resolucao-bcb-590]") == \
+        "x [kb:0][sector_event:banking:resolucao-bcb-590]"
+    assert aa.tidy_citations("x [card_id:0, card_id:2, card_id:4]") == "x [0][2][4]"
 
 
 def test_index_citations_resolve_only_to_a_source_that_carries_the_claim():
@@ -1010,11 +1014,13 @@ def test_index_citations_resolve_only_to_a_source_that_carries_the_claim():
             "conforme o art. 14 da Medida Provisória nº 1.394, de 25 de setembro de 2026 [0][card_id:2]. "
             "Bancos e fintechs são afetados [0][6].")
     out = aa.resolve_index_citations(aa.tidy_citations(text), cards, kb)
-    # [0] → kb:0 (names Res. 590); [2] is Res. 595 → dropped; the uncited second sentence loses its
-    # unverifiable indices instead of showing them raw
+    # [0] → kb:0 (names Res. 590); [2] is Res. 595 → dropped. The second sentence names no act: it is
+    # about the answer's act (590), so [0] → kb:0 and [6] (no such source) is removed, never shown raw
     assert out == ("A Resolução BCB 590 exige que os bancos vedem transações de apostas de quota fixa, "
                    "conforme o art. 14 da Medida Provisória nº 1.394, de 25 de setembro de 2026 [kb:0]. "
-                   "Bancos e fintechs são afetados.")
+                   "Bancos e fintechs são afetados [kb:0].")
+    # an answer about no act: an index that shares nothing with the sentence is removed
+    assert aa.resolve_index_citations("O Bradesco lucrou mais [0].", cards, kb) == "O Bradesco lucrou mais."
     assert [c["id"] for c in aa.validate_citations(out, cards, kb)] == ["kb:0"]
 
 

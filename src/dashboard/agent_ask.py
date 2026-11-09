@@ -523,8 +523,12 @@ _LIST_CITE_RE = re.compile(r"\[\s*([A-Za-z0-9:_\-]+(?:\s*[,;]\s*[A-Za-z0-9:_\-]+
 _ID_TOKEN_RE = re.compile(r"^[A-Za-z0-9_\-]+:[A-Za-z0-9:_\-]+$")
 
 
+_LABEL_PREFIX_RE = re.compile(r"^(?:(?:card_id|card|id)\s*:\s*)+", re.I)
+
+
 def _split_cite_list(m: re.Match) -> str:
-    parts = [p.strip() for p in re.split(r"[,;]", m.group(1)) if p.strip()]
+    # each item may carry its own label: "[card_id:0, card_id:2, card_id:4]" (live 11-09)
+    parts = [_LABEL_PREFIX_RE.sub("", p.strip()) for p in re.split(r"[,;]", m.group(1)) if p.strip()]
     if not parts or not all(re.fullmatch(r"[A-Za-z0-9:_\-]+", p) for p in parts):
         return m.group(0)
     return "".join(f"[{p}]" for p in parts)
@@ -640,10 +644,16 @@ def _sentence_before(text: str, pos: int) -> str:
     return head[starts[-1] if starts else 0:]
 
 
-def _supports(sentence: str, source_text: str) -> bool:
+def _supports(sentence: str, source_text: str, about: set[tuple[str, str, str]] = frozenset(),
+              answer_acts: set[tuple[str, str, str]] = frozenset()) -> bool:
+    """Does the source carry the sentence's claim? The sentence's own act decides; a sentence that
+    names none ("A vigência da resolução é …") is about the act(s) the ANSWER names, so a source
+    ABOUT one of those acts qualifies; otherwise 4+ shared content words."""
     s_acts = act_keys(sentence)
     if s_acts:
         return acts_match(s_acts, act_keys(source_text))
+    if answer_acts and about and acts_match(answer_acts, about):
+        return True
     words = {w for w in _tokens(sentence) if len(w) >= 5}
     return len(words & set(_tokens(source_text))) >= 4
 
@@ -651,16 +661,19 @@ def _supports(sentence: str, source_text: str) -> bool:
 def resolve_index_citations(text: str, cards: list[dict[str, Any]],
                             kb_snippets: list[dict[str, Any]] | None) -> str:
     kb_by_id = {str(s.get("id")): s for s in (kb_snippets or [])}
+    answer_acts = act_keys(_CITE_RE.sub(" ", text or ""))
 
     def _sub(m: re.Match) -> str:
         n = int(m.group(1))
         sentence = _sentence_before(text, m.start())
         kb = kb_by_id.get(f"kb:{n}")
         if kb and _supports(sentence, " ".join(str(kb.get(k) or "") for k in ("title", "subject"))
-                            + " " + re.sub(r"tipo=([^&]*)&numero=", r"\1 n ", unquote_plus(str(kb.get("url") or "")))):
+                            + " " + re.sub(r"tipo=([^&]*)&numero=", r"\1 n ", unquote_plus(str(kb.get("url") or ""))),
+                            _source_acts(kb), answer_acts):
             return f"[kb:{n}]"
         if n < len(cards) and _supports(sentence, " ".join(
-                str(cards[n].get(k) or "") for k in ("entity_label", "narrative"))):
+                str(cards[n].get(k) or "") for k in ("entity_label", "narrative")),
+                _source_acts(cards[n]), answer_acts):
             return f"[{cards[n].get('id')}]"
         return ""
 
