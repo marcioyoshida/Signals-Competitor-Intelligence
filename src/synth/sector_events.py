@@ -257,11 +257,31 @@ _RULING_RESTORE = re.compile(
     r"\bvolta(?:m)? a (?:proibir|bloquear|suspender)\b|\bvoltam? a ser (?:bloquead|proibid|suspens)\w*"
     r"|\bsuspende\w* (?:a |o )?(?:liminar|decisao)\b|\bcass(?:a|am|ou)\b|\brestabelec\w*"
     r"|\bmodifica\w* (?:a )?decisao\b|\bmant(?:em|eve|ida|ido|er)\b|\bconfirm\w* (?:a )?proib"
-    r"|\bsuspende\w* (?:a |o )?autorizac")
+    r"|\bsuspende\w* (?:a |o )?autorizac"
+    # a court freezing the lawsuits AGAINST a measure keeps it in force until judgment (11-09:
+    # "Fux suspende ações contra proibição das bets") — no release/restore verb, still a ruling
+    # ("suspende ações de cobrança" is not: the frozen lawsuits must be ABOUT a measure)
+    r"|\bsuspende\w* (?:todas as |todos os |as |os )?(?:acoes|processos)(?: judiciais)?(?: na justica)?"
+    r" (?:contra|sobre|que contestam) (?:a |o |as |os )?"
+    r"(?:proib|suspens|mp\b|medida|lei\b|resoluc|norma|decreto|regra|marco)")
 _RULING_RELEASE = re.compile(
     r"\bliber(?:a|am|ou|aram|ad[ao]s?)\b|\bautoriz(?:a|am|ou|aram|ad[ao]s?)\b|\bretorno\b|\bretomada\b"
     r"|\bvolt(?:a|am|ar) a (?:funcionar|operar)\b|\bderrub\w* (?:a |o )?(?:proib|suspens|mp|medida)")
 RULING_LABEL = {"release": "liberação", "restore": "nova proibição / manutenção"}
+#: Which court a headline names. Two rulings from different courts are different stories even
+#: days apart on one measure (11-09: Fux/STF freezing the lawsuits ≠ the TRF-3 ruling of 11-06).
+_COURT_TIERS = (
+    ("stf", re.compile(r"\b(?:stf|supremo|fux)\b")),
+    ("stj", re.compile(r"\bstj\b")),
+    ("lower", re.compile(r"\b(?:trf\d|tj[a-z]{2}|desembargador\w*|juiz\w*"
+                         r"|justica (?:de|do|da|federal|estadual))\b")),
+)
+
+
+def court_tiers(text: Any) -> set[str]:
+    """``{"stf"}``, ``{"lower"}``… — the courts a headline names (empty: none named)."""
+    t = _norm(text)
+    return {name for name, rx in _COURT_TIERS if rx.search(t)}
 
 
 def _norm(text: Any) -> str:
@@ -667,6 +687,11 @@ def _story_match(title: Any, srcs: list[dict[str, Any]]) -> bool:
         return _is_generic(news)
     mine = topic_tokens(title)
     direct = [s for s in news if mention_of(s.get("title")) == "direct"]
+    if "@court" in mine:
+        courts = court_tiers(title)
+        theirs = set().union(*(court_tiers(s.get("title")) for s in direct)) if direct else set()
+        if courts and theirs and not courts & theirs:
+            return False  # another court's ruling: its own story
     return any(topic_match(mine, topic_tokens(s.get("title"))) for s in direct)
 
 

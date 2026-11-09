@@ -459,6 +459,12 @@ def test_background_mention_vs_direct_report(title, mention):
     ("TRF3 suspende liminar: Casa de Apostas, Betsul e Jogo Online voltam a ser bloqueadas", "restore"),
     ("TRF3 modifica decisão de desembargadora e volta a proibir bets", "restore"),
     ("Fux mantém proibição das bets e marca audiência com governo e clubes", "restore"),
+    # 11-09: lawsuits against the ban frozen until the STF rules -> the ban stays in force
+    ("Fux suspende ações contra proibição das bets até julgamento do STF", "restore"),
+    ("STF suspende ações judiciais sobre proibição das bets em todo o país", "restore"),
+    ("Fux atende a pedido da PGR e suspende processos sobre proibição de bets até decisão do STF", "restore"),
+    ("Fux suspende todas as ações judiciais contra proibição de bets no país", "restore"),
+    ("Justiça suspende ações de cobrança contra clientes do banco", None),                      # no measure
     ("Nova decisão do STJ libera encerramento de contas do Nubank, Itaú e outros bancos", None),  # no measure
     ("Bets buscam reverter proibição de Lula no STF", None),                                      # an attempt
 ])
