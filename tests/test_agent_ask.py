@@ -894,3 +894,182 @@ def test_subjectless_follow_up_after_multi_item_answer_covers_every_item():
     aa.answer("por quê?", feed=feed, converser=conv1,
               history=[{"q": "Quem está em alerta?", "a": "Itaú [c1].", "cited": ["c1"]}])
     assert "tratou de" not in conv1.calls[-1]["system"]
+
+
+# --- Res. BCB 590 rehearsal (11-09): act-anchored grounding, DOU dates, index citations --------
+_RES590_TITLE = "RESOLUÇÃO BCB Nº 590, DE 28 DE SETEMBRO DE 2026"
+_RES590_KB = {"id": "kb:0", "source": "DOU", "doc_type": "Resolução", "date": "2026-09-30",
+              "title": _RES590_TITLE,
+              "url": "https://www.in.gov.br/web/dou/-/resolucao-bcb-n-590-de-28-de-setembro-de-2026-735385489",
+              "subject": _RES590_TITLE + " Dispõe sobre a vedação de processar, liquidar ou viabilizar "
+                         "transações destinadas a loterias de aposta de quota fixa estabelecida pelo "
+                         "art. 14 da Medida Provisória nº 1.394, de 25 de setembro de 2026."}
+_RES595_KB = {"id": "kb:2", "source": "DOU", "doc_type": "Resolução", "date": "2026-10-02",
+              "title": "RESOLUÇÃO BCB Nº 595, DE 30 DE SETEMBRO DE 2026",
+              "subject": "Altera a Resolução BCB nº 256, que regulamenta a TED."}
+
+
+def _res590_feed():
+    bradesco = [{"id": "cand-ent-bradesco", "date": f"2026-11-0{d}", "entity": "bradesco",
+                 "entity_label": "Bradesco", "entities": ["bradesco"], "lenses": ["news", "dou"],
+                 "is_alert": True, "threat_score": 63,
+                 "narrative": f"O Bradesco divulgou resultados e patrocínio (dia {d})."} for d in range(1, 10)]
+    bradesco += [{"id": f"cand-ent-bradesco-{s}", "date": "2026-10-28", "entity": f"bradesco-{s}",
+                  "entity_label": f"Bradesco-{s}", "entities": [f"bradesco-{s}"], "lenses": ["juros"],
+                  "is_alert": True, "threat_score": 80, "narrative": f"O Bradesco {s} subiu juros."}
+                 for s in ("consorcio", "corretora", "seguros", "vida")]
+    lifecycle = {"id": "reg-lifecycle-res-bcb-590", "date": "2026-10-01", "entity": None,
+                 "entity_label": "Regulatório", "lenses": ["regulatory"], "topics": ["regulacao"],
+                 "industries": ["banking"], "is_alert": False, "threat_score": 25,
+                 "narrative": "Ciclo regulatório: Resolução BCB 590 — estágio atual Publicação."}
+    return {
+        "entities": [{"entity": "bradesco", "label": "Bradesco"}],
+        "industry_options": [{"slug": "banking", "display_name": "Banking"}],
+        "feed": bradesco + [lifecycle],
+        "sector_events": [{
+            "id": "sector_event:banking:resolucao-bcb-590", "industry": "banking", "date": "2026-09-30",
+            "change_label": "proibição", "title": _RES590_TITLE, "severity": "critical",
+            "confidence": "official", "n_affected": 40,
+            "summary": "Dispõe sobre a vedação de processar transações de apostas de quota fixa.",
+            "sources": [{"kind": "official", "title": _RES590_TITLE, "source": "DOU", "section": "DO1",
+                         "date": "2026-09-30", "url": _RES590_KB["url"]}],
+        }],
+    }
+
+
+def test_question_naming_an_act_grounds_on_that_act_over_entity_news():
+    # live 11-09: 12 Bradesco news cards (entity boost) pushed every Res. 590 card out of the pool;
+    # Nova then declined 3 of 6 runs of the same question.
+    feed = _res590_feed()
+    pool = feed["feed"] + aa.sector_event_cards(feed)
+    ids = [c["id"] for c in aa.select_grounding("O que muda para o Bradesco com a Resolução BCB 590?", pool)]
+    assert set(ids[:2]) == {"sector_event:banking:resolucao-bcb-590", "reg-lifecycle-res-bcb-590"}
+    assert "cand-ent-bradesco" in ids     # the entity still gets the remaining depth
+
+
+def test_act_match_needs_same_number_and_compatible_organ():
+    assert aa.acts_match(aa.act_keys("Resolução BCB 590"), aa.act_keys(_RES590_TITLE))
+    assert aa.acts_match(aa.act_keys("a resolução 590"), aa.act_keys(_RES590_TITLE))
+    assert not aa.acts_match(aa.act_keys("Resolução CMN 590"), aa.act_keys(_RES590_TITLE))
+    assert not aa.acts_match(aa.act_keys("Resolução BCB 595"), aa.act_keys(_RES590_TITLE))
+    assert ("medida provisoria", "", "1394") in aa.act_keys("Medida Provisória nº 1.394")
+
+
+def test_kb_header_labels_dou_publication_and_signing_dates():
+    head = aa.kb_header(_RES590_KB)
+    assert "publicado no DOU em 2026-09-30 (ato assinado em 2026-09-28)" in head
+    # a non-DOU snippet keeps its bare date
+    assert aa.kb_header({"source": "BCB", "date": "2026-09-30", "title": "Resolução BCB N° 591"}) == \
+        "BCB · 2026-09-30 · Resolução BCB N° 591"
+
+
+def test_sector_event_card_labels_dou_publication_date():
+    card = aa.sector_event_cards(_res590_feed())[0]
+    assert "(DOU, DO1, publicado no DOU em 2026-09-30)" in card["narrative"]
+
+
+def test_publication_claim_with_signing_date_is_corrected():
+    kb = [_RES590_KB]
+    fix = lambda t: aa.correct_act_dates(t, [], kb)   # noqa: E731
+    # the two live phrasings
+    assert fix("A Resolução BCB 590 entra em vigor na data de sua publicação, 28 de setembro de 2026 [kb:0].") == \
+        "A Resolução BCB 590 entra em vigor na data de sua publicação, 30 de setembro de 2026 [kb:0]."
+    assert fix("A Resolução BCB 590 está em vigor desde 28 de setembro [kb:0].") == \
+        "A Resolução BCB 590 está em vigor desde 30 de setembro [kb:0]."
+    assert fix("A Resolução BCB 590, publicada em 28/09/2026, veda pagamentos.") == \
+        "A Resolução BCB 590, publicada em 30/09/2026, veda pagamentos."
+    assert fix("Vigência: desde 2026-09-28 [kb:0].") == "Vigência: desde 2026-09-30 [kb:0]."
+    # the title form is the act's name, not a claim — untouched, even next to a vigência cue
+    t = "A Resolução BCB 590, de 28 de setembro de 2026, entra em vigor na data de sua publicação."
+    assert fix(t) == t
+    # no publication/vigência cue → untouched
+    t = "O BCB assinou a Resolução BCB 590 em 28 de setembro de 2026."
+    assert fix(t) == t
+    # a sentence about another act with no stored dates is untouched
+    t = "A MP 1.394 foi publicada em 25 de setembro de 2026."
+    assert fix(t) == t
+
+
+def test_publication_dates_also_read_from_sector_event_cards():
+    cards = aa.sector_event_cards(_res590_feed())
+    assert aa.correct_act_dates("A Resolução BCB 590 foi publicada em 28 de setembro de 2026.", cards, []) == \
+        "A Resolução BCB 590 foi publicada em 30 de setembro de 2026."
+
+
+def test_doubled_citation_label_is_normalized():
+    # live 11-09: "[card_id:sector_event:fintech:…]" reached the reader (label written twice)
+    assert aa.tidy_citations("x [card_id:card_id:sector_event:fintech:resolucao-bcb-590].") == \
+        "x [sector_event:fintech:resolucao-bcb-590]."
+    assert aa.tidy_citations("x [card_id: card: kb:0]") == "x [kb:0]"
+
+
+def test_index_citations_resolve_only_to_a_source_that_carries_the_claim():
+    cards = [{"id": "c0", "entity_label": "Bradesco", "narrative": "Bradesco patrocina a Haas."}]
+    kb = [_RES590_KB, {"id": "kb:1", "title": "RESOLUÇÃO BCB Nº 591"}, _RES595_KB]
+    text = ("A Resolução BCB 590 exige que os bancos vedem transações de apostas de quota fixa, "
+            "conforme o art. 14 da Medida Provisória nº 1.394, de 25 de setembro de 2026 [0][card_id:2]. "
+            "Bancos e fintechs são afetados [0][6].")
+    out = aa.resolve_index_citations(aa.tidy_citations(text), cards, kb)
+    # [0] → kb:0 (names Res. 590); [2] is Res. 595 → dropped; the uncited second sentence loses its
+    # unverifiable indices instead of showing them raw
+    assert out == ("A Resolução BCB 590 exige que os bancos vedem transações de apostas de quota fixa, "
+                   "conforme o art. 14 da Medida Provisória nº 1.394, de 25 de setembro de 2026 [kb:0]. "
+                   "Bancos e fintechs são afetados.")
+    assert [c["id"] for c in aa.validate_citations(out, cards, kb)] == ["kb:0"]
+
+
+def test_answer_with_only_index_citations_is_grounded():
+    # live 11-09: "[0]"-only answers went out grounded:false (2 of 6 runs) and were logged as gaps
+    feed = _res590_feed()
+    r = aa.answer("O que a Resolução BCB 590 exige dos bancos? Cite a fonte.", feed=feed,
+                  converser=lambda *a, **k: ("A Resolução BCB 590 exige que os bancos vedem transações "
+                                             "de apostas; entrou em vigor em 28 de setembro de 2026 [0]."),
+                  kb_retrieve=lambda q: [_RES590_KB])
+    assert r["grounded"] and [c["id"] for c in r["citations"]] == ["kb:0"]
+    assert "30 de setembro de 2026 [kb:0]" in r["answer"] and "[0]" not in r["answer"]
+
+
+def test_a_failing_guard_keeps_the_answer(monkeypatch):
+    def boom(*a, **k):
+        raise RuntimeError("guard bug")
+    monkeypatch.setattr(aa, "correct_act_dates", boom)
+    r = aa.answer("O que a Resolução BCB 590 exige dos bancos?", feed=_res590_feed(),
+                  converser=lambda *a, **k: "Veda transações de apostas [kb:0].",
+                  kb_retrieve=lambda q: [_RES590_KB])
+    assert r["grounded"] and r["answer"] == "Veda transações de apostas [kb:0]."
+
+
+def test_act_date_fix_never_cascades_into_another_acts_dates():
+    # replay 11-09: Res. 595 is SIGNED on 30/09 (Res. 590's DOU date) — a chained rewrite turned a
+    # correct "em vigor em 30 de setembro" into "2 de outubro"
+    kb = [_RES590_KB, _RES595_KB]
+    fix = lambda t: aa.correct_act_dates(t, [], kb)   # noqa: E731
+    assert fix("Essa resolução foi publicada em 28 de setembro de 2026 e entrou em vigor em "
+               "30 de setembro de 2026 [kb:0].") == \
+        "Essa resolução foi publicada em 30 de setembro de 2026 e entrou em vigor em 30 de setembro de 2026 [kb:0]."
+    t = "Essa resolução está em vigor desde 30 de setembro de 2026 [kb:0]."
+    assert fix(t) == t                                  # cited act is 590: 30/09 is right
+    # no act named, nothing cited: the act the ANSWER names decides …
+    assert fix("A Resolução BCB 590 veda pagamentos a bets [kb:0]. A resolução está em vigor desde "
+               "28 de setembro de 2026.") == ("A Resolução BCB 590 veda pagamentos a bets [kb:0]. "
+                                              "A resolução está em vigor desde 30 de setembro de 2026.")
+    # … and an answer that names no act is left alone (595 is only in the context)
+    t = "A resolução está em vigor desde 30 de setembro de 2026."
+    assert fix(t) == t
+    # a cited CARD anchors the act too (reg-lifecycle / sector-event cards)
+    card = {"id": "reg-lifecycle-res-bcb-590", "narrative": "Ciclo regulatório: Resolução BCB 590 — Publicação."}
+    assert aa.correct_act_dates("A norma entrará em vigor em 30 de setembro de 2026 [reg-lifecycle-res-bcb-590].",
+                                [card], kb) == \
+        "A norma entrará em vigor em 30 de setembro de 2026 [reg-lifecycle-res-bcb-590]."
+    # Res. 595 named: its own dates apply
+    assert fix("A Resolução BCB 595 foi publicada em 30 de setembro de 2026 [kb:2].") == \
+        "A Resolução BCB 595 foi publicada em 2 de outubro de 2026 [kb:2]."
+    # both acts' signing dates in one uncited, unnamed sentence → ambiguous, untouched
+    t = "As resoluções foram publicadas em 28 de setembro e 30 de setembro."
+    assert fix(t) == t
+
+
+def test_act_date_fix_keeps_sentences_with_abbreviations_whole():
+    t = ("A Resolução BCB 590 veda transações estabelecidas pelo art. 14 da MP e entrou em vigor "
+         "em 28 de setembro de 2026 [kb:0].")
+    assert aa.correct_act_dates(t, [], [_RES590_KB]).endswith("em vigor em 30 de setembro de 2026 [kb:0].")

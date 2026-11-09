@@ -315,6 +315,10 @@ def select_grounding(
     # RANKING signal only (lifts on-topic cards), never a relevance trigger, so a
     # broad topic like "pagamentos" can't flood the pool with every PIX card.
     q_topics = question_topics(q)
+    # A question that names a normative act ("Resolução BCB 590") is about THAT act: live 11-09,
+    # "O que muda para o Bradesco com a Resolução BCB 590?" filled all 12 slots with Bradesco news
+    # (entity boost) and left out the three cards on Res. 590, so Nova declined in 3 of 6 runs.
+    q_acts = act_keys(q)
     scope_entity = _fold(scope.get("entity") or "") or None
     scope_lens = _fold(scope.get("lens") or "") or None
     scope_date = str(scope.get("date") or "") or None
@@ -375,6 +379,9 @@ def select_grounding(
         # sector's event card above entity narratives that merely mention the same words.
         if card.get("sector_terms") and q_toks & set(_tokens(" ".join(card["sector_terms"]))):
             score += 6.0
+            relevant = True
+        if q_acts and acts_match(q_acts, act_keys(blob)):
+            score += 8.0
             relevant = True
         if not relevant:
             continue
@@ -509,7 +516,9 @@ _RUN_RE = re.compile(r"(\[[A-Za-z0-9:_\-]+\])(?:[\s,;]*\1)+")
 # #190: the model sometimes echoes the prompt's "[card_id]" placeholder literally —
 # "[card_id: kb:0]" — or lists several ids in one bracket ("[kb:0, cvm:x]"). Both are
 # rewritten to the canonical "[id][id]" form, so the answer validates as grounded.
-_LABELED_CITE_RE = re.compile(r"\[\s*(?:card_id|card|id)\s*:\s*([^\]]+?)\s*\]", re.I)
+# Every leading label is dropped: live 11-09 "[card_id:sector_event:fintech:…]" reached the reader
+# because the model wrote the label twice and one pass removed only the first.
+_LABELED_CITE_RE = re.compile(r"\[\s*(?:(?:card_id|card|id)\s*:\s*)+([^\]]+?)\s*\]", re.I)
 _LIST_CITE_RE = re.compile(r"\[\s*([A-Za-z0-9:_\-]+(?:\s*[,;]\s*[A-Za-z0-9:_\-]+)+)\s*\]")
 _ID_TOKEN_RE = re.compile(r"^[A-Za-z0-9_\-]+:[A-Za-z0-9:_\-]+$")
 
@@ -598,6 +607,208 @@ def merge_duplicate_citations(text: str, kb_snippets: list[dict[str, Any]] | Non
         return text
     text = _CITE_RE.sub(lambda m: "[%s]" % aliases.get(m.group(1), m.group(1)), text or "")
     return _RUN_RE.sub(r"\1", text)
+
+
+def act_keys(text: Any) -> set[tuple[str, str, str]]:
+    """(kind, organ, number) of every normative act named in ``text``: "Resolução BCB nº 590" →
+    ("resolucao", "bcb", "590"); "MP"-style abbreviations are not recognised."""
+    return {(m.group(1), m.group(2) or "", m.group(3).replace(".", "").lstrip("0"))
+            for m in _ACT_RE.finditer(_fold(text)) if m.group(3).replace(".", "").lstrip("0")}
+
+
+def acts_match(a: set[tuple[str, str, str]], b: set[tuple[str, str, str]]) -> bool:
+    """Same kind and number; the organ must agree when both name one ("Resolução 590" matches
+    "Resolução BCB 590", "Resolução CMN 590" does not)."""
+    return any(ka == kb_ and na == nb and (not oa or not ob or oa == ob)
+               for ka, oa, na in a for kb_, ob, nb in b)
+
+
+# --- bare index citations ("[0]", "[card_id:2]") ----------------------------
+# Live 11-09: Nova cited "[0][5][6]" (an index, not an id) on 2 of 6 runs of "O que a Resolução BCB
+# 590 exige dos bancos?", so a correct answer went out grounded:false — and raw "[0]" reached the
+# reader. An index is mapped to kb:n (or the n-th card) ONLY when that source carries the claim
+# (same act named, or strong word overlap with the sentence); otherwise the token is removed.
+_INDEX_CITE_RE = re.compile(r"\[\s*(\d{1,2})\s*\]")
+# a sentence ends at . ! ? before a capital/bullet ("art. 14" and "nº 1.394" do not end one) or a newline
+_SENT_START_RE = re.compile(r"(?:[.!?]\s+(?=[A-ZÀ-Ý*#•\-])|\n)")
+
+
+def _sentence_before(text: str, pos: int) -> str:
+    """The sentence a citation at ``pos`` closes (citations trail their claim)."""
+    head = _CITE_RE.sub(" ", text[:pos])
+    starts = [m.end() for m in _SENT_START_RE.finditer(head.rstrip())]
+    return head[starts[-1] if starts else 0:]
+
+
+def _supports(sentence: str, source_text: str) -> bool:
+    s_acts = act_keys(sentence)
+    if s_acts:
+        return acts_match(s_acts, act_keys(source_text))
+    words = {w for w in _tokens(sentence) if len(w) >= 5}
+    return len(words & set(_tokens(source_text))) >= 4
+
+
+def resolve_index_citations(text: str, cards: list[dict[str, Any]],
+                            kb_snippets: list[dict[str, Any]] | None) -> str:
+    kb_by_id = {str(s.get("id")): s for s in (kb_snippets or [])}
+
+    def _sub(m: re.Match) -> str:
+        n = int(m.group(1))
+        sentence = _sentence_before(text, m.start())
+        kb = kb_by_id.get(f"kb:{n}")
+        if kb and _supports(sentence, " ".join(str(kb.get(k) or "") for k in ("title", "subject"))
+                            + " " + re.sub(r"tipo=([^&]*)&numero=", r"\1 n ", unquote_plus(str(kb.get("url") or "")))):
+            return f"[kb:{n}]"
+        if n < len(cards) and _supports(sentence, " ".join(
+                str(cards[n].get(k) or "") for k in ("entity_label", "narrative"))):
+            return f"[{cards[n].get('id')}]"
+        return ""
+
+    out = _INDEX_CITE_RE.sub(_sub, text or "")
+    out = re.sub(r"[ \t]+([.,;:!?])", r"\1", out)   # "… de 2026 ." left by a dropped token
+    return _RUN_RE.sub(r"\1", out)
+
+
+# --- act dates: signing date (title) vs DOU publication -------------------
+# Live 11-09: "entra em vigor na data de sua publicação, 28 de setembro de 2026" — 28/09 is the
+# date in the TITLE ("RESOLUÇÃO BCB Nº 590, DE 28 DE SETEMBRO DE 2026"); the DOU published it on
+# 30/09. The context now labels the DOU date (kb_header, sector-event cards) and this guard
+# rewrites a publication/vigência claim that still carries the signing date. Not a prompt rule:
+# prompt additions measurably cut citations (synthesis-guards notes, 10-04).
+_MESES = ("janeiro", "fevereiro", "marco", "abril", "maio", "junho", "julho", "agosto",
+          "setembro", "outubro", "novembro", "dezembro")
+_MESES_PT = ("janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto",
+             "setembro", "outubro", "novembro", "dezembro")
+_TITLE_DATE_RE = re.compile(r"\bde (\d{1,2})o? de (%s) de (\d{4})\b" % "|".join(_MESES))
+_PUB_CUE_RE = re.compile(r"publica|vigor\b|vigencia|vigente")
+# "590, de 28 de setembro" / "nº 1.394, de 25 de …": a date right after an act number is its title.
+_TITLE_POS_RE = re.compile(r"\d[\d.]*\s*,?\s*(?:de\s+)?$")
+# Card narratives: "TITLE, DE dd DE mês DE aaaa (DOU, …, publicado no DOU em aaaa-mm-dd)".
+_CARD_DOU_ACT_RE = re.compile(r"([^.;:()]*\bde \d{1,2}o? de [a-z]+ de \d{4})\s*\(dou\b[^()]*?(\d{4}-\d{2}-\d{2})\)")
+
+
+def _fold_aligned(s: str) -> str:
+    """``_fold`` that keeps every index (one char in, one char out) so spans map back."""
+    out = []
+    for ch in s:
+        base = "".join(c for c in unicodedata.normalize("NFKD", ch) if not unicodedata.combining(c))
+        out.append((base[:1] or ch).lower()[:1] or ch)
+    return "".join(out)
+
+
+def _signing_date(title: Any) -> Any:
+    from datetime import date
+    m = _TITLE_DATE_RE.search(_fold(title))
+    if not m:
+        return None
+    try:
+        return date(int(m.group(3)), _MESES.index(m.group(2)) + 1, int(m.group(1)))
+    except ValueError:
+        return None
+
+
+def act_publication_dates(cards: list[dict[str, Any]],
+                          kb_snippets: list[dict[str, Any]] | None) -> dict[tuple[str, str, str], tuple[Any, Any]]:
+    """act key → (signing date from its title, DOU publication date), for DOU acts whose two dates
+    differ. An act seen with two publication dates (a republication) keeps the earliest."""
+    from datetime import date
+    found: list[tuple[str, str]] = []
+    for s in kb_snippets or []:
+        if _fold(s.get("source")) == "dou" and s.get("date") and s.get("title"):
+            found.append((str(s["title"]), str(s["date"])[:10]))
+    for c in cards or []:
+        for m in _CARD_DOU_ACT_RE.finditer(_fold(c.get("narrative"))):
+            found.append((m.group(1), m.group(2)))
+    out: dict[tuple[str, str, str], tuple[Any, Any]] = {}
+    for title, pub in found:
+        signed = _signing_date(title)
+        try:
+            published = date.fromisoformat(pub)
+        except ValueError:
+            continue
+        if not signed or signed == published:
+            continue
+        for k in act_keys(title):
+            if k not in out or published < out[k][1]:
+                out[k] = (signed, published)
+    return out
+
+
+def _date_patterns(d: Any) -> list[tuple[re.Pattern, str]]:
+    mes = _MESES[d.month - 1]
+    return [
+        (re.compile(rf"\b0?{d.day}o? de {mes}( de {d.year})?\b"), "long"),
+        (re.compile(rf"\b0?{d.day}/0?{d.month}(/{d.year})?\b"), "slash"),
+        (re.compile(rf"\b{d.year}-{d.month:02d}-{d.day:02d}\b"), "iso"),
+    ]
+
+
+def _render_date(d: Any, style: str, with_year: bool) -> str:
+    if style == "iso":
+        return d.isoformat()
+    if style == "slash":
+        return f"{d.day:02d}/{d.month:02d}" + (f"/{d.year}" if with_year else "")
+    day = "1º" if d.day == 1 else str(d.day)
+    return f"{day} de {_MESES_PT[d.month - 1]}" + (f" de {d.year}" if with_year else "")
+
+
+def _sentences(text: str) -> list[str]:
+    """Split into sentences that concatenate back to ``text`` ("art. 14", "nº 1.394" stay whole)."""
+    cuts = [m.end() for m in _SENT_START_RE.finditer(text)]
+    return [text[a:b] for a, b in zip([0] + cuts, cuts + [len(text)]) if b > a]
+
+
+def _source_acts(src: dict[str, Any]) -> set[tuple[str, str, str]]:
+    """The act a cited source is ABOUT: a KB document's title (else its URL), a card's lead."""
+    if src.get("title") or src.get("url"):
+        return act_keys(src.get("title")) or act_keys(
+            re.sub(r"tipo=([^&]*)&numero=", r"\1 n ", unquote_plus(str(src.get("url") or ""))))
+    return act_keys(str(src.get("narrative") or "")[:240])
+
+
+def correct_act_dates(text: str, cards: list[dict[str, Any]],
+                      kb_snippets: list[dict[str, Any]] | None) -> str:
+    """Rewrite the signing date to the DOU publication date where a sentence says the act was
+    published / entered into force on it. The sentence's act is the one it names, else the one its
+    citations are about, else the act(s) the answer names; with more than one candidate it is left
+    alone. One pass, so a corrected date is never corrected again (Res. 595 is
+    signed on 30/09, Res. 590's publication date). The title form ("Resolução BCB 590, de 28 de
+    setembro") is the act's name, not a claim, and is never touched."""
+    acts = act_publication_dates(cards, kb_snippets)
+    if not acts or not text:
+        return text
+    by_id = {str(c.get("id")): c for c in list(cards or []) + list(kb_snippets or [])}
+    # "A Resolução entrou em vigor em 28/09" (no number, no citation) is about the act the ANSWER
+    # names — never about another act that merely sits in the retrieved context.
+    in_answer = {k for k in acts if acts_match({k}, act_keys(_CITE_RE.sub(" ", text)))}
+    out: list[str] = []
+    for sent in _sentences(text):
+        f = _fold_aligned(sent)
+        if not _PUB_CUE_RE.search(f):
+            out.append(sent)
+            continue
+        named = {k for k in acts if acts_match({k}, act_keys(_CITE_RE.sub(" ", sent)))}
+        cited: set[tuple[str, str, str]] = set()
+        for cid in _CITE_RE.findall(sent):
+            if cid in by_id:
+                cited |= {k for k in acts if acts_match({k}, _source_acts(by_id[cid]))}
+        pool = named or cited or in_answer
+        spans: dict[tuple[str, str, str], list[tuple[re.Match, str]]] = {}
+        for k in pool:
+            for pat, style in _date_patterns(acts[k][0]):
+                for m in pat.finditer(f):
+                    if not _TITLE_POS_RE.search(f[:m.start()]):
+                        spans.setdefault(k, []).append((m, style))
+        if len({acts[k] for k in spans}) != 1:   # nothing to fix, or ambiguous between acts
+            out.append(sent)
+            continue
+        k = next(iter(spans))
+        published = acts[k][1]
+        for m, style in sorted(spans[k], key=lambda t: t[0].start(), reverse=True):
+            new = _render_date(published, style, with_year=style == "iso" or bool(m.group(1)))
+            sent = sent[:m.start()] + new + sent[m.end():]
+        out.append(sent)
+    return "".join(out)
 
 
 # Ported from Anteater #143 (Signals-Sectorial-Intelligence 661ec8d): a reply that hits max_tokens
@@ -1104,7 +1315,10 @@ def sector_event_cards(feed: dict[str, Any]) -> list[dict[str, Any]]:
             bits.append("Ato oficial: " + "; ".join(
                 f"{s.get('title')} ({s.get('source') or 'DOU'}"
                 f"{', ' + s['section'] if s.get('section') else ''}"
-                f"{', ' + s['organ'] if s.get('organ') else ''}, {s.get('date')})" for s in official[:3]))
+                f"{', ' + s['organ'] if s.get('organ') else ''}, "
+                # a DOU source's date is the publication, not the date in the act's title (11-09)
+                f"{'publicado no DOU em ' if (s.get('source') or 'DOU') == 'DOU' else ''}{s.get('date')})"
+                for s in official[:3]))
         if news:
             bits.append(f"Imprensa ({len({s.get('publisher_key') or s.get('publisher') for s in news})} "
                         f"veículo(s)): " + "; ".join(
@@ -1323,6 +1537,11 @@ def answer(
                 "reason": "model-declined", "citations": [],
                 "considered": [c.get("id") for c in cards]}
     text = trim_unfinished(tidy_citations(text), truncated=_approx_tokens(text) >= int(max_tokens * 0.95))
+    for guard in (resolve_index_citations, correct_act_dates):
+        try:
+            text = guard(text, cards, kb_snippets)
+        except Exception as exc:  # noqa: BLE001 - a guard bug must not cost the answer
+            print(f"Warning: ask guard {guard.__name__} skipped: {exc!r}")
     text = merge_duplicate_citations(text, kb_snippets)
     citations = validate_citations(text, cards, kb_snippets)
     return {
@@ -1479,9 +1698,18 @@ def kb_snippets_from_results(results: list[dict[str, Any]], *, max_chars: int = 
 
 
 def kb_header(s: dict[str, Any]) -> str:
-    """"DOU · Medida Provisória · 2026-09-25 · MEDIDA PROVISÓRIA Nº 1.394… · <url>" — whatever
-    provenance the snippet has, in that order; empty when it has none."""
-    return " · ".join(str(x) for x in (s.get("source"), s.get("doc_type"), s.get("date"),
+    """"DOU · Medida Provisória · publicado no DOU em 2026-09-25 · MEDIDA PROVISÓRIA Nº 1.394… ·
+    <url>" — whatever provenance the snippet has, in that order; empty when it has none.
+
+    A DOU snippet's date is its PUBLICATION date and is labelled as such, with the signing date
+    from the title beside it when they differ: a bare date next to "…, DE 28 DE SETEMBRO DE 2026"
+    let the model state the title date as the publication (live 11-09, Res. BCB 590: DOU 30/09)."""
+    when = s.get("date")
+    if when and _fold(s.get("source")) == "dou":
+        signed = _signing_date(s.get("title"))
+        when = f"publicado no DOU em {when}" + (
+            f" (ato assinado em {signed.isoformat()})" if signed and signed.isoformat() != str(when)[:10] else "")
+    return " · ".join(str(x) for x in (s.get("source"), s.get("doc_type"), when,
                                          s.get("title"), s.get("url")) if x)
 
 
