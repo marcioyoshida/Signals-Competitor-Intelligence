@@ -1619,6 +1619,9 @@ class OncaPrototypeStack(Stack):
                 "ONCA_ENTITIES_TABLE": entities_table.table_name,
                 "ONCA_ANSOFF_ENABLED": "1",
                 "ONCA_ANSOFF_MAX_ENTITIES": "8",
+                # #369/#373: re-draft an already-drafted entity on a newer confirmed radar
+                # launch (>= 60 days since its last proposal, max 2/run). Owner ON 2026-11-09.
+                "ONCA_RADAR_REFRESH": "1",
             },
         )
         digests_bucket.grant_read_write(ansoff_fn)
@@ -1675,6 +1678,9 @@ class OncaPrototypeStack(Stack):
                 "ONCA_ENTITIES_TABLE": entities_table.table_name,
                 "ONCA_FOUR_CORNERS_ENABLED": "1",
                 "ONCA_FOUR_CORNERS_MAX_ENTITIES": "8",
+                # #369/#373: re-draft an already-drafted entity on a newer confirmed radar
+                # launch (>= 60 days since its last proposal, max 2/run). Owner ON 2026-11-09.
+                "ONCA_RADAR_REFRESH": "1",
             },
         )
         digests_bucket.grant_read_write(four_corners_fn)

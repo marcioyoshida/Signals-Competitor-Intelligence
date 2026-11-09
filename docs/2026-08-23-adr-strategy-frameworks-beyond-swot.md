@@ -340,6 +340,6 @@ append-only pile. A clean ADR-006 follow-up when picked up.
   - its newest proposal (or its last refresh attempt) is at least `ONCA_RADAR_REFRESH_MIN_AGE_DAYS` old (60);
   - a confirmed launch or feature is dated after it.
   Entities are ordered newest launch first, at most `ONCA_RADAR_REFRESH_MAX` per run (2). Each attempt is recorded under `radar_refreshed` in the proposals document, so a redraft that yields nothing does not repeat every run. Eligibility is otherwise unchanged: a refreshed entity still needs `MIN_EVIDENCE` narratives.
-- **Off by default (`ONCA_RADAR_REFRESH=1` to enable).** Each refresh costs one LLM draft, and Bedrock spend is reserved for paying clients, so this is an owner decision.
+- **Off by default in code (`ONCA_RADAR_REFRESH=1` to enable); ENABLED by the owner on 2026-11-09** in `infra/app.py` for the Ansoff and Four Corners Lambdas. Each refresh costs one LLM draft, and Bedrock spend is reserved for paying clients, so this is an owner decision.
   - The 11-08 dry run, read-only on live data, would refresh the same six entities in both frameworks: santander, nubank, itau, btg, picpay, c6.
   - That is about 12 drafts once, spread over the day's runs at 2 per framework per run, then none for an entity until 60 days pass or the radar sees a newer launch.
