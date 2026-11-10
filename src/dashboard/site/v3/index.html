@@ -145,13 +145,31 @@
   .sc-trail line { stroke-width:1.5; stroke-opacity:.65; pointer-events:none; }
   .sc-trail circle { fill:var(--surface); stroke-width:1.5; pointer-events:none; }
   .sc-trail path { fill-opacity:.85; pointer-events:none; }
+  /* #376: halo under each trail so crossings stay legible; the focused trail is solid, on top */
+  .sc-trail .sc-halo { stroke:var(--surface); stroke-width:4; fill:var(--surface); stroke-opacity:.9; }
+  .sc-trail--focus line:not(.sc-halo) { stroke-width:2.2; stroke-opacity:1; }
+  .sc-anchor-ln { stroke:var(--muted); stroke-width:.8; stroke-opacity:.7; pointer-events:none; }
+  .sc-anchor { pointer-events:none; }
+  .sc-dot { cursor:grab; touch-action:none; }
+  .sc-dot--focus { stroke:var(--ink); stroke-width:1.8; }
+  .sc-dot:focus-visible { outline:none; stroke:var(--ink); stroke-width:2.2; }
+  .scatter.sc-pulling .sc-dot { cursor:grabbing; }
+  .scatter.sc-pulling .sc-dot:not([style*="translate"]) { opacity:.95; }
+  .sc-return { transition:transform .28s cubic-bezier(.2,.8,.3,1); }
+  .sc-btn--cl { cursor:zoom-in; font-weight:600; }
+  .sc-clbtns { display:contents; }
+  .sc-zlbl { font-size:var(--fs-micro); color:var(--ink-2); font-weight:600; text-transform:uppercase; letter-spacing:.5px; margin-left:6px; }
+  .sc-sizekey { display:inline-flex; align-items:center; gap:6px; }
+  .sc-keysvg text { font-size:6.6px; }   /* viewBox units; scFitKey scales the key ~1.6x on desktop */
+  .sc-key { fill:var(--muted); fill-opacity:.25; stroke:var(--muted); stroke-width:1; }
+  @media (prefers-reduced-motion: reduce) { .sc-return { transition:none; } }
   .sc-btn[aria-pressed="false"] { color:var(--muted); text-decoration:line-through; }
   .sc-tgrid { stroke:var(--border-2); stroke-width:.5; opacity:.55; }
   .sc-tick { fill:var(--muted); font-size:10px; font-variant-numeric:tabular-nums; }
   .sc-cross line { stroke:var(--ink-2); stroke-width:.8; stroke-dasharray:3 2; pointer-events:none; }
   .sc-cross rect { fill:var(--ink); pointer-events:none; }
   .sc-cross text { fill:var(--surface); font-size:10px; font-weight:600; font-variant-numeric:tabular-nums; pointer-events:none; }
-  .sc-tools { display:flex; align-items:center; justify-content:flex-end; gap:6px; margin-bottom:var(--s2); }
+  .sc-tools { display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:6px; margin-bottom:var(--s2); }
   .sc-hint { font-size:var(--fs-micro); color:var(--muted); margin-right:auto; }
   .sc-btn { min-width:30px; height:28px; padding:0 10px; border:1px solid var(--border); border-radius:6px;
     background:var(--surface); color:var(--ink); font:inherit; font-size:var(--fs-sm); cursor:pointer; }
@@ -877,6 +895,8 @@
     /* --- charts ------------------------------------------------------------------ */
     .scatter { padding:var(--s3) var(--s2); }
     .sc-legend { justify-content:flex-start; padding:0 var(--s2); }
+    .sc-hint { flex-basis:100%; margin:0 0 var(--s1); }
+    .sc-zlbl { display:none; }
   }
 
   /* #278: on a touch screen every interactive target is >= 44px tall (WCAG 2.5.5 / HIG), like the #245
@@ -2197,30 +2217,6 @@ function entityColor(id) {
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
   return ENTITY_PALETTE[h % ENTITY_PALETTE.length];
 }
-// Label declutter: greedy vertical stacking. A busy cluster (several competitors within a
-// handful of ameaça/momentum points of each other — the exact live case that prompted this,
-// 2026-09-15: five fintechs' labels overlapping into unreadable text soup) gets its labels
-// pushed apart vertically in placement order (highest ameaça first, so the most important name
-// keeps its natural position and lower-priority ones cede ground); anything nudged more than a
-// couple px gets a thin leader stub back to its real anchor so the displacement stays legible
-// rather than looking like a labeling error.
-function declutterLabels(cands) {
-  const GAP = 13, XR = 170;
-  const placed = [];
-  cands.forEach(c => {
-    let y = c.y;
-    let moved = true, guard = placed.length + 1;
-    // EPS: after y = p.py + GAP, float rounding can leave |p.py - y| at 12.999… (< GAP) and loop forever (#206).
-    while (moved && guard-- > 0) {
-      moved = false;
-      for (const p of placed) {
-        if (Math.abs(p.x - c.x) < XR && Math.abs(p.py - y) < GAP - 1e-6) { y = p.py + GAP; moved = true; }
-      }
-    }
-    placed.push({ ...c, py: y });
-  });
-  return placed;
-}
 // Zoom + hover readout (owner ask 2026-11-08: "zoomable, show measurement when hovering").
 // The map re-renders in DATA space on zoom (not a CSS/SVG transform), so dots keep their
 // pixel radius, labels stay 11px and re-declutter for the visible window, and the axis ticks
@@ -2261,8 +2257,10 @@ function scSvg(id) {
   st.geo = { W, H, padL, padT, iw, ih };
   const full = scIsFull(st);
   const maxSize = Math.max(1, ...list.map(d => d.size_bi || 0));
-  const rFor = d => d.size_bi == null ? SC_R_UNKNOWN
-    : SC_R_MIN + Math.sqrt(d.size_bi / maxSize) * (SC_R_MAX - SC_R_MIN);
+  // #376: the phone plot is half as wide, so bubbles shrink with it (same sqrt scale).
+  const rk = narrow ? 0.7 : 1;
+  const rFor = d => rk * (d.size_bi == null ? SC_R_UNKNOWN
+    : SC_R_MIN + Math.sqrt(d.size_bi / maxSize) * (SC_R_MAX - SC_R_MIN));
   st.rFor = rFor;
   const inView = d => (d.momentum || 0) >= v.x0 && (d.momentum || 0) <= v.x1 && (d.recent || 0) >= v.y0 && (d.recent || 0) <= v.y1;
   const clip = `${id}-clip`;
@@ -2284,44 +2282,67 @@ function scSvg(id) {
   ].map(([qx, qy, an, t]) => `<text class="sc-quad" x="${qx}" y="${qy}" text-anchor="${an}">${t}</text>`).join("") : "";
   // Paint largest bubbles first (underneath) so small/unknown-size competitors on top stay visible.
   const painted = list.map((d, i) => [d, i]).filter(([d]) => inView(d)).sort((a, b) => (b[0].size_bi || 0) - (a[0].size_bi || 0));
-  // Trail: hollow ring at last week's position → line → arrowhead touching the dot's edge.
-  const trails = !st.trails ? "" : painted.filter(([d]) => d.prior_momentum != null && d.prior != null).map(([d]) => {
-    const px = x(d.prior_momentum), py = y(d.prior), cx = x(d.momentum || 0), cy = y(d.recent || 0), r = rFor(d);
-    const dx = cx - px, dy = cy - py, L = Math.hypot(dx, dy);
+  // #376 collision-aware placement: each bubble keeps its TRUE data point as an anchor and is
+  // nudged off its neighbours by a short deterministic relaxation (fixed iterations, no
+  // randomness), so a dense cluster spreads out instead of stacking. A displaced bubble gets a
+  // hairline back to its anchor; the tooltip/crosshair always read the anchor (the data).
+  const lay = scLayout(st, painted, x, y, rFor, { padL, padT, iw, ih });
+  const P = i => lay.pos[i];
+  // Trails: only the focused entity + the biggest movers (all at once was a tangle), each with
+  // a surface-coloured halo so a crossing stays legible; the focused trail draws ABOVE the dots.
+  const trailOf = d => {
+    if (d.prior_momentum == null || d.prior == null) return null;
+    const px = x(d.prior_momentum), py = y(d.prior), ax = x(d.momentum || 0), ay = y(d.recent || 0);
+    return { px, py, ax, ay, len: Math.hypot(ax - px, ay - py) };
+  };
+  const movers = !st.trails ? new Set() : new Set(painted.map(([d, i]) => [i, trailOf(d)])
+    .filter(([, t]) => t && t.len > 10).sort((a, b) => b[1].len - a[1].len)
+    .slice(0, full ? 5 : 8).map(([i]) => i));
+  const trailSvg = (d, i, focus) => {
+    const t = trailOf(d); if (!t) return "";
+    const p = P(i), r = rFor(d), dx = p.x - t.px, dy = p.y - t.py, L = Math.hypot(dx, dy);
     if (L < r + 8) return "";                                      // moved less than its own size
-    const ux = dx / L, uy = dy / L, ex = cx - ux * (r + 2), ey = cy - uy * (r + 2), col = entityColor(d.entity);
-    const hx = ex - ux * 7, hy = ey - uy * 7, nx = -uy * 3.5, ny = ux * 3.5;
-    return `<g class="sc-trail"><circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="2.5" stroke="${col}"/>` +
-      `<line x1="${px.toFixed(1)}" y1="${py.toFixed(1)}" x2="${hx.toFixed(1)}" y2="${hy.toFixed(1)}" stroke="${col}"/>` +
-      `<path d="M${ex.toFixed(1)} ${ey.toFixed(1)} L${(hx + nx).toFixed(1)} ${(hy + ny).toFixed(1)} L${(hx - nx).toFixed(1)} ${(hy - ny).toFixed(1)} Z" fill="${col}"/></g>`;
+    const ux = dx / L, uy = dy / L, ex = p.x - ux * (r + 2), ey = p.y - uy * (r + 2), col = entityColor(d.entity);
+    const hx = ex - ux * 7, hy = ey - uy * 7, nx = -uy * 3.5, ny = ux * 3.5, f = n => n.toFixed(1);
+    const head = `M${f(ex)} ${f(ey)} L${f(hx + nx)} ${f(hy + ny)} L${f(hx - nx)} ${f(hy - ny)} Z`;
+    return `<g class="sc-trail${focus ? " sc-trail--focus" : ""}">` +
+      `<line class="sc-halo" x1="${f(t.px)}" y1="${f(t.py)}" x2="${f(hx)}" y2="${f(hy)}"/>` +
+      `<path class="sc-halo" d="${head}"/>` +
+      `<circle cx="${f(t.px)}" cy="${f(t.py)}" r="2.5" stroke="${col}"/>` +
+      `<line x1="${f(t.px)}" y1="${f(t.py)}" x2="${f(hx)}" y2="${f(hy)}" stroke="${col}"/>` +
+      `<path d="${head}" fill="${col}"/></g>`;
+  };
+  const focusI = st.trails && st.focus != null && painted.some(([, i]) => i === st.focus) ? st.focus : null;
+  const trails = !st.trails ? "" : painted.filter(([, i]) => movers.has(i) && i !== focusI).map(([d, i]) => trailSvg(d, i, false)).join("");
+  const focusTrail = focusI == null ? "" : trailSvg(st.list[focusI], focusI, true);
+  const anchors = painted.map(([d, i]) => {
+    const p = P(i), ax = x(d.momentum || 0), ay = y(d.recent || 0);
+    if (Math.hypot(p.x - ax, p.y - ay) < 2.5) return "";
+    return `<line class="sc-anchor-ln" x1="${ax.toFixed(1)}" y1="${ay.toFixed(1)}" x2="${p.x.toFixed(1)}" y2="${p.y.toFixed(1)}"/>` +
+      `<circle class="sc-anchor" cx="${ax.toFixed(1)}" cy="${ay.toFixed(1)}" r="1.8" fill="${entityColor(d.entity)}"/>`;
   }).join("");
   const dots = painted.map(([d, i]) => {
-    const known = d.size_bi != null;
-    return `<circle class="sc-dot${known ? "" : " sc-dot--nd"}" data-i="${i}" cx="${x(d.momentum || 0).toFixed(1)}" ` +
-      `cy="${y(d.recent || 0).toFixed(1)}" r="${rFor(d).toFixed(1)}" fill="${entityColor(d.entity)}" fill-opacity="${known ? ".85" : ".6"}"/>`;
+    const known = d.size_bi != null, p = P(i);
+    return `<circle class="sc-dot${known ? "" : " sc-dot--nd"}${i === focusI ? " sc-dot--focus" : ""}" data-i="${i}" ` +
+      `cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" ` +
+      `data-ax="${x(d.momentum || 0).toFixed(1)}" data-ay="${y(d.recent || 0).toFixed(1)}" r="${rFor(d).toFixed(1)}" ` +
+      `fill="${entityColor(d.entity)}" fill-opacity="${known ? ".85" : ".6"}" tabindex="0" ` +
+      `aria-label="${U.esc(d.label || d.entity)}: ameaça ${scNum(d.recent || 0)}, momentum ${scSigned(d.momentum || 0)}"/>`;
   }).join("");
   // Phone: name only the top 6 by ameaça at full view; zoomed in there is room for more.
   const nLabels = full ? (narrow ? 6 : 10) : (narrow ? 10 : 18);
-  const labelCands = painted.map(([d]) => d).sort((a, b) => (b.recent || 0) - (a.recent || 0)).slice(0, nLabels).map(d => {
-    const cx = x(d.momentum || 0), cy = y(d.recent || 0), end = cx > W - (narrow ? 110 : 150);
-    // Offset from the DOT'S OWN EDGE, not a flat px — a flat +9 sits inside any bubble whose
-    // radius exceeds 9 (r ranges 4–24 here), starting the label on top of its own circle.
-    const off = rFor(d) + 6;
-    return { x: cx + (end ? -off : off), y: cy + 3.5, anchor: end ? "end" : "start",
-      dotX: cx, dotY: cy, text: (d.label || "").slice(0, narrow ? 16 : 22) };
-  });
-  const labels = declutterLabels(labelCands).map(c => {
-    const lead = Math.abs(c.py - c.y) > 2.5
-      ? `<line class="sc-lbl-lead" x1="${c.dotX.toFixed(1)}" y1="${c.dotY.toFixed(1)}" x2="${c.x.toFixed(1)}" y2="${c.py.toFixed(1)}"/>` : "";
-    return lead + `<text class="sc-lbl" x="${c.x.toFixed(1)}" y="${c.py.toFixed(1)}" text-anchor="${c.anchor}">${U.esc(c.text)}</text>`;
-  }).join("");
+  const labels = scPlaceLabels(painted.map(([d, i]) => [d, i]).sort((a, b) => (b[0].recent || 0) - (a[0].recent || 0))
+    .slice(0, nLabels).map(([d, i]) => ({ i, p: P(i), r: rFor(d), text: scClip(d.label || "", narrow ? 16 : 22) })),
+    painted.map(([d, i]) => ({ i, p: P(i), r: rFor(d) })), { x0: padL, y0: padT, x1: padL + iw, y1: padT + ih })
+    .map(c => (c.lead ? `<line class="sc-lbl-lead" x1="${c.lead[0].toFixed(1)}" y1="${c.lead[1].toFixed(1)}" x2="${c.lead[2].toFixed(1)}" y2="${c.lead[3].toFixed(1)}"/>` : "") +
+      `<text class="sc-lbl" data-li="${c.i}" x="${c.x.toFixed(1)}" y="${c.y.toFixed(1)}" text-anchor="${c.anchor}">${U.esc(c.text)}</text>`).join("");
   const hidden = list.length - painted.length;
   return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" class="${full ? "" : "sc-zoomed"}" ` +
     `aria-label="Mapa competitivo: ameaça por momentum, tamanho = ativos totais">` +
     `<defs><clipPath id="${clip}"><rect x="${padL}" y="${padT}" width="${iw}" height="${ih}"/></clipPath></defs>` +
     `<rect class="sc-bg" x="${padL}" y="${padT}" width="${iw}" height="${ih}"/>` +
     danger + grid + `<rect class="sc-frame" x="${padL}" y="${padT}" width="${iw}" height="${ih}"/>` + quads +
-    `<g clip-path="url(#${clip})">${trails}${dots}${labels}</g>` +
+    `<g clip-path="url(#${clip})">${trails}${anchors}${dots}${focusTrail}${labels}</g>` +
     `<g class="sc-cross" visibility="hidden"><line class="sc-cx"/><line class="sc-cy"/>` +
     `<g class="sc-bx"><rect rx="3"/><text text-anchor="middle"/></g><g class="sc-by"><rect rx="3"/><text text-anchor="end"/></g></g>` +
     `<text class="sc-ax" x="${padL + iw}" y="${H - 8}" text-anchor="end">${narrow ? "recua ← momentum → acelera" : "momentum — recua ← 0 → acelera"}</text>` +
@@ -2329,6 +2350,118 @@ function scSvg(id) {
     (hidden > 0 ? `<text class="sc-tick" x="${padL}" y="${H - 8}">${hidden} fora do zoom</text>` : "") +
     `</svg>`;
 }
+// #376 label placement: try 8 spots around the bubble (right, left, above, below, diagonals)
+// and take the first that hits no other bubble, no placed label and stays in the plot. No
+// spot free -> no label (hover/tap still names it), instead of a long leader across the map.
+function scPlaceLabels(cands, bubbles, box, obstacles) {
+  const placed = (obstacles || []).slice(), CW = 6.1, LH = 12;
+  const hitsCircle = (bx, by, bw, bh, c) => {
+    const nx = Math.max(bx, Math.min(c.p.x, bx + bw)), ny = Math.max(by, Math.min(c.p.y, by + bh));
+    return (nx - c.p.x) ** 2 + (ny - c.p.y) ** 2 < (c.r + 1.5) ** 2;
+  };
+  const out = [];
+  cands.forEach(c => {
+    const w = c.text.length * CW, r = c.r, x = c.p.x, y = c.p.y;
+    // ring 1 touches the bubble; ring 2 sits ~18px out and gets a short leader to the edge
+    const ring = (k, lead) => [
+      [x + r + 5 + k, y + 4, "start", [x + r, y]], [x - r - 5 - k, y + 4, "end", [x - r, y]],
+      [x, y - r - 5 - k, "middle", [x, y - r]], [x, y + r + 13 + k, "middle", [x, y + r]],
+      [x + r * .75 + 4 + k, y - r * .75 - 3 - k, "start", [x + r * .7, y - r * .7]],
+      [x + r * .75 + 4 + k, y + r * .75 + 11 + k, "start", [x + r * .7, y + r * .7]],
+      [x - r * .75 - 4 - k, y - r * .75 - 3 - k, "end", [x - r * .7, y - r * .7]],
+      [x - r * .75 - 4 - k, y + r * .75 + 11 + k, "end", [x - r * .7, y + r * .7]]].map(sp => [...sp, lead]);
+    const spots = ring(0, false).concat(ring(18, true));
+    for (const [tx, ty, anchor, edge, lead] of spots) {
+      const bx = anchor === "start" ? tx : anchor === "end" ? tx - w : tx - w / 2, by = ty - LH + 2;
+      if (bx < box.x0 + 2 || bx + w > box.x1 - 2 || by < box.y0 + 2 || by + LH > box.y1 - 2) continue;
+      if (bubbles.some(o => o.i !== c.i && hitsCircle(bx, by, w, LH, o))) continue;
+      if (placed.some(q => bx < q.x + q.w && bx + w > q.x && by < q.y + q.h && by + LH > q.y)) continue;
+      if (lead && bubbles.some(o => o.i !== c.i && scSegHitsCircle(edge[0], edge[1], tx, ty - 4, o))) continue;
+      placed.push({ x: bx, y: by, w, h: LH });
+      out.push({ i: c.i, x: tx, y: ty, anchor, text: c.text, lead: lead ? [edge[0], edge[1], tx, ty - 4] : null });
+      break;
+    }
+  });
+  return out;
+}
+function scSegHitsCircle(x1, y1, x2, y2, c) {
+  const dx = x2 - x1, dy = y2 - y1, L2 = dx * dx + dy * dy || 1;
+  const t = Math.max(0, Math.min(1, ((c.p.x - x1) * dx + (c.p.y - y1) * dy) / L2));
+  return (x1 + t * dx - c.p.x) ** 2 + (y1 + t * dy - c.p.y) ** 2 < (c.r + 1) ** 2;
+}
+// #376: deterministic collision relaxation in pixel space, cached per view (hover/focus
+// re-renders reuse it; pan/zoom recompute). Bigger bubbles move less (mass ∝ r²); every
+// bubble is pulled back toward its true anchor, so displacement stays local.
+function scLayout(st, painted, x, y, rFor, box) {
+  const v = st.view, key = [v.x0, v.x1, v.y0, v.y1, painted.length, box.iw].map(n => Number(n).toFixed(3)).join("|");
+  if (st.layout && st.layout.key === key) return st.layout;
+  const nodes = painted.map(([d, i], k) => {
+    const ax = x(d.momentum || 0), ay = y(d.recent || 0);
+    // identical anchors get a tiny golden-angle offset so the push has a direction
+    const ang = k * 2.399963;
+    return { i, ax, ay, x: ax + Math.cos(ang) * 0.01 * k, y: ay + Math.sin(ang) * 0.01 * k, r: rFor(d) };
+  });
+  // The home spring fades to 0 over the run, so the last passes only separate (the earlier
+  // fixed spring settled into equilibria where big bubbles still overlapped by a few px).
+  const GAP = 1.5, ITER = 140;
+  for (let it = 0; it < ITER; it++) {
+    const K_HOME = 0.05 * Math.max(0, 1 - it / (ITER * 0.7));
+    for (let a = 0; a < nodes.length; a++) {
+      const A = nodes[a];
+      for (let b = a + 1; b < nodes.length; b++) {
+        const B = nodes[b], dx = B.x - A.x, dy = B.y - A.y, need = A.r + B.r + GAP;
+        if (Math.abs(dx) >= need || Math.abs(dy) >= need) continue;
+        const dist = Math.hypot(dx, dy) || 0.01;
+        if (dist >= need) continue;
+        const push = (need - dist) / dist * 0.5, mA = A.r * A.r, mB = B.r * B.r, wA = mB / (mA + mB), wB = mA / (mA + mB);
+        A.x -= dx * push * wA; A.y -= dy * push * wA; B.x += dx * push * wB; B.y += dy * push * wB;
+      }
+    }
+    for (const N of nodes) {
+      N.x += (N.ax - N.x) * K_HOME; N.y += (N.ay - N.y) * K_HOME;
+      N.x = Math.min(box.padL + box.iw - N.r, Math.max(box.padL + N.r, N.x));
+      N.y = Math.min(box.padT + box.ih - N.r, Math.max(box.padT + N.r, N.y));
+    }
+  }
+  // Separation-only passes until nothing overlaps by more than a quarter pixel (dense stacks).
+  for (let extra = 0; extra < 120; extra++) {
+    let worst = 0;
+    for (let a = 0; a < nodes.length; a++) {
+      const A = nodes[a];
+      for (let b = a + 1; b < nodes.length; b++) {
+        const B = nodes[b], dx = B.x - A.x, dy = B.y - A.y, need = A.r + B.r + GAP;
+        if (Math.abs(dx) >= need || Math.abs(dy) >= need) continue;
+        const dist = Math.hypot(dx, dy) || 0.01, ov = need - dist;
+        if (ov <= 0) continue;
+        worst = Math.max(worst, ov - GAP);
+        const push = ov / dist * 0.55, mA = A.r * A.r, mB = B.r * B.r, wA = mB / (mA + mB), wB = mA / (mA + mB);
+        A.x -= dx * push * wA; A.y -= dy * push * wA; B.x += dx * push * wB; B.y += dy * push * wB;
+      }
+    }
+    for (const N of nodes) {
+      N.x = Math.min(box.padL + box.iw - N.r, Math.max(box.padL + N.r, N.x));
+      N.y = Math.min(box.padT + box.ih - N.r, Math.max(box.padT + N.r, N.y));
+    }
+    if (worst < 0.25) break;
+  }
+  const pos = {};
+  nodes.forEach(N => { pos[N.i] = { x: N.x, y: N.y }; });
+  // Clusters: anchors with >= 4 neighbours within 26 px; greedy, at most 2, far apart.
+  const R2 = 26 * 26, cands = nodes.map(N => ({ N, n: nodes.filter(M => (M.ax - N.ax) ** 2 + (M.ay - N.ay) ** 2 <= R2).length }))
+    .filter(c => c.n >= 4).sort((p, q) => q.n - p.n);
+  const clusters = [];
+  for (const c of cands) {
+    if (clusters.length >= 2) break;
+    if (clusters.some(k => Math.hypot(k.x - c.N.ax, k.y - c.N.ay) < 120)) continue;
+    const top = Math.min(...nodes.filter(M => (M.ax - c.N.ax) ** 2 + (M.ay - c.N.ay) ** 2 <= R2).map(M => M.y - M.r));
+    const by = Math.max(box.padT + 12, top - 14);
+    clusters.push({ x: Math.min(box.padL + box.iw - 32, Math.max(box.padL + 32, c.N.ax)), y: by, n: c.n,
+      m: v.x0 + (c.N.ax - box.padL) / box.iw * (v.x1 - v.x0), a: v.y1 - (c.N.ay - box.padT) / box.ih * (v.y1 - v.y0) });
+  }
+  st.layout = { key, pos, clusters };
+  return st.layout;
+}
+
 function scatterMap(list) {
   list = (list || []).filter(inSector).filter(d => d && d.entity);
   if (!list.length) return U.empty("Sem dados de posição na janela.", "", "○");
@@ -2341,23 +2474,63 @@ function scatterMap(list) {
   const narrow = (document.documentElement.clientWidth || window.innerWidth) <= 640;
   const hasTrail = list.some(d => d.prior_momentum != null);
   SC.maps[id] = { list, full, view: Object.assign({}, full), narrow, trails: hasTrail };
+  requestAnimationFrame(() => scFitKey(document.querySelector(`.scatter[data-sc="${id}"]`)));
+  const plotSvg = scSvg(id);   // first: computes the layout the cluster buttons read
   return `<div class="scatter" data-sc="${id}">` +
     `<div class="sc-tools" role="group" aria-label="Zoom do mapa">` +
-    `<span class="sc-hint">${narrow ? "+/− para zoom · arraste para mover" : "Ctrl + roda (ou pinça) para zoom · duplo clique aproxima · arraste para mover"}</span>` +
-    (hasTrail ? `<button type="button" class="sc-btn" data-sc-trail aria-pressed="true">Rastro</button>` : "") +
+    `<span class="sc-hint">${narrow ? "arraste uma bolha para ver o que está embaixo" : "arraste uma bolha para ver o que está embaixo · Ctrl + roda ou duplo clique para zoom"}</span>` +
+    (hasTrail ? `<button type="button" class="sc-btn" data-sc-trail aria-pressed="true" title="Rastro dos maiores movimentos e da bolha em foco">Rastro</button>` : "") +
+    `<span class="sc-clbtns">${scClusterBtns(SC.maps[id])}</span>` +
+    `<span class="sc-zlbl" aria-hidden="true">Zoom</span>` +
     `<button type="button" class="sc-btn" data-sc-zoom="out" aria-label="Afastar" disabled>−</button>` +
     `<button type="button" class="sc-btn" data-sc-zoom="in" aria-label="Aproximar">+</button>` +
     `<button type="button" class="sc-btn" data-sc-zoom="reset" disabled>Ajustar</button></div>` +
-    `<div class="sc-plot">${scSvg(id)}</div><div class="sc-tip" hidden></div>` +
-    `<div class="sc-legend">` +
+    `<div class="sc-plot">${plotSvg}</div><div class="sc-tip" hidden></div>` +
+    `<div class="sc-legend">` + scSizeLegend(list, narrow) +
     `<span>cor = concorrente (posição vertical é a ameaça — eixo Y)</span>` +
     `<span>momentum = ameaça média dos últimos 7 dias − 7 dias anteriores</span>` +
-    (hasTrail ? `<span>rastro = posição há uma semana (○) → agora</span>` : "") +
-    `<span>tamanho da bolha = ativos totais (R$ bi) · IF.data/CVM · pontilhado = sem dado</span>` +
+    `<span>• + linha fina = posição exata, quando a bolha foi afastada dos vizinhos</span>` +
+    (hasTrail ? `<span>rastro = posição há uma semana (○) → agora · maiores movimentos e a bolha em foco</span>` : "") +
     `</div></div>`;
+}
+const scClip = (t, n) => t.length > n ? t.slice(0, n - 1).trimEnd() + "…" : t;
+// #376: a real size key (reference circles at the chart's own scale), not a sentence. Drawn in
+// the plot's viewBox units; scFitKey() then sizes it to the plot's ON-SCREEN scale, so a key
+// circle and a bubble of the same assets are the same size on the page.
+function scSizeLegend(list, narrow) {
+  const maxSize = Math.max(0, ...list.map(d => d.size_bi || 0));
+  const nice = v => { const p = Math.pow(10, Math.floor(Math.log10(v))); return [1, 2, 5, 10].map(k => k * p).filter(n => n <= v).pop() || p; };
+  const rk = narrow ? 0.7 : 1, r = v => rk * (SC_R_MIN + Math.sqrt(v / maxSize) * (SC_R_MAX - SC_R_MIN));
+  const refs = maxSize > 0 ? [...new Set([nice(maxSize), nice(maxSize / 8)])].filter(v => v > 0) : [];
+  let x = 4; const H = 2 * SC_R_MAX + 4, parts = [];
+  refs.forEach(v => { const rr = r(v); parts.push(`<circle class="sc-key" cx="${(x + rr).toFixed(1)}" cy="${(H - 2 - rr).toFixed(1)}" r="${rr.toFixed(1)}"/>` +
+    `<text class="sc-tick" x="${(x + 2 * rr + 4).toFixed(1)}" y="${(H - 4).toFixed(1)}">R$ ${v.toLocaleString("pt-BR")} bi</text>`); x += 2 * rr + 64; });
+  const ru = rk * SC_R_UNKNOWN;
+  parts.push(`<circle class="sc-key sc-dot--nd" cx="${(x + ru).toFixed(1)}" cy="${(H - 2 - ru).toFixed(1)}" r="${ru.toFixed(1)}"/>` +
+    `<text class="sc-tick" x="${(x + 2 * ru + 4).toFixed(1)}" y="${(H - 4).toFixed(1)}">sem dado</text>`);
+  x += 70;
+  return `<span class="sc-sizekey" title="Tamanho = ativos totais (IF.data/CVM)">tamanho = ativos totais` +
+    `<svg class="sc-keysvg" viewBox="0 0 ${x.toFixed(0)} ${H}" width="${x.toFixed(0)}" height="${H}" aria-hidden="true">${parts.join("")}</svg></span>`;
+}
+function scFitKey(root) {
+  const st = root && SC.maps[root.dataset.sc], plot = root && root.querySelector(".sc-plot svg"), key = root && root.querySelector(".sc-keysvg");
+  if (!st || !st.geo || !plot || !key) return;
+  const k = plot.getBoundingClientRect().width / st.geo.W; if (!(k > 0)) return;
+  const vb = key.viewBox.baseVal;
+  // inline style: the generic `.scatter svg { width:100% }` rule would otherwise stretch the key
+  key.style.width = (vb.width * k).toFixed(1) + "px"; key.style.height = (vb.height * k).toFixed(1) + "px";
+}
+window.addEventListener("resize", () => { clearTimeout(scFitKey.t); scFitKey.t = setTimeout(() => document.querySelectorAll(".scatter[data-sc]").forEach(scFitKey), 150); });
+// #376: dense clusters get a toolbar button that zooms straight into them (the zoom existed but
+// went unseen; an on-plot badge covered the very bubbles it pointed at).
+function scClusterBtns(st) {
+  if (!st || !st.layout || !scIsFull(st)) return "";
+  return st.layout.clusters.map(c => `<button type="button" class="sc-btn sc-btn--cl" data-sc-cluster="${c.m.toFixed(2)},${c.a.toFixed(2)}" ` +
+    `title="Aproximar o grupo denso em momentum ${scSigned(Math.round(c.m * 10) / 10)}, ameaça ${scNum(c.a, 0)}">⊕ grupo de ${c.n}</button>`).join("");
 }
 function scRedraw(root, st) {
   root.querySelector(".sc-plot").innerHTML = scSvg(root.dataset.sc);
+  const cb = root.querySelector(".sc-clbtns"); if (cb) cb.innerHTML = scClusterBtns(st);
   const full = scIsFull(st);
   root.querySelector('[data-sc-zoom="out"]').disabled = full;
   root.querySelector('[data-sc-zoom="reset"]').disabled = full;
@@ -2418,12 +2591,33 @@ function scTip(root, st, d, e) {
 }
 (function scWire() {
   const rootOf = e => e.target && e.target.closest && e.target.closest(".scatter[data-sc]");
-  let drag = null, raf = 0;
+  const dotOf = e => e.target && e.target.closest && e.target.closest(".scatter[data-sc] .sc-dot");
+  let drag = null, pull = null, raf = 0, swallowClick = false;
+  // Crosshair + readout always point at the ANCHOR (the data), never the nudged bubble.
+  const readout = (root, st, i, e) => {
+    const el = root.querySelector(`.sc-dot[data-i="${i}"]`), d = st.list[i]; if (!el || !d) return;
+    scCross(root, st, Number(el.getAttribute("data-ax")), Number(el.getAttribute("data-ay")), d.momentum || 0, d.recent || 0);
+    scTip(root, st, d, e);
+  };
+  // Hover/focus picks the trail to draw on top; a re-render reuses the cached layout.
+  const setFocus = (root, st, i) => {
+    if (st.focus === i) return;
+    st.focus = i;
+    if (st.trails && !pull && !drag) scRedraw(root, st);
+  };
   document.addEventListener("click", e => {
-    const dot = e.target.closest && e.target.closest(".scatter[data-sc] .sc-dot");
+    if (swallowClick) { swallowClick = false; return; }        // the end of a pull-aside drag
+    const dot = dotOf(e);
     if (dot) {   // touch has no hover: a tap shows the same readout
-      const root = rootOf(e), st = SC.maps[root.dataset.sc], d = st && st.list[Number(dot.getAttribute("data-i"))];
-      if (d) { scCross(root, st, Number(dot.getAttribute("cx")), Number(dot.getAttribute("cy")), d.momentum || 0, d.recent || 0); scTip(root, st, d, e); }
+      const root = rootOf(e), st = SC.maps[root.dataset.sc], i = Number(dot.getAttribute("data-i"));
+      if (st) { setFocus(root, st, i); readout(root, st, i, e); }
+      return;
+    }
+    const cl = e.target.closest && e.target.closest("[data-sc-cluster]");
+    if (cl) {
+      const root = rootOf(e), st = root && SC.maps[root.dataset.sc]; if (!st) return;
+      const [m, a] = cl.getAttribute("data-sc-cluster").split(",").map(Number);
+      scZoom(root, 0.3, { m, a });
       return;
     }
     const t = e.target.closest && e.target.closest("[data-sc-trail]");
@@ -2437,6 +2631,11 @@ function scTip(root, st, d, e) {
     const k = b.getAttribute("data-sc-zoom");
     if (k === "reset") { st.view = Object.assign({}, st.full); scRedraw(root, st); }
     else scZoom(root, k === "in" ? 0.5 : 2);
+  });
+  document.addEventListener("focusin", e => {   // keyboard: a focused bubble shows its readout
+    const dot = dotOf(e); if (!dot) return;
+    const root = rootOf(e), st = SC.maps[root.dataset.sc], r = dot.getBoundingClientRect();
+    if (st) readout(root, st, Number(dot.getAttribute("data-i")), { clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 });
   });
   document.addEventListener("wheel", e => {
     if (!(e.ctrlKey || e.metaKey)) return;                 // a plain wheel keeps scrolling the page
@@ -2453,10 +2652,32 @@ function scTip(root, st, d, e) {
   });
   document.addEventListener("pointerdown", e => {
     const root = rootOf(e), st = root && SC.maps[root.dataset.sc];
-    if (!st || scIsFull(st) || e.button || !(e.target.closest && e.target.closest("svg"))) return;
+    if (!st || e.button || !(e.target.closest && e.target.closest("svg"))) return;
+    const dot = dotOf(e);
+    if (dot) {
+      // #376 pull-aside: drag a bubble OUT OF THE WAY to read what is underneath; it springs
+      // back on release. Never persisted — the map has no movable/saved positions.
+      const i = Number(dot.getAttribute("data-i"));
+      pull = { root, st, el: dot, lbl: root.querySelector(`.sc-lbl[data-li="${i}"]`), x: e.clientX, y: e.clientY, moved: false };
+      dot.classList.remove("sc-return"); if (pull.lbl) pull.lbl.classList.remove("sc-return");
+      try { dot.setPointerCapture(e.pointerId); } catch (_) { /* old browsers: document listeners still work */ }
+      return;
+    }
+    if (scIsFull(st)) return;                               // pan only exists once zoomed in
     drag = { root, st, x: e.clientX, y: e.clientY, v: Object.assign({}, st.view), moved: false };
   });
   document.addEventListener("pointermove", e => {
+    if (pull) {
+      const r = pull.root.querySelector("svg").getBoundingClientRect(), g = pull.st.geo;
+      const dx = (e.clientX - pull.x) * g.W / r.width, dy = (e.clientY - pull.y) * g.H / r.height;
+      if (Math.abs(e.clientX - pull.x) + Math.abs(e.clientY - pull.y) > 3) pull.moved = true;
+      if (!pull.moved) return;
+      pull.root.classList.add("sc-pulling");
+      const tf = `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px)`;
+      pull.el.style.transform = tf; if (pull.lbl) pull.lbl.style.transform = tf;
+      scTip(pull.root, pull.st, null); scCross(pull.root, pull.st);
+      return;
+    }
     if (drag) {
       const { root, st } = drag, r = root.querySelector("svg").getBoundingClientRect(), g = st.geo;
       const dm = (e.clientX - drag.x) * g.W / r.width / g.iw * (drag.v.x1 - drag.v.x0);
@@ -2469,19 +2690,32 @@ function scTip(root, st, d, e) {
     }
     const root = rootOf(e), st = root && SC.maps[root.dataset.sc];
     document.querySelectorAll(".scatter[data-sc]").forEach(o => { if (o !== root) { scCross(o, SC.maps[o.dataset.sc] || {}); const t = o.querySelector(".sc-tip"); if (t) t.hidden = true; } });
-    if (!st || !st.geo || !(e.target.closest && e.target.closest(".sc-plot"))) { if (root && st) { scCross(root, st); scTip(root, st, null); } return; }
-    const dot = e.target.closest(".sc-dot");
+    if (!st || !st.geo || !(e.target.closest && e.target.closest(".sc-plot"))) {
+      if (root && st) { scCross(root, st); scTip(root, st, null); setFocus(root, st, null); }
+      return;
+    }
+    const dot = dotOf(e);
     if (dot) {
-      const d = st.list[Number(dot.getAttribute("data-i"))];
-      scCross(root, st, Number(dot.getAttribute("cx")), Number(dot.getAttribute("cy")), d.momentum || 0, d.recent || 0);
-      scTip(root, st, d, e);
+      const i = Number(dot.getAttribute("data-i"));
+      setFocus(root, st, i);
+      readout(root, st, i, e);
       return;
     }
     const p = scAt(root, st, e);
     scTip(root, st, null);
     if (p.inPlot) scCross(root, st, p.sx, p.sy, p.m, p.a); else scCross(root, st);
   });
-  const end = () => { drag = null; };
+  const end = () => {
+    if (pull) {
+      const { el, lbl, root, moved } = pull;
+      [el, lbl].forEach(n => { if (n) { n.classList.add("sc-return"); n.style.transform = ""; } });
+      root.classList.remove("sc-pulling");
+      if (moved) swallowClick = true;
+      setTimeout(() => { swallowClick = false; }, 400);
+      pull = null;
+    }
+    drag = null;
+  };
   document.addEventListener("pointerup", end);
   document.addEventListener("pointercancel", end);
 })();
