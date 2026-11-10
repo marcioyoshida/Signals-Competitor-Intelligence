@@ -2059,6 +2059,11 @@ function sevBadge(x, what) {
   const word = SEV_PT[x] || x;
   return `<span class="badge badge--${SEV[x] || "low"}" title="${U.esc((what ? what + ": " : "") + word)}">${what === "dificuldade" ? "dif. " : ""}${U.esc(word)}</span>`;
 }
+// #378: where a deadline came from — the act's own text (official) or press coverage.
+function deadlineBasis(r) {
+  return r.deadline_source === "ato" ? "Data do texto do próprio ato (fonte oficial)"
+    : r.deadline_source === "narrativa" ? "Data citada na cobertura — confirmar no ato" : "Prazo";
+}
 function deadlineTxt(n) {
   return n < 0 ? `venceu há ${pl(-n, "dia")}` : n === 0 ? "prazo hoje" : `prazo em ${pl(n, "dia")}`;
 }
@@ -2093,7 +2098,9 @@ function rowsReg(list, emptyMsg) {
     <span class="ttl" title="${U.esc(txt)}">${U.esc(txt)}</span>
     ${r.blast_band ? sevBadge(r.blast_band, "alcance") : (r.blast ? `<span class="meta">${pl(r.blast, "setor", "setores")}</span>` : "")}
     ${r.difficulty_band ? sevBadge(r.difficulty_band, "dificuldade") : ""}
-    ${r.days_to_deadline != null ? `<span class="dt${r.days_to_deadline <= 7 ? " sl-warn" : ""}">${deadlineTxt(r.days_to_deadline)}</span>` : ""}
+    ${r.days_to_deadline != null ? `<span class="dt${r.days_to_deadline <= 7 ? " sl-warn" : ""}" title="${U.esc(deadlineBasis(r))}">${deadlineTxt(r.days_to_deadline)}${r.deadline ? " · " + U.fmtDate(r.deadline) : ""}</span>` : ""}
+    ${r.deadline_source === "ato" ? `<span class="meta" title="Data extraída do texto do próprio ato (fonte oficial)">texto do ato</span>`
+      : r.deadline_source === "narrativa" ? `<span class="meta" title="Data citada na cobertura; confirmar no texto do ato">cobertura</span>` : ""}
     ${r.threat_score != null ? threatChip(r.threat_score) : ""}</div>`; }).join("");
 }
 // Macro strip (v1 → shared /exec header): Copom Selic + Focus projections, national, so it

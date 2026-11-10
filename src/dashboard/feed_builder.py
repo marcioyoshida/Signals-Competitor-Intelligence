@@ -406,6 +406,16 @@ def _attach_threat_history(entity_attrs: dict[str, Any] | None,
     return out
 
 
+def _days_to(deadline: Any, fallback: Any = None) -> int | None:
+    """Days from today (UTC) to an ISO ``deadline``; the stored count when unparseable."""
+    if not deadline:
+        return fallback if isinstance(fallback, int) else None
+    try:
+        return (dt.date.fromisoformat(str(deadline)[:10]) - dt.date.today()).days
+    except ValueError:
+        return fallback if isinstance(fallback, int) else None
+
+
 def _project_item(n: dict[str, Any]) -> dict[str, Any]:
     """Project one narrative (or thread card) into a feed item — one shared schema."""
     # Legacy narratives (persisted before threat_factors) carry a stale, saturated
@@ -440,7 +450,11 @@ def _project_item(n: dict[str, Any]) -> dict[str, Any]:
         "subject_label": subject_label(n),
         "swot_hint": n.get("swot_hint"),
         "deadline": n.get("deadline"),
-        "days_to_deadline": n.get("days_to_deadline"),
+        # #378: recount from the date at feed-build time; the card's own count froze when it
+        # was written and the card lives 14 days in the window.
+        "days_to_deadline": _days_to(n.get("deadline"), n.get("days_to_deadline")),
+        "deadline_source": n.get("deadline_source"),
+        "deadline_cue": n.get("deadline_cue"),
         # thread payload (Wave 2): status + development count + reg-lifecycle stage.
         "status": n.get("status"),
         # ADR 009: regulatory change intelligence — Phase A change list + §3 LLM record.

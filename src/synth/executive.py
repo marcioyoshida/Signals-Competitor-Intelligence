@@ -808,6 +808,7 @@ def _reg_row(c: dict[str, Any]) -> dict[str, Any]:
             "title": title,
             "affected_industries": c.get("affected_industries") or [],
             "current_stage": c.get("current_stage"), "days_to_deadline": c.get("days_to_deadline"),
+            "deadline": c.get("deadline"), "deadline_source": c.get("deadline_source"),
             "threat_score": c.get("threat_score"), "blast": len(c.get("affected_industries") or []),
             "date": c.get("date"), "n_changes": c.get("n_changes"),
             "blast_band": (cr.get("blast_radius") or {}).get("band"),
@@ -1056,7 +1057,9 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
                     key=lambda c: ((c.get("change_record") or {}).get("blast_radius", {}).get("score", 0),
                                    len(c.get("affected_industries") or [])),
                     reverse=True)
-    deadlines = sorted((c for c in reg if c.get("days_to_deadline") is not None),
+    # #378: the calendar lists what is still due (a passed date is history, not a deadline)
+    deadlines = sorted((c for c in reg if isinstance(c.get("days_to_deadline"), int)
+                        and c["days_to_deadline"] >= 0),
                        key=lambda c: c.get("days_to_deadline"))
     changes = [c for c in reg if (c.get("n_changes") or 0) > 0]
 
@@ -1077,7 +1080,8 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
                 "n_acts_changed": sum(1 for c in sr if (c.get("n_changes") or 0) > 0),
                 "n_sector_events": len(sev_events),
                 "sector_event_severity": sev_events[0].get("severity") if sev_events else None,
-                "n_deadlines": sum(1 for c in sr if c.get("days_to_deadline") is not None),
+                "n_deadlines": sum(1 for c in sr if isinstance(c.get("days_to_deadline"), int)
+                                   and c["days_to_deadline"] >= 0),
                 "max_blast": max(blasts) if blasts else 0,
                 # ADR 022 Phase 4: prudential solvency of the sector's tracked competitors.
                 "min_basileia": min((r["indice_basileia"] for r in ss if r["indice_basileia"] is not None), default=None),

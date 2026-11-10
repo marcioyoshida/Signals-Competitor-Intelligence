@@ -120,14 +120,17 @@ def _num(raw: str) -> str:
 
 _DEADLINE_CUE = re.compile(
     r"(a partir de|ate\s+\d|ate\s+o dia|entra em vigor|entrar[aã] em vigor|"
-    r"vig[êe]ncia|prazo|passa a valer|obrigatori)"
+    # #378: "médio/longo/curto prazo" is market talk, not an obligation deadline
+    r"vig[êe]ncia|(?<!curto )(?<!medio )(?<!longo )prazo|passa a valer|obrigatori)"
 )
 _DATE_NUM = re.compile(r"(\d{1,2})/(\d{1,2})/(\d{4})")
 _MONTHS = {
     "janeiro": 1, "fevereiro": 2, "marco": 3, "abril": 4, "maio": 5, "junho": 6,
     "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12,
 }
-_DATE_TXT = re.compile(r"(\d{1,2})\s+de\s+(" + "|".join(_MONTHS) + r")\s+de\s+(\d{4})")
+# #378: acts write the first of the month as an ordinal — "1º de janeiro de 2027" — which
+# _norm turns into "1o de janeiro"; the bare-digit pattern never matched it.
+_DATE_TXT = re.compile(r"(\d{1,2})o?\s+de\s+(" + "|".join(_MONTHS) + r")\s+de\s+(\d{4})")
 
 # Affected-domain taxonomy (accent-free keyword -> domain label).
 _DOMAINS = [
@@ -232,6 +235,67 @@ def _future_deadline(text: str, as_of: str, horizon: int) -> str | None:
     return future[0].isoformat() if future else None
 
 
+# #378: the act's OWN text (regdocs/, ADR 009 Phase B) is where effective dates live —
+# "Esta Resolução entra em vigor em 1º de janeiro de 2027", "produz efeitos a partir de…".
+# A narrative is a few-sentence summary and almost never carries them (11-10: 7 of 2,445
+# activity narratives in 60 days had a full date; 10 of 58 act texts had a future one).
+_ACT_DEADLINE_CUE = re.compile(
+    r"(entra(?:ra|rao|m)? em vigor|produz(?:ira|irao|em)? efeitos|vigencia|a partir de|"
+    r"prazo (?:de|para|maximo|final)|ate o dia)"
+)
+_ACT_CUE_SPAN = 160
+
+
+def act_deadline(text: str, as_of: str, horizon: int = DEADLINE_HORIZON) -> dict[str, Any] | None:
+    """Nearest future date (within ``horizon`` days) that follows an effective-date cue in
+    an act's own text: {"date", "cue"} or None. Pure, deterministic, no LLM."""
+    t = _norm(text or "")
+    try:
+        as_of_d = feature_store._parse(as_of)
+    except Exception:
+        return None
+    best: tuple[dt.date, str] | None = None
+    for m in _ACT_DEADLINE_CUE.finditer(t):
+        win = t[m.start(): m.end() + _ACT_CUE_SPAN]
+        found: list[dt.date] = []
+        for d, mon, y in _DATE_TXT.findall(win):
+            try:
+                found.append(dt.date(int(y), _MONTHS[mon], int(d)))
+            except (ValueError, KeyError):
+                continue
+        for d, mo, y in _DATE_NUM.findall(win):
+            try:
+                found.append(dt.date(int(y), int(mo), int(d)))
+            except ValueError:
+                continue
+        for x in found:
+            if 0 < (x - as_of_d).days <= horizon and (best is None or x < best[0]):
+                best = (x, re.sub(r"\s+", " ", win).strip()[:_ACT_CUE_SPAN])
+    return {"date": best[0].isoformat(), "cue": best[1]} if best else None
+
+
+def act_deadlines_from_index(index: dict[str, Any] | None, bucket: str, s3: Any, *,
+                             as_of: str, horizon: int = DEADLINE_HORIZON,
+                             max_docs: int = 120) -> dict[str, dict[str, Any]]:
+    """{instrument key: {"date", "cue", "source"}} from the latest stored text of each
+    regdocs instrument. Best-effort: an unreadable text just yields no act deadline."""
+    out: dict[str, dict[str, Any]] = {}
+    for key, rec in list((index or {}).items())[:max_docs]:
+        vs = [v for v in (rec or {}).get("versions") or [] if v.get("key")]
+        if not vs:
+            continue
+        v = vs[-1]
+        try:
+            text = s3.get_object(Bucket=bucket, Key=v["key"])["Body"].read().decode("utf-8", "replace")
+        except Exception as exc:  # pragma: no cover - best-effort
+            print(f"Warning: regdoc text {key} unreadable: {exc}")
+            continue
+        ad = act_deadline(text, as_of, horizon)
+        if ad:
+            out[key] = {**ad, "source": "BCB" if (v.get("source") == "bcb") else "DOU"}
+    return out
+
+
 # --- Lifecycle stages (Wave 2: the full regulatory-lifecycle thread) --------
 # An instrument moves proposal → publication → in-force → enforcement. Each mention
 # is classified by cue precedence (enforcement > in-force > consultation > default
@@ -290,8 +354,12 @@ def _score(value: Any) -> float:
 
 
 def threads(narratives: list[dict[str, Any]], *, as_of: str, recency: int,
-            include_comunicados: bool, horizon: int) -> dict[str, dict[str, Any]]:
-    """Aggregate recent regulatory activity into per-instrument threads."""
+            include_comunicados: bool, horizon: int,
+            act_deadlines: dict[str, dict[str, Any]] | None = None) -> dict[str, dict[str, Any]]:
+    """Aggregate recent regulatory activity into per-instrument threads.
+
+    #378: ``act_deadlines`` ({instrument: {date, cue, source}}, from the act's own text) wins
+    over the date regex on the narrative summaries; ``deadline_source`` says which one."""
     groups: dict[str, dict[str, Any]] = {}
     for n in narratives:
         if not feature_store.is_activity_narrative(n):
@@ -347,6 +415,13 @@ def threads(narratives: list[dict[str, Any]], *, as_of: str, recency: int,
                 "date": d, "stage": stage_of(ctx), "summary": raw.strip()[:600],
                 "citations": [c for c in (n.get("citations") or []) if isinstance(c, dict)],
             })
+    for key, g in groups.items():
+        ad = (act_deadlines or {}).get(key)
+        if ad and ad.get("date"):
+            g["deadline"], g["deadline_source"], g["deadline_cue"] = ad["date"], "ato", ad.get("cue")
+        else:
+            g["deadline_source"] = "narrativa" if g.get("deadline") else None
+            g["deadline_cue"] = None
     for g in groups.values():
         if not g["latest"]:
             g["latest"] = max((feature_store._date_of(c) for c in g["cards"]), default="")
@@ -360,6 +435,7 @@ def nominate(
     *,
     as_of: str | None = None,
     cooldown_days: int | None = None,
+    act_deadlines: dict[str, dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Pure gate: recent narratives -> regulatory-instrument candidates (no I/O)."""
     as_of = as_of or run_date_today()
@@ -372,7 +448,8 @@ def nominate(
     include_com = bool(int(_f("ONCA_REG_INCLUDE_COMUNICADOS", 0)))
 
     groups = threads(narratives, as_of=as_of, recency=recency,
-                     include_comunicados=include_com, horizon=horizon)
+                     include_comunicados=include_com, horizon=horizon,
+                     act_deadlines=act_deadlines)
     prior = prior_instruments(narratives)
 
     out: list[dict[str, Any]] = []
@@ -402,6 +479,8 @@ def nominate(
                 "compliance_tags": list(g.get("compliance_tags") or []),
                 "deadline": g["deadline"],
                 "days_to_deadline": dtd,
+                "deadline_source": g.get("deadline_source"),
+                "deadline_cue": g.get("deadline_cue"),
                 "mentions": len(g["cards"]),
                 "latest": g["latest"],
                 "signature": signature,
@@ -650,7 +729,8 @@ def build_narrative(cand: dict[str, Any], *, change_record: dict[str, Any] | Non
             dd = feature_store._parse(deadline).strftime("%d/%m/%Y")
         except Exception:
             dd = deadline
-        head += f" Prazo: vence em {dd}" + (f" (faltam {dtd} dias)." if dtd is not None else ".")
+        head += f" Prazo: vence em {dd}" + (f" (faltam {dtd} dias)" if dtd is not None else "")
+        head += _deadline_basis(cand) + "."
     ind_pt = ", ".join(_INDUSTRY_PT.get(s, s) for s in industries)
     head += f" Afeta: {domain} (exposição provável: {ind_pt})."
     # ADR 009 Phase A: enumerate the act's own declared changes (amends/revokes/…).
@@ -687,6 +767,9 @@ def build_narrative(cand: dict[str, Any], *, change_record: dict[str, Any] | Non
         "consolidated": consolidated,
         "deadline": deadline,
         "days_to_deadline": dtd,
+        # #378: "ato" = the act's own text (regdocs) · "narrativa" = the summary regex
+        "deadline_source": cand.get("deadline_source"),
+        "deadline_cue": cand.get("deadline_cue"),
         "signature": cand["signature"],
         "entity": None,
         "entities": [],
@@ -714,7 +797,8 @@ def build_narrative(cand: dict[str, Any], *, change_record: dict[str, Any] | Non
 
 # --- Full regulatory-lifecycle thread (Wave 2) ------------------------------
 def build_lifecycles(
-    narratives: list[dict[str, Any]], *, as_of: str | None = None, window: int = 90
+    narratives: list[dict[str, Any]], *, as_of: str | None = None, window: int = 90,
+    act_deadlines: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Per-instrument lifecycle thread: stage progression over time (deterministic)."""
     as_of = as_of or run_date_today()
@@ -723,7 +807,8 @@ def build_lifecycles(
     min_dates = int(_f("ONCA_REG_LIFECYCLE_MIN_DATES", 2))
 
     groups = threads(narratives, as_of=as_of, recency=window,
-                     include_comunicados=include_com, horizon=horizon)
+                     include_comunicados=include_com, horizon=horizon,
+                     act_deadlines=act_deadlines)
     out: dict[str, dict[str, Any]] = {}
     for key, g in groups.items():
         # one timeline entry per (date, stage)
@@ -756,6 +841,7 @@ def build_lifecycles(
             "industries": industries, "industries_source": ind_source,
             "compliance_tags": list(g.get("compliance_tags") or []),
             "deadline": deadline, "days_to_deadline": dtd,
+            "deadline_source": g.get("deadline_source"), "deadline_cue": g.get("deadline_cue"),
             "stages_seen": stages_seen, "current_stage": current, "status": status,
             "first_seen": min(dates), "last_updated": max(dates),
             "n_dates": len(dates), "timeline": timeline,
@@ -854,6 +940,15 @@ def consolidated_sentence(c: dict[str, Any] | None) -> str:
     return out
 
 
+def _deadline_basis(c: dict[str, Any]) -> str:
+    """#378: where the deadline came from, said on the card (sourced vs. inferred)."""
+    if c.get("deadline_source") == "ato":
+        return ", data do texto do próprio ato"
+    if c.get("deadline_source") == "narrativa":
+        return ", data citada na cobertura (confirmar no ato)"
+    return ""
+
+
 def build_lifecycle_card(lc: dict[str, Any]) -> dict[str, Any]:
     """A feed-ready card for one instrument's lifecycle thread (grounded, labeled)."""
     def _fmt(d: str) -> str:
@@ -878,7 +973,8 @@ def build_lifecycle_card(lc: dict[str, Any]) -> dict[str, Any]:
     if arc:
         head += f" Progressão: {arc}."
     if deadline:
-        head += f" Prazo: vence em {_fmt(deadline)}" + (f" (faltam {dtd} dias)." if dtd is not None else ".")
+        head += f" Prazo: vence em {_fmt(deadline)}" + (f" (faltam {dtd} dias)" if dtd is not None else "")
+        head += _deadline_basis(lc) + "."
     head += f" Afeta: {lc['domain']} (exposição provável: {ind_pt})."
     if changes:
         head += f" Mudanças: {reg_change.summarize_changes(changes)}."
@@ -907,6 +1003,8 @@ def build_lifecycle_card(lc: dict[str, Any]) -> dict[str, Any]:
         "consolidated": lc.get("consolidated"),          # #294
         "deadline": deadline,
         "days_to_deadline": dtd,
+        "deadline_source": lc.get("deadline_source"),  # #378
+        "deadline_cue": lc.get("deadline_cue"),
         "status": lc["status"],
         "current_stage": lc["current_stage"],
         "stages_seen": lc["stages_seen"],
@@ -1075,6 +1173,33 @@ def update_acts(bucket: str, s3: Any, *, as_of: str, window: int) -> dict[str, A
     return store
 
 
+def _sync_regdocs(recent: list[dict[str, Any]], digests_bucket: str, s3: Any, *,
+                  run_date: str, window_days: int) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    """ADR 009 Phase B (#294): fetch + version the full text of the tracked instruments into
+    regdocs/ BEFORE the cards are built, so each card can carry what the regulator's
+    consolidated text says — and (#378) the act's own effective date. BCB/CMN norms come from
+    BCB's API, the rest from DOU. No LLM. Content-hash-cached and time-boxed, so steady-state
+    runs only write changed docs. Returns (report | None, index)."""
+    regdocs = None
+    regdoc_index: dict[str, Any] = {}
+    if os.environ.get("ONCA_REGDOCS", "false").lower() in ("1", "true", "yes"):
+        try:
+            bucket = os.environ.get("ONCA_RAW_BUCKET") or digests_bucket
+            targets = regdoc_targets(recent, as_of=run_date, window=window_days)
+            regdocs = reg_documents.sync_documents(
+                targets, bucket, s3=s3, as_of=run_date,
+                budget_s=_f("ONCA_REGDOCS_BUDGET_S", 120))
+            regdoc_index = regdocs.pop("index", {}) or {}
+            print(f"regdocs: targets={regdocs['targets']} stored={len(regdocs['stored'])} "
+                  f"unchanged={regdocs['unchanged']} skipped={regdocs['skipped']} "
+                  f"deferred={regdocs['deferred']} errors={len(regdocs['errors'])}")
+            for e in regdocs["errors"][:5]:
+                print(f"regdocs error {e['key']}: {e['error']}")
+        except Exception as exc:  # pragma: no cover - best-effort, never blocks
+            print(f"Warning: regdocs sync failed: {exc}")
+    return regdocs, regdoc_index
+
+
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """Load recent history, emit regulatory-instrument radar narratives."""
     digests_bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
@@ -1090,7 +1215,19 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     acts_store = update_acts(digests_bucket, s3, as_of=run_date,
                              window=int(_f("ONCA_REG_RECENCY_DAYS", RECENCY_DAYS)))
     recent = recent + act_narratives(acts_store)
-    cands = nominate(recent, as_of=run_date)
+    regdocs, regdoc_index = _sync_regdocs(recent, digests_bucket, s3, run_date=run_date,
+                                          window_days=window_days)
+    # #378: effective dates from each tracked act's own text (regdocs) — the CRO calendar.
+    act_dl: dict[str, dict[str, Any]] = {}
+    if regdoc_index:
+        try:
+            act_dl = act_deadlines_from_index(
+                regdoc_index, os.environ.get("ONCA_RAW_BUCKET") or digests_bucket, s3,
+                as_of=run_date, horizon=int(_f("ONCA_REG_DEADLINE_HORIZON", DEADLINE_HORIZON)))
+            print(f"act deadlines: {len(act_dl)} of {len(regdoc_index)} tracked acts")
+        except Exception as exc:  # pragma: no cover - best-effort, never blocks
+            print(f"Warning: act deadlines failed: {exc}")
+    cands = nominate(recent, as_of=run_date, act_deadlines=act_dl)
 
     # ADR 009 §3: rate changes with a bounded LLM (labeled inference). Gated OFF by default
     # (Bedrock cost). One shared budget across radar cards + lifecycles; the concrete
@@ -1109,28 +1246,6 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as exc:  # pragma: no cover
             print(f"Warning: industry counts unavailable, §3 off: {exc}")
             llm_on = False
-
-    # ADR 009 Phase B (#294): fetch + version the full text of the tracked instruments into
-    # regdocs/ BEFORE the cards are built, so each card can carry what the regulator's
-    # consolidated text says. BCB/CMN norms come from BCB's API, the rest from DOU. No LLM.
-    # Content-hash-cached and time-boxed, so steady-state runs only write changed docs.
-    regdocs = None
-    regdoc_index: dict[str, Any] = {}
-    if os.environ.get("ONCA_REGDOCS", "false").lower() in ("1", "true", "yes"):
-        try:
-            bucket = os.environ.get("ONCA_RAW_BUCKET") or digests_bucket
-            targets = regdoc_targets(recent, as_of=run_date, window=window_days)
-            regdocs = reg_documents.sync_documents(
-                targets, bucket, s3=s3, as_of=run_date,
-                budget_s=_f("ONCA_REGDOCS_BUDGET_S", 120))
-            regdoc_index = regdocs.pop("index", {}) or {}
-            print(f"regdocs: targets={regdocs['targets']} stored={len(regdocs['stored'])} "
-                  f"unchanged={regdocs['unchanged']} skipped={regdocs['skipped']} "
-                  f"deferred={regdocs['deferred']} errors={len(regdocs['errors'])}")
-            for e in regdocs["errors"][:5]:
-                print(f"regdocs error {e['key']}: {e['error']}")
-        except Exception as exc:  # pragma: no cover - best-effort, never blocks
-            print(f"Warning: regdocs sync failed: {exc}")
 
     def _consolidated(instrument: str) -> dict[str, Any] | None:
         return consolidated_for(instrument, regdoc_index, as_of=run_date) if regdoc_index else None
@@ -1165,13 +1280,15 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     horizon = int(_f("ONCA_REG_DEADLINE_HORIZON", DEADLINE_HORIZON))
     include_com = bool(int(_f("ONCA_REG_INCLUDE_COMUNICADOS", 0)))
     qualifying = set(threads(recent, as_of=run_date, recency=recency,
-                             include_comunicados=include_com, horizon=horizon).keys())
+                             include_comunicados=include_com, horizon=horizon,
+                             act_deadlines=act_dl).keys())
     retracted = _retract_same_day(digests_bucket, s3, run_date, qualifying)
 
     # Wave 2: the full regulatory-lifecycle thread — stage progression per instrument.
     n_lifecycles = 0
     try:
-        lifecycles = build_lifecycles(recent, as_of=run_date, window=window_days)
+        lifecycles = build_lifecycles(recent, as_of=run_date, window=window_days,
+                                      act_deadlines=act_dl)
         # §3 continues on the lifecycles with the REMAINING shared budget (radar cards drew
         # from it first).
         if llm_on and n_records < llm_budget:
@@ -1202,6 +1319,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 "emitted": len(keys),
                 "lifecycles": n_lifecycles,
                 "change_records": n_records,
+                "act_deadlines": len(act_dl),  # #378
                 "regdocs": ({"stored": len(regdocs["stored"]), "unchanged": regdocs["unchanged"],
                              "skipped": regdocs["skipped"], "deferred": regdocs["deferred"],
                              "errors": len(regdocs["errors"]),
