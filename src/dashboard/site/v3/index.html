@@ -3050,8 +3050,10 @@ function growthMatrices(p) {
   return `<div class="qgrowth">${quadMatrix("ansoff", QMODEL.ansoff)}${quadMatrix("bcg", QMODEL.bcg)}</div><div class="qdet qdet-ent" aria-live="polite"></div>`;
 }
 function quadThesis(ent, b, showEnt) {
-  const n = Number(b.n_evidence) || 0;
-  return `<li>${showEnt ? `<b>${U.esc(ent)}</b> · ` : ""}${U.esc(b.text || "")} <span class="qmeta">· ${Math.round((Number(b.confidence) || 0) * 100)}% · ${n ? pl(n, "fonte") : "sem fonte"}</span>` +
+  // n_evidence absent (feed built before #377) -> say nothing; only an explicit 0 is "sem fonte".
+  const n = b.n_evidence == null ? null : Number(b.n_evidence) || 0;
+  const src = n == null ? "" : ` · ${n ? pl(n, "fonte") : "sem fonte"}`;
+  return `<li>${showEnt ? `<b>${U.esc(ent)}</b> · ` : ""}${U.esc(b.text || "")} <span class="qmeta">· ${Math.round((Number(b.confidence) || 0) * 100)}%${src}</span>` +
     ((b.radar || []).map(r => `<div class="qradar">radar: ${U.esc(r)}</div>`).join("")) + `</li>`;
 }
 function wireQuads(root) {

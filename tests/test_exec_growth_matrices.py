@@ -31,3 +31,8 @@ def test_honesty_and_accessibility_hooks():
     for glyph in ("★", "◆", "✕"):
         assert glyph in HTML                                              # color is never the only signal
     assert ".qcell.is-all .qchips { max-height:" in CSS                   # dense cells scroll, never stretch the grid
+
+
+def test_missing_evidence_count_is_not_called_sem_fonte():
+    # a feed built before #377 has no n_evidence: that is unknown, not "no source"
+    assert 'b.n_evidence == null ? null' in HTML
