@@ -23,6 +23,11 @@
     "alertEmail": "marcioyoshida@gmail.com",
     "gdelt_bridge_ready": "1",
     "gcp_project": "onssa-508623",
+    "onboard": {
+      "tenant_config_table": "OncaPrototypeStack-OncaTenantConfigCADB28F8-IM6BJDHGUAPH",
+      "federated_map_table": "OncaPrototypeStack-OncaFederatedTenantMapTableDD7187F6-14H066V17QZ1M",
+      "user_pool_id": "us-east-1_rxEkYhYHg"
+    },
     "tenant_domains": [
       {
         "tenant": "qa-internal-admin",

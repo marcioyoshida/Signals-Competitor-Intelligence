@@ -252,9 +252,13 @@ def _default_plane(tier: str) -> str:
 def put_tenant_config(
     tenant_id: str, tier: str, modules: list[str], *, plane: str | None = None,
     table: Any | None = None, force_not_ready: bool = False,
-    resolve_caller_role_arn: str | None = None,
+    resolve_caller_role_arn: str | None = None, onboard: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Provision/update a tenant's entitlement. Idempotent upsert."""
+    """Provision/update a tenant's entitlement. Idempotent upsert.
+
+    ``onboard`` (#379) is the operator-onboarding stamp ``src.dashboard.onboard`` writes; it goes
+    in the same put as the row, so a tenant is never left created-but-unstamped. Omitted (every
+    other caller), an existing stamp is carried over like the billing fields."""
     tier = str(tier)
     if tier not in VALID_TIERS:
         raise ValueError(f"tier must be one of {VALID_TIERS}, got {tier!r}")
@@ -300,6 +304,8 @@ def put_tenant_config(
     # this module already follows for optional fields.
     if resolve_caller_role_arn:
         item["resolve_caller_role_arn"] = str(resolve_caller_role_arn)
+    if onboard:
+        item["onboard"] = dict(onboard)
     # #187: an operator re-put replaces the whole item. It must not wipe what the storefront
     # manages (paid subscriptions, the trial), or a paying customer silently loses access.
     try:
@@ -308,7 +314,7 @@ def put_tenant_config(
         prior = {}
     # Same for the tenant's security policy (#164 idle limit, #257 app-lock ceiling): a re-put
     # that silently dropped it would loosen the customer's settings without anyone noticing.
-    for k in _BILLING_FIELDS + _POLICY_FIELDS + _PREF_FIELDS:
+    for k in _BILLING_FIELDS + _POLICY_FIELDS + _PREF_FIELDS + _ONBOARD_FIELDS:
         if k in prior and k not in item:
             item[k] = prior[k]
     _table(table).put_item(Item=item)
@@ -323,6 +329,17 @@ _PREF_FIELDS = ("watchlist", "score_weights", "alert_prefs", "prefs_updated_at",
                 # #350: the external id the tenant's own Bedrock role trusts. Losing it on a
                 # re-put would break the client's trust policy, so it is carried like a pref.
                 "model_external_id")
+# #379: the operator-onboarding stamp {cohort, expires_on, by, at, request_id}. A re-put that
+# dropped it would turn a comp tenant into one the reports count as a customer, and one that
+# `onboard` expire/remove refuses to touch.
+_ONBOARD_FIELDS = ("onboard",)
+
+
+def is_onboarded(item: dict[str, Any] | None) -> bool:
+    """#379: was this RAW tenant-config row created by operator onboarding (a friends-and-family,
+    pilot or design-partner comp)? Usage and customer reports use it to leave such tenants out.
+    Takes the raw item: ``get_tenant_config`` returns a derived view without the stamp."""
+    return bool((item or {}).get("onboard"))
 
 
 def set_tenant_prefs(tenant_id: str, *, watchlist: list[str] | None = None,
@@ -448,36 +465,9 @@ def _put_sub(tenant_id: str, key: str, fields: dict[str, Any], action: str, even
     return effective_entitlement(item)
 
 
-def cognito_upsert_user(
-    pool_id: str, email: str, tenant_id: str, tier: str, *, client: Any | None = None,
-) -> str:
-    """Create/update the Cognito user that carries `custom:tenant`/`custom:tier` for a real
-    tenant — closing the gap where only 4 hardcoded demo tenants get a Cognito user
-    (infra/app.py's deploy-time seed); a real design partner had no scripted path at all.
-
-    `custom:tenant` is IMMUTABLE (infra/app.py's UserPool definition), so this refuses to
-    silently relink an existing email to a different tenant — that would either fail at the
-    API call or, worse, look like it worked while attaching the wrong identity. Returns
-    "created" or "updated" (tier only, the one mutable field — e.g. an entry→saas upgrade)."""
-    if client is None:
-        import boto3
-
-        client = boto3.client("cognito-idp")
-    try:
-        existing = client.admin_get_user(UserPoolId=pool_id, Username=email)
-    except client.exceptions.UserNotFoundException:
-        client.admin_create_user(
-            UserPoolId=pool_id,
-            Username=email,
-            UserAttributes=[
-                {"Name": "email", "Value": email},
-                {"Name": "email_verified", "Value": "true"},
-                {"Name": "custom:tenant", "Value": str(tenant_id)},
-                {"Name": "custom:tier", "Value": str(tier)},
-            ],
-            DesiredDeliveryMediums=["EMAIL"],
-        )
-        return "created"
+def _refuse_relink(existing: dict[str, Any], email: str, tenant_id: str) -> str | None:
+    """The `custom:tenant` an existing Cognito user carries (None if it has none). Raises
+    ValueError when that is a DIFFERENT tenant: the attribute is immutable."""
     cur_tenant = next(
         (a["Value"] for a in existing.get("UserAttributes", []) if a["Name"] == "custom:tenant"),
         None,
@@ -487,6 +477,69 @@ def cognito_upsert_user(
             f"{email!r} is already linked to tenant {cur_tenant!r}, not {tenant_id!r} — "
             "custom:tenant is immutable, use a different email or a new user"
         )
+    return cur_tenant
+
+
+def cognito_user_link(
+    pool_id: str, email: str, tenant_id: str, *, client: Any | None = None,
+) -> dict[str, Any] | None:
+    """#379: read-only twin of ``cognito_upsert_user``'s guard, so a caller can refuse BEFORE it
+    writes anything. None when no such user; else ``{"username", "tenant", "status", "enabled"}``
+    (``username`` is Cognito's own opaque id, not the e-mail; ``tenant`` is None for a user
+    created without `custom:tenant`). Raises the same ValueError as the upsert when the e-mail
+    belongs to another tenant."""
+    if client is None:
+        import boto3
+
+        client = boto3.client("cognito-idp")
+    try:
+        existing = client.admin_get_user(UserPoolId=pool_id, Username=email)
+    except client.exceptions.UserNotFoundException:
+        return None
+    return {"username": str(existing.get("Username") or email),
+            "tenant": _refuse_relink(existing, email, tenant_id),
+            "status": str(existing.get("UserStatus") or ""),
+            "enabled": bool(existing.get("Enabled", True))}
+
+
+def cognito_upsert_user(
+    pool_id: str, email: str, tenant_id: str, tier: str, *, client: Any | None = None,
+    send_invite: bool = True,
+) -> str:
+    """Create/update the Cognito user that carries `custom:tenant`/`custom:tier` for a real
+    tenant — closing the gap where only 4 hardcoded demo tenants get a Cognito user
+    (infra/app.py's deploy-time seed); a real design partner had no scripted path at all.
+
+    `custom:tenant` is IMMUTABLE (infra/app.py's UserPool definition), so this refuses to
+    silently relink an existing email to a different tenant — that would either fail at the
+    API call or, worse, look like it worked while attaching the wrong identity. Returns
+    "created" or "updated" (tier only, the one mutable field — e.g. an entry→saas upgrade).
+
+    ``send_invite`` (#379) only matters when the user is created: True (the default, what every
+    existing caller gets) lets Cognito e-mail its invitation; False creates the user with the
+    invitation suppressed (`MessageAction=SUPPRESS`), for a caller that sends its own message."""
+    if client is None:
+        import boto3
+
+        client = boto3.client("cognito-idp")
+    try:
+        existing = client.admin_get_user(UserPoolId=pool_id, Username=email)
+    except client.exceptions.UserNotFoundException:
+        delivery: dict[str, Any] = ({"DesiredDeliveryMediums": ["EMAIL"]} if send_invite
+                                    else {"MessageAction": "SUPPRESS"})
+        client.admin_create_user(
+            UserPoolId=pool_id,
+            Username=email,
+            UserAttributes=[
+                {"Name": "email", "Value": email},
+                {"Name": "email_verified", "Value": "true"},
+                {"Name": "custom:tenant", "Value": str(tenant_id)},
+                {"Name": "custom:tier", "Value": str(tier)},
+            ],
+            **delivery,
+        )
+        return "created"
+    _refuse_relink(existing, email, tenant_id)
     client.admin_update_user_attributes(
         UserPoolId=pool_id, Username=email,
         UserAttributes=[{"Name": "custom:tier", "Value": str(tier)}],

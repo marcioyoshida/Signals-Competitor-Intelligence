@@ -4491,6 +4491,19 @@ OncaQaPipelineStack(app, "OncaQaPipelineStack")
 from gdelt_bridge import OncaGdeltBridgeStack  # noqa: E402  (local module, after app-stack def)
 
 OncaGdeltBridgeStack(app, "OncaGdeltBridgeStack", entities_table=main_stack.entities_table)
+# #379 — the operator onboarding Lambda (`onca-onboard`), its own stack: the main stack is at
+# 485 of 500 resources. It takes the tenant-config table, the federated-map table and the user
+# pool by NAME (cdk.json "onboard"), not as tokens from main_stack, so it adds nothing to
+# OncaPrototypeStack and neither stack's deploy waits on the other — see infra/onboard_stack.py.
+from onboard_stack import CONTEXT_KEY as ONBOARD_CONTEXT_KEY  # noqa: E402
+from onboard_stack import OncaOnboardStack, onboard_names  # noqa: E402
+
+_onboard_names = onboard_names(app.node.try_get_context(ONBOARD_CONTEXT_KEY))
+if _onboard_names:
+    OncaOnboardStack(app, "OncaOnboardStack", runtime=LAMBDA_RUNTIME, asset=LAMBDA_ASSET,
+                     **_onboard_names)
+else:
+    print(f"WARNING: no '{ONBOARD_CONTEXT_KEY}' cdk context; OncaOnboardStack is not synthesized")
 # App-wide identification + Cost Explorer allocation tag across every resource in both
 # stacks (the standalone "tr:project-name" tag OncaPrototypeStack used to carry alongside
 # this one was retired 2026-09-14 — every fork now rolls up under this single "project" key).

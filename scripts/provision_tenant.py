@@ -35,6 +35,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from src.dashboard import onboard
 from src.dashboard import tenant_config as tc
 
 
@@ -53,45 +54,53 @@ def _split_modules(raw: list[str]) -> list[str]:
     return out
 
 
+# What a refused step prints (the stage comes from onboard.Rejected).
+_REJECTED = {
+    "tenant": "REJECTED: {}",
+    "pool": "REJECTED: --email given but no --user-pool-id / $ONCA_USER_POOL_ID",
+    "cognito": "REJECTED (cognito): {}",
+    "google": "REJECTED (google): {}",
+}
+
+
 def cmd_put(args) -> int:
     table, table_name = _resolve_table(args.table)
     modules = _split_modules(args.modules)
+    cfg: dict = {}
+
+    def report(stage: str, value) -> None:
+        """One OK line per write, printed as it happens."""
+        if stage == "tenant":
+            cfg.update(value)
+            print(f"OK  {table_name}  {cfg['tenant_id']}  tier={cfg['tier']}  "
+                  f"plane={cfg['plane']}  modules={cfg['modules']}")
+        elif stage == "cognito":
+            print(f"OK  cognito  {args.email}  {value}  tenant={cfg['tenant_id']}  tier={cfg['tier']}")
+        elif stage == "google":
+            print(f"OK  google  {args.google_email}  mapped  tenant={cfg['tenant_id']}  tier={cfg['tier']}")
+
+    # The writes live in src/dashboard/onboard.py, shared with the onca-onboard Lambda (#379) so
+    # the two cannot drift: the entitlement row through put_tenant_config, then the logins.
+    #   --email         A tenant_config row alone isn't enough to log in — this links a Cognito
+    #                   user to it via custom:tenant/custom:tier, closing the gap where only demo
+    #                   tenants had a scripted user (see infra/app.py's deploy-time seed).
+    #                   Optional: omit --email to write only the row.
+    #   --google-email  Google OAuth ("Continue with Google", see docs/google-oauth-runbook.md): a
+    #                   federated login can never get a real custom:tenant attribute (it's
+    #                   immutable and Cognito creates that user internally with no attribute list
+    #                   this app controls), so it's resolved instead from this email->tenant
+    #                   mapping by lambda_pretoken.py. Independent of --email — a person may have
+    #                   a password login, a Google login, both, or neither.
+    # A tenant written here carries no `onboard` stamp: it is hand-provisioned, so the Lambda's
+    # expire/remove never touch it.
     try:
-        cfg = tc.put_tenant_config(
+        onboard.provision(
             args.tenant_id, args.tier, modules, plane=args.plane, table=table,
-            force_not_ready=args.force_not_ready)
-    except ValueError as exc:
-        print(f"REJECTED: {exc}", file=sys.stderr)
+            force_not_ready=args.force_not_ready, email=args.email,
+            google_email=args.google_email, pool_id=args.user_pool_id, on_step=report)
+    except onboard.Rejected as exc:
+        print(_REJECTED[exc.stage].format(exc), file=sys.stderr)
         return 2
-    print(f"OK  {table_name}  {cfg['tenant_id']}  tier={cfg['tier']}  "
-          f"plane={cfg['plane']}  modules={cfg['modules']}")
-    # A tenant_config row alone isn't enough to log in — this links a Cognito user to it via
-    # custom:tenant/custom:tier, closing the gap where only demo tenants had a scripted user
-    # (see infra/app.py's deploy-time seed). Optional: omit --email to keep today's behavior.
-    if args.email:
-        pool_id = args.user_pool_id or os.environ.get("ONCA_USER_POOL_ID")
-        if not pool_id:
-            print("REJECTED: --email given but no --user-pool-id / $ONCA_USER_POOL_ID",
-                  file=sys.stderr)
-            return 2
-        try:
-            outcome = tc.cognito_upsert_user(pool_id, args.email, cfg["tenant_id"], cfg["tier"])
-        except ValueError as exc:
-            print(f"REJECTED (cognito): {exc}", file=sys.stderr)
-            return 2
-        print(f"OK  cognito  {args.email}  {outcome}  tenant={cfg['tenant_id']}  tier={cfg['tier']}")
-    # Google OAuth ("Continue with Google", see docs/google-oauth-runbook.md): a federated
-    # login can never get a real custom:tenant attribute (it's immutable and Cognito creates
-    # that user internally with no attribute list this app controls), so it's resolved instead
-    # from this email->tenant mapping by lambda_pretoken.py. Independent of --email above — a
-    # person may have a password login, a Google login, both, or (if this is omitted) neither.
-    if args.google_email:
-        try:
-            tc.map_federated_email(args.google_email, cfg["tenant_id"], cfg["tier"])
-        except ValueError as exc:
-            print(f"REJECTED (google): {exc}", file=sys.stderr)
-            return 2
-        print(f"OK  google  {args.google_email}  mapped  tenant={cfg['tenant_id']}  tier={cfg['tier']}")
     return 0
 
 
