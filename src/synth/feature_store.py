@@ -224,28 +224,41 @@ def _recent_dates(window_days: int, as_of: dt.date | None = None) -> set[str]:
 # thread-safe). Same objects, same (key) order as before.
 _HISTORY_WORKERS = int(os.environ.get("ONCA_HISTORY_LOAD_WORKERS", "16"))
 
+# #308: past days rarely change, yet ~21 Lambdas x 3 runs/day re-GOT every narrative in the
+# 90-day window one object at a time (271k GETs on 2026-11-01). A past day is now read from ONE
+# bundle `narrative_bundles/{day}.json` = {"objects": [[key, etag], ...], "items": [...]}.
+# The bundle is used only if its (key, ETag) list equals the day's LIST (already done, so the
+# check is free): a rewritten, added, deleted or quarantined narrative changes the list and
+# the day is re-read and re-bundled. Bundles live OUTSIDE `narratives/`, so the prefix
+# listers (feed_builder, digest_io) never see them. Today is always read per object.
+BUNDLE_PREFIX = "narrative_bundles/"
+_BUNDLES = os.environ.get("ONCA_HISTORY_BUNDLES", "1") not in ("0", "false", "False")
+
 
 def load_history(
-    bucket: str, window_days: int = 90, *, s3: Any | None = None
+    bucket: str, window_days: int = 90, *, s3: Any | None = None,
+    as_of: dt.date | None = None,
 ) -> list[dict[str, Any]]:
     """Read narrative objects for the last window_days from narratives/{date}/.
 
     Longer window than the dashboard feed (baselines need history); still bounded
-    so the scan stays cheap. Same durable digests store — never raw."""
+    so the scan stays cheap. Same durable digests store — never raw. Past days come
+    from a validated per-day bundle when one exists (#308); same objects, same order."""
     from concurrent.futures import ThreadPoolExecutor
 
     s3 = s3 or boto3.client("s3")
-    days = sorted(_recent_dates(window_days))
+    today = (as_of or dt.date.today()).isoformat()
+    days = sorted(_recent_dates(window_days, as_of))
 
-    def list_day(day: str) -> list[str]:
-        keys: list[str] = []
+    def list_day(day: str) -> list[list[str]]:
+        objs: list[list[str]] = []
         paginator = s3.get_paginator("list_objects_v2")
         for page in paginator.paginate(Bucket=bucket, Prefix=f"{NARRATIVES_PREFIX}{day}/"):
             for obj in page.get("Contents") or []:
                 key = obj["Key"]
                 if len(key.split("/")) >= 3 and key.endswith(".json"):
-                    keys.append(key)
-        return sorted(keys)
+                    objs.append([key, str(obj.get("ETag") or "")])
+        return sorted(objs)
 
     def get(key: str) -> dict[str, Any] | None:
         try:
@@ -255,11 +268,49 @@ def load_history(
             print(f"Warning: skip narrative {key}: {exc}")
             return None
 
+    def get_bundle(day: str) -> dict[str, Any] | None:
+        try:
+            body = s3.get_object(Bucket=bucket, Key=f"{BUNDLE_PREFIX}{day}.json")["Body"].read()
+            return json.loads(body.decode("utf-8"))
+        except Exception:
+            return None  # absent (first read of that day) or unreadable -> per-object path
+
     workers = max(1, _HISTORY_WORKERS)
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        keys = [k for day_keys in pool.map(list_day, days) for k in day_keys]
-        bodies = list(pool.map(get, keys))
-    return [b for b in bodies if b is not None]
+        listed = dict(zip(days, pool.map(list_day, days)))
+        cached: dict[str, list[dict[str, Any]]] = {}
+        past = [d for d in days if d < today and listed[d]] if _BUNDLES else []
+        for day, b in zip(past, pool.map(get_bundle, past)):
+            if isinstance(b, dict) and b.get("objects") == listed[day] \
+                    and len(b.get("items") or []) == len(listed[day]):
+                cached[day] = b["items"]
+        todo = [o[0] for d in days if d not in cached for o in listed[d]]
+        fetched = dict(zip(todo, pool.map(get, todo)))
+
+    out: list[dict[str, Any]] = []
+    writable = True
+    stats = {"bundled": 0, "rebuilt": 0, "objects": len(todo)}
+    for day in days:
+        if day in cached:
+            out.extend(cached[day])
+            stats["bundled"] += 1
+            continue
+        bodies = [fetched.get(k) for k, _ in listed[day]]
+        out.extend(b for b in bodies if b is not None)
+        # Bundle a past day only when every object read cleanly (never freeze a skip).
+        if writable and _BUNDLES and day < today and bodies and all(b is not None for b in bodies):
+            try:
+                s3.put_object(Bucket=bucket, Key=f"{BUNDLE_PREFIX}{day}.json",
+                              Body=json.dumps({"objects": listed[day], "items": bodies},
+                                              ensure_ascii=False).encode("utf-8"),
+                              ContentType="application/json")
+                stats["rebuilt"] += 1
+            except Exception as exc:  # read-only caller (grant_read) or transient: next run retries
+                print(f"Warning: narrative bundles not written ({day}): {exc}")
+                writable = False  # one warning per call, not one per day
+    print(f"load_history: {len(days)} days, {stats['bundled']} from bundles, "
+          f"{stats['rebuilt']} re-bundled, {stats['objects']} object GETs")
+    return out
 
 
 def load_industry_map() -> dict[str, list[str]]:
