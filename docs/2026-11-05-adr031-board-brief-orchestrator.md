@@ -215,7 +215,7 @@ actually did, read from CVM board minutes (M1).
 | Complaint microdata | consumidor.gov.br monthly files | Blocked on the `GOV_DADOS_TOKEN` (401) |
 | Market reaction | B3 COTAHIST yearly files | Not ingested |
 | System stress context | BCB Financial Stability Report (REF) PDFs | Not ingested (KB) |
-| Entity continuity | Mergers and renames (HSBC→Bradesco, Citi retail→Itaú) | Prerequisite: a dated CNPJ↔entity map |
+| Entity continuity | Mergers and renames (HSBC→Bradesco, Citi retail→Itaú) | **Built (#330).** `bcb_entity_history`: IF.data `IfDataCadastro`, 2000-03 onward, `entity_history/cnpj_map.json`. Asset-only deals (Citi retail) need a curated override |
 
 Out of scope: sovereign CDS, bank bond spreads and other paid market data (Bloomberg,
 LSEG, ANBIMA curves). They are a stated blind spot of the brief.
