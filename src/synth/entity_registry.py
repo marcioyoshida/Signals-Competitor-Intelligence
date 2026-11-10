@@ -2484,17 +2484,36 @@ _ALIAS_MAP_CACHE: dict[str, list[str]] | None = None
 _TRUST_MAP_CACHE: dict[str, bool] | None = None
 _AMBIG_TOKENS_CACHE: set[str] | None = None
 _CNPJ_ROOT_CACHE: dict[str, str] | None = None
+# {merged twin -> surviving id} from `canonical_id` (chains followed, cycles dropped) —
+# filled by the same scan; see `load_canonical_map`.
+_CANON_CACHE: dict[str, str] | None = None
+
+
+def _follow_canonical(raw: dict[str, str]) -> dict[str, str]:
+    """{twin: survivor} from raw {entity_id: canonical_id} pairs. Mirrors
+    `feed_builder._canonical_map`: chains collapse to their end, a cycle is dropped."""
+    out: dict[str, str] = {}
+    for eid, target in raw.items():
+        seen, cur = {eid}, target
+        while cur in raw and cur not in seen:
+            seen.add(cur)
+            cur = raw[cur]
+        if cur not in seen:
+            out[eid] = cur
+    return out
 
 
 def _load_maps(
     table: Any | None = None, force: bool = False
 ) -> tuple[dict[str, list[str]], dict[str, bool], set[str], dict[str, str]]:
     global _ALIAS_MAP_CACHE, _TRUST_MAP_CACHE, _AMBIG_TOKENS_CACHE, _CNPJ_ROOT_CACHE
+    global _CANON_CACHE
     if (
         _ALIAS_MAP_CACHE is not None
         and _TRUST_MAP_CACHE is not None
         and _AMBIG_TOKENS_CACHE is not None
         and _CNPJ_ROOT_CACHE is not None
+        and _CANON_CACHE is not None
         and not force
     ):
         return _ALIAS_MAP_CACHE, _TRUST_MAP_CACHE, _AMBIG_TOKENS_CACHE, _CNPJ_ROOT_CACHE
@@ -2504,6 +2523,7 @@ def _load_maps(
     ambig: set[str] = set()
     roots: dict[str, str] = {}
     root_owners: dict[str, set[str]] = {}
+    merged: dict[str, str] = {}
     kwargs: dict[str, Any] = {}
     while True:
         resp = t.scan(**kwargs)
@@ -2513,6 +2533,9 @@ def _load_maps(
                 forms = list(it.get("alias_forms") or it.get("aliases") or [])
                 aliases[eid] = forms
                 trust[eid] = it.get("confidence") == "curated" or bool(it.get("news_safe"))
+                cid = it.get("canonical_id")
+                if cid and str(cid) != eid:
+                    merged[eid] = str(cid)
                 # The entity's own common-word tokens feed the free-text
                 # ambiguity set (precise: STONE, not the distinctive STONECO).
                 for tok in it.get("ambiguous_tokens") or []:
@@ -2534,12 +2557,27 @@ def _load_maps(
     roots = {r: next(iter(owners)) for r, owners in root_owners.items() if len(owners) == 1}
     _ALIAS_MAP_CACHE, _TRUST_MAP_CACHE, _AMBIG_TOKENS_CACHE, _CNPJ_ROOT_CACHE = (
         aliases, trust, ambig, roots)
+    _CANON_CACHE = _follow_canonical(merged)
     return aliases, trust, ambig, roots
 
 
 def load_alias_map(table: Any | None = None, force: bool = False) -> dict[str, list[str]]:
     """Return {entity_id: raw alias forms} from the registry (cached)."""
     return _load_maps(table, force)[0]
+
+
+def load_canonical_map(table: Any | None = None, force: bool = False) -> dict[str, str]:
+    """Return {merged twin: surviving id} from the registry's ``canonical_id`` (cached,
+    same scan as the aliases).
+
+    #377 — a merge recorded with ``set_canonical_id`` (``itau-unibanco`` -> ``itau``,
+    ``pan`` -> ``banco_pan``) keeps the twin's ALIAS#/CNPJ# rows, so name and CNPJ lookups
+    still answer with the twin and narratives — then framework theses — are minted under
+    it. Resolution consumers fold their output through this map; the registry-level
+    ``resolve_by_*`` lookups stay raw (they answer "which row owns this key").
+    """
+    _load_maps(table, force)
+    return dict(_CANON_CACHE or {})
 
 
 def load_trust_map(table: Any | None = None, force: bool = False) -> dict[str, bool]:
@@ -2607,12 +2645,13 @@ def set_ambiguous_tokens(entity_id: str, tokens: Iterable[str],
 
 def clear_cache() -> None:
     global _ALIAS_MAP_CACHE, _TRUST_MAP_CACHE, _AMBIG_TOKENS_CACHE, _ROLE_MAP_CACHE
-    global _CNPJ_ROOT_CACHE
+    global _CNPJ_ROOT_CACHE, _CANON_CACHE
     _ALIAS_MAP_CACHE = None
     _TRUST_MAP_CACHE = None
     _AMBIG_TOKENS_CACHE = None
     _ROLE_MAP_CACHE = None
     _CNPJ_ROOT_CACHE = None
+    _CANON_CACHE = None
 
 
 # --- Curation CRUD (operator API surface) --------------------------------------

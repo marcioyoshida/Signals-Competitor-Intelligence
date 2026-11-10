@@ -19,7 +19,7 @@ from typing import Any
 from uuid import uuid4
 
 from src.ingest import registry as _reg  # ADR 019 — source/lens registry (single source of truth)
-from src.synth.entities import resolve_entities, signal_blob, tokens_for_match
+from src.synth.entities import canonical_ids, resolve_entities, signal_blob, tokens_for_match
 
 # Lens priority when ranking multi-signal entity clusters.
 # ADR 019 Phase 1: lens policy is now declared once per lens in the source registry
@@ -87,7 +87,8 @@ def _entities_of(item: dict[str, Any]) -> list[str]:
     """
     pre = item.get("_entities")
     if pre is not None:
-        return list(pre)
+        # #377: an ingest-stamped CNPJ binding may name a merged twin — cluster on the survivor
+        return canonical_ids(pre)
     # Memoize on the (transient) signal dict: resolve_entities scans the whole
     # registry, and clustering + O(n²) _soft_related re-resolve the same signals
     # many times per run. Caching per signal turns that into one resolve per

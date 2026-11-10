@@ -606,6 +606,65 @@ def _canonicalize_map(m: dict[str, Any] | None, canon: dict[str, str]) -> dict[s
     return out
 
 
+def _bullet_key(b: Any) -> Any:
+    """Identity of a framework bullet for de-duplication: (dimension, whitespace/case-folded
+    text). Two twins of one institution often carry the SAME templated thesis."""
+    if not isinstance(b, dict):
+        return id(b)
+    return (b.get("dimension"), " ".join(str(b.get("text") or "").split()).casefold())
+
+
+def _canonicalize_frameworks(m: dict[str, Any] | None, canon: dict[str, str],
+                             entity_attrs: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Re-key a curated framework map ({entity: [bullets]} or the SWOT belief index
+    {entity: {dimensions: {S: [...]}, counts, label}}) onto surviving ids, MERGING.
+
+    The framework drafters group narratives by whatever id the resolver handed out, so a
+    merged twin (`itau-unibanco` -> `itau`) ends up with its own Ansoff/BCG/Four Corners
+    theses. Shipped as-is, the /exec growth grids drew one bank twice in one quadrant
+    ("Itaú" + "Itau Unibanco", "Banco Pan" + "Pan"), breaking cross-grid highlighting and
+    inflating entity counts (#377). `_canonicalize_map`'s first-wins `setdefault` is wrong
+    here — it would silently drop the twin's bullets — so lists are concatenated: the
+    survivor's own bullets first, then the twin's, identical (dimension, text) collapsed.
+    """
+    if not m or not canon:
+        return dict(m or {})
+    attrs = entity_attrs or {}
+    out: dict[str, Any] = {}
+    for eid in sorted(m, key=lambda e: e in canon):      # survivors' own rows first
+        v, tgt = m[eid], canon.get(eid, eid)
+        if isinstance(v, list):
+            cur = out.setdefault(tgt, [])
+            seen = {_bullet_key(b) for b in cur}
+            for b in v:
+                k = _bullet_key(b)
+                if k not in seen:
+                    seen.add(k)
+                    cur.append(b)
+        elif isinstance(v, dict) and isinstance(v.get("dimensions"), dict):   # SWOT index
+            if tgt not in out:
+                out[tgt] = {**v, "dimensions": {d: list(bl or [])
+                                                for d, bl in v["dimensions"].items()}}
+            else:
+                dims = out[tgt]["dimensions"]
+                for d, bl in v["dimensions"].items():
+                    dst = dims.setdefault(d, [])
+                    seen = {_bullet_key({"text": b.get("text")}) for b in dst
+                            if isinstance(b, dict)}
+                    dst.extend(b for b in (bl or []) if isinstance(b, dict)
+                               and _bullet_key({"text": b.get("text")}) not in seen)
+            if tgt != eid:        # only an entry that absorbed a twin is relabelled/recounted
+                rec = out[tgt]
+                rec["entity"] = tgt
+                rec["label"] = (attrs.get(tgt) or {}).get("label") or rec.get("label")
+                rec["counts"] = {d: sum(1 for b in bl if isinstance(b, dict)
+                                        and b.get("status", "active") == "active")
+                                 for d, bl in rec["dimensions"].items()}
+        else:
+            out.setdefault(tgt, v)
+    return out
+
+
 def _build_groups(entity_attrs: dict[str, Any] | None) -> dict[str, list[str]]:
     """ADR 017 corporate groups: {parent_id: sorted[child sub-entity ids]} from the
     entities' `parent` links. Only parents that are themselves tracked are kept.
@@ -905,17 +964,20 @@ def build_feed(
         "macro": built_macro,
         # ADR 004 step 2: per-entity SWOT belief store (compact index) — the war
         # room renders a S/W/O/T panel for the selected entity. {} when absent.
-        "swot": (swot or {}).get("entities", {}) if swot else {},
+        # Every framework map is folded onto canonical ids like the feed items above, or a
+        # merged twin shows up as a second institution in the same grid (#377).
+        "swot": _canonicalize_frameworks(
+            (swot or {}).get("entities", {}) if swot else {}, canon, entity_attrs),
         # ADR 006: curated TOWS postures, grouped by entity.
-        "tows": tows_curated or {},
+        "tows": _canonicalize_frameworks(tows_curated, canon, entity_attrs),
         # ADR 006: curated Porter assessments, grouped by entity.
-        "porter": porter_curated or {},
+        "porter": _canonicalize_frameworks(porter_curated, canon, entity_attrs),
         # ADR 006: curated PESTLE/Ansoff/BCG/Four Corners/7S, grouped by entity.
-        "pestle": pestle_curated or {},
-        "ansoff": ansoff_curated or {},
-        "bcg": bcg_curated or {},
-        "four_corners": four_corners_curated or {},
-        "seven_s": seven_s_curated or {},
+        "pestle": _canonicalize_frameworks(pestle_curated, canon, entity_attrs),
+        "ansoff": _canonicalize_frameworks(ansoff_curated, canon, entity_attrs),
+        "bcg": _canonicalize_frameworks(bcg_curated, canon, entity_attrs),
+        "four_corners": _canonicalize_frameworks(four_corners_curated, canon, entity_attrs),
+        "seven_s": _canonicalize_frameworks(seven_s_curated, canon, entity_attrs),
         # ADR 004 step 3: pending reconcile proposals (contradict/new bullets from the
         # LLM stance loop) — surfaced read-only for the review queue (never auto-applied).
         "swot_proposals": [

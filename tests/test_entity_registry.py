@@ -1097,3 +1097,30 @@ def test_misheld_skips_the_funds_own_ticker_and_legal_name_and_picks_the_top_lev
     assert ("icdi11", "ITAU", "itau") in found
     assert ("craa11", "SPARTA", "sparta") in found
     assert not {f for f in found if f[0] == "craa11" and f[1] != "SPARTA"}
+
+
+def test_load_canonical_map_follows_chains_from_the_same_scan(monkeypatch):
+    """#377 — merges recorded with set_canonical_id, read off the alias scan (no 2nd scan).
+    Synthetic ids only."""
+    items = [
+        {"type": "entity", "entity_id": "acme", "aliases": ["ACME"], "canonical_id": "acme"},
+        {"type": "entity", "entity_id": "acme-holding", "aliases": ["ACME HOLDING"],
+         "canonical_id": "acme"},
+        {"type": "entity", "entity_id": "acme-old", "aliases": [], "canonical_id": "acme-holding"},
+        {"type": "entity", "entity_id": "x", "aliases": [], "canonical_id": "y"},   # legacy loop
+        {"type": "entity", "entity_id": "y", "aliases": [], "canonical_id": "x"},
+        {"type": "entity", "entity_id": "plain", "aliases": []},
+    ]
+    scans = []
+
+    class _T:
+        def scan(self, **kw):
+            scans.append(kw)
+            return {"Items": items}
+
+    monkeypatch.setattr(er, "_table", lambda t=None: _T())
+    er.clear_cache()
+    assert er.load_canonical_map() == {"acme-holding": "acme", "acme-old": "acme"}
+    er.load_alias_map()
+    assert len(scans) == 1
+    er.clear_cache()

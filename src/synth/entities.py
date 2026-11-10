@@ -98,6 +98,33 @@ def _alias_map() -> dict[str, list[str]]:
     return ENTITY_ALIASES
 
 
+def _canonical_ids() -> dict[str, str]:
+    """{merged twin: surviving id} from the registry's ``canonical_id`` (#377). Empty when
+    the registry is not configured or unavailable — resolution then behaves as before."""
+    if not os.environ.get("ONCA_ENTITIES_TABLE"):
+        return {}
+    try:
+        from src.synth import entity_registry
+
+        return entity_registry.load_canonical_map()
+    except Exception as exc:  # pragma: no cover - graceful fallback
+        print(f"Warning: canonical map unavailable: {exc}")
+        return {}
+
+
+def canonical_ids(ids: Any) -> list[str]:
+    """Fold entity ids onto their surviving ids, order-stable and de-duplicated.
+
+    #377 — a registry merge (``itau-unibanco`` -> ``itau``) leaves the twin's alias and CNPJ
+    rows in place, so the alias scan and the CNPJ map still answer with the twin. Without
+    this fold every narrative those rows match is minted under the twin, the framework
+    drafters (which group by narrative entity) write a second set of theses for it, and
+    /exec draws one institution twice in the same grid."""
+    canon = _canonical_ids()
+    out = [canon.get(e, e) for e in (ids or []) if e]
+    return list(dict.fromkeys(out))
+
+
 def resolve_by_cnpj(cnpj: Any) -> str | None:
     """Entity id owning this CNPJ root, or None. Exact evidence — no fuzziness involved.
 
@@ -125,14 +152,17 @@ def resolve_by_cnpj(cnpj: Any) -> str | None:
 
     if resolver.mode() == resolver.REMOTE:
         result = resolver.resolve_known_id(cnpj_root=root)
-        return result["entity_id"] if result else None
+        # the /resolve contract carries the survivor; prefer it over a merged twin (#377)
+        return (result.get("canonical_id") or result["entity_id"]) if result else None
 
     if not os.environ.get("ONCA_ENTITIES_TABLE"):
         return None
     try:
         from src.synth import entity_registry
 
-        return entity_registry.load_cnpj_root_map().get(root)
+        eid = entity_registry.load_cnpj_root_map().get(root)
+        # #377: the CNPJ usually sits on the discovered twin, not the curated survivor
+        return entity_registry.load_canonical_map().get(eid, eid) if eid else None
     except Exception as exc:  # pragma: no cover - graceful fallback
         print(f"Warning: cnpj root map unavailable: {exc}")
         return None
@@ -683,6 +713,9 @@ def resolve_entities(item: dict[str, Any]) -> list[str]:
         ):
             continue
         found.append(entity_id)
+    # #377: fold merged twins BEFORE the id-keyed cross-refs below, so "Itaú Unibanco …
+    # consórcio" reaches itau-consorcio through the survivor `itau`.
+    found = canonical_ids(found)
     for parent in known_parents(item):
         if parent not in found:
             found.append(parent)
@@ -694,7 +727,8 @@ def resolve_entities(item: dict[str, Any]) -> list[str]:
     # (issue #47): "Itaú ... consórcio" → itau-consorcio, so it reaches the consórcio view.
     for sub in line_of_business_cross_refs(item, found):
         found.append(sub)
-    return found
+    # #377: a merged twin's aliases still match — report the surviving id, once.
+    return canonical_ids(found)
 
 
 def primary_entity(item: dict[str, Any]) -> str | None:

@@ -1049,3 +1049,72 @@ def test_history_is_scoped_with_the_entity_and_dropped_from_entry():
     entry = feed_builder.derive_entry_feed(feed, industries=("banking",))
     for a in (entry.get("entity_attrs") or {}).values():
         assert feed_builder.THREAT_HISTORY_KEY not in a
+
+
+# --- #377: curated framework maps fold merged twins onto the survivor ------------------
+# Synthetic ids only (public repo): `acme` is the survivor, `acme-holding` its merged twin.
+_TWIN_ATTRS = {"acme": {"label": "Acme Bank", "industries": ["banking"]},
+               "acme-holding": {"label": "Acme Holding", "canonical_id": "acme"},
+               "other": {"label": "Other"}}
+
+
+def test_framework_map_merges_twin_bullets_into_survivor():
+    canon = {"acme-holding": "acme"}
+    m = {
+        "acme-holding": [{"dimension": "penetration", "text": "Twin-only thesis"},
+                         {"dimension": "market_dev", "text": "  shared   THESIS "}],
+        "acme": [{"dimension": "market_dev", "text": "Shared thesis"}],
+        "other": [{"dimension": "penetration", "text": "Untouched"}],
+    }
+    out = feed_builder._canonicalize_frameworks(m, canon, _TWIN_ATTRS)
+    assert set(out) == {"acme", "other"}                       # the twin key is gone
+    # survivor's own bullet first, then the twin's; identical (dim, text) collapsed
+    assert [b["text"] for b in out["acme"]] == ["Shared thesis", "Twin-only thesis"]
+    assert out["other"] == m["other"]                          # untouched entries pass through
+    assert m["acme"] == [{"dimension": "market_dev", "text": "Shared thesis"}]   # input not mutated
+
+
+def test_framework_map_rekeys_a_twin_with_no_survivor_row():
+    out = feed_builder._canonicalize_frameworks(
+        {"acme-holding": [{"dimension": "star", "text": "Only here"}]},
+        {"acme-holding": "acme"})
+    assert out == {"acme": [{"dimension": "star", "text": "Only here"}]}
+
+
+def test_swot_index_merges_per_dimension_and_recounts():
+    def belief(eid, label, s, o):
+        return {"entity": eid, "label": label, "counts": {"S": len(s), "O": len(o)},
+                "dimensions": {"S": [{"text": t, "status": "active"} for t in s],
+                               "O": [{"text": t, "status": st} for t, st in o]}}
+    m = {"acme-holding": belief("acme-holding", "Acme-Holding", ["Generic strength", "Twin S"],
+                                [("Twin O", "challenged")]),
+         "acme": belief("acme", "Acme Bank", ["Generic strength"], [("Own O", "active")])}
+    out = feed_builder._canonicalize_frameworks(m, {"acme-holding": "acme"}, _TWIN_ATTRS)
+    rec = out["acme"]
+    assert list(out) == ["acme"] and rec["entity"] == "acme" and rec["label"] == "Acme Bank"
+    assert [b["text"] for b in rec["dimensions"]["S"]] == ["Generic strength", "Twin S"]
+    assert rec["counts"] == {"S": 2, "O": 1}       # challenged bullets are not counted
+    assert m["acme"]["counts"] == {"S": 1, "O": 1}  # input not mutated
+
+
+def test_framework_map_is_identity_without_merges():
+    m = {"acme": [{"dimension": "star", "text": "x"}]}
+    assert feed_builder._canonicalize_frameworks(m, {}) == m
+    assert feed_builder._canonicalize_frameworks(None, {"a": "b"}) == {}
+
+
+def test_build_feed_folds_every_framework_map():
+    # The /exec growth grids drew one institution twice in a quadrant (#377).
+    fw = {"acme-holding": [{"dimension": "penetration", "text": "Twin thesis"}],
+          "acme": [{"dimension": "product_dev", "text": "Own thesis"}]}
+    swot = {"entities": {"acme-holding": {"entity": "acme-holding", "label": "Acme-Holding",
+                                          "counts": {"S": 1},
+                                          "dimensions": {"S": [{"text": "s", "status": "active"}]}}}}
+    feed = feed_builder.build_feed(
+        [_narr("n1", "acme", "2026-09-01", 0.5)], entity_attrs=_TWIN_ATTRS, swot=swot,
+        tows_curated=fw, porter_curated=fw, pestle_curated=fw, ansoff_curated=fw,
+        bcg_curated=fw, four_corners_curated=fw, seven_s_curated=fw)
+    for key in ("tows", "porter", "pestle", "ansoff", "bcg", "four_corners", "seven_s"):
+        assert set(feed[key]) == {"acme"}, key
+        assert [b["text"] for b in feed[key]["acme"]] == ["Own thesis", "Twin thesis"], key
+    assert set(feed["swot"]) == {"acme"} and feed["swot"]["acme"]["label"] == "Acme Bank"

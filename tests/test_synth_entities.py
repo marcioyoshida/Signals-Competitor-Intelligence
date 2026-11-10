@@ -335,3 +335,40 @@ def test_short_code_alias_after_a_content_word_is_a_model_not_the_entity(monkeyp
               "Denza B3 chega; ações da B3 sobem"):
         assert news(t) == ["b3"], t
     assert news("Itaú e C6 disputam clientes") == ["c6"]
+
+
+# --- #377: a merged twin resolves to its survivor (synthetic ids only) -----------------
+def _twin_registry(monkeypatch):
+    from src.synth import entity_registry
+    monkeypatch.setenv("ONCA_ENTITIES_TABLE", "t")
+    monkeypatch.setattr(entity_registry, "load_alias_map", lambda *a, **k: {
+        "acme": ["ACME BANK"], "acme-holding": ["ACME HOLDING S.A."], "zeta": ["ZETA PAY"]})
+    monkeypatch.setattr(entity_registry, "load_trust_map", lambda *a, **k: {})
+    monkeypatch.setattr(entity_registry, "load_canonical_map",
+                        lambda *a, **k: {"acme-holding": "acme"})
+    monkeypatch.setattr(entity_registry, "load_cnpj_root_map",
+                        lambda *a, **k: {"11111111": "acme-holding", "22222222": "zeta"})
+
+
+def test_resolve_entities_folds_a_merged_twin_onto_the_survivor(monkeypatch):
+    from src.synth import entities
+    _twin_registry(monkeypatch)
+    assert entities.resolve_entities({"name": "ACME HOLDING S.A."}) == ["acme"]
+    # both twins named in one item -> the survivor once, not twice
+    assert entities.resolve_entities({"name": "ACME HOLDING S.A. e ACME BANK"}) == ["acme"]
+    assert entities.resolve_entities({"name": "ZETA PAY"}) == ["zeta"]
+
+
+def test_resolve_by_cnpj_folds_a_merged_twin_onto_the_survivor(monkeypatch):
+    from src.synth import entities
+    _twin_registry(monkeypatch)
+    assert entities.resolve_by_cnpj("11.111.111/0001-00") == "acme"
+    assert entities.resolve_by_cnpj("22222222") == "zeta"
+    assert entities.resolve_by_cnpj("33333333") is None
+
+
+def test_ingest_stamped_entities_are_folded_for_clustering(monkeypatch):
+    from src.synth import candidates
+    _twin_registry(monkeypatch)
+    item = {"_entities": ["acme-holding", "acme", "zeta"]}
+    assert candidates._entities_of(item) == ["acme", "zeta"]
