@@ -581,3 +581,62 @@ details.fold.chg > summary { padding: var(--s2) var(--s3); font-size: var(--fs-m
   .sup a::before, a.refnum::before { content: ""; position: absolute; inset: -16px -6px; }
   a.refnum { margin-right: 4px; }
 }
+
+/* ---- CPO growth matrices (Ansoff / BCG 2×2) ---------------------------- */
+.qgrowth { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s4); }
+.qfw { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: var(--s4); box-shadow: var(--shadow-1); min-width: 0; }
+.qfw-hd { display: flex; align-items: baseline; gap: var(--s2); margin-bottom: var(--s3); }
+.qfw-hd h2 { margin: 0; font-size: var(--fs-md); color: var(--ink); }
+.qmx { display: grid; grid-template-columns: 22px 1fr 1fr; grid-template-rows: auto 1fr 1fr; gap: var(--s2); }
+.qax { font-size: var(--fs-micro); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); text-align: center; }
+.qax-c { grid-row: 1; padding-bottom: 2px; }
+.qax-r { grid-column: 1; writing-mode: vertical-rl; transform: rotate(180deg); align-self: center; }
+.qcell { --qt: var(--cat-steel); border: 1px solid var(--border); border-radius: var(--r-md); padding: var(--s2); min-height: 150px; min-width: 0;
+  background: color-mix(in srgb, var(--qt) 6%, var(--surface)); display: flex; flex-direction: column; gap: var(--s2); }
+.q-ansoff-1, .q-bcg-1 { --qt: var(--cat-violet); } .q-ansoff-2, .q-bcg-2 { --qt: var(--cat-teal); } .q-ansoff-3, .q-bcg-3 { --qt: var(--cat-gold); }
+.qcell.is-sel { outline: 2px solid var(--primary); outline-offset: 1px; }
+.qhd { all: unset; box-sizing: border-box; cursor: pointer; display: grid; grid-template-columns: auto 1fr; column-gap: var(--s2); min-height: 44px; padding: 2px 4px; border-radius: var(--r-sm); }
+.qhd:focus-visible, .qchip:focus-visible { box-shadow: var(--focus); }
+.qhd:hover .qn { text-decoration: underline; }
+.qg { grid-row: span 2; color: var(--qt); font-weight: 700; font-size: var(--fs-md); line-height: 1.2; width: 1.2em; text-align: center; }
+.qn { font-weight: 600; font-size: var(--fs-sm); color: var(--ink); }
+.qc { font-size: var(--fs-meta); color: var(--muted); }
+.qchips { display: flex; flex-wrap: wrap; gap: 6px; }
+.qchip { font: inherit; font-size: var(--fs-meta); color: var(--ink-2); background: var(--surface); border: 1px solid var(--border-2); border-radius: var(--r-pill);
+  padding: 4px 10px; min-height: 32px; cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qchip:hover { border-color: var(--primary); color: var(--ink); }
+.qck { display: none; margin-right: 4px; color: var(--primary); font-weight: 700; }
+.qchip.is-sel { outline: 2px solid var(--primary); color: var(--ink); background: var(--primary-weak); }
+.qchip.is-sel .qck { display: inline; }
+.has-ent .qchip[data-qent]:not(.is-sel) { opacity: .55; }
+.qmore { color: var(--primary); font-weight: 600; border-style: dashed; }
+.qm4, .q-x8 { display: none; }
+.qcell.is-all .q-x8, .qcell.is-all .q-x4 { display: inline-block; }
+.qcell.is-all .qmore { display: none; }
+.qcell.is-all .qchips { max-height: 232px; overflow-y: auto; overscroll-behavior: contain; padding: 2px; }
+.qcell .qchip.is-sel { display: inline-block; }   /* a selected entity stays visible past the chip cap */
+.qn-s { display: none; }
+.qfoot { margin: var(--s2) 0 0; font-size: var(--fs-meta); color: var(--muted); font-style: italic; }
+.qdet:empty { display: none; }
+.qdet { margin-top: var(--s3); border-top: 1px solid var(--border); padding-top: var(--s3); font-size: var(--fs-sm); color: var(--ink-2); }
+.qdet-ent { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: var(--s4); margin-top: var(--s4); }
+.qdet-hd { font-size: var(--fs-micro); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: var(--s2); }
+.qdet ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s2); }
+.qdet li b { color: var(--ink); }
+.qdet li.qq { margin-top: var(--s2); }
+.qmeta, .qmuted, .qradar { color: var(--muted); font-size: var(--fs-meta); }
+.qradar { margin-top: 2px; padding-left: var(--s3); }
+.qdet-top { display: flex; align-items: center; gap: var(--s3); margin-bottom: var(--s3); font-size: var(--fs-md); color: var(--ink); }
+.qclr { margin-left: auto; font: inherit; font-size: var(--fs-meta); min-height: 44px; padding: 0 var(--s3); background: none; color: var(--primary); border: 1px solid var(--border-2); border-radius: var(--r-pill); cursor: pointer; }
+.qdet-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s4); }
+@media (max-width: 720px) {
+  .qgrowth, .qdet-2 { grid-template-columns: 1fr; }
+  .qmx { grid-template-columns: 18px 1fr 1fr; gap: 6px; }
+  .qfw { padding: var(--s3); }
+  .qcell { min-height: 120px; padding: 6px; }
+  .qchip { min-height: 44px; }
+  .q-x4, .qm8 { display: none; }
+  .qm4 { display: inline-block; }
+  .qcell.is-all .qm4 { display: none; }
+  .qn-l { display: none; } .qn-s { display: inline; }
+}

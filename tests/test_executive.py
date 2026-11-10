@@ -889,3 +889,17 @@ def test_build_executive_reads_the_history_from_entity_attrs():
         a["threat_w3"] = {"mean": 10.0, "n": 2}
     mom = executive.build_executive(feed)["cso"]["panels"]["momentum"]
     assert mom and all("prior_momentum" in m for m in mom)
+
+
+def test_framework_rows_carry_label_only_radar_line_and_evidence_count():
+    """#377: the Ansoff 2×2 shows a radar-backed thesis's label-only source line."""
+    lab = "Itaú — lançamento (YouTube oficial, 04/11/2026)"
+    feed = {"ansoff": {"itau": [
+        {"dimension": "product_dev", "text": "novo app", "confidence": 0.8, "status": "active",
+         "n_evidence": 3, "radar_evidence": [{"id": "r1", "label": lab}, {"bad": 1}]},
+        {"dimension": "penetration", "text": "base atual", "confidence": 0.6, "status": "active",
+         "evidence": ["n1", "n2"]}]}}
+    b = executive._framework_rows(feed, "ansoff")[0]["bullets"]
+    assert b[0]["radar"] == [lab] and b[0]["n_evidence"] == 3
+    assert "radar" not in b[1] and b[1]["n_evidence"] == 2
+    assert not any(k in str(b) for k in ("youtube.com", "title", "channel"))

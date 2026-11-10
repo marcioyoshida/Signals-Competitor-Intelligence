@@ -2988,6 +2988,124 @@ function rowsFramework(list) {
       `<div class="hd-note" style="margin-top:2px"><b>${U.esc(prettyDim(b.dimension))}</b> — ${U.esc(b.text || "")}</div>`).join("") +
     `</div>`).join("") + `</div>`;
 }
+// CPO growth band: Ansoff + BCG as real 2×2 matrices of entity chips (rowsFramework stays the
+// list renderer for CSO/CCO). Quadrant = the validated thesis' dimension — no measured position.
+const QUAD_FW = {
+  ansoff: { name: "Ansoff", where: "onde cresce",
+    cols: ["Produtos existentes", "Produtos novos"], rows: ["Mercados existentes", "Mercados novos"],
+    cells: [["penetration", "Penetração de mercado", "→", "Penetração"], ["product_dev", "Desenvolvimento de produto", "+", "Novo produto"],
+            ["market_dev", "Desenvolvimento de mercado", "↗", "Novo mercado"], ["diversification", "Diversificação", "✦", "Diversificação"]] },
+  bcg: { name: "BCG", where: "onde está o portfólio",
+    cols: ["Participação alta", "Participação baixa"], rows: ["Crescimento alto", "Crescimento baixo"],
+    cells: [["star", "Estrela", "★"], ["question_mark", "Interrogação", "?"],
+            ["cash_cow", "Vaca leiteira", "◆"], ["dog", "Abacaxi", "✕"]] },
+};
+let QSEL = { cell: null, ent: null };   // survives board re-render
+const QOPEN = new Set();                // cells expanded past the chip cap
+let QMODEL = {};
+function quadModel(fw, list) {
+  const keys = QUAD_FW[fw].cells.map(c => c[0]), out = {};
+  keys.forEach(k => { out[k] = { ents: new Map(), n: 0 }; });
+  (list || []).filter(inSector).forEach(r => {
+    const ent = String(r.entity || r.label || "");
+    (r.bullets || []).forEach(b => {
+      const c = out[b.dimension]; if (!c || !ent) return;
+      let e = c.ents.get(ent);
+      if (!e) { e = { ent, label: r.label || ent, conf: 0, theses: [] }; c.ents.set(ent, e); }
+      e.conf = Math.max(e.conf, Number(b.confidence) || 0);
+      e.theses.push(b); c.n++;
+    });
+  });
+  keys.forEach(k => { out[k].list = [...out[k].ents.values()].sort((a, b) => b.conf - a.conf); });
+  return out;
+}
+function quadEntN(m) { const s = new Set(); Object.values(m).forEach(c => c.list.forEach(e => s.add(e.ent))); return s.size; }
+function growthSubtitle(p) {
+  const a = quadEntN(quadModel("ansoff", p.ansoff)), b = quadEntN(quadModel("bcg", p.bcg));
+  return `Ansoff ${pl(a, "entidade")} · BCG ${pl(b, "entidade")} · teses validadas`;
+}
+function quadMatrix(fw, m) {
+  const F = QUAD_FW[fw];
+  const cell = ([k, name, g, short], i) => {
+    const c = m[k], n = c.list.length, open = QOPEN.has(fw + "|" + k);
+    const chips = c.list.map((e, j) =>
+      `<button type="button" class="qchip${j >= 4 ? " q-x4" : ""}${j >= 8 ? " q-x8" : ""}" data-qent="${U.esc(e.ent)}" aria-pressed="false" title="${U.esc(e.label)} · confiança ${Math.round(e.conf * 100)}%"><span class="qck" aria-hidden="true">✓</span>${U.esc(e.label)}</button>`).join("");
+    const more = (cap, cls) => n > cap ? `<button type="button" class="qchip qmore ${cls}" data-qmore="1" aria-label="mostrar mais ${n - cap} entidades">+${n - cap}</button>` : "";
+    return `<div class="qcell q-${fw}-${i}${open ? " is-all" : ""}" style="grid-column:${2 + i % 2};grid-row:${2 + (i >> 1)}" data-qcell="${fw}|${k}">` +
+      `<button type="button" class="qhd" aria-expanded="false" aria-controls="qdet-${fw}"><span class="qg" aria-hidden="true">${g}</span><span class="qn"><span class="qn-l">${U.esc(name)}</span><span class="qn-s" aria-hidden="true">${U.esc(short || name)}</span></span>` +
+      `<span class="qc">${n ? `${pl(n, "entidade")} · ${pl(c.n, "tese")}` : "sem tese"}</span></button>` +
+      (n ? `<div class="qchips">${chips}${more(8, "qm8")}${more(4, "qm4")}</div>` : "") + `</div>`;
+  };
+  return `<div class="qfw" data-qfw="${fw}"><div class="qfw-hd"><h2>${F.name}</h2><span class="hd-note">${U.esc(F.where)}</span></div>` +
+    `<div class="qmx"><span class="qax qax-c" style="grid-column:2">${U.esc(F.cols[0])}</span><span class="qax qax-c" style="grid-column:3">${U.esc(F.cols[1])}</span>` +
+    `<span class="qax qax-r" style="grid-row:2">${U.esc(F.rows[0])}</span>${cell(F.cells[0], 0)}${cell(F.cells[1], 1)}` +
+    `<span class="qax qax-r" style="grid-row:3">${U.esc(F.rows[1])}</span>${cell(F.cells[2], 2)}${cell(F.cells[3], 3)}</div>` +
+    (fw === "bcg" ? `<p class="qfoot">quadrante segundo a tese validada — não é posição medida de share × crescimento</p>` : "") +
+    `<div class="qdet" id="qdet-${fw}" aria-live="polite"></div></div>`;
+}
+function growthMatrices(p) {
+  QMODEL = { ansoff: quadModel("ansoff", p.ansoff), bcg: quadModel("bcg", p.bcg) };
+  if (!quadEntN(QMODEL.ansoff) && !quadEntN(QMODEL.bcg))
+    return U.empty("Sem tese de crescimento ou portfólio no escopo.", "nenhum sinal validado neste setor — ausência de sinal não é ausência de risco", "○");
+  return `<div class="qgrowth">${quadMatrix("ansoff", QMODEL.ansoff)}${quadMatrix("bcg", QMODEL.bcg)}</div><div class="qdet qdet-ent" aria-live="polite"></div>`;
+}
+function quadThesis(ent, b, showEnt) {
+  const n = Number(b.n_evidence) || 0;
+  return `<li>${showEnt ? `<b>${U.esc(ent)}</b> · ` : ""}${U.esc(b.text || "")} <span class="qmeta">· ${Math.round((Number(b.confidence) || 0) * 100)}% · ${n ? pl(n, "fonte") : "sem fonte"}</span>` +
+    ((b.radar || []).map(r => `<div class="qradar">radar: ${U.esc(r)}</div>`).join("")) + `</li>`;
+}
+function wireQuads(root) {
+  const host = root.querySelector(".qgrowth"); if (!host) return;
+  const entBox = root.querySelector(".qdet-ent");
+  const nameOf = (fw, k) => (QUAD_FW[fw].cells.find(c => c[0] === k) || [])[1] || k;
+  const apply = () => {
+    host.querySelectorAll(".qcell").forEach(c => {
+      const on = QSEL.cell === c.getAttribute("data-qcell");
+      c.classList.toggle("is-sel", on); c.querySelector(".qhd").setAttribute("aria-expanded", on ? "true" : "false");
+    });
+    host.classList.toggle("has-ent", !!QSEL.ent);
+    host.querySelectorAll(".qchip[data-qent]").forEach(b => {
+      const on = b.getAttribute("data-qent") === QSEL.ent;
+      b.classList.toggle("is-sel", on); b.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+    host.querySelectorAll(".qdet").forEach(d => { d.innerHTML = ""; });
+    if (QSEL.cell) {
+      const [fw, k] = QSEL.cell.split("|"), c = (QMODEL[fw] || {})[k], d = host.querySelector("#qdet-" + fw);
+      if (c && d) d.innerHTML = `<div class="qdet-hd">${U.esc(nameOf(fw, k))} · ${pl(c.n, "tese")}</div>` +
+        (c.list.length ? `<ul>${c.list.flatMap(e => e.theses.map(b => quadThesis(e.label, b, true))).join("")}</ul>` : `<p class="qmuted">sem tese neste quadrante</p>`);
+    }
+    entBox.innerHTML = "";
+    if (QSEL.ent) {
+      let label = QSEL.ent;
+      const sec = (fw) => {
+        const rows = [];
+        QUAD_FW[fw].cells.forEach(([k, name]) => { const e = QMODEL[fw][k].ents.get(QSEL.ent);
+          if (e) { label = e.label; rows.push(`<li class="qq"><span class="qmeta">${U.esc(name)}</span></li>` + e.theses.map(b => quadThesis("", b, false)).join("")); } });
+        return `<div><div class="qdet-hd">${U.esc(QUAD_FW[fw].where)} · ${QUAD_FW[fw].name}</div>${rows.length ? `<ul>${rows.join("")}</ul>` : `<p class="qmuted">sem tese ${QUAD_FW[fw].name} para esta entidade</p>`}</div>`;
+      };
+      const a = sec("ansoff"), b = sec("bcg");
+      entBox.innerHTML = `<div class="qdet-top"><b>${U.esc(label)}</b><button type="button" class="qclr">limpar seleção (Esc)</button></div><div class="qdet-2">${a}${b}</div>`;
+      entBox.querySelector(".qclr").addEventListener("click", () => { QSEL.ent = null; apply(); });
+    }
+  };
+  host.addEventListener("click", (e) => {
+    const hd = e.target.closest(".qhd"), chip = e.target.closest(".qchip");
+    if (hd) { const k = hd.parentElement.getAttribute("data-qcell"); QSEL.cell = QSEL.cell === k ? null : k; apply(); }
+    else if (chip && chip.hasAttribute("data-qmore")) { const c = chip.closest(".qcell"); c.classList.add("is-all"); QOPEN.add(c.getAttribute("data-qcell")); }
+    else if (chip) { const v = chip.getAttribute("data-qent"); QSEL.ent = QSEL.ent === v ? null : v; apply(); }
+  });
+  if (!window.__oncaQuadEsc) {
+    window.__oncaQuadEsc = true;
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape" || !QSEL.ent) return;
+      const dr = document.getElementById("drawer"); if (dr && dr.classList.contains("open")) return;
+      QSEL.ent = null; const b = document.querySelector("#board .qgrowth"); if (b) wireQuadsApply();
+    });
+  }
+  wireQuadsApply = apply;
+  apply();
+}
+let wireQuadsApply = () => {};
 // SURF-10: compliance change-diff — enumerated article changes + deadline (CCO).
 function rowsChangeDiff(list) {
   const rows = (list || []).filter(inSector);
@@ -3734,15 +3852,14 @@ function render() {
         "mais recente primeiro · fontes linkadas", rowsRadar(p.product_radar))) +
     band("Movimentos de produto", "lançamentos & ofertas · lente ofertas/produto",
       panel("Feed de produto", ofN(p.product_moves, totN(p, "product_moves")), "mais recente primeiro", rowsCard(p.product_moves))) +
-    band("Crescimento (Ansoff) & portfólio (BCG)", "vetores de crescimento · quadrante · teses validadas",
-      grid("1fr 1fr", [panel("Ansoff", ofN(p.ansoff, totN(p, "ansoff")), "penetração·desenvolvimento·diversificação", rowsFramework(p.ansoff), { lead: true }),
-                       panel("BCG", ofN(p.bcg, totN(p, "bcg")), "estrela·vaca·interrogação·abacaxi", rowsFramework(p.bcg), { lead: true })]), { lead: true });
+    band("Crescimento (Ansoff) & portfólio (BCG)", growthSubtitle(p), growthMatrices(p), { lead: true });
   el.innerHTML = flowBand() + board + silenceBand() + outcomesDueBand() + metricsBand() + referenceBand();
   if (OFFICER === "cso") loadQuotes();  // async B3 market pulse (fills #b3ticker post-render)
   if (OFFICER === "cco") loadIbis();    // #293: async Ibis partner alerts (fills #ibisPanel)
   wireHeadlines(el);
   bindRows(el);
   capLists(el);
+  if (OFFICER === "cpo") wireQuads(el);
   if (narrowScreen()) foldBands(el);
   el.querySelectorAll(".traj-f button[data-tv]").forEach(b => b.addEventListener("click", () => askConfirm(b, captureTraj)));
   el.querySelectorAll(".traj-f a[data-ev]").forEach(a => a.addEventListener("click", (e) => { e.preventDefault(); onEvidence(a); }));

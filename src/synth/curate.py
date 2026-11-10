@@ -112,6 +112,12 @@ def _curated_bullet(p: dict[str, Any], *, at: str) -> dict[str, Any]:
     fw = p.get("framework")
     if fw and fw != swot_store.DEFAULT_FRAMEWORK:
         bullet["framework"] = fw
+    # #377: keep the radar source line (#369) — label-only {id, label}, never YouTube data.
+    radar = [{"id": str(r["id"]), "label": str(r["label"])}
+             for r in (p.get("radar_evidence") or [])
+             if isinstance(r, dict) and r.get("id") and r.get("label")]
+    if radar:
+        bullet["radar_evidence"] = radar
     return bullet
 
 

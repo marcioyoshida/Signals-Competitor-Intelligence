@@ -336,3 +336,15 @@ def test_curated_retirement_marks_target_retired():
     retired = next(b for b in after["itau"]["bullets"] if b["id"] == bid)
     assert retired["status"] == "retired"
     assert after["itau"]["counts"]["S"] == 0    # no longer counted active
+
+
+def test_approved_framework_bullet_keeps_label_only_radar_line():
+    """#377: an approved radar-backed Ansoff proposal keeps {id, label} only."""
+    b = curate._curated_bullet({"id": "a1", "entity": "itau", "dimension": "product_dev",
+                                "text": "t", "evidence": ["n1", "r1"], "framework": "ansoff",
+                                "radar_evidence": [{"id": "r1", "label": "Itaú — lançamento",
+                                                    "title": "leak", "url": "https://x"},
+                                                   {"label": "no id"}]},
+                               at="2026-11-10T00:00:00Z")
+    assert b["radar_evidence"] == [{"id": "r1", "label": "Itaú — lançamento"}]
+    assert "radar_evidence" not in curate._curated_bullet({"id": "a2", "text": "t"}, at="x")

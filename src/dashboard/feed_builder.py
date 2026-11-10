@@ -1967,15 +1967,41 @@ def _load_porter_curated(digests_bucket: str) -> dict[str, list[dict[str, Any]]]
     return _load_fw_curated(digests_bucket, "porter")
 
 
+# #377: frameworks whose proposals may carry a label-only radar source line (#369/#373).
+# Bullets approved before the curated record kept it get it joined back at read time.
+RADAR_PROPOSAL_STORES = {"ansoff": "ansoff/proposals.json",
+                         "four_corners": "four_corners/proposals.json"}
+
+
+def _radar_by_proposal(proposals_doc: dict[str, Any] | None) -> dict[str, list[dict[str, str]]]:
+    """proposal id -> [{id, label}] (label-only; anything else on the ref is dropped). Pure."""
+    out: dict[str, list[dict[str, str]]] = {}
+    for p in (proposals_doc or {}).get("proposals") or []:
+        refs = [{"id": str(r["id"]), "label": str(r["label"])}
+                for r in (p.get("radar_evidence") or [])
+                if isinstance(r, dict) and r.get("id") and r.get("label")]
+        if refs and p.get("id"):
+            out[str(p["id"])] = refs
+    return out
+
+
 def _load_fw_curated(digests_bucket: str, framework: str) -> dict[str, list[dict[str, Any]]]:
     """ADR 006: load curated beliefs for a framework from swot/curated.json, grouped by entity."""
     try:
         from src.synth import swot_store
 
-        body = boto3.client("s3").get_object(
+        s3c = boto3.client("s3")
+        body = s3c.get_object(
             Bucket=digests_bucket, Key=swot_store.CURATED_KEY
         )["Body"].read()
         data = json.loads(body.decode("utf-8"))
+        radar_by_id: dict[str, list[dict[str, str]]] = {}
+        if framework in RADAR_PROPOSAL_STORES:
+            try:
+                radar_by_id = _radar_by_proposal(json.loads(s3c.get_object(
+                    Bucket=digests_bucket, Key=RADAR_PROPOSAL_STORES[framework])["Body"].read()))
+            except Exception:
+                radar_by_id = {}
         retired = {r.get("target_bullet_id") for r in data.get("retirements", [])
                    if r.get("target_bullet_id")}
         by_ent: dict[str, list[dict[str, Any]]] = {}
@@ -1994,6 +2020,10 @@ def _load_fw_curated(digests_bucket: str, framework: str) -> dict[str, list[dict
                     "confidence": b.get("confidence", swot_store.CURATED_CONFIDENCE),
                     "status": "active",
                     "origin": b.get("origin"),
+                    # #377: evidence count + label-only radar source line (#369) for /exec.
+                    "n_evidence": len(b.get("evidence") or []),
+                    **({"radar_evidence": radar} if (radar := b.get("radar_evidence")
+                                                       or radar_by_id.get(str(b.get("id")))) else {}),
                 })
         return by_ent
     except Exception:

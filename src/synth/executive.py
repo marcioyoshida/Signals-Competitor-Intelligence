@@ -663,9 +663,19 @@ def _framework_rows(feed: dict[str, Any], key: str) -> list[dict[str, Any]]:
     labels = _labels(feed)
     rows: list[dict[str, Any]] = []
     for ent, bullets in fw.items():
-        active = [{"dimension": b.get("dimension"), "text": b.get("text"),
-                   "confidence": b.get("confidence")}
-                  for b in (bullets or []) if b.get("status") in (None, "active")]
+        active = []
+        for b in (bullets or []):
+            if b.get("status") not in (None, "active"):
+                continue
+            row = {"dimension": b.get("dimension"), "text": b.get("text"),
+                   "confidence": b.get("confidence"),
+                   "n_evidence": b.get("n_evidence", len(b.get("evidence") or []))}
+            # #377: label-only radar source line (#369), e.g. "Itaú — lançamento (YouTube oficial, …)".
+            radar = [str(r.get("label")) for r in (b.get("radar_evidence") or [])
+                     if isinstance(r, dict) and r.get("label")]
+            if radar:
+                row["radar"] = radar[:2]
+            active.append(row)
         if not active:
             continue
         active.sort(key=lambda x: x.get("confidence") or 0, reverse=True)
