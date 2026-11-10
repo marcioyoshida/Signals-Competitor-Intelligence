@@ -1133,6 +1133,7 @@ def scope_feed_to_modules(feed: dict[str, Any], modules: Any) -> dict[str, Any]:
             # #177: an industry-level event is visible only to tenants licensed for it.
             "sector_events": scope_sector_events(feed.get("sector_events"), keep),
             "enforcement": _scope_enforcement(feed.get("enforcement"), keep, row_ok),  # #193
+            "bcb_supervision": _scope_bcb_supervision(feed.get("bcb_supervision"), keep, row_ok),  # #378
             **_scope_sector_blocks(feed, keep, row_ok),  # #203
             "integrity": {"findings": [], "counts": {}, "total": 0, "withheld": True},  # operator-only; #211 "withheld" ≠ "audited clean"
             "regulatory_coverage": {},                                # operator-only (#2)
@@ -1289,6 +1290,7 @@ def derive_entry_feed(
             "product_radar": scope_product_radar(feed.get("product_radar"), row_ok),  # #159
             "sector_events": scope_sector_events(feed.get("sector_events"), keep),  # #177
             "enforcement": _scope_enforcement(feed.get("enforcement"), keep, row_ok),  # #193
+            "bcb_supervision": _scope_bcb_supervision(feed.get("bcb_supervision"), keep, row_ok),  # #378
             **_scope_sector_blocks(feed, keep, row_ok),  # #203
             "integrity": {"findings": [], "counts": {}, "total": 0, "withheld": True},  # operator-only; #211 "withheld" ≠ "audited clean"
             "regulatory_coverage": {},                                # operator-only (#2)
@@ -1385,7 +1387,8 @@ def derive_sample_feed(
         "sections": sorted(
             k for k in ("distress", "capital_moves", "reputation", "financials", "swot",
                         "tows", "porter", "pestle", "ansoff", "bcg", "four_corners",
-                        "seven_s", "executive", "product_radar", "sector_events", "enforcement")
+                        "seven_s", "executive", "product_radar", "sector_events", "enforcement",
+                        "bcb_supervision")
             if out.get(k)
         ),
     }
@@ -1409,7 +1412,7 @@ def derive_sample_feed(
                 "reviews", "swot_proposals", "graph_proposals", "sector_events", "enforcement"):
         out[key] = []
     for key in ("swot", "tows", "porter", "pestle", "ansoff", "bcg", "four_corners",
-                "seven_s", "groups", "product_radar"):
+                "seven_s", "groups", "product_radar", "bcb_supervision"):
         out[key] = {}
     # Not _rescope_executive({}) — the officer dashboard is the entry tier's headline
     # feature and this block has leaked unscoped once before (see _rescope_executive).
@@ -1750,6 +1753,30 @@ def _load_enforcement(digests_bucket: str | None, entity_attrs: dict[str, Any] |
     except Exception as exc:  # pragma: no cover - best-effort, read-only
         print(f"Warning: load enforcement register failed: {exc}")
         return []
+
+
+def _load_bcb_supervision(digests_bucket: str | None, entity_attrs: dict[str, Any] | None
+                          ) -> dict[str, Any]:
+    """#378 BCB supervision (PAS sanctions, Pix data incidents, open consultations) from
+    ``reference/bcb_supervision.json`` (structured ingest), best-effort. {} if absent."""
+    if not digests_bucket:
+        return {}
+    try:
+        from src.ingest import bcb_supervision
+
+        doc = json.loads(boto3.client("s3").get_object(
+            Bucket=digests_bucket, Key=bcb_supervision.STATE_KEY)["Body"].read())
+        return bcb_supervision.for_feed(doc, entity_attrs=entity_attrs)
+    except Exception as exc:  # pragma: no cover - best-effort, read-only
+        print(f"Warning: load BCB supervision failed: {exc}")
+        return {}
+
+
+def _scope_bcb_supervision(block: dict[str, Any] | None, industries: Any,
+                           row_ok: Callable[[dict[str, Any]], bool]) -> dict[str, Any]:
+    from src.ingest import bcb_supervision
+
+    return bcb_supervision.scope(block, industries or [], row_ok)
 
 
 def _scope_enforcement(actions: list[dict[str, Any]] | None, industries: Any,
@@ -2299,6 +2326,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # #193: the CCO sanctions/enforcement register (BCB liquidações, SPA/COAF/CVM sanctions,
     # CEIS/CNEP, enforcement news) — attached before the executive block so build_cco sees it.
     feed["enforcement"] = _load_enforcement(digests_bucket, feed.get("entity_attrs"))
+    # #378: BCB supervision (PAS, Pix data incidents, consultations) for the CRO board.
+    feed["bcb_supervision"] = _load_bcb_supervision(digests_bucket, feed.get("entity_attrs"))
     # ADR 021 §D/§G: the per-officer executive block (read-track: CSO), industry-scoped.
     # Derived from the feed above — no new data; best-effort so a failure never blocks publish.
     try:

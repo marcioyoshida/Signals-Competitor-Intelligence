@@ -3,6 +3,7 @@
   "calls": [
    "[\"autorizacoes.certs\", [[{\"date\": \"2026-10-20\", \"id\": \"ent-0\", \"is_fintech\": true, \"name\": \"Ent Co\", \"text\": \"ent text 0\", \"title\": \"ent title 0\"}, {\"date\": \"2026-10-21\", \"id\": \"ent-1\", \"is_fintech\": true, \"name\": \"Ent Co\", \"text\": \"ent text 1\", \"title\": \"ent title 1\"}, {\"date\": \"2026-10-22\", \"id\": \"ent-2\", \"is_fintech\": true, \"name\": \"Ent Co\", \"text\": \"ent text 2\", \"title\": \"ent title 2\"}]], {}]",
    "[\"autorizacoes.fetch\", [], {}]",
+   "[\"bcb_supervision.update\", [\"digests\"], {\"cnpj_to_entity\": {\"12345678\": \"x\"}, \"name_to_entity\": {}}]",
    "[\"cade.fetch\", [], {\"lookback_days\": 45}]",
    "[\"cade.map\", [[{\"date\": \"2026-10-20\", \"id\": \"cade-0\", \"text\": \"cade text 0\", \"title\": \"cade title 0\"}, {\"date\": \"2026-10-21\", \"id\": \"cade-1\", \"text\": \"cade text 1\", \"title\": \"cade title 1\"}]], {\"resolver\": \"<fn resolve_entities>\"}]",
    "[\"ceis.fetch\", [], {}]",
@@ -22,6 +23,7 @@
    "[\"er.classify\", [{\"date\": \"2026-10-21\", \"id\": \"ent-1\", \"is_fintech\": true, \"name\": \"Ent Co\", \"registry_entity_id\": \"eid-ent-1\", \"text\": \"ent text 1\", \"title\": \"ent title 1\", \"trade_name\": \"Brand\"}], {}]",
    "[\"er.fatos_terms\", [], {}]",
    "[\"er.group_merges\", [], {}]",
+   "[\"er.list_entities\", [], {}]",
    "[\"er.list_entities\", [], {}]",
    "[\"er.list_entities\", [], {}]",
    "[\"er.propose_news_safe\", [\"eid-ent-0\", \"Brand\"], {}]",

@@ -354,3 +354,17 @@ the read-only ADR 010 (`/api/ask`); reuses ADR-018 (audit/rollback/integrity), A
 (coverage-gap + cold-start reference), ADR-006 (frameworks), ADR-019 (source registry). Mirrors the
 sister ADR in `Signals-Sectorial-Intelligence` (regulated-sectors domain). Issue: #20 follow-on.
 ```
+
+## Addendum — Banking CRO: act deadlines and BCB supervision (2026-11-10, #378)
+
+- **Deadlines from the act's own text (part 1, dfeda7b).** The compliance calendar reads effective dates from the stored `regdocs/` text of each act. `deadline_source` is `ato` (the act) or `narrativa` (press coverage). Live: 0 → 13 deadlines across sectors, 0 → 3 for Banking.
+- **BCB supervision (part 2).** `src/ingest/bcb_supervision.py` runs inside the existing structured-ingest Lambda, bounded to 60 s by `_source_budget` (no new AWS resource; the stack is at 485/500). It writes `reference/bcb_supervision.json`, and a source that fails keeps its previous rows. The data comes from three official BCB sources; BCB's terms allow reproduction with the information intact and the source cited:
+  - **PAS register** (Olinda `Gepad_QuadroPenalidades`): first-instance sanction decisions.
+    - **Rows about individuals are dropped at ingest** (LGPD).
+    - Companies are kept when the COPAS committee decided or the target is a BCB-supervised institution. The DERAD/GEPAG capital-register fines on non-financial firms are excluded as noise for a bank CRO.
+    - Olinda rejects `+`-encoded spaces and quoted dates, so the query string is built by hand.
+  - **Pix data-incident register** (BCB LGPD page, DICT rows): institution, incident period, keys exposed.
+  - **Open public consultations** (BCB "Sistema Consultas Públicas"): comment deadline. These join the compliance calendar as `deadline_source: "consulta"`.
+- **Entity binding.** Rows bind to tracked entities by CNPJ root first, then by exact legal name, then by a conservative name key (suffixes and a leading "Banco" dropped, plus the register's parenthesised short name). An ambiguous key binds nothing. A bound row takes its entity's industries; an unbound row gets industries inferred from its legal name.
+- **Tenant scoping.** `bcb_supervision` is scoped like the #193 enforcement register in both tenant projections and emptied for the anonymous sample.
+- **CRO board.** A new band, "Supervisão do Banco Central", has two panels: BCB sanctions to institutions (grouped per institution and day, 180 days) and Pix data incidents (24 months).

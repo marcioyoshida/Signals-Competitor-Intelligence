@@ -1039,6 +1039,47 @@ def _sector_event_row(e: dict[str, Any], labels: dict[str, str] | None = None) -
             "sources": srcs}
 
 
+# --- #378: BCB supervision on the CRO board (official BCB data) --------------------------
+def _bcb_sanction_rows(block: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """PAS decisions grouped per (institution, decision date): one row per institution-day with
+    the number of decisions, total fine and statuses. Newest first, then the largest fine."""
+    groups: dict[tuple[str, str], dict[str, Any]] = {}
+    for r in (block or {}).get("pas") or []:
+        key = (r.get("entity") or r.get("name") or "?", str(r.get("date") or ""))
+        g = groups.get(key)
+        if g is None:
+            g = groups[key] = {
+                "id": r.get("id"), "entity": r.get("entity"),
+                "label": r.get("label") or r.get("name"), "date": r.get("date"),
+                "industries": list(r.get("industries") or []), "committee": r.get("committee"),
+                "n_decisions": 0, "fine_total": 0.0, "penalties": [], "statuses": [],
+                "appealed": False, "pas": [], "source": r.get("source"), "url": r.get("url")}
+        g["n_decisions"] += 1
+        g["fine_total"] += float(r.get("fine") or 0)
+        g["appealed"] = g["appealed"] or bool(r.get("appealed"))
+        for k, v in (("penalties", r.get("penalty")), ("statuses", r.get("status")), ("pas", r.get("pas"))):
+            if v and v not in g[k]:
+                g[k].append(v)
+    rows = list(groups.values())
+    rows.sort(key=lambda g: g["fine_total"], reverse=True)
+    rows.sort(key=lambda g: str(g["date"] or ""), reverse=True)
+    return rows
+
+
+def _consulta_deadline_rows(block: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Open BCB public consultations as compliance-calendar rows (comment deadline)."""
+    out = []
+    for c in (block or {}).get("consultas") or []:
+        if not isinstance(c.get("days_to_deadline"), int) or c["days_to_deadline"] < 0:
+            continue
+        out.append({"id": c.get("id"), "domain": f"Consulta pública BCB {c.get('number')}",
+                    "title": c.get("subject"), "affected_industries": list(c.get("industries") or []),
+                    "deadline": c.get("deadline"), "days_to_deadline": c["days_to_deadline"],
+                    "deadline_source": "consulta", "date": None, "url": c.get("url"),
+                    "kind": "consulta"})
+    return out
+
+
 def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     reg = ctx["reg_cards"]
     sector_events = _sector_events(feed)
@@ -1072,6 +1113,10 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
                         and c["days_to_deadline"] >= 0),
                        key=lambda c: c.get("days_to_deadline"))
     changes = [c for c in reg if (c.get("n_changes") or 0) > 0]
+    bcb = feed.get("bcb_supervision") or {}
+    sanctions = _bcb_sanction_rows(bcb)
+    pix = list(bcb.get("pix_incidents") or [])
+    consultas = _consulta_deadline_rows(bcb)
 
     def agg(slug):
         sr = [c for c in reg if _in_industry(c, slug)]
@@ -1091,7 +1136,12 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
                 "n_sector_events": len(sev_events),
                 "sector_event_severity": sev_events[0].get("severity") if sev_events else None,
                 "n_deadlines": sum(1 for c in sr if isinstance(c.get("days_to_deadline"), int)
-                                   and c["days_to_deadline"] >= 0),
+                                   and c["days_to_deadline"] >= 0)
+                               + sum(1 for c in consultas if _in_industry(c, slug)),
+                # #378: BCB supervision in the sector (official BCB data)
+                "n_bcb_sanctions": sum(1 for g in sanctions if _in_industry(g, slug)),
+                "bcb_fines_total": round(sum(g["fine_total"] for g in sanctions if _in_industry(g, slug)), 2),
+                "n_pix_incidents": sum(1 for r in pix if _in_industry(r, slug)),
                 "max_blast": max(blasts) if blasts else 0,
                 # ADR 022 Phase 4: prudential solvency of the sector's tracked competitors.
                 "min_basileia": min((r["indice_basileia"] for r in ss if r["indice_basileia"] is not None), default=None),
@@ -1167,7 +1217,14 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         "sector_events": [_sector_event_row(e) for e in sector_events[:20]],
         "timeline": [_reg_row(c) for c in _sector_fair(timeline, ctx["sectors"], 50)],
         "impact": [_reg_row(c) for c in _sector_fair(impact, ctx["sectors"], 20)],
-        "deadlines": [_reg_row(c) for c in _sector_fair(deadlines, ctx["sectors"], 20)],
+        # #378: act deadlines + open BCB consultation comment deadlines, soonest first
+        "deadlines": sorted([_reg_row(c) for c in _sector_fair(deadlines, ctx["sectors"], 20)]
+                            + consultas, key=lambda r: r.get("days_to_deadline") or 0),
+        # #378: BCB supervision — PAS sanctions (legal entities) and the Pix data-incident register
+        "bcb_sanctions": sanctions[:30],
+        "pix_incidents": pix[:20],
+        "bcb_as_of": {"pas": bcb.get("pas_as_of"), "pix": bcb.get("pix_as_of"),
+                      "consultas": bcb.get("consultas_as_of")},
         "changes": [{**_reg_row(c), "changes": (c.get("changes") or [])[:6]}
                     for c in _sector_fair(changes, ctx["sectors"], 20)],
         # ADR 022 Phase 4: prudential solvency (Índice de Basileia et al.), weakest first.

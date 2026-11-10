@@ -2081,6 +2081,7 @@ function sevBadge(x, what) {
 }
 // #378: where a deadline came from — the act's own text (official) or press coverage.
 function deadlineBasis(r) {
+  if (r.deadline_source === "consulta") return "Data final da consulta pública (BCB)";
   return r.deadline_source === "ato" ? "Data do texto do próprio ato (fonte oficial)"
     : r.deadline_source === "narrativa" ? "Data citada na cobertura — confirmar no ato" : "Prazo";
 }
@@ -2113,14 +2114,15 @@ function rowsReg(list, emptyMsg) {
   list = (list || []).filter(inSector);
   if (!list.length) return U.empty(emptyMsg || "Sem itens regulatórios no escopo.", "", "○");
   return list.map(r => { const txt = r.title || r.change || (r.affected_industries || []).join(", ") || "";
-    return `<div class="exrow exrow--reg" data-id="${U.esc(r.id)}">
+    return `<div class="exrow exrow--reg" data-id="${U.esc(r.id)}"${r.kind === "consulta" && r.url ? ` data-url="${U.esc(r.url)}"` : ""}>
     <span class="ent" style="min-width:150px" title="${U.esc(r.domain || "Regulação")}">${U.esc(r.domain || "Regulação")}</span>
     <span class="ttl" title="${U.esc(txt)}">${U.esc(txt)}</span>
     ${r.blast_band ? sevBadge(r.blast_band, "alcance") : (r.blast ? `<span class="meta">${pl(r.blast, "setor", "setores")}</span>` : "")}
     ${r.difficulty_band ? sevBadge(r.difficulty_band, "dificuldade") : ""}
     ${r.days_to_deadline != null ? `<span class="dt${r.days_to_deadline <= 7 ? " sl-warn" : ""}" title="${U.esc(deadlineBasis(r))}">${deadlineTxt(r.days_to_deadline)}${r.deadline ? " · " + U.fmtDate(r.deadline) : ""}</span>` : ""}
     ${r.deadline_source === "ato" ? `<span class="meta" title="Data extraída do texto do próprio ato (fonte oficial)">texto do ato</span>`
-      : r.deadline_source === "narrativa" ? `<span class="meta" title="Data citada na cobertura; confirmar no texto do ato">cobertura</span>` : ""}
+      : r.deadline_source === "narrativa" ? `<span class="meta" title="Data citada na cobertura; confirmar no texto do ato">cobertura</span>`
+      : r.deadline_source === "consulta" ? `<span class="meta" title="Data final para envio de sugestões — Sistema Consultas Públicas do BCB">consulta pública</span>` : ""}
     ${r.threat_score != null ? threatChip(r.threat_score) : ""}</div>`; }).join("");
 }
 // Macro strip (v1 → shared /exec header): Copom Selic + Focus projections, national, so it
@@ -2953,6 +2955,40 @@ function rowsEnforcement(list) {
     <span class="meta"><span class="badge badge--ghost enf-src">${meta}</span> ${links}</span></div>`;
   }).join("");
 }
+// #378 — BCB supervision on the CRO board (official Banco Central data, source cited per BCB terms).
+// PAS: first-instance sanction decisions against INSTITUTIONS (people are dropped at ingest, LGPD),
+// grouped per institution-day; the fine is the decided amount — an appeal can still change it.
+function brlShort(n) {
+  if (!n) return "—";
+  return n >= 1e6 ? `R$ ${nf(n / 1e6, 1)} mi` : n >= 1e3 ? `R$ ${nf(n / 1e3, 0)} mil` : `R$ ${brl(n)}`;
+}
+function rowsBcbSanctions(list) {
+  list = (list || []).filter(inSector);
+  if (!list.length) return U.empty("Nenhuma decisão de PAS do BCB contra instituições do setor em 180 dias.", "Banco Central · Quadro de Processos Administrativos Sancionadores", "○");
+  return list.slice(0, 20).map(r => {
+    const pend = (r.statuses || []).some(x => /RECURSO/i.test(x));
+    const st = (r.statuses || []).map(x => x.toLowerCase()).join(" · ");
+    const pen = (r.penalties || []).map(x => x.toLowerCase()).join(" · ");
+    const n = r.n_decisions > 1 ? ` · ${pl(r.n_decisions, "decisão", "decisões")}` : "";
+    return `<div class="exrow exrow--enf" data-url="${U.esc(r.url || "")}">
+    ${dCell(r.date)}
+    <span class="badge badge--${r.fine_total >= 1e6 ? "high" : "low"}" title="multa total decidida em 1ª instância">${U.esc(brlShort(r.fine_total))}</span>
+    <span class="ent" title="${U.esc(r.label || "—")}">${r.entity ? "● " : ""}${U.esc(r.label || "—")}</span>
+    <span class="ttl" title="${U.esc(pen + " · " + st)}"><b>${U.esc(pen || "decisão")}</b>${U.esc(n)} · ${U.esc(st)}</span>
+    <span class="meta"><span class="badge badge--ghost" title="Banco Central do Brasil · ${U.esc(r.committee || "")}">BCB · 1ª instância${pend ? " · recurso pendente" : ""}</span></span></div>`;
+  }).join("");
+}
+// Pix: the BCB's own register of personal-data incidents with Pix keys (DICT). Public bodies appear
+// too — exactly as the BCB lists them. The count is keys exposed, never account balances.
+function rowsPixIncidents(list) {
+  list = (list || []).filter(inSector);
+  if (!list.length) return U.empty("Nenhum incidente com dados de chaves Pix registrado pelo BCB no período.", "Banco Central · Registro de incidentes com dados pessoais", "○");
+  return list.slice(0, 12).map(r => `<div class="exrow" data-url="${U.esc(r.url || "")}">
+    ${dCell(r.date)}
+    <span class="badge badge--${(r.keys || 0) >= 10000 ? "high" : "low"}" title="chaves Pix com dados cadastrais expostos · Banco Central (DICT)">${r.keys != null ? U.esc(nf(r.keys, 0)) + " chaves" : "chaves: n/d"}</span>
+    <span class="ent" title="${U.esc(r.label || r.name || "—")}">${r.entity ? "● " : ""}${U.esc(r.label || r.name || "—")}</span>
+    <span class="ttl" title="período do incidente: ${U.esc(r.period || "")}">${U.esc(r.period || "—")}</span></div>`).join("");
+}
 function rowsDiscovery(list) {
   list = (list || []).filter(inSectorStrict);
   if (!list.length) return U.empty("Sem propostas de descoberta no escopo.", "", "○");
@@ -3720,6 +3756,9 @@ function render() {
            panel("Eventos setoriais", (p.sector_events || []).filter(inSectorStrict).length, "setor · severidade · fontes", rowsSectorEvents(p.sector_events), { nav: "events", lead: true }), { lead: true }) +
       band("Solidez prudencial dos concorrentes", "Basileia + LCR + PDD/mês + inadimplência + fragilidade + tom",
            panel("Solvência, inadimplência, trajetória & tom (mais frágil primeiro)", null, "Basileia · CET1 · PDD/mês · NPL · tom", rowsSolvency(p.solvency), { nav: "solvency" })) +
+      band("Supervisão do Banco Central", "sanções (PAS) e incidentes com dados Pix · dados oficiais do BCB" + (a.bcb_fines_total ? " · multas decididas em 180 dias: " + brlShort(a.bcb_fines_total) : ""),
+           grid("1fr 1fr", [panel("Sanções do BCB a instituições", ofN((p.bcb_sanctions || []).filter(inSector), a.n_bcb_sanctions), "PAS · 1ª instância · 180 dias · ● concorrente acompanhado", rowsBcbSanctions(p.bcb_sanctions), { nav: "bcbpas" }),
+                              panel("Incidentes com dados de chaves Pix", ofN((p.pix_incidents || []).filter(inSector), a.n_pix_incidents), "registro do BCB · período do incidente · 24 meses", rowsPixIncidents(p.pix_incidents))])) +
       band("Impacto & alcance", "alcance · quantos setores cada norma afeta", panel("Mudanças por impacto", ofN(p.impact, a.n_reg), "banda de alcance · dificuldade", rowsReg(p.impact), { nav: "impact" })) +
       band("Linha do tempo regulatória", "", grid("1fr 1fr", [panel("Consulta → norma → fiscalização", ofN(p.timeline, a.n_reg), "recente", rowsReg(p.timeline)),
                             panel("Atos com mudanças enumeradas", ofN(p.changes, a.n_acts_changed), "amending acts", rowsReg(p.changes), { nav: "changes" })])) +
