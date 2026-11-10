@@ -3113,7 +3113,10 @@ class OncaPrototypeStack(Stack):
             rule=ses.CfnReceiptRule.RuleProperty(
                 name="onca-contact",
                 enabled=True,
-                recipients=["contato@onssa.org"],
+                # Same list as contact_forward.INBOUND_ADDRESSES (#360): contato@ = public
+                # contact; alertas@ = From of the alarm mails; app-review@ = store-reviewer
+                # login (#313). One rule, one bucket and prefix, so no new resources.
+                recipients=["contato@onssa.org", "alertas@onssa.org", "app-review@onssa.org"],
                 actions=[
                     ses.CfnReceiptRule.ActionProperty(
                         s3_action=ses.CfnReceiptRule.S3ActionProperty(

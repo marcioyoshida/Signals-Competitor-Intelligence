@@ -38,6 +38,27 @@ from email import policy
 from typing import Any
 
 FROM_ADDRESS = "contato@onssa.org"
+# Every address the SES rule "onca-contact" accepts (#360). Must match `recipients` in
+# infra/app.py: contato@ = public contact; alertas@ = From of the Onça alarm mails
+# (replies/bounces); app-review@ = store-reviewer login (#313), so Cognito reset and
+# verify mails land somewhere readable.
+INBOUND_ADDRESSES = ("contato@onssa.org", "alertas@onssa.org", "app-review@onssa.org")
+
+
+def received_at(msg: Any) -> str:
+    """The accepted address this copy was delivered to (Delivered-To, then To, then Cc).
+
+    Only addresses the rule accepts count, so a stray onssa.org name in To cannot
+    relabel the mail. Bcc'd copies carry none of these, so they fall back to contato@,
+    which was the behaviour before #360.
+    """
+    from email.utils import getaddresses
+
+    for header in ("Delivered-To", "To", "Cc"):
+        for _, addr in getaddresses([str(v) for v in msg.get_all(header, [])]):
+            if addr.lower() in INBOUND_ADDRESSES:
+                return addr.lower()
+    return FROM_ADDRESS
 
 
 def _client(client: Any | None = None) -> Any:
@@ -91,9 +112,11 @@ def build_forward(raw_mime: bytes, forward_to: str) -> dict[str, str]:
         body = msg.get_content() if msg.get_content_type() == "text/plain" else ""
     body = (body or "(mensagem sem corpo em texto simples)").strip()
 
-    subject = f"[Onça contato] {original_subject}"
+    inbox = received_at(msg)
+    # "[Onça contato]" is unchanged for contato@ mail, so existing inbox filters still match.
+    subject = f"[Onça {inbox.split('@')[0]}] {original_subject}"
     text = (
-        f"Nova mensagem recebida em {FROM_ADDRESS}\n"
+        f"Nova mensagem recebida em {inbox}\n"
         f"De: {original_from}\n"
         f"Data: {original_date}\n"
         f"Assunto original: {original_subject}\n"
@@ -105,6 +128,7 @@ def build_forward(raw_mime: bytes, forward_to: str) -> dict[str, str]:
         "text": text,
         "reply_to": original_from,
         "to": forward_to,
+        "received_at": inbox,
     }
 
 

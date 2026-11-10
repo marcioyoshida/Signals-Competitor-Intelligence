@@ -201,3 +201,40 @@ def test_forward_to_is_empty_with_neither_configured(monkeypatch):
     monkeypatch.delenv("ONCA_CONTACT_FORWARD_TO", raising=False)
     monkeypatch.delenv("ONCA_CONTACT_FORWARD_PARAM", raising=False)
     assert cf._forward_to(_FakeSSM("x@example.com")) == ""
+
+
+# --- #360: alertas@ and app-review@ share the onca-contact rule --------------
+
+def _to(addr_header: str, extra: bytes = b"") -> bytes:
+    return (b"From: AWS <no-reply@example.com>\r\n" + addr_header.encode() + b"\r\n" + extra +
+            b"Subject: Teste\r\nContent-Type: text/plain\r\n\r\ncorpo\r\n")
+
+
+@pytest.mark.parametrize("addr,tag", [("alertas@onssa.org", "alertas"),
+                                      ("App-Review@onssa.org", "app-review"),
+                                      ("contato@onssa.org", "contato")])
+def test_build_forward_names_the_address_that_received_the_mail(addr, tag):
+    parts = cf.build_forward(_to(f"To: Someone <{addr}>"), "ops@example.com")
+    assert parts["subject"] == f"[Onça {tag}] Teste"
+    assert parts["text"].startswith(f"Nova mensagem recebida em {addr.lower()}\n")
+    assert parts["received_at"] == addr.lower()
+
+
+def test_build_forward_falls_back_to_contato_when_bcc():
+    parts = cf.build_forward(_to("To: someone@example.com"), "ops@example.com")
+    assert parts["subject"] == "[Onça contato] Teste" and parts["received_at"] == "contato@onssa.org"
+
+
+def test_delivered_to_wins_and_unaccepted_onssa_names_are_ignored():
+    raw = _to("To: x@onssa.org, alertas@onssa.org", b"Delivered-To: app-review@onssa.org\r\n")
+    assert cf.build_forward(raw, "ops@example.com")["received_at"] == "app-review@onssa.org"
+    raw = _to("To: x@onssa.org", b"Cc: alertas@onssa.org\r\n")
+    assert cf.build_forward(raw, "ops@example.com")["received_at"] == "alertas@onssa.org"
+
+
+def test_receipt_rule_recipients_match_the_forwarders_list():
+    import re
+    app = (Path(__file__).resolve().parents[1] / "infra" / "app.py").read_text(encoding="utf-8")
+    block = app[app.index('name="onca-contact"'):]
+    recipients = re.search(r"recipients=\[([^\]]*)\]", block).group(1)
+    assert tuple(re.findall(r'"([^"]+)"', recipients)) == cf.INBOUND_ADDRESSES
