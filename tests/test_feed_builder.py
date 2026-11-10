@@ -1118,3 +1118,92 @@ def test_build_feed_folds_every_framework_map():
         assert set(feed[key]) == {"acme"}, key
         assert [b["text"] for b in feed[key]["acme"]] == ["Own thesis", "Twin thesis"], key
     assert set(feed["swot"]) == {"acme"} and feed["swot"]["acme"]["label"] == "Acme Bank"
+
+
+# --- #377 follow-up: financials / market_structure / sector_events / swot_hint ----------
+# Same synthetic pair: `acme` survives, `acme-holding` is the merged twin.
+def _fin(eid, revenue, *, basis="consolidated", period="2025-12-31", name=None):
+    return {"entity_id": eid, "name": name or eid.upper(), "revenue": revenue,
+            "basis": basis, "period": period}
+
+
+def test_financials_fold_keeps_one_statement_per_survivor_never_summed():
+    canon = {"acme-holding": "acme"}
+    rows = [_fin("acme-holding", 300.0, name="ACME HOLDING SA"),     # group (consolidates the bank)
+            _fin("other", 50.0),
+            _fin("acme", 200.0, name="ACME BANCO SA"),               # the bank, part of the group
+            {"name": "no id", "revenue": 1.0}]
+    out = feed_builder._canonicalize_financials(rows, canon)
+    assert [r.get("entity_id") for r in out] == ["acme", "other", None]
+    assert out[0]["revenue"] == 300.0 and out[0]["name"] == "ACME HOLDING SA"
+    assert rows[0]["entity_id"] == "acme-holding"                    # input not mutated
+
+
+def test_financials_fold_prefers_consolidated_over_a_larger_individual():
+    out = feed_builder._canonicalize_financials(
+        [_fin("acme", 500.0, basis="individual"), _fin("acme-holding", 400.0)],
+        {"acme-holding": "acme"})
+    assert len(out) == 1 and out[0]["revenue"] == 400.0 and out[0]["entity_id"] == "acme"
+
+
+def test_financials_fold_is_identity_without_merges():
+    rows = [_fin("acme", 1.0)]
+    assert feed_builder._canonicalize_financials(rows, {}) == rows
+    assert feed_builder._canonicalize_financials(None, {"a": "b"}) == []
+
+
+def test_market_structure_from_folded_financials_has_survivor_leader_and_no_double_count():
+    from src.synth import product_intel
+
+    attrs = {"acme": {"label": "Acme Bank", "industries": ["banking"]},
+             "acme-holding": {"label": "Acme Holding", "canonical_id": "acme",
+                              "industries": ["banking"]},
+             "other": {"label": "Other", "industries": ["banking"]}}
+    feed = feed_builder.build_feed(
+        [_narr("n1", "acme", "2026-09-01", 0.5)], entity_attrs=attrs,
+        industry_map={"acme": ["banking"], "acme-holding": ["banking"], "other": ["banking"]},
+        financials=[_fin("acme-holding", 300.0), _fin("acme", 200.0), _fin("other", 100.0)])
+    assert [r["entity_id"] for r in feed["financials"]] == ["acme", "other"]
+    ms = product_intel.market_structure(feed["financials"], feed["entity_attrs"])["banking"]
+    assert ms["leader"]["entity"] == "acme"
+    assert ms["issuers"] == 2 and ms["size_revenue"] == 400.0      # 300 + 100, never + 200
+    assert ms["leader"]["rev_share"] == 0.75
+    assert [c["entity"] for c in ms["constituents"]] == ["acme", "other"]
+
+
+def test_sector_events_fold_entities_and_recount_n_affected():
+    canon = {"acme-holding": "acme"}
+    evs = [{"id": "e1", "industry": "banking", "n_affected": 3,
+            "entities": ["acme", "acme-holding", "other"]},
+           {"id": "e2", "industry": "banking", "n_affected": 2,
+            "entities": ["acme-holding", "other"]},
+           {"id": "e3", "industry": "banking", "n_affected": 9, "entities": ["acme-holding"]},
+           {"id": "e4", "industry": "insurance", "n_affected": 1, "entities": ["other"]}]
+    out = feed_builder._canonicalize_sector_events(evs, canon)
+    assert [e["entities"] for e in out] == [["acme", "other"], ["acme", "other"], ["acme"], ["other"]]
+    assert [e["n_affected"] for e in out] == [2, 2, 9, 1]   # e3's count was not the roster size
+    assert out[3] is evs[3]                                  # untouched event passes through
+    assert evs[0]["entities"] == ["acme", "acme-holding", "other"]   # input not mutated
+
+
+def test_load_sector_events_folds_the_roster(monkeypatch):
+    from src.synth import sector_events
+
+    attrs = {"acme": {"label": "Acme Bank", "industries": ["banking"]},
+             "acme-holding": {"label": "Acme Holding", "canonical_id": "acme",
+                              "industries": ["banking"]},
+             "other": {"label": "Other", "industries": ["banking"]}}
+    monkeypatch.setattr(sector_events, "load_store", lambda bucket: {"events": [
+        {"id": "e1", "industry": "banking", "date": "2099-01-01", "last_evidence": "2099-01-01"}]})
+    out = feed_builder._load_sector_events("bucket", attrs)
+    assert out[0]["entities"] == ["acme", "other"] and out[0]["n_affected"] == 2
+
+
+def test_swot_hint_entities_fold_onto_survivor():
+    hint = {"dimension": "O", "theme": "expansion", "entities": ["acme-holding", "other", "acme"]}
+    n = {**_narr("t1", None, "2026-09-01", 0.4), "kind": "thematic", "swot_hint": hint}
+    feed = feed_builder.build_feed([n], entity_attrs=_TWIN_ATTRS)
+    item = next(x for x in feed["feed"] if x["id"] == "t1")
+    assert item["swot_hint"]["entities"] == ["acme", "other"]
+    assert item["swot_hint"]["dimension"] == "O"
+    assert hint["entities"] == ["acme-holding", "other", "acme"]   # source narrative untouched

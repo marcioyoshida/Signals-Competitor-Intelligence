@@ -561,8 +561,25 @@ def _canonical_map(entity_attrs: dict[str, Any] | None) -> dict[str, str]:
     return out
 
 
+def _fold_ids(ids: list[Any], canon: dict[str, str]) -> list[Any]:
+    """An id list onto surviving ids, de-duplicated, first occurrence's position kept."""
+    seen: set[Any] = set()
+    out = []
+    for e in ids:
+        e2 = canon.get(e, e) if isinstance(e, str) else e
+        if e2 not in seen:
+            seen.add(e2)
+            out.append(e2)
+    return out
+
+
 def _canonicalize_item(item: dict[str, Any], canon: dict[str, str]) -> None:
-    """Rewrite a feed item's entity references to their surviving ids, in place."""
+    """Rewrite a feed item's entity references to their surviving ids, in place.
+
+    Covers `swot_hint.entities` too: a thematic/cohort card lists every participating id
+    there, so a twin pair showed up as two participants (`itau` + `itau-unibanco`) and the
+    SWOT store filed the same O/T bullet under both. The hint is replaced, not mutated —
+    it is shared with the source narrative."""
     if not canon:
         return
     ent = item.get("entity")
@@ -570,14 +587,81 @@ def _canonicalize_item(item: dict[str, Any], canon: dict[str, str]) -> None:
         item["entity"] = canon[ent]
         item["entity_label"] = display_label(canon[ent], item.get("kind"))
     if item.get("entities"):
-        seen: set[str] = set()
-        merged = []
-        for e in item["entities"]:
-            e2 = canon.get(e, e)
-            if e2 not in seen:
-                seen.add(e2)
-                merged.append(e2)
-        item["entities"] = merged
+        item["entities"] = _fold_ids(item["entities"], canon)
+    hint = item.get("swot_hint")
+    if isinstance(hint, dict) and isinstance(hint.get("entities"), list):
+        item["swot_hint"] = {**hint, "entities": _fold_ids(hint["entities"], canon)}
+
+
+def _fin_rank(row: dict[str, Any], survivor: str) -> tuple[Any, ...]:
+    """Which of several financial statements folding onto one survivor represents it.
+
+    Consolidated beats individual, then the larger revenue: a holding's consolidated
+    statement already contains its operating bank's, so the larger one is the group and
+    the smaller one is a part of it. Then the newer period, then the survivor's own row."""
+    try:
+        rev = float(row.get("revenue") or 0)
+    except (TypeError, ValueError):
+        rev = 0.0
+    return (row.get("basis") == "consolidated", rev, str(row.get("period") or ""),
+            row.get("entity_id") == survivor)
+
+
+def _canonicalize_financials(rows: list[dict[str, Any]] | None,
+                             canon: dict[str, str]) -> list[dict[str, Any]]:
+    """Fold CVM financial statements onto surviving ids: ONE statement per institution.
+
+    `market_structure` (product_intel R3) sums `revenue` per industry and takes the top row
+    as the leader, and BCG positions read the same rows, so a twin id here meant the banking
+    leader rendered as `itau-unibanco` (#377). Two statements folding onto one survivor are
+    never summed — they are a holding and its own bank (different CNPJs, one consolidating
+    the other) or the same filing matched twice; adding them double counts the group. The
+    representative is picked by `_fin_rank`; the others are dropped. Rows keep their order.
+    """
+    if not rows or not canon:
+        return list(rows or [])
+    best: dict[str, int] = {}
+    for i, r in enumerate(rows):
+        eid = r.get("entity_id") if isinstance(r, dict) else None
+        if not eid:
+            continue
+        tgt = canon.get(eid, eid)
+        j = best.get(tgt)
+        if j is None or _fin_rank(r, tgt) > _fin_rank(rows[j], tgt):
+            best[tgt] = i
+    keep = {i: tgt for tgt, i in best.items()}
+    out: list[dict[str, Any]] = []
+    for i, r in enumerate(rows):
+        eid = r.get("entity_id") if isinstance(r, dict) else None
+        if not eid:
+            out.append(r)
+        elif i in keep:
+            out.append(r if r["entity_id"] == keep[i] else {**r, "entity_id": keep[i]})
+    return out
+
+
+def _canonicalize_sector_events(events: list[dict[str, Any]] | None,
+                                canon: dict[str, str]) -> list[dict[str, Any]]:
+    """Fold each #177 sector event's affected `entities` onto surviving ids, de-duplicated.
+
+    The roster is every entity_attrs row of the industry, twins included, so a banking
+    event listed `itau` AND `itau-unibanco` and its `n_affected` counted one bank twice.
+    `n_affected` is recounted only where it was the roster size (an event built without a
+    roster keeps whatever count it carried)."""
+    if not events or not canon:
+        return list(events or [])
+    out = []
+    for ev in events:
+        ents = ev.get("entities") if isinstance(ev, dict) else None
+        if not isinstance(ents, list) or not any(e in canon for e in ents if isinstance(e, str)):
+            out.append(ev)
+            continue
+        folded = _fold_ids(ents, canon)
+        ev2 = {**ev, "entities": folded}
+        if ev.get("n_affected") == len(ents):
+            ev2["n_affected"] = len(folded)
+        out.append(ev2)
+    return out
 
 
 def _canonicalize_map(m: dict[str, Any] | None, canon: dict[str, str]) -> dict[str, Any]:
@@ -885,6 +969,9 @@ def build_feed(
     # Issue #7 Phase 2: ground each issuer's BCG position in real financials (revenue
     # growth × relative share vs the industry leader) — a hard-number anchor for the
     # BCG framework, computed against the current industry map.
+    # #377: one statement per SURVIVING id first — `imap` is canonical, and the
+    # market_structure built from these rows downstream must never count a group twice.
+    financials = _canonicalize_financials(financials, canon)
     if financials:
         from src.synth import bcg as _bcg
 
@@ -1733,8 +1820,9 @@ def _load_sector_events(digests_bucket: str | None, entity_attrs: dict[str, Any]
     try:
         from src.synth import sector_events
 
-        return sector_events.for_feed(sector_events.load_store(digests_bucket),
-                                      entity_attrs=entity_attrs)
+        events = sector_events.for_feed(sector_events.load_store(digests_bucket),
+                                        entity_attrs=entity_attrs)
+        return _canonicalize_sector_events(events, _canonical_map(entity_attrs))  # #377
     except Exception as exc:  # pragma: no cover - best-effort, read-only
         print(f"Warning: load sector events failed: {exc}")
         return []
