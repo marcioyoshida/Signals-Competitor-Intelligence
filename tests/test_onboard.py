@@ -440,6 +440,23 @@ def test_link_works_on_a_billing_managed_tenant(w):
     assert w.tenants.snapshot() == row
 
 
+@pytest.mark.parametrize("row", [
+    {"billing_managed": True, "trial_until": "2099-01-01T00:00:00+00:00", "trial_modules": ["crypto"]},
+    {"subs": {"banking": {"status": "active", "tier": "saas", "band": "saas_premium"}}},
+])
+def test_a_friends_family_guest_is_never_linked_to_a_customers_tenant(w, row):
+    w.tenants.items["acme"] = {"tenant_id": "acme", "tier": "entry", "modules": [],
+                               "plane": "portal", **row}
+    before = w.snapshot()
+    r = w.call("link", tenant_id="acme", cohort="friends-family", login="password",
+               email="friend@example.org")
+    assert r["ok"] is False and "customer's" in r["error"]
+    assert w.snapshot() == before and w.writes() == 0
+    # the same tenant still takes a pilot's second user
+    assert w.call("link", tenant_id="acme", cohort="pilot", login="password",
+                  email="cfo@acme.example")["ok"]
+
+
 def test_link_to_an_unknown_tenant_is_rejected(w):
     r = w.call("link", email="ana@acme.example", login="password")
     assert r == {"ok": False, "request_id": "req-1", "error": "REJECTED: unknown tenant 'pilot-acme'"}

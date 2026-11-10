@@ -21,7 +21,8 @@ What each action may touch:
             any ``subs`` entry, and an existing row without the stamp (a hand-provisioned or
             self-registered tenant is never adopted: adopting it would make it removable).
 ``link``    attaches one login to an EXISTING tenant (any tenant, several e-mails) and changes
-            nothing on its row.
+            nothing on its row. A ``friends-family`` guest is refused on a billing-managed
+            tenant or one with ``subs``: a guest never lands on a customer's tenant.
 ``get``     the tenant's entitlement, its stamp and how many logins onboarding tracks.
 ``expire``  lapses the comp: base ``modules`` become ``[]`` (a purchase in ``subs`` still entitles its
             own modules) and, when the tenant has no purchase, the logins onboarding created stop
@@ -542,6 +543,13 @@ def _put(req: dict[str, Any], ctx: _Ctx) -> dict[str, Any]:
 
 def _link(req: dict[str, Any], ctx: _Ctx) -> dict[str, Any]:
     raw = _existing(req, ctx)
+    if req["cohort"] == "friends-family" and (raw.get("billing_managed") or raw.get("subs")):
+        # link reaches ANY tenant, which is what a pilot's second user needs. A guest has no
+        # business on a tenant somebody pays for: one mistyped id would show them a customer's
+        # watchlist. A pilot or design-partner link to that tenant is still allowed.
+        raise Rejected(f"tenant {req['tenant_id']!r} is a customer's (a purchase or a trial); a "
+                       "friends-family guest is only linked to a demo or onboarding tenant",
+                       stage="billing")
     cfg = ctx.view(req["tenant_id"])
     pre = _preflight(req, ctx)
     google = req["login"] == "google"
