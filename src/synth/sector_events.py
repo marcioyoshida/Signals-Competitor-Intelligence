@@ -262,8 +262,12 @@ _RULING_RESTORE = re.compile(
     # "Fux suspende ações contra proibição das bets") — no release/restore verb, still a ruling
     # ("suspende ações de cobrança" is not: the frozen lawsuits must be ABOUT a measure)
     r"|\bsuspende\w* (?:todas as |todos os |as |os )?(?:acoes|processos)(?: judiciais)?(?: na justica)?"
-    r" (?:contra|sobre|que contestam) (?:a |o |as |os )?"
-    r"(?:proib|suspens|mp\b|medida|lei\b|resoluc|norma|decreto|regra|marco)")
+    r" (?:contra|sobre|que (?:contestam|questionam)) (?:a |o |as |os )?"
+    r"(?:proib|suspens|mp\b|medida|lei\b|resoluc|norma|decreto|regra|marco|constitucionalidade|validade)"
+    # 11-10: "suspende todas as ações sobre bets até julgamento do STF" names the sector, not the
+    # measure — the "until judgment" clause is what makes it the freeze ruling
+    r"|\bsuspende\w* (?:todas as |todos os |as |os )?(?:acoes|processos)(?: judiciais)?"
+    r" (?:contra|sobre) (?:as )?(?:bets|apostas)\b.*\bate (?:o )?(?:julgamento|decisao)\b")
 _RULING_RELEASE = re.compile(
     r"\bliber(?:a|am|ou|aram|ad[ao]s?)\b|\bautoriz(?:a|am|ou|aram|ad[ao]s?)\b|\bretorno\b|\bretomada\b"
     r"|\bvolt(?:a|am|ar) a (?:funcionar|operar)\b|\bderrub\w* (?:a |o )?(?:proib|suspens|mp|medida)")

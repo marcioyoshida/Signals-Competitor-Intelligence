@@ -464,7 +464,13 @@ def test_background_mention_vs_direct_report(title, mention):
     ("STF suspende ações judiciais sobre proibição das bets em todo o país", "restore"),
     ("Fux atende a pedido da PGR e suspende processos sobre proibição de bets até decisão do STF", "restore"),
     ("Fux suspende todas as ações judiciais contra proibição de bets no país", "restore"),
+    # 11-10: the same Fux ruling filed as a separate "suspensão" — "questionam", "regras",
+    # "constitucionalidade", and "ações sobre bets até julgamento"
+    ("Fux suspende todos os processos que questionam regras do governo contra as bets", "restore"),
+    ("STF suspende processos que questionam constitucionalidade de MP das bets", "restore"),
+    ("Fux atende PGR e suspende todas as ações sobre bets até julgamento do STF", "restore"),
     ("Justiça suspende ações de cobrança contra clientes do banco", None),                      # no measure
+    ("STF suspende ações sobre bets de clubes de futebol", None),               # sector, no "até julgamento"
     ("Nova decisão do STJ libera encerramento de contas do Nubank, Itaú e outros bancos", None),  # no measure
     ("Bets buscam reverter proibição de Lula no STF", None),                                      # an attempt
 ])
