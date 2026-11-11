@@ -204,7 +204,8 @@ def test_c5_a_sector_vertical_runs_no_fs_fetch(monkeypatch):
     fs = _names(_run(monkeypatch, EVERYTHING_ON, after=_stub_jobs))
     # positive control: under FS every one of these jobs is reached
     for n in ("soundness.date", "receita_bulk.fetch", "discovery.discover_fiagro", "susep.fetch",
-              "reclame.companies", "ans_igr.run", "pix.fetch", "ifdata.load_index", "autorizacoes.fetch"):
+              "reclame.companies", "ans_igr.run", "pix.fetch", "ifdata.load_index", "autorizacoes.fetch",
+              "bcb_supervision.update"):
         assert n in fs, n
     sector = _names(_run(monkeypatch, {**EVERYTHING_ON, "ONCA_VERTICAL": "pharma"}, after=_stub_jobs))
     assert sector <= AGNOSTIC, sorted(sector - AGNOSTIC)

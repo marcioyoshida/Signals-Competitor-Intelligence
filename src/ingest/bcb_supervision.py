@@ -318,6 +318,23 @@ def match_entities(rows: list[dict[str, Any]], cnpj_to_entity: dict[str, str] | 
             r["entity"] = ent
 
 
+def carried_bindings(prev: dict[str, Any] | None) -> tuple[dict[str, str], dict[str, str]]:
+    """(cnpj_root -> entity, folded name -> entity) from a previous state doc's bound rows — the
+    fallback when this run's registry scan is unavailable."""
+    cnpj: dict[str, str] = {}
+    names: dict[str, str] = {}
+    for key in ("pas", "pix_incidents"):
+        for r in (prev or {}).get(key) or []:
+            eid = r.get("entity")
+            if not eid:
+                continue
+            if r.get("cnpj_root"):
+                cnpj.setdefault(str(r["cnpj_root"])[:8], eid)
+            if r.get("name"):
+                names.setdefault(_fold(r["name"]), eid)
+    return cnpj, names
+
+
 def update_state(bucket: str, *, s3: Any = None, get: Callable[[str], Any] | None = None,
                  consultas_fn: Callable[..., list[dict[str, Any]]] | None = None,
                  cnpj_to_entity: dict[str, str] | None = None,
@@ -335,6 +352,11 @@ def update_state(bucket: str, *, s3: Any = None, get: Callable[[str], Any] | Non
     except Exception:
         prev = {}
     doc: dict[str, Any] = {"as_of": today.isoformat(), "source": SOURCE, "errors": {}}
+    if not cnpj_to_entity and not name_to_entity:
+        # registry scan failed or timed out: reuse the previous run's bindings, never unbind
+        cnpj_to_entity, name_to_entity = carried_bindings(prev)
+        if cnpj_to_entity or name_to_entity:
+            doc["entity_map"] = "carried"
     for key, fn in (("pas", lambda: fetch_pas(get, today=today)),
                     ("pix_incidents", lambda: fetch_pix(get)),
                     ("consultas", lambda: (consultas_fn or fetch_consultas)(today=today))):

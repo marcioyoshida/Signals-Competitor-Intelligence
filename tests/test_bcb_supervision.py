@@ -130,6 +130,48 @@ def test_update_state_keeps_previous_rows_when_a_source_fails():
     assert doc["pix_incidents"] == prev["pix_incidents"] and doc["pix_incidents_as_of"] == "2026-11-09"
 
 
+def test_update_state_carries_previous_bindings_when_registry_scan_fails():
+    """2026-11-11 06:50 run: the registry scan timed out, the maps came in empty, and every row
+    lost its entity. An empty map now reuses the previous run's bindings."""
+    prev = {"pas": [b.normalize_pas(_pas()) | {"entity": "banco_alfa"}],
+            "pix_incidents": [{"id": "bcb-pix:1", "name": "Exemplo Pagamentos S.A.",
+                               "entity": "exemplo_pag", "date": "2026-05-01"}]}
+    s3 = _S3({b.STATE_KEY: json.dumps(prev).encode()})
+
+    def get(url):
+        if "Gepad" in url:
+            return {"value": [_pas()]}
+        return {"conteudo": [{"BancoDados": "DICT", "Periodo_incidente": "1 a 2 de maio de 2026",
+                           "Instituicao_incidente": "Exemplo Pagamentos S.A.",
+                           "NaturezaDados": "46 chaves Pix"}]}
+
+    out = b.update_state("bkt", s3=s3, get=get, consultas_fn=lambda today: [],
+                         cnpj_to_entity={}, name_to_entity={}, today=TODAY)
+    doc = json.loads(s3.objs[b.STATE_KEY])
+    assert out["matched"] == 2 and doc["entity_map"] == "carried"
+    assert doc["pas"][0]["entity"] == "banco_alfa"
+    assert doc["pix_incidents"][0]["entity"] == "exemplo_pag"
+
+
+def test_update_state_fresh_map_wins_over_carried():
+    prev = {"pas": [b.normalize_pas(_pas()) | {"entity": "old_id"}]}
+    s3 = _S3({b.STATE_KEY: json.dumps(prev).encode()})
+    out = b.update_state("bkt", s3=s3, get=lambda url: {"value": [_pas()]} if "Gepad" in url else {"value": []},
+                         consultas_fn=lambda today: [], cnpj_to_entity={"11222333": "banco_alfa"},
+                         today=TODAY)
+    doc = json.loads(s3.objs[b.STATE_KEY])
+    assert out["matched"] == 1 and doc["pas"][0]["entity"] == "banco_alfa" and "entity_map" not in doc
+
+
+def test_supervision_runs_on_its_own_budget_not_in_the_entrants_hook():
+    """It shared the BCB autorizações budget inside _post_entrants; a slow register fetch
+    exhausted it and killed the registry scan."""
+    src = open("src/ingest/lambda_port.py", encoding="utf-8").read()
+    hook = src[src.index("def _post_entrants("):src.index("def _post_fatos(")]
+    assert "bcb_supervision" not in hook
+    assert '_source_budget("BCB supervision"' in src
+
+
 # --- feed projection + scoping -------------------------------------------------------------
 DOC = {"as_of": "2026-11-10",
        "pas": [b.normalize_pas(_pas()) | {"entity": "banco_alfa"},

@@ -1283,32 +1283,6 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 print(f"BCB resolution regimes: {bcb_regimes.update_state(_bucket, match_names=_names)}")
             except Exception as exc:  # pragma: no cover - never blocks the entrant scan
                 print(f"Warning: BCB resolution regimes fetch failed: {exc}")
-            # #378: BCB supervision for the CRO board — PAS sanctions (legal entities only),
-            # the Pix data-incident register and open public consultations (comment deadline).
-            try:
-                from src.ingest import bcb_supervision
-
-                _cnpj: dict[str, str] = {}
-                _legal: dict[str, str] = {}
-                try:
-                    from src.synth import entity_registry as _er2
-
-                    for e in _er2.list_entities():
-                        eid = e.get("entity_id")
-                        if not eid:
-                            continue
-                        for root in e.get("cnpj_roots") or []:
-                            _cnpj.setdefault(str(root)[:8], eid)
-                        for a in [e.get("legal_name"), e.get("display_name"), *(e.get("aliases") or [])]:
-                            if a:
-                                _legal.setdefault(bcb_supervision._fold(a), eid)
-                except Exception as exc:  # pragma: no cover - registry best-effort
-                    print(f"Warning: BCB supervision entity map unavailable: {exc}")
-                # bounded: the ingest run already peaks near its 900 s timeout
-                with _source_budget("BCB supervision", deadline, min(per_source, 60)):
-                    print(f"BCB supervision: {bcb_supervision.update_state(_bucket, cnpj_to_entity=_cnpj, name_to_entity=_legal)}")
-            except Exception as exc:  # pragma: no cover - never blocks the entrant scan
-                print(f"Warning: BCB supervision fetch failed: {exc}")
 
     def _post_fatos(records: list[dict[str, Any]], new: list[dict[str, Any]]) -> None:
         # Governance events are the strategic ones — float them to the
@@ -1423,6 +1397,38 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     susep_rows: list[dict[str, Any]] = []
     spa_rows: list[dict[str, Any]] = []
     _entrants_on = _source_enabled(registry.by_id("new_entrants"))
+
+    # #378: BCB supervision for the CRO board — PAS sanctions (legal entities only), the Pix
+    # data-incident register and open public consultations (comment deadline). Runs here, on
+    # its OWN budget, not inside the "new_entrants" post hook: there it shared the BCB
+    # autorizações 180 s budget, which a slow register fetch exhausted (2026-11-11 06:50 run:
+    # the registry scan was killed and nothing matched). An empty map now carries the
+    # previous run's bindings forward (bcb_supervision.update_state). FS-only (C5, #303).
+    if _bucket and _fs_jobs_ok():
+        try:
+            from src.ingest import bcb_supervision
+
+            with _source_budget("BCB supervision", deadline, min(per_source, 90)):
+                _cnpj: dict[str, str] = {}
+                _legal: dict[str, str] = {}
+                try:
+                    from src.synth import entity_registry as _er2
+
+                    for e in _er2.list_entities():
+                        eid = e.get("entity_id")
+                        if not eid:
+                            continue
+                        for root in e.get("cnpj_roots") or []:
+                            _cnpj.setdefault(str(root)[:8], eid)
+                        for a in [e.get("legal_name"), e.get("display_name"), *(e.get("aliases") or [])]:
+                            if a:
+                                _legal.setdefault(bcb_supervision._fold(a), eid)
+                except Exception as exc:  # pragma: no cover - registry best-effort
+                    print(f"Warning: BCB supervision entity map unavailable: {exc}")
+                    _cnpj, _legal = {}, {}
+                print(f"BCB supervision: {bcb_supervision.update_state(_bucket, cnpj_to_entity=_cnpj, name_to_entity=_legal)}")
+        except Exception as exc:  # pragma: no cover - never blocks the run
+            print(f"Warning: BCB supervision fetch failed: {exc}")
 
     # CVM market-participant registries (E5) — consultores/adm de carteira new-entrant scan.
     # Gated (heavy CVM zip fetch) + seed-suppressed. Non-fintech → surfaces as entrant SIGNALS
