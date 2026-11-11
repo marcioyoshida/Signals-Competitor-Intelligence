@@ -168,8 +168,9 @@ def test_supervision_runs_on_its_own_budget_not_in_the_entrants_hook():
     exhausted it and killed the registry scan."""
     src = open("src/ingest/lambda_port.py", encoding="utf-8").read()
     hook = src[src.index("def _post_entrants("):src.index("def _post_fatos(")]
-    assert "bcb_supervision" not in hook
+    assert "bcb_supervision" not in hook and "bcb_regimes" not in hook
     assert '_source_budget("BCB supervision"' in src
+    assert '_source_budget("BCB resolution regimes"' in src
 
 
 # --- feed projection + scoping -------------------------------------------------------------

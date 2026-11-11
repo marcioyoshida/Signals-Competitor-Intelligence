@@ -1267,22 +1267,6 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 print(f"BCB register state: {bcb_autorizacoes.update_register_state(records, _bucket)}")
             except Exception as exc:  # pragma: no cover - never blocks the entrant scan
                 print(f"Warning: BCB register snapshot/exit diff failed: {exc}")
-            # #362: official BCB resolution regimes (liquidação / intervenção / RAET) — the
-            # distress watch turns this snapshot into regulatory records (the Will Bank miss).
-            try:
-                from src.ingest import bcb_regimes
-
-                try:  # tracked names drive the (bounded) history detail fetch
-                    from src.synth import entity_registry as _er
-
-                    _names = {bcb_regimes.legal_key(a) for e in _er.list_entities()
-                              for a in [e.get("display_name"), *(e.get("aliases") or [])] if a}
-                except Exception as exc:  # pragma: no cover - registry best-effort
-                    print(f"Warning: regime history names unavailable: {exc}")
-                    _names = None
-                print(f"BCB resolution regimes: {bcb_regimes.update_state(_bucket, match_names=_names)}")
-            except Exception as exc:  # pragma: no cover - never blocks the entrant scan
-                print(f"Warning: BCB resolution regimes fetch failed: {exc}")
 
     def _post_fatos(records: list[dict[str, Any]], new: list[dict[str, Any]]) -> None:
         # Governance events are the strategic ones — float them to the
@@ -1397,6 +1381,27 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     susep_rows: list[dict[str, Any]] = []
     spa_rows: list[dict[str, Any]] = []
     _entrants_on = _source_enabled(registry.by_id("new_entrants"))
+
+    # #362: official BCB resolution regimes (liquidação / intervenção / RAET) — the distress
+    # watch turns this snapshot into regulatory records (the Will Bank miss). Own budget, NOT
+    # the "new_entrants" post hook: there it shared the BCB autorizações 180 s budget and a slow
+    # register fetch cut its detail fetches short (2026-11-11 06:50 run). FS-only (C5, #303).
+    if _bucket and _fs_jobs_ok():
+        try:
+            from src.ingest import bcb_regimes
+
+            with _source_budget("BCB resolution regimes", deadline, max(per_source, 120)):
+                try:  # tracked names drive the (bounded) history detail fetch
+                    from src.synth import entity_registry as _er
+
+                    _names = {bcb_regimes.legal_key(a) for e in _er.list_entities()
+                              for a in [e.get("display_name"), *(e.get("aliases") or [])] if a}
+                except Exception as exc:  # pragma: no cover - registry best-effort
+                    print(f"Warning: regime history names unavailable: {exc}")
+                    _names = None
+                print(f"BCB resolution regimes: {bcb_regimes.update_state(_bucket, match_names=_names)}")
+        except Exception as exc:  # pragma: no cover - never blocks the run
+            print(f"Warning: BCB resolution regimes fetch failed: {exc}")
 
     # #378: BCB supervision for the CRO board — PAS sanctions (legal entities only), the Pix
     # data-incident register and open public consultations (comment deadline). Runs here, on

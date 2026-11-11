@@ -85,6 +85,24 @@ def test_fetch_active_reads_list_then_details():
     assert calls[1].endswith("identificador=100562")
 
 
+def test_failed_detail_keeps_the_regime_active_not_closed():
+    """2026-11-11 06:50 run: two detail fetches hit the ingest budget, the regimes dropped out of
+    ``active`` and merge_state recorded two live liquidações as CLOSED until the next run."""
+    prev = {"active": {"100562": bcb_regimes.normalize(WILL_DETAIL)}}
+
+    def get(url):
+        if "regime_resolucao_ativo" in url:
+            return {"conteudo": [{"identificador": 100562, "NomeIf": "WILL", "Situacao": "Ativo"}]}
+        raise RuntimeError("exceeded 180s budget")
+
+    rows = bcb_regimes.fetch_active(get=get, prev_active=prev["active"])
+    assert [r["id"] for r in rows] == ["100562"]
+    doc = bcb_regimes.merge_state(prev, rows, as_of="2026-11-11", detail=lambda rid: None)
+    assert doc["closed"] == {} and "100562" in doc["active"]
+    # a brand-new regime whose first detail fails is simply absent until the next run
+    assert bcb_regimes.fetch_active(get=get) == []
+
+
 def test_merge_state_moves_a_vanished_regime_to_closed_with_its_reason():
     prev = {"active": {"100562": bcb_regimes.normalize(WILL_DETAIL)}}
     closed_detail = bcb_regimes.normalize({**WILL_DETAIL, "Situacao": "Encerrado (Convolação em falência.)",

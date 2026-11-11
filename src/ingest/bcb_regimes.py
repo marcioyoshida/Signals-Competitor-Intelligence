@@ -117,9 +117,15 @@ def _http_get(url: str) -> Any:
     return r.json()
 
 
-def fetch_active(*, get: Callable[[str], Any] | None = None) -> list[dict[str, Any]]:
-    """Every ACTIVE regime, detailed. Raises when the list itself can't be read."""
+def fetch_active(*, get: Callable[[str], Any] | None = None,
+                 prev_active: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    """Every ACTIVE regime, detailed. Raises when the list itself can't be read.
+
+    A regime still on the list whose detail fetch fails keeps its ``prev_active`` row: dropping
+    it would read as a CLOSURE in ``merge_state`` (2026-11-11 06:50 run: two details hit the
+    ingest budget and two live liquidações were recorded as closed until the next run)."""
     get = get or _http_get
+    prev_active = prev_active or {}
     rows = (get(ACTIVE_URL) or {}).get("conteudo") or []
     out: list[dict[str, Any]] = []
     for r in rows:
@@ -132,6 +138,8 @@ def fetch_active(*, get: Callable[[str], Any] | None = None) -> list[dict[str, A
             print(f"Warning: BCB regime detail {rid} failed: {exc}")
             det = None
         row = normalize(det) if det else None
+        if not row:
+            row = prev_active.get(str(rid))
         if row:
             out.append(row)
     return out
@@ -252,7 +260,7 @@ def update_state(bucket: str, *, s3: Any = None, get: Callable[[str], Any] | Non
         prev = json.loads(s3.get_object(Bucket=bucket, Key=SNAPSHOT_KEY)["Body"].read())
     except Exception:
         prev = {}
-    active = fetch_active(get=get)
+    active = fetch_active(get=get, prev_active=prev.get("active") or {})
     n_prev = len(prev.get("active") or {})
     if not active or (n_prev and len(active) < n_prev * MIN_ACTIVE_RATIO):
         return {"skipped": f"suspicious fetch ({len(active)} active vs {n_prev} before)"}
