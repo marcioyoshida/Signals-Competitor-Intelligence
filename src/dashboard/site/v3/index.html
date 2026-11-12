@@ -3013,6 +3013,17 @@ function rowsSanctionsLists(b) {
   if (!m.length && !br.length) return head + U.empty("Nenhuma entidade ligada ao Brasil nem correspondência com empresas acompanhadas.", "ONU · OFAC · UE · Reino Unido", "○");
   return head + m.slice(0, 10).map(rowM).join("") + br.slice(0, 20).map(rowB).join("");
 }
+// #382 — international standard-setters on the CRO board: a global standard (Basel/CPMI/FSB) is the
+// early warning for the Brazilian rule that implements it later. Headline + link only.
+function rowsStandardSetters(list) {
+  list = (list || []).filter(inSector);
+  if (!list.length) return U.empty("Nenhuma publicação de padrão internacional no escopo em 12 meses.", "BIS (Basileia, CPMI) · FSB", "○");
+  return list.slice(0, 15).map(r => `<div class="exrow" data-url="${U.esc(r.url || "")}">
+    ${dCell(r.date)}
+    <span class="badge badge--ghost" title="${U.esc(r.body_label || r.body || "")}">${U.esc(r.body || "")}</span>
+    <span class="ttl" title="${U.esc((r.topic_labels || []).join(" · "))}">${r.brazil ? "<b>Brasil · </b>" : ""}${U.esc(r.title || "")}</span>
+    <span class="meta"><span class="badge badge--low" title="quem costuma internalizar no Brasil">→ ${U.esc((r.implementers || []).join(" · "))}</span></span></div>`).join("");
+}
 function rowsDiscovery(list) {
   list = (list || []).filter(inSectorStrict);
   if (!list.length) return U.empty("Sem propostas de descoberta no escopo.", "", "○");
@@ -3783,6 +3794,9 @@ function render() {
       band("Supervisão do Banco Central", "sanções (PAS) e incidentes com dados Pix · dados oficiais do BCB" + (a.bcb_fines_total ? " · multas decididas em 180 dias: " + brlShort(a.bcb_fines_total) : ""),
            grid("1fr 1fr", [panel("Sanções do BCB a instituições", ofN((p.bcb_sanctions || []).filter(inSector), a.n_bcb_sanctions), "PAS · 1ª instância · 180 dias · ● concorrente acompanhado", rowsBcbSanctions(p.bcb_sanctions), { nav: "bcbpas" }),
                               panel("Incidentes com dados de chaves Pix", ofN((p.pix_incidents || []).filter(inSector), a.n_pix_incidents), "registro do BCB · período do incidente · 24 meses", rowsPixIncidents(p.pix_incidents))])) +
+      // #382: global standard → Brazilian implementer (early warning)
+      band("Padrões internacionais", "Basileia · CPMI · FSB → BCB / CVM / SUSEP",
+           panel("Padrões globais que antecedem a norma brasileira", ofN(p.standard_setters, a.n_global_standards), "12 meses · mais recente primeiro · fonte linkada", rowsStandardSetters(p.standard_setters), { nav: "globalstd" }), { nav: "globalstd" }) +
       band("Impacto & alcance", "alcance · quantos setores cada norma afeta", panel("Mudanças por impacto", ofN(p.impact, a.n_reg), "banda de alcance · dificuldade", rowsReg(p.impact), { nav: "impact" })) +
       band("Linha do tempo regulatória", "", grid("1fr 1fr", [panel("Consulta → norma → fiscalização", ofN(p.timeline, a.n_reg), "recente", rowsReg(p.timeline)),
                             panel("Atos com mudanças enumeradas", ofN(p.changes, a.n_acts_changed), "amending acts", rowsReg(p.changes), { nav: "changes" })])) +

@@ -1222,6 +1222,7 @@ def scope_feed_to_modules(feed: dict[str, Any], modules: Any) -> dict[str, Any]:
             "enforcement": _scope_enforcement(feed.get("enforcement"), keep, row_ok),  # #193
             "bcb_supervision": _scope_bcb_supervision(feed.get("bcb_supervision"), keep, row_ok),  # #378
             "sanctions": _scope_sanctions(feed.get("sanctions"), keep, row_ok),  # #381
+            "standard_setters": _scope_standard_setters(feed.get("standard_setters"), keep),  # #382
             **_scope_sector_blocks(feed, keep, row_ok),  # #203
             "integrity": {"findings": [], "counts": {}, "total": 0, "withheld": True},  # operator-only; #211 "withheld" ≠ "audited clean"
             "regulatory_coverage": {},                                # operator-only (#2)
@@ -1380,6 +1381,7 @@ def derive_entry_feed(
             "enforcement": _scope_enforcement(feed.get("enforcement"), keep, row_ok),  # #193
             "bcb_supervision": _scope_bcb_supervision(feed.get("bcb_supervision"), keep, row_ok),  # #378
             "sanctions": {},  # #381: sanctions screening is SaaS depth — never in Entry
+            "standard_setters": _scope_standard_setters(feed.get("standard_setters"), keep),  # #382
             **_scope_sector_blocks(feed, keep, row_ok),  # #203
             "integrity": {"findings": [], "counts": {}, "total": 0, "withheld": True},  # operator-only; #211 "withheld" ≠ "audited clean"
             "regulatory_coverage": {},                                # operator-only (#2)
@@ -1477,7 +1479,7 @@ def derive_sample_feed(
             k for k in ("distress", "capital_moves", "reputation", "financials", "swot",
                         "tows", "porter", "pestle", "ansoff", "bcg", "four_corners",
                         "seven_s", "executive", "product_radar", "sector_events", "enforcement",
-                        "bcb_supervision", "sanctions")
+                        "bcb_supervision", "sanctions", "standard_setters")
             if out.get(k)
         ),
     }
@@ -1501,7 +1503,7 @@ def derive_sample_feed(
                 "reviews", "swot_proposals", "graph_proposals", "sector_events", "enforcement"):
         out[key] = []
     for key in ("swot", "tows", "porter", "pestle", "ansoff", "bcg", "four_corners",
-                "seven_s", "groups", "product_radar", "bcb_supervision", "sanctions"):
+                "seven_s", "groups", "product_radar", "bcb_supervision", "sanctions", "standard_setters"):
         out[key] = {}
     # Not _rescope_executive({}) — the officer dashboard is the entry tier's headline
     # feature and this block has leaked unscoped once before (see _rescope_executive).
@@ -1891,6 +1893,27 @@ def _scope_sanctions(block: dict[str, Any] | None, industries: Any,
     from src.ingest import sanctions
 
     return sanctions.scope(block, industries or [], row_ok)
+
+
+def _load_standard_setters(digests_bucket: str | None) -> dict[str, Any]:
+    """#382 international standard-setters (BIS/BCBS/CPMI, FSB), best-effort. {} if absent."""
+    if not digests_bucket:
+        return {}
+    try:
+        from src.ingest import standard_setters
+
+        doc = json.loads(boto3.client("s3").get_object(
+            Bucket=digests_bucket, Key=standard_setters.STATE_KEY)["Body"].read())
+        return standard_setters.for_feed(doc)
+    except Exception as exc:  # noqa: BLE001 - best-effort
+        print(f"Warning: load standard setters failed: {exc}")
+        return {}
+
+
+def _scope_standard_setters(block: dict[str, Any] | None, industries: Any) -> dict[str, Any]:
+    from src.ingest import standard_setters
+
+    return standard_setters.scope(block, industries or [])
 
 
 def _scope_enforcement(actions: list[dict[str, Any]] | None, industries: Any,
@@ -2444,6 +2467,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     feed["bcb_supervision"] = _load_bcb_supervision(digests_bucket, feed.get("entity_attrs"))
     # #381: international sanctions lists (Brazil-linked designations + roster matches) — CCO.
     feed["sanctions"] = _load_sanctions(digests_bucket, feed.get("entity_attrs"))
+    # #382: international standard-setters → CRO "Padrões internacionais" (early warning).
+    feed["standard_setters"] = _load_standard_setters(digests_bucket)
     # ADR 021 §D/§G: the per-officer executive block (read-track: CSO), industry-scoped.
     # Derived from the feed above — no new data; best-effort so a failure never blocks publish.
     try:

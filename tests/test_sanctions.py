@@ -251,7 +251,7 @@ def test_entry_and_sample_feeds_never_carry_sanctions():
     assert src.count('"sanctions": _scope_sanctions(') == 1                      # tenant scope
     assert '"sanctions": {},  # #381' in src                                      # static Entry
     assert '"product_radar", "sanctions",  # #381' in src                         # Entry tenant
-    assert '"bcb_supervision", "sanctions"):' in src                             # sample
+    assert '"bcb_supervision", "sanctions", "standard_setters"):' in src                             # sample
     assert "sanctions" in feed_builder.ENTRY_TENANT_WITHHELD_STORES
 
 

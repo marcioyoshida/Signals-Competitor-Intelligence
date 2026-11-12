@@ -1080,6 +1080,18 @@ def _consulta_deadline_rows(block: dict[str, Any] | None) -> list[dict[str, Any]
     return out
 
 
+def _days_ago(feed: dict[str, Any], days: int) -> str:
+    """ISO date ``days`` before the feed's run date (falls back to today)."""
+    import datetime as _dt
+
+    base = str(feed.get("run_date") or (feed.get("dates") or [""])[-1] or "")
+    try:
+        d = _dt.date.fromisoformat(base[:10])
+    except ValueError:
+        d = _dt.date.today()
+    return (d - _dt.timedelta(days=days)).isoformat()
+
+
 def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     reg = ctx["reg_cards"]
     sector_events = _sector_events(feed)
@@ -1117,6 +1129,8 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     sanctions = _bcb_sanction_rows(bcb)
     pix = list(bcb.get("pix_incidents") or [])
     consultas = _consulta_deadline_rows(bcb)
+    # #382: international standard-setters (BIS/BCBS/CPMI, FSB) — early warning before BCB/CVM.
+    globals_ = list((feed.get("standard_setters") or {}).get("items") or [])
 
     def agg(slug):
         sr = [c for c in reg if _in_industry(c, slug)]
@@ -1142,6 +1156,7 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
                 "n_bcb_sanctions": sum(1 for g in sanctions if _in_industry(g, slug)),
                 "bcb_fines_total": round(sum(g["fine_total"] for g in sanctions if _in_industry(g, slug)), 2),
                 "n_pix_incidents": sum(1 for r in pix if _in_industry(r, slug)),
+                "n_global_standards": sum(1 for r in globals_ if _in_industry(r, slug)),
                 "max_blast": max(blasts) if blasts else 0,
                 # ADR 022 Phase 4: prudential solvency of the sector's tracked competitors.
                 "min_basileia": min((r["indice_basileia"] for r in ss if r["indice_basileia"] is not None), default=None),
@@ -1173,6 +1188,14 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         recs.append(_rec("30d", f"Prazo em {r.get('days_to_deadline')}d — {r.get('domain') or 'regulação'}",
                          "open_watch", officer="cro", evidence_id=r.get("id"),
                          industries=r.get("affected_industries") or []))
+    fresh = [g for g in globals_ if str(g.get("date") or "") >= _days_ago(feed, 30)
+             and set(g.get("topics") or []) & {"capital", "liquidity", "payments", "crypto", "resolution"}]
+    if fresh:
+        g = fresh[0]
+        recs.append(_rec("30d", f"Padrão internacional recente — {g.get('body_label')}: "
+                         f"{str(g.get('title') or '')[:100]} → antecipar {', '.join(g.get('implementers') or [])}",
+                         "open_watch", officer="cro", evidence_id=g.get("id"),
+                         industries=g.get("industries") or []))
     if weak_solvency:
         w = weak_solvency[0]
         recs.append(_rec("imediato",
@@ -1223,6 +1246,8 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         # #378: BCB supervision — PAS sanctions (legal entities) and the Pix data-incident register
         "bcb_sanctions": sanctions[:30],
         "pix_incidents": pix[:20],
+        # #382: global standard → Brazilian implementer, newest first.
+        "standard_setters": _sector_fair(globals_, ctx["sectors"], 30),
         "bcb_as_of": {"pas": bcb.get("pas_as_of"), "pix": bcb.get("pix_as_of"),
                       "consultas": bcb.get("consultas_as_of")},
         "changes": [{**_reg_row(c), "changes": (c.get("changes") or [])[:6]}

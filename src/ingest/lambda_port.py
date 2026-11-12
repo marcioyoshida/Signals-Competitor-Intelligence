@@ -811,6 +811,15 @@ def _sanctions_slice(context: Any) -> dict[str, Any]:
         print(f"Warning: sanctions update failed: {exc}")
         return {"mode": "sanctions", "error": str(exc)[:200]}
     print(f"Sanctions lists: {stats}")
+    # #382: international standard-setters (BIS/BCBS/CPMI, FSB) ride the same off-budget branch
+    # — two small requests, headline + link + date only.
+    try:
+        from src.ingest import standard_setters
+
+        with _source_budget("Padrões internacionais", deadline, 60):
+            print(f"Standard setters: {standard_setters.update_state(bucket)}")
+    except Exception as exc:  # pragma: no cover - never fails the branch
+        print(f"Warning: standard setters update failed: {exc}")
     return {"mode": "sanctions", **stats}
 
 

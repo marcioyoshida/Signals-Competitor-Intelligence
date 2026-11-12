@@ -216,7 +216,7 @@ def test_scope_fail_closed_and_entity_follows_row_ok():
 def test_every_feed_projection_scopes_or_empties_the_block():
     src = open(feed_builder.__file__, encoding="utf-8").read()
     assert src.count('"bcb_supervision": _scope_bcb_supervision(') == 2   # tenant + entry
-    assert '"seven_s", "groups", "product_radar", "bcb_supervision", "sanctions"):' in src  # sample tier empties it
+    assert '"seven_s", "groups", "product_radar", "bcb_supervision", "sanctions", "standard_setters"):' in src  # sample tier empties it
 
 
 # --- executive CRO -------------------------------------------------------------------------
