@@ -2989,6 +2989,30 @@ function rowsPixIncidents(list) {
     <span class="ent" title="${U.esc(r.label || r.name || "—")}">${r.entity ? "● " : ""}${U.esc(r.label || r.name || "—")}</span>
     <span class="ttl" title="período do incidente: ${U.esc(r.period || "")}">${U.esc(r.period || "—")}</span></div>`).join("");
 }
+// #381 — international sanctions lists on the CCO board (UN binding in Brazil — Lei 13.810/2019;
+// OFAC/EU/UK drive correspondent and card-scheme decisions). A roster row is a POSSIBLE match to
+// verify on the official list, never a finding; individuals are counted only (LGPD).
+function rowsSanctionsLists(b) {
+  b = b || {};
+  const m = (b.matches || []).filter(inSector), br = (b.brazil || []).filter(inSector);
+  const lists = (b.lists || []).map(l => `<span class="badge badge--ghost" title="${U.esc(l.label)} · ${U.esc(nf(l.total || 0, 0))} designações · ${U.esc(nf(l.new_30d || 0, 0))} novas em 30 dias${l.binding_in_brazil ? " · vinculante no Brasil (Lei 13.810/2019)" : ""}">${U.esc(l.short)}${l.binding_in_brazil ? " ●" : ""} · ${U.esc(nf(l.total || 0, 0))}${l.new_30d ? " · +" + U.esc(nf(l.new_30d, 0)) : ""}</span>`).join(" ");
+  const ind = Object.entries(b.brazil_individuals || {}).filter(([, n]) => n > 0)
+    .map(([k, n]) => `${k.toUpperCase()} ${n}`).join(" · ");
+  const head = `<div class="hd-note" style="padding:var(--s3) var(--s4) 0">${lists || "listas ainda não carregadas"}${ind ? ` · pessoas físicas ligadas ao Brasil (só contagem): ${U.esc(ind)}` : ""}</div>`;
+  const rowM = r => `<div class="exrow exrow--enf" data-url="${U.esc(r.url || "")}">
+    <span class="badge badge--${r.basis === "cnpj" ? "crit" : "high"}" title="${r.basis === "cnpj" ? "CNPJ do registro igual ao identificador fiscal na lista" : "nome completo idêntico — homônimo possível"}">${r.basis === "cnpj" ? "CNPJ" : "nome"}</span>
+    <span class="ent" title="${U.esc(r.label || "—")}">● ${U.esc(r.label || "—")}</span>
+    <span class="ttl"><b>possível correspondência — verificar na lista oficial</b> · ${U.esc(r.name || "")} · ${U.esc((r.programs || []).join(", "))}</span>
+    <span class="meta"><span class="badge badge--ghost">${U.esc(r.list_short || "")}</span></span></div>`;
+  const rowB = r => `<div class="exrow" data-url="${U.esc(r.url || "")}">
+    ${dCell(r.first_seen || r.listed_on)}
+    <span class="badge badge--${r.first_seen ? "high" : "low"}" title="${r.first_seen ? "nova designação desde a última leitura" : "já constava da lista na primeira leitura"}">${r.first_seen ? "nova" : "na lista"}</span>
+    <span class="ent" title="${U.esc(r.name)}">${r.entity ? "● " : ""}${U.esc(r.name)}</span>
+    <span class="ttl" title="${U.esc((r.aliases || []).join(" · "))}">${U.esc((r.programs || []).join(", ") || "—")}</span>
+    <span class="meta"><span class="badge badge--ghost">${U.esc(r.list_short || "")}</span></span></div>`;
+  if (!m.length && !br.length) return head + U.empty("Nenhuma entidade ligada ao Brasil nem correspondência com empresas acompanhadas.", "ONU · OFAC · UE · Reino Unido", "○");
+  return head + m.slice(0, 10).map(rowM).join("") + br.slice(0, 20).map(rowB).join("");
+}
 function rowsDiscovery(list) {
   list = (list || []).filter(inSectorStrict);
   if (!list.length) return U.empty("Sem propostas de descoberta no escopo.", "", "○");
@@ -3790,6 +3814,10 @@ function render() {
       band("Fiscalização & sanções", "liquidação · intervenção · RAET · cassação · sanções · CEIS/CNEP",
            panel("Ações de supervisores contra operadores", (p.enforcement || []).filter(inSector).length,
              "mais grave primeiro · fontes linkadas", rowsEnforcement(p.enforcement), { nav: "enforcement", lead: true }), { lead: true }) +
+      // #381: international sanctions lists — roster matches to verify + Brazil-linked entities
+      band("Listas de sanções", "ONU (vinculante) · OFAC · UE · Reino Unido",
+        panel("Entidades ligadas ao Brasil e possíveis correspondências", ((p.sanctions_lists || {}).matches || []).filter(inSector).length + ((p.sanctions_lists || {}).brazil || []).filter(inSector).length,
+          "correspondência = verificar, não constatação · pessoas físicas só contadas", rowsSanctionsLists(p.sanctions_lists), { nav: "sanctions" }), { nav: "sanctions" }) +
       // #293: Ibis register alerts on the tenant's crypto partners — filled by loadIbis() post-render
       band("Parceiros cripto · Ibis", "registros oficiais · alertas assinados",
         `<div class="panel" data-nav="ibis"><div class="panel__hd"><h2>Alertas de registro dos parceiros cripto</h2>` +

@@ -776,6 +776,44 @@ def _response_body(payload: dict, digest_key: str | None) -> str:
                        "inline": False, "counts": counts}, ensure_ascii=False)
 
 
+def _sanctions_slice(context: Any) -> dict[str, Any]:
+    """#381: fetch the sanctions lists, rebuild roster matches (CNPJ root + exact name key).
+    FS-only (C5, #303). Each list runs on its own budget; state persists after every list."""
+    bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
+    if not bucket or not _fs_jobs_ok():
+        return {"mode": "sanctions", "skipped": True}
+    from src.ingest import sanctions
+
+    deadline = _ingest_deadline(context)
+    per_list = int(os.environ.get("ONCA_SANCTIONS_LIST_TIMEOUT_SEC", "240"))
+    cnpj: dict[str, str] = {}
+    names: dict[str, str] = {}
+    try:
+        from src.synth import entity_registry as _er
+
+        for e in _er.list_entities():
+            eid = e.get("entity_id")
+            if not eid:
+                continue
+            for root in e.get("cnpj_roots") or []:
+                cnpj.setdefault(str(root)[:8], eid)
+            for a in [e.get("legal_name"), e.get("display_name"), *(e.get("aliases") or [])]:
+                if a:
+                    names.setdefault(str(a), eid)
+    except Exception as exc:  # pragma: no cover - registry best-effort; matches carried
+        print(f"Warning: sanctions entity map unavailable: {exc}")
+        cnpj, names = {}, {}
+    try:
+        stats = sanctions.update_state(
+            bucket, cnpj_to_entity=cnpj, name_to_entity=names,
+            budget=lambda label: _source_budget(label, deadline, per_list))
+    except Exception as exc:  # pragma: no cover - never fails the pipeline
+        print(f"Warning: sanctions update failed: {exc}")
+        return {"mode": "sanctions", "error": str(exc)[:200]}
+    print(f"Sanctions lists: {stats}")
+    return {"mode": "sanctions", **stats}
+
+
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     """Return a small digest payload for downstream Lambda/CDK wiring.
 
@@ -802,6 +840,16 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
         if bucket:
             _source_health.merge_and_publish(bucket, shard="news")
+        return out
+
+    if mode == "sanctions":
+        # #381: international sanctions lists (UN/OFAC/EU/UK) on their OWN parallel branch —
+        # ~80 MB of downloads that must never share the structured branch's 900 s budget.
+        _source_health.reset()
+        out = _sanctions_slice(context)
+        bucket = os.environ.get("ONCA_DIGESTS_BUCKET")
+        if bucket:
+            _source_health.merge_and_publish(bucket, shard="sanctions")
         return out
 
     _source_health.reset()  # #76: fresh per-run telemetry ledger for the structured path

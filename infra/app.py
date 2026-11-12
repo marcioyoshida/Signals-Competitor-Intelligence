@@ -3285,9 +3285,23 @@ class OncaPrototypeStack(Stack):
             interval=Duration.seconds(30),
             backoff_rate=2.0,
         )
+        # #381: international sanctions lists (UN/OFAC/EU/UK, ~80 MB) on a THIRD branch of the
+        # same Lambda — off the structured branch's 900 s budget. Best-effort: a failure is
+        # caught into a Pass so it can never fail the run (the CCO block keeps the last state).
+        sanctions_ingest = sfn_tasks.LambdaInvoke(
+            self,
+            "SanctionsIngest",
+            lambda_function=func,
+            payload=sfn.TaskInput.from_object({"mode": "sanctions"}),
+            result_path=sfn.JsonPath.DISCARD,
+        )
+        sanctions_ingest.add_retry(**_no_retry_on_timeout)
+        sanctions_ingest.add_catch(
+            sfn.Pass(self, "SanctionsIngestSkipped"), result_path=sfn.JsonPath.DISCARD)
         ingest_task = sfn.Parallel(self, "Ingest", result_path=sfn.JsonPath.DISCARD)
         ingest_task.branch(structured_ingest)
         ingest_task.branch(news_ingest)
+        ingest_task.branch(sanctions_ingest)
         # #196: every task downstream reads the LATEST digest in S3, so two overlapping
         # executions (a schedule + the dashboard's "Executar", or a manual run) swap digests
         # and one run's new items reach no feed. The later execution skips before ingesting

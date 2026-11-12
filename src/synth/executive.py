@@ -1293,6 +1293,10 @@ def build_cco(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     # never as a "0 findings" result, and don't offer the client an operator action.
     withheld = bool((feed.get("integrity") or {}).get("withheld"))
     distress = _trusted_distress(feed)
+    # #381: international sanctions lists — roster matches (verify) + Brazil-linked entities.
+    sl = feed.get("sanctions") or {}
+    sl_matches = list(sl.get("matches") or [])
+    sl_brazil = list(sl.get("brazil_entities") or [])
     # #140: the store now holds two scales that do NOT compare — BCB publishes a positional
     # rank (1 = worst), ANS an IGR rate (higher = worse, and withheld on a small book). A
     # single sort key would bury one source: ranking ANS rows at 999 pushed all 9 past the
@@ -1363,6 +1367,9 @@ def build_cco(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
                 "enforcement_severity": se[0].get("severity") if se else None,
                 "n_high": None if withheld else sum(1 for i in si if i.get("severity") == "high"),
                 "worst_rank": min([r["rank"] for r in sr if r.get("rank")], default=None),
+                # #381: sanctions lists in the sector
+                "n_sanction_matches": sum(1 for r in sl_matches if _in_industry(r, slug)),
+                "n_sanctions_brazil": sum(1 for r in sl_brazil if _in_industry(r, slug)),
                 "signal_state": "insufficient" if insufficient else "sufficient"}
 
     recs = [] if withheld else [_rec("imediato", "Rodar auditoria de integridade do registro",
@@ -1372,6 +1379,13 @@ def build_cco(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         i = high[0]
         recs.append(_rec("imediato", f"Sinalizar achado de integridade: {i.get('entity_id') or i.get('card_id')}",
                          "flag_entity", officer="cco", entity=i.get("entity_id"), industries=i.get("industries")))
+    if sl_matches:
+        m = sl_matches[0]
+        recs.append(_rec("imediato", f"Verificar possível correspondência em lista de sanções — "
+                         f"{m.get('label')} × {m.get('name')} ({m.get('list_short')}, "
+                         f"{'CNPJ' if m.get('basis') == 'cnpj' else 'nome'})", "flag_entity",
+                         officer="cco", entity=m.get("entity"), evidence_id=m.get("id"),
+                         industries=m.get("industries")))
     bound = [r for r in enforcement if r.get("entity") and r.get("severity") in ("critical", "high")]
     if bound:
         r = bound[0]
@@ -1385,6 +1399,11 @@ def build_cco(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         "integrity": _sector_fair(integrity_rows, ctx["sectors"], 40),
         "integrity_withheld": withheld,
         "risk_register": risk_register[:30],
+        # #381: sanctions lists — possible roster matches first, then Brazil-linked entities.
+        "sanctions_lists": {"matches": sl_matches[:20], "brazil": sl_brazil[:40],
+                            "lists": list(sl.get("lists") or []),
+                            "brazil_individuals": dict(sl.get("brazil_individuals") or {}),
+                            "as_of": sl.get("as_of")},
         "reputation": rep_rows[:30],
         # SURF-3: PESTLE macro/regulatory environment routed to the CCO (7S dropped — internal,
         # no external signal to ground it).

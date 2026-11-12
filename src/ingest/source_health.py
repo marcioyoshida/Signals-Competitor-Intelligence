@@ -27,7 +27,7 @@ INDEX_KEY = "source_health/index.json"
 #: `INDEX_KEY` the later writer would silently drop the earlier one's sources.
 #: Each branch therefore owns its own object and `load_index` combines them on read.
 #: No locking, no conditional put: the writers never touch the same key.
-SHARDS = ("structured", "news")
+SHARDS = ("structured", "news", "sanctions")  # #381: sanctions branch
 
 
 def shard_key(shard: str) -> str:
