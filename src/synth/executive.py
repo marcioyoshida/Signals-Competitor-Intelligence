@@ -21,7 +21,9 @@ from src.synth.fmt_br import num, pct, pp, signed, signed_pct
 from src.synth.text_pt import pt_count
 
 ALL = "__all__"
-OFFICERS = ("cso", "cro", "cco", "cpo")
+# Internal ids (decision log, KB, act API). Display names: Estratégia, Regulatório, Risco,
+# Compliance, Produto — no C-suite acronyms reach a user (owner, 2026-11-12).
+OFFICERS = ("cso", "cro", "risk", "cco", "cpo")
 
 _MOVE_TOPICS = {"concorrencia", "novos_entrantes"}
 _MOVE_LENSES = {"entrants", "ofertas", "market"}
@@ -799,6 +801,8 @@ def build_cso(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         # SURF-2: competitive frameworks (Porter five-forces + Four Corners) routed to the CSO.
         "porter": _fair_totals(_framework_rows(feed, "porter"), ctx["sectors"], 20, tot, "porter"),
         "four_corners": _fair_totals(_framework_rows(feed, "four_corners"), ctx["sectors"], 20, tot, "four_corners"),
+        # SURF-3 (moved from the compliance board 2026-11-12): PESTLE is an environment scan.
+        "pestle": _fair_totals(_framework_rows(feed, "pestle"), ctx["sectors"], 20, tot, "pestle"),
         # SURF-7: forward-look — predictive (horizon) + ecosystem (infrastructure hubs), inference.
         "forward_look": _axis_rows(feed, "horizon_days", "hub")[:24],
         # SURF-11: behavioral patterns (drumbeat / multi-front) — peer-cohort read.
@@ -1093,24 +1097,13 @@ def _days_ago(feed: dict[str, Any], days: int) -> str:
 
 
 def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
+    """The Regulatório board (internal id ``cro``): what the rules say and when — sector events,
+    acts and their reach, the change timeline, deadlines, open consultations and global
+    standards. Prudential soundness moved to ``build_risk`` and BCB conduct sanctions to
+    ``build_cco`` (owner, 2026-11-12: supervision outcomes are risk/compliance, rule-making is
+    regulatory)."""
     reg = ctx["reg_cards"]
     sector_events = _sector_events(feed)
-    solvency = _solvency_rows(feed)
-    weak_solvency = [r for r in solvency if r.get("band") in _WEAK_BANDS]
-    # Tier-B slope firing: competitors whose provisions are rising fastest MoM (credit deterioration).
-    slope_warnings = sorted((r for r in solvency if r.get("slope_warning")),
-                            key=lambda r: r.get("pdd_mom_pct") or 0, reverse=True)
-    # Tier-2 asset-quality firing: highest inadimplência in the "elevada" band.
-    npl_high = sorted((r for r in solvency if r.get("npl_band") == "elevada"),
-                      key=lambda r: r.get("npl_total") or 0, reverse=True)
-    # #16 composite fragility (most fragile first) + #17 optimism-divergence (tone > numbers).
-    fragile = sorted((r for r in solvency if (r.get("fragility") or {}).get("band") == "frágil"),
-                     key=lambda r: (r.get("fragility") or {}).get("score", 0), reverse=True)
-    optimism = sorted((r for r in solvency if (r.get("tone_divergence") or {}).get("flag") == "otimismo desalinhado"),
-                      key=lambda r: (r.get("tone_divergence") or {}).get("divergence", 0), reverse=True)
-    # Multi-bank Pilar 3: lowest LCR below the comfort band (liquidity watch).
-    lcr_low = sorted((r for r in solvency if r.get("lcr_band") in ("crítica", "atenção")),
-                     key=lambda r: r.get("lcr_pct") or 999)
     timeline = sorted(reg, key=lambda c: str(c.get("date") or ""), reverse=True)
     # #208: the LLM change record is gated off by default (ONCA_REG_LLM, Bedrock cost), so
     # ranking ONLY cards that carry one left "Mudanças por impacto" permanently empty under a
@@ -1126,8 +1119,6 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
                        key=lambda c: c.get("days_to_deadline"))
     changes = [c for c in reg if (c.get("n_changes") or 0) > 0]
     bcb = feed.get("bcb_supervision") or {}
-    sanctions = _bcb_sanction_rows(bcb)
-    pix = list(bcb.get("pix_incidents") or [])
     consultas = _consulta_deadline_rows(bcb)
     # #382: international standard-setters (BIS/BCBS/CPMI, FSB) — early warning before BCB/CVM.
     globals_ = list((feed.get("standard_setters") or {}).get("items") or [])
@@ -1136,10 +1127,6 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         sr = [c for c in reg if _in_industry(c, slug)]
         sev_events = _sector_events(feed, slug)
         blasts = [len(c.get("affected_industries") or []) for c in sr]
-        # #214: `__all__` is in no row's industries, so the all-sectors tile read 0 while each
-        # sector read 1 — the all-sectors bucket is the union of the (tenant-scoped) rows.
-        ss = [r for r in solvency if slug in (ALL, None) or slug in (r.get("industries") or [])]
-        npls = [r["npl_total"] for r in ss if r.get("npl_total") is not None]
         return {"n_reg": len(sr),
                 # #177: a sector event floors the average (SECTOR_EVENT_FLOOR by severity).
                 "reg_threat": _scope_reg_threat(reg, feed, slug, ctx["sectors"]),
@@ -1152,23 +1139,8 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
                 "n_deadlines": sum(1 for c in sr if isinstance(c.get("days_to_deadline"), int)
                                    and c["days_to_deadline"] >= 0)
                                + sum(1 for c in consultas if _in_industry(c, slug)),
-                # #378: BCB supervision in the sector (official BCB data)
-                "n_bcb_sanctions": sum(1 for g in sanctions if _in_industry(g, slug)),
-                "bcb_fines_total": round(sum(g["fine_total"] for g in sanctions if _in_industry(g, slug)), 2),
-                "n_pix_incidents": sum(1 for r in pix if _in_industry(r, slug)),
                 "n_global_standards": sum(1 for r in globals_ if _in_industry(r, slug)),
-                "max_blast": max(blasts) if blasts else 0,
-                # ADR 022 Phase 4: prudential solvency of the sector's tracked competitors.
-                "min_basileia": min((r["indice_basileia"] for r in ss if r["indice_basileia"] is not None), default=None),
-                "n_weak_solvency": sum(1 for r in ss if r.get("band") in _WEAK_BANDS),
-                "n_slope_warning": sum(1 for r in ss if r.get("slope_warning")),
-                # ADR 022 Tier-2: sector asset quality (max/avg inadimplência).
-                "max_npl": max(npls) if npls else None,
-                "n_npl_elevada": sum(1 for r in ss if r.get("npl_band") == "elevada"),
-                # ADR 022 #16: sector composite fragility (worst score + count frágil).
-                "max_fragility": max([(r.get("fragility") or {}).get("score") for r in ss
-                                      if r.get("fragility")], default=None),
-                "n_fragil": sum(1 for r in ss if (r.get("fragility") or {}).get("band") == "frágil")}
+                "max_blast": max(blasts) if blasts else 0}
 
     recs = []
     for ev in [e for e in sector_events if e.get("severity") in ("critical", "high")][:2]:
@@ -1196,45 +1168,6 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
                          f"{str(g.get('title') or '')[:100]} → antecipar {', '.join(g.get('implementers') or [])}",
                          "open_watch", officer="cro", evidence_id=g.get("id"),
                          industries=g.get("industries") or []))
-    if weak_solvency:
-        w = weak_solvency[0]
-        recs.append(_rec("imediato",
-                         f"Solidez sob {w['band']} — {w['label']} (Basileia {pct(w['indice_basileia'])})",
-                         "open_watch", officer="cro", evidence_id=w.get("entity"),
-                         industries=w.get("industries") or []))
-    if slope_warnings:
-        w = slope_warnings[0]
-        recs.append(_rec("imediato",
-                         f"Deterioração de crédito — {w['label']}: provisões (PDD) {signed_pct(w['pdd_mom_pct'])} no mês",
-                         "open_watch", officer="cro", evidence_id=w.get("entity"),
-                         industries=w.get("industries") or []))
-    if npl_high:
-        w = npl_high[0]
-        recs.append(_rec("imediato",
-                         f"Inadimplência elevada — {w['label']}: {pct(w['npl_total'])} da carteira (15+ dias; "
-                         f"PF {pct(w.get('npl_pf'))} · PJ {pct(w.get('npl_pj'))})",
-                         "open_watch", officer="cro", evidence_id=w.get("entity"),
-                         industries=w.get("industries") or []))
-    if fragile:
-        w = fragile[0]
-        recs.append(_rec("imediato",
-                         f"Fragilidade composta — {w['label']}: índice {num(w['fragility']['score'], 0)}/100 "
-                         f"(capital·NPL·PDD·ROE·alavancagem)",
-                         "open_watch", officer="cro", evidence_id=w.get("entity"),
-                         industries=w.get("industries") or []))
-    if optimism:
-        w = optimism[0]
-        recs.append(_rec("30d",
-                         f"Tom vs números — {w['label']}: relato mais otimista que os indicadores "
-                         f"(divergência {signed(w['tone_divergence']['divergence'], 2)}) — verificar credibilidade",
-                         "curate_belief", officer="cro", evidence_id=w.get("entity"),
-                         industries=w.get("industries") or []))
-    if lcr_low:
-        w = lcr_low[0]
-        recs.append(_rec("30d",
-                         f"Liquidez sob {w['lcr_band']} — {w['label']}: LCR {pct(w['lcr_pct'])} (Pilar 3)",
-                         "open_watch", officer="cro", evidence_id=w.get("entity"),
-                         industries=w.get("industries") or []))
     return {"by_industry": _by_industry(ctx["sectors"], agg), "panels": {
         # #177: top of the CRO view — industry-level regulatory events, official act first.
         "sector_events": [_sector_event_row(e) for e in sector_events[:20]],
@@ -1243,17 +1176,142 @@ def build_cro(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         # #378: act deadlines + open BCB consultation comment deadlines, soonest first
         "deadlines": sorted([_reg_row(c) for c in _sector_fair(deadlines, ctx["sectors"], 20)]
                             + consultas, key=lambda r: r.get("days_to_deadline") or 0),
-        # #378: BCB supervision — PAS sanctions (legal entities) and the Pix data-incident register
-        "bcb_sanctions": sanctions[:30],
-        "pix_incidents": pix[:20],
         # #382: global standard → Brazilian implementer, newest first.
         "standard_setters": _sector_fair(globals_, ctx["sectors"], 30),
         "bcb_as_of": {"pas": bcb.get("pas_as_of"), "pix": bcb.get("pix_as_of"),
                       "consultas": bcb.get("consultas_as_of")},
         "changes": [{**_reg_row(c), "changes": (c.get("changes") or [])[:6]}
                     for c in _sector_fair(changes, ctx["sectors"], 20)],
+        # SURF-10 (moved from the compliance board 2026-11-12): enumerated article changes +
+        # deadline — what the rule text changed is regulatory change management.
+        "totals": (tot := {}),  # #218
+        "change_diff": _fair_totals(_change_diff_rows(feed, ctx["reg_cards"]), ctx["sectors"], 24, tot, "change_diff"),
+        "recommendations": recs,
+    }}
+
+
+# --- Risco (internal id ``risk``, added 2026-11-12) ------------------------------------
+# Owner, 2026-11-12: "Fiscalização & sanções" mixed two things. Resolution regimes (liquidação,
+# intervenção, RAET, cassação) are prudential outcomes → this board, with insolvency (RJ /
+# falência), prudential soundness and Pix data incidents (operational risk). Conduct sanctions
+# stay on Compliance.
+RESOLUTION_KINDS = frozenset({"liquidacao", "intervencao", "raet", "cassacao"})
+
+
+def build_risk(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
+    labels = ctx["labels"]
+    solvency = _solvency_rows(feed)
+    weak_solvency = [r for r in solvency if r.get("band") in _WEAK_BANDS]
+    # Tier-B slope firing: competitors whose provisions are rising fastest MoM (credit deterioration).
+    slope_warnings = sorted((r for r in solvency if r.get("slope_warning")),
+                            key=lambda r: r.get("pdd_mom_pct") or 0, reverse=True)
+    # Tier-2 asset-quality firing: highest inadimplência in the "elevada" band.
+    npl_high = sorted((r for r in solvency if r.get("npl_band") == "elevada"),
+                      key=lambda r: r.get("npl_total") or 0, reverse=True)
+    # #16 composite fragility (most fragile first) + #17 optimism-divergence (tone > numbers).
+    fragile = sorted((r for r in solvency if (r.get("fragility") or {}).get("band") == "frágil"),
+                     key=lambda r: (r.get("fragility") or {}).get("score", 0), reverse=True)
+    optimism = sorted((r for r in solvency if (r.get("tone_divergence") or {}).get("flag") == "otimismo desalinhado"),
+                      key=lambda r: (r.get("tone_divergence") or {}).get("divergence", 0), reverse=True)
+    # Multi-bank Pilar 3: lowest LCR below the comfort band (liquidity watch).
+    lcr_low = sorted((r for r in solvency if r.get("lcr_band") in ("crítica", "atenção")),
+                     key=lambda r: r.get("lcr_pct") or 999)
+    resolution = [_enforcement_row(a, labels) for a in _enforcement(feed)
+                  if a.get("kind") in RESOLUTION_KINDS]
+    distress = _trusted_distress(feed)
+    third = _third_party_distress(feed)
+    pix = list((feed.get("bcb_supervision") or {}).get("pix_incidents") or [])
+    # Insolvency exposure = confirmed RJ/falência on the roster + distressed third parties.
+    # (Resolution regimes have their own panel — listing them here too repeated every row.)
+    register = (
+        [{"kind": "distress", "label": labels.get(d.get("entity"), d.get("entity")),
+            "detail": d.get("label"), "industries": _industries_of(feed, d.get("entity")),
+            "severity": "high"} for d in distress]
+        + [{"kind": "terceiro", "label": labels.get(d.get("entity"), d.get("entity")),
+            "detail": f"{d.get('label')} — {d.get('correspondent') or d.get('subject_name') or ''}".rstrip(" —"),
+            "industries": _industries_of(feed, d.get("entity")), "severity": "med"} for d in third][:8])
+
+    def agg(slug):
+        ss = [r for r in solvency if slug in (ALL, None) or slug in (r.get("industries") or [])]
+        npls = [r["npl_total"] for r in ss if r.get("npl_total") is not None]
+        sres = [r for r in resolution if _in_scope_or_market(r, slug)]
+        sd = [d for d in distress if slug in (ALL, None) or slug in _industries_of(feed, d.get("entity"))]
+        # the hero counts INSTITUTIONS: one under a BCB regime that is also in liquidation
+        # proceedings (MW, 2026-11-12) is one serious case, not two.
+        grave = ({r.get("entity") or r.get("label") for r in sres}
+                 | {d.get("entity") for d in sd}
+                 | {r.get("entity") for r in ss if (r.get("fragility") or {}).get("band") == "frágil"})
+        return {
+                "n_grave": len(grave - {None, ""}),
+                # ADR 022 Phase 4: prudential solvency of the sector's tracked competitors.
+                "min_basileia": min((r["indice_basileia"] for r in ss if r["indice_basileia"] is not None), default=None),
+                "n_weak_solvency": sum(1 for r in ss if r.get("band") in _WEAK_BANDS),
+                "n_slope_warning": sum(1 for r in ss if r.get("slope_warning")),
+                # ADR 022 Tier-2: sector asset quality (max/avg inadimplência).
+                "max_npl": max(npls) if npls else None,
+                "n_npl_elevada": sum(1 for r in ss if r.get("npl_band") == "elevada"),
+                # ADR 022 #16: sector composite fragility (worst score + count frágil).
+                "max_fragility": max([(r.get("fragility") or {}).get("score") for r in ss
+                                      if r.get("fragility")], default=None),
+                "n_fragil": sum(1 for r in ss if (r.get("fragility") or {}).get("band") == "frágil"),
+                "n_lcr_low": sum(1 for r in ss if r.get("lcr_band") in ("crítica", "atenção")),
+                "n_resolution": len(sres),
+                "n_distress": len(sd),
+                "n_pix_incidents": sum(1 for r in pix if _in_industry(r, slug))}
+
+    recs = []
+    bound = [r for r in resolution if r.get("entity")]
+    if bound:
+        r = bound[0]
+        recs.append(_rec("imediato", f"Avaliar exposição de contraparte: {r.get('authority')} — "
+                         f"{r.get('kind_label')} ({r.get('label')})", "open_watch", officer="risk",
+                         entity=r.get("entity"), evidence_id=r.get("id"), industries=r.get("industries")))
+    if weak_solvency:
+        w = weak_solvency[0]
+        recs.append(_rec("imediato",
+                         f"Solidez sob {w['band']} — {w['label']} (Basileia {pct(w['indice_basileia'])})",
+                         "open_watch", officer="risk", evidence_id=w.get("entity"),
+                         industries=w.get("industries") or []))
+    if slope_warnings:
+        w = slope_warnings[0]
+        recs.append(_rec("imediato",
+                         f"Deterioração de crédito — {w['label']}: provisões (PDD) {signed_pct(w['pdd_mom_pct'])} no mês",
+                         "open_watch", officer="risk", evidence_id=w.get("entity"),
+                         industries=w.get("industries") or []))
+    if npl_high:
+        w = npl_high[0]
+        recs.append(_rec("imediato",
+                         f"Inadimplência elevada — {w['label']}: {pct(w['npl_total'])} da carteira (15+ dias; "
+                         f"PF {pct(w.get('npl_pf'))} · PJ {pct(w.get('npl_pj'))})",
+                         "open_watch", officer="risk", evidence_id=w.get("entity"),
+                         industries=w.get("industries") or []))
+    if fragile:
+        w = fragile[0]
+        recs.append(_rec("imediato",
+                         f"Fragilidade composta — {w['label']}: índice {num(w['fragility']['score'], 0)}/100 "
+                         f"(capital·NPL·PDD·ROE·alavancagem)",
+                         "open_watch", officer="risk", evidence_id=w.get("entity"),
+                         industries=w.get("industries") or []))
+    if optimism:
+        w = optimism[0]
+        recs.append(_rec("30d",
+                         f"Tom vs números — {w['label']}: relato mais otimista que os indicadores "
+                         f"(divergência {signed(w['tone_divergence']['divergence'], 2)}) — verificar credibilidade",
+                         "curate_belief", officer="risk", evidence_id=w.get("entity"),
+                         industries=w.get("industries") or []))
+    if lcr_low:
+        w = lcr_low[0]
+        recs.append(_rec("30d",
+                         f"Liquidez sob {w['lcr_band']} — {w['label']}: LCR {pct(w['lcr_pct'])} (Pilar 3)",
+                         "open_watch", officer="risk", evidence_id=w.get("entity"),
+                         industries=w.get("industries") or []))
+    return {"by_industry": _by_industry(ctx["sectors"], agg), "panels": {
         # ADR 022 Phase 4: prudential solvency (Índice de Basileia et al.), weakest first.
         "solvency": solvency[:25],
+        "resolution": resolution[:30],
+        "register": register[:30],
+        # #378: the BCB Pix data-incident register (operational risk)
+        "pix_incidents": pix[:20],
         "recommendations": recs,
     }}
 
@@ -1312,12 +1370,15 @@ def _enforcement_row(a: dict[str, Any], labels: dict[str, str]) -> dict[str, Any
 
 def build_cco(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     labels = ctx["labels"]
-    enforcement = [_enforcement_row(a, labels) for a in _enforcement(feed)]
+    # 2026-11-12: conduct only — resolution regimes (RESOLUTION_KINDS) live on the Risco board.
+    enforcement = [_enforcement_row(a, labels) for a in _enforcement(feed)
+                   if a.get("kind") not in RESOLUTION_KINDS]
+    # #378 (moved from the regulatory board 2026-11-12): BCB PAS sanctions are conduct penalties.
+    bcb_sanctions = _bcb_sanction_rows(feed.get("bcb_supervision") or {})
     findings = list((feed.get("integrity") or {}).get("findings") or [])
     # #211: client feeds blank the operator-only integrity audit. Report it as unknown (None),
     # never as a "0 findings" result, and don't offer the client an operator action.
     withheld = bool((feed.get("integrity") or {}).get("withheld"))
-    distress = _trusted_distress(feed)
     # #381: international sanctions lists — roster matches (verify) + Brazil-linked entities.
     sl = feed.get("sanctions") or {}
     sl_matches = list(sl.get("matches") or [])
@@ -1354,29 +1415,8 @@ def build_cco(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
                  "index_withheld": r.get("index_withheld"),
                  "period": r.get("period"), "url": r.get("url"),
                  "industries": _industries_of(feed, r.get("entity"))} for r in reputation]
-    # Risk register = confirmed distress + worst-reputation + high-severity integrity.
-    risk_register = (
-        [{"kind": "enforcement", "label": r.get("label") or "—",
-          "detail": f"{r.get('authority')} · {r.get('kind_label')} · {r.get('title') or ''}",
-          "industries": r["industries"], "severity": "high" if r.get("severity") == "critical" else "med"}
-         for r in enforcement if r.get("severity") in ("critical", "high")][:8]
-        + [{"kind": "distress", "label": labels.get(d.get("entity"), d.get("entity")),
-          "detail": d.get("label"), "industries": _industries_of(feed, d.get("entity")),
-          "severity": "high"} for d in distress]
-        + [{"kind": "terceiro", "label": labels.get(d.get("entity"), d.get("entity")),
-            "detail": f"{d.get('label')} — {d.get('correspondent') or d.get('subject_name') or ''}".rstrip(" —"),
-            "industries": _industries_of(feed, d.get("entity")), "severity": "med"}
-           for d in _third_party_distress(feed)][:8]
-        + [{"kind": "reputacao", "label": r["label"], "detail": _rep_detail(r),
-            "industries": r["industries"], "severity": "med"} for r in rep_rows[:8]]
-        + [{"kind": "integridade", "label": (i.get("entity_id") or i.get("card_id") or "—"),
-            "detail": i.get("summary"), "industries": i.get("industries"), "severity": i.get("severity")}
-           for i in integrity_rows if i.get("severity") == "high"]
-    )
-
     def agg(slug):
         si = [i for i in integrity_rows if _in_industry(i, slug)]
-        sd = [d for d in distress if slug in (ALL, None) or slug in _industries_of(feed, d.get("entity"))]
         sr = [r for r in rep_rows if _in_industry(r, slug)]
         # #118: an integrity/reputation count of ~0 for a sector is almost always "this sector
         # has no compliance signal ingested" (the reputation store is the BCB complaints
@@ -1386,11 +1426,13 @@ def build_cco(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         # never fed this store — it is default-off and its source host is now dead.
         insufficient = len(si) == 0 and len(sr) < _CCO_MIN_REPUTATION_SIGNAL
         se = [r for r in enforcement if _in_scope_or_market(r, slug)]
-        return {"n_integrity": None if withheld else len(si), "n_distress": len(sd), "n_rep": len(sr),
+        return {"n_integrity": None if withheld else len(si), "n_rep": len(sr),
                 "n_enforcement": len(se),
                 "n_enforcement_severe": sum(1 for r in se if r.get("severity") in ("critical", "high")),
                 "enforcement_severity": se[0].get("severity") if se else None,
                 "n_high": None if withheld else sum(1 for i in si if i.get("severity") == "high"),
+                "n_bcb_sanctions": sum(1 for g in bcb_sanctions if _in_industry(g, slug)),
+                "bcb_fines_total": round(sum(g["fine_total"] for g in bcb_sanctions if _in_industry(g, slug)), 2),
                 "worst_rank": min([r["rank"] for r in sr if r.get("rank")], default=None),
                 # #381: sanctions lists in the sector
                 "n_sanction_matches": sum(1 for r in sl_matches if _in_industry(r, slug)),
@@ -1423,19 +1465,13 @@ def build_cco(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
         # #226: sector-fair, so a sector's own findings are never crowded out of the 40.
         "integrity": _sector_fair(integrity_rows, ctx["sectors"], 40),
         "integrity_withheld": withheld,
-        "risk_register": risk_register[:30],
+        "bcb_sanctions": bcb_sanctions[:30],
         # #381: sanctions lists — possible roster matches first, then Brazil-linked entities.
         "sanctions_lists": {"matches": sl_matches[:20], "brazil": sl_brazil[:40],
                             "lists": list(sl.get("lists") or []),
                             "brazil_individuals": dict(sl.get("brazil_individuals") or {}),
                             "as_of": sl.get("as_of")},
         "reputation": rep_rows[:30],
-        # SURF-3: PESTLE macro/regulatory environment routed to the CCO (7S dropped — internal,
-        # no external signal to ground it).
-        "totals": (tot := {}),  # #218
-        "pestle": _fair_totals(_framework_rows(feed, "pestle"), ctx["sectors"], 20, tot, "pestle"),
-        # SURF-10: compliance change-diff — enumerated article changes + deadlines.
-        "change_diff": _fair_totals(_change_diff_rows(feed, ctx["reg_cards"]), ctx["sectors"], 24, tot, "change_diff"),
         "recommendations": recs,
     }}
 
@@ -1829,25 +1865,29 @@ def build_flow(feed: dict[str, Any], ctx: dict[str, Any]) -> list[dict[str, Any]
                          action="Avaliar exposição do setor e roteirizar resposta", action_ref="open_watch",
                          key=ev.get("id") or "", handoff="cco" if ev.get("severity") == "critical" else None))
 
-    # Confirmed insolvency on the roster → CCO.
+    # Confirmed insolvency on the roster → Risco (hand-off to Compliance for the flag).
     for d in _trusted_distress(feed):
         e = d.get("entity")
-        out.append(_traj("distress", f"Sinal de insolvência — {labels.get(e, e)}", "cco", "crit",
+        out.append(_traj("distress", f"Sinal de insolvência — {labels.get(e, e)}", "risk", "crit",
                          f"Processo de {d.get('label') or 'insolvência'} (confirmado).",
                          industries=_industries_of(feed, e), evidence_ids=(d.get("evidence") or [])[:2],
-                         action="Sinalizar para revisão de compliance", action_ref="flag_entity", key=e or ""))
+                         action="Sinalizar para revisão de compliance", action_ref="flag_entity", key=e or "",
+                         handoff="cco"))
 
-    # #193: an OFFICIAL critical enforcement act (liquidação / intervenção / RAET / cassação) → CCO.
+    # #193: an OFFICIAL critical enforcement act → Risco for a resolution regime (liquidação /
+    # intervenção / RAET / cassação), Compliance otherwise; Compliance gets the hand-off either way.
     for a in [x for x in _enforcement(feed)
               if x.get("severity") == "critical" and x.get("confidence") == "official"][:3]:
         who = labels.get(a.get("entity")) if a.get("entity") else (a.get("target") or "instituição")
         brief = (f"{a.get('title') or ''} · {a.get('authority')} · "
                  f"{pt_count(len(a.get('sources') or []), 'fonte oficial', 'fontes oficiais')}, {a.get('date')}.")
-        out.append(_traj("enforcement", f"Medida de supervisão — {a.get('kind_label')} ({who})", "cco", "crit", brief,
+        out.append(_traj("enforcement", f"Medida de supervisão — {a.get('kind_label')} ({who})",
+                         "risk" if a.get("kind") in RESOLUTION_KINDS else "cco", "crit", brief,
                          industries=list(a.get("industries") or []), evidence_ids=[a.get("id")],
                          action="Avaliar exposição de contraparte",
                          action_ref="flag_entity" if a.get("entity") else "open_watch",
-                         key=a.get("id") or ""))
+                         key=a.get("id") or "",
+                         handoff="cco" if a.get("kind") in RESOLUTION_KINDS else None))
 
     # High-severity integrity finding → CCO.
     for f in [x for x in ((feed.get("integrity") or {}).get("findings") or []) if x.get("severity") == "high"][:3]:
@@ -1902,9 +1942,18 @@ REFERENCE: dict[str, Any] = {
             "CVM — Resolução / Instrução / Deliberação",
             "BCB / CMN — Resolução BCB/CMN, Circular, Instrução Normativa",
             "SUSEP / CNSP — Circular / Resolução", "PREVIC — previdência complementar fechada"]}]},
+    "risk": {"title": "Referência de risco", "sections": [
+        {"h": "Solidez prudencial", "items": [
+            "Capital — Índice de Basileia, CET1 (IF.data / Pilar 3)", "Liquidez — LCR (Pilar 3)",
+            "Qualidade de crédito — PDD/mês, inadimplência 15+ dias", "Fragilidade composta (capital·NPL·PDD·ROE·alavancagem)"]},
+        {"h": "Regimes e insolvência", "items": [
+            "Regimes de resolução do BCB — liquidação extrajudicial, intervenção, RAET, cassação",
+            "Recuperação judicial / falência (confirmadas)", "Contrapartes em distress (correspondentes)"]},
+        {"h": "Risco operacional", "items": ["Incidentes com dados de chaves Pix (registro do BCB)"]}]},
     "cco": {"title": "Playbook de compliance", "sections": [
-        {"h": "Taxonomia de risco", "items": [
-            "Insolvência societária (recuperação judicial / falência)", "Sanções — CEIS / CNEP",
+        {"h": "Taxonomia de conduta", "items": [
+            "Sanções por conduta — BCB (PAS), CVM, SPA/MF, Procon", "Sanções — CEIS / CNEP",
+            "Listas internacionais — ONU (vinculante, Lei 13.810/2019), OFAC, UE, Reino Unido",
             # Reclame Aqui is BUILT but parked (ONCA_RECLAME_AQUI default-off, no authorized
             # feed — see docs/CONTEXT.md "Deferred"), so naming it here promised a source the
             # panel has never been fed. BCB is the only reputation store actually loaded.
@@ -1991,6 +2040,7 @@ def build_executive(feed: dict[str, Any], *, decisions: list[dict[str, Any]] | N
                           key=lambda s: (s.get("silence_tier") or 0, s.get("score") or 0), reverse=True)[:20],
         "cso": build_cso(feed, ctx),
         "cro": build_cro(feed, ctx),
+        "risk": build_risk(feed, ctx),
         "cco": build_cco(feed, ctx),
         "cpo": build_cpo(feed, ctx),
     }

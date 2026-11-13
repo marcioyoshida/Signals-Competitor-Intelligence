@@ -60,9 +60,9 @@ def _feed():
     }
 
 
-def test_build_executive_has_four_officers_and_shared_sectors():
+def test_build_executive_has_five_officers_and_shared_sectors():
     ex = executive.build_executive(_feed())
-    assert ex["officers"] == ["cso", "cro", "cco", "cpo"]
+    assert ex["officers"] == ["cso", "cro", "risk", "cco", "cpo"]
     assert {s["slug"] for s in ex["sectors"]} == {"banking", "fintech"}
     for off in ex["officers"]:
         assert ex[off]["panels"] and ex[off]["by_industry"]["__all__"]
@@ -238,7 +238,7 @@ def test_cro_solvency_panel_and_weak_recommendation():
                        "band": "sólido", "base_date": 202603}},
         {"entity": "noone", "label": "Sem dado"},  # no soundness → excluded
     ]
-    cro = executive.build_executive(feed)["cro"]
+    cro = executive.build_executive(feed)["risk"]
     sv = cro["panels"]["solvency"]
     assert [r["entity"] for r in sv] == ["xp", "btg"]           # weakest (lowest Basileia) first
     assert sv[0]["band"] == "atenção" and sv[0]["capital_principal"] == 7.17
@@ -261,25 +261,25 @@ def test_cro_tier_b_slope_fires_on_rising_pdd():
          "soundness": {"indice_basileia": 15.0, "capital_principal": 11.2, "band": "sólido", "base_date": 202603},
          "balancete": {"month": 202606, "months": 3, "pdd_mom_pct": 1.0, "credito_mom_pct": 2.0}},
     ]
-    cro = executive.build_executive(feed)["cro"]
+    cro = executive.build_executive(feed)["risk"]
     sv = {r["entity"]: r for r in cro["panels"]["solvency"]}
     # Tier-2 NPL surfaces on the same CRO rows + fires on the elevated band
     feed["entities"][0]["inadimplencia"] = {"npl_total": 12.9, "npl_pf": 12.8, "npl_pj": 14.4, "band": "elevada"}
-    cro = executive.build_executive(feed)["cro"]
+    cro = executive.build_executive(feed)["risk"]
     sv = {r["entity"]: r for r in cro["panels"]["solvency"]}
     # multi-bank Pilar 3 KM1: LCR surfaces on the CRO row + fires when below comfort
     feed["entities"][1]["pilar3_km1"] = {"lcr_pct": 118.0, "nsfr_pct": 105.0, "band_lcr": "atenção"}
-    cro = executive.build_executive(feed)["cro"]
+    cro = executive.build_executive(feed)["risk"]
     sv = {r["entity"]: r for r in cro["panels"]["solvency"]}
     assert sv["xp"]["lcr_pct"] == 118.0 and sv["xp"]["lcr_band"] == "atenção"
     assert any("Liquidez sob atenção" in r["text"] and "118,0%" in r["text"]
                for r in cro["panels"]["recommendations"])
-    sv = {r["entity"]: r for r in executive.build_executive(feed)["cro"]["panels"]["solvency"]}
+    sv = {r["entity"]: r for r in executive.build_executive(feed)["risk"]["panels"]["solvency"]}
     assert sv["bb"]["npl_total"] == 12.9 and sv["bb"]["npl_band"] == "elevada"
     assert any("Inadimplência elevada" in r["text"] and "12,9%" in r["text"]
                for r in cro["panels"]["recommendations"])
     assert cro["by_industry"]["banking"]["max_npl"] == 12.9 and cro["by_industry"]["banking"]["n_npl_elevada"] == 1
-    sv = {r["entity"]: r for r in executive.build_executive(feed)["cro"]["panels"]["solvency"]}
+    sv = {r["entity"]: r for r in executive.build_executive(feed)["risk"]["panels"]["solvency"]}
     assert sv["bb"]["slope_warning"] is True and sv["bb"]["pdd_mom_pct"] == 6.9  # +6.9% ≥ 5% → warns
     assert sv["xp"]["slope_warning"] is False                                    # +1.0% → calm
     # a rising-PDD competitor raises an immediate credit-deterioration rec
@@ -326,7 +326,7 @@ def test_cro_composite_fragility_and_tone_divergence():
          "fundamentals": {"roe_pct": 22.0, "leverage": 10.0},
          "financial_tone": {"net": 0.5, "corpus": "solvency_facts"}},
     ]
-    cro = executive.build_executive(feed)["cro"]
+    cro = executive.build_executive(feed)["risk"]
     sv = {r["entity"]: r for r in cro["panels"]["solvency"]}
     assert sv["weakco"]["fragility"]["band"] == "frágil" and sv["weakco"]["fragility"]["score"] >= 60
     assert sv["strongco"]["fragility"]["band"] == "resiliente"
@@ -337,12 +337,14 @@ def test_cro_composite_fragility_and_tone_divergence():
     assert cro["by_industry"]["banking"]["n_fragil"] == 1
 
 
-def test_cco_risk_register_and_reputation():
+def test_cco_integrity_and_reputation():
     cco = executive.build_executive(_feed())["cco"]
     assert cco["by_industry"]["__all__"]["n_integrity"] == 2
     assert cco["by_industry"]["__all__"]["n_high"] == 1
-    kinds = {r["kind"] for r in cco["panels"]["risk_register"]}
-    assert "reputacao" in kinds and "integridade" in kinds  # distress=0 here (both filtered/none)
+    # 2026-11-12: the exposure register (resolution · insolvency · third parties) moved to Risco;
+    # Compliance shows integrity and reputation in their own panels.
+    assert "risk_register" not in cco["panels"] and cco["panels"]["integrity"] and cco["panels"]["reputation"]
+    assert "n_distress" not in cco["by_industry"]["__all__"]
     assert cco["panels"]["reputation"][0]["label"] == "BRADESCO"
     assert cco["panels"]["recommendations"][0]["action"] == "run_integrity_audit"
 
@@ -498,7 +500,7 @@ def test_officer_panels_carry_frameworks_and_product_moves():
             "bcg": {"itau": [{"dimension": "star", "text": "s", "status": "active"}]}}
     ex = executive.build_executive(feed)
     assert ex["cso"]["panels"]["porter"] and ex["cso"]["panels"]["four_corners"]
-    assert ex["cco"]["panels"]["pestle"]
+    assert ex["cso"]["panels"]["pestle"] and "pestle" not in ex["cco"]["panels"]
     assert ex["cpo"]["panels"]["ansoff"] and ex["cpo"]["panels"]["bcg"]
     assert ex["cpo"]["panels"]["product_moves"][0]["id"] == "c1"  # ofertas-lens card surfaced
 
@@ -535,7 +537,7 @@ def test_axis_rows_and_change_diff():
     assert [r["id"] for r in ex["cso"]["panels"]["forward_look"]] == ["p1", "e1"]  # horizon + hub
     assert ex["cso"]["panels"]["behavioral"][0]["pattern"] == "drumbeat"
     assert ex["cso"]["panels"]["relational"][0]["relation"] == "co_mention"
-    cd = ex["cco"]["panels"]["change_diff"]
+    cd = ex["cro"]["panels"]["change_diff"]
     assert cd[0]["n_changes"] == 2 and cd[0]["changes"][1]["verb"] == "revoga"
     assert cd[0]["days_to_deadline"] == 20
 
@@ -759,10 +761,10 @@ def test_cco_withheld_integrity_is_unknown_not_zero():
 
 
 def test_all_sectors_solvency_and_roe_are_the_union():
-    """#214: the __all__ bucket of CRO solvency / CSO financial aggregates must cover every row
+    """#214: the __all__ bucket of Risco solvency / CSO financial aggregates must cover every row
     (it is in no row's `industries`), never read 0 while a sector reads >0."""
     ex = executive.build_executive(_feed())
-    cro = ex["cro"]["by_industry"]
+    cro = ex["risk"]["by_industry"]
     secs = [k for k in cro if k != executive.ALL]
     assert cro[executive.ALL]["n_weak_solvency"] >= max(cro[s]["n_weak_solvency"] for s in secs)
     mins = [cro[s]["min_basileia"] for s in secs if cro[s]["min_basileia"] is not None]
@@ -850,7 +852,7 @@ def test_display_strings_carry_no_english_decimals():
         assert want in joined, want
     assert "(divergência +1,55)" in joined   # tone 0,55 vs numbers -1,00
     # machine-readable fields stay numeric
-    row = {r["entity"]: r for r in ex["cro"]["panels"]["solvency"]}["weakco"]
+    row = {r["entity"]: r for r in ex["risk"]["panels"]["solvency"]}["weakco"]
     assert row["pdd_mom_pct"] == 10.25 and row["lcr_pct"] == 98.5 and row["npl_total"] == 11.3
     assert ex["cso"]["panels"]["capital_moves"][0]["delta_pct"] == 200.0
     mom = {m["entity"]: m for m in ex["cso"]["panels"]["momentum"]}["itau"]

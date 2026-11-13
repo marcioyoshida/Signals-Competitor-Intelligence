@@ -1741,7 +1741,7 @@
         <span class="rule"></span><span class="badge badge--ghost">SaaS</span></div>
         <div class="panel"><div class="panel__bd"><div class="empty"><div class="em-ico" aria-hidden="true">${(U.EMPTY_ICONS || {})["◐"] || "◐"}</div>
           <div class="em-t">Disponível no SaaS</div>
-          <div class="em-d">Painéis por diretoria (CSO, CRO, CCO, CPO), estresse e recuperação judicial, movimentos
+          <div class="em-d">Painéis por diretoria (Estratégia, Risco, Compliance, Produto, Regulatório), estresse e recuperação judicial, movimentos
             de capital, reputação, demonstrações financeiras, frameworks por entidade e Pergunte à Onça fazem
             parte do plano SaaS, licenciado por setor.</div>
           <div style="margin-top:var(--s3)">${ctas}</div>

@@ -1,4 +1,4 @@
-"""Four specialist officer personas + the chief-of-staff router (ADR 020, Phases 2–3).
+"""Five specialist officer personas + the chief-of-staff router (ADR 020, Phases 2–3).
 
 An **officer** is a domain **lens** (its grounding sources + a read persona) plus a
 **bounded action catalog** (a subset of the `/api/act` intents it may emit). This module
@@ -20,7 +20,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Officer:
-    role: str            # strategic | regulator | compliance | product
+    role: str            # strategic | regulator | risk | compliance | product
     title: str           # display name (pt-BR)
     mandate: str         # persona preamble prepended to the grounded-read system contract
     primary_lens: str    # soft grounding bias for the read
@@ -31,7 +31,7 @@ class Officer:
 OFFICERS: dict[str, Officer] = {
     "strategic": Officer(
         role="strategic",
-        title="Estrategista-chefe (CSO)",
+        title="Estratégia",
         mandate=(
             "Você é o Estrategista-chefe da Onça. Sua lente é a estratégia competitiva: "
             "o mapa de posição ameaça×expansão, SWOT/TOWS/Porter e os frameworks, "
@@ -48,7 +48,7 @@ OFFICERS: dict[str, Officer] = {
     ),
     "regulator": Officer(
         role="regulator",
-        title="Oficial regulatório (CRO)",
+        title="Regulatório",
         mandate=(
             "Você é o Oficial regulatório da Onça. Sua lente é o eixo regulatório: mudanças "
             "normativas, diffs de seção, blast-radius/dificuldade, prazos e os documentos "
@@ -62,26 +62,45 @@ OFFICERS: dict[str, Officer] = {
         ),
         actions=("open_watch", "trigger_run", "record_decision", "set_outcome", "set_board_adoption", "set_tdr_baseline", "append_reference", "record_engagement"),
     ),
+    "risk": Officer(
+        role="risk",
+        title="Risco",
+        mandate=(
+            "Você é o Oficial de risco da Onça. Sua lente é a solidez e a sobrevivência das "
+            "instituições: capital (Basileia), liquidez (LCR), provisões e inadimplência, "
+            "fragilidade composta, regimes de resolução do BCB (liquidação, intervenção, RAET, "
+            "cassação), recuperação judicial/falência e incidentes operacionais. Priorize quem "
+            "está mais frágil e a exposição de contraparte."
+        ),
+        primary_lens="distress",
+        cues=(
+            "risco", "solidez", "solvencia", "basileia", "capital", "liquidez", "lcr",
+            "inadimplencia", "pdd", "provisao", "fragilidade", "liquidacao", "intervencao",
+            "raet", "cassacao", "falencia", "recuperacao", "insolvencia", "distress",
+            "contraparte",
+        ),
+        actions=("open_watch", "trigger_run", "record_decision", "set_outcome", "set_board_adoption", "set_tdr_baseline", "append_reference", "record_engagement"),
+    ),
     "compliance": Officer(
         role="compliance",
-        title="Oficial de compliance (CCO)",
+        title="Compliance",
         mandate=(
-            "Você é o Oficial de compliance da Onça. Sua lente é integridade/governança e "
-            "risco: achados de integridade, sanções (CEIS/CNEP), antitruste (CADE), distress "
-            "societário e o log de curadoria. Priorize riscos de integridade, sanções e "
-            "insolvência na carteira."
+            "Você é o Oficial de compliance da Onça. Sua lente é conduta e integridade: "
+            "sanções a instituições por conduta (BCB, CVM, SPA, Procon), CEIS/CNEP, listas "
+            "internacionais de sanções, antitruste (CADE), reputação e o log de curadoria. "
+            "Priorize sanções, correspondências a verificar e achados de integridade."
         ),
         primary_lens="integridade",
         cues=(
             "integridade", "sancao", "sancoes", "ceis", "cnep", "cade", "antitruste",
-            "distress", "recuperacao", "falencia", "rollback", "reverter", "auditoria",
-            "risco", "governanca", "insolvencia",
+            "rollback", "reverter", "auditoria", "governanca", "conduta", "ofac",
+            "lavagem", "pld", "reputacao", "reclamacao", "multa",
         ),
         actions=("run_integrity_audit", "flag_entity", "rollback_field", "revert_entity", "record_decision", "set_outcome", "set_board_adoption", "set_tdr_baseline", "append_reference", "record_engagement"),
     ),
     "product": Officer(
         role="product",
-        title="Oficial de produto (CPO)",
+        title="Produto",
         mandate=(
             "Você é o Oficial de produto da Onça. Sua lente é produto/mercado e cobertura: a "
             "fila de lacunas de cobertura, o mapa CVM/BCB, propostas de descoberta e o "
@@ -99,9 +118,13 @@ OFFICERS: dict[str, Officer] = {
 # The router's fallback when nothing matches — product owns "where are our blind spots?"
 _DEFAULT_ROLE = "product"
 
-# ADR-021 uses the buyer-facing C-suite titles (CSO/CRO/CCO/CPO); ADR-020 keys officers by
-# role. They are the same four officers — accept either spelling everywhere via this alias map.
-_ALIASES = {"cso": "strategic", "cro": "regulator", "cco": "compliance", "cpo": "product"}
+# ADR-021 keyed the boards by C-suite ids (cso/cro/cco/cpo); ADR-020 keys officers by role.
+# They are the same officers — accept either spelling everywhere via this alias map. The ids
+# stay as INTERNAL keys (decision log, KB precedents, feed.executive blocks); 2026-11-12 the
+# owner dropped the acronyms from everything a user reads. `cro` is the regulatory board;
+# risk (added 2026-11-12) has no C-acronym, so its id is "risk" in both spellings.
+_ALIASES = {"cso": "strategic", "cro": "regulator", "cco": "compliance", "cpo": "product",
+            "risk": "risk"}
 
 
 _REVERSE_ALIASES = {v: k for k, v in _ALIASES.items()}

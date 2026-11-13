@@ -45,7 +45,7 @@ def test_enforcement_and_distress_labels_are_portuguese():
 
 def test_cco_reference_names_insolvency_in_portuguese():
     src = (Path(__file__).resolve().parents[1] / "src" / "synth" / "executive.py").read_text(encoding="utf-8")
-    assert "Distress societário" not in src and "Insolvência societária (recuperação judicial / falência)" in src
+    assert "Distress societário" not in src and "Recuperação judicial / falência (confirmadas)" in src
 
 
 def test_clip_cuts_at_a_word_boundary_with_ellipsis():

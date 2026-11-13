@@ -236,12 +236,16 @@ def test_cro_groups_sanctions_and_adds_consultation_deadlines():
 def test_build_executive_carries_bcb_panels():
     feed = {"dates": ["2026-11-10"], "industry_options": [{"slug": "banking", "label": "Banking"}],
             "entity_attrs": ATTRS, "feed": [], "bcb_supervision": b.for_feed(DOC, entity_attrs=ATTRS, today=TODAY)}
-    cro = executive.build_executive(feed)["cro"]
-    P = cro["panels"]
-    assert P["bcb_sanctions"] and P["pix_incidents"]
-    assert any(r.get("deadline_source") == "consulta" for r in P["deadlines"])
-    agg = cro["by_industry"]["banking"]
-    assert agg["n_bcb_sanctions"] >= 1 and agg["n_deadlines"] >= 1 and agg["bcb_fines_total"] >= 1500000
+    ex = executive.build_executive(feed)
+    cro, cco, risk = ex["cro"], ex["cco"], ex["risk"]
+    # 2026-11-12: PAS sanctions are conduct (Compliance), Pix incidents operational risk (Risco),
+    # open consultations stay on Regulatório.
+    assert cco["panels"]["bcb_sanctions"] and risk["panels"]["pix_incidents"]
+    assert "bcb_sanctions" not in cro["panels"] and "pix_incidents" not in cro["panels"]
+    assert any(r.get("deadline_source") == "consulta" for r in cro["panels"]["deadlines"])
+    assert cro["by_industry"]["banking"]["n_deadlines"] >= 1
+    agg = cco["by_industry"]["banking"]
+    assert agg["n_bcb_sanctions"] >= 1 and agg["bcb_fines_total"] >= 1500000
 
 
 def test_name_key_conservative_matching():

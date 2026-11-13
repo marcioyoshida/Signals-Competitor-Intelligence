@@ -177,7 +177,7 @@ def compute_metrics(decisions: list[dict[str, Any]],
     full = len(measured) == 4  # all four components measured ⇒ the FULL composite
 
     by_officer: dict[str, Any] = {}
-    for off in ("cso", "cro", "cco", "cpo"):
+    for off in ("cso", "cro", "risk", "cco", "cpo"):
         ds = [d for d in decisions if (d.get("officer") or "").lower() == off]
         if ds:
             by_officer[off] = _slice(ds)

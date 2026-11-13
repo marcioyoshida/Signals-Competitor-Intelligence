@@ -663,10 +663,10 @@ def test_send_cpo_digest_uses_existing_channels_and_is_silent_without_radar():
     slack = weekly_digest.format_slack({"title": w["title"], "headline": w["headline"], "lines": w["lines"],
                                         "lines_heading": "Eventos da semana"})
     txt = json.dumps(slack, ensure_ascii=False)
-    assert "Radar de produto semanal do CPO" in txt and "Movimentos" not in txt
+    assert "Radar de produto semanal" in txt and "Movimentos" not in txt
     subj, text, html = weekly_digest.format_email({"title": w["title"], "headline": w["headline"],
                                                    "lines": w["lines"]})
-    assert subj.startswith("Radar de produto semanal do CPO") and "Inter" in text
+    assert subj.startswith("Radar de produto semanal") and "Inter" in text
     assert weekly_digest.send_cpo_digest({}, as_of="2026-09-26") == {"teams": None, "slack": None, "email": None}
 
 

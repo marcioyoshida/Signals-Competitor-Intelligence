@@ -269,7 +269,7 @@ def test_get_advertises_officer_roster(monkeypatch):
     monkeypatch.setenv("ONCA_ORIGIN_SECRET", SECRET)
     resp = act_api.lambda_handler(_event("{}", method="GET"), None)
     roles = {o["role"] for o in json.loads(resp["body"])["officers"]}
-    assert roles == {"strategic", "regulator", "compliance", "product"}
+    assert roles == {"strategic", "regulator", "risk", "compliance", "product"}
 
 
 def test_officer_may_emit_its_own_action(monkeypatch):

@@ -1,3 +1,4 @@
+import re
 """ADR 020 Phases 2–3 — the four officer personas + chief-of-staff router/hand-off."""
 import sys
 from pathlib import Path
@@ -7,9 +8,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from src.dashboard import officers
 
 
-def test_roster_has_four_officers_each_with_a_catalog():
+def test_roster_has_five_officers_each_with_a_catalog():
     roster = officers.roster()
-    assert {o["role"] for o in roster} == {"strategic", "regulator", "compliance", "product"}
+    assert {o["role"] for o in roster} == {"strategic", "regulator", "risk", "compliance", "product"}
+    # 2026-11-12: no C-suite acronym in any title a user reads
+    assert not any(re.search(r"\b(CSO|CRO|CCO|CPO)\b", o["title"]) for o in roster)
     assert all(o["actions"] for o in roster)
 
 

@@ -36,7 +36,7 @@ from typing import Any
 from src.dashboard import watchlist as wl
 
 TYPES = ("radar", "distress", "regulatory")
-OFFICER_TYPES = {"cso": list(TYPES), "cpo": ["radar"], "cco": ["distress"], "cro": ["regulatory"]}
+OFFICER_TYPES = {"cso": list(TYPES), "cpo": ["radar"], "cco": ["distress"], "cro": ["regulatory"], "risk": ["distress"]}
 DEFAULT_QUIET = (21, 7)          # BRT hours [start, end)
 DEFAULT_DAILY_CAP = 3
 MAX_FAILS = 3

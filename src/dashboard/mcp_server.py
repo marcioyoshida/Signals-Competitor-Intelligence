@@ -363,7 +363,7 @@ def ops_tools(elevated: bool) -> list[dict[str, Any]]:
                 "args": {"type": "object", "description": "The intent's arguments (see the /api/act catalog)."},
                 "idempotency_key": {"type": "string", "minLength": 8,
                                     "description": "Required. Reuse it to retry safely: a replay returns the stored result."},
-                "officer": {"type": "string", "enum": ["cso", "cro", "cco", "cpo"]}},
+                "officer": {"type": "string", "enum": ["cso", "cro", "risk", "cco", "cpo"]}},
                 "required": ["idempotency_key"], "additionalProperties": False}})
     return out
 

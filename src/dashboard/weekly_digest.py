@@ -86,7 +86,7 @@ def _priority_lines(top: list[dict[str, Any]]) -> list[str]:
 
 
 def _title(w: dict[str, Any]) -> str:
-    return str(w.get("title") or "Briefing semanal do CSO")
+    return str(w.get("title") or "Briefing semanal · Estratégia")
 
 
 def _lines(w: dict[str, Any]) -> list[str]:

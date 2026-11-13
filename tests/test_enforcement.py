@@ -279,21 +279,28 @@ def _exec_feed():
             "enforcement": enf.for_feed(store, entity_attrs=attrs, today=TODAY)}
 
 
-def test_build_cco_enforcement_panel_counts_risk_register_and_flow():
+def test_enforcement_splits_conduct_to_compliance_and_resolution_to_risk():
+    """2026-11-12: conduct sanctions stay on Compliance; resolution regimes (liquidação,
+    intervenção, RAET, cassação) are prudential outcomes on the Risco board."""
     ex = executive.build_executive(_exec_feed())
-    cco = ex["cco"]
+    cco, risk = ex["cco"], ex["risk"]
     rows = cco["panels"]["enforcement"]
-    assert [r["severity"] for r in rows] == ["critical", "high", "high"]
-    assert rows[0]["authority"] == "BCB" and rows[0]["label"].startswith("Banvox")
+    assert [r["severity"] for r in rows] == ["high", "high"]
+    assert not any(r["kind"] in executive.RESOLUTION_KINDS for r in rows)
     assert all(k in rows[0] for k in ("kind_label", "confidence", "sources", "title", "industries"))
     allb, bank, bet = (cco["by_industry"][k] for k in ("__all__", "banking", "betting"))
-    assert allb["n_enforcement"] == 3 and allb["enforcement_severity"] == "critical"
-    assert bank["n_enforcement"] == 3  # market-wide (untagged) + the Itaú CNEP row
-    assert bet["n_enforcement"] == 2 and bet["n_enforcement_severe"] == 2
-    assert any(r["kind"] == "enforcement" for r in cco["panels"]["risk_register"])
+    assert allb["n_enforcement"] == 2 and allb["enforcement_severity"] == "high"
+    assert bank["n_enforcement"] == 2  # market-wide (untagged) + the Itaú CNEP row
+    assert bet["n_enforcement"] == 1 and bet["n_enforcement_severe"] == 1
     assert any(r.get("entity") == "itau" and r["action"] == "flag_entity" for r in cco["panels"]["recommendations"])
+    res = risk["panels"]["resolution"]
+    assert len(res) == 1 and res[0]["authority"] == "BCB" and res[0]["label"].startswith("Banvox")
+    assert risk["by_industry"]["betting"]["n_resolution"] == 1   # market-wide → every sector
+    assert risk["panels"]["register"] == []   # regimes have their own panel, not repeated
+    assert risk["by_industry"]["__all__"]["n_grave"] == 1
     flow = [t for t in ex["flow"] if t["trigger"] == "enforcement"]
-    assert len(flow) == 1 and flow[0]["officer"] == "cco" and flow[0]["action_ref"] == "open_watch"
+    assert len(flow) == 1 and flow[0]["officer"] == "risk" and flow[0]["handoff"] == "cco"
+    assert flow[0]["action_ref"] == "open_watch"
 
 
 def test_ask_cards_cite_the_action_sources():

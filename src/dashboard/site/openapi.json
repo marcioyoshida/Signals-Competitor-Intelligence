@@ -143,6 +143,7 @@
           "enum": [
            "cso",
            "cro",
+           "risk",
            "cco",
            "cpo",
            "auto"
@@ -259,6 +260,7 @@
           "enum": [
            "cso",
            "cro",
+           "risk",
            "cco",
            "cpo",
            "auto"

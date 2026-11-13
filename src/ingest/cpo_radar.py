@@ -1424,8 +1424,8 @@ def render_weekly_digest(radar: dict[str, Any] | None, *, as_of: str | None = No
              + ("" if _looks_english(e.get("reason") or "") else f" — {e.get('reason')}")
              + (f" ({e['url']})" if e.get("url") else "")
              for e in evs[:limit]]
-    text = f"Radar de produto do CPO — {start} a {end}\n{headline}\n" + "\n".join(f"- {l}" for l in lines)
-    return {"title": "Radar de produto semanal do CPO", "headline": headline, "period": [start, end],
+    text = f"Radar de produto — {start} a {end}\n{headline}\n" + "\n".join(f"- {l}" for l in lines)
+    return {"title": "Radar de produto semanal", "headline": headline, "period": [start, end],
             "lines": lines, "events": evs[:limit], "text": text}
 
 

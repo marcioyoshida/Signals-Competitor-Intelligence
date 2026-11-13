@@ -151,7 +151,7 @@ def render_openapi(base: str = BASE) -> dict[str, Any]:
                 "schema": {"type": "object", "required": ["q"], "properties": {
                     "q": {"type": "string", "maxLength": 800, "description": "The question (PT or EN)."},
                     "scope": {"type": "object", "properties": {"industry": {"type": "string"}}},
-                    "officer": {"type": "string", "enum": ["cso", "cro", "cco", "cpo", "auto"]}}},
+                    "officer": {"type": "string", "enum": ["cso", "cro", "risk", "cco", "cpo", "auto"]}}},
                 "example": e["request"]}}}
         paths[e["path"]] = {e["method"].lower(): op}
     return {
