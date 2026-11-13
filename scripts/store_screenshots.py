@@ -121,9 +121,11 @@ def main(argv: list[str] | None = None) -> int:
                             rows.first.click()
                             page.wait_for_timeout(700)
                     if action == "officer":
-                        tabs = page.locator("#officerTabs a, #officerTabs button")
-                        if tabs.count() > 1:
-                            tabs.nth(1).click()
+                        # ADR 032: tap Regulatório by name (the tab order changed; Risco names
+                        # institutions in liquidation, a poor store first impression)
+                        tab = page.locator('#officerTabs a[data-officer="cro"]')
+                        if tab.count():
+                            tab.first.click()
                             page.wait_for_timeout(700)
                     f = d / f"{label}.png"
                     page.screenshot(path=str(f))

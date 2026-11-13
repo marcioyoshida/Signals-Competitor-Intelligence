@@ -719,15 +719,22 @@
 
     /* --- bottom tab bar (officers) --------------------------------------------- */
     #officerTabs { position:fixed; left:0; right:0; bottom:0; z-index:40; order:0; flex:none;
-      display:grid; grid-template-columns:repeat(4,1fr); gap:0; overflow:visible;
+      /* ADR 032: five boards — columns may shrink below the label width (minmax(0,…)) */
+      display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:0; overflow:visible;
       height:calc(var(--tabbar-h) + var(--safe-b)); padding:4px 4px var(--safe-b);
       background:var(--surface); border-top:1px solid var(--border-2);
       box-shadow:0 -6px 18px rgba(0,0,0,.28); }
     #officerTabs a { flex-direction:column; justify-content:center; align-items:center; gap:2px;
       min-height:50px; padding:2px 0; border:0; border-radius:12px; background:none;
-      color:var(--muted); font-size:11.5px; font-weight:600; letter-spacing:.1px; white-space:nowrap; }
+      color:var(--muted); font-size:11px; font-weight:600; letter-spacing:0; white-space:nowrap; min-width:0; }
+    #officerTabs a .ot-l { max-width:100%; overflow:hidden; text-overflow:ellipsis; }
+    @media (max-width:350px) {   /* 320px phones: five labels at 64px each */
+      #officerTabs { padding-left:0; padding-right:0; }
+      #officerTabs a { font-size:9.5px; letter-spacing:-.2px; overflow:hidden; }
+      #officerTabs a[aria-current="page"] .ot-l { font-weight:700; }
+      #officerTabs .ot-ic { width:40px; } }
     #officerTabs a .ot-k, #officerTabs a .ot-sep { display:none; }
-    #officerTabs .ot-ic { display:grid; place-items:center; width:52px; height:28px; border-radius:14px; }
+    #officerTabs .ot-ic { display:grid; place-items:center; width:48px; height:28px; border-radius:14px; }
     #officerTabs .ot-ic svg { width:22px; height:22px; }
     #officerTabs a[aria-current="page"] { color:var(--ink); background:none; border:0; }
     #officerTabs a[aria-current="page"] .ot-ic { background:var(--primary-weak); color:var(--primary);
@@ -3201,7 +3208,7 @@ function rowsChangeDiff(list) {
     const arts = (r.changes || []).map(ch => `${U.esc(ch.art || "?")} ${U.esc(ch.verb || "")}`).join(" · ");
     const dl = r.days_to_deadline != null ? `<span class="badge badge--${r.days_to_deadline <= 30 ? "high" : "med"}">prazo ${r.days_to_deadline}d</span>` : "";
     return `<div class="exrow" data-id="${U.esc(r.id || "")}" style="padding:var(--s2) var(--s3)">
-      <div style="display:flex;gap:var(--s2);align-items:baseline"><b style="flex:1;min-width:0">${U.esc(r.domain || r.title || "—")}</b>
+      <div style="display:flex;flex-wrap:wrap;gap:var(--s2);align-items:baseline"><b style="flex:1 1 12em;min-width:0;overflow-wrap:anywhere">${U.esc(r.domain || r.title || "—")}</b>
         <span class="badge badge--low">${pl(r.n_changes || 0, "mudança")}</span>${dl}</div>
       <div class="hd-note" style="margin-top:2px">${arts || U.esc((r.title || "").slice(0, 160))}</div></div>`;
   }).join("");

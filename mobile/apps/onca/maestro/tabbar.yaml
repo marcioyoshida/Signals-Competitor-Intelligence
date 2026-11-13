@@ -1,6 +1,7 @@
 # #259: the bottom officer tab bar switches the view. Hoje is data-driven and looks alike across
-# officers, so the check runs on Painel, whose heading names the officer.
-# Needs MAESTRO_QA_EMAIL / MAESTRO_QA_PASSWORD (the qa admin persona: four officer tabs).
+# officers, so the check runs on Painel, whose heading names the board ("Sala executiva — Risco").
+# ADR 032 (2026-11-12): five boards, plain names, no C-suite acronyms.
+# Needs MAESTRO_QA_EMAIL / MAESTRO_QA_PASSWORD (the qa admin persona: five board tabs).
 appId: org.onssa.onca
 tags:
   - auth
@@ -9,31 +10,37 @@ tags:
     clearState: true
 - runFlow: subflows/sign_in.yaml
 - assertVisible: "Estratégia"
-- assertVisible: "Regulatório"
+- assertVisible: "Risco"
 - assertVisible: "Compliance"
 - assertVisible: "Produto"
+- assertVisible: "Regulatório"
 - tapOn: "Painel"
 - extendedWaitUntil:
-    visible: ".*\\(CSO\\).*"
+    visible: ".*— Estratégia"
     timeout: 15000
-- tapOn: "Regulatório"
+- tapOn: "Risco"
 - extendedWaitUntil:
-    visible: ".*\\(CRO\\).*"
+    visible: ".*— Risco"
     timeout: 15000
-- takeScreenshot: tab-cro
+- takeScreenshot: tab-risco
 - tapOn: "Compliance"
 - extendedWaitUntil:
-    visible: ".*\\(CCO\\).*"
+    visible: ".*— Compliance"
     timeout: 15000
-- takeScreenshot: tab-cco
+- takeScreenshot: tab-compliance
 - tapOn: "Produto"
 - extendedWaitUntil:
-    visible: ".*\\(CPO\\).*"
+    visible: ".*— Produto"
     timeout: 15000
-- takeScreenshot: tab-cpo
+- takeScreenshot: tab-produto
+- tapOn: "Regulatório"
+- extendedWaitUntil:
+    visible: ".*— Regulatório"
+    timeout: 15000
+- takeScreenshot: tab-regulatorio
 - tapOn: "Estratégia"
 - extendedWaitUntil:
-    visible: ".*\\(CSO\\).*"
+    visible: ".*— Estratégia"
     timeout: 15000
-- takeScreenshot: tab-cso
+- takeScreenshot: tab-estrategia
 - assertNotVisible: "Assinar.*"
