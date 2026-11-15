@@ -2499,6 +2499,21 @@ class OncaPrototypeStack(Stack):
             _fn.add_to_role_policy(iam.PolicyStatement(
                 actions=["sts:AssumeRole"], resources=[model_broker.role_arn]))
 
+        # #328 board brief: /api/act starts a run on OncaBoardStack's state machine and reads the
+        # tenant's run items. By NAME (cdk.json "board".runs_table, the state machine's fixed
+        # name), never a cross-stack token, so neither stack's deploy waits on the other.
+        _board_ctx = self.node.try_get_context("board") or {}
+        if _board_ctx.get("runs_table"):
+            _board_sm = f"arn:aws:states:{self.region}:{self.account}:stateMachine:onca-board-brief"
+            act_fn.add_environment("ONCA_BOARD_STATE_MACHINE", _board_sm)
+            act_fn.add_environment("ONCA_BOARD_RUNS_TABLE", _board_ctx["runs_table"])
+            act_fn.add_to_role_policy(iam.PolicyStatement(
+                actions=["states:StartExecution"], resources=[_board_sm]))
+            act_fn.add_to_role_policy(iam.PolicyStatement(
+                actions=["dynamodb:GetItem", "dynamodb:Query"],
+                resources=[self.format_arn(service="dynamodb", resource="table",
+                                           resource_name=_board_ctx["runs_table"])]))
+
         # Agentic API key admin (self-service): a tenant's own logged-in user manages
         # ONLY its own tenant's keys — gated by the SAME Cognito-JWT authorizer as
         # /api/ask, tenant resolved from the verified identity, never the request.

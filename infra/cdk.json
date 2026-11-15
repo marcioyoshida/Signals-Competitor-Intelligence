@@ -33,6 +33,7 @@
       "guardrail_id": "o7en9enbllvk",
       "guardrail_version": "2",
       "synth_model_id": "amazon.nova-lite-v1:0",
+      "runs_table": "OncaBoardStack-OncaBoardRuns370BE8F7-LTMPFNVMRNOB",
       "model_profiles": {
         "amazon.nova-micro-v1:0": "arn:aws:bedrock:us-east-1:668449743071:application-inference-profile/76swhzg1u2xa",
         "amazon.nova-lite-v1:0": "arn:aws:bedrock:us-east-1:668449743071:application-inference-profile/id71iwyvauq9"

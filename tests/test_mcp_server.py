@@ -148,7 +148,10 @@ def test_ops_tools_for_operators_require_an_idempotency_key():
 
 def test_read_endpoint_never_exposes_ops_tools():
     r = m.handle_rpc({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, path="/mcp", ctx=ctx(elevated=True))
-    assert {t["name"] for t in r["result"]["tools"]} == {"lookup_entity", "entity_signals", "regulatory_events", "ask"}
+    names = {t["name"] for t in r["result"]["tools"]}
+    # #328: the two board tools are deliberate TENANT tools; no other /api/act intent leaks here
+    assert names - {"board_brief", "board_run_status"} == {"lookup_entity", "entity_signals",
+                                                            "regulatory_events", "ask"}
 
 
 def test_notifications_get_no_response_and_initialize_says_what_it_is():

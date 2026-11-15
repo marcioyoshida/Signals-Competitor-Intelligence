@@ -22,7 +22,10 @@ SYNTH = json.dumps({
     "summary": "Dois caminhos.",
     "options": [
         {"id": "opt-1", "description": "Reforçar liquidez", "customer_impact": "low",
-         "capital_liquidity_effect": "+LCR", "supported_by": ["risk", "cfo"], "citations": ["f-km1-alfa"]},
+         "capital_liquidity_effect": "+LCR", "supported_by": ["cso", "risk", "cco", "cpo", "cro"],
+         "derived_from": [{"officer": "risk", "option": "opt-1"}, {"officer": "cfo", "option": "opt-1"},
+                          {"officer": "cso", "option": "opt-9"}],
+         "citations": ["f-km1-alfa"]},
         {"id": "opt-2", "description": "Rever preços", "customer_impact": "high",
          "capital_liquidity_effect": "", "supported_by": ["cpo"], "citations": ["f-npl-alfa", "f-invented"]},
         {"id": "opt-3", "description": "Inventada", "customer_impact": "low", "citations": ["f-nope"]},
@@ -73,7 +76,12 @@ def test_synthesis_keeps_only_cited_claims_and_known_officers():
     out = run(Fake())
     s = out["synthesis"]
     assert [o["id"] for o in s["options"]] == ["opt-1", "opt-2"]
-    assert s["options"][0]["supported_by"] == ["risk"]            # "cfo" is not a board
+    # support comes from code: only "risk" names a real option of its own ("cfo" is not a
+    # board, cso has no "opt-9"); the model's claim of all five is ignored
+    assert s["options"][0]["supported_by"] == ["risk"]
+    assert s["options"][0]["derived_from"] == [{"officer": "risk", "option": "opt-1"}]
+    assert s["options"][0]["contested_by"] == ["cco", "cro"]       # they challenge risk
+    assert s["options"][1]["supported_by"] == [] and s["options"][1]["contested_by"] == []
     assert s["options"][1]["citations"] == ["f-npl-alfa"]          # invented id stripped
     assert [t["text"] for t in s["monitoring_triggers"]] == ["Selic sobe"]
     assert any("Inventada" in d for d in out["dropped"]) and any("boato" in d for d in out["dropped"])

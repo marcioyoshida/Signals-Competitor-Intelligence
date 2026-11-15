@@ -62,6 +62,8 @@ def board_names(context: Any) -> dict[str, Any] | None:
     if not isinstance(profiles, dict) or not all(_ARN_RE.fullmatch(str(a)) for a in profiles.values()):
         raise ValueError(f"cdk context {CONTEXT_KEY}.model_profiles must map model ids to ARNs")
     out["model_profiles"] = profiles
+    # "runs_table" is read by the MAIN stack (#328, act_fn), not by this one: it is this stack's
+    # own output, recorded after the first deploy.
     return out
 
 

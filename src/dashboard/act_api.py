@@ -902,6 +902,102 @@ def _act_set_model_admins(args: dict[str, Any], actor: str) -> tuple[str, int, d
     return "applied", 200, {"tenant_id": tenant, "model_admins": admins}
 
 
+# ---- #328 board brief (ADR 031): start a run, read its status --------------------------------
+_BOARD_REFUSALS = {
+    "tenant_not_provisioned": "o briefing de conselho pertence a uma conta de organização",
+    "no_tenant": "o briefing de conselho pertence a uma conta de organização",
+    "tenant_lookup_failed": "não foi possível verificar a conta agora; tente de novo",
+}
+_BOARD_RUN_FIELDS = ("run_id", "status", "task", "target", "created_at", "gate", "client_billed",
+                     "token_cap", "usage", "n_facts", "pack_gaps", "gaps", "synthesis", "dissents",
+                     "dropped", "elapsed_s", "reason", "pack_sha")
+
+
+def _board_tenant(args: dict[str, Any]) -> str:
+    """The VERIFIED tenant for a signed-in caller; only the origin-secret operator may name one."""
+    identified = "tenant" in args
+    return str((args.get("tenant") if identified else args.get("tenant_id")) or "").strip()
+
+
+def _act_board_brief(args: dict[str, Any], actor: str) -> tuple[str, int, dict[str, Any]]:
+    """apply (self-service): start an outside-in board brief on one entity (ADR 031). The five
+    boards debate over a frozen, cited context pack; the result is a brief for the board, never a
+    capital or pricing decision. Runs only when someone pays for it (the tenant's own model, an
+    active plan, or an operator flag). Needs `target` (entity id), `task` (the question) and an
+    `idempotency_key`; a retry with the same key returns the same run."""
+    import boto3
+
+    from src.board import gate, store
+    from src.dashboard import tenant_config
+
+    tenant = _board_tenant(args)
+    target = str(args.get("target") or "").strip()
+    task = " ".join(str(args.get("task") or "").split())
+    key = str(args.get("_idem") or "").strip()
+    if not key:
+        return "blocked", 400, {"error": "idempotency_key é obrigatório para iniciar um briefing"}
+    if not target or not (10 <= len(task) <= 800):
+        return "blocked", 400, {"error": "informe `target` (id da entidade) e `task` (10 a 800 caracteres)"}
+    sm = os.environ.get("ONCA_BOARD_STATE_MACHINE")
+    if not sm:
+        return "blocked", 503, {"error": "o briefing de conselho não está habilitado aqui"}
+
+    def raw_row(t: str) -> dict[str, Any] | None:
+        return tenant_config._table(None).get_item(Key={"tenant_id": t}).get("Item")
+
+    def client(t: str) -> Any:
+        from src.synth import model_keys
+        return model_keys.connection(t) if model_keys.configured() else None
+
+    d = gate.decide(tenant, config=tenant_config.get_tenant_config, raw_row=raw_row, client_model=client)
+    if not d.allowed:
+        msg = _BOARD_REFUSALS.get(d.reason, "o briefing de conselho exige um plano ativo ou o modelo "
+                                            "próprio da sua organização conectado")
+        return "blocked", 402, {"reason": d.reason, "error": msg}
+    run_id = store.run_id_for(tenant, key)
+    payload = {"tenant": tenant, "idempotency_key": key, "target": target, "task": task,
+               "requested_by": actor}
+    try:
+        boto3.client("stepfunctions").start_execution(
+            stateMachineArn=sm, name=f"brief-{run_id}", input=json.dumps(payload, ensure_ascii=False))
+        started = True
+    except Exception as exc:
+        if (getattr(exc, "response", None) or {}).get("Error", {}).get("Code") != "ExecutionAlreadyExists":
+            raise
+        started = False
+    return "applied", 202 if started else 200, {
+        "run_id": run_id, "status": "queued" if started else "exists", "gate": d.reason,
+        "client_billed": d.client_billed, "next": "board_run_status"}
+
+
+def _act_board_run_status(args: dict[str, Any], actor: str) -> tuple[str, int, dict[str, Any]]:
+    """apply (self-service, read-only): one board brief run by `run_id` (status, synthesis,
+    dissents, gaps, usage), or the organisation's 10 most recent runs. Never another tenant's."""
+    import boto3
+
+    from src.board import store
+
+    tenant = _board_tenant(args)
+    name = os.environ.get("ONCA_BOARD_RUNS_TABLE")
+    if not tenant or not name:
+        return "blocked", 403 if name else 503, {"error": "o briefing de conselho não está habilitado aqui"}
+    table = boto3.resource("dynamodb").Table(name)
+    run_id = str(args.get("run_id") or "").strip()
+    if run_id:
+        item = store.get_run(table, tenant, run_id)
+        if not item:
+            return "noop", 404, {"detail": "run not found", "run_id": run_id}
+        return "applied", 200, {"run": _plain({k: item[k] for k in _BOARD_RUN_FIELDS if k in item})}
+    runs = [{k: r[k] for k in ("run_id", "status", "target", "task", "created_at") if k in r}
+            for r in store.list_runs(table, tenant, limit=10)]
+    return "applied", 200, {"runs": _plain(runs)}
+
+
+def _plain(v: Any) -> Any:
+    """DynamoDB Decimals → JSON numbers."""
+    return json.loads(json.dumps(v, default=lambda x: int(x) if x == int(x) else float(x)))
+
+
 # #347: args that must never reach the journal or an idempotency replay (a model API key).
 _SECRET_ARGS = ("api_key",)
 # #347: intents that carry a secret are never offered as MCP tools: a key typed into an agent
@@ -911,10 +1007,11 @@ _MODEL_INTENTS = frozenset({"model_status", "connect_model", "test_model", "disc
 
 
 # report_feedback: the client's free text must not be copied into the curation journal.
-_NO_JOURNAL = frozenset({"record_engagement", "list_product_radar", "report_feedback", "list_feedback"})
+_NO_JOURNAL = frozenset({"record_engagement", "list_product_radar", "report_feedback", "list_feedback",
+                         "board_run_status"})
 
 # results that must not be kept as an idempotency replay (#249: an invite code is shown once)
-_NO_REPLAY = frozenset({"issue_invite"})
+_NO_REPLAY = frozenset({"issue_invite", "board_run_status"})  # a status must be read fresh
 
 # DEC-6: decision-management intents operate ON a decision — they must NOT be linked back as
 # "actions authorized BY" that decision (would self-reference).
@@ -968,13 +1065,17 @@ _CATALOG: dict[str, tuple[str, Callable[..., tuple[str, int, dict[str, Any]]], s
     "test_model": (APPLY, _act_test_model, None),
     "disconnect_model": (APPLY, _act_disconnect_model, None),
     "set_model_admins": (APPLY, _act_set_model_admins, "tenant_id"),   # operator only
+    # #328 board brief (ADR 031): start a run (spend-gated) and read its status
+    "board_brief": (APPLY, _act_board_brief, "target"),
+    "board_run_status": (APPLY, _act_board_run_status, None),
 }
+_BOARD_INTENTS = frozenset({"board_brief", "board_run_status"})
 
 # #161: what a NON-elevated tenant identity (Cognito JWT via /api/me/act) may call — the officer's
 # own decision capture and attention telemetry, nothing that touches the registry or pipeline.
 _SELF_SERVICE = frozenset({"record_decision", "set_outcome", "set_board_adoption",
                            "append_reference", "record_engagement", "report_feedback",
-                           "delete_account", "set_watchlist", *_MODEL_INTENTS})
+                           "delete_account", "set_watchlist", *_MODEL_INTENTS, *_BOARD_INTENTS})
 # #251: intents that only ever act on the verified caller — no origin-secret operator, no MCP.
 _SELF_ONLY = frozenset({"delete_account"})
 # of those, the ones that act on an EXISTING decision — tenant-checked before they run
@@ -1078,7 +1179,10 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     if identity is None and intent in _MODEL_INTENTS:
         args["_elevated"] = elevated     # the origin-secret operator names tenant_id
+    if intent == "board_brief":          # #328: the run id derives from (tenant, raw key)
+        args["_idem"] = str(body.get("idempotency_key") or "").strip()
     outcome, status, detail = handler(args, actor)
+    args.pop("_idem", None)
     # #347: a secret never reaches the journal or the replay store; the last 4 identify it.
     for k in _SECRET_ARGS:
         if k in args:

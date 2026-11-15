@@ -111,3 +111,15 @@ def test_ask_officer_no_answer_is_not_retried():
 def test_ask_officer_rejects_unknown_officer():
     with pytest.raises(ValueError):
         c.ask_officer("cfo", env(), call=lambda s, p: "{}", pack_fact_ids=PACK)
+
+
+def test_length_limits_are_stated_and_enforced():
+    user = c.user_prompt("risk", env())
+    assert f"até {c.DIAGNOSIS_TARGET} caracteres" in user
+    long_diag = good(diagnosis="x" * (c.DIAGNOSIS_MAX + 1))
+    assert any("diagnosis longer" in e for e in c.validate_position(long_diag, officer="risk", pack_fact_ids=PACK))
+    opt = dict(good()["options"][0], description="y" * (c.DESCRIPTION_MAX + 1),
+               red_lines=["a"] * (c.MAX_RED_LINES + 1))
+    errs = c.validate_position(good(options=[opt], constraints=["c"] * 6), officer="risk", pack_fact_ids=PACK)
+    assert any("description longer" in e for e in errs)
+    assert any("red_lines" in e for e in errs) and any("constraints" in e for e in errs)

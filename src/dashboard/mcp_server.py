@@ -152,6 +152,57 @@ def read_tools() -> list[dict[str, Any]]:
     ]
 
 
+BOARD_SCOPE = ("Outside-in only: built from public data (regulators, registries, prudential "
+               "reports, press) about the entity and its peers. It is a briefing for a board, never a "
+               "capital, liquidity or pricing decision; it cannot see the bank's internal data.")
+
+
+def board_tools() -> list[dict[str, Any]]:
+    """#328: the board brief (ADR 031) as two tenant tools. Listed only to a caller that belongs
+    to an organisation (a tenant token); a run is spend-gated server-side."""
+    return [
+        {"name": "board_brief", "title": "Board brief (start)",
+         "annotations": {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True,
+                         "openWorldHint": False},
+         "description": ("Start a board brief on one entity: the five Onça boards (Estratégia, Risco, "
+                         "Compliance, Produto, Regulatório) diagnose, challenge each other, quantify "
+                         "against peers and synthesize 2–3 cited options with customer-impact bands, "
+                         "verbatim dissents and monitoring triggers. " + BOARD_SCOPE + " Takes several "
+                         "minutes and uses the organisation's plan or its own connected model: poll "
+                         "`board_run_status`. Reusing `idempotency_key` returns the same run."),
+         "inputSchema": {"type": "object", "properties": {
+             "target": {"type": "string", "description": "Entity id (from `lookup_entity`)."},
+             "task": {"type": "string", "minLength": 10, "maxLength": 800,
+                      "description": "The board's question, e.g. how to respond to a rating downgrade."},
+             "idempotency_key": {"type": "string", "minLength": 8,
+                                 "description": "Required. One key per question; retry with the same key."}},
+             "required": ["target", "task", "idempotency_key"], "additionalProperties": False}},
+        {"name": "board_run_status", "title": "Board brief (status)",
+         "annotations": {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True,
+                         "openWorldHint": False},
+         "description": ("Status and result of a board brief: the synthesis (options, each with the "
+                         "pack facts it cites), dissents, gaps and usage. Without `run_id`, the "
+                         "organisation's recent runs. " + BOARD_SCOPE),
+         "inputSchema": {"type": "object", "properties": {
+             "run_id": {"type": "string", "description": "From `board_brief`; omit to list recent runs."}},
+             "additionalProperties": False}},
+    ]
+
+
+def call_board_tool(name: str, args: dict[str, Any], ctx: "Context") -> dict[str, Any]:
+    if not ctx.principal.get("tenant"):
+        return _text({"isError": True, "message": "O briefing de conselho pertence a uma conta de organização."})
+    args = args or {}
+    if name == "board_brief":
+        key = str(args.get("idempotency_key") or "").strip()
+        if len(key) < 8:
+            return _text({"isError": True, "message": "`idempotency_key` (≥ 8 caracteres) é obrigatório."})
+        return _text(ctx.act({"intent": "board_brief", "idempotency_key": key,
+                              "args": {"target": args.get("target"), "task": args.get("task")}}))
+    return _text(ctx.act({"intent": "board_run_status",
+                          "args": {"run_id": args.get("run_id")} if args.get("run_id") else {}}))
+
+
 def _envelope(rows_key: str, rows: list[dict[str, Any]], as_of: Any, source: str, **extra: Any) -> dict[str, Any]:
     return {"as_of": as_of, "source": source, "license": LICENSE, rows_key: rows, "count": len(rows), **extra}
 
@@ -403,12 +454,16 @@ def handle_rpc(message: Any, *, path: str, ctx: Context) -> dict[str, Any] | Non
                              "links, sector-wide regulatory events, and a grounded `ask`. The first three tools "
                              "are deterministic; `ask` is a model and can be wrong. Always cite the `url`.")})
     if method == "tools/list":
-        return _ok(mid, {"tools": ops_tools(ctx.elevated) if path == "/mcp/ops" else read_tools()})
+        tools = (ops_tools(ctx.elevated) if path == "/mcp/ops" else
+                 read_tools() + (board_tools() if ctx.principal.get("tenant") else []))
+        return _ok(mid, {"tools": tools})
     if method == "tools/call":
         p = message.get("params") or {}
-        fn = call_ops_tool if path == "/mcp/ops" else call_read_tool
+        name = str(p.get("name") or "")
+        fn = (call_ops_tool if path == "/mcp/ops" else
+              call_board_tool if name in ("board_brief", "board_run_status") else call_read_tool)
         try:
-            return _ok(mid, fn(str(p.get("name") or ""), p.get("arguments") or {}, ctx))
+            return _ok(mid, fn(name, p.get("arguments") or {}, ctx))
         except Exception as exc:  # noqa: BLE001 - a tool result the agent can read, never a 500
             print("mcp: tool_error " + json.dumps({"tool": p.get("name"), "type": type(exc).__name__}))
             return _ok(mid, _text({"isError": True, "message": "Falha interna nesta ferramenta — tente de novo."}))

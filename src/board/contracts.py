@@ -23,7 +23,13 @@ BOARD_OFFICERS: tuple[str, ...] = ("cso", "risk", "cco", "cpo", "cro")
 PHASES: tuple[str, ...] = ("diagnosis", "challenge", "quantify", "synthesize")
 IMPACT_BANDS: tuple[str, ...] = ("low", "medium", "high")
 MAX_OPTIONS = 3
-MAX_TEXT = 4000  # per free-text field; a longer field is a filler signal, not more substance
+# Length limits (dry run 2026-11-15: ~3.5k output tokens per officer, a long and costly read).
+# The prompt states the TARGET; validation enforces a looser BOUND, so only a real overrun
+# costs a re-prompt.
+DIAGNOSIS_TARGET, DIAGNOSIS_MAX = 900, 1500
+DESCRIPTION_TARGET, DESCRIPTION_MAX = 400, 700
+MAX_CONSTRAINTS, MAX_RED_LINES = 5, 4
+MAX_TEXT = DIAGNOSIS_MAX
 
 # A position is valid, or it is recorded as invalid after one re-prompt (ADR 031 §2).
 STATUS_OK, STATUS_INVALID, STATUS_NO_ANSWER = "ok", "invalid", "no_answer"
@@ -63,6 +69,8 @@ def validate_position(obj: Any, *, officer: str, pack_fact_ids: set[str] | None)
         errs.append(f"diagnosis longer than {MAX_TEXT} characters")
     if not _strs(obj.get("constraints", [])):
         errs.append("constraints must be a list of strings")
+    elif len(obj.get("constraints", [])) > MAX_CONSTRAINTS:
+        errs.append(f"at most {MAX_CONSTRAINTS} constraints")
     opts = obj.get("options", [])
     if not isinstance(opts, list) or len(opts) > MAX_OPTIONS:
         errs.append(f"options must be a list of at most {MAX_OPTIONS}")
@@ -82,12 +90,16 @@ def validate_position(obj: Any, *, officer: str, pack_fact_ids: set[str] | None)
             seen.add(oid)
         if not isinstance(o.get("description"), str) or not o["description"].strip():
             errs.append(f"{where}.description is required")
+        elif len(o["description"]) > DESCRIPTION_MAX:
+            errs.append(f"{where}.description longer than {DESCRIPTION_MAX} characters")
         if o.get("customer_impact") not in IMPACT_BANDS:
             errs.append(f"{where}.customer_impact must be one of {', '.join(IMPACT_BANDS)}")
         if not isinstance(o.get("capital_liquidity_effect", ""), str):
             errs.append(f"{where}.capital_liquidity_effect must be a string")
         if not _strs(o.get("red_lines", [])):
             errs.append(f"{where}.red_lines must be a list of strings")
+        elif len(o.get("red_lines", [])) > MAX_RED_LINES:
+            errs.append(f"{where}: at most {MAX_RED_LINES} red_lines")
     cites = obj.get("citations")
     if not isinstance(cites, list) or not cites:
         errs.append("citations must list at least one pack fact")
@@ -129,7 +141,10 @@ _CONTRACT = """Responda SOMENTE com um objeto JSON no esquema board/v1/position:
  "tool_call_summary": []}
 Regras: use apenas fatos do pacote de contexto; cite cada fato pelo pack_fact_id; no máximo
 %(max_options)d opções; se o pacote não sustenta uma afirmação, não a faça. Dados públicos têm
-defasagem: diga o trimestre/data (as_of) dos números que usar."""
+defasagem: diga o trimestre/data (as_of) dos números que usar.
+Tamanho: diagnosis com até %(diag)d caracteres; cada description com até %(desc)d; no máximo
+%(cons)d constraints e %(red)d red_lines por opção. Seja direto: números e o fato citado, sem repetir
+o pacote."""
 
 
 def system_prompt(officer: str) -> str:
@@ -143,7 +158,9 @@ def user_prompt(officer: str, envelope: dict[str, Any]) -> str:
     parts = [f"Fase: {envelope['phase']}", f"Tarefa: {envelope['task']}"]
     if prior:
         parts.append("Posições anteriores:\n" + json.dumps(prior, ensure_ascii=False))
-    parts.append(_CONTRACT % {"officer": officer, "max_options": MAX_OPTIONS})
+    parts.append(_CONTRACT % {"officer": officer, "max_options": MAX_OPTIONS,
+                              "diag": DIAGNOSIS_TARGET, "desc": DESCRIPTION_TARGET,
+                              "cons": MAX_CONSTRAINTS, "red": MAX_RED_LINES})
     return "\n\n".join(parts)
 
 

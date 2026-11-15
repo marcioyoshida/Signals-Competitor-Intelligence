@@ -1,0 +1,2110 @@
+{
+  "model": "sonnet",
+  "provider": "claude-cli (subscription)",
+  "scenario": "downgrade-v1",
+  "pack_sha256": "0884ead9d9c813ce7724941379fe56efeb962cd13d9870f6434c2728f871cb7f",
+  "usage": {
+    "calls": 12,
+    "tokens_in": 213446,
+    "tokens_out": 32408,
+    "cache_read": 852216,
+    "token_cap": 400000
+  },
+  "calls": [
+    {
+      "officer": "cso",
+      "phase": "diagnosis",
+      "s": 21.5,
+      "input_tokens": 55618,
+      "cache_read": 0,
+      "output_tokens": 2457,
+      "is_error": false
+    },
+    {
+      "officer": "risk",
+      "phase": "diagnosis",
+      "s": 20.1,
+      "input_tokens": 4904,
+      "cache_read": 79015,
+      "output_tokens": 2639,
+      "is_error": false
+    },
+    {
+      "officer": "cco",
+      "phase": "diagnosis",
+      "s": 20.6,
+      "input_tokens": 4904,
+      "cache_read": 78993,
+      "output_tokens": 2725,
+      "is_error": false
+    },
+    {
+      "officer": "cpo",
+      "phase": "diagnosis",
+      "s": 19.2,
+      "input_tokens": 4239,
+      "cache_read": 78975,
+      "output_tokens": 2457,
+      "is_error": false
+    },
+    {
+      "officer": "cro",
+      "phase": "diagnosis",
+      "s": 20.5,
+      "input_tokens": 4904,
+      "cache_read": 78967,
+      "output_tokens": 2605,
+      "is_error": false
+    },
+    {
+      "officer": "cro",
+      "phase": "challenge",
+      "s": 21.6,
+      "input_tokens": 10226,
+      "cache_read": 78967,
+      "output_tokens": 2934,
+      "is_error": false
+    },
+    {
+      "officer": "cco",
+      "phase": "challenge",
+      "s": 19.1,
+      "input_tokens": 9560,
+      "cache_read": 78993,
+      "output_tokens": 2415,
+      "is_error": false
+    },
+    {
+      "officer": "risk",
+      "phase": "challenge",
+      "s": 19.4,
+      "input_tokens": 7019,
+      "cache_read": 62509,
+      "output_tokens": 2399,
+      "is_error": false
+    },
+    {
+      "officer": "risk",
+      "phase": "quantify",
+      "s": 18.6,
+      "input_tokens": 25523,
+      "cache_read": 79015,
+      "output_tokens": 2759,
+      "is_error": false
+    },
+    {
+      "officer": "cpo",
+      "phase": "quantify",
+      "s": 19.5,
+      "input_tokens": 26158,
+      "cache_read": 78975,
+      "output_tokens": 2916,
+      "is_error": false
+    },
+    {
+      "officer": "cso",
+      "phase": "quantify",
+      "s": 19.2,
+      "input_tokens": 25478,
+      "cache_read": 78987,
+      "output_tokens": 2829,
+      "is_error": false
+    },
+    {
+      "officer": "secretary",
+      "phase": "synthesize",
+      "s": 22.2,
+      "input_tokens": 34913,
+      "cache_read": 78820,
+      "output_tokens": 3273,
+      "is_error": false
+    }
+  ],
+  "result": {
+    "run_id": "dry-downgrade-v1-20261115T0502Z",
+    "shared_context_id": "0884ead9d9c813ce7724941379fe56efeb962cd13d9870f6434c2728f871cb7f",
+    "task": "O Banco Aurora (fictício) teve o rating rebaixado de AA para A+ com perspectiva negativa. Que opções o conselho deve considerar nos próximos 90 dias para funding, preço de crédito e relacionamento com clientes, e quais gatilhos monitorar?",
+    "status": "complete",
+    "phases": {
+      "diagnosis": {
+        "cso": {
+          "officer": "cso",
+          "phase": "diagnosis",
+          "run_id": "dry-downgrade-v1-20261115T0502Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cso",
+            "diagnosis": "O rebaixamento (AA→A+, negativa, 2026-11-10) confirma uma posição competitiva em perda de terreno: Aurora está abaixo dos pares em todas as frentes públicas. Funding: atacado 46% (pares 24–33%), varejo 38% (pares 51–60%), 22% do atacado vence em 12m (IF.data 2026-06); CDB 2 anos subiu de 104% para 112% do CDI (2026-11-12). Capital: Basileia 13,0%→12,1% e LCR 131%→118% de 2026-2 para 2026-3 (defasagem de um trimestre). Carteira: NPL 5,8% (+1,1 p.p. em 2 trimestres, 2026-06), ROE 9,8% vs 13–17% dos pares. Pares atacam: Boreal com portabilidade a 4,4% a.m. e Cerrado com conta remunerada a 102% do CDI. Tese: Aurora tem pouca margem para competir por preço e deve defender liquidez e a base de clientes. Sem dados internos (apetite a risco, custo marginal de funding, elasticidade).",
+            "constraints": [
+              "Briefing externo (outside-in): sem dados internos de apetite a risco, custo marginal de funding ou elasticidade de depósitos; não é decisão de capital ou preço.",
+              "Dados prudenciais e IF.data com defasagem (KM1 2026-3; NPL e funding 2026-06); LCR e Basileia atuais podem já ser diferentes.",
+              "Prazo de 90 dias coincide com a consulta pública de renegociação padronizada (180 dias de adequação após publicação) e com o PAS em curso sem decisão.",
+              "BCB sinalizou possível ativação gradual do adicional contracíclico em 2027, o que pressionaria o capital de Aurora, já em queda.",
+              "Selic de 13,75% e comprometimento de renda das famílias em 28,6% (máxima) limitam a capacidade de repassar custo ao crédito."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Defender liquidez e funding: alongar vencimentos do atacado (22% vence em 12m), diversificar investidores e acelerar captação de varejo com oferta direcionada, evitando competir em preço com a conta de 102% do CDI do Cerrado.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Reduz risco de refinanciamento e protege o LCR (118% em 2026-3), mas mantém custo de captação elevado (112% do CDI no CDB de 2 anos) e pressiona a margem com ROE de 9,8%.",
+                "red_lines": [
+                  "Não deixar o LCR cair abaixo do patamar mínimo definido pelo conselho.",
+                  "Não depender de rolagem de atacado concentrada em poucas contrapartes.",
+                  "Não aceitar captação a custo que torne a carteira nova inviável."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Reprecificar e reorientar crédito: reduzir exposição a cartão e crédito pessoal (41% do varejo; rotativo a 14,2% a.m. vs 12,8% dos pares) e priorizar carteira de menor risco, aceitando perda de volume diante da portabilidade do Boreal.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Preserva capital ao conter o custo de crédito (7,4% da carteira) e a inadimplência; reduz receita no curto prazo e acelera a saída de clientes de varejo, pressionando o ROE.",
+                "red_lines": [
+                  "Não elevar taxas acima dos níveis atuais, já superiores à mediana dos pares, sem avaliação do risco do PAS sobre superendividados.",
+                  "Não restringir crédito de forma que force clientes ao inadimplemento.",
+                  "Não deixar a Basileia (12,1%) cair com a queda de volume sem plano de capital."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Reforçar relacionamento e conformidade: antecipar a renegociação padronizada para clientes com mais de 90 dias de atraso, rever tarifas e cobrança (3º no ranking de reclamações, índice 61,4) e retenção ativa contra a portabilidade do Boreal.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Pode elevar provisões e reduzir receita de tarifas no curto prazo, com efeito sobre o capital principal (9,4%); mitiga risco regulatório e reputacional e apoia a captação de varejo.",
+                "red_lines": [
+                  "Não renegociar de modo a mascarar a inadimplência real.",
+                  "Não agir de forma que contrarie o processo administrativo sancionador em curso.",
+                  "Não comprometer o capital principal sem projeção de absorção."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-rating-aurora-downgrade",
+                "source": "Agência fictícia (comunicado público)",
+                "as_of": "2026-11-10"
+              },
+              {
+                "pack_fact_id": "f-km1-aurora",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-aurora-prev",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-2"
+              },
+              {
+                "pack_fact_id": "f-npl-aurora",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-funding-aurora",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-funding-peers",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-roe-aurora",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-spread-aurora",
+                "source": "Taxas de captação divulgadas (fictício)",
+                "as_of": "2026-11-12"
+              },
+              {
+                "pack_fact_id": "f-rates-aurora",
+                "source": "BCB taxas de juros (fictício)",
+                "as_of": "2026-11-07"
+              },
+              {
+                "pack_fact_id": "f-complaints-aurora",
+                "source": "Ranking de reclamações (fictício)",
+                "as_of": "2026-T3"
+              },
+              {
+                "pack_fact_id": "f-pas-aurora",
+                "source": "BCB PAS (fictício)",
+                "as_of": "2026-09-30"
+              },
+              {
+                "pack_fact_id": "f-reg-renegociacao",
+                "source": "CMN/BCB (fictício)",
+                "as_of": "2026-10-20"
+              },
+              {
+                "pack_fact_id": "f-reg-capital-buffer",
+                "source": "BCB (fictício)",
+                "as_of": "2026-09-01"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "Copom (fictício)",
+                "as_of": "2026-11-05"
+              },
+              {
+                "pack_fact_id": "f-macro-households",
+                "source": "BCB (fictício)",
+                "as_of": "2026-09"
+              },
+              {
+                "pack_fact_id": "f-boreal-move",
+                "source": "Imprensa (fictício)",
+                "as_of": "2026-11-11"
+              },
+              {
+                "pack_fact_id": "f-cerrado-move",
+                "source": "Imprensa (fictício)",
+                "as_of": "2026-11-08"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "risk": {
+          "officer": "risk",
+          "phase": "diagnosis",
+          "run_id": "dry-downgrade-v1-20261115T0502Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "risk",
+            "diagnosis": "Aurora é o elo mais frágil do grupo e a piora é composta. Capital (KM1, 2026-3): Basileia 12.1% (13.0% no 2026-2), capital principal 9.4% (10.1%), ambos abaixo de todos os pares (13.6–15.2%; 10.2–11.6%). Liquidez: LCR 118% (131%) e NSFR 104%, os menores do grupo. Qualidade: inadimplência 5.8%, +1.1 p.p. em dois trimestres (IF.data, 2026-06), contra 3.1–4.4% dos pares; custo de crédito 7.4% e ROE 9.8% limitam geração de capital. Funding: atacado 46%, 22% vence em 12 meses (2026-06); pós-rebaixamento CDB 2 anos subiu a 112% do CDI (104% antes). Dados prudenciais têm defasagem e não captam o efeito do rebaixamento de 2026-11-10; sem dados internos.",
+            "constraints": [
+              "Dados prudenciais são de 2026-3 e IF.data de 2026-06: não refletem o rebaixamento nem a alta de custo de funding.",
+              "Sem dados internos (apetite a risco, custo marginal de funding, elasticidade de depósitos): efeitos de cada opção são direcionais, não quantificados.",
+              "PAS em curso sobre crédito a superendividados (2026-09-30), sem decisão: reduz espaço para repricing agressivo ou cobrança dura.",
+              "Norma de renegociação padronizada >90 dias em consulta (2026-10-20; adequação proposta de 180 dias) pode elevar carga operacional e provisões.",
+              "BCB sinaliza possível adicional contracíclico em 2027 se o crédito às famílias seguir acelerando (hoje 0%), o que elevaria exigência de capital."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Defender liquidez e capital: alongar e diversificar funding, reduzir o atacado que vence em 12 meses, pagar prêmio seletivo em CDB e desacelerar crescimento de cartão/crédito pessoal para preservar Basileia e LCR.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Protege LCR (118%) e reduz risco de rolagem; prêmio sobre CDI (112% vs 101–104% dos pares) pressiona margem e ROE (9.8%). Menor crescimento de ativos pondera Basileia (12.1%).",
+                "red_lines": [
+                  "Não deixar LCR cair abaixo do piso interno aprovado (a definir pelo conselho)",
+                  "Não aceitar prêmio de captação que torne a margem insustentável",
+                  "Não depender de rolagem de atacado concentrada em poucos investidores"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Reprecificar e restringir crédito de varejo por risco: elevar preço ou cortar limites nos segmentos de pior inadimplência (PF 7.9%) e reforçar cobrança e provisões. Taxas já acima dos pares (6.1% e 14.2% a.m. vs 5.2% e 12.8%).",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Melhora a receita ajustada ao risco e reduz consumo de capital no médio prazo; provisões extras reduzem capital no curto prazo. Risco de seleção adversa e de perda de clientes para a portabilidade do Boreal (a partir de 4.4% a.m.).",
+                "red_lines": [
+                  "Não elevar preço a clientes superendividados enquanto o PAS estiver em curso",
+                  "Não contrariar a norma de renegociação em consulta",
+                  "Não aprofundar a distância de preço frente aos pares sem avaliar a fuga de bons clientes"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Relacionamento e retenção de depósitos: renegociação proativa e transparente de dívidas, revisão de tarifas (3º em reclamações) e oferta de conta remunerada para ampliar depósitos de varejo (38% do funding vs 51–60% dos pares).",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Reduz dependência de atacado e melhora a estabilidade do funding no médio prazo. Renegociação pode elevar provisões e comprimir receita de tarifas no curto prazo; remuneração disputa com o Cerrado (102% do CDI).",
+                "red_lines": [
+                  "Não renegociar de forma que esconda a deterioração da carteira nas métricas",
+                  "Não oferecer remuneração que supere o custo marginal do atacado",
+                  "Não reduzir tarifas sem avaliar o efeito sobre o resultado, dado o ROE de 9.8%"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-rating-aurora-downgrade",
+                "source": "Agência fictícia (comunicado público)",
+                "as_of": "2026-11-10"
+              },
+              {
+                "pack_fact_id": "f-km1-aurora",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-aurora-prev",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-2"
+              },
+              {
+                "pack_fact_id": "f-km1-boreal",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-cerrado",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-delta",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-npl-aurora",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-npl-boreal",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-npl-cerrado",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-npl-delta",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-funding-aurora",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-funding-peers",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-roe-aurora",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-spread-aurora",
+                "source": "Taxas de captação divulgadas (fictício)",
+                "as_of": "2026-11-12"
+              },
+              {
+                "pack_fact_id": "f-rates-aurora",
+                "source": "BCB taxas de juros (fictício)",
+                "as_of": "2026-11-07"
+              },
+              {
+                "pack_fact_id": "f-complaints-aurora",
+                "source": "Ranking de reclamações (fictício)",
+                "as_of": "2026-T3"
+              },
+              {
+                "pack_fact_id": "f-pas-aurora",
+                "source": "BCB PAS (fictício)",
+                "as_of": "2026-09-30"
+              },
+              {
+                "pack_fact_id": "f-reg-renegociacao",
+                "source": "CMN/BCB (fictício)",
+                "as_of": "2026-10-20"
+              },
+              {
+                "pack_fact_id": "f-reg-capital-buffer",
+                "source": "BCB (fictício)",
+                "as_of": "2026-09-01"
+              },
+              {
+                "pack_fact_id": "f-boreal-move",
+                "source": "Imprensa (fictício)",
+                "as_of": "2026-11-11"
+              },
+              {
+                "pack_fact_id": "f-cerrado-move",
+                "source": "Imprensa (fictício)",
+                "as_of": "2026-11-08"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cco": {
+          "officer": "cco",
+          "phase": "diagnosis",
+          "run_id": "dry-downgrade-v1-20261115T0502Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cco",
+            "diagnosis": "Outside-in, o rebaixamento (AA→A+, perspectiva negativa, 2026-11-10) reflete carteira de varejo pior e dependência de atacado. Funding: atacado 46% (pares 24–33%), 22% vence em 12 meses (IF.data 2026-06); CDB 2 anos subiu de 104% para 112% do CDI. Capital/liquidez enfraqueceram (KM1 2026-3): Basileia 13.0%→12.1%, capital principal 10.1%→9.4%, LCR 131%→118%. Inadimplência 5.8% (pares 3.1–4.4%), ROE 9.8% (pares 13–17%). Conduta: 3º no ranking de reclamações, PAS em curso sobre superendividados (sem decisão), preços acima dos pares e norma de renegociação em consulta. Boreal e Cerrado já atacam portabilidade e depósitos. Sem dados internos; dados prudenciais têm defasagem de um trimestre.",
+            "constraints": [
+              "Sem dados internos (apetite a risco, custo marginal de funding, elasticidade de depósitos): opções são direcionais, não decisão de capital ou preço.",
+              "Dados prudenciais são de 2026-3 e IF.data de 2026-06; o rebaixamento (2026-11-10) ainda não aparece neles.",
+              "PAS em curso sobre oferta de crédito a superendividados: qualquer ação de preço ou cobrança deve evitar agravar a exposição de conduta.",
+              "Norma de renegociação padronizada (>90 dias de atraso, 180 dias de adequação proposta) está só em consulta pública.",
+              "Possível ativação gradual do adicional contracíclico em 2027 pressionaria capital já em queda."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Reduzir a dependência de atacado: alongar prazos e escalonar os vencimentos de 22% do atacado, além de captar depósitos de varejo com remuneração calibrada, ciente de que Cerrado já paga 102% do CDI. Metas e gatilhos de liquidez a definir pelo conselho.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Protege o LCR (118% em 2026-3, vs 140–172% nos pares) e reduz o risco de rolagem; o custo de funding sobe no curto prazo (CDB a 112% do CDI) e pressiona um ROE de 9.8%.",
+                "red_lines": [
+                  "Não deixar o LCR cair abaixo do piso regulatório nem do nível interno definido pelo conselho.",
+                  "Não pagar prêmio crescente por atacado sem teto aprovado.",
+                  "Não concentrar vencimentos em janelas curtas.",
+                  "Não depender de uma única classe de investidor institucional."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Reprecificar e restringir o crédito de varejo com disciplina de risco: aperto de política em cartão e crédito pessoal (41% do varejo), cujas taxas (6.1% e 14.2% a.m.) já superam a mediana dos pares (5.2% e 12.8%). Preservar clientes de menor risco, sem concorrer em portabilidade com o Boreal (4.4% a.m.).",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Contém o crescimento de ativos ponderados pelo risco e o custo de crédito (7.4% da carteira), apoiando capital principal (9.4%). Reduz receita e volume no curto prazo e pode acelerar a perda de clientes para pares.",
+                "red_lines": [
+                  "Não elevar preço a clientes superendividados enquanto o PAS estiver em curso.",
+                  "Não adotar corte de limite sem aviso e sem canal de renegociação.",
+                  "Não buscar crescimento via taxa agressiva que agrave a inadimplência de 5.8%."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Programa proativo de relacionamento e renegociação: oferta padronizada a clientes em atraso (antecipando a norma em consulta), tratamento das principais causas de reclamação (tarifas, renegociação) e comunicação transparente aos depositantes após o rebaixamento.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Pode reduzir o fluxo de inadimplência e o risco de conduta (PAS, ranking de reclamações: 3º, índice 61.4). Renegociações podem exigir provisões e afetar o capital no curto prazo; efeito líquido sem dados internos.",
+                "red_lines": [
+                  "Não condicionar renegociação a venda de produtos.",
+                  "Não comunicar o rebaixamento de forma enganosa ou minimizadora.",
+                  "Não tratar a norma em consulta como definitiva antes da publicação.",
+                  "Não prometer condições sem lastro em capital e provisões."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-rating-aurora-downgrade",
+                "source": "Agência fictícia (comunicado público)",
+                "as_of": "2026-11-10"
+              },
+              {
+                "pack_fact_id": "f-km1-aurora",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-aurora-prev",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-2"
+              },
+              {
+                "pack_fact_id": "f-km1-boreal",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-cerrado",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-delta",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-npl-aurora",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-npl-boreal",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-npl-cerrado",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-npl-delta",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-funding-aurora",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-funding-peers",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-roe-aurora",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-spread-aurora",
+                "source": "Taxas de captação divulgadas (fictício)",
+                "as_of": "2026-11-12"
+              },
+              {
+                "pack_fact_id": "f-rates-aurora",
+                "source": "BCB taxas de juros (fictício)",
+                "as_of": "2026-11-07"
+              },
+              {
+                "pack_fact_id": "f-complaints-aurora",
+                "source": "Ranking de reclamações (fictício)",
+                "as_of": "2026-T3"
+              },
+              {
+                "pack_fact_id": "f-complaints-peers",
+                "source": "Ranking de reclamações (fictício)",
+                "as_of": "2026-T3"
+              },
+              {
+                "pack_fact_id": "f-pas-aurora",
+                "source": "BCB PAS (fictício)",
+                "as_of": "2026-09-30"
+              },
+              {
+                "pack_fact_id": "f-reg-renegociacao",
+                "source": "CMN/BCB (fictício)",
+                "as_of": "2026-10-20"
+              },
+              {
+                "pack_fact_id": "f-reg-capital-buffer",
+                "source": "BCB (fictício)",
+                "as_of": "2026-09-01"
+              },
+              {
+                "pack_fact_id": "f-boreal-move",
+                "source": "Imprensa (fictício)",
+                "as_of": "2026-11-11"
+              },
+              {
+                "pack_fact_id": "f-cerrado-move",
+                "source": "Imprensa (fictício)",
+                "as_of": "2026-11-08"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cpo": {
+          "officer": "cpo",
+          "phase": "diagnosis",
+          "run_id": "dry-downgrade-v1-20261115T0502Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cpo",
+            "diagnosis": "Rebaixamento (2026-11-10) de AA para A+, perspectiva negativa, cita carteira de varejo e dependência de atacado. Os dados confirmam: atacado é 46% do funding vs 24%-33% nos pares, com 22% vencendo em 12 meses (IF.data 2026-06). Capital cai: Basileia 13.0%→12.1% e LCR 131%→118% (KM1 2026-3 vs 2026-2), abaixo dos pares (Basileia 13.6%-15.2%). Inadimplência 5.8% (+1.1 p.p.), ROE 9.8% vs 13%-17%. O custo de captação já subiu: CDB 2 anos de 104% para 112% do CDI (2026-11-12). Pontos cegos: sem apetite a risco, custo marginal de funding ou elasticidade de depósitos internos; dados prudenciais defasados em um trimestre. Boreal (portabilidade a partir de 4.4% a.m.) e Cerrado (102% do CDI) pressionam clientes e depósitos.",
+            "constraints": [
+              "Dados públicos defasados: KM1 de 2026-3 e IF.data de 2026-06 não refletem o efeito do rebaixamento.",
+              "Sem dados internos (apetite a risco, custo marginal de funding, elasticidade de depósitos): briefing outside-in, sem decisão de capital ou preço.",
+              "Capital principal 9.4% e Basileia 12.1% em queda trimestral deixam pouca folga para absorver custo de crédito (7.4% da carteira).",
+              "Processo sancionador do BCB sobre crédito a superendividados em curso, sem decisão; norma de renegociação em consulta pública (180 dias de adequação proposta).",
+              "Adicional contracíclico em 0%, com possível ativação gradual em 2027 se o crédito às famílias seguir acelerando."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Priorizar liquidez e funding: alongar vencimentos do atacado (22% vence em 12 meses) e reforçar depósitos de varejo (38% do funding vs 51%-60% nos pares), ponderando o custo adicional frente ao CDB a 112% do CDI e à conta remunerada do Cerrado a 102%.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Melhora o perfil de vencimentos e o LCR (118%, ante 131% no trimestre anterior); eleva o custo de funding, pressionando um ROE de 9.8%.",
+                "red_lines": [
+                  "LCR não deve cair abaixo do patamar atual de 118%",
+                  "Não depender de atacado de curto prazo para cobrir o vencimento de 22% em 12 meses",
+                  "Custo de captação não pode corroer ainda mais a margem (ROE 9.8%)"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Reprecificar e restringir crédito de maior risco (cartão e crédito pessoal são 41% do varejo; pessoal a 6.1% a.m. e rotativo a 14.2% a.m., acima da mediana dos pares de 5.2% e 12.8%). Reforçar a seletividade na originação e a cobrança, sem ampliar o preço.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Reduz ativos ponderados por risco e a pressão sobre o custo de crédito (7.4%) e a inadimplência (5.8%); pode reduzir a receita e a base de clientes.",
+                "red_lines": [
+                  "Evitar elevar preço a clientes superendividados, dado o PAS em curso",
+                  "Não aumentar o risco de perda de clientes para a portabilidade do Boreal (4.4% a.m.)",
+                  "Manter a conformidade com a norma de renegociação em consulta pública"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Programa de relacionamento e renegociação padronizada antecipando a norma em consulta (>90 dias de atraso), com foco nas reclamações (3º no ranking, índice 61.4, motivo tarifas e renegociação) e na retenção contra a portabilidade do Boreal.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Pode reduzir perdas e reclamações; o efeito inicial em provisões e receita de tarifas não é sustentado pelo pacote.",
+                "red_lines": [
+                  "Não tratar a norma como definitiva: está em consulta pública",
+                  "Não antecipar as conclusões do PAS, sem decisão",
+                  "Não comprometer o capital principal (9.4%) com concessões sem estimativa interna"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-rating-aurora-downgrade",
+                "source": "Agência fictícia (comunicado público)",
+                "as_of": "2026-11-10"
+              },
+              {
+                "pack_fact_id": "f-km1-aurora",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-aurora-prev",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-2"
+              },
+              {
+                "pack_fact_id": "f-km1-boreal",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-cerrado",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-delta",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-npl-aurora",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-funding-aurora",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-funding-peers",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-roe-aurora",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-spread-aurora",
+                "source": "Taxas de captação divulgadas (fictício)",
+                "as_of": "2026-11-12"
+              },
+              {
+                "pack_fact_id": "f-rates-aurora",
+                "source": "BCB taxas de juros (fictício)",
+                "as_of": "2026-11-07"
+              },
+              {
+                "pack_fact_id": "f-complaints-aurora",
+                "source": "Ranking de reclamações (fictício)",
+                "as_of": "2026-T3"
+              },
+              {
+                "pack_fact_id": "f-pas-aurora",
+                "source": "BCB PAS (fictício)",
+                "as_of": "2026-09-30"
+              },
+              {
+                "pack_fact_id": "f-reg-renegociacao",
+                "source": "CMN/BCB (fictício)",
+                "as_of": "2026-10-20"
+              },
+              {
+                "pack_fact_id": "f-reg-capital-buffer",
+                "source": "BCB (fictício)",
+                "as_of": "2026-09-01"
+              },
+              {
+                "pack_fact_id": "f-boreal-move",
+                "source": "Imprensa (fictício)",
+                "as_of": "2026-11-11"
+              },
+              {
+                "pack_fact_id": "f-cerrado-move",
+                "source": "Imprensa (fictício)",
+                "as_of": "2026-11-08"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cro": {
+          "officer": "cro",
+          "phase": "diagnosis",
+          "run_id": "dry-downgrade-v1-20261115T0502Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cro",
+            "diagnosis": "Rebaixamento de AA para A+ com perspectiva negativa (10/11/2026) incide sobre balanço já frágil. Capital: Basileia 12,1% (vs 13,0% no 2T) e capital principal 9,4% (vs 10,1%), abaixo de todos os pares (13,6%-15,2% e 10,2%-11,6%), 3T26. Liquidez: LCR 118% (131% no 2T), NSFR 104%. Funding: atacado 46% (pares 24%-33%), 22% vence em 12 meses; CDB 2 anos subiu de 104% para 112% do CDI. Crédito: inadimplência 5,8% (+1,1 p.p. em dois trimestres, jun/2026), ROE 9,8% vs 13%-17%, custo de crédito 7,4%. Cliente/regulatório: 3º em reclamações, PAS em curso, norma de renegociação em consulta (180 dias). Boreal e Cerrado já disputam portabilidade e depósitos. Dados prudenciais têm defasagem de um trimestre; sem dados internos do Aurora (apetite a risco, custo marginal de funding, elasticidade de depósitos).",
+            "constraints": [
+              "Briefing externo (outside-in): não é decisão de capital nem de preço; sem dados internos de apetite a risco, custo marginal de funding ou elasticidade de depósitos.",
+              "Dados prudenciais (KM1 3T26) e IF.data (jun/2026) defasados; o efeito do rebaixamento ainda não aparece neles.",
+              "Vencimento de 22% do atacado em 12 meses a custo mais alto (112% do CDI) pressiona margem, com ROE já em 9,8%.",
+              "Adicional contracíclico em 0% com possível ativação gradual em 2027; capital principal de 9,4% deixa pouca folga.",
+              "PAS sobre oferta de crédito a superendividados sem decisão; norma de renegociação em consulta pública (prazo proposto de 180 dias)."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Reequilibrar funding: elevar captação de varejo (conta remunerada, CDB de varejo) e alongar prazos do atacado, aceitando custo maior no curto prazo. Pares: varejo 51%-60% do funding, contra 38% no Aurora. Cerrado já paga 102% do CDI.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Melhora LCR/NSFR (118%/104% no 3T26) e reduz o risco de rolagem dos 22% do atacado que vencem em 12 meses; aumenta o custo de funding no curto prazo e pressiona o ROE de 9,8%.",
+                "red_lines": [
+                  "LCR não pode seguir caindo (131% no 2T para 118% no 3T26)",
+                  "Evitar pagar acima de 112% do CDI em CDB de 2 anos sem avaliar o efeito no ROE",
+                  "Não concentrar novos vencimentos de atacado nos próximos 12 meses"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Reprecificar e conter a originação em cartão e crédito pessoal (41% do varejo), segmento de maior risco, mantendo PJ. Aurora cobra 6,1% a.m. no pessoal e 14,2% no rotativo, acima da mediana dos pares (5,2% e 12,8%), e Boreal oferece portabilidade a partir de 4,4% a.m.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Reduz a exposição ao risco de crédito PF (inadimplência de 7,9%) e preserva capital principal de 9,4%; reduz receita e pode acelerar a perda de clientes via portabilidade.",
+                "red_lines": [
+                  "Capital principal não pode cair abaixo de 9,4% (3T26) sem plano de recomposição",
+                  "Não apertar crédito de modo que agrave o superendividamento, dado o PAS em curso",
+                  "Não subir taxas acima da mediana dos pares sem acompanhar a perda de clientes por portabilidade"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Antecipar a oferta padronizada de renegociação a clientes com mais de 90 dias de atraso e tratar tarifas e cobrança, motivos principais das reclamações (3º no ranking, índice 61,4). Reduz o risco regulatório e de reputação antes da vigência da norma.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Pode reduzir perdas e inadimplência no médio prazo, mas renegociações podem exigir provisões e reduzir a receita de tarifas no curto prazo; efeito sobre capital e liquidez não quantificável com o pacote.",
+                "red_lines": [
+                  "Não antecipar a norma antes de ela ser publicada sem avaliar o impacto em provisões",
+                  "Evitar renegociações que mascarem a inadimplência",
+                  "Tratar o PAS com cautela: sem decisão, não presumir resultado"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-rating-aurora-downgrade",
+                "source": "Agência fictícia (comunicado público)",
+                "as_of": "2026-11-10"
+              },
+              {
+                "pack_fact_id": "f-km1-aurora",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-aurora-prev",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-2"
+              },
+              {
+                "pack_fact_id": "f-km1-boreal",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-cerrado",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-delta",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-npl-aurora",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-funding-aurora",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-funding-peers",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-roe-aurora",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-spread-aurora",
+                "source": "Taxas de captação divulgadas (fictício)",
+                "as_of": "2026-11-12"
+              },
+              {
+                "pack_fact_id": "f-rates-aurora",
+                "source": "BCB taxas de juros (fictício)",
+                "as_of": "2026-11-07"
+              },
+              {
+                "pack_fact_id": "f-complaints-aurora",
+                "source": "Ranking de reclamações (fictício)",
+                "as_of": "2026-T3"
+              },
+              {
+                "pack_fact_id": "f-pas-aurora",
+                "source": "BCB PAS (fictício)",
+                "as_of": "2026-09-30"
+              },
+              {
+                "pack_fact_id": "f-reg-renegociacao",
+                "source": "CMN/BCB (fictício)",
+                "as_of": "2026-10-20"
+              },
+              {
+                "pack_fact_id": "f-reg-capital-buffer",
+                "source": "BCB (fictício)",
+                "as_of": "2026-09-01"
+              },
+              {
+                "pack_fact_id": "f-boreal-move",
+                "source": "Imprensa (fictício)",
+                "as_of": "2026-11-11"
+              },
+              {
+                "pack_fact_id": "f-cerrado-move",
+                "source": "Imprensa (fictício)",
+                "as_of": "2026-11-08"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        }
+      },
+      "challenge": {
+        "cro": {
+          "officer": "cro",
+          "phase": "challenge",
+          "run_id": "dry-downgrade-v1-20261115T0502Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cro",
+            "diagnosis": "Contesto CPO e Risk: ambos acertam no diagnóstico (Aurora abaixo de todos os pares: Basileia 12.1% vs 13.6-15.2%, LCR 118% vs 140-172%, NSFR 104% vs 111-119%, KM1 2026-3; NPL 5.8% vs 3.1-4.4%, IF.data 2026-06; atacado 46%, 22% vence em 12m), mas as opções omitem o ponto central: a trajetória. Basileia caiu 0.9 p.p. e LCR 13 p.p. em um trimestre, ANTES do rebaixamento (2026-11-10) e do CDB a 112% do CDI (2026-11-12). Os números atuais provavelmente são piores e o pacote não permite estimar. Faltam: piso interno de LCR/capital, perfil de vencimentos por mês, colateral livre e gatilhos quantificados. Opções que misturam funding caro, corte de crédito e renegociação sem ordem de prioridade e sem dados internos são direcionais, não decidíveis.",
+            "constraints": [
+              "KM1 é de 2026-3 e IF.data de 2026-06: nenhum número captura o efeito do rebaixamento (2026-11-10) nem do CDB a 112% do CDI (2026-11-12).",
+              "Sem dados internos (apetite a risco, custo marginal de funding, elasticidade de depósitos, calendário de vencimentos, colateral): briefing outside-in; efeitos são direcionais.",
+              "Margem estreita: ROE 9.8% (pares 13-17%) e custo de crédito 7.4% limitam geração orgânica de capital e a absorção de funding mais caro.",
+              "PAS em curso (2026-09-30, sem decisão) e norma de renegociação em consulta (2026-10-20, 180 dias propostos) restringem repricing e cobrança; não tratar a norma como definitiva.",
+              "Adicional contracíclico em 0% com possível ativação gradual em 2027 (BCB, 2026-09-01) pode elevar a exigência sobre capital já em queda."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Prioridade 1 (0-30 dias): liquidez. Alongar o atacado que vence em 12m (22%) e diversificar investidores, com teto de prêmio sobre o CDI aprovado pelo conselho (hoje 112% vs 101-104% dos pares). Contestação: sem calendário de vencimentos e piso de LCR definido, 'não cair abaixo de 118%' não é linha vermelha válida, pois já caiu de 131%.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Reduz risco de rolagem e protege LCR; prêmio de captação pressiona margem e ROE (9.8%). Custo marginal real é desconhecido no pacote.",
+                "red_lines": [
+                  "Conselho deve definir piso de LCR e de capital principal (9.4% em 2026-3) antes de qualquer opção de crescimento",
+                  "Sem prêmio de captação sem teto e sem prazo de revisão",
+                  "Sem concentração de rolagem em poucos investidores"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Seletividade na originação de cartão/crédito pessoal (41% do varejo; 6.1% e 14.2% a.m. vs 5.2% e 12.8% dos pares) por corte de limites e critério de entrada, não por aumento de preço. Contestação: o CPO fala em 'não ampliar preço' e Risk em 'elevar preço'; as duas posturas são incompatíveis, e preço já acima dos pares com portabilidade do Boreal (4.4% a.m.) agrava seleção adversa.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Reduz RWA e pressão sobre custo de crédito; provisões extras consomem capital no curto prazo; receita e base de clientes tendem a cair.",
+                "red_lines": [
+                  "Não elevar preço nem cobrança dura a superendividados com PAS em curso",
+                  "Não subprovisionar para preservar capital: renegociação não pode mascarar a deterioração (NPL 5.8%)",
+                  "Não aprofundar a distância de preço frente aos pares sem medir fuga de bons clientes"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Retenção e depósitos: renegociação proativa e revisão de tarifas (3º em reclamações, 61.4; motivo tarifas e renegociação), com conta remunerada para ampliar depósitos (38% vs 51-60%). Contestação: antecipar a norma só é seguro com estimativa de provisões e receita de tarifas, que o pacote não traz; remuneração a 102% do CDI do Cerrado é referência, não meta.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Reduz dependência do atacado no médio prazo; no curto prazo pode elevar provisões e reduzir tarifas, com capital principal de 9.4% (2026-3) com pouca folga.",
+                "red_lines": [
+                  "Remuneração não pode superar o custo marginal do atacado (hoje não observável no pacote)",
+                  "Não antecipar as conclusões do PAS nem tratar a norma em consulta como definitiva",
+                  "Não comprometer o capital principal com concessões sem estimativa interna"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-rating-aurora-downgrade",
+                "source": "Agência fictícia (comunicado público)",
+                "as_of": "2026-11-10"
+              },
+              {
+                "pack_fact_id": "f-km1-aurora",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-aurora-prev",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-2"
+              },
+              {
+                "pack_fact_id": "f-km1-boreal",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-cerrado",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-delta",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-npl-aurora",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-npl-boreal",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-npl-cerrado",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-npl-delta",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-funding-aurora",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-funding-peers",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-roe-aurora",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-spread-aurora",
+                "source": "Taxas de captação divulgadas (fictício)",
+                "as_of": "2026-11-12"
+              },
+              {
+                "pack_fact_id": "f-rates-aurora",
+                "source": "BCB taxas de juros (fictício)",
+                "as_of": "2026-11-07"
+              },
+              {
+                "pack_fact_id": "f-complaints-aurora",
+                "source": "Ranking de reclamações (fictício)",
+                "as_of": "2026-T3"
+              },
+              {
+                "pack_fact_id": "f-pas-aurora",
+                "source": "BCB PAS (fictício)",
+                "as_of": "2026-09-30"
+              },
+              {
+                "pack_fact_id": "f-reg-renegociacao",
+                "source": "CMN/BCB (fictício)",
+                "as_of": "2026-10-20"
+              },
+              {
+                "pack_fact_id": "f-reg-capital-buffer",
+                "source": "BCB (fictício)",
+                "as_of": "2026-09-01"
+              },
+              {
+                "pack_fact_id": "f-boreal-move",
+                "source": "Imprensa (fictício)",
+                "as_of": "2026-11-11"
+              },
+              {
+                "pack_fact_id": "f-cerrado-move",
+                "source": "Imprensa (fictício)",
+                "as_of": "2026-11-08"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cco": {
+          "officer": "cco",
+          "phase": "challenge",
+          "run_id": "dry-downgrade-v1-20261115T0502Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cco",
+            "diagnosis": "Lente de conduta/integridade. Aurora combina deterioração financeira (rating AA→A+, perspectiva negativa, 2026-11-10; Basileia 12.1% vs 13.0%, KM1 2026-3) com exposição de conduta: PAS do BCB sobre crédito a superendividados (2026-09-30, sem decisão), 3º lugar em reclamações (índice 61.4 vs 32.0–55.3 dos pares, 2026-T3; motivo: tarifas e renegociação) e preços acima dos pares (pessoal 6.1% vs 5.2% a.m.; rotativo 14.2% vs 12.8%, 2026-11-07) com comprometimento de renda das famílias na máxima (28.6%, 2026-09). Contesto cpo e risk: ambos propõem reprecificar/restringir crédito sem tratar o risco de conduta e de seleção adversa; o pacote não traz correspondências em CEIS/CNEP, listas internacionais ou CADE (não verificado, não é ausência de risco).",
+            "constraints": [
+              "Dados públicos defasados: KM1 2026-3 e IF.data 2026-06 não captam o efeito do rebaixamento.",
+              "Sem dados internos (apetite a risco, custo marginal de funding, elasticidade): efeitos direcionais, sem decisão de capital ou preço.",
+              "PAS em curso sobre superendividados, sem decisão: qualquer mudança de preço/cobrança sobre essa base é evidência potencial para o BCB.",
+              "Norma de renegociação (>90 dias, adequação de 180 dias) é consulta pública, não vinculante; antecipá-la deve ser voluntário e documentado.",
+              "Pacote não cobre CEIS/CNEP, listas internacionais de sanções, CADE nem log de curadoria: lacuna de verificação de integridade."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Funding com governança de conduta: alongar o atacado (46% do funding; 22% vence em 12 meses, 2026-06) com contrapartes triadas em sanções/CEIS/CNEP antes de aceitar prêmio (CDB 2a em 112% do CDI, 2026-11-12). Sem pressão comercial sobre varejo para captar depósitos.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Protege LCR (118%, 2026-3) e reduz risco de rolagem; prêmio acima dos pares (101%–104% do CDI) pressiona ROE de 9.8% (2026-06). Triagem de contrapartes é custo operacional, sem efeito direto em capital.",
+                "red_lines": [
+                  "Não aceitar atacado de contraparte sem triagem de sanções/CEIS/CNEP concluída",
+                  "Não comunicar ao mercado a situação de liquidez de forma incompleta ou otimista",
+                  "Não aceitar prêmio que torne a margem insustentável (ROE 9.8%)"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Preço de crédito com salvaguarda de conduta: não elevar preço nem endurecer cobrança na base superendividada enquanto o PAS estiver em curso; restringir originação nova por risco, com critérios documentados e revisados por compliance antes de qualquer mudança de taxa.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Contém consumo de capital e custo de crédito (7.4% da carteira, 2026-06) via seletividade; receita menor e risco de migração para a portabilidade do Boreal (a partir de 4.4% a.m., 2026-11-11). Efeito não quantificável sem dados internos.",
+                "red_lines": [
+                  "Não elevar preço nem endurecer cobrança para clientes superendividados com PAS em curso",
+                  "Não reprecificar de modo que penalize clientes vulneráveis por segmento sem critério documentado",
+                  "Não usar o PAS ou a norma em consulta como fato consumado em comunicação externa"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Retenção e renegociação padronizada voluntária (>90 dias): tratar as reclamações sobre tarifas e renegociação (3º no ranking), com oferta transparente, trilha de auditoria e métricas de carteira que não mascarem a inadimplência (5.8%, 2026-06).",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Pode reduzir reclamações e perdas; provisões e receita de tarifas podem piorar no curto prazo, sobre capital principal de 9.4% (2026-3). Sem estimativa interna, o efeito não é sustentado.",
+                "red_lines": [
+                  "Não renegociar de modo que esconda a deterioração nas métricas de inadimplência",
+                  "Não oferecer renegociação com cláusulas que induzam ao reendividamento",
+                  "Não tratar a norma em consulta como definitiva nem antecipar conclusões do PAS"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-rating-aurora-downgrade",
+                "source": "Agência fictícia (comunicado público)",
+                "as_of": "2026-11-10"
+              },
+              {
+                "pack_fact_id": "f-km1-aurora",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-aurora-prev",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-2"
+              },
+              {
+                "pack_fact_id": "f-npl-aurora",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-funding-aurora",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-funding-peers",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-roe-aurora",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-spread-aurora",
+                "source": "Taxas de captação divulgadas (fictício)",
+                "as_of": "2026-11-12"
+              },
+              {
+                "pack_fact_id": "f-rates-aurora",
+                "source": "BCB taxas de juros (fictício)",
+                "as_of": "2026-11-07"
+              },
+              {
+                "pack_fact_id": "f-complaints-aurora",
+                "source": "Ranking de reclamações (fictício)",
+                "as_of": "2026-T3"
+              },
+              {
+                "pack_fact_id": "f-complaints-peers",
+                "source": "Ranking de reclamações (fictício)",
+                "as_of": "2026-T3"
+              },
+              {
+                "pack_fact_id": "f-pas-aurora",
+                "source": "BCB PAS (fictício)",
+                "as_of": "2026-09-30"
+              },
+              {
+                "pack_fact_id": "f-reg-renegociacao",
+                "source": "CMN/BCB (fictício)",
+                "as_of": "2026-10-20"
+              },
+              {
+                "pack_fact_id": "f-macro-households",
+                "source": "BCB (fictício)",
+                "as_of": "2026-09"
+              },
+              {
+                "pack_fact_id": "f-boreal-move",
+                "source": "Imprensa (fictício)",
+                "as_of": "2026-11-11"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "risk": {
+          "officer": "risk",
+          "phase": "challenge",
+          "run_id": "dry-downgrade-v1-20261115T0502Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "risk",
+            "diagnosis": "As opções do CSO tratam o rebaixamento (AA→A+, negativa, 10/11/2026) como problema competitivo, mas é de sobrevivência: funding de atacado 46% (pares 24–33%), 22% dele vence em 12m (IF.data 2026-06); CDB 2a subiu de 104% para 112% do CDI (12/11). Entre 2026-2 e 2026-3: Basileia 13,0%→12,1%, capital principal 10,1%→9,4%, LCR 131%→118% (defasados; hoje podem ser piores). NPL 5,8% (+1,1 p.p., 2026-06), custo de crédito 7,4%, ROE 9,8%: absorção de capital por lucro é fraca. Faltam gatilhos, gatilhos de contingência de liquidez e limites quantificados; nenhuma opção testa o efeito conjunto (funding mais caro + provisões + adicional contracíclico em 2027). Sem dados internos.",
+            "constraints": [
+              "Briefing externo: sem dados internos de vencimentos por contraparte, colchão de liquidez, covenants/gatilhos de rating em contratos ou elasticidade de depósitos.",
+              "KM1 é de 2026-3 e IF.data de 2026-06; LCR, Basileia e NPL atuais podem ser piores que o divulgado.",
+              "Tendência Basileia/LCR/capital principal de -0,7 a -13 pontos em um trimestre; extrapolar sem projeção é especulação, mas a direção exige plano de capital.",
+              "Consulta pública de renegociação (180 dias após publicação) e PAS sem decisão elevam a incerteza de provisões e sanção.",
+              "Comprometimento de renda de 28,6% e Selic de 13,75% limitam repasse de custo ao crédito e pressionam a inadimplência de PF."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Contestação à opção 1 do CSO: alongar atacado e diversificar é correto, mas insuficiente sem plano de contingência de liquidez, teste de estresse de saída de atacado e limite de custo de captação; evitar guerra de depósitos com Cerrado (102% CDI) é prudente.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Protege o LCR (118%, 2026-3) mas captar a 112% do CDI com ROE 9,8% e custo de crédito de 7,4% corrói margem e capital; sem gatilho de acionamento, a defesa é reativa.",
+                "red_lines": [
+                  "Não aceitar LCR abaixo de limite interno definido pelo conselho, com gatilho de contingência acima dele.",
+                  "Não concentrar rolagem do atacado em poucas contrapartes (22% vence em 12m).",
+                  "Não pagar custo de captação acima da rentabilidade marginal da carteira nova."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Contestação à opção 2: reduzir cartão/pessoal (41% do varejo) protege capital, mas a opção ignora que o corte acelera perda de receita e que reprecificar para cima é inviável (6,1% e 14,2% a.m. já acima dos pares). Priorizar contenção de originação nova e cobrança, não aumento de taxa.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Conter originação reduz risco-ponderados e provisões futuras, apoiando Basileia (12,1%), mas diminui receita e ROE no curto prazo e não resolve estoque já inadimplente.",
+                "red_lines": [
+                  "Não elevar taxas acima dos atuais sem análise do PAS sobre superendividados.",
+                  "Não cortar crédito a ponto de forçar inadimplência de clientes existentes.",
+                  "Não deixar Basileia/capital principal cair sem plano de capital aprovado."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Contestação à opção 3: antecipar renegociação reduz risco regulatório, mas norma ainda é consulta; sem projeção de provisões, pode consumir capital principal (9,4%) justo quando o rating cai. Exigir teste de impacto antes de comprometer.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Pode elevar provisões e reduzir tarifas, pressionando capital principal; em contrapartida reduz risco de sanção e melhora reputação (3º em reclamações) e apoia captação de varejo.",
+                "red_lines": [
+                  "Não renegociar de forma a mascarar a inadimplência real (NPL 5,8%).",
+                  "Não agir de modo que contrarie o PAS em curso sem parecer jurídico.",
+                  "Não adotar antes de simular absorção pelo capital principal e adicional contracíclico possível em 2027."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-rating-aurora-downgrade",
+                "source": "Agência fictícia (comunicado público)",
+                "as_of": "2026-11-10"
+              },
+              {
+                "pack_fact_id": "f-km1-aurora",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-aurora-prev",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-2"
+              },
+              {
+                "pack_fact_id": "f-npl-aurora",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-funding-aurora",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-funding-peers",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-roe-aurora",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-spread-aurora",
+                "source": "Taxas de captação divulgadas (fictício)",
+                "as_of": "2026-11-12"
+              },
+              {
+                "pack_fact_id": "f-rates-aurora",
+                "source": "BCB taxas de juros (fictício)",
+                "as_of": "2026-11-07"
+              },
+              {
+                "pack_fact_id": "f-complaints-aurora",
+                "source": "Ranking de reclamações (fictício)",
+                "as_of": "2026-T3"
+              },
+              {
+                "pack_fact_id": "f-pas-aurora",
+                "source": "BCB PAS (fictício)",
+                "as_of": "2026-09-30"
+              },
+              {
+                "pack_fact_id": "f-reg-renegociacao",
+                "source": "CMN/BCB (fictício)",
+                "as_of": "2026-10-20"
+              },
+              {
+                "pack_fact_id": "f-reg-capital-buffer",
+                "source": "BCB (fictício)",
+                "as_of": "2026-09-01"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "Copom (fictício)",
+                "as_of": "2026-11-05"
+              },
+              {
+                "pack_fact_id": "f-macro-households",
+                "source": "BCB (fictício)",
+                "as_of": "2026-09"
+              },
+              {
+                "pack_fact_id": "f-cerrado-move",
+                "source": "Imprensa (fictício)",
+                "as_of": "2026-11-08"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        }
+      },
+      "quantify": {
+        "risk": {
+          "officer": "risk",
+          "phase": "quantify",
+          "run_id": "dry-downgrade-v1-20261115T0502Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "risk",
+            "diagnosis": "Aurora é o elo mais frágil e a piora é composta. KM1 2026-3 (defasagem de um trimestre) vs pares: Basileia 12,1% vs 13,6–15,2% (−1,5 a −3,1 p.p.); capital principal 9,4% vs 10,2–11,6%; alavancagem 5,2% vs 6,0–6,9%; LCR 118% vs 140–172%; NSFR 104% vs 111–119%. Tendência 2026-2→2026-3: Basileia −0,9 p.p., capital principal −0,7 p.p., LCR −13 p.p., NSFR −3 p.p. IF.data 2026-06: inadimplência 5,8% vs 3,1–4,4% (+1,1 p.p. em dois trimestres); atacado 46% do funding (pares 24–33%), 22% vence em 12 meses; ROE 9,8% vs 13–17%. Rebaixamento (2026-11-10) e CDB 2a a 112% do CDI (2026-11-12) não aparecem nesses dados; os números atuais podem ser piores. Sem dados internos.",
+            "constraints": [
+              "KM1 é de 2026-3 e IF.data de 2026-06: não captam o rebaixamento nem o custo de funding pós-2026-11-10.",
+              "Sem dados internos (calendário de vencimentos, colchão de liquidez, gatilhos de rating em contratos, custo marginal de funding, elasticidade de depósitos): efeitos são direcionais, não decisão de capital ou preço.",
+              "Margem estreita: ROE 9,8% e custo de crédito 7,4% da carteira limitam geração orgânica de capital e a absorção de funding mais caro.",
+              "PAS sem decisão (2026-09-30) e norma de renegociação apenas em consulta (2026-10-20; 180 dias de adequação proposta) restringem preço e cobrança.",
+              "Possível adicional contracíclico em 2027 (hoje 0%) e comprometimento de renda de 28,6% (2026-09) pressionam capital e inadimplência de PF."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Prioridade 0–30 dias: liquidez. Alongar e escalonar os 22% do atacado que vencem em 12 meses, diversificar investidores, com teto de prêmio sobre CDI (hoje 112% vs 101–104% dos pares) e piso interno de LCR com gatilho de contingência definidos pelo conselho.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Reduz risco de rolagem e protege o LCR (118%, 2026-3, queda de 13 p.p. no trimestre); prêmio de captação pressiona margem e ROE (9,8%). Custo marginal real não observável no pacote.",
+                "red_lines": [
+                  "Conselho define piso de LCR e gatilho de contingência antes de qualquer crescimento",
+                  "Sem prêmio de captação sem teto e prazo de revisão",
+                  "Sem concentração de rolagem em poucas contrapartes",
+                  "Sem disputa de preço de depósito acima do custo marginal do atacado"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Seletividade na originação de cartão e crédito pessoal (41% do varejo) por critérios de entrada e limites, não por alta de preço: taxas já acima dos pares (6,1% e 14,2% a.m. vs 5,2% e 12,8%) e Boreal oferece portabilidade a partir de 4,4% a.m.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Reduz ativos ponderados por risco e provisões futuras, apoiando Basileia (12,1%) e capital principal (9,4%); reduz receita e ROE no curto prazo e não resolve o estoque inadimplente (5,8%).",
+                "red_lines": [
+                  "Sem aumento de preço a superendividados com PAS em curso",
+                  "Sem corte de limite que force inadimplência de clientes existentes",
+                  "Sem subprovisionamento para preservar capital",
+                  "Plano de capital aprovado antes de qualquer queda adicional de Basileia ou capital principal"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Renegociação padronizada voluntária (>90 dias) e revisão de tarifas e cobrança (3º em reclamações, índice 61,4), condicionada a teste de impacto de provisões sobre o capital principal e ao possível adicional contracíclico de 2027.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Pode reduzir perdas e risco de conduta e apoiar depósitos de varejo (38% do funding vs 51–60% dos pares); no curto prazo eleva provisões e reduz tarifas sobre capital principal de 9,4% com pouca folga. Efeito líquido sem dados internos.",
+                "red_lines": [
+                  "Sem renegociação que mascare a inadimplência real",
+                  "Sem tratar a norma em consulta como definitiva",
+                  "Sem antecipar conclusões do PAS sem parecer jurídico",
+                  "Sem concessões sem simulação de absorção pelo capital"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-rating-aurora-downgrade",
+                "source": "Agência fictícia (comunicado público)",
+                "as_of": "2026-11-10"
+              },
+              {
+                "pack_fact_id": "f-km1-aurora",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-aurora-prev",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-2"
+              },
+              {
+                "pack_fact_id": "f-km1-boreal",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-cerrado",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-delta",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-npl-aurora",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-npl-boreal",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-npl-cerrado",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-npl-delta",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-funding-aurora",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-funding-peers",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-roe-aurora",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-spread-aurora",
+                "source": "Taxas de captação divulgadas (fictício)",
+                "as_of": "2026-11-12"
+              },
+              {
+                "pack_fact_id": "f-rates-aurora",
+                "source": "BCB taxas de juros (fictício)",
+                "as_of": "2026-11-07"
+              },
+              {
+                "pack_fact_id": "f-complaints-aurora",
+                "source": "Ranking de reclamações (fictício)",
+                "as_of": "2026-T3"
+              },
+              {
+                "pack_fact_id": "f-pas-aurora",
+                "source": "BCB PAS (fictício)",
+                "as_of": "2026-09-30"
+              },
+              {
+                "pack_fact_id": "f-reg-renegociacao",
+                "source": "CMN/BCB (fictício)",
+                "as_of": "2026-10-20"
+              },
+              {
+                "pack_fact_id": "f-reg-capital-buffer",
+                "source": "BCB (fictício)",
+                "as_of": "2026-09-01"
+              },
+              {
+                "pack_fact_id": "f-macro-households",
+                "source": "BCB (fictício)",
+                "as_of": "2026-09"
+              },
+              {
+                "pack_fact_id": "f-boreal-move",
+                "source": "Imprensa (fictício)",
+                "as_of": "2026-11-11"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cpo": {
+          "officer": "cpo",
+          "phase": "quantify",
+          "run_id": "dry-downgrade-v1-20261115T0502Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cpo",
+            "diagnosis": "Lente de produto/cobertura. O rebaixamento (AA→A+, negativa, 2026-11-10) expõe um encaixe de mercado em deterioração: Aurora perde em preço e confiança frente a pares que já atacam clientes. Preço: pessoal 6,1% e rotativo 14,2% a.m. vs 5,2% e 12,8% dos pares (2026-11-07); Boreal oferece portabilidade a partir de 4,4% a.m. (2026-11-11). Reputação: 3º em reclamações, índice 61,4 vs Boreal 32,0, Cerrado 40,7, Delta 55,3 (2026-T3). Funding: CDB 2a a 112% do CDI vs 101–104% dos pares (2026-11-12); atacado 46% vs 24–33% e varejo 38% vs 51–60% (2026-06). Capital em queda: Basileia 13,0%→12,1%, LCR 131%→118% (2026-2→2026-3). Pontos cegos: nenhum dado interno (elasticidade, custo marginal, vencimentos); dados públicos defasados e não captam o rebaixamento.",
+            "constraints": [
+              "Briefing externo: sem apetite a risco, custo marginal de funding ou elasticidade de depósitos; efeitos são direcionais, não decisão de capital ou preço.",
+              "KM1 é de 2026-3 e IF.data de 2026-06: não refletem o rebaixamento (2026-11-10) nem o CDB a 112% do CDI (2026-11-12).",
+              "PAS sobre crédito a superendividados em curso, sem decisão (2026-09-30); norma de renegociação é só consulta pública (2026-10-20, 180 dias de adequação propostos).",
+              "Comprometimento de renda das famílias em 28,6% (2026-09) e Selic de 13,75% (2026-11-05) limitam repasse de custo ao crédito.",
+              "Adicional contracíclico em 0% com possível ativação em 2027 (2026-09-01) pressionaria capital principal de 9,4% (2026-3)."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Funding em 0–90 dias: alongar e escalonar os 22% de atacado que vencem em 12m, diversificar investidores e captar varejo com oferta direcionada, com teto de prêmio definido pelo conselho. Cerrado paga 102% do CDI na conta remunerada (2026-11-08): referência, não meta.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Protege o LCR (118% em 2026-3, vs 140–172% dos pares) e reduz risco de rolagem; o custo de captação (112% do CDI vs 101–104%) pressiona o ROE de 9,8% (2026-06). Custo marginal real não observável.",
+                "red_lines": [
+                  "Conselho deve fixar piso de LCR e de capital principal; 118% já caiu de 131%.",
+                  "Não pagar prêmio de captação sem teto e prazo de revisão.",
+                  "Não concentrar rolagem em poucas contrapartes ou janelas curtas.",
+                  "Não comunicar a liquidez de forma incompleta após o rebaixamento."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Preço de crédito: conter originação em cartão e pessoal (41% do varejo) por critério de entrada e limites, não por aumento de taxa, já acima da mediana dos pares. Monitorar fuga de bons clientes para a portabilidade do Boreal (4,4% a.m.).",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Reduz RWA e pressão sobre custo de crédito (7,4% da carteira) e NPL (5,8%, 2026-06), apoiando Basileia (12,1%); reduz receita e volume no curto prazo e pode acelerar saída de clientes. Efeito líquido sem dados internos.",
+                "red_lines": [
+                  "Não elevar preço nem endurecer cobrança de superendividados com PAS em curso.",
+                  "Não cortar limites sem aviso e canal de renegociação.",
+                  "Não aprofundar a distância de preço frente aos pares sem medir a perda de bons clientes.",
+                  "Não deixar Basileia/capital principal cair sem plano de capital."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Relacionamento: renegociação padronizada voluntária (>90 dias) e revisão de tarifas e cobrança, motivos das reclamações (3º, índice 61,4), com retenção ativa contra a portabilidade. Só avançar com estimativa de provisões e receita de tarifas.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Pode reduzir perdas, reclamações e risco regulatório e apoiar depósitos de varejo; provisões e menor receita de tarifas pressionam o capital principal (9,4%, 2026-3) no curto prazo. Efeito não sustentado pelo pacote.",
+                "red_lines": [
+                  "Não renegociar de modo que mascare a inadimplência real.",
+                  "Não tratar a norma em consulta como definitiva nem antecipar conclusões do PAS.",
+                  "Não condicionar renegociação a venda de produtos.",
+                  "Não comprometer o capital principal sem projeção interna de absorção."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-rating-aurora-downgrade",
+                "source": "Agência fictícia (comunicado público)",
+                "as_of": "2026-11-10"
+              },
+              {
+                "pack_fact_id": "f-km1-aurora",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-aurora-prev",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-2"
+              },
+              {
+                "pack_fact_id": "f-km1-boreal",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-cerrado",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-delta",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-npl-aurora",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-funding-aurora",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-funding-peers",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-roe-aurora",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-spread-aurora",
+                "source": "Taxas de captação divulgadas (fictício)",
+                "as_of": "2026-11-12"
+              },
+              {
+                "pack_fact_id": "f-rates-aurora",
+                "source": "BCB taxas de juros (fictício)",
+                "as_of": "2026-11-07"
+              },
+              {
+                "pack_fact_id": "f-complaints-aurora",
+                "source": "Ranking de reclamações (fictício)",
+                "as_of": "2026-T3"
+              },
+              {
+                "pack_fact_id": "f-complaints-peers",
+                "source": "Ranking de reclamações (fictício)",
+                "as_of": "2026-T3"
+              },
+              {
+                "pack_fact_id": "f-pas-aurora",
+                "source": "BCB PAS (fictício)",
+                "as_of": "2026-09-30"
+              },
+              {
+                "pack_fact_id": "f-reg-renegociacao",
+                "source": "CMN/BCB (fictício)",
+                "as_of": "2026-10-20"
+              },
+              {
+                "pack_fact_id": "f-reg-capital-buffer",
+                "source": "BCB (fictício)",
+                "as_of": "2026-09-01"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "Copom (fictício)",
+                "as_of": "2026-11-05"
+              },
+              {
+                "pack_fact_id": "f-macro-households",
+                "source": "BCB (fictício)",
+                "as_of": "2026-09"
+              },
+              {
+                "pack_fact_id": "f-boreal-move",
+                "source": "Imprensa (fictício)",
+                "as_of": "2026-11-11"
+              },
+              {
+                "pack_fact_id": "f-cerrado-move",
+                "source": "Imprensa (fictício)",
+                "as_of": "2026-11-08"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cso": {
+          "officer": "cso",
+          "phase": "quantify",
+          "run_id": "dry-downgrade-v1-20261115T0502Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cso",
+            "diagnosis": "Aurora perde terreno em todas as frentes públicas. Funding: atacado 46% (pares 24–33%), varejo 38% (pares 51–60%), 22% do atacado vence em 12m (IF.data 2026-06); CDB 2a foi de 104% para 112% do CDI após o rebaixamento AA→A+ (2026-11-12). Capital/liquidez (KM1 2026-3 vs 2026-2): Basileia 13,0%→12,1%, capital principal 10,1%→9,4%, LCR 131%→118%, todos abaixo dos pares. Carteira: NPL 5,8% (+1,1 p.p.), ROE 9,8% vs 13–17%. Preço já acima dos pares (pessoal 6,1% vs 5,2% a.m.; rotativo 14,2% vs 12,8%) enquanto Boreal (portabilidade a partir de 4,4% a.m.) e Cerrado (102% do CDI) atacam clientes e depósitos. Tese: sem margem para guerra de preço; ordem de encaixe: 1) funding, 2) seletividade de crédito, 3) renegociação/relacionamento. Dados defasados; efeitos direcionais, sem dados internos.",
+            "constraints": [
+              "Outside-in: sem apetite a risco, custo marginal de funding, elasticidade de depósitos nem calendário de vencimentos; efeitos são direcionais, não quantificados, e não são decisão de capital ou preço.",
+              "KM1 é de 2026-3 e IF.data de 2026-06: não captam o rebaixamento (2026-11-10) nem o CDB a 112% do CDI (2026-11-12); números atuais podem ser piores.",
+              "PAS sobre crédito a superendividados (2026-09-30) sem decisão restringe repricing e cobrança sobre essa base.",
+              "Norma de renegociação (>90 dias, 180 dias de adequação) está só em consulta pública (2026-10-20); não tratá-la como definitiva.",
+              "Possível adicional contracíclico em 2027 (hoje 0%) e Selic 13,75% com comprometimento de renda de 28,6% limitam capital e repasse de custo."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "1º encaixe (0-30 dias): defender liquidez. Alongar e escalonar o atacado que vence em 12m (22%), diversificar investidores, com teto de prêmio sobre o CDI (hoje 112% vs 101–104% dos pares), e captar varejo de forma calibrada sem perseguir os 102% do Cerrado.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Reduz risco de rolagem e sustenta o LCR (118% em 2026-3, vs 140–172% nos pares); mantém custo de funding alto e pressiona o ROE de 9,8%. Sem dados internos, efeito direcional.",
+                "red_lines": [
+                  "Conselho define piso de LCR e de capital principal, com gatilho de contingência acima do piso.",
+                  "Sem prêmio de captação sem teto e prazo de revisão.",
+                  "Sem concentração de vencimentos ou de investidores.",
+                  "Remuneração de varejo não supera o custo marginal do atacado."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "2º encaixe: seletividade na originação de cartão e crédito pessoal (41% do varejo; NPL PF 7,9%) por critério de entrada e limites, sem elevar preço, que já está acima dos pares; aceitar perda de volume diante da portabilidade do Boreal.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Contém ativos ponderados e custo de crédito (7,4% da carteira), apoiando capital principal (9,4%); reduz receita e pode acelerar saída de clientes. Provisões extras consomem capital no curto prazo.",
+                "red_lines": [
+                  "Não elevar preço nem endurecer cobrança de superendividados com PAS em curso.",
+                  "Não cortar limite sem aviso e canal de renegociação.",
+                  "Não subprovisionar para preservar capital.",
+                  "Não aprofundar a distância de preço frente aos pares sem medir fuga de bons clientes."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "3º encaixe: renegociação padronizada voluntária (>90 dias) e revisão de tarifas e cobrança, 3º no ranking de reclamações (índice 61,4 vs 32,0–55,3 dos pares), com retenção ativa contra a portabilidade do Boreal. Só após estimar impacto em provisões.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Reduz risco de conduta e reputacional e apoia depósitos de varejo no médio prazo; provisões e menor receita de tarifas podem pressionar o capital principal (9,4%) no curto prazo. Efeito líquido não estimável sem dados internos.",
+                "red_lines": [
+                  "Não mascarar a inadimplência (NPL 5,8%) com renegociação.",
+                  "Não tratar a norma em consulta como definitiva nem antecipar conclusões do PAS.",
+                  "Não comprometer o capital principal sem projeção interna de absorção.",
+                  "Não comunicar o rebaixamento de forma incompleta ou minimizadora."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-rating-aurora-downgrade",
+                "source": "Agência fictícia (comunicado público)",
+                "as_of": "2026-11-10"
+              },
+              {
+                "pack_fact_id": "f-km1-aurora",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-aurora-prev",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-2"
+              },
+              {
+                "pack_fact_id": "f-km1-boreal",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-cerrado",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-delta",
+                "source": "Pilar 3 (KM1, fictício)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-npl-aurora",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-funding-aurora",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-funding-peers",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-roe-aurora",
+                "source": "IF.data (fictício)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-spread-aurora",
+                "source": "Taxas de captação divulgadas (fictício)",
+                "as_of": "2026-11-12"
+              },
+              {
+                "pack_fact_id": "f-rates-aurora",
+                "source": "BCB taxas de juros (fictício)",
+                "as_of": "2026-11-07"
+              },
+              {
+                "pack_fact_id": "f-complaints-aurora",
+                "source": "Ranking de reclamações (fictício)",
+                "as_of": "2026-T3"
+              },
+              {
+                "pack_fact_id": "f-complaints-peers",
+                "source": "Ranking de reclamações (fictício)",
+                "as_of": "2026-T3"
+              },
+              {
+                "pack_fact_id": "f-pas-aurora",
+                "source": "BCB PAS (fictício)",
+                "as_of": "2026-09-30"
+              },
+              {
+                "pack_fact_id": "f-reg-renegociacao",
+                "source": "CMN/BCB (fictício)",
+                "as_of": "2026-10-20"
+              },
+              {
+                "pack_fact_id": "f-reg-capital-buffer",
+                "source": "BCB (fictício)",
+                "as_of": "2026-09-01"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "Copom (fictício)",
+                "as_of": "2026-11-05"
+              },
+              {
+                "pack_fact_id": "f-macro-households",
+                "source": "BCB (fictício)",
+                "as_of": "2026-09"
+              },
+              {
+                "pack_fact_id": "f-boreal-move",
+                "source": "Imprensa (fictício)",
+                "as_of": "2026-11-11"
+              },
+              {
+                "pack_fact_id": "f-cerrado-move",
+                "source": "Imprensa (fictício)",
+                "as_of": "2026-11-08"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        }
+      },
+      "synthesize": {
+        "secretary": {
+          "status": "ok"
+        }
+      }
+    },
+    "synthesis": {
+      "summary": "Outside-in: o rebaixamento de Aurora (AA→A+, perspectiva negativa) incide sobre um balanço já mais fraco que o de todos os pares em capital, liquidez, qualidade de carteira e funding. A trajetória piorava antes do rebaixamento, e os dados públicos (KM1 2026-3, IF.data 2026-06) não captam o efeito dele nem o CDB a 112% do CDI. Os cinco oficiais convergem na ordem de prioridade: 1) liquidez/funding, 2) seletividade de crédito sem alta de preço, 3) renegociação e relacionamento condicionados a teste de impacto. Não é decisão de capital nem de preço; os efeitos são direcionais, sem dados internos (apetite a risco, custo marginal de funding, elasticidade de depósitos, calendário de vencimentos).",
+      "options": [
+        {
+          "id": "opt-1",
+          "description": "Prioridade 0-30 dias: defender liquidez e funding. Alongar e escalonar os 22% do atacado que vencem em 12 meses e diversificar investidores (com triagem de contrapartes), com teto de prêmio sobre o CDI e prazo de revisão definidos pelo conselho. Captar varejo de forma calibrada, sem perseguir a conta de 102% do CDI do Cerrado. O conselho define piso de LCR e de capital principal, com gatilho de contingência acima do piso. Comunicação aos depositantes completa, sem minimizar o rebaixamento.",
+          "customer_impact": "low",
+          "capital_liquidity_effect": "Reduz o risco de rolagem e sustenta o LCR (118% em 2026-3, queda de 13 p.p. no trimestre, vs 140-172% nos pares). O CDB a 112% do CDI (vs 101-104% nos pares) e a base de varejo de 38% do funding (vs 51-60%) mantêm o custo de funding alto e pressionam o ROE de 9,8%. O custo marginal real não é observável no pacote.",
+          "citations": [
+            "f-rating-aurora-downgrade",
+            "f-km1-aurora",
+            "f-km1-aurora-prev",
+            "f-km1-boreal",
+            "f-km1-cerrado",
+            "f-km1-delta",
+            "f-funding-aurora",
+            "f-funding-peers",
+            "f-spread-aurora",
+            "f-roe-aurora",
+            "f-cerrado-move"
+          ],
+          "derived_from": [
+            {
+              "officer": "cso",
+              "option": "opt-1"
+            },
+            {
+              "officer": "risk",
+              "option": "opt-1"
+            },
+            {
+              "officer": "cco",
+              "option": "opt-1"
+            },
+            {
+              "officer": "cpo",
+              "option": "opt-1"
+            },
+            {
+              "officer": "cro",
+              "option": "opt-1"
+            }
+          ],
+          "supported_by": [
+            "cso",
+            "risk",
+            "cco",
+            "cpo",
+            "cro"
+          ],
+          "contested_by": [
+            "risk",
+            "cco",
+            "cro"
+          ]
+        },
+        {
+          "id": "opt-2",
+          "description": "Seletividade na originação de cartão e crédito pessoal (41% do varejo; inadimplência PF 7,9%) por critérios de entrada e limites, sem elevar preço. As taxas de Aurora já estão acima da mediana dos pares (6,1% e 14,2% a.m. vs 5,2% e 12,8%) e o Boreal oferece portabilidade a partir de 4,4% a.m.; aceitar perda de volume. Sem aumento de preço nem cobrança mais dura sobre superendividados enquanto o PAS estiver em curso, e sem corte de limite sem aviso e canal de renegociação.",
+          "customer_impact": "high",
+          "capital_liquidity_effect": "Contém os ativos ponderados por risco e o custo de crédito (7,4% da carteira), apoiando Basileia (12,1%) e capital principal (9,4%). Reduz receita e ROE no curto prazo, pode acelerar a saída de clientes para a portabilidade e não resolve o estoque inadimplente (5,8%). Provisões extras consomem capital no curto prazo. É necessário plano de capital aprovado antes de nova queda.",
+          "citations": [
+            "f-npl-aurora",
+            "f-rates-aurora",
+            "f-boreal-move",
+            "f-pas-aurora",
+            "f-roe-aurora",
+            "f-km1-aurora",
+            "f-macro-households",
+            "f-macro-selic",
+            "f-reg-capital-buffer"
+          ],
+          "derived_from": [
+            {
+              "officer": "cso",
+              "option": "opt-2"
+            },
+            {
+              "officer": "risk",
+              "option": "opt-2"
+            },
+            {
+              "officer": "cco",
+              "option": "opt-2"
+            },
+            {
+              "officer": "cpo",
+              "option": "opt-2"
+            },
+            {
+              "officer": "cro",
+              "option": "opt-2"
+            }
+          ],
+          "supported_by": [
+            "cso",
+            "risk",
+            "cco",
+            "cpo",
+            "cro"
+          ],
+          "contested_by": [
+            "risk",
+            "cco",
+            "cro"
+          ]
+        },
+        {
+          "id": "opt-3",
+          "description": "Renegociação padronizada voluntária para clientes com mais de 90 dias de atraso e revisão de tarifas e cobrança, motivos principais das reclamações (3º no ranking, índice 61,4 vs 32,0-55,3 nos pares), com retenção ativa contra a portabilidade. Só avançar após teste de impacto em provisões, receita de tarifas e capital principal (incluindo o possível adicional contracíclico de 2027). A norma está só em consulta pública e o PAS não tem decisão: não tratar a norma como definitiva nem antecipar conclusões do PAS. Sem renegociação que mascare a inadimplência nem condicionada a venda de produtos.",
+          "customer_impact": "medium",
+          "capital_liquidity_effect": "Pode reduzir perdas, reclamações e risco de conduta, e apoiar depósitos de varejo no médio prazo. No curto prazo, provisões e menor receita de tarifas pressionam o capital principal (9,4% em 2026-3), com pouca folga. O efeito líquido não é estimável sem dados internos.",
+          "citations": [
+            "f-complaints-aurora",
+            "f-complaints-peers",
+            "f-reg-renegociacao",
+            "f-pas-aurora",
+            "f-npl-aurora",
+            "f-km1-aurora",
+            "f-reg-capital-buffer",
+            "f-boreal-move"
+          ],
+          "derived_from": [
+            {
+              "officer": "cso",
+              "option": "opt-3"
+            },
+            {
+              "officer": "risk",
+              "option": "opt-3"
+            },
+            {
+              "officer": "cco",
+              "option": "opt-3"
+            },
+            {
+              "officer": "cpo",
+              "option": "opt-3"
+            },
+            {
+              "officer": "cro",
+              "option": "opt-3"
+            }
+          ],
+          "supported_by": [
+            "cso",
+            "risk",
+            "cco",
+            "cpo",
+            "cro"
+          ],
+          "contested_by": [
+            "risk",
+            "cco",
+            "cro"
+          ]
+        }
+      ],
+      "residual_regulatory_risk": "Permanece risco regulatório mesmo com as três opções: (i) o PAS sobre oferta de crédito a superendividados segue sem decisão e qualquer mudança de preço, cobrança ou renegociação sobre essa base pode virar evidência; (ii) a norma de renegociação (>90 dias, 180 dias de adequação proposta) está em consulta e pode mudar antes da publicação; (iii) o BCB sinaliza possível ativação gradual do adicional contracíclico em 2027, o que elevaria a exigência sobre capital principal já em queda; (iv) os dados prudenciais têm um trimestre de defasagem e não refletem o rebaixamento, então a posição atual de Basileia e LCR pode ser pior que a divulgada; (v) o pacote não cobre CEIS/CNEP, listas de sanções nem CADE, o que é lacuna de verificação, não ausência de risco.",
+      "monitoring_triggers": [
+        {
+          "text": "Próximo KM1 (2026-4): Basileia, capital principal e LCR abaixo da trajetória de 2026-2→2026-3 (Basileia 13,0%→12,1%; capital principal 10,1%→9,4%; LCR 131%→118%) ou abaixo dos pisos que o conselho definir.",
+          "citations": [
+            "f-km1-aurora",
+            "f-km1-aurora-prev"
+          ]
+        },
+        {
+          "text": "Custo de captação: CDB de 2 anos acima de 112% do CDI ou ampliação do diferencial frente aos pares (101-104%); sinal de dificuldade de rolagem dos 22% do atacado que vence em 12 meses.",
+          "citations": [
+            "f-spread-aurora",
+            "f-funding-aurora",
+            "f-funding-peers"
+          ]
+        },
+        {
+          "text": "Nova ação de rating ou mudança da perspectiva negativa, e eventual efeito em covenants ou gatilhos de rating em contratos de atacado.",
+          "citations": [
+            "f-rating-aurora-downgrade"
+          ]
+        },
+        {
+          "text": "Concorrência: adesão à campanha de portabilidade do Boreal (a partir de 4,4% a.m.) e reação de depósitos à conta remunerada do Cerrado (102% do CDI).",
+          "citations": [
+            "f-boreal-move",
+            "f-cerrado-move",
+            "f-rates-aurora"
+          ]
+        },
+        {
+          "text": "Qualidade da carteira: inadimplência total acima de 5,8% e PF acima de 7,9% no próximo IF.data, e custo de crédito acima de 7,4% da carteira.",
+          "citations": [
+            "f-npl-aurora",
+            "f-roe-aurora"
+          ]
+        },
+        {
+          "text": "Regulatório: decisão ou desdobramento do PAS sobre superendividados; publicação da norma de renegociação padronizada (início do prazo de 180 dias).",
+          "citations": [
+            "f-pas-aurora",
+            "f-reg-renegociacao"
+          ]
+        },
+        {
+          "text": "Sinalização do BCB sobre ativação do adicional contracíclico em 2027, em função da aceleração do crédito às famílias.",
+          "citations": [
+            "f-reg-capital-buffer"
+          ]
+        },
+        {
+          "text": "Conduta e reputação: posição no ranking de reclamações (3º, índice 61,4) no próximo trimestre, sobretudo por tarifas e renegociação.",
+          "citations": [
+            "f-complaints-aurora",
+            "f-complaints-peers"
+          ]
+        },
+        {
+          "text": "Macro: Selic (13,75%) e comprometimento de renda das famílias (28,6%, máxima da série) como pressão sobre inadimplência de PF e sobre a capacidade de repasse de custo.",
+          "citations": [
+            "f-macro-selic",
+            "f-macro-households"
+          ]
+        }
+      ]
+    },
+    "dissents": [
+      {
+        "officer": "cro",
+        "challenged": [
+          "cpo",
+          "risk"
+        ],
+        "text": "Contesto CPO e Risk: ambos acertam no diagnóstico (Aurora abaixo de todos os pares: Basileia 12.1% vs 13.6-15.2%, LCR 118% vs 140-172%, NSFR 104% vs 111-119%, KM1 2026-3; NPL 5.8% vs 3.1-4.4%, IF.data 2026-06; atacado 46%, 22% vence em 12m), mas as opções omitem o ponto central: a trajetória. Basileia caiu 0.9 p.p. e LCR 13 p.p. em um trimestre, ANTES do rebaixamento (2026-11-10) e do CDB a 112% do CDI (2026-11-12). Os números atuais provavelmente são piores e o pacote não permite estimar. Faltam: piso interno de LCR/capital, perfil de vencimentos por mês, colateral livre e gatilhos quantificados. Opções que misturam funding caro, corte de crédito e renegociação sem ordem de prioridade e sem dados internos são direcionais, não decidíveis.",
+        "red_lines": [
+          "Conselho deve definir piso de LCR e de capital principal (9.4% em 2026-3) antes de qualquer opção de crescimento",
+          "Sem prêmio de captação sem teto e sem prazo de revisão",
+          "Sem concentração de rolagem em poucos investidores",
+          "Não elevar preço nem cobrança dura a superendividados com PAS em curso",
+          "Não subprovisionar para preservar capital: renegociação não pode mascarar a deterioração (NPL 5.8%)",
+          "Não aprofundar a distância de preço frente aos pares sem medir fuga de bons clientes",
+          "Remuneração não pode superar o custo marginal do atacado (hoje não observável no pacote)",
+          "Não antecipar as conclusões do PAS nem tratar a norma em consulta como definitiva",
+          "Não comprometer o capital principal com concessões sem estimativa interna"
+        ]
+      },
+      {
+        "officer": "cco",
+        "challenged": [
+          "cpo",
+          "risk"
+        ],
+        "text": "Lente de conduta/integridade. Aurora combina deterioração financeira (rating AA→A+, perspectiva negativa, 2026-11-10; Basileia 12.1% vs 13.0%, KM1 2026-3) com exposição de conduta: PAS do BCB sobre crédito a superendividados (2026-09-30, sem decisão), 3º lugar em reclamações (índice 61.4 vs 32.0–55.3 dos pares, 2026-T3; motivo: tarifas e renegociação) e preços acima dos pares (pessoal 6.1% vs 5.2% a.m.; rotativo 14.2% vs 12.8%, 2026-11-07) com comprometimento de renda das famílias na máxima (28.6%, 2026-09). Contesto cpo e risk: ambos propõem reprecificar/restringir crédito sem tratar o risco de conduta e de seleção adversa; o pacote não traz correspondências em CEIS/CNEP, listas internacionais ou CADE (não verificado, não é ausência de risco).",
+        "red_lines": [
+          "Não aceitar atacado de contraparte sem triagem de sanções/CEIS/CNEP concluída",
+          "Não comunicar ao mercado a situação de liquidez de forma incompleta ou otimista",
+          "Não aceitar prêmio que torne a margem insustentável (ROE 9.8%)",
+          "Não elevar preço nem endurecer cobrança para clientes superendividados com PAS em curso",
+          "Não reprecificar de modo que penalize clientes vulneráveis por segmento sem critério documentado",
+          "Não usar o PAS ou a norma em consulta como fato consumado em comunicação externa",
+          "Não renegociar de modo que esconda a deterioração nas métricas de inadimplência",
+          "Não oferecer renegociação com cláusulas que induzam ao reendividamento",
+          "Não tratar a norma em consulta como definitiva nem antecipar conclusões do PAS"
+        ]
+      },
+      {
+        "officer": "risk",
+        "challenged": [
+          "cso"
+        ],
+        "text": "As opções do CSO tratam o rebaixamento (AA→A+, negativa, 10/11/2026) como problema competitivo, mas é de sobrevivência: funding de atacado 46% (pares 24–33%), 22% dele vence em 12m (IF.data 2026-06); CDB 2a subiu de 104% para 112% do CDI (12/11). Entre 2026-2 e 2026-3: Basileia 13,0%→12,1%, capital principal 10,1%→9,4%, LCR 131%→118% (defasados; hoje podem ser piores). NPL 5,8% (+1,1 p.p., 2026-06), custo de crédito 7,4%, ROE 9,8%: absorção de capital por lucro é fraca. Faltam gatilhos, gatilhos de contingência de liquidez e limites quantificados; nenhuma opção testa o efeito conjunto (funding mais caro + provisões + adicional contracíclico em 2027). Sem dados internos.",
+        "red_lines": [
+          "Não aceitar LCR abaixo de limite interno definido pelo conselho, com gatilho de contingência acima dele.",
+          "Não concentrar rolagem do atacado em poucas contrapartes (22% vence em 12m).",
+          "Não pagar custo de captação acima da rentabilidade marginal da carteira nova.",
+          "Não elevar taxas acima dos atuais sem análise do PAS sobre superendividados.",
+          "Não cortar crédito a ponto de forçar inadimplência de clientes existentes.",
+          "Não deixar Basileia/capital principal cair sem plano de capital aprovado.",
+          "Não renegociar de forma a mascarar a inadimplência real (NPL 5,8%).",
+          "Não agir de modo que contrarie o PAS em curso sem parecer jurídico.",
+          "Não adotar antes de simular absorção pelo capital principal e adicional contracíclico possível em 2027."
+        ]
+      }
+    ],
+    "dropped": [],
+    "gaps": [],
+    "elapsed_s": 241.4
+  }
+}

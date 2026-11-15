@@ -42,10 +42,13 @@ SYNTH_SYSTEM = (
 SYNTH_CONTRACT = """Responda SOMENTE com JSON:
 {"summary": "texto curto", "options": [{"id": "opt-1", "description": "texto",
   "customer_impact": "low|medium|high", "capital_liquidity_effect": "texto",
-  "supported_by": ["cso|risk|cco|cpo|cro"], "citations": ["pack_fact_id"]}],
+  "derived_from": [{"officer": "cso|risk|cco|cpo|cro", "option": "id da opção desse oficial"}],
+  "citations": ["pack_fact_id"]}],
  "residual_regulatory_risk": "texto", "monitoring_triggers": [{"text": "texto",
   "citations": ["pack_fact_id"]}]}
-De 2 a 3 opções."""
+De 2 a 3 opções. Em derived_from, liste SÓ as opções dos oficiais (diagnóstico ou quantificação)
+que a sua opção de fato consolida, pelo id que o oficial usou; não liste quem não propôs algo
+equivalente. Quem apoia e quem contesta é calculado a partir disso."""
 
 
 def _gap(officer: str | None, phase: str, why: str) -> dict[str, Any]:
@@ -85,8 +88,38 @@ def _ok(results: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
     return {o: r["position"] for o, r in results.items() if r["status"] == c.STATUS_OK}
 
 
-def validate_synthesis(obj: Any, pack_ids: set[str]) -> tuple[dict[str, Any] | None, list[str]]:
-    """Keep only cited options/triggers. Returns (clean synthesis or None, dropped notes)."""
+def _support(o: dict[str, Any], positions: dict[str, dict[str, dict[str, Any]]] | None
+             ) -> tuple[list[str], list[dict[str, str]], list[str]]:
+    """``supported_by`` from code, not from the model: an officer supports a brief option only
+    if ``derived_from`` names an option id that exists in that officer's own diagnosis or
+    quantify position. ``contested_by`` = the boards that challenged any supporter."""
+    if positions is None:
+        return [], [], []
+    own: dict[str, set[str]] = {}
+    for phase in ("diagnosis", "quantify"):
+        for off, pos in (positions.get(phase) or {}).items():
+            own.setdefault(off, set()).update(
+                str(x.get("id")) for x in pos.get("options") or [] if isinstance(x, dict))
+    refs, sup = [], []
+    for d in o.get("derived_from") or []:
+        if not isinstance(d, dict):
+            continue
+        off, oid = str(d.get("officer") or ""), str(d.get("option") or "")
+        if oid in own.get(off, set()):
+            refs.append({"officer": off, "option": oid})
+            if off not in sup:
+                sup.append(off)
+    challenged = positions.get("challenge") or {}
+    contested = [ch for ch in CHALLENGES if ch in challenged and set(CHALLENGES[ch]) & set(sup)]
+    order = {o: i for i, o in enumerate(c.BOARD_OFFICERS)}
+    return sorted(sup, key=order.get), refs, sorted(contested, key=order.get)
+
+
+def validate_synthesis(obj: Any, pack_ids: set[str],
+                       positions: dict[str, dict[str, dict[str, Any]]] | None = None
+                       ) -> tuple[dict[str, Any] | None, list[str]]:
+    """Keep only cited options/triggers; compute support from the officers' own options.
+    Returns (clean synthesis or None, dropped notes)."""
     if not isinstance(obj, dict):
         return None, ["síntese sem JSON"]
     dropped: list[str] = []
@@ -101,8 +134,10 @@ def validate_synthesis(obj: Any, pack_ids: set[str]) -> tuple[dict[str, Any] | N
         if o.get("customer_impact") not in c.IMPACT_BANDS:
             dropped.append(f"opção sem faixa de impacto ao cliente descartada: {o.get('id')}")
             continue
-        sup = [s for s in o.get("supported_by") or [] if s in c.BOARD_OFFICERS]
-        opts.append({**o, "citations": cites, "supported_by": sup})
+        sup, refs, contested = _support(o, positions)
+        clean = {k: v for k, v in o.items() if k not in ("supported_by", "derived_from")}
+        opts.append({**clean, "citations": cites, "derived_from": refs, "supported_by": sup,
+                     "contested_by": contested})
     trig = []
     for t in obj.get("monitoring_triggers") or []:
         cites = [x for x in (t or {}).get("citations") or [] if x in pack_ids] if isinstance(t, dict) else []
@@ -197,7 +232,7 @@ def run_brief(*, run_id: str, pack_sha: str, pack_ids: set[str], task: str, call
     finally:
         pool.shutdown(wait=False, cancel_futures=True)
     if text is not None:
-        synth, dropped = validate_synthesis(c.parse_position(text), pack_ids)
+        synth, dropped = validate_synthesis(c.parse_position(text), pack_ids, positions)
         if synth is None:
             gaps.append(_gap(None, "synthesize", "; ".join(dropped[-1:]) or "síntese inválida"))
     phases["synthesize"] = {"secretary": {"status": c.STATUS_OK if synth else c.STATUS_INVALID}}
