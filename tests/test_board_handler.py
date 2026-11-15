@@ -112,6 +112,9 @@ def test_run_meters_persists_and_finishes(env, monkeypatch):
     run = t.items[("paying", f"RUN#{a['run_id']}")]
     assert run["status"] == "complete" and run["usage"]["tokens_in"] == 12_000
     assert metered == [14_400]
+    # #327: the board pack renders from the run item alone
+    assert [f["id"] for f in run["cited_facts"]] == ["f-km1-alfa"]
+    assert run["phase_status"]["synthesize"] == {"secretary": "ok"} and run["feed_as_of"] == "2026-11-14"
     assert sum(1 for (tn, sk) in t.items if sk.startswith(f"RUN#{a['run_id']}#R#")) == 12
     # a late catch never overwrites a finished run
     assert H.lambda_handler({"action": "fail", "tenant": "paying", "run_id": a["run_id"]}, None)

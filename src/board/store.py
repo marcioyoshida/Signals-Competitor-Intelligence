@@ -126,8 +126,31 @@ def list_runs(table: Any, tenant: str, limit: int = 20) -> list[dict[str, Any]]:
     kwargs: dict[str, Any] = {"KeyConditionExpression": Key("tenant").eq(tenant) & Key("sk").begins_with("RUN#")}
     while True:
         page = table.query(**kwargs)
-        items += [i for i in page.get("Items", []) if "#R#" not in i["sk"]]
+        items += [i for i in page.get("Items", []) if i["sk"].count("#") == 1]
         if "LastEvaluatedKey" not in page:
             break
         kwargs["ExclusiveStartKey"] = page["LastEvaluatedKey"]
     return sorted(items, key=lambda i: i.get("created_at") or "", reverse=True)[:limit]
+
+
+def decision_key(run_id: str) -> str:
+    return f"RUN#{run_id}#DECISION"
+
+
+def get_decision(table: Any, tenant: str, run_id: str) -> dict[str, Any] | None:
+    return table.get_item(Key={"tenant": tenant, "sk": decision_key(run_id)}).get("Item")
+
+
+def link_decision(table: Any, *, tenant: str, run_id: str, decision: dict[str, Any],
+                  now: dt.datetime | None = None) -> bool:
+    """#327 human gate: one decision per run, written once. False if the run already has one."""
+    now = now or _now()
+    item = {"tenant": tenant, "sk": decision_key(run_id), "run_id": run_id,
+            **_ddb(decision), "at": now.isoformat(timespec="seconds"), "expires_at": _expires(now)}
+    try:
+        table.put_item(Item=item, ConditionExpression="attribute_not_exists(sk)")
+        return True
+    except Exception as exc:
+        if _code(exc) == "ConditionalCheckFailedException":
+            return False
+        raise

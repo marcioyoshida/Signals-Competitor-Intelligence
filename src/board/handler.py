@@ -21,7 +21,7 @@ import json
 import os
 from typing import Any
 
-from src.board import contracts, gate, pack as packmod, runner, store
+from src.board import artifact, contracts, gate, pack as packmod, runner, store
 
 MAX_TOKENS_PER_CALL = 1800
 
@@ -138,7 +138,11 @@ def run(event: dict[str, Any]) -> dict[str, Any]:
     store.set_status(_table(), tenant=tenant, run_id=run_id, status=result["status"],
                      usage=usage, gaps=result["gaps"], dissents=result["dissents"],
                      synthesis=result["synthesis"], dropped=result["dropped"],
-                     elapsed_s=result["elapsed_s"])
+                     elapsed_s=result["elapsed_s"],
+                     # #327: what the board pack needs, so reading it never touches S3
+                     cited_facts=artifact.cited_facts(result["synthesis"], p),
+                     phase_status=artifact.phase_status(result),
+                     feed_as_of=p.get("feed_as_of"), peers=p.get("peers"))
     return {"run_id": run_id, "status": result["status"], "calls": usage["calls"],
             "n_gaps": len(result["gaps"])}
 

@@ -531,6 +531,37 @@
   .view-tabs a { border-bottom:2px solid transparent; border-radius:0; padding:var(--s2) var(--s3); font-weight:700; }
   .view-tabs a[aria-current="page"] { border-bottom-color:var(--primary); color:var(--ink); }
   body.view-hoje #macroStrip, body.view-hoje #askOpen, body.view-hoje #recsBand { display:none; }
+  /* #327 Conselho — board briefs */
+  body.view-conselho #macroStrip, body.view-conselho #askOpen, body.view-conselho #recsBand,
+  body.view-conselho #officerTabs, body.view-conselho .selwrap, body.view-conselho #askFab { display:none; }
+  @media (max-width: 430px) { .brand .ctx { display:none; } #viewTabs a { padding:0 12px; } }  /* 3 view tabs */
+  .cs-form { display:flex; flex-direction:column; gap:var(--s2); padding:0 var(--s3) var(--s3); }
+  .cs-form select, .cs-form textarea, .cs-gate select, .cs-gate textarea { font:inherit; color:var(--ink);
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--r-sm); padding:8px 10px; min-height:44px; }
+  .cs-row { display:flex; flex-wrap:wrap; align-items:center; gap:var(--s2); }
+  .cs-btn { min-height:44px; padding:0 var(--s3); border-radius:var(--r-sm); border:1px solid var(--primary);
+    background:var(--primary); color:var(--on-primary); font-weight:700; cursor:pointer; }
+  .cs-btn:disabled { opacity:.55; cursor:default; }
+  .cs-btn--no { background:none; color:var(--t-high); border-color:var(--t-high); }
+  .cs-msg { color:var(--muted); font-size:var(--fs-meta); }
+  .cs-run[aria-current="true"] { background:var(--surface-2, rgba(127,127,127,.08)); }
+  .cs-st { display:inline-block; min-width:92px; font-size:var(--fs-meta); font-weight:700; color:var(--muted); }
+  .cs-st--complete { color:var(--ok); } .cs-st--failed, .cs-st--refused { color:var(--t-high); }
+  .cs-st--partial, .cs-st--running, .cs-st--queued { color:var(--warn); }
+  .cs-doc { padding:0 var(--s3) var(--s3); line-height:1.55; overflow-wrap:anywhere; }
+  .cs-doc .cs-h { margin:var(--s3) 0 var(--s1); font-size:var(--fs-md); }
+  .cs-doc h2.cs-h { font-size:var(--fs-lg, 1.15rem); }
+  .cs-doc .cs-note { color:var(--muted); border-left:3px solid var(--primary); padding-left:var(--s2); }
+  .cs-doc ul { margin:var(--s1) 0; padding-left:1.2em; }
+  .cs-doc code { font-size:.85em; overflow-wrap:anywhere; }
+  .cs-tw { overflow-x:auto; margin:var(--s2) 0; }
+  .cs-t { border-collapse:collapse; width:100%; font-size:var(--fs-meta); }
+  .cs-t th, .cs-t td { border-top:1px solid var(--border); padding:6px 8px; text-align:left; vertical-align:top; }
+  .cs-t th { color:var(--muted); font-weight:700; white-space:nowrap; }
+  .cs-t td:first-child { white-space:nowrap; }
+  .cs-t td:nth-child(n+3) { min-width:7.5em; }
+  .cs-t td:nth-child(2) { min-width:16em; }
+  .cs-gate { border-top:1px solid var(--border); padding:var(--s3); display:flex; flex-direction:column; gap:var(--s2); }
   .hoje { display:flex; flex-direction:column; gap:var(--s3); }
   .hoje-sec { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md, 10px); overflow:hidden; }
   /* #210 follow-up (smoke 10-09): an empty Hoje section ("Decisões pendentes 0") was a 148px box
@@ -930,7 +961,7 @@
 <header class="appbar">
   <div class="brand"><span class="mark">ON<b>Ç</b>A</span><span class="ctx">Executivo</span></div>
   <nav class="ctxnav view-tabs" id="viewTabs" aria-label="Visão">
-    <a href="#hoje" data-view="hoje">Hoje</a><a href="#painel" data-view="painel">Painel</a></nav>
+    <a href="#hoje" data-view="hoje">Hoje</a><a href="#painel" data-view="painel">Painel</a><a href="#conselho" data-view="conselho">Conselho</a></nav>
   <nav class="ctxnav officer-tabs" id="officerTabs" aria-label="Oficiais"></nav>
   <span class="spacer"></span>
   <span class="selwrap"><label for="sectorSel" class="hd-note">Setor</label>
@@ -1018,8 +1049,8 @@ function hashOfficer() {
   return null;
 }
 function hashView() {
-  const t = hashTokens().find(x => x === "painel" || x.indexOf("hoje") === 0);
-  return t ? (t === "painel" ? "painel" : "hoje") : null;
+  const t = hashTokens().find(x => x === "painel" || x === "conselho" || x.indexOf("hoje") === 0);
+  return t ? (t === "painel" || t === "conselho" ? t : "hoje") : null;
 }
 function writeHash(p) {
   const o = p.officer || OFFICER, v = p.view || VIEW || "painel";
@@ -1046,6 +1077,7 @@ function initialView() {
 function setView(v) {
   VIEW = v;
   document.body.classList.toggle("view-hoje", v === "hoje");
+  document.body.classList.toggle("view-conselho", v === "conselho");   // #327
   document.querySelectorAll("#viewTabs a").forEach(a =>
     a.setAttribute("aria-current", a.getAttribute("data-view") === v ? "page" : "false"));
 }
@@ -3764,6 +3796,7 @@ function render() {
   const p = block().panels || {}, a = agg();
   const el = document.getElementById("board");
   let board = "";
+  if (VIEW === "conselho") { renderConselho(el); return; }   // #327
   if (VIEW === "hoje") { renderHoje(el); return; }
 
   if (OFFICER === "cso") {
@@ -4137,6 +4170,175 @@ function hojeSec(id, title, n, sub, body, go, goTitle) {
     : `<span class="n">${n}</span>`;
   return `<section class="hoje-sec" id="${id}"><div class="hoje-hd"><h2>${U.esc(title)}</h2>` +
     `${cnt}<span class="sub hd-note">${U.esc(sub || "")}</span></div>${body}</section>`;
+}
+// ---- #327 Conselho: board briefs (ADR 031) — start a brief, read the board pack, record the
+// board's decision (aceitar | modificar | rejeitar), then adoption and the observed outcome.
+// Everything goes through /api/me/act with the officer's own token; the tenant is the token's.
+const CONSELHO = { runs: null, run: null, msg: "", err: "", busy: false, poll: null };
+function conselhoAct(intent, args, key) {
+  const body = { intent, args: args || {} };
+  if (key) body.idempotency_key = key;
+  return actFetch(JSON.stringify(body)).then(r => r.json().then(j => ({ status: r.status, body: j })));
+}
+function mdInline(s) {
+  return s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>").replace(/`([^`]+)`/g, "<code>$1</code>");
+}
+// The board pack is server-written Markdown; every line is escaped BEFORE any markup is added.
+function mdToHtml(md) {
+  const out = [], lines = String(md || "").split("\n");
+  let i = 0;
+  while (i < lines.length) {
+    const raw = lines[i];
+    if (/^\|/.test(raw)) {
+      const rows = [];
+      while (i < lines.length && /^\|/.test(lines[i])) { rows.push(lines[i]); i++; }
+      const cells = r => r.replace(/^\||\|$/g, "").split("|").map(c => mdInline(U.esc(c.trim())));
+      const body = rows.filter(r => !/^\|\s*-/.test(r));
+      out.push(`<div class="cs-tw"><table class="cs-t"><thead><tr>${cells(body[0]).map(c => `<th>${c}</th>`).join("")}</tr></thead><tbody>` +
+        body.slice(1).map(r => `<tr>${cells(r).map(c => `<td>${c}</td>`).join("")}</tr>`).join("") + `</tbody></table></div>`);
+      continue;
+    }
+    if (/^- /.test(raw)) {
+      const items = [];
+      while (i < lines.length && /^- /.test(lines[i])) { items.push(`<li>${mdInline(U.esc(lines[i].slice(2)))}</li>`); i++; }
+      out.push(`<ul>${items.join("")}</ul>`);
+      continue;
+    }
+    const h = raw.match(/^(#{1,3}) (.*)$/);
+    if (h) out.push(`<h${h[1].length + 1} class="cs-h">${mdInline(U.esc(h[2]))}</h${h[1].length + 1}>`);
+    else if (/^> /.test(raw)) out.push(`<p class="cs-note">${mdInline(U.esc(raw.slice(2)))}</p>`);
+    else if (raw.trim()) out.push(`<p>${mdInline(U.esc(raw.trim().replace(/\s+$/, "")))}</p>`);
+    i++;
+  }
+  return out.join("");
+}
+const CS_STATUS = { queued: "na fila", running: "em andamento", complete: "concluído", partial: "parcial",
+  failed: "falhou", refused: "recusado" };
+function conselhoTargets() {
+  return (DATA.entities || []).filter(e => e && e.entity)
+    .sort((a, b) => String(a.label || a.entity).localeCompare(String(b.label || b.entity), "pt-BR"));
+}
+function renderConselho(el) {
+  document.getElementById("pgTitle").innerHTML = `<span class="pg-k">Sala executiva<span class="pg-dash"> — </span></span>Briefing de conselho`;
+  document.getElementById("pgLede").textContent = "As cinco áreas debatem uma pergunta com fatos públicos citados; o conselho decide.";
+  if (ADMIN || !Ctx.getIdToken()) {
+    el.innerHTML = `<div class="hoje">` + hojeSec("cs-off", "Briefing de conselho", null, "", U.empty(
+      ADMIN ? "O briefing de conselho é das contas de organização, não da prévia de operador."
+            : "Entre com a conta da sua organização para usar o briefing de conselho.", "", "○")) + `</div>`;
+    return;
+  }
+  if (CONSELHO.runs === null && !CONSELHO.busy) conselhoLoad();
+  const opts = conselhoTargets().map(e => `<option value="${U.esc(e.entity)}">${U.esc(e.label || e.entity)}</option>`).join("");
+  const form = `<form class="cs-form" id="csForm">
+      <label class="hd-note" for="csTarget">Instituição</label>
+      <select id="csTarget" required>${opts}</select>
+      <label class="hd-note" for="csTask">Pergunta do conselho</label>
+      <textarea id="csTask" rows="3" minlength="10" maxlength="800" required
+        placeholder="Ex.: como responder ao rebaixamento de rating nos próximos 90 dias?"></textarea>
+      <p class="hd-note">Leva alguns minutos e usa o plano da organização ou o modelo próprio conectado. Briefing externo: não é decisão de capital ou preço.</p>
+      <div class="cs-row"><button type="submit" class="cs-btn" ${CONSELHO.busy ? "disabled" : ""}>Gerar briefing</button>
+        <span class="cs-msg" role="status">${U.esc(CONSELHO.err || CONSELHO.msg)}</span></div></form>`;
+  const runs = CONSELHO.runs || [];
+  const list = runs.length ? `<div class="panel__bd--flush">` + runs.map(r => `<button class="hoje-rec cs-run" data-run="${U.esc(r.run_id)}"
+      aria-current="${CONSELHO.run && CONSELHO.run.run && CONSELHO.run.run.run_id === r.run_id ? "true" : "false"}">
+      <span class="cs-st cs-st--${U.esc(r.status)}">${U.esc(CS_STATUS[r.status] || r.status)}</span>
+      <b>${U.esc(r.target || "")}</b> · ${U.esc(String(r.task || "").slice(0, 120))}
+      <span class="hd-note"> · ${U.esc(dShort(String(r.created_at || "").slice(0, 10)))}</span></button>`).join("") + `</div>`
+    : U.empty(CONSELHO.runs === null ? "Carregando…" : "Nenhum briefing ainda.", "", "○");
+  let html = hojeSec("cs-novo", "Novo briefing", null, "cinco áreas, opções citadas", form) +
+    hojeSec("cs-lista", "Briefings", runs.length || null, "mais recentes", list);
+  if (CONSELHO.run) html += hojeSec("cs-pack", "Briefing", null, "", conselhoPack(CONSELHO.run));
+  el.innerHTML = `<div class="hoje cs">${html}</div>`;
+  const f = document.getElementById("csForm");
+  if (f) f.addEventListener("submit", (e) => { e.preventDefault(); conselhoStart(); });
+  el.querySelectorAll(".cs-run").forEach(b => b.addEventListener("click", () => conselhoOpen(b.getAttribute("data-run"))));
+  conselhoWireGate(el);
+}
+function conselhoPack(st) {
+  const run = st.run || {}, dec = st.decision;
+  if (!st.board_pack) {
+    return `<p class="hd-note">Situação: ${U.esc(CS_STATUS[run.status] || run.status)}` +
+      (run.reason ? ` · ${U.esc(run.reason)}` : "") + `</p>`;
+  }
+  const options = ((run.synthesis || {}).options || []);
+  let gate;
+  if (dec) {
+    gate = `<div class="cs-gate"><p><b>Decisão registrada:</b> ${U.esc(dec.choice)}${dec.option_id ? " · " + U.esc(dec.option_id) : ""}</p>
+      <div class="cs-row"><button class="cs-btn" data-cs="adopt" data-d="${U.esc(dec.decision_id)}">Adotada pelo conselho</button>
+      <label class="hd-note" for="csOut">Resultado observado</label>
+      <select id="csOut"><option value="">—</option><option value="favoravel">favorável</option>
+        <option value="neutro">neutro</option><option value="desfavoravel">desfavorável</option></select>
+      <button class="cs-btn" data-cs="outcome" data-d="${U.esc(dec.decision_id)}">Registrar resultado</button></div></div>`;
+  } else {
+    gate = `<div class="cs-gate"><p><b>Decisão do conselho</b> <span class="hd-note">· registrada uma vez por briefing</span></p>
+      <div class="cs-row"><label class="hd-note" for="csOpt">Opção</label>
+        <select id="csOpt">${options.map(o => `<option value="${U.esc(o.id)}">${U.esc(o.id)}</option>`).join("")}</select></div>
+      <textarea id="csText" rows="2" maxlength="800" placeholder="Só para modificar: a opção como o conselho a aprovou"></textarea>
+      <textarea id="csWhy" rows="2" maxlength="800" placeholder="Justificativa (opcional)"></textarea>
+      <div class="cs-row"><button class="cs-btn" data-cs="aceitar">Aceitar</button>
+        <button class="cs-btn" data-cs="modificar">Modificar</button>
+        <button class="cs-btn cs-btn--no" data-cs="rejeitar">Rejeitar todas</button></div></div>`;
+  }
+  return `<div class="cs-doc">${mdToHtml(st.board_pack)}</div>${gate}`;
+}
+function conselhoWireGate(el) {
+  el.querySelectorAll("[data-cs]").forEach(b => b.addEventListener("click", () => {
+    const what = b.getAttribute("data-cs"), run = (CONSELHO.run || {}).run || {};
+    let p;
+    if (what === "adopt") p = conselhoAct("set_board_adoption", { decision_id: b.getAttribute("data-d"), adopted: true }, newKey());
+    else if (what === "outcome") {
+      const v = (document.getElementById("csOut") || {}).value;
+      if (!v) return;
+      p = conselhoAct("set_outcome", { decision_id: b.getAttribute("data-d"), outcome: v }, newKey());
+    } else {
+      p = conselhoAct("decide_board_brief", { run_id: run.run_id, choice: what,
+        option_id: what === "rejeitar" ? undefined : (document.getElementById("csOpt") || {}).value,
+        text: (document.getElementById("csText") || {}).value || undefined,
+        rationale: (document.getElementById("csWhy") || {}).value || undefined, device: deviceClass() }, newKey());
+    }
+    b.disabled = true;
+    p.then(r => {
+      CONSELHO.err = r.status >= 400 ? (r.body.error || "não foi possível registrar") : "";
+      CONSELHO.msg = r.status < 400 ? "Registrado." : "";
+      return conselhoOpen(run.run_id);
+    }).catch(() => { CONSELHO.err = "sem conexão"; render(); });
+  }));
+}
+function newKey() {
+  try { if (crypto.randomUUID) return crypto.randomUUID(); } catch (e) {}
+  return Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
+function conselhoLoad() {
+  CONSELHO.busy = true;
+  return conselhoAct("board_run_status", {}).then(r => {
+    CONSELHO.busy = false;
+    CONSELHO.runs = r.status < 400 ? (r.body.runs || []) : [];
+    if (r.status >= 400) CONSELHO.err = r.body.error || "";
+    if (VIEW === "conselho") render();
+  }).catch(() => { CONSELHO.busy = false; CONSELHO.runs = []; CONSELHO.err = "sem conexão"; if (VIEW === "conselho") render(); });
+}
+function conselhoOpen(runId) {
+  if (!runId) return Promise.resolve();
+  return conselhoAct("board_run_status", { run_id: runId }).then(r => {
+    CONSELHO.run = r.status < 400 ? r.body : null;
+    const st = CONSELHO.run && CONSELHO.run.run && CONSELHO.run.run.status;
+    clearTimeout(CONSELHO.poll);
+    if (st === "queued" || st === "running") CONSELHO.poll = setTimeout(() => { if (VIEW === "conselho") conselhoOpen(runId); }, 15000);
+    else conselhoLoad();
+    if (VIEW === "conselho") render();
+  });
+}
+function conselhoStart() {
+  const target = document.getElementById("csTarget").value;
+  const task = document.getElementById("csTask").value.trim();
+  CONSELHO.err = ""; CONSELHO.msg = ""; CONSELHO.busy = true; render();
+  conselhoAct("board_brief", { target, task }, newKey()).then(r => {
+    CONSELHO.busy = false;
+    if (r.status >= 400) { CONSELHO.err = r.body.error || "não foi possível iniciar"; render(); return; }
+    CONSELHO.msg = "Briefing iniciado. Leva alguns minutos.";
+    engage("nav", "open", null, "conselho-brief");
+    return conselhoOpen(r.body.run_id);
+  }).catch(() => { CONSELHO.busy = false; CONSELHO.err = "sem conexão"; render(); });
 }
 function renderHoje(el) {
   const since = hojeBaseline(OFFICER);

@@ -987,10 +987,83 @@ def _act_board_run_status(args: dict[str, Any], actor: str) -> tuple[str, int, d
         item = store.get_run(table, tenant, run_id)
         if not item:
             return "noop", 404, {"detail": "run not found", "run_id": run_id}
-        return "applied", 200, {"run": _plain({k: item[k] for k in _BOARD_RUN_FIELDS if k in item})}
+        from src.board import artifact
+
+        out = {"run": _plain({k: item[k] for k in _BOARD_RUN_FIELDS if k in item})}
+        if item.get("status") in ("complete", "partial"):
+            out["board_pack"] = artifact.render_markdown(_plain(item))   # #327
+        dec = store.get_decision(table, tenant, run_id)
+        if dec:
+            out["decision"] = _plain({k: dec[k] for k in ("decision_id", "choice", "option_id", "at")
+                                      if k in dec})
+        return "applied", 200, out
     runs = [{k: r[k] for k in ("run_id", "status", "target", "task", "created_at") if k in r}
             for r in store.list_runs(table, tenant, limit=10)]
     return "applied", 200, {"runs": _plain(runs)}
+
+
+_BOARD_CHOICES = {"aceitar": "aprovado", "modificar": "aprovado", "rejeitar": "rejeitado"}
+
+
+def _act_decide_board_brief(args: dict[str, Any], actor: str) -> tuple[str, int, dict[str, Any]]:
+    """apply (self-service): the board's human gate on a finished brief (ADR 031 §6). `choice`
+    aceitar (one `option_id` as written), modificar (`option_id` + the board's own `text`) or
+    rejeitar; optional `rationale`. Recorded once per run as a decision, so adoption
+    (`set_board_adoption`) and the observed outcome (`set_outcome`) follow on its decision_id."""
+    import boto3
+
+    from src.board import store
+    from src.synth import decision_log
+
+    tenant = _board_tenant(args)
+    name = os.environ.get("ONCA_BOARD_RUNS_TABLE")
+    if not tenant or not name:
+        return "blocked", 403 if name else 503, {"error": "o briefing de conselho não está habilitado aqui"}
+    run_id = str(args.get("run_id") or "").strip()
+    choice = str(args.get("choice") or "").strip().lower()
+    if choice not in _BOARD_CHOICES:
+        return "blocked", 400, {"error": "choice deve ser aceitar, modificar ou rejeitar"}
+    table = boto3.resource("dynamodb").Table(name)
+    run = store.get_run(table, tenant, run_id) if run_id else None
+    if not run:
+        return "noop", 404, {"detail": "run not found", "run_id": run_id}
+    if run.get("status") not in ("complete", "partial") or not (run.get("synthesis") or {}).get("options"):
+        return "blocked", 409, {"error": "este briefing não tem opções para decidir", "status": run.get("status")}
+    if store.get_decision(table, tenant, run_id):
+        return "blocked", 409, {"error": "este briefing já tem uma decisão registrada"}
+    opts = {o.get("id"): o for o in run["synthesis"]["options"]}
+    option_id = str(args.get("option_id") or "").strip() or None
+    if choice != "rejeitar" and option_id not in opts:
+        return "blocked", 400, {"error": "informe option_id de uma das opções do briefing",
+                                "options": list(opts)}
+    text = " ".join(str(args.get("text") or "").split())
+    if choice == "modificar" and len(text) < 10:
+        return "blocked", 400, {"error": "modificar exige o texto da opção como o conselho a aprovou"}
+    if choice == "rejeitar":
+        recommendation = f"Briefing de conselho ({run.get('target')}): nenhuma das opções adotada"
+    elif choice == "modificar":
+        recommendation = text
+    else:
+        recommendation = str(opts[option_id].get("description") or "")
+    rationale = " ".join(str(args.get("rationale") or "").split()) or None
+    if choice == "modificar":
+        rationale = f"Modificada a partir da opção {option_id} do briefing." + (f" {rationale}" if rationale else "")
+    try:
+        item = decision_log.record_decision(
+            officer="board", recommendation=recommendation, verdict=_BOARD_CHOICES[choice],
+            actor=actor, context_id=f"board:{run_id}", action_ref=option_id,
+            evidence_id=run.get("pack_sha"), rationale=rationale, tenant=tenant,
+            device=_device(args.get("device")))
+    except ValueError as exc:
+        return "blocked", 400, {"error": str(exc)}
+    if not store.link_decision(table, tenant=tenant, run_id=run_id, decision={
+            "decision_id": item["decision_id"], "choice": choice, "option_id": option_id}):
+        # a concurrent decision won the link; this one stays in the log, visibly unlinked
+        return "blocked", 409, {"error": "outra decisão foi registrada para este briefing ao mesmo tempo",
+                                "decision_id": item["decision_id"]}
+    return "applied", 200, {"decision_id": item["decision_id"], "verdict": item["verdict"],
+                            "choice": choice, "option_id": option_id, "run_id": run_id,
+                            "next": ["set_board_adoption", "set_outcome"]}
 
 
 def _plain(v: Any) -> Any:
@@ -1015,7 +1088,7 @@ _NO_REPLAY = frozenset({"issue_invite", "board_run_status"})  # a status must be
 
 # DEC-6: decision-management intents operate ON a decision — they must NOT be linked back as
 # "actions authorized BY" that decision (would self-reference).
-_DECISION_INTENTS = frozenset({"record_decision", "set_outcome", "set_board_adoption",
+_DECISION_INTENTS = frozenset({"record_decision", "set_outcome", "set_board_adoption", "decide_board_brief",
                                "set_tdr_baseline", "append_reference", "record_engagement"})
 
 
@@ -1068,8 +1141,9 @@ _CATALOG: dict[str, tuple[str, Callable[..., tuple[str, int, dict[str, Any]]], s
     # #328 board brief (ADR 031): start a run (spend-gated) and read its status
     "board_brief": (APPLY, _act_board_brief, "target"),
     "board_run_status": (APPLY, _act_board_run_status, None),
+    "decide_board_brief": (APPLY, _act_decide_board_brief, None),   # #327 human gate
 }
-_BOARD_INTENTS = frozenset({"board_brief", "board_run_status"})
+_BOARD_INTENTS = frozenset({"board_brief", "board_run_status", "decide_board_brief"})
 
 # #161: what a NON-elevated tenant identity (Cognito JWT via /api/me/act) may call — the officer's
 # own decision capture and attention telemetry, nothing that touches the registry or pipeline.
