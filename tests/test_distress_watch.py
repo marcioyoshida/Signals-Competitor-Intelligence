@@ -409,3 +409,44 @@ def test_common_word_brand_is_dropped_by_the_correspondent_corpus():
                 bcb_rows=[EURO_SCD], reviews_fn=lambda: [], promote_fn=None,
                 correspondent_lookup=None, qsa={}, exits=[], today=TODAY)
     assert out["untracked"] == []
+
+
+# --- 2026-11-14: "instituições financeiras" linked every correspondent to a liquidation -------
+
+def _corr(name, cnpj, contratante_cnpj, contratante="BANCO X"):
+    return {"NomeCorrespondente": name, "CnpjCorrespondente": cnpj,
+            "CnpjContratante": contratante_cnpj, "NomeContratante": contratante, "Posicao": "202609"}
+
+
+def test_institutional_words_are_not_brands():
+    for head in ("instituicoes", "instituicao", "financeiras", "correspondentes", "corretora"):
+        assert not w._distinctive(head)
+
+
+def test_common_head_is_not_linked_even_if_distinctive():
+    # 6 distinct companies carry "aurora" → an ordinary word; nothing is linked
+    rows = [_corr(f"AURORA SERVICOS {i} LTDA", f"1000000{i}", "62232889") for i in range(6)]
+    ev = [{"entity": None, "kind": "liquidacao_extrajudicial", "brand": "aurora servicos",
+           "matched_via": "review_queue"}]
+    assert w.attach_correspondents(ev, {"62232889": "daycoval"}, lookup=lambda b: rows) == 0
+    assert "correspondent_of" not in ev[0] and ev[0]["correspondent_checked"]
+
+
+def test_regime_pinned_record_is_exempt_from_the_commonness_test():
+    rows = [_corr(f"PORTOCRED AGENTE {i}", "11111111" if i == 0 else f"2000000{i}", "62232889")
+            for i in range(7)]
+    ev = [{"entity": None, "kind": "liquidacao_extrajudicial", "brand": "portocred",
+           "matched_via": "bcb_regime", "cnpj": "11111111"}]
+    assert w.attach_correspondents(ev, {"62232889": "daycoval"}, lookup=lambda b: rows) == 1
+    assert [l["entity"] for l in ev[0]["correspondent_of"]] == ["daycoval"]
+
+
+def test_stored_links_from_a_generic_brand_do_not_render():
+    idx = {"untracked": {"brand:instituicoes financeiras#liquidacao_extrajudicial": {
+        "entity": None, "kind": "liquidacao_extrajudicial", "label": "Liquidação Extrajudicial",
+        "brand": "instituicoes financeiras", "matched_via": "review_queue",
+        "first_seen": "2026-11-12", "last_seen": "2026-11-12", "latest_title": "t", "sources": [],
+        "correspondent_of": [{"entity": "banrisul", "correspondente": "TONIN SERVICOS DE "
+                              "CORRESPONDENTES DE INSTITUICOES FINANCEIRAS LTDA"}]}}}
+    rows = distress.list_records(idx)
+    assert [r.get("role") for r in rows if r.get("entity") == "banrisul"] == []

@@ -58,6 +58,12 @@ GENERIC_HEADS = frozenset({
     "mercado", "empresa", "empresas", "fundo", "fundos", "ativos", "recursos",
     "parana", "paulista", "mineira", "goias", "bahia", "sul", "norte", "leste", "oeste",
     "regional", "estado", "cidade", "familia", "povo", "trabalho", "energia",
+    # 2026-11-14: a headline "BC decreta liquidação de mais duas instituições financeiras" made
+    # the brand "instituicoes financeiras" and linked every "…CORRESPONDENTE(S) DE INSTITUICOES
+    # FINANCEIRAS LTDA" to a liquidation (Banrisul, BMG, BRB, BTG… on the Risco board).
+    "instituicao", "instituicoes", "financeiras", "financeiro", "financeiros", "correspondente",
+    "correspondentes", "bancos", "bancaria", "bancario", "corretora", "corretoras",
+    "administradora", "consorcio", "consorcios", "participacoes", "holding", "sociedade",
 })
 # Legal-form tails stripped before a legal-name match.
 _LEGAL_TAIL = re.compile(r"\s+(?:ltda|s\s*/?\s*a|sa|eireli|me|epp)\.?$")
@@ -365,6 +371,13 @@ def attach_correspondents(
                 print(f"Warning: correspondent lookup for {head} failed: {exc}")
                 cache[head] = []
                 continue
+        # A head carried by many distinct correspondent companies is an ordinary word, not a
+        # brand (same test as drop_common_brands). An official regime pins one CNPJ, so it is
+        # exempt: only that company's own contracts are linked below.
+        if ev.get("matched_via") != "bcb_regime" and _common_head(head, cache[head]):
+            ev["correspondent_checked"] = dt.date.today().isoformat()
+            ev.pop("correspondent_of", None)
+            continue
         links: dict[str, dict[str, Any]] = {}
         for row in cache[head]:
             # the correspondent's own name must carry the brand as a word (contains() is loose)
@@ -391,6 +404,14 @@ def attach_correspondents(
 MAX_COMMON_COMPANIES = 5
 
 
+def _common_head(head: str, rows: list[dict[str, Any]]) -> bool:
+    """True when more than ``MAX_COMMON_COMPANIES`` distinct correspondent companies carry
+    ``head`` as a word in their name."""
+    cos = {r.get("CnpjCorrespondente") for r in rows
+           if f" {head} " in " " + re.sub(r"[^a-z0-9 ]+", " ", _fold(r.get("NomeCorrespondente"))) + " "}
+    return len(cos) > MAX_COMMON_COMPANIES
+
+
 def drop_common_brands(events: list[dict[str, Any]], *,
                        lookup: Callable[[str], list[dict[str, Any]]]) -> list[dict[str, Any]]:
     """Drop brand-matched (group) events whose head is an ordinary word: the BCB correspondent
@@ -407,10 +428,7 @@ def drop_common_brands(events: list[dict[str, Any]], *,
         head = (ev.get("brand") or "").split(" ")[0]
         if head not in verdict:
             try:
-                rows = lookup(head.upper()) or []
-                cos = {r.get("CnpjCorrespondente") for r in rows
-                       if f" {head} " in " " + re.sub(r"[^a-z0-9 ]+", " ", _fold(r.get("NomeCorrespondente"))) + " "}
-                verdict[head] = len(cos) <= MAX_COMMON_COMPANIES
+                verdict[head] = not _common_head(head, lookup(head.upper()) or [])
             except Exception as exc:  # pragma: no cover - best-effort network
                 print(f"Warning: brand commonness check for {head} failed: {exc}")
                 verdict[head] = False

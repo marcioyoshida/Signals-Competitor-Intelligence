@@ -614,6 +614,12 @@ def _with_ids(rec: dict[str, Any], key: str, tracked: bool) -> dict[str, Any]:
     return r
 
 
+def _brand_distinctive(brand: Any) -> bool:
+    from src.synth.distress_watch import _distinctive  # lazy: distress_watch imports this module
+
+    return _distinctive((str(brand or "")).split(" ")[0])
+
+
 def list_records(index: dict[str, Any]) -> list[dict[str, Any]]:
     """Flat, sorted (most-recent first) list of distress records for the feed.
 
@@ -629,7 +635,12 @@ def list_records(index: dict[str, Any]) -> list[dict[str, Any]]:
             if not tracked:
                 base["entity"] = None
             recs.append(base)
-            for link in r.get("correspondent_of") or []:
+            # A link stored by an older run from a non-distinctive brand is not exposure
+            # (2026-11-14, "instituicoes financeiras"); a regime-pinned link always stands.
+            links = r.get("correspondent_of") or []
+            if links and r.get("matched_via") != "bcb_regime" and not _brand_distinctive(r.get("brand")):
+                links = []
+            for link in links:
                 row = dict(base)
                 row.update(entity=link.get("entity"), role="correspondent", tracked=True,
                            correspondent=link.get("correspondente"),
