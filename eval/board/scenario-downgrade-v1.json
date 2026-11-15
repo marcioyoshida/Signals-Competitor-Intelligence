@@ -1,0 +1,39 @@
+{
+  "schema": "board/v1/pack",
+  "scenario": "downgrade-v1",
+  "note": "CENÁRIO SINTÉTICO (#338). Bancos, agência, números e eventos são fictícios. Nenhum fato se refere a uma instituição real.",
+  "target": "banco-aurora",
+  "peers": ["banco-boreal", "banco-cerrado", "banco-delta"],
+  "feed_generated_at": "2026-11-15T00:00:00+00:00",
+  "feed_as_of": "2026-11-15",
+  "facts": [
+    {"id": "f-rating-aurora-downgrade", "kind": "rating", "entity": "banco-aurora", "source": "Agência fictícia (comunicado público)", "as_of": "2026-11-10", "text": "Banco Aurora (fictício): rating nacional de longo prazo rebaixado de AA para A+, perspectiva negativa. Motivos citados: piora da qualidade da carteira de varejo e maior dependência de captação de atacado."},
+    {"id": "f-km1-aurora", "kind": "km1", "entity": "banco-aurora", "source": "Pilar 3 (KM1, fictício)", "as_of": "2026-3", "text": "Banco Aurora: Basileia 12.1%, capital principal 9.4%, alavancagem 5.2%, LCR 118%, NSFR 104% (trimestre 2026-3)."},
+    {"id": "f-km1-aurora-prev", "kind": "km1", "entity": "banco-aurora", "source": "Pilar 3 (KM1, fictício)", "as_of": "2026-2", "text": "Banco Aurora: Basileia 13.0%, capital principal 10.1%, LCR 131%, NSFR 107% (trimestre 2026-2)."},
+    {"id": "f-km1-boreal", "kind": "km1", "entity": "banco-boreal", "source": "Pilar 3 (KM1, fictício)", "as_of": "2026-3", "text": "Banco Boreal: Basileia 15.2%, capital principal 11.6%, alavancagem 6.9%, LCR 172%, NSFR 119%."},
+    {"id": "f-km1-cerrado", "kind": "km1", "entity": "banco-cerrado", "source": "Pilar 3 (KM1, fictício)", "as_of": "2026-3", "text": "Banco Cerrado: Basileia 14.4%, capital principal 10.9%, alavancagem 6.4%, LCR 155%, NSFR 115%."},
+    {"id": "f-km1-delta", "kind": "km1", "entity": "banco-delta", "source": "Pilar 3 (KM1, fictício)", "as_of": "2026-3", "text": "Banco Delta: Basileia 13.6%, capital principal 10.2%, alavancagem 6.0%, LCR 140%, NSFR 111%."},
+    {"id": "f-npl-aurora", "kind": "npl", "entity": "banco-aurora", "source": "IF.data (fictício)", "as_of": "2026-06", "text": "Banco Aurora: inadimplência total 5.8% (PF 7.9%, PJ 2.6%), alta de 1.1 p.p. em dois trimestres; carteira de cartão e crédito pessoal é 41% do varejo."},
+    {"id": "f-npl-boreal", "kind": "npl", "entity": "banco-boreal", "source": "IF.data (fictício)", "as_of": "2026-06", "text": "Banco Boreal: inadimplência total 3.1% (PF 4.2%, PJ 1.5%)."},
+    {"id": "f-npl-cerrado", "kind": "npl", "entity": "banco-cerrado", "source": "IF.data (fictício)", "as_of": "2026-06", "text": "Banco Cerrado: inadimplência total 3.6% (PF 4.8%, PJ 1.9%)."},
+    {"id": "f-npl-delta", "kind": "npl", "entity": "banco-delta", "source": "IF.data (fictício)", "as_of": "2026-06", "text": "Banco Delta: inadimplência total 4.4% (PF 5.9%, PJ 2.0%)."},
+    {"id": "f-funding-aurora", "kind": "fundamentals", "entity": "banco-aurora", "source": "IF.data (fictício)", "as_of": "2026-06", "text": "Banco Aurora: captação de atacado (CDB institucional, letras financeiras) é 46% do funding; depósitos de varejo 38%; 22% do atacado vence nos próximos 12 meses."},
+    {"id": "f-funding-peers", "kind": "fundamentals", "entity": null, "source": "IF.data (fictício)", "as_of": "2026-06", "text": "Pares (Boreal, Cerrado, Delta): captação de atacado entre 24% e 33% do funding; depósitos de varejo entre 51% e 60%."},
+    {"id": "f-roe-aurora", "kind": "fundamentals", "entity": "banco-aurora", "source": "IF.data (fictício)", "as_of": "2026-06", "text": "Banco Aurora: ROE 9.8% (pares 13% a 17%); custo de crédito 7.4% da carteira."},
+    {"id": "f-spread-aurora", "kind": "market", "entity": "banco-aurora", "source": "Taxas de captação divulgadas (fictício)", "as_of": "2026-11-12", "text": "Após o rebaixamento, CDBs de 2 anos do Banco Aurora passaram a pagar 112% do CDI, contra 104% antes; pares pagam 101% a 104%."},
+    {"id": "f-rates-aurora", "kind": "pricing", "entity": "banco-aurora", "source": "BCB taxas de juros (fictício)", "as_of": "2026-11-07", "text": "Banco Aurora: crédito pessoal não consignado a 6.1% a.m. e rotativo do cartão a 14.2% a.m.; mediana dos pares 5.2% e 12.8% a.m."},
+    {"id": "f-complaints-aurora", "kind": "reputation", "entity": "banco-aurora", "source": "Ranking de reclamações (fictício)", "as_of": "2026-T3", "text": "Banco Aurora: 3º no ranking de reclamações do trimestre (índice 61.4), principal motivo: cobrança de tarifas e renegociação de dívidas."},
+    {"id": "f-complaints-peers", "kind": "reputation", "entity": null, "source": "Ranking de reclamações (fictício)", "as_of": "2026-T3", "text": "Pares: Boreal 9º (índice 32.0), Cerrado 6º (40.7), Delta 4º (55.3)."},
+    {"id": "f-pas-aurora", "kind": "enforcement", "entity": "banco-aurora", "source": "BCB PAS (fictício)", "as_of": "2026-09-30", "text": "Banco Aurora: processo administrativo sancionador em curso sobre oferta de crédito a clientes superendividados (sem decisão)."},
+    {"id": "f-reg-renegociacao", "kind": "regulatory", "entity": null, "source": "CMN/BCB (fictício)", "as_of": "2026-10-20", "text": "Norma fictícia em consulta pública: exige oferta de renegociação padronizada a clientes com mais de 90 dias de atraso; prazo de adequação proposto de 180 dias após publicação."},
+    {"id": "f-reg-capital-buffer", "kind": "regulatory", "entity": null, "source": "BCB (fictício)", "as_of": "2026-09-01", "text": "Adicional contracíclico de capital mantido em 0%; BCB sinaliza possível ativação gradual em 2027 se o crédito às famílias seguir acelerando."},
+    {"id": "f-macro-selic", "kind": "macro", "entity": null, "source": "Copom (fictício)", "as_of": "2026-11-05", "text": "Selic em 13.75% a.a., viés de estabilidade; Focus projeta 12.5% ao fim de 2027."},
+    {"id": "f-macro-households", "kind": "macro", "entity": null, "source": "BCB (fictício)", "as_of": "2026-09", "text": "Comprometimento de renda das famílias com dívidas em 28.6%, máxima da série; inadimplência do sistema PF em 5.5%."},
+    {"id": "f-boreal-move", "kind": "narrative", "entity": "banco-boreal", "source": "Imprensa (fictício)", "as_of": "2026-11-11", "text": "Banco Boreal anunciou campanha de portabilidade de crédito pessoal com taxa a partir de 4.4% a.m., mirando clientes de bancos médios."},
+    {"id": "f-cerrado-move", "kind": "narrative", "entity": "banco-cerrado", "source": "Imprensa (fictício)", "as_of": "2026-11-08", "text": "Banco Cerrado elevou a remuneração da conta remunerada para 102% do CDI para captar depósitos de varejo."}
+  ],
+  "gaps": [
+    "Sem dados internos do Banco Aurora (apetite a risco, custo marginal de funding, elasticidade de depósitos): briefing é externo (outside-in).",
+    "Dados prudenciais públicos têm defasagem de um trimestre."
+  ]
+}
