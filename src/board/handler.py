@@ -51,24 +51,31 @@ def admit(event: dict[str, Any]) -> dict[str, Any]:
     from src.dashboard.tenant_config import get_tenant_config
 
     tenant, key = str(event.get("tenant") or ""), str(event.get("idempotency_key") or "")
-    target, task = str(event.get("target") or ""), str(event.get("task") or "").strip()
-    if not (tenant and key and target and task):
+    task = str(event.get("task") or "").strip()
+    if not (tenant and key and task):
         return {"allowed": False, "reason": "bad_request"}
     d = gate.decide(tenant, config=get_tenant_config, raw_row=_raw_tenant_row,
                     client_model=_client_connection)
+    # #386: whose board decides comes from the tenant row (set by onboarding, #387), never
+    # from the request; the request only names the subject (legacy `target`), default focal.
+    focal = ((get_tenant_config(tenant) or {}).get("focal_entity") or "") if d.allowed else ""
+    subject = str(event.get("subject") or event.get("target") or "").strip() or focal
     run_id = store.run_id_for(tenant, key)
     item, created = store.create_run(_table(), tenant=tenant, run_id=run_id, task=task,
-                                     target=target, requested_by=event.get("requested_by"))
+                                     target=subject or "?", requested_by=event.get("requested_by"))
     if not created:  # a retried request: report the existing run, never start a second one
         return {"allowed": False, "reason": "duplicate", "run_id": run_id,
                 "status": item.get("status")}
+    if d.allowed and not focal:
+        d = gate.Decision(False, "no_focal")
     if not d.allowed:
         store.set_status(_table(), tenant=tenant, run_id=run_id, status="refused", reason=d.reason)
         return {"allowed": False, "reason": d.reason, "run_id": run_id}
     store.set_status(_table(), tenant=tenant, run_id=run_id, status="running",
-                     gate=d.reason, client_billed=d.client_billed, token_cap=d.token_cap)
+                     gate=d.reason, client_billed=d.client_billed, token_cap=d.token_cap,
+                     focal=focal, subject=subject)
     return {"allowed": True, "reason": d.reason, "run_id": run_id, "tenant": tenant,
-            "target": target, "token_cap": d.token_cap, "client_billed": d.client_billed}
+            "target": subject, "token_cap": d.token_cap, "client_billed": d.client_billed}
 
 
 def _scoped_feed(tenant: str) -> dict[str, Any]:
@@ -86,9 +93,12 @@ def _scoped_feed(tenant: str) -> dict[str, Any]:
 
 
 def build_pack(event: dict[str, Any]) -> dict[str, Any]:
-    tenant, run_id, target = event["tenant"], event["run_id"], event["target"]
+    tenant, run_id = event["tenant"], event["run_id"]
+    run_item = store.get_run(_table(), tenant, run_id) or {}
+    focal = run_item.get("focal") or event.get("target")          # legacy runs: target = focal
+    subject = run_item.get("subject") or focal
     try:
-        p = packmod.seal(packmod.build_pack(_scoped_feed(tenant), target))
+        p = packmod.seal(packmod.build_pack(_scoped_feed(tenant), focal, subject=subject))
     except (ValueError, PermissionError) as exc:
         # an unknown or out-of-scope target: the run ends here, visibly
         store.set_status(_table(), tenant=tenant, run_id=run_id, status="failed", reason=str(exc)[:300])
@@ -126,7 +136,11 @@ def run(event: dict[str, Any]) -> dict[str, Any]:
         return text
 
     result = runner.run_brief(run_id=run_id, pack_sha=sha, pack_ids=packmod.fact_ids(p),
-                              task=str(item.get("task") or ""), call=call, stop=meter.stop)
+                              task=str(item.get("task") or ""), call=call, stop=meter.stop,
+                              focal=p.get("focal"), subject=p.get("subject"),
+                              proximity_of=packmod.proximity_of(p),
+                              fact_entity={f["id"]: f.get("entity") for f in p.get("facts") or []},
+                              proximity_score={x["peer"]: x["score"] for x in p.get("proximity") or []})
     store.record_result(_table(), tenant=tenant, result=result)
     usage = meter.summary()
     if target is not None:
@@ -142,7 +156,8 @@ def run(event: dict[str, Any]) -> dict[str, Any]:
                      # #327: what the board pack needs, so reading it never touches S3
                      cited_facts=artifact.cited_facts(result["synthesis"], p),
                      phase_status=artifact.phase_status(result),
-                     feed_as_of=p.get("feed_as_of"), peers=p.get("peers"))
+                     feed_as_of=p.get("feed_as_of"), peers=p.get("peers"),
+                     proximity=p.get("proximity") or [])
     return {"run_id": run_id, "status": result["status"], "calls": usage["calls"],
             "n_gaps": len(result["gaps"])}
 

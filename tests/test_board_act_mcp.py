@@ -40,7 +40,9 @@ def board(monkeypatch):
     monkeypatch.setattr(boto3, "client", lambda svc, *a, **k: sfn if svc == "stepfunctions" else None)
     monkeypatch.setattr(boto3, "resource", lambda svc, *a, **k: type("R", (), {"Table": lambda self, n: table})())
     from src.dashboard import tenant_config
-    cfgs = {"acme": {"tenant_id": "acme", "modules": ["banking"], "billing": {"state": "active"}},
+    cfgs = {"acme": {"tenant_id": "acme", "modules": ["banking"], "billing": {"state": "active"},
+                     "focal_entity": "bradesco"},
+            "nofocal": {"tenant_id": "nofocal", "modules": ["banking"], "billing": {"state": "active"}},
             "trialco": {"tenant_id": "trialco", "modules": ["banking"], "billing": {"state": "trial"}}}
     monkeypatch.setattr(tenant_config, "get_tenant_config", lambda t, **k: cfgs.get(t))
     monkeypatch.setattr(tenant_config, "_table",
@@ -95,10 +97,26 @@ def test_trial_tenant_is_refused_before_anything_starts(board):
     assert sfn.started == []
 
 
-def test_key_target_and_task_are_required(board):
+def test_key_and_task_are_required_subject_defaults_to_focal(board):
+    sfn, _ = board
     assert brief(key=None)["statusCode"] == 400
     assert brief(task="curta")["statusCode"] == 400
-    assert brief(target="")["statusCode"] == 400
+    r = brief(target="")
+    assert r["statusCode"] == 202 and body(r)["subject"] == "bradesco" == body(r)["focal"]
+    assert sfn.started[0][2]["subject"] == "bradesco"
+
+
+def test_subject_is_the_request_focal_is_the_tenants(board):
+    sfn, _ = board
+    r = brief(subject="nubank", extra={"focal_entity": "itau", "focal": "itau"})
+    assert body(r)["focal"] == "bradesco" and body(r)["subject"] == "nubank"
+    assert sfn.started[0][2]["subject"] == "nubank" and "focal" not in sfn.started[0][2]
+
+
+def test_a_tenant_without_a_focal_institution_cannot_start(board):
+    sfn, _ = board
+    r = brief(tenant="nofocal")
+    assert r["statusCode"] == 409 and body(r)["reason"] == "no_focal" and sfn.started == []
 
 
 def test_disabled_when_the_state_machine_is_not_configured(board, monkeypatch):

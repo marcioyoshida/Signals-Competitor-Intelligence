@@ -1,6 +1,7 @@
 """Shared Context Pack (#323): the frozen, hashed fact set every officer in a board run reads.
 
-Built from one feed.json for a target entity and its peers. Every fact carries a stable
+Built from one feed.json for the client's own (focal) institution, the question's subject and
+the focal institution's nearest competitors by proximity (#385, #386). Every fact carries a stable
 ``id`` (what an officer cites as ``pack_fact_id``), its ``source`` and its ``as_of``. The pack
 is canonical JSON; its sha256 is the run's ``shared_context_id`` and the S3 key, so the same
 inputs always give the same pack and a stored pack is never rewritten.
@@ -23,11 +24,12 @@ PACK_SCHEMA = "board/v1/pack"
 DEFAULT_MAX_CHARS = 60_000
 MAX_PEERS = 5
 MAX_NARRATIVES = 6
+PEER_NARRATIVES = 2
 MAX_EVENTS = 6
 NARRATIVE_CHARS = 400
 
 # Lower number = kept first when the size cap bites.
-PRIORITY = {"km1": 0, "soundness": 0, "npl": 0, "fundamentals": 1, "results": 1,
+PRIORITY = {"proximity": 0, "km1": 0, "soundness": 0, "npl": 0, "fundamentals": 1, "results": 1,
             "distress": 0, "third_party": 1, "enforcement": 1, "macro": 1, "financials": 2, "reputation": 2,
             "sanctions": 0, "swot": 3, "sector_event": 3, "narrative": 4}
 
@@ -109,19 +111,47 @@ def _entity_facts(e: Mapping[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
-def build_pack(feed: Mapping[str, Any], target: str, *, peers: list[str] | None = None,
-               max_chars: int = DEFAULT_MAX_CHARS) -> dict[str, Any]:
-    """The pack dict (without its hash; see ``seal``). Raises if the target is unknown."""
+def build_pack(feed: Mapping[str, Any], focal: str, *, subject: str | None = None,
+               peers: list[str] | None = None, max_chars: int = DEFAULT_MAX_CHARS,
+               proximity_config: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """The pack dict (without its hash; see ``seal``). Raises if focal or subject is unknown.
+
+    ``focal`` is the client's own institution (whose board decides); ``subject`` is what the
+    question is about (defaults to ``focal``). Peers are the focal institution's nearest
+    competitors by proximity (#385), plus the subject when it is a competitor; each gets an
+    ``f-proximity-<peer>`` fact so officers can weight its signals by distance."""
+    from src.board import proximity as prox
+
     ents = {e["entity"]: e for e in feed.get("entities") or [] if e.get("entity")}
-    if target not in ents:
-        raise ValueError(f"target {target!r} is not an entity in this feed")
-    peers = [p for p in (peers if peers is not None else choose_peers(feed, target))
-             if p in ents and p != target][:MAX_PEERS]
-    scope = [target, *peers]
+    if focal not in ents:
+        raise ValueError(f"focal {focal!r} is not an entity in this feed")
+    subject = subject or focal
+    if subject not in ents:
+        raise ValueError(f"subject {subject!r} is not an entity in this feed")
+    target = focal
+    pcfg = proximity_config or prox.load_config()
+    ranked = prox.rank(feed, focal, candidates=peers, config=pcfg)
+    peers = [r["peer"] for r in ranked][:MAX_PEERS]
+    if subject != focal and subject not in peers:
+        peers = [subject, *peers][:MAX_PEERS]
+    if subject != focal and not any(r["peer"] == subject for r in ranked):
+        ranked = ranked + prox.rank(feed, focal, candidates=[subject], config=pcfg)
+    prox_by = {r["peer"]: r for r in ranked}
+    scope = [focal, *[p for p in peers if p != focal]]
     scope_set = set(scope)
     facts: list[dict[str, Any]] = []
     gaps: list[str] = []
 
+    focal_label = ents[focal].get("label") or focal
+    proximity = []
+    for eid in scope[1:]:
+        r = prox_by.get(eid)
+        if r:
+            facts.append(prox.fact(r, focal_label, feed.get("as_of")))
+            proximity.append({"peer": eid, "label": r["label"], "score": r["score"],
+                              "coverage": r["coverage"], "low_coverage": r["low_coverage"],
+                              "components": {d: c["sim"] for d, c in r["components"].items()},
+                              "missing": r["missing"]})
     for eid in scope:
         ef = _entity_facts(ents[eid])
         if not ef:
@@ -194,7 +224,7 @@ def build_pack(feed: Mapping[str, Any], target: str, *, peers: list[str] | None 
                                f"{rp.get('company')}: posição {rp.get('rank')} no ranking de reclamações "
                                f"({rp.get('category')}, índice {rp.get('index')}, {rp.get('period')})."))
 
-    sw = (feed.get("swot") or {}).get(target)
+    sw = (feed.get("swot") or {}).get(focal)
     if sw:
         lines = [f"{dim}: {b.get('text')}" for dim, bs in (sw.get("dimensions") or {}).items()
                  for b in bs if b.get("status") == "active"]
@@ -211,14 +241,26 @@ def build_pack(feed: Mapping[str, Any], target: str, *, peers: list[str] | None 
                            ((ev.get("sources") or [{}])[0] or {}).get("source") or "setorial",
                            ev.get("date"), ev.get("title") or ev.get("summary") or ""))
 
-    nar = [x for x in feed.get("feed") or [] if x.get("kind") not in _SKIP_NARRATIVE
-           and target in (x.get("entities") or []) and x.get("narrative")]
-    for x in sorted(nar, key=lambda x: x.get("date") or "", reverse=True)[:MAX_NARRATIVES]:
+    # Narratives: the focal institution and the subject (up to MAX_NARRATIVES), plus each other
+    # peer's latest PEER_NARRATIVES — a competitor's move must reach the officers, weighted by
+    # its proximity fact (#386 dry run: Gigante's campaign was missing from the pack).
+    def _nar_fact(x: Mapping[str, Any], ent: str) -> dict[str, Any]:
         text = x["narrative"]
         text = text if len(text) <= NARRATIVE_CHARS else text[:NARRATIVE_CHARS].rsplit(" ", 1)[0] + "…"
-        facts.append(_fact(f"f-narrative-{_slug(x['id'])}", "narrative", target,
-                           f"Onça {x['kind']}" + (" (inferência)" if x.get("is_inference") else ""),
-                           x.get("data_date") or x.get("date"), text))
+        return _fact(f"f-narrative-{_slug(x['id'])}", "narrative", ent,
+                     f"Onça {x['kind']}" + (" (inferência)" if x.get("is_inference") else ""),
+                     x.get("data_date") or x.get("date"), text)
+
+    rows = sorted((x for x in feed.get("feed") or [] if x.get("kind") not in _SKIP_NARRATIVE
+                   and x.get("narrative")), key=lambda x: x.get("date") or "", reverse=True)
+    about = {focal, subject}
+    for x in [x for x in rows if about & set(x.get("entities") or [])][:MAX_NARRATIVES]:
+        facts.append(_nar_fact(x, subject if subject in (x.get("entities") or []) else focal))
+    for peer in scope[1:]:
+        if peer in about:
+            continue
+        mine = [x for x in rows if peer in (x.get("entities") or []) and not about & set(x.get("entities") or [])]
+        facts += [_nar_fact(x, peer) for x in mine[:PEER_NARRATIVES]]
 
     # Stable order, unique ids (a repeated id would make a citation ambiguous).
     seen: set[str] = set()
@@ -233,7 +275,8 @@ def build_pack(feed: Mapping[str, Any], target: str, *, peers: list[str] | None 
         facts.remove(dropped)
         gaps.append(f"omitido por limite de tamanho: {dropped['id']}")
 
-    return {"schema": PACK_SCHEMA, "target": target, "peers": peers,
+    return {"schema": PACK_SCHEMA, "focal": focal, "subject": subject, "target": subject,
+            "peers": [p for p in scope[1:]], "proximity": proximity,
             "feed_generated_at": feed.get("generated_at"), "feed_as_of": feed.get("as_of"),
             "facts": facts, "gaps": gaps}
 
@@ -244,8 +287,13 @@ def render(facts: list[dict[str, Any]]) -> str:
 
 
 def context_text(pack: Mapping[str, Any]) -> str:
-    head = (f"PACOTE DE CONTEXTO {pack.get('sha256', '')} — alvo: {pack['target']}; pares: "
-            f"{', '.join(pack['peers']) or 'nenhum'}; feed de {pack.get('feed_as_of')}.")
+    focal = pack.get("focal") or pack["target"]
+    subject = pack.get("subject") or focal
+    prox = {p["peer"]: p.get("score") for p in pack.get("proximity") or []}
+    peers = ", ".join(f"{p} ({prox[p]:.2f})" if prox.get(p) is not None else p for p in pack["peers"])
+    head = (f"PACOTE DE CONTEXTO {pack.get('sha256', '')} — instituição focal (o conselho que decide): "
+            f"{focal}; assunto: {subject if subject != focal else 'a própria instituição focal'}; "
+            f"concorrentes (proximidade à focal, 0 a 1): {peers or 'nenhum'}; feed de {pack.get('feed_as_of')}.")
     gaps = ("\nLACUNAS: " + "; ".join(pack["gaps"])) if pack.get("gaps") else ""
     return head + gaps + "\n" + render(pack["facts"])
 
@@ -262,6 +310,14 @@ def seal(pack: dict[str, Any]) -> dict[str, Any]:
 
 def fact_ids(pack: Mapping[str, Any]) -> set[str]:
     return {f["id"] for f in pack.get("facts") or []}
+
+
+def proximity_of(pack: Mapping[str, Any]) -> dict[str, str]:
+    """#386: every competitor fact id -> that competitor's ``f-proximity-*`` fact id. Facts
+    about the focal institution, the market or no entity need no proximity."""
+    prox = {f["entity"]: f["id"] for f in pack.get("facts") or [] if f.get("kind") == "proximity"}
+    return {f["id"]: prox[f["entity"]] for f in pack.get("facts") or []
+            if f.get("kind") != "proximity" and f.get("entity") in prox}
 
 
 def pack_key(sha: str) -> str:

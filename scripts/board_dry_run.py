@@ -80,7 +80,13 @@ def main() -> int:
     ap.add_argument("--scenario", type=Path, default=SCENARIO)
     a = ap.parse_args()
 
-    p = packmod.seal(json.loads(a.scenario.read_text(encoding="utf-8")))
+    sc = json.loads(a.scenario.read_text(encoding="utf-8"))
+    if "feed" in sc:   # #386: a synthetic FEED through the real pack builder + proximity
+        p = packmod.seal({**packmod.build_pack(sc["feed"], sc["focal"], subject=sc.get("subject")),
+                          "scenario": sc["scenario"]})
+        task = sc.get("task") or TASK
+    else:              # v1: a hand-written pack (no focal/proximity)
+        p, task = packmod.seal(sc), TASK
     ctx = packmod.context_text(p)
     log: list[dict[str, Any]] = []
     call = cli_call(a.model, log, ctx)
@@ -89,15 +95,22 @@ def main() -> int:
     stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%MZ")
     run_id = f"dry-{p['scenario']}-{stamp}"
     print(f"pack {p['sha256'][:12]} · {len(p['facts'])} facts · model {a.model} · cap {a.cap}")
+    focal_kw = {}
+    if p.get("focal"):
+        focal_kw = dict(focal=p["focal"], subject=p.get("subject"), proximity_of=packmod.proximity_of(p),
+                        fact_entity={f["id"]: f.get("entity") for f in p["facts"]},
+                        proximity_score={x["peer"]: x["score"] for x in p.get("proximity") or []})
     result = runner.run_brief(run_id=run_id, pack_sha=p["sha256"], pack_ids=packmod.fact_ids(p),
-                              task=TASK, call=call, stop=call.meter.stop,
+                              task=task, call=call, stop=call.meter.stop, **focal_kw,
                               timebox_s={"diagnosis": 1500, "challenge": 1000,
                                          "quantify": 1000, "synthesize": 400})
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     out = OUT_DIR / f"{run_id}.json"
     out.write_text(json.dumps({"model": a.model, "provider": "claude-cli (subscription)",
                                "scenario": p["scenario"], "pack_sha256": p["sha256"],
-                               "usage": call.meter.summary(), "calls": log, "result": result},
+                               "usage": call.meter.summary(), "calls": log, "result": result,
+                               "focal": p.get("focal"), "subject": p.get("subject"),
+                               "proximity": p.get("proximity")},
                               ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"status {result['status']} · {call.meter.summary()} · gaps {len(result['gaps'])} · "
           f"dropped {len(result['dropped'])} · {result['elapsed_s']} s")

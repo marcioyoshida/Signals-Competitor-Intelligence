@@ -1,0 +1,64 @@
+{
+  "scenario": "competitor-v2",
+  "note": "CENÁRIO SINTÉTICO (#386). Feed fictício passado pelo construtor real do pacote e pelo cálculo de proximidade. Bancos, números e eventos são fictícios. Instituição focal: Banco Aurora. Assunto: um movimento do Banco Boreal (concorrente próximo). O Banco Gigante (concorrente distante) fez um movimento parecido.",
+  "focal": "banco-aurora",
+  "subject": "banco-boreal",
+  "task": "O Banco Boreal lançou portabilidade de crédito pessoal a partir de 4,4% a.m. e cortou o rotativo do cartão; o Banco Gigante fez campanha parecida. Como o Banco Aurora deve responder nos próximos 90 dias, e quanto cada movimento deve pesar?",
+  "feed": {
+    "as_of": "2026-11-15",
+    "generated_at": "2026-11-15T00:00:00+00:00",
+    "entities": [
+      {"entity": "banco-aurora", "label": "Banco Aurora", "industries": ["banking"], "market_share_pct": 1.9,
+       "fundamentals": {"ativo_bi": 180.0, "credito_captacoes_pct": 64.0, "roa_pct": 1.0, "roe_pct": 11.2, "base_date": 202606},
+       "soundness": {"indice_basileia": 13.4, "capital_principal": 10.6, "razao_alavancagem": 6.6, "band": "sólido", "base_date": 202606},
+       "pilar3_km1": {"basileia_pct": 13.4, "leverage_pct": 6.6, "lcr_pct": 138.0, "nsfr_pct": 110.0, "trimestre": "2026-3"},
+       "inadimplencia": {"npl_total": 4.6, "npl_pf": 6.3, "npl_pj": 2.1, "band": "atenção", "carteira_bi": 96.0, "base_date": 202606},
+       "resultados": {"custo_credito_pct": 6.2, "opex_ativo_pct": 2.4, "month": 202606}},
+      {"entity": "banco-boreal", "label": "Banco Boreal", "industries": ["banking"], "market_share_pct": 2.3,
+       "fundamentals": {"ativo_bi": 215.0, "credito_captacoes_pct": 66.0, "roa_pct": 1.2, "roe_pct": 13.5, "base_date": 202606},
+       "soundness": {"indice_basileia": 14.1, "capital_principal": 11.2, "razao_alavancagem": 6.9, "band": "sólido", "base_date": 202606},
+       "pilar3_km1": {"basileia_pct": 14.1, "leverage_pct": 6.9, "lcr_pct": 151.0, "nsfr_pct": 114.0, "trimestre": "2026-3"},
+       "inadimplencia": {"npl_total": 4.1, "npl_pf": 5.6, "npl_pj": 1.9, "band": "baixa", "carteira_bi": 118.0, "base_date": 202606},
+       "resultados": {"custo_credito_pct": 5.7, "opex_ativo_pct": 2.2, "month": 202606}},
+      {"entity": "banco-cerrado", "label": "Banco Cerrado", "industries": ["banking"], "market_share_pct": 1.5,
+       "fundamentals": {"ativo_bi": 140.0, "credito_captacoes_pct": 58.0, "roa_pct": 0.9, "roe_pct": 10.4, "base_date": 202606},
+       "soundness": {"indice_basileia": 13.0, "capital_principal": 10.1, "razao_alavancagem": 6.2, "band": "sólido", "base_date": 202606},
+       "pilar3_km1": {"basileia_pct": 13.0, "leverage_pct": 6.2, "lcr_pct": 129.0, "nsfr_pct": 108.0, "trimestre": "2026-3"},
+       "inadimplencia": {"npl_total": 5.0, "npl_pf": 6.8, "npl_pj": 2.3, "band": "atenção", "carteira_bi": 70.0, "base_date": 202606},
+       "resultados": {"custo_credito_pct": 6.6, "opex_ativo_pct": 2.6, "month": 202606}},
+      {"entity": "banco-gigante", "label": "Banco Gigante", "industries": ["banking", "insurance", "asset-management"], "market_share_pct": 21.0,
+       "fundamentals": {"ativo_bi": 2400.0, "credito_captacoes_pct": 88.0, "roa_pct": 1.6, "roe_pct": 19.0, "base_date": 202606},
+       "soundness": {"indice_basileia": 16.2, "capital_principal": 12.4, "razao_alavancagem": 7.4, "band": "sólido", "base_date": 202606},
+       "pilar3_km1": {"basileia_pct": 16.2, "leverage_pct": 7.4, "lcr_pct": 196.0, "nsfr_pct": 124.0, "trimestre": "2026-3"},
+       "inadimplencia": {"npl_total": 2.4, "npl_pf": 3.2, "npl_pj": 1.0, "band": "baixa", "carteira_bi": 1250.0, "base_date": 202606},
+       "resultados": {"custo_credito_pct": 3.4, "opex_ativo_pct": 1.7, "month": 202606}},
+      {"entity": "fintech-delta", "label": "Fintech Delta", "industries": ["banking", "fintech"], "market_share_pct": 0.4,
+       "fundamentals": {"ativo_bi": 22.0, "credito_captacoes_pct": 41.0, "roa_pct": -0.4, "roe_pct": -3.0, "base_date": 202606},
+       "soundness": {"indice_basileia": 21.0, "capital_principal": 20.5, "razao_alavancagem": 11.0, "band": "sólido", "base_date": 202606},
+       "inadimplencia": {"npl_total": 7.9, "npl_pf": 8.1, "npl_pj": 3.0, "band": "alta", "carteira_bi": 9.0, "base_date": 202606},
+       "resultados": {"custo_credito_pct": 11.0, "opex_ativo_pct": 6.5, "month": 202606}}
+    ],
+    "entity_attrs": {
+      "banco-boreal": {"threat_w3": {"mean": 78.0, "n": 9, "from": "2026-11-01", "to": "2026-11-14"}},
+      "banco-cerrado": {"threat_w3": {"mean": 41.0, "n": 6, "from": "2026-11-01", "to": "2026-11-14"}},
+      "banco-gigante": {"threat_w3": {"mean": 64.0, "n": 11, "from": "2026-11-01", "to": "2026-11-14"}},
+      "fintech-delta": {"threat_w3": {"mean": 55.0, "n": 5, "from": "2026-11-01", "to": "2026-11-14"}}
+    },
+    "feed": [
+      {"id": "boreal-portabilidade", "kind": "competitor:news", "entities": ["banco-boreal"], "date": "2026-11-12", "data_date": "2026-11-12",
+       "narrative": "Banco Boreal (fictício) lançou campanha de portabilidade de crédito pessoal a partir de 4,4% a.m. e reduziu o rotativo do cartão de 13,9% para 12,1% a.m., mirando clientes de bancos médios."},
+      {"id": "gigante-campanha", "kind": "competitor:news", "entities": ["banco-gigante"], "date": "2026-11-10", "data_date": "2026-11-10",
+       "narrative": "Banco Gigante (fictício) anunciou campanha nacional de crédito pessoal com taxa a partir de 3,9% a.m. para correntistas de alta renda com folha de pagamento no banco."},
+      {"id": "aurora-taxas", "kind": "competitor:news", "entities": ["banco-aurora"], "date": "2026-11-07", "data_date": "2026-11-07",
+       "narrative": "Banco Aurora (fictício) cobra 5,8% a.m. no crédito pessoal e 14,0% a.m. no rotativo; 44% da carteira PF está em cartão e crédito pessoal, concentrada em clientes de renda média."},
+      {"id": "delta-app", "kind": "competitor:news", "entities": ["fintech-delta"], "date": "2026-11-09", "data_date": "2026-11-09",
+       "narrative": "Fintech Delta (fictícia) passou a oferecer antecipação de salário sem tarifa no aplicativo."}
+    ],
+    "macro": {"selic": {"current": 13.75, "as_of": "2026-11-05", "last_decision": {"date": "2026-11-05", "previous": 13.75, "value": 13.75}},
+              "focus": [{"indicator": "Selic", "ref_year": 2027, "median": 12.5, "prev_median": 12.75, "date": "2026-11-06"}]},
+    "reputation": [
+      {"id": "rk-aurora", "entity": "banco-aurora", "source": "Ranking de reclamações (fictício)", "company": "BANCO AURORA", "rank": 5, "index": 48.2, "category": "Bancos", "period": "2026-T3"},
+      {"id": "rk-boreal", "entity": "banco-boreal", "source": "Ranking de reclamações (fictício)", "company": "BANCO BOREAL", "rank": 9, "index": 31.5, "category": "Bancos", "period": "2026-T3"}
+    ]
+  }
+}

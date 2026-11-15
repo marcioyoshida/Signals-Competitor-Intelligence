@@ -56,6 +56,7 @@ def _gap(officer: str | None, phase: str, why: str) -> dict[str, Any]:
 
 
 def _run_phase(phase: str, asks: dict[str, dict[str, Any]], *, call: Call, pack_ids: set[str],
+               proximity_of: dict[str, str] | None = None,
                timebox_s: float, gaps: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     """Run ``{officer: envelope}`` in parallel under one time box."""
     out: dict[str, dict[str, Any]] = {}
@@ -64,7 +65,8 @@ def _run_phase(phase: str, asks: dict[str, dict[str, Any]], *, call: Call, pack_
     pool = cf.ThreadPoolExecutor(max_workers=min(MAX_WORKERS, len(asks)))
     futs = {pool.submit(c.ask_officer, off, env,
                         call=lambda s, p, off=off: call(off, phase, s, p),
-                        pack_fact_ids=pack_ids): off for off, env in asks.items()}
+                        pack_fact_ids=pack_ids, proximity_of=proximity_of): off
+            for off, env in asks.items()}
     try:
         for fut in cf.as_completed(futs, timeout=timebox_s):
             off = futs[fut]
@@ -152,7 +154,22 @@ def validate_synthesis(obj: Any, pack_ids: set[str],
             "monitoring_triggers": trig}, dropped
 
 
+def _competitor_signals(synth: dict[str, Any], focal: str | None, fact_entity: dict[str, str],
+                        proximity_score: dict[str, float]) -> None:
+    """#386, by code: per option, the competitors whose facts it cites, closest first, with
+    their proximity to the focal institution (None when it could not be measured)."""
+    for o in synth.get("options") or []:
+        ents = {fact_entity[f] for f in o.get("citations") or [] if fact_entity.get(f)} - {focal, None}
+        o["competitor_signals"] = sorted(
+            ({"entity": e, "proximity": proximity_score.get(e)} for e in ents),
+            key=lambda x: (-(x["proximity"] if x["proximity"] is not None else -1), x["entity"]))
+
+
 def run_brief(*, run_id: str, pack_sha: str, pack_ids: set[str], task: str, call: Call,
+              focal: str | None = None, subject: str | None = None,
+              proximity_of: dict[str, str] | None = None,
+              fact_entity: dict[str, str] | None = None,
+              proximity_score: dict[str, float] | None = None,
               stop: Callable[[], bool] = lambda: False,
               timebox_s: dict[str, float] | None = None) -> dict[str, Any]:
     """One board run. Always returns a result; ``status`` is ``complete`` or ``partial``."""
@@ -163,6 +180,7 @@ def run_brief(*, run_id: str, pack_sha: str, pack_ids: set[str], task: str, call
 
     def env(phase: str, t: str, prior: list[dict[str, Any]]) -> dict[str, Any]:
         return c.make_envelope(run_id=run_id, phase=phase, shared_context_id=pack_sha, task=t,
+                               focal=focal, subject=subject,
                                prior_positions=prior)
 
     def stopped(before: str) -> bool:
@@ -182,7 +200,7 @@ def run_brief(*, run_id: str, pack_sha: str, pack_ids: set[str], task: str, call
         return result("partial")
     phases["diagnosis"] = _run_phase(
         "diagnosis", {o: env("diagnosis", task, []) for o in c.BOARD_OFFICERS},
-        call=call, pack_ids=pack_ids, timebox_s=tb["diagnosis"], gaps=gaps)
+        call=call, pack_ids=pack_ids, proximity_of=proximity_of, timebox_s=tb["diagnosis"], gaps=gaps)
     diag = _ok(phases["diagnosis"])
 
     # 2. challenge — one reply per challenger, against the targets that answered
@@ -196,7 +214,7 @@ def run_brief(*, run_id: str, pack_sha: str, pack_ids: set[str], task: str, call
             asks[ch] = env("challenge", f"{task}\n\nConteste as opções de: {names}. Aponte linhas "
                                         "vermelhas, riscos e o que falta. Uma resposta.", prior)
     phases["challenge"] = _run_phase("challenge", asks, call=call, pack_ids=pack_ids,
-                                     timebox_s=tb["challenge"], gaps=gaps)
+                                     proximity_of=proximity_of, timebox_s=tb["challenge"], gaps=gaps)
     chal = _ok(phases["challenge"])
     dissents = [{"officer": o, "challenged": list(CHALLENGES[o]), "text": p["diagnosis"],
                  "red_lines": [rl for opt in p.get("options") or [] for rl in opt.get("red_lines") or []]}
@@ -209,7 +227,7 @@ def run_brief(*, run_id: str, pack_sha: str, pack_ids: set[str], task: str, call
     phases["quantify"] = _run_phase(
         "quantify", {o: env("quantify", f"{task}\n\n{t}", prior_all)
                      for o, t in QUANTIFY_TASKS.items() if o in diag},
-        call=call, pack_ids=pack_ids, timebox_s=tb["quantify"], gaps=gaps)
+        call=call, pack_ids=pack_ids, proximity_of=proximity_of, timebox_s=tb["quantify"], gaps=gaps)
     quant = _ok(phases["quantify"])
 
     # 4. synthesize — one call; code keeps only cited claims
@@ -219,7 +237,9 @@ def run_brief(*, run_id: str, pack_sha: str, pack_ids: set[str], task: str, call
         gaps.append(_gap(None, "synthesize", "nenhum oficial respondeu ao diagnóstico"))
         return result("partial", dissents=dissents)
     positions = {"diagnosis": diag, "challenge": chal, "quantify": quant}
-    prompt = (f"Tarefa: {task}\n\nPosições:\n{json.dumps(positions, ensure_ascii=False)}\n\n"
+    framing = (f"Instituição focal (o conselho que decide): {focal}. Assunto: {subject or focal}. "
+               "Sinais de concorrentes pesam pela proximidade à focal.\n\n") if focal else ""
+    prompt = (f"{framing}Tarefa: {task}\n\nPosições:\n{json.dumps(positions, ensure_ascii=False)}\n\n"
               + SYNTH_CONTRACT)
     synth, dropped = None, []
     pool = cf.ThreadPoolExecutor(max_workers=1)  # not a `with`: its exit would wait out a hang
@@ -233,6 +253,8 @@ def run_brief(*, run_id: str, pack_sha: str, pack_ids: set[str], task: str, call
         pool.shutdown(wait=False, cancel_futures=True)
     if text is not None:
         synth, dropped = validate_synthesis(c.parse_position(text), pack_ids, positions)
+        if synth is not None and fact_entity:
+            _competitor_signals(synth, focal, fact_entity, proximity_score or {})
         if synth is None:
             gaps.append(_gap(None, "synthesize", "; ".join(dropped[-1:]) or "síntese inválida"))
     phases["synthesize"] = {"secretary": {"status": c.STATUS_OK if synth else c.STATUS_INVALID}}

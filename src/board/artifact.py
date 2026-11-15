@@ -53,25 +53,45 @@ def _cell(s: Any) -> str:
 def render_markdown(run: Mapping[str, Any]) -> str:
     """The board pack. Works on partial runs too: gaps are printed, never hidden."""
     syn = run.get("synthesis") or {}
-    out = [f"# Briefing de conselho — {run.get('target')}",
+    focal = run.get("focal") or run.get("target")
+    subject = run.get("subject") or focal
+    out = [f"# Briefing de conselho — {focal}",
            "",
            f"> {NOTICE}",
            "",
+           f"**Conselho de:** {focal}  ",
+           f"**Assunto:** {subject if subject != focal else 'a própria instituição'}  ",
            f"**Pergunta:** {run.get('task')}  ",
            f"**Situação do processo:** {STATUS_NAMES.get(str(run.get('status')), run.get('status'))}"
            f" · dados do feed de {run.get('feed_as_of') or 's/d'}"
-           + (f" · pares: {', '.join(run.get('peers') or [])}" if run.get("peers") else ""),
+           + (f" · concorrentes: {', '.join(run.get('peers') or [])}" if run.get("peers") else ""),
            ""]
     if syn.get("summary"):
         out += ["## Situação", "", syn["summary"], ""]
+    prox = run.get("proximity") or []
+    if prox:
+        dims = ("size", "market", "business_model", "prudential", "pressure")
+        names = ("porte", "mercado", "modelo", "prudencial", "pressão")
+        out += [f"## Concorrentes por proximidade a {focal}", "",
+                "| Concorrente | Proximidade | " + " | ".join(names) + " | Cobertura |",
+                "|---|---|" + "---|" * len(names) + "---|"]
+        for x in prox:
+            comps = x.get("components") or {}
+            cells = [f"{comps[d]:.2f}" if comps.get(d) is not None else "s/d" for d in dims]
+            score = f"{x['score']:.2f}" if x.get("score") is not None else "s/d"
+            out.append(f"| {x.get('label') or x.get('peer')} | {score} | " + " | ".join(cells) +
+                       f" | {x.get('coverage', 0):.0%}{' (baixa)' if x.get('low_coverage') else ''} |")
+        out.append("")
     opts = syn.get("options") or []
     if opts:
         out += ["## Opções", "",
-                "| # | Opção | Impacto no cliente | Apoiada por | Contestada por |",
-                "|---|---|---|---|---|"]
+                "| # | Opção | Impacto no cliente | Sinais de concorrentes (proximidade) | Apoiada por | Contestada por |",
+                "|---|---|---|---|---|---|"]
         for o in opts:
+            sig = ", ".join(f"{x['entity']} ({x['proximity']:.2f})" if x.get("proximity") is not None
+                            else f"{x['entity']} (s/d)" for x in o.get("competitor_signals") or []) or "—"
             out.append(f"| {o.get('id')} | {_cell(o.get('description'))} | "
-                       f"{IMPACT.get(o.get('customer_impact'), o.get('customer_impact'))} | "
+                       f"{IMPACT.get(o.get('customer_impact'), o.get('customer_impact'))} | {sig} | "
                        f"{_boards(o.get('supported_by'))} | {_boards(o.get('contested_by'))} |")
         out.append("")
         for o in opts:

@@ -1,0 +1,1946 @@
+{
+  "model": "sonnet",
+  "provider": "claude-cli (subscription)",
+  "scenario": "competitor-v2",
+  "pack_sha256": "59638afe1f9298b941d0b06208f0111b2ac50354d84259f3118e7ee2a86b32ed",
+  "usage": {
+    "calls": 12,
+    "tokens_in": 356255,
+    "tokens_out": 29852,
+    "cache_read": 693606,
+    "token_cap": 400000
+  },
+  "calls": [
+    {
+      "officer": "cso",
+      "phase": "diagnosis",
+      "s": 27.9,
+      "input_tokens": 53692,
+      "cache_read": 0,
+      "output_tokens": 2978,
+      "is_error": false
+    },
+    {
+      "officer": "risk",
+      "phase": "diagnosis",
+      "s": 18.4,
+      "input_tokens": 85165,
+      "cache_read": 0,
+      "output_tokens": 2152,
+      "is_error": false
+    },
+    {
+      "officer": "cco",
+      "phase": "diagnosis",
+      "s": 17.5,
+      "input_tokens": 6323,
+      "cache_read": 78820,
+      "output_tokens": 1990,
+      "is_error": false
+    },
+    {
+      "officer": "cpo",
+      "phase": "diagnosis",
+      "s": 24.3,
+      "input_tokens": 68149,
+      "cache_read": 0,
+      "output_tokens": 3079,
+      "is_error": false
+    },
+    {
+      "officer": "cro",
+      "phase": "diagnosis",
+      "s": 18.4,
+      "input_tokens": 6297,
+      "cache_read": 78820,
+      "output_tokens": 2115,
+      "is_error": false
+    },
+    {
+      "officer": "cro",
+      "phase": "challenge",
+      "s": 19.0,
+      "input_tokens": 10921,
+      "cache_read": 78967,
+      "output_tokens": 2457,
+      "is_error": false
+    },
+    {
+      "officer": "cco",
+      "phase": "challenge",
+      "s": 18.4,
+      "input_tokens": 10428,
+      "cache_read": 62509,
+      "output_tokens": 2313,
+      "is_error": false
+    },
+    {
+      "officer": "risk",
+      "phase": "challenge",
+      "s": 18.3,
+      "input_tokens": 8480,
+      "cache_read": 79015,
+      "output_tokens": 2488,
+      "is_error": false
+    },
+    {
+      "officer": "risk",
+      "phase": "quantify",
+      "s": 17.1,
+      "input_tokens": 24710,
+      "cache_read": 79015,
+      "output_tokens": 2581,
+      "is_error": false
+    },
+    {
+      "officer": "cpo",
+      "phase": "quantify",
+      "s": 17.0,
+      "input_tokens": 24834,
+      "cache_read": 78820,
+      "output_tokens": 2538,
+      "is_error": false
+    },
+    {
+      "officer": "cso",
+      "phase": "quantify",
+      "s": 16.7,
+      "input_tokens": 24832,
+      "cache_read": 78820,
+      "output_tokens": 2501,
+      "is_error": false
+    },
+    {
+      "officer": "secretary",
+      "phase": "synthesize",
+      "s": 18.2,
+      "input_tokens": 32424,
+      "cache_read": 78820,
+      "output_tokens": 2660,
+      "is_error": false
+    }
+  ],
+  "result": {
+    "run_id": "dry-competitor-v2-20261115T0730Z",
+    "shared_context_id": "59638afe1f9298b941d0b06208f0111b2ac50354d84259f3118e7ee2a86b32ed",
+    "task": "O Banco Boreal lançou portabilidade de crédito pessoal a partir de 4,4% a.m. e cortou o rotativo do cartão; o Banco Gigante fez campanha parecida. Como o Banco Aurora deve responder nos próximos 90 dias, e quanto cada movimento deve pesar?",
+    "status": "complete",
+    "phases": {
+      "diagnosis": {
+        "cso": {
+          "officer": "cso",
+          "phase": "diagnosis",
+          "run_id": "dry-competitor-v2-20261115T0730Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cso",
+            "diagnosis": "O movimento do Boreal (proximidade 0.92, f-proximity-banco-boreal) é a ameaça principal e mira o segmento do Aurora: bancos médios, renda média. Hoje o Aurora cobra 5,8% a.m. no pessoal e 14,0% no rotativo, contra 4,4% e 12,1% do Boreal, e 44% da carteira PF está em cartão e crédito pessoal (f-narrative-aurora-taxas, f-narrative-boreal-portabilidade, 2026-11). O Aurora tem menos folga para igualar preço: NPL PF 6,3% vs 5,6%, custo de crédito 6,2% vs 5,7%, ROE 11,2% vs 13,5% (IF.data/COSIF, 2026-06). Peso sugerido: Boreal ~70%. O Gigante (0.47, 13,33× o porte, f-proximity-banco-gigante) pesa ~15%, pois o pacote não traz dados da campanha dele. O Cerrado (0.86) tem NPL PF 6,8% e é um risco indireto, ~15%. Capital e liquidez do Aurora são sólidos (Basileia 13,4%, LCR 138%, trim. 2026-3), mas a resposta é limitada pela rentabilidade, não pelo capital.",
+            "constraints": [
+              "Dados públicos defasados: KM1 do trim. 2026-3, IF.data/COSIF de 2026-06; as campanhas são de nov/2026 e ainda não aparecem nos números.",
+              "O pacote não traz dados da campanha do Banco Gigante nem sua taxa, então não é possível dimensionar essa ameaça; o peso dele fica baixo pela distância (0.47).",
+              "O pacote não traz margem por produto, elasticidade ou volume de clientes do Aurora suscetíveis à portabilidade; o impacto em receita não é estimável.",
+              "Custo de crédito de 6,2% e NPL PF de 6,3% (banda atenção) limitam o corte de taxa; igualar o preço do Boreal pode atrair risco adverso.",
+              "Briefing externo (outside-in): não é decisão de preço ou capital."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Defesa seletiva (peso principal, ~50%): oferecer retenção e contraproposta de taxa só a clientes PF de renda média com bom histórico que peçam portabilidade, sem corte geral de tabela.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Efeito moderado em margem sobre a parte da carteira retida; sem pressão relevante sobre Basileia (13,4%) ou LCR (138%), trim. 2026-3.",
+                "red_lines": [
+                  "Não igualar 4,4% a.m. de forma ampla, dado o custo de crédito de 6,2% (2026-06).",
+                  "Não conceder a clientes sem critério de risco."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Reprecificar o rotativo do cartão (peso ~30%): reduzir de 14,0% rumo ao patamar do Boreal (12,1%) para segmentos de menor risco, preservando a base de cartão.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Reduz receita de juros do cartão; efeito em capital indireto, via resultado. Não estimável com o pacote (sem dados de volume do rotativo).",
+                "red_lines": [
+                  "Não reduzir o rotativo para toda a carteira, pelo NPL PF de 6,3%.",
+                  "Revisar se a queda de custo de crédito não vier junto."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Monitorar e diferenciar sem preço (peso ~20%): acompanhar saída de clientes nos 90 dias e responder com serviço, relacionamento e comunicação. A Selic cai (Focus 2027: 12,5%), o que pode aliviar o custo de funding.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Sem efeito imediato em capital ou liquidez; risco de perda gradual de carteira PF se a portabilidade acelerar.",
+                "red_lines": [
+                  "Definir gatilho de saída de clientes que force a passagem para opt-1.",
+                  "Não adiar a decisão além dos 90 dias."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-proximity-banco-boreal",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2026-11-15"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-gigante",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2026-11-15"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-cerrado",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2026-11-15"
+              },
+              {
+                "pack_fact_id": "f-narrative-aurora-taxas",
+                "source": "Onça competitor:news",
+                "as_of": "2026-11-07"
+              },
+              {
+                "pack_fact_id": "f-narrative-boreal-portabilidade",
+                "source": "Onça competitor:news",
+                "as_of": "2026-11-12"
+              },
+              {
+                "pack_fact_id": "f-npl-banco-aurora",
+                "source": "BCB IF.data (inadimplência)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-npl-banco-boreal",
+                "source": "BCB IF.data (inadimplência)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-npl-banco-cerrado",
+                "source": "BCB IF.data (inadimplência)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-results-banco-aurora",
+                "source": "BCB COSIF",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-results-banco-boreal",
+                "source": "BCB COSIF",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-aurora",
+                "source": "BCB IF.data",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-boreal",
+                "source": "BCB IF.data",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-km1-banco-aurora",
+                "source": "BCB Pilar 3 (KM1)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-macro-focus-selic-2027",
+                "source": "BCB Focus",
+                "as_of": "2026-11-06"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "risk": {
+          "officer": "risk",
+          "phase": "diagnosis",
+          "run_id": "dry-competitor-v2-20261115T0730Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "risk",
+            "diagnosis": "Aurora é sólida mas a mais apertada entre os pares próximos em margem de capital e com carteira PF pesada. Basileia 13.4%, CET1 10.6%, LCR 138% (KM1 2026-3; IF.data 2026-06). NPL 4.6% (faixa atenção), NPL PF 6.3%, custo de crédito 6.2% do crédito, ROE 11.2%. Boreal (proximidade 0.92, muito próximo) está mais forte: Basileia 14.1%, LCR 151%, NPL 4.1%, custo de crédito 5.7%, e ataca com portabilidade a 4,4% a.m. vs 5,8% de Aurora e rotativo 12,1% vs 14,0%. Risco principal: perder bons clientes PF de renda média por portabilidade (seleção adversa) e, se igualar preço, comprimir margem com custo de crédito já alto. Gigante (proximidade 0.47, distante) pesa pouco; o pacote não traz dados de campanha dele, então não afirmo seu conteúdo. Dados com defasagem (2026-06/2026-3); Selic 13.75% sem corte.",
+            "constraints": [
+              "Capital: Basileia 13.4% e CET1 10.6% oferecem folga limitada; queda de margem ou alta de provisões consome capital sem reforço externo.",
+              "Carteira PF com NPL 6.3% e 44% em cartão/crédito pessoal: corte linear de taxa atrai risco ruim e pressiona custo de crédito (6.2%).",
+              "Boreal (0.92) pesa muito mais que Gigante (0.47) e Fintech Delta (0.37); campanha do Gigante não consta no pacote e recebe peso baixo.",
+              "Dados do pacote são de 2026-06/2026-3; não refletem efeito já ocorrido da campanha de Boreal (12/11).",
+              "Selic 13.75% (Focus 2027: 12.5%) mantém custo de captação elevado; não sustenta guerra de preços generalizada."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Defesa seletiva (peso ~60%): oferta de retenção e contra-portabilidade com preço reduzido apenas a clientes PF de baixo risco e bom histórico, com limite de volume e teto de perda de margem.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Efeito moderado na margem; protege base de qualidade e mantém Basileia próxima a 13.4%. Sem impacto relevante no LCR (138%).",
+                "red_lines": [
+                  "Não reduzir Basileia abaixo do nível atual por expansão de carteira PF",
+                  "Não conceder desconto a segmentos com NPL acima da média da carteira",
+                  "Não igualar 4,4% a.m. de forma ampla"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Monitoramento e gatilhos (peso ~30%): medir saída por portabilidade e NPL semanalmente; ajustar rotativo (14,0%) só se perda de clientes bons ultrapassar limite definido pelo conselho.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Preserva capital no curto prazo; risco de perda de share e receita se a reação for lenta.",
+                "red_lines": [
+                  "Definir gatilho numérico de saída antes de 30 dias",
+                  "Não esperar novos dados trimestrais para decidir"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Igualar preços de Boreal em PF e rotativo (peso ~10%, não recomendado): paridade ampla de taxas.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Compressão de margem com custo de crédito 6.2% e ROE 11.2%; geração de capital menor e Basileia 13.4% sob pressão.",
+                "red_lines": [
+                  "Não adotar sem simulação de capital e provisões aprovada pelo risco",
+                  "Não aplicar a carteira já em atenção (NPL 4.6%)"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-km1-banco-aurora",
+                "source": "BCB Pilar 3 (KM1)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-banco-boreal",
+                "source": "BCB Pilar 3 (KM1)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-soundness-banco-aurora",
+                "source": "BCB IF.data",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-npl-banco-aurora",
+                "source": "BCB IF.data (inadimplência)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-npl-banco-boreal",
+                "source": "BCB IF.data (inadimplência)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-results-banco-aurora",
+                "source": "BCB COSIF",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-results-banco-boreal",
+                "source": "BCB COSIF",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-aurora",
+                "source": "BCB IF.data",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-boreal",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2026-11-15"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-gigante",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2026-11-15"
+              },
+              {
+                "pack_fact_id": "f-proximity-fintech-delta",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2026-11-15"
+              },
+              {
+                "pack_fact_id": "f-narrative-aurora-taxas",
+                "source": "Onça competitor:news",
+                "as_of": "2026-11-07"
+              },
+              {
+                "pack_fact_id": "f-narrative-boreal-portabilidade",
+                "source": "Onça competitor:news",
+                "as_of": "2026-11-12"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2026-11-05"
+              },
+              {
+                "pack_fact_id": "f-macro-focus-selic-2027",
+                "source": "BCB Focus",
+                "as_of": "2026-11-06"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cco": {
+          "officer": "cco",
+          "phase": "diagnosis",
+          "run_id": "dry-competitor-v2-20261115T0730Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cco",
+            "diagnosis": "Visão externa (outside-in), não decisão de capital nem de preço. Boreal (proximidade 0.92 a Aurora, f-proximity-banco-boreal, muito próximo) ataca o nicho PF de Aurora: portabilidade a partir de 4,4% a.m. e rotativo de 13,9% para 12,1% a.m. (2026-11-12), contra os 5,8% e 14,0% de Aurora (2026-11-07); 44% da carteira PF de Aurora está em cartão e crédito pessoal. Boreal tem NPL 4,1% vs 4,6% e custo de crédito 5,7% vs 6,2% (IF.data/COSIF, 2026-06), com mais folga de capital (Basileia 14,1% vs 13,4%, KM1 2026-3). Gigante: o pacote não traz dado da campanha; proximidade 0.47 (f-proximity-banco-gigante, distante, 13,33× o porte), então pesa pouco. Reputação: Aurora 5º no ranking de reclamações vs Boreal 9º (2026-T3). Conduta: portabilidade exige tratamento regulado e transparente; não há sanção no pacote.",
+            "constraints": [
+              "Dados públicos defasados: Basileia/KM1 de 2026-3, NPL/custos de 2026-06; sem dados de conduta (CEIS/CNEP, sanções) no pacote.",
+              "Campanha do Banco Gigante não consta no pacote; peso baixo, distante (0.47).",
+              "Pacote não traz elasticidade, saída efetiva de clientes nem margem por produto; resposta não é decisão de preço ou capital.",
+              "Basileia de Aurora 13,4% e custo de crédito 6,2% limitam concessões amplas de preço.",
+              "Comunicação ao cliente deve ser clara e não enganosa; reclamações já elevadas (5º lugar)."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Retenção direcionada (peso ~60%): oferta proativa de contrapartida e transparência a clientes PF de cartão e crédito pessoal sob risco de portabilidade, priorizando os de menor risco; resposta ao Boreal (0.92, mais próximo).",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Compressão de margem limitada ao segmento; efeito em capital a quantificar pela Tesouraria/Finanças (pacote não permite estimar).",
+                "red_lines": [
+                  "Não retardar nem dificultar pedidos de portabilidade.",
+                  "Publicidade sem informações claras de taxa e condições.",
+                  "Não relaxar critérios de crédito para igualar preço (NPL PF 6,3%)."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Monitoramento e preparação (peso ~30%): acompanhar semanalmente pedidos de portabilidade, reclamações e a campanha do Gigante; ter gatilhos definidos para ajustar o rotativo (14,0% vs 12,1% do Boreal).",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Sem efeito imediato em capital ou liquidez (LCR 138%, KM1 2026-3).",
+                "red_lines": [
+                  "Não tratar Gigante como par direto sem evidência (proximidade 0.47).",
+                  "Não agir sem revisão jurídica e de conduta."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Igualar preços amplamente (peso ~10%, não recomendado): alinhar taxas ao Boreal em toda a carteira PF.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Pressão sobre margem e capital com Basileia 13,4% e custo de crédito de 6,2%; sem sustentação no pacote.",
+                "red_lines": [
+                  "Não adotar sem decisão do comitê de capital e preço.",
+                  "Não sacrificar a qualidade da carteira (NPL PF 6,3%)."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-narrative-boreal-portabilidade",
+                "source": "Onça competitor:news",
+                "as_of": "2026-11-12"
+              },
+              {
+                "pack_fact_id": "f-narrative-aurora-taxas",
+                "source": "Onça competitor:news",
+                "as_of": "2026-11-07"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-boreal",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2026-11-15"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-gigante",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2026-11-15"
+              },
+              {
+                "pack_fact_id": "f-npl-banco-aurora",
+                "source": "BCB IF.data (inadimplência)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-npl-banco-boreal",
+                "source": "BCB IF.data (inadimplência)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-results-banco-aurora",
+                "source": "BCB COSIF",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-results-banco-boreal",
+                "source": "BCB COSIF",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-km1-banco-aurora",
+                "source": "BCB Pilar 3 (KM1)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-banco-boreal",
+                "source": "BCB Pilar 3 (KM1)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-aurora",
+                "source": "Ranking de reclamações (fictício)",
+                "as_of": "2026-T3"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-boreal",
+                "source": "Ranking de reclamações (fictício)",
+                "as_of": "2026-T3"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cpo": {
+          "officer": "cpo",
+          "phase": "diagnosis",
+          "run_id": "dry-competitor-v2-20261115T0730Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cpo",
+            "diagnosis": "Banco Boreal é o concorrente que mais importa para o Aurora: proximidade 0,92 (2026-11-15), pressão competitiva 0,78, e a campanha mira clientes de bancos médios (f-narrative-boreal-portabilidade, 2026-11-12). Ele cobra 4,4% a.m. a partir de portabilidade e 12,1% a.m. no rotativo. O Aurora cobra 5,8% e 14,0%, com 44% da carteira PF em cartão e crédito pessoal (2026-11-07). Aurora tem NPL PF 6,3% contra 5,6% do Boreal, custo de crédito 6,2% contra 5,7% e ROE 11,2% contra 13,5% (2026-06). O Boreal tem folga maior de capital e liquidez (Basileia 14,1% contra 13,4%; LCR 151% contra 138%, 2026-3). Por isso, igualar o preço em toda a carteira corroeria a margem e atrairia risco pior. Sobre o Banco Gigante, o pacote não traz fato da campanha; a proximidade é 0,47 (13,3× o porte), então pesa pouco. Pesos indicativos: Boreal ~80%, Gigante ~10% e não verificado, macro ~10%. A Selic em 13,75% e o Focus 2027 em 12,5% sugerem alívio gradual no custo de captação, sem folga hoje.",
+            "constraints": [
+              "NPL PF do Aurora é 6,3% (faixa atenção, 2026-06) e o custo de crédito é 6,2%: baixar preço sem filtro de risco pioraria ambos.",
+              "Basileia 13,4% e LCR 138% (2026-3) estão abaixo dos do Boreal; crescimento de carteira por portabilidade consome capital.",
+              "Dados públicos defasados (IF.data 2026-06, KM1 2026-3); a campanha do Boreal é de 2026-11-12, sem efeito ainda medido.",
+              "O pacote não traz dados sobre a campanha do Banco Gigante nem sobre a base de clientes do Aurora em risco de portabilidade.",
+              "Selic 13,75% sem corte na última decisão (2026-11-05): o custo de captação não cai no horizonte de 90 dias."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Retenção seletiva: contraproposta de taxa só para clientes PF de baixo risco que pedirem portabilidade. Migração de rotativo para parcelamento mais barato. Sem corte linear de tabela. Revisão em 30 e 60 dias com NPL e saída de clientes.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Compressão de margem limitada ao segmento tratado; sem consumo relevante de capital se a carteira não crescer e o risco for filtrado.",
+                "red_lines": [
+                  "Não crescer carteira PF com perfil de risco pior que o atual (NPL PF 6,3%).",
+                  "Não ofertar abaixo do custo de crédito mais o opex sem aprovação do conselho.",
+                  "Não deixar Basileia ou LCR abaixo dos limites internos."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Igualar a oferta do Boreal (4,4% a.m. e rotativo 12,1%) em toda a base PF, com campanha própria de portabilidade ativa para ganhar clientes.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Alto custo de margem sobre 44% da carteira PF; crescimento pressiona capital (Basileia 13,4%) e risco de seleção adversa.",
+                "red_lines": [
+                  "Custo de crédito de 6,2% e NPL PF de 6,3% já são pressionados; piora seria inaceitável.",
+                  "Não sacrificar o ROE de 11,2% sem plano de recomposição.",
+                  "Não reduzir o LCR de 138%."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Manter preços e responder em serviço: abordagem proativa à base, tratamento de reclamações (Aurora 5º, Boreal 9º no ranking, 2026-T3) e monitoramento semanal de saídas, com gatilho para ativar a opt-1.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Neutro em capital e liquidez; risco de perda de volume de crédito pessoal e cartão se o Boreal ganhar tração.",
+                "red_lines": [
+                  "Definir gatilho numérico de saída de clientes que ative a opt-1 sem nova rodada.",
+                  "Não ignorar a pressão sobre clientes de renda média, concentração da carteira PF."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-narrative-boreal-portabilidade",
+                "source": "Onça competitor:news",
+                "as_of": "2026-11-12"
+              },
+              {
+                "pack_fact_id": "f-narrative-aurora-taxas",
+                "source": "Onça competitor:news",
+                "as_of": "2026-11-07"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-boreal",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2026-11-15"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-gigante",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2026-11-15"
+              },
+              {
+                "pack_fact_id": "f-npl-banco-aurora",
+                "source": "BCB IF.data (inadimplência)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-npl-banco-boreal",
+                "source": "BCB IF.data (inadimplência)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-results-banco-aurora",
+                "source": "BCB COSIF",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-results-banco-boreal",
+                "source": "BCB COSIF",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-aurora",
+                "source": "BCB IF.data",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-boreal",
+                "source": "BCB IF.data",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-km1-banco-aurora",
+                "source": "BCB Pilar 3 (KM1)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-banco-boreal",
+                "source": "BCB Pilar 3 (KM1)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-aurora",
+                "source": "Ranking de reclamações (fictício)",
+                "as_of": "2026-T3"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-boreal",
+                "source": "Ranking de reclamações (fictício)",
+                "as_of": "2026-T3"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2026-11-05"
+              },
+              {
+                "pack_fact_id": "f-macro-focus-selic-2027",
+                "source": "BCB Focus",
+                "as_of": "2026-11-06"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cro": {
+          "officer": "cro",
+          "phase": "diagnosis",
+          "run_id": "dry-competitor-v2-20261115T0730Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cro",
+            "diagnosis": "Boreal (proximidade 0.92, f-proximity-banco-boreal: concorrente mais próximo) ataca o nicho PF de Aurora: portabilidade de crédito pessoal a partir de 4,4% a.m. vs 5,8% de Aurora, e rotativo de 13,9% para 12,1% vs 14,0% de Aurora (f-narrative-boreal-portabilidade 2026-11-12; f-narrative-aurora-taxas 2026-11-07). 44% da carteira PF de Aurora está em cartão e crédito pessoal, o que expõe o grosso do PF. Aurora já tem NPL PF 6,3% (atenção) e custo de crédito 6,2% vs 5,7% de Boreal (f-npl-banco-aurora, f-results-banco-aurora, 2026-06); Basileia 13,4% vs 14,1% e LCR 138% vs 151% (f-km1-*, 2026-3). Igualar preço corrói margem e capital com risco pior; o pacote não traz fato de campanha do Banco Gigante, então não há sustentação para pesá-la (proximidade 0.47, f-proximity-banco-gigante: distante, peso baixo). Peso sugerido: Boreal ~70%, demais ~30% (inferência, não dado do pacote).",
+            "constraints": [
+              "Dados prudenciais/inadimplência são defasados (KM1 2026-3; IF.data/COSIF 2026-06); não refletem efeito da campanha de Boreal.",
+              "Pacote não informa volume de portabilidade em curso nem saídas de clientes de Aurora: perda real não é mensurável.",
+              "Pacote não traz detalhes da campanha do Banco Gigante; sem fato, sem peso atribuído além da proximidade 0.47.",
+              "Pacote não informa elasticidade de preço nem preço mínimo viável de Aurora; custo de captação não consta além de Selic 13,75% (f-macro-selic, 2026-11-05).",
+              "Margem apertada: ROE 11,2% vs 13,5% de Boreal (f-fundamentals-*, 2026-06)."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Retenção seletiva (peso ~60%): oferta de contra-portabilidade/redução de taxa só a clientes PF de baixo risco e renda média em risco de saída, com teto de preço por score; sem corte geral de tabela.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Compressão de margem limitada ao segmento ofertado; consumo de capital marginal, sem efeito relevante em liquidez (LCR 138%, f-km1-banco-aurora, 2026-3).",
+                "red_lines": [
+                  "Não precificar abaixo do custo de crédito (6,2% a.a., f-results-banco-aurora) ajustado a risco",
+                  "Não afrouxar critério de crédito para igualar a oferta de Boreal",
+                  "Não ferir piso regulatório de capital (Basileia 13,4%)"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Defesa de rotativo/cartão (peso ~25%): revisar o rotativo de 14,0% a.m. com ajuste parcial, renegociação e migração a parcelado para clientes em atenção, atacando a carteira de 44% PF.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Reduz receita de juros no curto prazo, mas pode conter migração de NPL PF (6,3%); efeito sobre capital depende da perda esperada, não estimada no pacote.",
+                "red_lines": [
+                  "Não mascarar inadimplência por reestruturação sem provisão adequada",
+                  "Respeitar limites regulatórios de juros e transparência de tarifas"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Monitorar e não igualar preço (peso ~15%): acompanhar por 30 dias saídas, portabilidades recebidas e NPL; decidir escalada com dados, mantendo foco em qualidade de carteira.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Preserva margem e capital; risco de perda de volume PF para Boreal sem medição prévia.",
+                "red_lines": [
+                  "Não ignorar gatilhos de saída de clientes acima de limite definido pelo comitê",
+                  "Não adiar decisão além de 90 dias sem revisão do conselho"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-proximity-banco-boreal",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2026-11-15"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-gigante",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2026-11-15"
+              },
+              {
+                "pack_fact_id": "f-narrative-boreal-portabilidade",
+                "source": "Onça competitor:news",
+                "as_of": "2026-11-12"
+              },
+              {
+                "pack_fact_id": "f-narrative-aurora-taxas",
+                "source": "Onça competitor:news",
+                "as_of": "2026-11-07"
+              },
+              {
+                "pack_fact_id": "f-npl-banco-aurora",
+                "source": "BCB IF.data (inadimplência)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-results-banco-aurora",
+                "source": "BCB COSIF",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-results-banco-boreal",
+                "source": "BCB COSIF",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-km1-banco-aurora",
+                "source": "BCB Pilar 3 (KM1)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-banco-boreal",
+                "source": "BCB Pilar 3 (KM1)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-aurora",
+                "source": "BCB IF.data",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-boreal",
+                "source": "BCB IF.data",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2026-11-05"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        }
+      },
+      "challenge": {
+        "cro": {
+          "officer": "cro",
+          "phase": "challenge",
+          "run_id": "dry-competitor-v2-20261115T0730Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cro",
+            "diagnosis": "Contesto CPO e Risk: ambos convergem em retenção seletiva, mas faltam gatilhos numéricos e simulação de capital. Boreal (proximidade 0,92, 2026-11-15) cobra 4,4% a.m. e rotativo 12,1% contra 5,8% e 14,0% do Aurora (2026-11-12/07). Aurora tem NPL PF 6,3% contra 5,6%, custo de crédito 6,2% contra 5,7% e ROE 11,2% contra 13,5% (2026-06); Basileia 13,4% contra 14,1% e LCR 138% contra 151% (2026-3). O desconto seletivo, sem tabela de perda de margem, pode virar corte disfarçado, pois 'baixo risco' não está definido. Gigante (0,47, 13,3× o porte): o pacote não traz fato da campanha, então o enunciado 'campanha parecida' não é verificável e pesa pouco. Pesos dados pelos oficiais (Boreal ~80% e ~60% para defesa seletiva) são indicativos, não derivados de dados.",
+            "constraints": [
+              "O pacote não traz base de clientes do Aurora em risco de portabilidade, elasticidade, nem margem por produto: o peso de cada movimento não pode ser calibrado com dados.",
+              "Dados defasados (IF.data/COSIF 2026-06; KM1 2026-3) e sem efeito medido da campanha de Boreal (2026-11-12).",
+              "Basileia 13,4% e LCR 138% (2026-3) são menores que os de Boreal; o pacote não traz limites internos nem mínimos regulatórios para medir a folga real.",
+              "Selic 13,75% sem corte em 2026-11-05; Focus 2027 em 12,5% é expectativa, não alivio de captação nos 90 dias.",
+              "Seleção adversa: clientes de renda média com carteira PF 44% em cartão/crédito pessoal (2026-11-07) tendem a aceitar portabilidade primeiro; o filtro de baixo risco pode excluir justamente quem Boreal busca."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Retenção seletiva com limites quantitativos: contraproposta apenas a PF com score e histórico definidos, teto de volume e piso de preço acima de custo de crédito + opex. Rotativo: migrar para parcelamento, sem corte de tabela. Revisão em 30/60 dias.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Margem comprimida só no segmento tratado; capital neutro se a carteira não crescer. Exige simulação prévia de Basileia (13,4%) e provisões.",
+                "red_lines": [
+                  "Não ofertar abaixo de custo de crédito (6,2%) + opex (2,4% do ativo) sem aprovação do conselho.",
+                  "Não crescer a carteira PF com NPL acima de 6,3%.",
+                  "Não aprovar sem simulação de capital e provisões assinada por risco."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Gatilho antes de preço: monitorar semanalmente saída por portabilidade e NPL; defender com serviço (Aurora 5º no ranking de reclamações contra Boreal 9º, 2026-T3). Ativar a opt-1 automaticamente ao cruzar limite numérico definido em até 30 dias.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Neutro em capital e liquidez no curto prazo; risco de perder volume de crédito pessoal e cartão se a reação for lenta.",
+                "red_lines": [
+                  "Gatilho numérico de saída aprovado em até 30 dias.",
+                  "Não esperar dados trimestrais para decidir.",
+                  "Não ignorar a base de renda média."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Igualar Boreal (4,4% a.m., rotativo 12,1%) em toda a base PF com campanha ativa de portabilidade. Não recomendado: só com simulação e aprovação do conselho.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Alta compressão de margem sobre 44% da carteira PF; custo de crédito 6,2% e ROE 11,2% sem folga; crescimento consome Basileia 13,4% e atrai risco pior.",
+                "red_lines": [
+                  "Não aplicar à carteira em atenção (NPL 4,6%).",
+                  "Não reduzir LCR (138%) nem Basileia.",
+                  "Não adotar sem plano de recomposição do ROE."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-narrative-boreal-portabilidade",
+                "source": "Onça competitor:news",
+                "as_of": "2026-11-12"
+              },
+              {
+                "pack_fact_id": "f-narrative-aurora-taxas",
+                "source": "Onça competitor:news",
+                "as_of": "2026-11-07"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-boreal",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2026-11-15"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-gigante",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2026-11-15"
+              },
+              {
+                "pack_fact_id": "f-npl-banco-aurora",
+                "source": "BCB IF.data (inadimplência)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-npl-banco-boreal",
+                "source": "BCB IF.data (inadimplência)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-results-banco-aurora",
+                "source": "BCB COSIF",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-results-banco-boreal",
+                "source": "BCB COSIF",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-aurora",
+                "source": "BCB IF.data",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-boreal",
+                "source": "BCB IF.data",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-km1-banco-aurora",
+                "source": "BCB Pilar 3 (KM1)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-banco-boreal",
+                "source": "BCB Pilar 3 (KM1)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-aurora",
+                "source": "Ranking de reclamações (fictício)",
+                "as_of": "2026-T3"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-boreal",
+                "source": "Ranking de reclamações (fictício)",
+                "as_of": "2026-T3"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2026-11-05"
+              },
+              {
+                "pack_fact_id": "f-macro-focus-selic-2027",
+                "source": "BCB Focus",
+                "as_of": "2026-11-06"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cco": {
+          "officer": "cco",
+          "phase": "challenge",
+          "run_id": "dry-competitor-v2-20261115T0730Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cco",
+            "diagnosis": "Contesto CPO e risk: ambos convergem em retenção seletiva, mas há lacunas. (1) Nenhum quantifica base PF em risco de portabilidade nem o 'baixo risco' elegível; sem isso o filtro é vazio. (2) Contraproposta a clientes que pedem portabilidade é seletiva por natureza: Aurora cobra 5,8% vs 4,4% do Boreal (f-narrative, 2026-11-07/12) e quem sai tende a ser o bom pagador. (3) Boreal, proximidade 0,92 (f-proximity, 2026-11-15), tem NPL PF 5,6% vs 6,3% do Aurora (2026-06): atrai a faixa de menor risco. (4) Conduta: oferta de preço só a quem pede portabilidade e não à base fiel gera tratamento desigual e risco de reclamação; Aurora já é 5º no ranking vs 9º do Boreal (2026-T3). Gigante (0,47, 13,3× o porte): sem fato de campanha, peso baixo. Pesos: Boreal ~75%, Gigante ≤10% não verificado, macro/conduta ~15%.",
+            "constraints": [
+              "Dados defasados (IF.data 2026-06; KM1 2026-3); efeito da campanha do Boreal (2026-11-12) ainda não medido.",
+              "Pacote não traz base PF do Aurora em risco, taxa de saída, nem campanha do Gigante; nada disso deve ser afirmado.",
+              "Reclamações: Aurora 5º, índice 48,2 vs Boreal 9º, 31,5 (2026-T3): oferta discriminatória ou comunicação pouco clara agrava a reputação.",
+              "Basileia 13,4% e LCR 138% (2026-3) abaixo do Boreal (14,1%; 151%): sem folga para crescer carteira por portabilidade.",
+              "Selic 13,75% sem corte (2026-11-05) e Focus 2027 12,5%: captação não alivia em 90 dias."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Retenção seletiva com critérios objetivos, escritos e auditáveis (score, histórico), aplicados igualmente a quem pede portabilidade e a clientes equivalentes que não pedem. Teto de volume e de perda de margem; revisão em 30 e 60 dias.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Compressão de margem limitada ao segmento; sem consumo relevante de capital se a carteira PF não crescer e o risco for filtrado.",
+                "red_lines": [
+                  "Sem critério de elegibilidade documentado e igual para clientes equivalentes.",
+                  "Sem oferta abaixo do custo de crédito (6,2%) mais opex (2,4%) sem aprovação do conselho.",
+                  "Sem crescimento de carteira PF com NPL pior que 6,3%.",
+                  "Sem comunicação enganosa sobre taxa ou condições."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Reprecificar rotativo e parcelamento (14,0% a.m. hoje) por faixa de risco, em vez de oferta caso a caso, com migração proativa e transparente. Só após simulação de margem e provisões pelo risco.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Reduz receita de rotativo; pode baixar custo de crédito se migrar para produto parcelado. Magnitude não sustentada pelo pacote.",
+                "red_lines": [
+                  "Sem simulação de capital e provisões aprovada antes do lançamento.",
+                  "Sem repasse que eleve o custo de clientes já em atraso.",
+                  "Sem queda da Basileia (13,4%) ou do LCR (138%) abaixo dos limites internos."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Manter preços 30 dias com monitoramento semanal de saída por portabilidade e NPL, atendimento reforçado das reclamações e gatilho numérico pré-aprovado que ative a opt-1. Gatilho definido em até 7 dias, não 30.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Neutro em capital e liquidez; risco de perder volume de crédito pessoal e cartão se o Boreal ganhar tração antes do gatilho.",
+                "red_lines": [
+                  "Sem gatilho numérico aprovado em até 7 dias.",
+                  "Sem decisão adiada à espera de dados trimestrais.",
+                  "Sem ignorar clientes de renda média, concentração da carteira PF."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-narrative-boreal-portabilidade",
+                "source": "Onça competitor:news",
+                "as_of": "2026-11-12"
+              },
+              {
+                "pack_fact_id": "f-narrative-aurora-taxas",
+                "source": "Onça competitor:news",
+                "as_of": "2026-11-07"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-boreal",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2026-11-15"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-gigante",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2026-11-15"
+              },
+              {
+                "pack_fact_id": "f-npl-banco-aurora",
+                "source": "BCB IF.data (inadimplência)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-npl-banco-boreal",
+                "source": "BCB IF.data (inadimplência)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-results-banco-aurora",
+                "source": "BCB COSIF",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-km1-banco-aurora",
+                "source": "BCB Pilar 3 (KM1)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-banco-boreal",
+                "source": "BCB Pilar 3 (KM1)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-aurora",
+                "source": "Ranking de reclamações (fictício)",
+                "as_of": "2026-T3"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-boreal",
+                "source": "Ranking de reclamações (fictício)",
+                "as_of": "2026-T3"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2026-11-05"
+              },
+              {
+                "pack_fact_id": "f-macro-focus-selic-2027",
+                "source": "BCB Focus",
+                "as_of": "2026-11-06"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "risk": {
+          "officer": "risk",
+          "phase": "challenge",
+          "run_id": "dry-competitor-v2-20261115T0730Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "risk",
+            "diagnosis": "Contesto o CSO pelo lado da sobrevivência: o Aurora é o mais frágil do par. Boreal (0.92, f-proximity-banco-boreal) tem Basileia 14,1% vs 13,4%, LCR 151% vs 138% (KM1 2026-3), NPL 4,1% vs 4,6%, custo de crédito 5,7% vs 6,2% e ROE 13,5% vs 11,2% (2026-06). Cerrado (0.86, f-proximity-banco-cerrado) é ainda mais frágil (Basileia 13,0%, NPL 5,0%), então o risco de contraparte está no entorno do Aurora, não só no Boreal. O custo de crédito de 6,2% com NPL PF 6,3% (banda atenção) e 44% da carteira PF em cartão/pessoal (2026-11-07) tornam a portabilidade um risco de seleção adversa: ficam com o Aurora os clientes que o Boreal recusa. Capital e liquidez são sólidos, mas a folga é pequena; o CSO subestima o risco de perda de qualidade da carteira e não define limites de perda. Os pesos 50/30/20 não têm base quantitativa no pacote.",
+            "constraints": [
+              "Dados defasados: KM1 do trim. 2026-3 e IF.data/COSIF de 2026-06; as campanhas (nov/2026) ainda não aparecem nos números.",
+              "O pacote não traz margem por produto, volume do rotativo, elasticidade ou clientes expostos à portabilidade; o impacto em receita e capital não é estimável.",
+              "Sem dados da campanha do Gigante (0.47, 13,33× o porte, f-proximity-banco-gigante); peso baixo pela distância.",
+              "Os pesos 70/15/15 e 50/30/20 do CSO são julgamento, não derivados de dados; tratar como ordem de prioridade, não como alocação.",
+              "Briefing externo (outside-in): não é decisão de preço ou capital."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Defesa seletiva com teto de risco (prioridade 1): contraproposta só a PF de renda média com histórico bom, com limite de perda de margem e de NPL pré-definido e revisão a cada 30 dias; sem corte de tabela.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Efeito limitado à parte retida; sem pressão relevante sobre Basileia 13,4% ou LCR 138% (2026-3). Magnitude não estimável sem dados de margem.",
+                "red_lines": [
+                  "Não igualar 4,4% a.m. amplamente com custo de crédito de 6,2% (2026-06).",
+                  "Não conceder sem critério de risco: NPL PF 6,3% já em banda atenção.",
+                  "Suspender o programa se o NPL PF subir acima do nível atual."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Rotativo só em teste restrito (prioridade 2, menor que o ~30% do CSO): reduzir de 14,0% apenas para segmento de baixo risco, em piloto pequeno, antes de qualquer corte maior rumo a 12,1% do Boreal.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Reduz receita de juros do cartão; efeito em capital via resultado, não estimável sem volume do rotativo. ROE 11,2% já está abaixo do Boreal.",
+                "red_lines": [
+                  "Sem corte geral: NPL PF 6,3% e custo de crédito 6,2%.",
+                  "Não escalar sem evidência de queda do custo de crédito."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Monitorar com gatilhos objetivos e sem preço (prioridade 3): acompanhar saída de clientes e qualidade da carteira nos 90 dias; serviço e relacionamento. Reclamações: Aurora 5ª vs Boreal 9ª (2026-T3) são uma vulnerabilidade na retenção.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Sem efeito imediato em capital ou liquidez; risco de erosão gradual da carteira PF e da rentabilidade se a portabilidade acelerar.",
+                "red_lines": [
+                  "Definir gatilho numérico de saída que force a opt-1.",
+                  "Não adiar a decisão além dos 90 dias."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-proximity-banco-boreal",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2026-11-15"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-cerrado",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2026-11-15"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-gigante",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2026-11-15"
+              },
+              {
+                "pack_fact_id": "f-km1-banco-aurora",
+                "source": "BCB Pilar 3 (KM1)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-banco-boreal",
+                "source": "BCB Pilar 3 (KM1)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-banco-cerrado",
+                "source": "BCB Pilar 3 (KM1)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-npl-banco-aurora",
+                "source": "BCB IF.data (inadimplência)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-npl-banco-boreal",
+                "source": "BCB IF.data (inadimplência)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-npl-banco-cerrado",
+                "source": "BCB IF.data (inadimplência)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-results-banco-aurora",
+                "source": "BCB COSIF",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-results-banco-boreal",
+                "source": "BCB COSIF",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-aurora",
+                "source": "BCB IF.data",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-boreal",
+                "source": "BCB IF.data",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-narrative-aurora-taxas",
+                "source": "Onça competitor:news",
+                "as_of": "2026-11-07"
+              },
+              {
+                "pack_fact_id": "f-narrative-boreal-portabilidade",
+                "source": "Onça competitor:news",
+                "as_of": "2026-11-12"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-aurora",
+                "source": "Ranking de reclamações (fictício)",
+                "as_of": "2026-T3"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-boreal",
+                "source": "Ranking de reclamações (fictício)",
+                "as_of": "2026-T3"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        }
+      },
+      "quantify": {
+        "risk": {
+          "officer": "risk",
+          "phase": "quantify",
+          "run_id": "dry-competitor-v2-20261115T0730Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "risk",
+            "diagnosis": "Quantificação (Aurora vs pares, KM1 2026-3, defasagem ~2 trimestres; NPL IF.data 2026-06, ~5 meses). Aurora é o mais frágil entre Boreal e Gigante, melhor só que Cerrado. Basileia: 13,4% vs Boreal 14,1% (-0,7 p.p.; proximidade 0.92), Cerrado 13,0% (+0,4; 0.86), Gigante 16,2% (-2,8; 0.47). Alavancagem 6,6% vs 6,9% / 6,2% / 7,4%. LCR 138% vs 151% (-13 p.p.) / 129% / 196%; NSFR 110% vs 114% / 108% / 124%. NPL total 4,6% vs 4,1% (+0,5 p.p.) / 5,0% / 2,4%; NPL PF 6,3% vs 5,6% (+0,7). Custo de crédito 6,2% vs 5,7%; ROE 11,2% vs 13,5%. Boreal pesa mais (0.92); Gigante (0.47) pesa pouco. Folga pequena e carteira PF pior tornam a portabilidade um risco de seleção adversa; as campanhas de nov/2026 não aparecem nos dados.",
+            "constraints": [
+              "Defasagem: KM1 de 2026-3 e IF.data/COSIF de 2026-06; as campanhas de nov/2026 não estão refletidas nos números.",
+              "O pacote não traz margem por produto, volume do rotativo, elasticidade nem base de clientes exposta à portabilidade: impacto em receita e capital não é estimável e os pesos são ordem de prioridade, não alocação.",
+              "O pacote não traz dados da campanha do Gigante (proximidade 0.47, 13,33× o porte); peso baixo e conteúdo não verificado.",
+              "O pacote não traz mínimos regulatórios nem limites internos, então a folga real de Basileia e LCR não é mensurável.",
+              "Selic 13,75% sem corte (2026-11-05); Focus 2027 12,5% é expectativa, sem alívio de captação garantido em 90 dias."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Defesa seletiva com teto (peso ~55%, Boreal 0.92 como alvo): contraproposta só a PF de renda média com score definido, com limites de volume, de perda de margem e de NPL, e revisão a cada 30 dias. Sem corte de tabela.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Efeito restrito ao segmento retido; sem pressão relevante sobre Basileia 13,4% ou LCR 138% (2026-3) se a carteira não crescer. Magnitude não estimável sem dados de margem.",
+                "red_lines": [
+                  "Não igualar 4,4% a.m. amplamente com custo de crédito de 6,2% (2026-06)",
+                  "Não conceder sem critério de risco: NPL PF 6,3% já em atenção",
+                  "Suspender se o NPL PF subir acima do nível atual",
+                  "Sem simulação de capital e provisões assinada por risco"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Monitoramento com gatilhos numéricos (peso ~30%): acompanhar semanalmente saídas por portabilidade e NPL; gatilho aprovado em até 30 dias ativa a opt-1. Rotativo (14,0% vs 12,1% do Boreal) só em piloto restrito de baixo risco.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Neutro em capital e liquidez no curto prazo; risco de erosão da carteira PF e do ROE (11,2%) se a reação for lenta.",
+                "red_lines": [
+                  "Gatilho numérico aprovado antes de 30 dias",
+                  "Sem corte geral do rotativo",
+                  "Não esperar dados trimestrais para decidir"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Igualar Boreal em toda a base PF (peso ~15% ou menos, não recomendado): 4,4% a.m. e rotativo 12,1%, só com aprovação do conselho.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Compressão de margem sobre 44% da carteira PF, com custo de crédito 6,2% e ROE 11,2%; crescimento consome Basileia 13,4% e atrai seleção adversa.",
+                "red_lines": [
+                  "Não adotar sem simulação de capital e provisões",
+                  "Não reduzir Basileia (13,4%) nem LCR (138%)",
+                  "Não aplicar a carteira em atenção"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-km1-banco-aurora",
+                "source": "BCB Pilar 3 (KM1)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-banco-boreal",
+                "source": "BCB Pilar 3 (KM1)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-banco-cerrado",
+                "source": "BCB Pilar 3 (KM1)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-banco-gigante",
+                "source": "BCB Pilar 3 (KM1)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-npl-banco-aurora",
+                "source": "BCB IF.data (inadimplência)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-npl-banco-boreal",
+                "source": "BCB IF.data (inadimplência)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-npl-banco-cerrado",
+                "source": "BCB IF.data (inadimplência)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-npl-banco-gigante",
+                "source": "BCB IF.data (inadimplência)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-results-banco-aurora",
+                "source": "BCB COSIF",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-results-banco-boreal",
+                "source": "BCB COSIF",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-aurora",
+                "source": "BCB IF.data",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-boreal",
+                "source": "BCB IF.data",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-boreal",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2026-11-15"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-cerrado",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2026-11-15"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-gigante",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2026-11-15"
+              },
+              {
+                "pack_fact_id": "f-narrative-boreal-portabilidade",
+                "source": "Onça competitor:news",
+                "as_of": "2026-11-12"
+              },
+              {
+                "pack_fact_id": "f-narrative-aurora-taxas",
+                "source": "Onça competitor:news",
+                "as_of": "2026-11-07"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2026-11-05"
+              },
+              {
+                "pack_fact_id": "f-macro-focus-selic-2027",
+                "source": "BCB Focus",
+                "as_of": "2026-11-06"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cpo": {
+          "officer": "cpo",
+          "phase": "quantify",
+          "run_id": "dry-competitor-v2-20261115T0730Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cpo",
+            "diagnosis": "Lente de produto/cobertura: o Boreal (0.92, f-proximity-banco-boreal, muito próximo) mira o nicho PF de renda média do Aurora (f-narrative-boreal-portabilidade, 2026-11-12): portabilidade a partir de 4,4% a.m. e rotativo de 13,9% para 12,1%, contra 5,8% e 14,0% do Aurora, com 44% da carteira PF em cartão e crédito pessoal (f-narrative-aurora-taxas, 2026-11-07). Evidência contra preço amplo: NPL PF 6,3% vs 5,6%, custo de crédito 6,2% vs 5,7%, ROE 11,2% vs 13,5% (2026-06). Reputação: Aurora 5º (índice 48,2) vs Boreal 9º (31,5) no ranking de reclamações (2026-T3), vulnerabilidade na retenção. Ponto cego: o pacote não traz campanha, taxa ou volume do Gigante (0.47, distante, f-proximity-banco-gigante), nem base do Aurora exposta à portabilidade. Pesos propostos: Boreal ~75%, Gigante ≤10% (não verificado), demais ~15%; são julgamento, não derivados de dados.",
+            "constraints": [
+              "Dados defasados: KM1 2026-3; IF.data/COSIF 2026-06; as campanhas de nov/2026 ainda não aparecem nos números.",
+              "O pacote não traz campanha do Gigante, margem por produto, elasticidade, volume do rotativo nem base do Aurora em risco de portabilidade: impacto em receita e capital não é estimável.",
+              "Basileia 13,4% e LCR 138% (2026-3) são menores que os do Boreal (14,1%; 151%): pouca folga para crescer carteira por portabilidade.",
+              "Selic 13,75% sem corte (2026-11-05); Focus 2027 em 12,5% é expectativa, sem alívio de captação garantido em 90 dias.",
+              "Briefing externo (outside-in): não é decisão de preço ou capital; pesos são indicativos."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Retenção seletiva (~55%): contraproposta a PF de renda média com critério objetivo de score e histórico, igual para clientes equivalentes, com teto de volume e de perda de margem. Sem corte geral de tabela. Revisão em 30 e 60 dias.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Compressão de margem limitada ao segmento tratado; sem pressão relevante em Basileia (13,4%) ou LCR (138%), 2026-3, se a carteira não crescer. Magnitude não estimável com o pacote.",
+                "red_lines": [
+                  "Não igualar 4,4% a.m. de forma ampla, dado o custo de crédito de 6,2% (2026-06).",
+                  "Não ofertar sem critério de risco documentado: NPL PF 6,3% em banda atenção.",
+                  "Não ofertar abaixo do custo de crédito mais opex sem aprovação do conselho.",
+                  "Não dificultar pedidos de portabilidade nem comunicar taxas de forma pouco clara."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Rotativo em piloto restrito (~20%): reduzir os 14,0% a.m. rumo aos 12,1% do Boreal só para faixa de baixo risco e migrar para parcelamento, após simulação de margem e provisões.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Reduz receita de juros do cartão; efeito em capital via resultado, não estimável sem volume do rotativo. ROE de 11,2% já abaixo do Boreal.",
+                "red_lines": [
+                  "Sem corte geral do rotativo (NPL PF 6,3%).",
+                  "Não escalar sem evidência de queda do custo de crédito.",
+                  "Não lançar sem simulação de capital e provisões aprovada."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Monitorar e diferenciar sem preço (~25%): acompanhar semanalmente saída por portabilidade, NPL e reclamações (Aurora 5º vs Boreal 9º) e reforçar atendimento; gatilho numérico pré-aprovado em até 7 dias ativa a opt-1.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Neutro em capital e liquidez no curto prazo; risco de perda gradual de carteira PF se a portabilidade acelerar antes do gatilho.",
+                "red_lines": [
+                  "Sem gatilho numérico aprovado em até 7 dias.",
+                  "Não esperar dados trimestrais para decidir.",
+                  "Não adiar a decisão além dos 90 dias."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-proximity-banco-boreal",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2026-11-15"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-gigante",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2026-11-15"
+              },
+              {
+                "pack_fact_id": "f-narrative-boreal-portabilidade",
+                "source": "Onça competitor:news",
+                "as_of": "2026-11-12"
+              },
+              {
+                "pack_fact_id": "f-narrative-aurora-taxas",
+                "source": "Onça competitor:news",
+                "as_of": "2026-11-07"
+              },
+              {
+                "pack_fact_id": "f-npl-banco-aurora",
+                "source": "BCB IF.data (inadimplência)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-npl-banco-boreal",
+                "source": "BCB IF.data (inadimplência)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-results-banco-aurora",
+                "source": "BCB COSIF",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-results-banco-boreal",
+                "source": "BCB COSIF",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-aurora",
+                "source": "BCB IF.data",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-boreal",
+                "source": "BCB IF.data",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-km1-banco-aurora",
+                "source": "BCB Pilar 3 (KM1)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-banco-boreal",
+                "source": "BCB Pilar 3 (KM1)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-aurora",
+                "source": "Ranking de reclamações (fictício)",
+                "as_of": "2026-T3"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-boreal",
+                "source": "Ranking de reclamações (fictício)",
+                "as_of": "2026-T3"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2026-11-05"
+              },
+              {
+                "pack_fact_id": "f-macro-focus-selic-2027",
+                "source": "BCB Focus",
+                "as_of": "2026-11-06"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cso": {
+          "officer": "cso",
+          "phase": "quantify",
+          "run_id": "dry-competitor-v2-20261115T0730Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cso",
+            "diagnosis": "Ordem por encaixe estratégico: 1) defesa seletiva, 2) monitorar com gatilho, 3) rotativo em piloto, 4) igualar preço (descartar). Boreal (proximidade 0.92, f-proximity-banco-boreal, quase par) ataca o núcleo PF do Aurora: 4,4% vs 5,8% a.m. e rotativo 12,1% vs 14,0%, com 44% da carteira PF em cartão/pessoal (2026-11-07/12). O Aurora tem menos folga: NPL PF 6,3% vs 5,6%, custo de crédito 6,2% vs 5,7%, ROE 11,2% vs 13,5% (2026-06). Capital é sólido (Basileia 13,4% vs 14,1%, trim. 2026-3), mas a rentabilidade limita o preço. Pesos: Boreal ~70%; Gigante (0.47, 13,33× o porte, f-proximity-banco-gigante) ~10%, sem fato da campanha; Cerrado (0.86, NPL PF 6,8%) ~20% como risco indireto. Pesos são julgamento, não derivados de dados.",
+            "constraints": [
+              "Dados defasados: KM1 trim. 2026-3; IF.data/COSIF 2026-06; as campanhas de nov/2026 ainda não aparecem nos números.",
+              "O pacote não traz dados da campanha do Gigante (0.47, distante): a premissa 'campanha parecida' não é verificável e o peso é baixo.",
+              "Sem margem por produto, elasticidade ou base do Aurora exposta à portabilidade: impacto em receita e capital não é estimável.",
+              "Custo de crédito 6,2% e NPL PF 6,3% (banda atenção) limitam corte de taxa; igualar o preço atrai seleção adversa.",
+              "Briefing outside-in: não é decisão de preço ou capital; Selic 13,75% sem corte, Focus 2027 12,5% é expectativa."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Defesa seletiva (peso ~55%): contraproposta de taxa e migração do rotativo para parcelado só a PF de renda média com bom histórico, critério escrito e igual para clientes equivalentes, com teto de volume e perda de margem. Sem corte de tabela.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Compressão de margem só no segmento retido; sem pressão relevante sobre Basileia 13,4% ou LCR 138% (trim. 2026-3) se a carteira não crescer. Magnitude não estimável.",
+                "red_lines": [
+                  "Não igualar 4,4% a.m. amplamente (custo de crédito 6,2%).",
+                  "Não conceder sem critério de risco nem afrouxar crédito (NPL PF 6,3%).",
+                  "Não aprovar sem simulação de capital e provisões.",
+                  "Não dificultar pedidos de portabilidade nem comunicar de forma pouco clara."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Monitorar com gatilho numérico (peso ~25%): acompanhar semanalmente portabilidades, saídas, NPL e reclamações (Aurora 5º vs Boreal 9º, 2026-T3), com serviço reforçado; gatilho pré-aprovado em até 7 dias ativa a opt-1.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Neutro em capital e liquidez no curto prazo; risco de perda gradual de carteira PF se o Boreal ganhar tração antes do gatilho.",
+                "red_lines": [
+                  "Gatilho numérico aprovado em até 7 dias.",
+                  "Não esperar dados trimestrais para decidir.",
+                  "Não adiar a decisão além dos 90 dias."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Rotativo em piloto restrito (peso ~20%): reduzir de 14,0% rumo a 12,1% do Boreal só para baixo risco, em escala pequena. Igualar preço em toda a base PF fica descartado.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Reduz receita de juros do cartão; efeito em capital via resultado, não estimável sem volume do rotativo. ROE 11,2% já está abaixo do Boreal.",
+                "red_lines": [
+                  "Sem corte geral do rotativo (NPL PF 6,3%).",
+                  "Não escalar sem queda comprovada do custo de crédito.",
+                  "Sem simulação aprovada de margem e provisões."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-proximity-banco-boreal",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2026-11-15"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-gigante",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2026-11-15"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-cerrado",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2026-11-15"
+              },
+              {
+                "pack_fact_id": "f-narrative-aurora-taxas",
+                "source": "Onça competitor:news",
+                "as_of": "2026-11-07"
+              },
+              {
+                "pack_fact_id": "f-narrative-boreal-portabilidade",
+                "source": "Onça competitor:news",
+                "as_of": "2026-11-12"
+              },
+              {
+                "pack_fact_id": "f-npl-banco-aurora",
+                "source": "BCB IF.data (inadimplência)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-npl-banco-boreal",
+                "source": "BCB IF.data (inadimplência)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-npl-banco-cerrado",
+                "source": "BCB IF.data (inadimplência)",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-results-banco-aurora",
+                "source": "BCB COSIF",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-results-banco-boreal",
+                "source": "BCB COSIF",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-aurora",
+                "source": "BCB IF.data",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-boreal",
+                "source": "BCB IF.data",
+                "as_of": "2026-06"
+              },
+              {
+                "pack_fact_id": "f-km1-banco-aurora",
+                "source": "BCB Pilar 3 (KM1)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-km1-banco-boreal",
+                "source": "BCB Pilar 3 (KM1)",
+                "as_of": "2026-3"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-aurora",
+                "source": "Ranking de reclamações (fictício)",
+                "as_of": "2026-T3"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-boreal",
+                "source": "Ranking de reclamações (fictício)",
+                "as_of": "2026-T3"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2026-11-05"
+              },
+              {
+                "pack_fact_id": "f-macro-focus-selic-2027",
+                "source": "BCB Focus",
+                "as_of": "2026-11-06"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        }
+      },
+      "synthesize": {
+        "secretary": {
+          "status": "ok"
+        }
+      }
+    },
+    "synthesis": {
+      "summary": "Briefing outside-in, não é decisão de preço nem de capital. O Banco Boreal (proximidade 0.92) é a ameaça dominante: portabilidade a partir de 4,4% a.m. e rotativo cortado de 13,9% para 12,1%, contra 5,8% e 14,0% do Aurora, que tem 44% da carteira PF em cartão e crédito pessoal. O Aurora tem menos folga que o Boreal (NPL PF 6,3% vs 5,6%, custo de crédito 6,2% vs 5,7%, ROE 11,2% vs 13,5%), e por isso igualar preço de forma ampla é desaconselhado. Peso indicativo: Boreal ~70-75%; Cerrado (0.86) ~10-20% como risco indireto; Gigante (0.47, 13,33× o porte) ≤10%, porque o pacote não traz fato da campanha dele e a premissa não é verificável. Os pesos são julgamento dos oficiais, não derivados de dados. Os dados são defasados (KM1 2026-3, IF.data/COSIF 2026-06) e não refletem as campanhas de nov/2026. O pacote também não traz base exposta à portabilidade, elasticidade nem margem por produto.",
+      "options": [
+        {
+          "id": "opt-1",
+          "description": "Defesa seletiva (peso ~55%, alvo Boreal): contraproposta de taxa e migração do rotativo para parcelado só a PF de renda média com score e histórico bom. O critério é escrito, auditável e igual para clientes equivalentes. Há teto de volume e de perda de margem, revisão a cada 30 e 60 dias e piso de preço acima de custo de crédito + opex. Sem corte linear de tabela e sem dificultar pedidos de portabilidade.",
+          "customer_impact": "medium",
+          "capital_liquidity_effect": "Compressão de margem restrita ao segmento retido. Sem pressão relevante sobre Basileia 13,4% ou LCR 138% (2026-3) se a carteira não crescer. Magnitude não estimável sem margem por produto. Exige simulação prévia de capital e provisões.",
+          "citations": [
+            "f-proximity-banco-boreal",
+            "f-narrative-boreal-portabilidade",
+            "f-narrative-aurora-taxas",
+            "f-npl-banco-aurora",
+            "f-npl-banco-boreal",
+            "f-results-banco-aurora",
+            "f-results-banco-boreal",
+            "f-fundamentals-banco-aurora",
+            "f-fundamentals-banco-boreal",
+            "f-km1-banco-aurora"
+          ],
+          "derived_from": [
+            {
+              "officer": "cso",
+              "option": "opt-1"
+            },
+            {
+              "officer": "risk",
+              "option": "opt-1"
+            },
+            {
+              "officer": "cco",
+              "option": "opt-1"
+            },
+            {
+              "officer": "cpo",
+              "option": "opt-1"
+            },
+            {
+              "officer": "cro",
+              "option": "opt-1"
+            }
+          ],
+          "supported_by": [
+            "cso",
+            "risk",
+            "cco",
+            "cpo",
+            "cro"
+          ],
+          "contested_by": [
+            "risk",
+            "cco",
+            "cro"
+          ],
+          "competitor_signals": [
+            {
+              "entity": "banco-boreal",
+              "proximity": 0.916
+            }
+          ]
+        },
+        {
+          "id": "opt-2",
+          "description": "Monitorar com gatilho numérico e diferenciar por serviço (peso ~25-30%): acompanhar semanalmente portabilidades, saídas, NPL e reclamações. Gatilho pré-aprovado em até 7 dias, no máximo 30, ativa a opt-1. Rotativo (14,0% vs 12,1%) só em piloto restrito de baixo risco, sem corte geral, após simulação de margem e provisões. Não esperar dados trimestrais nem adiar além de 90 dias.",
+          "customer_impact": "low",
+          "capital_liquidity_effect": "Neutro em capital e liquidez no curto prazo. Risco de erosão da carteira PF e do ROE (11,2%) se o Boreal ganhar tração antes do gatilho. O piloto do rotativo reduz receita de cartão em escala pequena, sem estimativa possível sem volume do rotativo.",
+          "citations": [
+            "f-narrative-aurora-taxas",
+            "f-narrative-boreal-portabilidade",
+            "f-reputation-rk-aurora",
+            "f-reputation-rk-boreal",
+            "f-npl-banco-aurora",
+            "f-results-banco-aurora",
+            "f-km1-banco-aurora",
+            "f-proximity-banco-gigante",
+            "f-macro-selic",
+            "f-macro-focus-selic-2027"
+          ],
+          "derived_from": [
+            {
+              "officer": "cso",
+              "option": "opt-2"
+            },
+            {
+              "officer": "cso",
+              "option": "opt-3"
+            },
+            {
+              "officer": "risk",
+              "option": "opt-2"
+            },
+            {
+              "officer": "risk",
+              "option": "opt-3"
+            },
+            {
+              "officer": "cco",
+              "option": "opt-2"
+            },
+            {
+              "officer": "cco",
+              "option": "opt-3"
+            },
+            {
+              "officer": "cpo",
+              "option": "opt-2"
+            },
+            {
+              "officer": "cpo",
+              "option": "opt-3"
+            },
+            {
+              "officer": "cro",
+              "option": "opt-2"
+            },
+            {
+              "officer": "cro",
+              "option": "opt-3"
+            }
+          ],
+          "supported_by": [
+            "cso",
+            "risk",
+            "cco",
+            "cpo",
+            "cro"
+          ],
+          "contested_by": [
+            "risk",
+            "cco",
+            "cro"
+          ],
+          "competitor_signals": [
+            {
+              "entity": "banco-boreal",
+              "proximity": 0.916
+            },
+            {
+              "entity": "banco-gigante",
+              "proximity": 0.465
+            }
+          ]
+        },
+        {
+          "id": "opt-3",
+          "description": "Igualar o Boreal em toda a base PF (4,4% a.m. e rotativo 12,1%), com campanha ativa de portabilidade (peso ≤10-15%, não recomendado). Só com simulação de capital e provisões e aprovação do conselho.",
+          "customer_impact": "high",
+          "capital_liquidity_effect": "Alta compressão de margem sobre 44% da carteira PF, com custo de crédito 6,2% e ROE 11,2% sem folga. O crescimento consome Basileia 13,4% e atrai seleção adversa.",
+          "citations": [
+            "f-narrative-boreal-portabilidade",
+            "f-narrative-aurora-taxas",
+            "f-results-banco-aurora",
+            "f-fundamentals-banco-aurora",
+            "f-km1-banco-aurora",
+            "f-npl-banco-aurora"
+          ],
+          "derived_from": [
+            {
+              "officer": "risk",
+              "option": "opt-3"
+            },
+            {
+              "officer": "cco",
+              "option": "opt-3"
+            },
+            {
+              "officer": "cpo",
+              "option": "opt-2"
+            }
+          ],
+          "supported_by": [
+            "risk",
+            "cco",
+            "cpo"
+          ],
+          "contested_by": [
+            "cco",
+            "cro"
+          ],
+          "competitor_signals": [
+            {
+              "entity": "banco-boreal",
+              "proximity": 0.916
+            }
+          ]
+        }
+      ],
+      "residual_regulatory_risk": "Portabilidade de crédito é regulada. Oferta seletiva pode gerar tratamento desigual e risco de conduta, e comunicação pouco clara de taxas agrava a reputação (Aurora 5º vs Boreal 9º no ranking de reclamações, 2026-T3). O pacote não traz mínimos regulatórios nem limites internos de Basileia e LCR, então a folga real não é mensurável. Também não há dados de sanções.",
+      "monitoring_triggers": [
+        {
+          "text": "Saída de clientes PF por portabilidade acima de um limite numérico aprovado em até 7 dias (no máximo 30), com revisão semanal: ativa a opt-1.",
+          "citations": [
+            "f-narrative-boreal-portabilidade",
+            "f-proximity-banco-boreal"
+          ]
+        },
+        {
+          "text": "NPL PF acima de 6,3% ou custo de crédito acima de 6,2% na carteira retida ou no piloto de rotativo: suspender concessões de preço.",
+          "citations": [
+            "f-npl-banco-aurora",
+            "f-results-banco-aurora"
+          ]
+        },
+        {
+          "text": "Basileia abaixo de 13,4% ou LCR abaixo de 138% no próximo KM1: reavaliar qualquer concessão de preço.",
+          "citations": [
+            "f-km1-banco-aurora"
+          ]
+        },
+        {
+          "text": "Evidência de campanha do Banco Gigante (taxa, volume) ou de movimento do Cerrado: reponderar, hoje com peso baixo pela proximidade.",
+          "citations": [
+            "f-proximity-banco-gigante",
+            "f-proximity-banco-cerrado"
+          ]
+        },
+        {
+          "text": "Alta das reclamações ou piora do ranking do Aurora (5º, índice 48,2) durante a retenção.",
+          "citations": [
+            "f-reputation-rk-aurora",
+            "f-reputation-rk-boreal"
+          ]
+        },
+        {
+          "text": "Mudança na Selic (13,75%) ou no Focus 2027 (12,5%) que altere o custo de captação.",
+          "citations": [
+            "f-macro-selic",
+            "f-macro-focus-selic-2027"
+          ]
+        }
+      ]
+    },
+    "dissents": [
+      {
+        "officer": "cro",
+        "challenged": [
+          "cpo",
+          "risk"
+        ],
+        "text": "Contesto CPO e Risk: ambos convergem em retenção seletiva, mas faltam gatilhos numéricos e simulação de capital. Boreal (proximidade 0,92, 2026-11-15) cobra 4,4% a.m. e rotativo 12,1% contra 5,8% e 14,0% do Aurora (2026-11-12/07). Aurora tem NPL PF 6,3% contra 5,6%, custo de crédito 6,2% contra 5,7% e ROE 11,2% contra 13,5% (2026-06); Basileia 13,4% contra 14,1% e LCR 138% contra 151% (2026-3). O desconto seletivo, sem tabela de perda de margem, pode virar corte disfarçado, pois 'baixo risco' não está definido. Gigante (0,47, 13,3× o porte): o pacote não traz fato da campanha, então o enunciado 'campanha parecida' não é verificável e pesa pouco. Pesos dados pelos oficiais (Boreal ~80% e ~60% para defesa seletiva) são indicativos, não derivados de dados.",
+        "red_lines": [
+          "Não ofertar abaixo de custo de crédito (6,2%) + opex (2,4% do ativo) sem aprovação do conselho.",
+          "Não crescer a carteira PF com NPL acima de 6,3%.",
+          "Não aprovar sem simulação de capital e provisões assinada por risco.",
+          "Gatilho numérico de saída aprovado em até 30 dias.",
+          "Não esperar dados trimestrais para decidir.",
+          "Não ignorar a base de renda média.",
+          "Não aplicar à carteira em atenção (NPL 4,6%).",
+          "Não reduzir LCR (138%) nem Basileia.",
+          "Não adotar sem plano de recomposição do ROE."
+        ]
+      },
+      {
+        "officer": "cco",
+        "challenged": [
+          "cpo",
+          "risk"
+        ],
+        "text": "Contesto CPO e risk: ambos convergem em retenção seletiva, mas há lacunas. (1) Nenhum quantifica base PF em risco de portabilidade nem o 'baixo risco' elegível; sem isso o filtro é vazio. (2) Contraproposta a clientes que pedem portabilidade é seletiva por natureza: Aurora cobra 5,8% vs 4,4% do Boreal (f-narrative, 2026-11-07/12) e quem sai tende a ser o bom pagador. (3) Boreal, proximidade 0,92 (f-proximity, 2026-11-15), tem NPL PF 5,6% vs 6,3% do Aurora (2026-06): atrai a faixa de menor risco. (4) Conduta: oferta de preço só a quem pede portabilidade e não à base fiel gera tratamento desigual e risco de reclamação; Aurora já é 5º no ranking vs 9º do Boreal (2026-T3). Gigante (0,47, 13,3× o porte): sem fato de campanha, peso baixo. Pesos: Boreal ~75%, Gigante ≤10% não verificado, macro/conduta ~15%.",
+        "red_lines": [
+          "Sem critério de elegibilidade documentado e igual para clientes equivalentes.",
+          "Sem oferta abaixo do custo de crédito (6,2%) mais opex (2,4%) sem aprovação do conselho.",
+          "Sem crescimento de carteira PF com NPL pior que 6,3%.",
+          "Sem comunicação enganosa sobre taxa ou condições.",
+          "Sem simulação de capital e provisões aprovada antes do lançamento.",
+          "Sem repasse que eleve o custo de clientes já em atraso.",
+          "Sem queda da Basileia (13,4%) ou do LCR (138%) abaixo dos limites internos.",
+          "Sem gatilho numérico aprovado em até 7 dias.",
+          "Sem decisão adiada à espera de dados trimestrais.",
+          "Sem ignorar clientes de renda média, concentração da carteira PF."
+        ]
+      },
+      {
+        "officer": "risk",
+        "challenged": [
+          "cso"
+        ],
+        "text": "Contesto o CSO pelo lado da sobrevivência: o Aurora é o mais frágil do par. Boreal (0.92, f-proximity-banco-boreal) tem Basileia 14,1% vs 13,4%, LCR 151% vs 138% (KM1 2026-3), NPL 4,1% vs 4,6%, custo de crédito 5,7% vs 6,2% e ROE 13,5% vs 11,2% (2026-06). Cerrado (0.86, f-proximity-banco-cerrado) é ainda mais frágil (Basileia 13,0%, NPL 5,0%), então o risco de contraparte está no entorno do Aurora, não só no Boreal. O custo de crédito de 6,2% com NPL PF 6,3% (banda atenção) e 44% da carteira PF em cartão/pessoal (2026-11-07) tornam a portabilidade um risco de seleção adversa: ficam com o Aurora os clientes que o Boreal recusa. Capital e liquidez são sólidos, mas a folga é pequena; o CSO subestima o risco de perda de qualidade da carteira e não define limites de perda. Os pesos 50/30/20 não têm base quantitativa no pacote.",
+        "red_lines": [
+          "Não igualar 4,4% a.m. amplamente com custo de crédito de 6,2% (2026-06).",
+          "Não conceder sem critério de risco: NPL PF 6,3% já em banda atenção.",
+          "Suspender o programa se o NPL PF subir acima do nível atual.",
+          "Sem corte geral: NPL PF 6,3% e custo de crédito 6,2%.",
+          "Não escalar sem evidência de queda do custo de crédito.",
+          "Definir gatilho numérico de saída que force a opt-1.",
+          "Não adiar a decisão além dos 90 dias."
+        ]
+      }
+    ],
+    "dropped": [],
+    "gaps": [],
+    "elapsed_s": 231.0
+  },
+  "focal": "banco-aurora",
+  "subject": "banco-boreal",
+  "proximity": [
+    {
+      "peer": "banco-boreal",
+      "label": "Banco Boreal",
+      "score": 0.916,
+      "coverage": 1.0,
+      "low_coverage": false,
+      "components": {
+        "size": 0.961,
+        "market": 1.0,
+        "business_model": 0.904,
+        "prudential": 0.864,
+        "pressure": 0.78
+      },
+      "missing": []
+    },
+    {
+      "peer": "banco-cerrado",
+      "label": "Banco Cerrado",
+      "score": 0.859,
+      "coverage": 1.0,
+      "low_coverage": false,
+      "components": {
+        "size": 0.945,
+        "market": 1.0,
+        "business_model": 0.901,
+        "prudential": 0.894,
+        "pressure": 0.41
+      },
+      "missing": []
+    },
+    {
+      "peer": "banco-gigante",
+      "label": "Banco Gigante",
+      "score": 0.465,
+      "coverage": 1.0,
+      "low_coverage": false,
+      "components": {
+        "size": 0.438,
+        "market": 0.333,
+        "business_model": 0.522,
+        "prudential": 0.445,
+        "pressure": 0.64
+      },
+      "missing": []
+    },
+    {
+      "peer": "fintech-delta",
+      "label": "Fintech Delta",
+      "score": 0.372,
+      "coverage": 1.0,
+      "low_coverage": false,
+      "components": {
+        "size": 0.544,
+        "market": 0.5,
+        "business_model": 0.133,
+        "prudential": 0.0,
+        "pressure": 0.55
+      },
+      "missing": []
+    }
+  ]
+}

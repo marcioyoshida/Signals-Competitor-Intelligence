@@ -40,8 +40,8 @@ RUN = {
 def test_markdown_has_every_section_and_hides_nothing():
     md = A.render_markdown(RUN)
     for needle in ("# Briefing de conselho — banco-aurora", "outside-in", "## Situação", "## Opções",
-                   "| opt-1 | Funding / liquidez primeiro | baixo | Estratégia, Risco | Compliance |",
-                   "| opt-2 | Reprecificar crédito | alto | Produto | — |",
+                   "| opt-1 | Funding / liquidez primeiro | baixo | — | Estratégia, Risco | Compliance |",
+                   "| opt-2 | Reprecificar crédito | alto | — | Produto | — |",
                    "### Compliance contesta Produto, Risco", "Discordo — conduta.", "- sem venda casada",
                    "## Risco regulatório residual", "- Próximo KM1 [f-km1-aurora]",
                    "sem resposta no prazo (180 s)", "Sem dados internos.", "descartado: gatilho sem citação",

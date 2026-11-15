@@ -538,6 +538,7 @@
   .cs-form { display:flex; flex-direction:column; gap:var(--s2); padding:0 var(--s3) var(--s3); }
   .cs-form select, .cs-form textarea, .cs-gate select, .cs-gate textarea { font:inherit; color:var(--ink);
     background:var(--surface); border:1px solid var(--border); border-radius:var(--r-sm); padding:8px 10px; min-height:44px; }
+  .cs-focal { margin:0; }
   .cs-row { display:flex; flex-wrap:wrap; align-items:center; gap:var(--s2); }
   .cs-btn { min-height:44px; padding:0 var(--s3); border-radius:var(--r-sm); border:1px solid var(--primary);
     background:var(--primary); color:var(--on-primary); font-weight:700; cursor:pointer; }
@@ -4174,7 +4175,7 @@ function hojeSec(id, title, n, sub, body, go, goTitle) {
 // ---- #327 Conselho: board briefs (ADR 031) — start a brief, read the board pack, record the
 // board's decision (aceitar | modificar | rejeitar), then adoption and the observed outcome.
 // Everything goes through /api/me/act with the officer's own token; the tenant is the token's.
-const CONSELHO = { runs: null, run: null, msg: "", err: "", busy: false, poll: null };
+const CONSELHO = { runs: null, run: null, focal: null, msg: "", err: "", busy: false, poll: null };
 function conselhoAct(intent, args, key) {
   const body = { intent, args: args || {} };
   if (key) body.idempotency_key = key;
@@ -4228,10 +4229,17 @@ function renderConselho(el) {
     return;
   }
   if (CONSELHO.runs === null && !CONSELHO.busy) conselhoLoad();
-  const opts = conselhoTargets().map(e => `<option value="${U.esc(e.entity)}">${U.esc(e.label || e.entity)}</option>`).join("");
-  const form = `<form class="cs-form" id="csForm">
-      <label class="hd-note" for="csTarget">Instituição</label>
-      <select id="csTarget" required>${opts}</select>
+  // #386: the board is the client's own institution (set at onboarding); the form picks the SUBJECT
+  const ents = conselhoTargets(), fe = ents.find(e => e.entity === CONSELHO.focal);
+  const focalName = fe ? (fe.label || fe.entity) : (CONSELHO.focal || "");
+  const opts = `<option value="">A própria instituição (${U.esc(focalName)})</option>` + ents.filter(e => e.entity !== CONSELHO.focal)
+    .map(e => `<option value="${U.esc(e.entity)}">${U.esc(e.label || e.entity)}</option>`).join("");
+  const form = CONSELHO.runs !== null && !CONSELHO.focal
+    ? U.empty("A instituição da sua organização ainda não foi definida. Ela é registrada no onboarding; fale com a Onça.", "", "○")
+    : `<form class="cs-form" id="csForm">
+      <p class="cs-focal"><span class="hd-note">Conselho de</span> <b>${U.esc(focalName || "…")}</b></p>
+      <label class="hd-note" for="csTarget">Assunto</label>
+      <select id="csTarget">${opts}</select>
       <label class="hd-note" for="csTask">Pergunta do conselho</label>
       <textarea id="csTask" rows="3" minlength="10" maxlength="800" required
         placeholder="Ex.: como responder ao rebaixamento de rating nos próximos 90 dias?"></textarea>
@@ -4242,7 +4250,7 @@ function renderConselho(el) {
   const list = runs.length ? `<div class="panel__bd--flush">` + runs.map(r => `<button class="hoje-rec cs-run" data-run="${U.esc(r.run_id)}"
       aria-current="${CONSELHO.run && CONSELHO.run.run && CONSELHO.run.run.run_id === r.run_id ? "true" : "false"}">
       <span class="cs-st cs-st--${U.esc(r.status)}">${U.esc(CS_STATUS[r.status] || r.status)}</span>
-      <b>${U.esc(r.target || "")}</b> · ${U.esc(String(r.task || "").slice(0, 120))}
+      <b>${U.esc(r.subject || r.target || "")}</b> · ${U.esc(String(r.task || "").slice(0, 120))}
       <span class="hd-note"> · ${U.esc(dShort(String(r.created_at || "").slice(0, 10)))}</span></button>`).join("") + `</div>`
     : U.empty(CONSELHO.runs === null ? "Carregando…" : "Nenhum briefing ainda.", "", "○");
   let html = hojeSec("cs-novo", "Novo briefing", null, "cinco áreas, opções citadas", form) +
@@ -4313,6 +4321,7 @@ function conselhoLoad() {
   return conselhoAct("board_run_status", {}).then(r => {
     CONSELHO.busy = false;
     CONSELHO.runs = r.status < 400 ? (r.body.runs || []) : [];
+    CONSELHO.focal = r.status < 400 ? (r.body.focal || null) : null;
     if (r.status >= 400) CONSELHO.err = r.body.error || "";
     if (VIEW === "conselho") render();
   }).catch(() => { CONSELHO.busy = false; CONSELHO.runs = []; CONSELHO.err = "sem conexão"; if (VIEW === "conselho") render(); });
@@ -4329,10 +4338,10 @@ function conselhoOpen(runId) {
   });
 }
 function conselhoStart() {
-  const target = document.getElementById("csTarget").value;
+  const subject = document.getElementById("csTarget").value;
   const task = document.getElementById("csTask").value.trim();
   CONSELHO.err = ""; CONSELHO.msg = ""; CONSELHO.busy = true; render();
-  conselhoAct("board_brief", { target, task }, newKey()).then(r => {
+  conselhoAct("board_brief", subject ? { subject, task } : { task }, newKey()).then(r => {
     CONSELHO.busy = false;
     if (r.status >= 400) { CONSELHO.err = r.body.error || "não foi possível iniciar"; render(); return; }
     CONSELHO.msg = "Briefing iniciado. Leva alguns minutos.";

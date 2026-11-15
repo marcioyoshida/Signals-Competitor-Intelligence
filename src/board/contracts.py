@@ -36,23 +36,28 @@ STATUS_OK, STATUS_INVALID, STATUS_NO_ANSWER = "ok", "invalid", "no_answer"
 
 
 def make_envelope(*, run_id: str, phase: str, shared_context_id: str, task: str,
-                  prior_positions: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+                  prior_positions: list[dict[str, Any]] | None = None,
+                  focal: str | None = None, subject: str | None = None) -> dict[str, Any]:
     if phase not in PHASES:
         raise ValueError(f"unknown phase {phase!r}")
     if not re.fullmatch(r"[0-9a-f]{64}", shared_context_id or ""):
         raise ValueError("shared_context_id must be the pack's sha256 hex")
     if not (task or "").strip():
         raise ValueError("task is required")
-    return {"run_id": run_id, "phase": phase, "shared_context_id": shared_context_id,
-            "prior_positions": list(prior_positions or []), "task": task.strip(),
-            "output_schema": SCHEMA_ID}
+    env = {"run_id": run_id, "phase": phase, "shared_context_id": shared_context_id,
+           "prior_positions": list(prior_positions or []), "task": task.strip(),
+           "output_schema": SCHEMA_ID}
+    if focal:  # #386: whose board decides, and what the question is about
+        env["focal"], env["subject"] = focal, subject or focal
+    return env
 
 
 def _strs(v: Any) -> bool:
     return isinstance(v, list) and all(isinstance(x, str) for x in v)
 
 
-def validate_position(obj: Any, *, officer: str, pack_fact_ids: set[str] | None) -> list[str]:
+def validate_position(obj: Any, *, officer: str, pack_fact_ids: set[str] | None,
+                      proximity_of: dict[str, str] | None = None) -> list[str]:
     """Every problem with a position, as short pt-BR-neutral messages (empty = valid).
 
     ``pack_fact_ids`` is the set of fact ids in the frozen pack; a citation to anything else is
@@ -110,6 +115,13 @@ def validate_position(obj: Any, *, officer: str, pack_fact_ids: set[str] | None)
             errs.append(f"citations[{i}].pack_fact_id is required")
         elif pack_fact_ids is not None and fid not in pack_fact_ids:
             errs.append(f"citations[{i}].pack_fact_id {fid!r} is not in the pack")
+    # #386: a competitor's signal is weighted by its distance — citing a competitor's fact
+    # requires citing that competitor's proximity fact too.
+    if proximity_of and isinstance(obj.get("citations"), list):
+        cited = {c.get("pack_fact_id") for c in obj["citations"] if isinstance(c, dict)}
+        need = sorted({proximity_of[f] for f in cited if f in proximity_of} - cited)
+        if need:
+            errs.append("competitor facts cited without their proximity: also cite " + ", ".join(need))
     if not isinstance(obj.get("tool_call_summary", []), list):
         errs.append("tool_call_summary must be a list")
     return errs
@@ -146,6 +158,12 @@ Tamanho: diagnosis com até %(diag)d caracteres; cada description com até %(des
 %(cons)d constraints e %(red)d red_lines por opção. Seja direto: números e o fato citado, sem repetir
 o pacote."""
 
+_FOCAL = """Você assessora o conselho da instituição focal %(focal)s: toda posição responde "o que
+isto significa para %(focal)s". Assunto da pergunta: %(subject)s. Sinais de concorrentes pesam pela
+proximidade à focal (fatos f-proximity-*, de 0 a 1): ao usar um fato de um concorrente, cite também
+o f-proximity desse concorrente e diga a distância; um concorrente distante pode ser citado, mas
+pesa menos."""
+
 
 def system_prompt(officer: str) -> str:
     persona = officers.brief_persona(officer) or ""
@@ -156,6 +174,10 @@ def system_prompt(officer: str) -> str:
 def user_prompt(officer: str, envelope: dict[str, Any]) -> str:
     prior = envelope.get("prior_positions") or []
     parts = [f"Fase: {envelope['phase']}", f"Tarefa: {envelope['task']}"]
+    if envelope.get("focal"):
+        subj = envelope.get("subject") or envelope["focal"]
+        parts.append(_FOCAL % {"focal": envelope["focal"],
+                               "subject": subj if subj != envelope["focal"] else "a própria instituição focal"})
     if prior:
         parts.append("Posições anteriores:\n" + json.dumps(prior, ensure_ascii=False))
     parts.append(_CONTRACT % {"officer": officer, "max_options": MAX_OPTIONS,
@@ -165,7 +187,8 @@ def user_prompt(officer: str, envelope: dict[str, Any]) -> str:
 
 
 def ask_officer(officer: str, envelope: dict[str, Any], *, call: Callable[[str, str], str | None],
-                pack_fact_ids: set[str] | None) -> dict[str, Any]:
+                pack_fact_ids: set[str] | None,
+                proximity_of: dict[str, str] | None = None) -> dict[str, Any]:
     """One officer turn with at most one re-prompt.
 
     ``call(system, prompt)`` returns the model text (the caller binds the pack as ``context``,
@@ -183,7 +206,7 @@ def ask_officer(officer: str, envelope: dict[str, Any], *, call: Callable[[str, 
                     "errors": ["model returned no answer"]}
         obj = parse_position(text)
         errs = ["reply has no JSON object"] if obj is None else validate_position(
-            obj, officer=officer, pack_fact_ids=pack_fact_ids)
+            obj, officer=officer, pack_fact_ids=pack_fact_ids, proximity_of=proximity_of)
         if not errs:
             return {**base, "status": STATUS_OK, "attempts": attempt, "position": obj}
         prompt = (user_prompt(officer, envelope) + "\n\nSua resposta anterior foi rejeitada: "

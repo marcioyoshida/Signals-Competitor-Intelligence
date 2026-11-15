@@ -208,6 +208,9 @@ def get_tenant_config(tenant_id: str | None, *, table: Any | None = None) -> dic
         "tier": tier,
         "modules": modules,
         "billing": billing,
+        # #386: the client's own institution — whose board a board brief serves. Set by the
+        # customer onboarding process (#387), never from a request.
+        "focal_entity": str(item.get("focal_entity") or "").strip() or None,
         # ADR 016 delivery plane: portal (Entry static) | saas (shared multi-tenant) |
         # marketplace (the SAME product in the tenant's own AWS account). tier-1 is SaaS
         # OR Marketplace — same per-tenant read boundary either way.

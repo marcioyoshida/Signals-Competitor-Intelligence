@@ -908,7 +908,8 @@ _BOARD_REFUSALS = {
     "no_tenant": "o briefing de conselho pertence a uma conta de organização",
     "tenant_lookup_failed": "não foi possível verificar a conta agora; tente de novo",
 }
-_BOARD_RUN_FIELDS = ("run_id", "status", "task", "target", "created_at", "gate", "client_billed",
+_BOARD_RUN_FIELDS = ("run_id", "status", "task", "target", "focal", "subject", "proximity",
+                     "created_at", "gate", "client_billed",
                      "token_cap", "usage", "n_facts", "pack_gaps", "gaps", "synthesis", "dissents",
                      "dropped", "elapsed_s", "reason", "pack_sha")
 
@@ -931,13 +932,15 @@ def _act_board_brief(args: dict[str, Any], actor: str) -> tuple[str, int, dict[s
     from src.dashboard import tenant_config
 
     tenant = _board_tenant(args)
-    target = str(args.get("target") or "").strip()
+    # #386: `subject` = what the question is about (legacy `target`); default: the focal
+    # institution. The focal institution itself is NEVER taken from the request.
+    subject = str(args.get("subject") or args.get("target") or "").strip()
     task = " ".join(str(args.get("task") or "").split())
     key = str(args.get("_idem") or "").strip()
     if not key:
         return "blocked", 400, {"error": "idempotency_key é obrigatório para iniciar um briefing"}
-    if not target or not (10 <= len(task) <= 800):
-        return "blocked", 400, {"error": "informe `target` (id da entidade) e `task` (10 a 800 caracteres)"}
+    if not (10 <= len(task) <= 800):
+        return "blocked", 400, {"error": "informe `task` (10 a 800 caracteres) e, se quiser, `subject`"}
     sm = os.environ.get("ONCA_BOARD_STATE_MACHINE")
     if not sm:
         return "blocked", 503, {"error": "o briefing de conselho não está habilitado aqui"}
@@ -954,9 +957,13 @@ def _act_board_brief(args: dict[str, Any], actor: str) -> tuple[str, int, dict[s
         msg = _BOARD_REFUSALS.get(d.reason, "o briefing de conselho exige um plano ativo ou o modelo "
                                             "próprio da sua organização conectado")
         return "blocked", 402, {"reason": d.reason, "error": msg}
+    focal = str((raw_row(tenant) or {}).get("focal_entity") or "").strip()
+    if not focal:
+        return "blocked", 409, {"reason": "no_focal", "error": "a instituição da sua organização ainda "
+                                "não foi definida (etapa do onboarding); fale com a Onça"}
     run_id = store.run_id_for(tenant, key)
-    payload = {"tenant": tenant, "idempotency_key": key, "target": target, "task": task,
-               "requested_by": actor}
+    payload = {"tenant": tenant, "idempotency_key": key, "target": subject or focal,
+               "subject": subject or focal, "task": task, "requested_by": actor}
     try:
         boto3.client("stepfunctions").start_execution(
             stateMachineArn=sm, name=f"brief-{run_id}", input=json.dumps(payload, ensure_ascii=False))
@@ -967,6 +974,7 @@ def _act_board_brief(args: dict[str, Any], actor: str) -> tuple[str, int, dict[s
         started = False
     return "applied", 202 if started else 200, {
         "run_id": run_id, "status": "queued" if started else "exists", "gate": d.reason,
+        "focal": focal, "subject": subject or focal,
         "client_billed": d.client_billed, "next": "board_run_status"}
 
 
@@ -997,9 +1005,11 @@ def _act_board_run_status(args: dict[str, Any], actor: str) -> tuple[str, int, d
             out["decision"] = _plain({k: dec[k] for k in ("decision_id", "choice", "option_id", "at")
                                       if k in dec})
         return "applied", 200, out
-    runs = [{k: r[k] for k in ("run_id", "status", "target", "task", "created_at") if k in r}
-            for r in store.list_runs(table, tenant, limit=10)]
-    return "applied", 200, {"runs": _plain(runs)}
+    runs = [{k: r[k] for k in ("run_id", "status", "target", "focal", "subject", "task", "created_at")
+             if k in r} for r in store.list_runs(table, tenant, limit=10)]
+    from src.dashboard import tenant_config
+    focal = (tenant_config.get_tenant_config(tenant) or {}).get("focal_entity")
+    return "applied", 200, {"runs": _plain(runs), "focal": focal}
 
 
 _BOARD_CHOICES = {"aceitar": "aprovado", "modificar": "aprovado", "rejeitar": "rejeitado"}

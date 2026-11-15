@@ -37,9 +37,12 @@ def env(monkeypatch):
     monkeypatch.setattr(H, "_s3", lambda: s3)
     monkeypatch.setattr(H, "_scoped_feed", lambda tenant: small_feed())
     monkeypatch.setattr(H, "_client_connection", lambda tenant: None)
-    rows = {"paying": {"tenant_id": "paying"}, "trial": {"tenant_id": "trial"}}
+    rows = {"paying": {"tenant_id": "paying", "focal_entity": "alfa"}, "trial": {"tenant_id": "trial"},
+            "nofocal": {"tenant_id": "nofocal"}}
     monkeypatch.setattr(H, "_raw_tenant_row", lambda tenant: rows.get(tenant))
-    cfgs = {"paying": {"tenant_id": "paying", "modules": ["banking"], "billing": {"state": "active"}},
+    cfgs = {"paying": {"tenant_id": "paying", "modules": ["banking"], "billing": {"state": "active"},
+                       "focal_entity": "alfa"},
+            "nofocal": {"tenant_id": "nofocal", "modules": ["banking"], "billing": {"state": "active"}},
             "trial": {"tenant_id": "trial", "modules": ["banking"], "billing": {"state": "trial"}}}
     import src.dashboard.tenant_config as tc
     monkeypatch.setattr(tc, "get_tenant_config", lambda tenant, **kw: cfgs.get(tenant))
@@ -154,3 +157,17 @@ def test_every_lazy_import_in_the_handler_resolves():
         for n in names.split(","):
             n = n.split(" as ")[0].strip()
             assert hasattr(m, n) or importlib.util.find_spec(f"{mod}.{n}"), f"{mod}.{n}"
+
+
+def test_admit_refuses_a_tenant_without_focal_and_pack_uses_the_runs_focal(env):
+    t, s3 = env
+    out = H.lambda_handler(req("nofocal"), None)
+    assert out["allowed"] is False and out["reason"] == "no_focal"
+    a = H.lambda_handler({**req(key="k-focal"), "subject": "beta"}, None)
+    run = t.items[("paying", f"RUN#{a['run_id']}")]
+    assert run["focal"] == "alfa" and run["subject"] == "beta" and a["target"] == "beta"
+    p = H.lambda_handler({"action": "pack", **a}, None)
+    import json as _j
+    stored = _j.loads(s3.store[P.pack_key(p["pack_sha"])])
+    assert stored["focal"] == "alfa" and stored["subject"] == "beta"
+    assert any(f["id"] == "f-proximity-beta" for f in stored["facts"])
