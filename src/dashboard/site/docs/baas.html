@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<script src="/v2/app-guard.js"></script>  <!-- #258: no purchase affordance in the store app -->
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Radar BaaS — Res. Conjunta CMN/BCB 16/2025 · Onça</title>
+<meta name="description" content="Prazo de 31/12/2026 da Resolução Conjunta CMN/BCB 16/2025 (Banking as a Service): o que a prestadora precisa ter pronto, os prazos das Resoluções BCB 601, 602 e 603 e as liquidações decretadas pelo Banco Central em 2026, com o ato original de cada item." />
+<link rel="canonical" href="https://onssa.org/docs/baas.html" />
+<meta property="og:title" content="Radar BaaS — Res. Conjunta CMN/BCB 16/2025" />
+<meta property="og:description" content="O que a prestadora de Banking as a Service precisa ter pronto até 31/12/2026, com o ato original de cada item." />
+<meta property="og:url" content="https://onssa.org/docs/baas.html" />
+<meta property="og:type" content="article" />
+<style>
+  /* Same tokens as /docs, /pricing.html and /sample — one visual system for every page a
+     stranger can reach without credentials. Every fact here cites the official act. */
+  :root {
+    --bg: #0e1116; --panel: #161b22; --panel2: #1d232c; --border: #2a313b;
+    --ink: #e6e9ee; --ink2: #aeb6c2; --muted: #79818c; --accent: #3fbdb6;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  header { padding: 28px 22px 10px; text-align: center; }
+  header h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: .2px; }
+  header .sub { color: var(--muted); font-size: 14px; }
+  .wrap { padding: 20px 22px 60px; max-width: 820px; margin: 0 auto; }
+  section { margin-top: 34px; }
+  h2 { font-size: 15px; color: var(--ink2); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 12px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px; }
+  .count { display: flex; align-items: baseline; justify-content: center; gap: 12px; flex-wrap: wrap; text-align: center; }
+  .count .n { font-size: 54px; font-weight: 700; color: var(--accent); line-height: 1; }
+  .count .t { color: var(--ink2); font-size: 15px; max-width: 420px; text-align: left; }
+  ul { margin: 8px 0 0; padding-left: 20px; color: var(--ink2); }
+  li { margin-bottom: 6px; }
+  li b { color: var(--ink); font-weight: 600; }
+  .art { color: var(--muted); font-size: 13px; white-space: nowrap; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--ink2); font-weight: 600; }
+  td.d { white-space: nowrap; color: var(--ink2); }
+  tr.hl td { color: var(--ink); }
+  tr.hl td.d { color: var(--accent); font-weight: 600; }
+  .scroll { overflow-x: auto; }
+  .note { color: var(--muted); font-size: 13px; margin-top: 10px; }
+  .ctas { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 640px) { .ctas { grid-template-columns: 1fr; } }
+  .cta h3 { margin: 0 0 6px; font-size: 16px; }
+  .cta p { margin: 0 0 12px; color: var(--ink2); font-size: 14px; }
+  .btn { display: inline-block; background: var(--accent); color: #06211f; font-weight: 650;
+         padding: 9px 18px; border-radius: 10px; font-size: 14px; }
+  .btn:hover { text-decoration: none; filter: brightness(1.08); }
+  .btn.ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+  .foot { color: var(--muted); font-size: 12.5px; margin-top: 34px; border-top: 1px solid var(--border); padding-top: 18px; }
+
+  /* #281: touch targets >= 44px. */
+  @media (pointer: coarse) {
+    a { position: relative; }
+    a:where(:not(.btn))::after { content: ""; position: absolute; inset: -15px -6px; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>🐆 Radar BaaS</h1>
+  <div class="sub">Resolução Conjunta CMN/BCB nº 16/2025 e o que vem depois · atualizado em 14/11/2026</div>
+</header>
+<div class="wrap">
+
+<section>
+  <div class="card count" aria-live="polite">
+    <span class="n" id="days">47</span>
+    <span class="t" id="days-t">dias até 31/12/2026, fim do prazo do art. 22 para adequar todo contrato de Banking as a Service em vigor.</span>
+  </div>
+</section>
+
+<section>
+  <h2>O que a prestadora precisa ter pronto</h2>
+  <div class="card">
+    <ul>
+      <li><b>Política de risco com regras próprias para BaaS</b> e avaliação da tomadora antes e durante o contrato <span class="art">arts. 5º e 7º</span></li>
+      <li><b>Contrato com conteúdo mínimo</b>, incluindo aviso prévio de 30 dias antes de a tomadora interromper o serviço quando a prestadora estiver sob regime de resolução <span class="art">art. 8º</span></li>
+      <li><b>Responsabilidade integral</b> por segurança, sigilo, identificação de clientes, prevenção a fraudes e PLD/FT; no crédito, por toda a regulamentação de operações de crédito <span class="art">arts. 9º, 10 e 12</span></li>
+      <li><b>Diretor responsável</b> designado ao Banco Central <span class="art">art. 13</span></li>
+      <li><b>Identificação da prestadora</b>, visível ao cliente final, nos canais, contratos e documentos da tomadora <span class="art">art. 14</span></li>
+      <li><b>Atendimento e indicadores de qualidade</b> da tomadora, inclusive reclamações <span class="art">arts. 16 e 18</span></li>
+      <li><b>Lista pública de tomadoras</b> no próprio site e perante o Banco Central, e guarda de documentos por cinco anos <span class="art">arts. 20 e 21</span></li>
+    </ul>
+    <p class="note">Na prática, cada tomadora vira um ponto de exposição regulatória da prestadora. O acompanhamento deixa de ser por instituição e passa a ser por tomadora e por produto.
+      Fonte: <a href="https://www.bcb.gov.br/estabilidadefinanceira/exibenormativo?tipo=Resolu%C3%A7%C3%A3o%20Conjunta&amp;numero=16" rel="noopener">Resolução Conjunta CMN/BCB nº 16/2025</a>.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Os prazos seguintes</h2>
+  <div class="card scroll">
+    <table>
+      <thead><tr><th>Prazo</th><th>Norma</th><th>O que precisa estar pronto</th></tr></thead>
+      <tbody id="deadlines">
+        <tr data-date="2026-12-31"><td class="d">31/12/2026</td><td><a href="https://www.bcb.gov.br/estabilidadefinanceira/exibenormativo?tipo=Resolu%C3%A7%C3%A3o%20Conjunta&amp;numero=16" rel="noopener">Res. Conjunta 16/2025</a></td><td>Contratos de BaaS adequados</td></tr>
+        <tr data-date="2027-02-23"><td class="d">≈ 23/02/2027</td><td><a href="https://www.bcb.gov.br/estabilidadefinanceira/exibenormativo?tipo=Resolu%C3%A7%C3%A3o%20BCB&amp;numero=602" rel="noopener">Res. BCB 602</a></td><td>Sistemas e canais adaptados à autorização seletiva de ofertas; comunicação de terceiros "em modelos de Banking as a Service" conta como oferta da instituição</td></tr>
+        <tr data-date="2027-03-31"><td class="d">31/03/2027</td><td><a href="https://www.bcb.gov.br/estabilidadefinanceira/exibenormativo?tipo=Resolu%C3%A7%C3%A3o%20BCB&amp;numero=602" rel="noopener">Res. BCB 602</a></td><td>Autorização seletiva em vigor</td></tr>
+        <tr data-date="2027-04-24"><td class="d">≈ 24/04/2027</td><td><a href="https://www.bcb.gov.br/estabilidadefinanceira/exibenormativo?tipo=Resolu%C3%A7%C3%A3o%20BCB&amp;numero=601" rel="noopener">Res. BCB 601</a></td><td>Sistemas adaptados ao painel de dívidas consolidadas, que inclui operações feitas por terceiros "em modelos de Banking as a Service" (art. 4º, § 4º)</td></tr>
+        <tr data-date="2027-07-01"><td class="d">01/07/2027</td><td><a href="https://www.bcb.gov.br/estabilidadefinanceira/exibenormativo?tipo=Resolu%C3%A7%C3%A3o%20BCB&amp;numero=601" rel="noopener">Res. BCB 601</a></td><td>Painel de dívidas em vigor</td></tr>
+        <tr data-date="2027-07-01"><td class="d">01/07/2027</td><td><a href="https://www.bcb.gov.br/estabilidadefinanceira/exibenormativo?tipo=Resolu%C3%A7%C3%A3o%20BCB&amp;numero=603" rel="noopener">Res. BCB 603</a></td><td>Regras de crédito na iniciação do Pix em vigor</td></tr>
+      </tbody>
+    </table>
+    <p class="note">Prazos com "≈" contados da publicação no Diário Oficial da União (26/10/2026).</p>
+  </div>
+</section>
+
+<section>
+  <h2>Por que o art. 8º importa: liquidações em 2026</h2>
+  <div class="card">
+    <p style="margin:0 0 10px;color:var(--ink2)">O Banco Central decretou <b style="color:var(--ink)">21 liquidações extrajudiciais</b> de 1º/01 a 14/11/2026. Cinco foram de instituições de pagamento ou sociedades de crédito direto, os perfis que mais prestam serviços a terceiros. É o cenário do aviso prévio do art. 8º: o que acontece com os clientes das tomadoras quando a prestadora entra em regime de resolução.</p>
+    <div class="scroll">
+    <table>
+      <thead><tr><th>Data</th><th>Instituição</th><th>Ato</th></tr></thead>
+      <tbody>
+        <tr><td class="d">29/10/2026</td><td>MW Instituição de Pagamento Ltda.</td><td><a href="https://www.bcb.gov.br/estabilidadefinanceira/exibenormativo?tipo=Ato%20do%20Presidente&amp;numero=1392" rel="noopener">Ato do Presidente nº 1.392</a></td></tr>
+        <tr><td class="d">27/03/2026</td><td>Octa Sociedade de Crédito Direto S.A.</td><td><a href="https://www.bcb.gov.br/estabilidadefinanceira/exibenormativo?tipo=Ato%20do%20Presidente&amp;numero=1.383" rel="noopener">Ato do Presidente nº 1.383</a></td></tr>
+        <tr><td class="d">27/03/2026</td><td>Acqio Adquirência Instituição de Pagamento S.A.</td><td><a href="https://www.bcb.gov.br/estabilidadefinanceira/exibenormativo?tipo=Ato%20do%20Presidente&amp;numero=1.382" rel="noopener">Ato do Presidente nº 1.382</a></td></tr>
+        <tr><td class="d">27/03/2026</td><td>Entrepay Instituição de Pagamento S.A.</td><td><a href="https://www.bcb.gov.br/estabilidadefinanceira/exibenormativo?tipo=Ato%20do%20Presidente&amp;numero=1.381" rel="noopener">Ato do Presidente nº 1.381</a></td></tr>
+        <tr><td class="d">11/03/2026</td><td>Dank Sociedade de Crédito Direto S.A.</td><td><a href="https://www.bcb.gov.br/estabilidadefinanceira/exibenormativo?tipo=Ato%20do%20Presidente&amp;numero=1379" rel="noopener">Ato do Presidente nº 1.379</a></td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p class="note">As outras 16 foram de bancos, financeiras, DTVMs, corretoras de câmbio, cooperativas e administradoras de consórcio. Lista completa nos Atos do Presidente nº 1.374 a 1.394 publicados pelo Banco Central.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Para a sua instituição</h2>
+  <div class="ctas">
+    <div class="card cta">
+      <h3>Relatório da sua instituição</h3>
+      <p>Os prazos e as mudanças que afetam o seu perfil de autorização nos últimos 30 dias, com o ato original de cada item. Sem custo para prestadores de BaaS.</p>
+      <a class="btn" href="mailto:contato@onssa.org?subject=Relat%C3%B3rio%20BaaS%20para%20a%20minha%20institui%C3%A7%C3%A3o">Pedir o relatório</a>
+    </div>
+    <div class="card cta">
+      <h3>Boletim semanal</h3>
+      <p>Uma vez por semana: o que o Banco Central, a CVM e o Diário Oficial publicaram sobre BaaS, Pix e crédito. Cancele quando quiser respondendo "sair".</p>
+      <a class="btn ghost" href="mailto:contato@onssa.org?subject=Inscrever%20no%20boletim%20semanal&amp;body=Quero%20receber%20o%20boletim%20semanal%20da%20Onça%20neste%20e-mail.">Inscrever por e-mail</a>
+    </div>
+  </div>
+</section>
+
+<div class="foot">
+  Levantamento da <b>Equipe Onça</b>. A Onça lê Banco Central, CVM e Diário Oficial três vezes por dia e liga cada mudança às instituições afetadas.
+  Este conteúdo é informativo e não constitui parecer jurídico. Contato: <a href="mailto:contato@onssa.org">contato@onssa.org</a> ·
+  <a href="/pricing.html">Preços</a> · <a href="/sample/">Amostra</a> · <a href="/docs/privacy.html">Privacidade</a>
+</div>
+</div>
+<script>
+(function () {
+  // Days left, counted in Brasília time (UTC-3, no DST since 2019) so the number flips at local midnight.
+  var DEADLINE = Date.UTC(2026, 11, 31, 3);       // 31/12/2026 00:00 BRT
+  var nowBrt = Date.now();
+  var d = Math.ceil((DEADLINE - nowBrt) / 86400000);
+  var n = document.getElementById("days"), t = document.getElementById("days-t");
+  if (d > 1) { n.textContent = d; }
+  else if (d === 1) { n.textContent = "1"; t.textContent = "dia até 31/12/2026, fim do prazo do art. 22 para adequar todo contrato de Banking as a Service em vigor."; }
+  else if (d === 0) { n.textContent = "Hoje"; t.textContent = "termina o prazo do art. 22 para adequar todo contrato de Banking as a Service em vigor."; }
+  else { n.textContent = "Encerrado"; t.textContent = "O prazo do art. 22 terminou em 31/12/2026. Todo contrato de BaaS em vigor já deve estar adequado."; }
+  // Grey out deadlines that have passed; highlight the next one.
+  var today = new Date(nowBrt - 3 * 3600000).toISOString().slice(0, 10), next = null;
+  document.querySelectorAll("#deadlines tr").forEach(function (tr) {
+    var dd = tr.getAttribute("data-date");
+    if (dd < today) { tr.style.opacity = ".5"; }
+    else if (!next) { next = dd; }
+    if (dd === next) { tr.className = "hl"; }
+  });
+})();
+</script>
+</body>
+</html>

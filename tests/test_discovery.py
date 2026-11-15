@@ -64,6 +64,15 @@ def test_agent_card_is_served_by_the_oauth_lambda():
     assert r["statusCode"] == 200 and json.loads(r["body"]) == discovery.render_agent_card()
 
 
+def test_glama_claim_file_is_served_with_the_company_inbox_only():
+    from src.dashboard.oauth import handler
+    r = handler.lambda_handler({"rawPath": "/.well-known/glama.json", "headers": {}})
+    body = json.loads(r["body"])
+    assert r["statusCode"] == 200 and body == discovery.render_glama_json()
+    assert [m["email"] for m in body["maintainers"]] == ["contato@onssa.org"]
+    assert body["$schema"] == "https://glama.ai/mcp/schemas/connector.json"
+
+
 def test_only_the_discovery_txt_files_are_in_the_site():
     # CloudFront serves /*.txt publicly (one behavior for llms.txt + ai.txt): nothing else may be .txt
     assert sorted(p.relative_to(SITE).as_posix() for p in SITE.rglob("*.txt")) == ["ai.txt", "llms.txt", "robots.txt", "sitemap.txt"]

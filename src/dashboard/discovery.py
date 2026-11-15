@@ -174,6 +174,16 @@ def render_openapi(base: str = BASE) -> dict[str, Any]:
     }
 
 
+GLAMA_MAINTAINER = "contato@onssa.org"   # company inbox only: this repo is public
+
+
+def render_glama_json() -> dict[str, Any]:
+    """``/.well-known/glama.json`` (#183): lets the Glama account that owns this address claim
+    the listing Glama made from the MCP Registry entry io.github.marcioyoshida/onca."""
+    return {"$schema": "https://glama.ai/mcp/schemas/connector.json",
+            "maintainers": [{"email": GLAMA_MAINTAINER}]}
+
+
 def render_agent_card(base: str = BASE) -> dict[str, Any]:
     """A2A agent card (protocol 0.3). Only `message/send` is served — say so, no streaming."""
     return {
