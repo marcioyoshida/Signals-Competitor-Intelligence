@@ -1,6 +1,8 @@
 # ADR 031: Board brief orchestrator (multi-officer debate over MCP)
 
 - Status: proposed, 2026-11-05. Epic #321; milestones Board M0–M3 (#322–#344).
+- Amended 2026-11-14 by ADR 032 (five boards): the Risco board (`risk`) replaces the planned
+  Financial officer, and the brief uses the five board names. See *Amendment 2026-11-14* below.
 - Scope: Onça. Anteater has the same officer layout (its ADR #27) and can adopt this later.
 - Origin: an external "ADR-001: Multi-Agent MCP Orchestrator for Board-Level Decision Making"
   sketch (rating-downgrade case). This ADR **adopts its process** (frozen context, typed
@@ -58,10 +60,13 @@ customer response to *our own* downgrade. That needs the bank's internal data.
    internal data, the artifact is a *brief* (situation, peer and regulatory position,
    options, dissents, monitoring triggers), never a capital or pricing decision. The word
    "decision" is reserved for the human gate.
-3. **Add a Financial officer now** (public prudential data, ADR 022). **Add Enterprise Risk
-   only with a client's risk appetite** (Phase M3). The new risk role must not reuse the
-   `cro` alias, which already means Regulator in URLs and deep links; its short alias is
-   `risco`.
+3. **Risco carries the prudential view now; the client's risk appetite comes in M3.**
+   *(Amended 2026-11-14.)* The original plan was a separate Financial officer (`cfo`) over the
+   public prudential data (ADR 022), with Enterprise Risk held until a client supplied its
+   risk appetite. ADR 032 has since shipped the Risco board (`risk`, URL `#risco`) over that
+   same data, plus resolution regimes and insolvency. Risco therefore takes the Financial
+   role in the brief, and M3 adds the client's risk appetite to Risco instead of creating a
+   sixth officer. `cro` still means Regulatório.
 4. **Collect historic public data before claiming evaluation.** The replay harness depends
    on backfills listed in M1. The first evaluation uses a synthetic scenario; historic
    replay follows once the backfills land.
@@ -79,10 +84,11 @@ customer response to *our own* downgrade. That needs the bank's internal data.
 2. **Parallel diagnosis.** Each officer receives the common envelope and must answer in the
    response schema below. Non-conforming output gets one re-prompt, then is recorded as
    `invalid` (the run continues with partial results).
-3. **Challenge round.** Regulator and Compliance challenge Product and Financial options;
-   Strategy is challenged by Compliance (by Enterprise Risk once it exists). One reply each.
-4. **Quantify.** Financial attaches public-metric deltas against peers; Product attaches
-   rate and complaint evidence; Strategy ranks options by fit.
+3. **Challenge round.** Regulatório and Compliance challenge the Produto and Risco options;
+   Risco challenges Estratégia. One reply each.
+4. **Quantify.** Risco attaches public-metric deltas against peers (stating the quarter and
+   publication lag); Produto attaches rate and complaint evidence; Estratégia ranks options
+   by fit.
 5. **Synthesize.** One synthesis call produces 2–3 options with an explicit
    customer-impact band, dissents kept verbatim, residual regulatory risk and monitoring
    triggers. Any claim without a citation id from the pack is dropped (same guard family
@@ -107,7 +113,7 @@ Envelope (orchestrator → officer):
 Position (officer → orchestrator):
 
 ```json
-{"officer": "cso|cro|cco|cpo|cfo|risco", "diagnosis": "string", "constraints": [],
+{"officer": "cso|risk|cco|cpo|cro", "diagnosis": "string", "constraints": [],
  "options": [{"id": "opt-1", "description": "", "customer_impact": "low|medium|high",
               "capital_liquidity_effect": "", "red_lines": []}],
  "citations": [{"pack_fact_id": "", "source": "", "as_of": ""}],
@@ -227,13 +233,27 @@ customer-impact model statistically.
 
 ## Phasing (milestones)
 
-- **Board M0 — Orchestrator (outside-in brief).** Stack, pack, contracts, Financial
-  officer, phase runner, board pack, exposure, spend gate, synthetic dry run.
+- **Board M0 — Orchestrator (outside-in brief).** Stack, pack, contracts, Risco's brief
+  role, phase runner, board pack, exposure, spend gate, synthetic dry run.
 - **Board M1 — Historic data.** The backfills above, starting with the dated entity map.
 - **Board M2 — Evaluation.** Synthetic scenario first, then historic replay with answer keys.
 - **Board M3 — Client inside-out (gated on a pilot bank).** Internal pack upload (Sovereign
-  SKU), Enterprise Risk officer, customer-impact model co-owned with the client, retention
-  policy.
+  SKU), the client's risk appetite in Risco, customer-impact model co-owned with the client,
+  retention policy.
+
+## Amendment 2026-11-14 (ADR 032)
+
+The officers in a board run are the five /exec boards, by internal id:
+
+| Board | Id | Role in the brief |
+|---|---|---|
+| Estratégia | `cso` | Diagnosis; ranks options by fit. Challenged by Risco. |
+| Risco | `risk` | Capital, liquidity, NPL, fragility and regimes from public data (was the planned Financial officer, #325). Quantifies against peers. Challenges Estratégia. |
+| Compliance | `cco` | Conduct and sanctions. Challenges Produto and Risco. |
+| Produto | `cpo` | Rate and complaint evidence. |
+| Regulatório | `cro` | Rules, deadlines, standards. Challenges Produto and Risco. |
+
+#325 is closed as superseded. #342 now means adding the client's risk-appetite input to Risco.
 
 ## Consequences
 
