@@ -1,6 +1,7 @@
 # ADR 031: Board brief orchestrator (multi-officer debate over MCP)
 
 - Status: proposed, 2026-11-05. Epic #321; milestones Board M0–M3 (#322–#344).
+- Amended 2026-11-15 (owner review): focal vs subject, competitor proximity, onboarding sets the focal institution.
 - Amended 2026-11-14 by ADR 032 (five boards): the Risco board (`risk`) replaces the planned
   Financial officer, and the brief uses the five board names. See *Amendment 2026-11-14* below.
 - Scope: Onça. Anteater has the same officer layout (its ADR #27) and can adopt this later.
@@ -254,6 +255,43 @@ The officers in a board run are the five /exec boards, by internal id:
 | Regulatório | `cro` | Rules, deadlines, standards. Challenges Produto and Risco. |
 
 #325 is closed as superseded. #342 now means adding the client's risk-appetite input to Risco.
+
+## Amendment 2026-11-15 (owner review): whose board, and how far away is each competitor
+
+Three assumptions were implicit in M0 and are now explicit.
+
+1. **The brief serves the client's own board.** M0 had one `target`, so the dry run (#338)
+   made the fictional Banco Aurora both the bank the facts were about and the bank whose
+   board decides. A brief now has two roles:
+   - **focal**: the client's own institution, whose board decides. One per tenant
+     (`focal_entity` on the tenant config). It is never taken from a request.
+   - **subject**: the entity or event prompting the question. It defaults to the focal
+     institution ("we were downgraded") and may be a competitor ("Itaú cut card rates").
+   The focal institution is set by the **customer onboarding process**: mostly automated,
+   it runs once the customer has accepted the terms and approved the contract. That process
+   is still to be designed (own story). A tenant without a focal institution cannot start a
+   brief.
+2. **Outside-in stays the boundary.** Officers infer only from public data about the focal
+   institution, its competitors and the market. Internal data remains M3 (#341).
+3. **Decisions revolve around competitor signals, weighted by distance.** M0 picked peers
+   as "the largest in the same industry" (size only, measured from the target) and gave
+   every peer fact the same weight. Instead:
+   - **Proximity.** Code, not the model, computes a score from the focal institution to
+     each competitor over dimensions the feed already carries:
+     - size (assets, loan book, market share);
+     - market overlap (industries, Product Radar products);
+     - business model (lending mix, retail deposits vs wholesale funding);
+     - prudential profile (Basileia, leverage, LCR and NPL bands);
+     - competitive pressure (threat score and momentum).
+     Weights live in a versioned config, so evaluation (#339/#340) can tune them.
+   - **Pack.** Peers are the focal institution's nearest neighbours by proximity, plus the
+     subject when it is a competitor. Each peer has an `f-proximity-<peer>` fact with its
+     per-dimension components and cited inputs.
+   - **Contracts and synthesis.** Every position is framed as "what this means for the
+     focal institution". A competitor signal an option relies on carries its proximity;
+     a distant competitor's move may be cited, with its distance stated.
+   - **Board pack.** A competitor table (proximity and components). Dissents may contest
+     a distance.
 
 ## Consequences
 
