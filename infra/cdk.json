@@ -23,6 +23,21 @@
     "alertEmail": "marcioyoshida@gmail.com",
     "gdelt_bridge_ready": "1",
     "gcp_project": "onssa-508623",
+    "board": {
+      "site_bucket": "oncaprototypestack-oncadashboardsitefdbca924-eu9minmw6ljv",
+      "tenant_config_table": "OncaPrototypeStack-OncaTenantConfigCADB28F8-IM6BJDHGUAPH",
+      "api_usage_table": "onca-api-usage",
+      "model_keys_table": "OncaPrototypeStack-OncaModelKeysF6E28FA6-1S55ND2GJIYKY",
+      "model_key_kms_arn": "arn:aws:kms:us-east-1:668449743071:key/2df8c471-24dd-44e2-b352-3205a771415c",
+      "broker_role_arn": "arn:aws:iam::668449743071:role/onca-client-model-broker",
+      "guardrail_id": "o7en9enbllvk",
+      "guardrail_version": "2",
+      "synth_model_id": "amazon.nova-lite-v1:0",
+      "model_profiles": {
+        "amazon.nova-micro-v1:0": "arn:aws:bedrock:us-east-1:668449743071:application-inference-profile/76swhzg1u2xa",
+        "amazon.nova-lite-v1:0": "arn:aws:bedrock:us-east-1:668449743071:application-inference-profile/id71iwyvauq9"
+      }
+    },
     "onboard": {
       "tenant_config_table": "OncaPrototypeStack-OncaTenantConfigCADB28F8-IM6BJDHGUAPH",
       "federated_map_table": "OncaPrototypeStack-OncaFederatedTenantMapTableDD7187F6-14H066V17QZ1M",

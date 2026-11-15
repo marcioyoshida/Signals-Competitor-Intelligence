@@ -2481,7 +2481,12 @@ class OncaPrototypeStack(Stack):
             role_name="onca-client-model-broker",
             description="Onça BYOK: assumes clients' own Bedrock roles with their external id (#350)",
             assumed_by=iam.CompositePrincipal(*[
-                iam.ArnPrincipal(_fn.role.role_arn) for _fn in (act_fn, agent_fn, agent_api_fn)]),
+                iam.ArnPrincipal(_fn.role.role_arn) for _fn in (act_fn, agent_fn, agent_api_fn)],
+                # #322: the board brief runner (OncaBoardStack, fixed role name). By ARN string,
+                # not a token: IAM rejects a principal that does not exist, so OncaBoardStack
+                # must be deployed BEFORE this line reaches the main stack.
+                *([iam.ArnPrincipal(f"arn:aws:iam::{self.account}:role/onca-board-runner")]
+                  if self.node.try_get_context("board") else [])),
             max_session_duration=Duration.hours(1),
         )
         model_broker.apply_removal_policy(RemovalPolicy.RETAIN)
@@ -4518,6 +4523,17 @@ if _onboard_names:
                      **_onboard_names)
 else:
     print(f"WARNING: no '{ONBOARD_CONTEXT_KEY}' cdk context; OncaOnboardStack is not synthesized")
+# #322 — the board brief orchestrator (ADR 031), its own stack for the same resource-limit
+# reason; main-stack resources come in by NAME from the "board" cdk.json context.
+from board_stack import CONTEXT_KEY as BOARD_CONTEXT_KEY  # noqa: E402
+from board_stack import OncaBoardStack, board_names  # noqa: E402
+
+_board_names = board_names(app.node.try_get_context(BOARD_CONTEXT_KEY))
+if _board_names:
+    OncaBoardStack(app, "OncaBoardStack", runtime=LAMBDA_RUNTIME, asset=LAMBDA_ASSET,
+                   **_board_names)
+else:
+    print(f"WARNING: no '{BOARD_CONTEXT_KEY}' cdk context; OncaBoardStack is not synthesized")
 # App-wide identification + Cost Explorer allocation tag across every resource in both
 # stacks (the standalone "tr:project-name" tag OncaPrototypeStack used to carry alongside
 # this one was retired 2026-09-14 — every fork now rolls up under this single "project" key).
