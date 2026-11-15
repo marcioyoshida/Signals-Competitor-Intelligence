@@ -1,0 +1,27 @@
+{
+  "version": "2026-11-15.1",
+  "note": "Board brief competitor proximity (#385, ADR 031 amendment 2026-11-15). Weights are a starting point; #339/#340 tune them on historic episodes. A new version replaces this file; never edit a version in place once a run has used it.",
+  "weights": {
+    "size": 0.30,
+    "market": 0.20,
+    "business_model": 0.20,
+    "prudential": 0.15,
+    "pressure": 0.15
+  },
+  "size": {
+    "orders_of_magnitude_to_zero": 2.0
+  },
+  "business_model": {
+    "credito_captacoes_pct": 40.0,
+    "custo_credito_pct": 5.0,
+    "opex_ativo_pct": 2.0,
+    "roa_pct": 1.5
+  },
+  "prudential": {
+    "indice_basileia": 5.0,
+    "razao_alavancagem": 4.0,
+    "lcr_pct": 80.0,
+    "npl_total": 3.0
+  },
+  "min_coverage": 0.7
+}
