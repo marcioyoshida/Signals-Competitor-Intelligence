@@ -93,3 +93,35 @@ def test_projected_card_keeps_source_acts_for_scoping():
                                             "industries": ["banking"], "severity": "medium"}]}
     card = feed_builder._project_item(n)
     assert card["source_acts"] == [{"ref": "Instrução Normativa BCB 788", "industries": ["banking"]}]
+
+
+def test_deadline_cue_stops_at_the_sentence_not_the_annex_table():
+    from src.synth import regulatory
+    text = ("Art. 3º Esta Resolução entra em vigor no dia 1º de fevereiro de 2027. ANEXO I "
+            "ANEXO I DA RESOLUÇÃO NORMATIVA Nº 465/2021 PROCEDIMENTO SUBGRUPO GRUPO CAPÍTULO OD AMB")
+    ad = regulatory.act_deadline(text, "2026-11-16")
+    assert ad["date"] == "2027-02-01"
+    assert ad["cue"].endswith("2027.") and "anexo" not in ad["cue"]
+
+
+def test_ans_rule_names_tracked_market_operators_but_not_staff_plans():
+    from src.synth import regulatory
+    idx = {"records": {
+        "a": {"entity": "bradesco-saude", "company": "BRADESCO SAÚDE S.A.",
+              "modalidade": "Seguradora Especializada em Saúde", "beneficiaries": 3373042},
+        "b": {"entity": "sulamerica-saude", "company": "SUL AMERICA COMPANHIA DE SEGURO SAÚDE",
+              "modalidade": "Seguradora Especializada em Saúde", "beneficiaries": 4947527},
+        "c": {"entity": "caixa", "company": "CAIXA ECONÔMICA FEDERAL",
+              "modalidade": "Autogestão", "beneficiaries": 272176}}}
+    ops = regulatory.ans_operators(idx)
+    assert [o["entity"] for o in ops] == ["sulamerica-saude", "bradesco-saude"]
+    assert regulatory.exposed_for("rn-ans-683", ops) == ops
+    assert regulatory.exposed_for("res-susep-96", ops) == []
+    cand = {"instrument": "rn-ans-683", "label": "Resolução Normativa ANS 683",
+            "domain": "Seguros & previdência", "industries": ["insurance"],
+            "industries_source": "federal_acts", "drivers": [], "mentions": 1,
+            "deadline": None, "days_to_deadline": None, "signature": "x", "latest": "2026-11-16",
+            "exposed": ops}
+    card = regulatory.build_narrative(cand)
+    assert card["entities"] == ["sulamerica-saude", "bradesco-saude"]
+    assert "BRADESCO SAÚDE S.A." in card["narrative"] and "CAIXA" not in card["narrative"]

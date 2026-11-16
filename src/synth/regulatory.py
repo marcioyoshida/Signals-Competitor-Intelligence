@@ -246,6 +246,14 @@ _ACT_DEADLINE_CUE = re.compile(
 _ACT_CUE_SPAN = 160
 
 
+def _cue_text(win: str, date_end: int) -> str:
+    """The cue sentence: from the trigger through the matched date, stopped at the next
+    sentence end — not a fixed window (RN ANS 683's ran into the annex table header)."""
+    tail = re.search(r"[.;:](?:\s|$)", win[date_end:])
+    cut = date_end + tail.start() + 1 if tail else len(win)
+    return re.sub(r"\s+", " ", win[:cut]).strip()[:_ACT_CUE_SPAN]
+
+
 def act_deadline(text: str, as_of: str, horizon: int = DEADLINE_HORIZON) -> dict[str, Any] | None:
     """Nearest future date (within ``horizon`` days) that follows an effective-date cue in
     an act's own text: {"date", "cue"} or None. Pure, deterministic, no LLM."""
@@ -257,20 +265,22 @@ def act_deadline(text: str, as_of: str, horizon: int = DEADLINE_HORIZON) -> dict
     best: tuple[dt.date, str] | None = None
     for m in _ACT_DEADLINE_CUE.finditer(t):
         win = t[m.start(): m.end() + _ACT_CUE_SPAN]
-        found: list[dt.date] = []
-        for d, mon, y in _DATE_TXT.findall(win):
+        found: list[tuple[dt.date, int]] = []
+        for dm in _DATE_TXT.finditer(win):
+            d, mon, y = dm.groups()[:3]
             try:
-                found.append(dt.date(int(y), _MONTHS[mon], int(d)))
+                found.append((dt.date(int(y), _MONTHS[mon], int(d)), dm.end()))
             except (ValueError, KeyError):
                 continue
-        for d, mo, y in _DATE_NUM.findall(win):
+        for dm in _DATE_NUM.finditer(win):
+            d, mo, y = dm.groups()[:3]
             try:
-                found.append(dt.date(int(y), int(mo), int(d)))
+                found.append((dt.date(int(y), int(mo), int(d)), dm.end()))
             except ValueError:
                 continue
-        for x in found:
+        for x, end in found:
             if 0 < (x - as_of_d).days <= horizon and (best is None or x < best[0]):
-                best = (x, re.sub(r"\s+", " ", win).strip()[:_ACT_CUE_SPAN])
+                best = (x, _cue_text(win, end))
     return {"date": best[0].isoformat(), "cue": best[1]} if best else None
 
 
@@ -701,6 +711,37 @@ def _instrument_citations(instrument_key: str, label: str,
     return out
 
 
+# An ANS rule binds the health-plan operators ANS registers. The ANS IGR store (#140) already
+# resolves those operators to registry entities by CNPJ (via ANS cadop, never by name), so an
+# ANS instrument card names exactly those — the exposed tracked operators, not a per-entity
+# compliance finding. Other regulators' rules stay entity-less (sector-wide, #70).
+ANS_INSTRUMENT_PREFIXES = ("rn-ans-",)
+
+
+def ans_operators(index: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """[{entity, company, beneficiaries}] from the ANS IGR index, largest book first."""
+    out = []
+    for r in ((index or {}).get("records") or {}).values():
+        # Autogestão = an employer's self-managed staff plan (Caixa's resolves to the bank
+        # itself): not a market operator, and linking it would scope the card onto banking
+        if isinstance(r, dict) and r.get("entity") and not _norm(r.get("modalidade") or "").startswith("autogest"):
+            out.append({"entity": r["entity"], "company": r.get("company") or r["entity"],
+                        "beneficiaries": r.get("beneficiaries") or 0})
+    return sorted(out, key=lambda o: (-int(o["beneficiaries"] or 0), o["entity"]))
+
+
+def exposed_for(instrument: str, operators: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    return list(operators or []) if instrument.startswith(ANS_INSTRUMENT_PREFIXES) else []
+
+
+def _exposed_sentence(exposed: list[dict[str, Any]] | None) -> str:
+    if not exposed:
+        return ""
+    names = ", ".join(o["company"] for o in exposed)
+    return (f" Operadoras de saúde acompanhadas sob regulação da ANS: {names} "
+            "(registro ANS → CNPJ; exposição, não avaliação de conformidade).")
+
+
 def build_narrative(cand: dict[str, Any], *, change_record: dict[str, Any] | None = None,
                     consolidated: dict[str, Any] | None = None) -> dict[str, Any]:
     """Heuristic pt-BR regulatory-radar card — sourced instrument, labeled inference."""
@@ -733,6 +774,7 @@ def build_narrative(cand: dict[str, Any], *, change_record: dict[str, Any] | Non
         head += _deadline_basis(cand) + "."
     ind_pt = ", ".join(_INDUSTRY_PT.get(s, s) for s in industries)
     head += f" Afeta: {domain} (exposição provável: {ind_pt})."
+    head += _exposed_sentence(cand.get("exposed"))
     # ADR 009 Phase A: enumerate the act's own declared changes (amends/revokes/…).
     changes = reg_change.parse_changes(
         " ".join((d.get("narrative") or "") for d in drivers)[:3000],
@@ -772,7 +814,7 @@ def build_narrative(cand: dict[str, Any], *, change_record: dict[str, Any] | Non
         "deadline_cue": cand.get("deadline_cue"),
         "signature": cand["signature"],
         "entity": None,
-        "entities": [],
+        "entities": [o["entity"] for o in cand.get("exposed") or []],
         "lenses": ["regulatory"],
         "is_alert": is_alert,
         "is_inference": True,
@@ -978,6 +1020,7 @@ def build_lifecycle_card(lc: dict[str, Any]) -> dict[str, Any]:
         head += f" Prazo: vence em {_fmt(deadline)}" + (f" (faltam {dtd} dias)" if dtd is not None else "")
         head += _deadline_basis(lc) + "."
     head += f" Afeta: {lc['domain']} (exposição provável: {ind_pt})."
+    head += _exposed_sentence(lc.get("exposed"))
     if changes:
         head += f" Mudanças: {reg_change.summarize_changes(changes)}."
     head += consolidated_sentence(lc.get("consolidated"))
@@ -1012,7 +1055,7 @@ def build_lifecycle_card(lc: dict[str, Any]) -> dict[str, Any]:
         "stages_seen": lc["stages_seen"],
         "n_developments": lc["n_dates"],
         "entity": None,
-        "entities": [],
+        "entities": [o["entity"] for o in lc.get("exposed") or []],
         "lenses": ["regulatory"],
         "is_alert": alert,
         "is_inference": True,
@@ -1230,6 +1273,16 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         except Exception as exc:  # pragma: no cover - best-effort, never blocks
             print(f"Warning: act deadlines failed: {exc}")
     cands = nominate(recent, as_of=run_date, act_deadlines=act_dl)
+    # ANS rules → the tracked health-plan operators (CNPJ-resolved by the ANS IGR store)
+    ans_ops: list[dict[str, Any]] = []
+    try:
+        from src.ingest import ans_igr
+
+        ans_ops = ans_operators(ans_igr.load_index(digests_bucket, s3=s3))
+    except Exception as exc:  # pragma: no cover - best-effort, never blocks
+        print(f"Warning: ANS operators unavailable: {exc}")
+    for cand in cands:
+        cand["exposed"] = exposed_for(cand["instrument"], ans_ops)
 
     # ADR 009 §3: rate changes with a bounded LLM (labeled inference). Gated OFF by default
     # (Bedrock cost). One shared budget across radar cards + lifecycles; the concrete
@@ -1306,6 +1359,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             print(f"reg change-records: drafted={n_records}")
         for key_, lc in lifecycles.items():
             lc["consolidated"] = _consolidated(key_)
+            lc["exposed"] = exposed_for(key_, ans_ops)
         n_lifecycles = publish_lifecycles(lifecycles, digests_bucket, s3=s3, as_of=run_date)
     except Exception as exc:  # pragma: no cover - best-effort
         print(f"Warning: regulatory lifecycle publish failed: {exc}")
