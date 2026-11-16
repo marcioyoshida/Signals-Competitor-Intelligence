@@ -1,0 +1,4 @@
+{
+  "_doc": "#332 link-only agency rating pointers. One row per rating action: entity_id (registry id), agency (sp|fitch|moodys), date (YYYY-MM-DD), action (upgrade|downgrade|affirm|assign|outlook|withdraw|review), optional old_rating/new_rating/outlook/note, and url on the agency's own domain. Entered by a person from the agency's public release; nothing is fetched from agency sites and no release text is stored. Validated by src/ingest/rating_events.validate_pointer.",
+  "pointers": []
+}
