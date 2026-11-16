@@ -1,0 +1,79 @@
+#!/usr/bin/env python3
+"""Backfill CVM IPE for financial institutions from 2014 (#331): material facts + board minutes.
+
+    AWS_PROFILE=my2027 .venv/bin/python scripts/backfill_cvm_ipe.py [--dry-run]
+        [--start 2014] [--end YYYY] [--refetch 2]
+
+Idempotent. A past year's file is immutable, so it is skipped once stored. The newest
+``--refetch`` years (default 2) are always rebuilt, because CVM keeps adding late filings and
+new versions. The filter and attribution come from the dated entity map (#330), which must
+already be in the bucket. Reads CVM's public ZIPs, writes only ``board_history/cvm_ipe/``. It
+makes no model calls.
+"""
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import sys
+import time
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from src.ingest import bcb_entity_history as eh  # noqa: E402
+from src.ingest import cvm_ipe  # noqa: E402
+from src.ingest import cvm_ipe_history as h  # noqa: E402
+
+BUCKET = "onca-digests-668449743071"
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap.add_argument("--bucket", default=BUCKET)
+    ap.add_argument("--start", type=int, default=h.FIRST_YEAR)
+    ap.add_argument("--end", type=int, default=dt.date.today().year)
+    ap.add_argument("--refetch", type=int, default=2, help="always rebuild the newest N years")
+    ap.add_argument("--dry-run", action="store_true", help="build and report; write nothing")
+    args = ap.parse_args()
+
+    import boto3
+    s3 = boto3.client("s3")
+    emap = eh.load_map(s3, args.bucket)
+    if not emap or not emap.get("roots"):
+        print(f"no entity map at s3://{args.bucket}/{eh.MAP_KEY}: run scripts/build_entity_history.py first")
+        return 1
+    print(f"entity map: {len(h.fi_roots(emap))} CNPJ roots")
+
+    years = list(range(args.start, args.end + 1))
+    fresh = set(years[-args.refetch:]) if args.refetch else set()
+    summary: dict[int, dict] = {}
+    for y in years:
+        if y not in fresh:
+            old = h.get_year(s3, args.bucket, y)
+            if old:
+                summary[y] = {k: v for k, v in old.items() if k != "rows"}
+                print(f"{y}: stored, {old['records']} records (skipped)")
+                continue
+        content = cvm_ipe._fetch_year_zip(y)
+        if not content:
+            print(f"{y}: no ZIP published")
+            continue
+        rows = h.select(h.year_records(content), emap)
+        s = h.summarize(rows)
+        print(f"{y}: {len(content):,} B → {s['records']} records from {s['filers']} filers, "
+              f"{s['attributed']} attributed; {s['by_class']}")
+        if not args.dry_run:
+            summary[y] = h.put_year(s3, args.bucket, y, rows, source_bytes=len(content))
+        time.sleep(1)  # polite to CVM
+    if args.dry_run:
+        print("dry run: nothing written")
+        return 0
+    if summary:
+        h.put_manifest(s3, args.bucket, summary, dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"))
+        print(f"wrote s3://{args.bucket}/{h.MANIFEST_KEY} ({len(summary)} years)")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -212,8 +212,8 @@ actually did, read from CVM board minutes (M1).
 
 | Need | Source | Status |
 |---|---|---|
-| Rating events, material facts | CVM IPE yearly ZIPs (Fato Relevante, Comunicado ao Mercado) | `cvm_ipe.py` reads 45 days; backfill from 2014 |
-| What boards decided (answer key) | CVM IPE board minutes (Ata de RCA) | Same dataset, category not read yet |
+| Rating events, material facts | CVM IPE yearly ZIPs (Fato Relevante, Comunicado ao Mercado) | **Built (#331).** 2014 onward in `board_history/cvm_ipe/{year}.json.gz`, financial institutions only (CNPJ root in the #330 map), owner at the meeting date. A foreign parent's relayed SEC forms and a BDR depositary's paperwork are dropped. The live reader still keeps 45 days |
+| What boards decided (answer key) | CVM IPE board minutes (Ata de RCA) | **Built (#331).** "Reunião da Administração" / "Conselho de Administração", Ata and Sumário das Decisões: 5,560 rows 2014–2026, flagged `answer_key`. `events_for()` splits triggers from decisions |
 | Agency rating actions | S&P, Fitch, Moody's sites | Link-only pointers (date, notch, outlook). Terms restrict text reuse. |
 | Capital, liquidity, funding history | IF.data quarterly, COSIF monthly, KM1 | Latest only; backfill with `as_of` |
 | Price pass-through | BCB `taxaJuros` v2 | Daily series goes back to 2012-01-02 (probed 2026-11-05); backfill |
