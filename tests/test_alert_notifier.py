@@ -56,3 +56,49 @@ def test_lambda_handler_ignores_malformed_or_non_alarm_records(monkeypatch):
     ]}
     resp = alert_notifier.lambda_handler(event, None)
     assert json.loads(resp["body"])["sent"] == []
+
+
+# 2026-11-16: board alarms arrived titled "Briefing semanal · Estratégia — Onça", with the
+# digest's "Movimentos: 0 · …" line, and three OK mails from new alarms' first evaluation.
+
+def test_alert_email_has_its_own_title_and_no_digest_metrics():
+    from src.dashboard import weekly_digest
+    seen = []
+    report = weekly_digest.send_alert("🚨 X — ALARM: boom", title="🚨 Alarme: X",
+                                      email_sender=lambda *a: seen.append(a),
+                                      teams_poster=lambda *a, **k: None, slack_poster=lambda *a, **k: None)
+    assert report is not None
+    subject, text, html = weekly_digest.format_email(
+        {"title": "🚨 Alarme: X", "headline": "🚨 X — ALARM: boom", "lines": []})
+    assert subject == "🚨 Alarme: X — Onça" and "Briefing semanal" not in subject + text + html
+    assert "Movimentos" not in text and "Top prioridades" not in text
+    default = weekly_digest.format_email({"title": "Alerta operacional", "headline": "h", "lines": []})[0]
+    assert "Briefing" not in default
+
+
+def test_titles_name_the_state_and_alarm():
+    t = alert_notifier._title
+    assert t({"AlarmName": "Onca-BoardRunFailures", "NewStateValue": "ALARM"}) == "🚨 Alarme: Onca-BoardRunFailures"
+    assert t({"AlarmName": "Onca-Canary", "NewStateValue": "OK"}) == "✅ Normalizado: Onca-Canary"
+
+
+def test_recovery_text_does_not_read_like_a_new_problem():
+    h = alert_notifier._headline({"AlarmName": "Onca-BoardRunDuration", "NewStateValue": "OK",
+                                  "AlarmDescription": "A board brief task ran over 12 min.",
+                                  "NewStateReason": "r"})
+    assert "voltou ao normal" in h and "Condição monitorada: A board brief task ran over 12 min." in h
+
+
+def test_first_evaluation_ok_is_not_sent_but_a_real_recovery_is(monkeypatch):
+    sent = []
+    monkeypatch.setattr(alert_notifier.weekly_digest, "send_alert",
+                        lambda headline, **kw: sent.append((headline, kw.get("title"))) or {"email": True})
+    event = _sns_event(
+        {"AlarmName": "Onca-New", "NewStateValue": "OK", "OldStateValue": "INSUFFICIENT_DATA"},
+        {"AlarmName": "Onca-Fixed", "NewStateValue": "OK", "OldStateValue": "ALARM"},
+        {"AlarmName": "Onca-Broke", "NewStateValue": "ALARM", "OldStateValue": "INSUFFICIENT_DATA"},
+        {"AlarmName": "OncaCoverageAlarm-x", "NewStateValue": "ALARM"})     # synthetic, no OldState
+    body = json.loads(alert_notifier.lambda_handler(event, None)["body"])
+    assert [t for _, t in sent] == ["✅ Normalizado: Onca-Fixed", "🚨 Alarme: Onca-Broke",
+                                    "🚨 Alarme: OncaCoverageAlarm-x"]
+    assert body["sent"][0] == {"alarm": "Onca-New", "state": "OK", "skipped": "first evaluation"}

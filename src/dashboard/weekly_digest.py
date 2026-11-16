@@ -415,14 +415,16 @@ def delivered(report: dict[str, Any] | None) -> bool:
     return any(v is True for v in (report or {}).values())
 
 
-def send_alert(headline: str, *, dashboard_url: str | None = None,
+def send_alert(headline: str, *, title: str | None = None, dashboard_url: str | None = None,
               teams_poster: Poster | None = None, slack_poster: Poster | None = None,
               email_sender: EmailSender | None = None) -> dict[str, bool | None]:
     """Push a one-line OPERATIONAL alert (pipeline failure, stale feed) to the same three
     channels as the weekly digest. Deliberately reuses `format_teams`/`format_slack`/
     `format_email` with a bare `{"headline": ...}` — those already render gracefully with
     empty metrics/priorities, so this needed no new formatting code, just a new caller."""
-    w = {"headline": headline}
+    # An alert has its own title (never the weekly briefing's "Briefing semanal · Estratégia") and
+    # an empty ``lines`` list, which also drops the digest's metric line ("Movimentos: 0 · …").
+    w = {"title": title or "Alerta operacional", "headline": headline, "lines": []}
     return {
         "teams": send_teams(w, dashboard_url=dashboard_url, poster=teams_poster),
         "slack": send_slack(w, dashboard_url=dashboard_url, poster=slack_poster),
