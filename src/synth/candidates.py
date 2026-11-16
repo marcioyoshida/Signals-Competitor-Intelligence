@@ -182,7 +182,9 @@ def extract_candidates(
         # #275: a routine (low-severity) act is never fused and never an alert; only a normative
         # one (a rule change) keeps a solo card — a routine Comunicado yields none.
         routine = _is_routine_act(reg)
-        if routine and not _is_normative(reg):
+        # an act about the regulator's own administration (staff health plan, internal rules)
+        # binds no supervised institution: no card, even though it is a Resolução
+        if routine and (not _is_normative(reg) or reg.get("internal_admin")):
             if rid:
                 used_ids.add(rid)
             continue
@@ -538,6 +540,25 @@ def _candidate_from_cluster(
     }
 
 
+_ACT_LENSES = ("regulatory", "dou", "cvm_normas")
+
+
+def _is_official_act(sig: dict[str, Any]) -> bool:
+    return sig.get("kind") == "regulatory" or sig.get("_lens") in _ACT_LENSES
+
+
+def _act_key(sig: dict[str, Any]) -> str | None:
+    from src.synth import regulatory  # lazy: regulatory imports the synth stack
+    ref = sig.get("title") or " ".join(str(x) for x in (sig.get("doc_type"), sig.get("number")) if x)
+    return regulatory.own_instrument(ref)
+
+
+def _same_instrument(a: dict[str, Any], b: dict[str, Any]) -> bool:
+    """The same act from two sources (the BCB page and its DOU publication) may still fuse."""
+    ka = _act_key(a)
+    return bool(ka) and ka == _act_key(b)
+
+
 def _soft_related(
     seed: dict[str, Any],
     signals: list[dict[str, Any]],
@@ -567,6 +588,8 @@ def _soft_related(
         if not shares_entity:
             if seed_ents:
                 continue  # specific-subject seed → no cross-entity fusion
+            if _is_official_act(seed) and _is_official_act(sig) and not _same_instrument(seed, sig):
+                continue  # two different acts are two stories (BCB IN 788 ≠ SPA/MF IN 32)
             if sig.get("_lens") in STRUCTURED_SUBJECT_LENSES and not sig_ents:
                 continue  # untracked institution's own filing → a different subject
         # Payments-domain link (Pix). Only REACHABLE now for a systemic seed or a

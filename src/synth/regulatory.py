@@ -82,7 +82,7 @@ def _days_between(a: str, b: str) -> int | None:
 _NUM = r"(\d[\d.]*\d|\d)"
 
 _INSTRUMENTS = [
-    ("in-bcb", "Instrução Normativa BCB {n}", re.compile(r"instrucao normativa\s*bcb[:\s]*" + _NUM)),
+    ("in-bcb", "Instrução Normativa BCB {n}", re.compile(r"instrucao normativa\s*bcb\s*(?:n[o]?\s*)?[:\s]*" + _NUM)),
     ("res-bcb", "Resolução BCB {n}", re.compile(r"resolucao\s+bcb\s*(?:n[o]?\s*)?[:\s]*" + _NUM)),
     ("res-cmn", "Resolução CMN {n}", re.compile(r"resolucao\s+cmn\s*(?:n[o]?\s*)?[:\s]*" + _NUM)),
     ("res-cvm", "Resolução CVM {n}", re.compile(r"resolucao\s+cvm\s*(?:n[o]?\s*)?[:\s]*" + _NUM)),
@@ -910,7 +910,9 @@ def consolidated_for(instrument_key: str, index: dict[str, Any] | None, *,
             continue
         d = v.get("diff")
         age = _days_between(as_of, v.get("fetched") or "")
-        if d and age is not None and 0 <= age <= CONSOLIDATED_DIFF_DAYS:
+        # a re-layout of the same text (0 units changed) is not a change to report
+        real = d and (d.get("added") or d.get("removed") or d.get("modified"))
+        if real and age is not None and 0 <= age <= CONSOLIDATED_DIFF_DAYS:
             diff = {"summary": d.get("summary"), "found": v.get("fetched"),
                     "added": d.get("added"), "removed": d.get("removed"),
                     "modified": d.get("modified")}

@@ -956,6 +956,14 @@ def build_feed(
                              if str(i).strip().lower() in keep})
             if scoped:
                 return scoped
+        # a fused regulatory card (cand-bcb:…) carries no domain: scope it by its own acts'
+        # ingest-time industries (IN BCB 788 → banking) instead of leaving it on no panel
+        act_inds = {str(i).strip().lower() for a in (c.get("source_acts") or []) if isinstance(a, dict)
+                    for i in (a.get("industries") or []) if i}
+        if act_inds and not c.get("domain"):
+            scoped = sorted(act_inds & {str(u).strip().lower() for u in _reg_universe})
+            if scoped:
+                return scoped
         dom = c.get("domain")
         if dom:
             from src.synth import regulatory

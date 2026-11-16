@@ -46,6 +46,17 @@ def _in_industry(item: dict[str, Any], slug: str | None) -> bool:
     return slug in inds
 
 
+def _is_opportunity(c: dict[str, Any]) -> bool:
+    """An O card, or a competitor's setback (sign "-" on a card about an entity). A rule's
+    sector-wide Threat (regulatory swot_hint T/-, no entity) is a burden on everyone,
+    never an opportunity (RN ANS 683 sat first in Oportunidades on 2026-11-16)."""
+    h = c.get("swot_hint") or {}
+    if h.get("dimension") == "O":
+        return True
+    if h.get("sign") != "-":
+        return False
+    return bool(c.get("entity") or c.get("entities")) and not h.get("instrument")
+
 def _threat(card: dict[str, Any]) -> float:
     """Threat on a 0–100 scale (feed threat_score is 0–1)."""
     try:
@@ -698,8 +709,7 @@ def build_cso(feed: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     headlines = sorted(news, key=lambda c: (str(c.get("date") or ""), _threat(c)), reverse=True)
     emerging = [c for c in news if str(c.get("date") or "") in recent and _threat(c) >= 60]
     risks = sorted((c for c in cards if c.get("is_alert")), key=_threat, reverse=True)
-    opps = [c for c in cards if (c.get("swot_hint") or {}).get("dimension") == "O"
-            or (c.get("swot_hint") or {}).get("sign") == "-"]
+    opps = [c for c in cards if _is_opportunity(c)]
     moves = [c for c in news if _is_move(c)]
     capital_rows = _capital_rows(feed, labels)
     momentum = _momentum(cards, dates, labels, sizes=_asset_size_index(feed),

@@ -112,6 +112,17 @@ _PERSONNEL = re.compile(
     r"\b(?:nomea\w*|nomear|exonera\w*|exonerar|designa\w*|designar|dispensa\w*|dispensar|substitut\w*"
     r"|cargo em comissao|funcao comissionada|codigo (?:cce|fce)|ferias|aposentadoria|remove\w*|redistribu\w*"
     r"|cede\w* (?:o|a) servidor|lotac\w*)\b")
+# An act about the regulator's OWN administration — its staff health plan (BCB Res. 605/2026
+# amends the PASBC), its internal rules, its org chart, a delegation of powers — binds no
+# supervised institution. Matched on the title + ementa head only: every BCB resolution cites
+# "o art. 11 do Regimento Interno do Banco Central" as its legal basis in the preamble.
+_INTERNAL_ADMIN = re.compile(
+    r"\bservidores d[oa] (?:banco central|bcb|comissao de valores mobiliarios|cvm|susep"
+    r"|superintendencia de seguros privados|previc|ans|agencia nacional de saude suplementar)\b"
+    r"|\bpasbc\b|\bassistencia a saude dos servidores\b|\bplano de saude dos servidores\b"
+    r"|\b(?:altera|aprova)\w* o regimento interno\b"
+    r"|\bestrutura organizacional d[oa] (?:banco central|bcb|cvm|susep|previc|ans)\b"
+    r"|\bdelega\w* (?:de )?competencias?\b")
 _BUDGET = re.compile(
     r"\b(?:credito (?:suplementar|especial|extraordinario)|abre ao orcamento|dotac\w*|remanejament\w*"
     r"|orcamento (?:fiscal|da seguridade)|programacao orcamentaria|limites? de (?:movimentacao|pagamento))\b")
@@ -305,6 +316,10 @@ def classify(rec: dict[str, Any], *, vocab: dict[str, list[str]] | None = None,
     that CITES one of them inherits its industries (union with its own) — the implementing
     Portaria of a ban is a betting act even if its ementa never says "apostas"."""
     title, ementa, art1 = _lead(rec)
+    if _INTERNAL_ADMIN.search(f"{title} {ementa[:400]}"):
+        return {"industries": [], "industries_basis": None, "severity": "low",
+                "severity_reason": "internal administrative act", "cites": [], "compliance": [],
+                "internal": True}
     # the issuing organ is part of the lead for INDUSTRY matching only: an SPA act is a betting
     # act even when its snippet is cut mid-name ("SECRETARIA ... DE PRÊMIOS E APOSTAS")
     lead = f"{fold(rec.get('organ'))} {title} {ementa} {art1}"
@@ -423,4 +438,8 @@ def annotate(records: Iterable[dict[str, Any]], *, vocab: dict[str, list[str]] |
             rec.pop("compliance_tags", None)
         rec["severity"] = c["severity"]
         rec["severity_reason"] = c["severity_reason"]
+        if c.get("internal"):  # the regulator's own administration: never a card
+            rec["internal_admin"] = True
+        else:
+            rec.pop("internal_admin", None)
     return recs

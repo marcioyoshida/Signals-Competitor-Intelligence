@@ -21,10 +21,33 @@ _ANEXO_RX = re.compile(r"(?im)^\s*(anexo\s+[ivxlcdm\d]+|anexo)\b")
 
 
 def _norm(text: str) -> str:
-    """Whitespace/case-insensitive normalization for equality (not for display)."""
+    """Whitespace/case-insensitive normalization for equality (not for display). Also folds
+    the two layout artefacts that differ between the DOU and BCB copies of one act: the
+    dotted placeholder of an amended article ("7º ......" of any length) and a spaced-out
+    enacting word ("R E S O L V E")."""
     t = unicodedata.normalize("NFKD", str(text or ""))
     t = "".join(c for c in t if not unicodedata.combining(c))
-    return re.sub(r"\s+", " ", t).strip().lower()
+    t = re.sub(r"\s+", " ", t).strip().lower()
+    t = re.sub(r"(?:\s*[.\u2026]){3,}", " … ", t)
+    t = re.sub(r"\b(?:[a-z] ){3,}[a-z]\b", lambda m: m.group(0).replace(" ", ""), t)
+    return re.sub(r"\s+", " ", t).strip()
+
+
+# The heading + ementa an act's own page puts above its preamble ("RESOLUÇÃO BCB Nº 605, DE
+# 13 DE NOVEMBRO DE 2026 Altera o Regulamento…") that another copy leaves out.
+_OWN_HEADING = re.compile(
+    r"^(?:resolucao|instrucao normativa|circular|carta circular|portaria|resolucao normativa"
+    r"|deliberacao|comunicado)\b")
+
+
+def _same_unit(key: str, old: str, new: str) -> bool:
+    a, b = _norm(old), _norm(new)
+    if a == b:
+        return True
+    if key != "preamble" or not a or not b:
+        return False
+    short, long_ = sorted((a, b), key=len)
+    return long_.endswith(short) and bool(_OWN_HEADING.match(long_))
 
 
 def _unit_key(header: str) -> str:
@@ -91,7 +114,7 @@ def diff_versions(old_text: str, new_text: str) -> dict[str, Any]:
         o, n = old_units.get(key), new_units.get(key)
         label = (n or o)["label"]
         if o and n:
-            if _norm(o["text"]) == _norm(n["text"]):
+            if _same_unit(key, o["text"], n["text"]):
                 sections.append({"key": key, "label": label, "status": "unchanged"})
             else:
                 modified.append(key)
