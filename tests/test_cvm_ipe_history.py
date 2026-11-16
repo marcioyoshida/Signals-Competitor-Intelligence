@@ -154,3 +154,27 @@ def test_a_bdr_depositarys_notices_are_dropped_but_its_board_minutes_kept():
         row(db, "Reunião da Administração", "Conselho de Administração", "Ata", proto="2"),
         row(db, "Fato Relevante", proto="3")])), emap)
     assert sorted(r["doc_class"] for r in rows) == ["ata_rca", "fato_relevante"]
+
+
+def test_insurer_roots_from_the_registry_and_the_susep_list():
+    reg_roots = {"61198164": "porto_seguro", "60746948": "bradesco", "33376989": "irb"}
+    got = h.insurer_roots(reg_roots, {"porto_seguro", "irb"}, ["33376989", "99999999", "", "123"])
+    assert got == {"61198164": "porto_seguro", "33376989": "irb", "99999999": None}
+
+
+def test_insurers_are_kept_and_banks_keep_their_dated_attribution():
+    recs = list(h.year_records(zipped([
+        row("61.198.164/0001-60", "Fato Relevante", proto="10", nome="PORTO SEGURO"),
+        row("60.746.948/0001-12", "Fato Relevante", proto="11"),
+        row("01.701.201/0001-89", "Reunião da Administração", "Conselho de Administração", "Ata",
+            proto="12"),
+        row("11.111.111/0001-11", "Fato Relevante", proto="13", nome="VAREJO SA")])))
+    extra = {"61198164": "porto_seguro", "60746948": "bradesco_seguros"}   # 6074 stays BCB-dated
+    rows = {r["protocol"]: r for r in h.select(recs, EMAP, extra)}
+    assert set(rows) == {"10", "11", "12"}
+    assert (rows["10"]["entity_id"], rows["10"]["regulator"], rows["10"]["attribution"]) == (
+        "porto_seguro", "susep", "registry")
+    assert (rows["11"]["entity_id"], rows["11"]["regulator"]) == ("bradesco", "bcb")
+    assert rows["12"]["entity_id"] == "hsbc" and rows["12"]["attribution"] == "dated"
+    assert h.summarize(list(rows.values()))["by_regulator"] == {"bcb": 2, "susep": 1}
+    assert {r["protocol"] for r in h.select(recs, EMAP)} == {"11", "12"}   # banks-only unchanged

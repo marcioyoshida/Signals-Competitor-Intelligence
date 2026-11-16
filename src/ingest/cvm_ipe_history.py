@@ -12,7 +12,10 @@ bank's board actually decided. Both come from the same CVM dataset, one ZIP per 
   other types and are left out.
 
 Scope is financial institutions: a filer is kept when its 8-digit CNPJ root is in the
-dated entity map (#330, every BCB-supervised root since 2000). Each record carries the
+dated entity map (#330, every BCB-supervised root since 2000), or (#388) is an insurer: a
+root the registry files under an ``insurance`` entity, or one on SUSEP's company list.
+Insurer rows carry ``regulator: "susep"`` and today's registry entity
+(``attribution: "registry"``) until the dated insurer map (#389) exists. Each record carries the
 registry entity that owned the root **on the meeting (reference) date**, through
 ``entity_at``. HSBC Bank Brasil's 2015 minutes therefore belong to HSBC, not to Bradesco.
 
@@ -93,15 +96,36 @@ def _version(rec: Mapping[str, Any]) -> int:
         return 0
 
 
-def select(records: Iterable[Mapping[str, Any]], entity_map: Mapping[str, Any]) -> list[dict[str, Any]]:
+def insurer_roots(registry_roots: Mapping[str, str], insurance_ids: Iterable[str],
+                  susep_roots: Iterable[str] = ()) -> dict[str, str | None]:
+    """#388: the SUSEP-side filers the BCB map cannot see, as {root: registry entity or None}.
+
+    A root is kept when the registry files it under an ``insurance`` entity, or when it is on
+    SUSEP's supervised-company list (then it carries whatever entity the registry has for it,
+    possibly none). There is no dated insurer map yet (#389), so these rows are attributed to
+    today's registry entity and say so with ``attribution: "registry"``."""
+    ins = set(insurance_ids)
+    out: dict[str, str | None] = {r: e for r, e in registry_roots.items() if e in ins}
+    for r in susep_roots:
+        if r and len(r) == 8:
+            out.setdefault(r, registry_roots.get(r))
+    return out
+
+
+def select(records: Iterable[Mapping[str, Any]], entity_map: Mapping[str, Any],
+           extra_roots: Mapping[str, str | None] | None = None) -> list[dict[str, Any]]:
     """Keep the four classes for financial-institution filers, one row per protocol (the
-    latest version), each attributed to its owner at the meeting date. Sorted by date."""
+    latest version), each attributed to its owner at the meeting date. Sorted by date.
+
+    ``extra_roots`` (#388) adds insurers: roots outside the BCB map, attributed to their
+    registry entity. A root in both keeps the dated BCB attribution."""
     roots = fi_roots(entity_map)
+    extra = {r: e for r, e in (extra_roots or {}).items() if r not in roots}
     best: dict[str, dict[str, Any]] = {}
     for rec in records:
         cls = doc_class(rec)
         root = (rec.get("cnpj") or "")[:8]
-        if not cls or len(root) != 8 or root not in roots:
+        if not cls or len(root) != 8 or (root not in roots and root not in extra):
             continue
         if cls == "comunicado" and (root in DEPOSITARY_ROOTS or is_relayed_sec_form(rec)):
             continue
@@ -109,10 +133,15 @@ def select(records: Iterable[Mapping[str, Any]], entity_map: Mapping[str, Any]) 
         out = {k: rec.get(k) for k in ("id", "protocol", "version", "date", "reference_date",
                                        "company", "cnpj", "category", "tipo", "especie",
                                        "subject", "url", "governance")}
-        out.update({"doc_class": cls, "answer_key": cls in ANSWER_KEY, "cnpj_root": root,
-                    "entity_id": eh.entity_at(entity_map, root, as_of) if as_of else None,
-                    "direct_entity_id": (eh.entity_at(entity_map, root, as_of, level="direct")
-                                         if as_of else None)})
+        out.update({"doc_class": cls, "answer_key": cls in ANSWER_KEY, "cnpj_root": root})
+        if root in roots:
+            out.update({"regulator": "bcb", "attribution": "dated",
+                        "entity_id": eh.entity_at(entity_map, root, as_of) if as_of else None,
+                        "direct_entity_id": (eh.entity_at(entity_map, root, as_of, level="direct")
+                                             if as_of else None)})
+        else:
+            out.update({"regulator": "susep", "attribution": "registry",
+                        "entity_id": extra[root], "direct_entity_id": extra[root]})
         key = str(rec.get("protocol") or rec.get("id"))
         if key not in best or _version(rec) >= _version(best[key]):
             best[key] = out
@@ -143,7 +172,9 @@ def summarize(rows: list[Mapping[str, Any]]) -> dict[str, Any]:
         by[r["doc_class"]] = by.get(r["doc_class"], 0) + 1
     return {"records": len(rows), "by_class": by,
             "filers": len({r["cnpj_root"] for r in rows}),
-            "attributed": sum(1 for r in rows if r.get("entity_id"))}
+            "attributed": sum(1 for r in rows if r.get("entity_id")),
+            "by_regulator": {g: sum(1 for r in rows if r.get("regulator", "bcb") == g)
+                             for g in ("bcb", "susep")}}
 
 
 # --- store ------------------------------------------------------------------------
