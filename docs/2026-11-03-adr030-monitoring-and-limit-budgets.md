@@ -55,6 +55,8 @@ incidents.
 | SES bounce rate | 10%: sending paused | `Onca-SesBounce` > 5% |
 | ACM renewal | expiry | `Onca-CertExpiry` < 30 days (renewal stalled) |
 | Step Functions state payload | 256 KB | covered by #173 S3 hand-off; listed for forks |
+| Board brief task Lambda (#329) | 15 min | `Onca-BoardRunDuration`: max ≥ 12 min/h |
+| Board brief Onça-billed tokens (#329) | 2M/day budget; 400k/run cap (code) | `Onca-BoardHostedTokens` ≥ 1.5M/day; `Onca-BoardCappedRuns` ≥ 3/day; `Onca-BoardRunFailures` ≥ 1/h |
 
 Every fork keeps a table like this in its own monitoring doc. **Any new integration with a
 platform limit adds a row before it ships.**

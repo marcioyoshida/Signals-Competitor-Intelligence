@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from typing import Any
 
 from src.board import artifact, contracts, gate, pack as packmod, runner, store
@@ -158,8 +159,28 @@ def run(event: dict[str, Any]) -> dict[str, Any]:
                      phase_status=artifact.phase_status(result),
                      feed_as_of=p.get("feed_as_of"), peers=p.get("peers"),
                      proximity=p.get("proximity") or [])
+    emit_run_metrics(usage, client_billed=target is not None, capped=meter.stop(),
+                     status=str(result["status"]))
     return {"run_id": run_id, "status": result["status"], "calls": usage["calls"],
             "n_gaps": len(result["gaps"])}
+
+
+METRIC_NAMESPACE = "Onca/Board"
+
+
+def emit_run_metrics(usage: dict[str, Any], *, client_billed: bool, capped: bool, status: str) -> dict:
+    """#329: one embedded-metric line per finished run (no API call, no IAM). Dimensionless on
+    purpose: the budget alarm sums Onça-billed tokens across tenants, and each dimension value
+    would be a billed metric. Tenant and status ride as log properties for Logs Insights."""
+    total = int(usage.get("tokens_in") or 0) + int(usage.get("tokens_out") or 0)
+    line = {"_aws": {"Timestamp": int(time.time() * 1000), "CloudWatchMetrics": [{
+        "Namespace": METRIC_NAMESPACE, "Dimensions": [[]],
+        "Metrics": [{"Name": n, "Unit": "Count"} for n in
+                    ("HostedTokens", "ClientTokens", "Runs", "CappedRuns")]}]},
+        "HostedTokens": 0 if client_billed else total, "ClientTokens": total if client_billed else 0,
+        "Runs": 1, "CappedRuns": 1 if capped else 0, "status": status, "calls": usage.get("calls")}
+    print(json.dumps(line))
+    return line
 
 
 def fail(event: dict[str, Any]) -> dict[str, Any]:

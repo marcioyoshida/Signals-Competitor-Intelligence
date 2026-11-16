@@ -22,11 +22,14 @@ from pathlib import Path
 from typing import Any
 
 from aws_cdk import CfnOutput, Duration, RemovalPolicy, Stack
+from aws_cdk import aws_cloudwatch as cw
+from aws_cdk import aws_cloudwatch_actions as cw_actions
 from aws_cdk import aws_dynamodb as ddb
 from aws_cdk import aws_iam as iam
 from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_logs as logs
 from aws_cdk import aws_s3 as s3
+from aws_cdk import aws_sns as sns
 from aws_cdk import aws_stepfunctions as sfn
 from aws_cdk import aws_stepfunctions_tasks as tasks
 from constructs import Construct
@@ -38,9 +41,19 @@ STATE_MACHINE_NAME = "onca-board-brief"
 RETENTION_DAYS = 90               # privacy policy: logs and run data (ADR 031 open question)
 RUN_TIMEOUT = Duration.minutes(15)
 
+# #329 budgets (ADR 030 layer 2: alarm on the distance to a limit, not on the limit).
+# Onça-billed (hosted) tokens are spent only for an active paid plan or an owner flag; client-
+# model runs bill the tenant and are not budgeted here. 2M/day ≈ five capped runs.
+HOSTED_DAILY_TOKEN_BUDGET = 2_000_000
+BUDGET_ALARM_AT = 0.75
+DURATION_ALARM_AT = 0.8            # of RUN_TIMEOUT, the Lambda's hard limit
+CAPPED_RUNS_PER_DAY = 3
+ALARMS = ("Onca-BoardHostedTokens", "Onca-BoardRunFailures", "Onca-BoardRunDuration",
+          "Onca-BoardCappedRuns")
+
 CONTEXT_FIELDS = ("site_bucket", "tenant_config_table", "api_usage_table", "model_keys_table",
                   "model_key_kms_arn", "broker_role_arn", "guardrail_id", "guardrail_version",
-                  "synth_model_id")
+                  "synth_model_id", "alerts_topic_arn")
 _NAME_RE = re.compile(r"[A-Za-z0-9_.:-]{3,255}")
 _ARN_RE = re.compile(r"arn:aws:[a-z0-9-]+:[a-z0-9-]*:\d{12}:[\w/:.-]+")
 
@@ -72,7 +85,8 @@ class OncaBoardStack(Stack):
                  asset: Path | str, site_bucket: str, tenant_config_table: str,
                  api_usage_table: str, model_keys_table: str, model_key_kms_arn: str,
                  broker_role_arn: str, guardrail_id: str, guardrail_version: str,
-                 synth_model_id: str, model_profiles: dict[str, str], **kwargs: Any) -> None:
+                 synth_model_id: str, model_profiles: dict[str, str], alerts_topic_arn: str,
+                 **kwargs: Any) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
         packs = s3.Bucket(
@@ -225,7 +239,57 @@ class OncaBoardStack(Stack):
             timeout=Duration.minutes(25))
 
         self.function, self.state_machine, self.runs_table, self.packs = fn, machine, runs, packs
+        self.alarms = self._alarms(fn, machine, alerts_topic_arn)
         CfnOutput(self, "BoardStateMachineArn", value=machine.state_machine_arn)
         CfnOutput(self, "BoardRunsTable", value=runs.table_name)
         CfnOutput(self, "BoardPacksBucket", value=packs.bucket_name)
         CfnOutput(self, "BoardRunnerRoleArn", value=role.role_arn)
+
+    def _alarms(self, fn: lambda_.Function, machine: sfn.StateMachine,
+                topic_arn: str) -> list[cw.Alarm]:
+        """#329: the board's spend and health alarms, on the main stack's alerts topic (by ARN,
+        like every other name this stack imports). OK is sent too (ADR 030 §6)."""
+        topic = sns.Topic.from_topic_arn(self, "OncaAlerts", topic_arn)
+        day, hour = Duration.days(1), Duration.hours(1)
+
+        def board(name: str) -> cw.Metric:
+            return cw.Metric(namespace="Onca/Board", metric_name=name, statistic="Sum", period=day)
+
+        budget = int(HOSTED_DAILY_TOKEN_BUDGET * BUDGET_ALARM_AT)
+        slow_ms = int(RUN_TIMEOUT.to_milliseconds() * DURATION_ALARM_AT)
+        failures = cw.MathExpression(
+            expression="FILL(f, 0) + FILL(t, 0) + FILL(a, 0) + FILL(e, 0)", period=hour,
+            using_metrics={"f": machine.metric_failed(period=hour),
+                           "t": machine.metric_timed_out(period=hour),
+                           "a": machine.metric_aborted(period=hour),
+                           "e": fn.metric_errors(period=hour)})
+        specs = [
+            ("Onca-BoardHostedTokens", board("HostedTokens"), budget,
+             f"Board briefs billed to Onça used over {budget:,} tokens in a day "
+             f"({BUDGET_ALARM_AT:.0%} of the {HOSTED_DAILY_TOKEN_BUDGET:,} daily budget). Only paid "
+             "plans and owner-flagged tenants spend hosted tokens. Look: OncaBoardRuns usage per "
+             "run, Logs Insights on /aws/lambda/onca-board-task (HostedTokens by tenant)."),
+            ("Onca-BoardRunFailures", failures, 1,
+             "A board brief execution failed, timed out or was aborted, or the task Lambda "
+             "errored, in the last hour. The run is marked failed for the tenant. Look: Step "
+             "Functions onca-board-brief executions, /aws/lambda/onca-board-task."),
+            ("Onca-BoardRunDuration", fn.metric_duration(statistic="Maximum", period=hour), slow_ms,
+             f"A board brief task ran over {slow_ms // 60000} min, {DURATION_ALARM_AT:.0%} of the "
+             f"{RUN_TIMEOUT.to_minutes()}-min Lambda limit. Next: runs get cut off. Look: phase "
+             "time boxes in src/board/runner.py, model latency."),
+            ("Onca-BoardCappedRuns", board("CappedRuns"), CAPPED_RUNS_PER_DAY,
+             f"{CAPPED_RUNS_PER_DAY} or more board briefs hit their token cap in a day and came "
+             "back partial. Either the cap is too low for real packs or a prompt loops. Look: "
+             "OncaBoardRuns usage vs token_cap, the gaps on those runs."),
+        ]
+        out = []
+        for name, metric, threshold, desc in specs:
+            alarm = cw.Alarm(
+                self, name.replace("-", ""), alarm_name=name, metric=metric, threshold=threshold,
+                evaluation_periods=1,
+                comparison_operator=cw.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+                treat_missing_data=cw.TreatMissingData.NOT_BREACHING, alarm_description=desc)
+            alarm.add_alarm_action(cw_actions.SnsAction(topic))
+            alarm.add_ok_action(cw_actions.SnsAction(topic))
+            out.append(alarm)
+        return out
