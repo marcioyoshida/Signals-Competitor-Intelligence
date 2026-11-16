@@ -81,3 +81,15 @@ def test_rule_threat_is_not_an_opportunity_but_a_rival_setback_is():
     opp = {"id": "o", "swot_hint": {"dimension": "O", "sign": "+"}}
     assert not executive._is_opportunity(rule)
     assert executive._is_opportunity(rival) and executive._is_opportunity(opp)
+
+
+def test_projected_card_keeps_source_acts_for_scoping():
+    # the live feed showed IN BCB 788 on no panel: _project_item dropped source_acts, so the
+    # _card_industries fallback never saw them (a unit test on the dict alone passed)
+    from src.dashboard import feed_builder
+    n = {"id": "cand-bcb:Instru-o-Normativa-BCB:788", "kind": "regulatory", "date": "2026-11-16",
+         "narrative": "x", "source_acts": [{"id": "bcb:Instrução Normativa BCB:788",
+                                            "ref": "Instrução Normativa BCB 788",
+                                            "industries": ["banking"], "severity": "medium"}]}
+    card = feed_builder._project_item(n)
+    assert card["source_acts"] == [{"ref": "Instrução Normativa BCB 788", "industries": ["banking"]}]

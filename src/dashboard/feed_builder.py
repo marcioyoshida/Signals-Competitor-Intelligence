@@ -487,6 +487,10 @@ def _project_item(n: dict[str, Any]) -> dict[str, Any]:
         # cross-industry compliance tags (AML) — not industries.
         "industries_source": n.get("industries_source"),
         "compliance_tags": n.get("compliance_tags") or [],
+        # the acts a fused regulatory card restates (ref + ingest-time industries): the
+        # scoping fallback in _card_industries reads them, so they must survive projection
+        "source_acts": [{"ref": a.get("ref"), "industries": a.get("industries") or []}
+                        for a in (n.get("source_acts") or []) if isinstance(a, dict)],
         "lenses": n.get("lenses") or [],
         # ADR #34 Phase 2: coarse topic rollup (from lenses+axis) for the dashboard
         # topic filter + agent grounding boost. Derived here so no synth/backfill.
