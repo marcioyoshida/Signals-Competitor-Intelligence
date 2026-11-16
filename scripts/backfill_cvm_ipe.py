@@ -61,6 +61,9 @@ def main() -> int:
         return 1
     print(f"entity map: {len(h.fi_roots(emap))} CNPJ roots")
     extra = {} if args.banks_only else insurers()
+    from src.ingest import susep_entity_history as sh
+    imap = None if args.banks_only else sh.load_map(s3, args.bucket)
+    print(f"insurer map (#389): {len((imap or {}).get('roots') or {})} dated roots")
     print(f"insurer roots outside the map: {sum(1 for r in extra if r not in h.fi_roots(emap))}")
 
     years = list(range(args.start, args.end + 1))
@@ -77,7 +80,7 @@ def main() -> int:
         if not content:
             print(f"{y}: no ZIP published")
             continue
-        rows = h.select(h.year_records(content), emap, extra)
+        rows = h.select(h.year_records(content), emap, extra, imap)
         s = h.summarize(rows)
         print(f"{y}: {len(content):,} B → {s['records']} records from {s['filers']} filers, "
               f"{s['attributed']} attributed; {s['by_class']}")

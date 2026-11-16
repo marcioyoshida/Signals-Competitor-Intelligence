@@ -14,8 +14,9 @@ bank's board actually decided. Both come from the same CVM dataset, one ZIP per 
 Scope is financial institutions: a filer is kept when its 8-digit CNPJ root is in the
 dated entity map (#330, every BCB-supervised root since 2000), or (#388) is an insurer: a
 root the registry files under an ``insurance`` entity, or one on SUSEP's company list.
-Insurer rows carry ``regulator: "susep"`` and today's registry entity
-(``attribution: "registry"``) until the dated insurer map (#389) exists. Each record carries the
+Insurer rows carry ``regulator: "susep"``. A root in the dated insurer map (#389) is
+attributed by date like a bank; a holding SUSEP does not supervise (BB Seguridade, Porto
+Seguro SA) carries today's registry entity (``attribution: "registry"``). Each record carries the
 registry entity that owned the root **on the meeting (reference) date**, through
 ``entity_at``. HSBC Bank Brasil's 2015 minutes therefore belong to HSBC, not to Bradesco.
 
@@ -113,12 +114,15 @@ def insurer_roots(registry_roots: Mapping[str, str], insurance_ids: Iterable[str
 
 
 def select(records: Iterable[Mapping[str, Any]], entity_map: Mapping[str, Any],
-           extra_roots: Mapping[str, str | None] | None = None) -> list[dict[str, Any]]:
+           extra_roots: Mapping[str, str | None] | None = None,
+           insurer_map: Mapping[str, Any] | None = None) -> list[dict[str, Any]]:
     """Keep the four classes for financial-institution filers, one row per protocol (the
     latest version), each attributed to its owner at the meeting date. Sorted by date.
 
     ``extra_roots`` (#388) adds insurers: roots outside the BCB map, attributed to their
-    registry entity. A root in both keeps the dated BCB attribution."""
+    registry entity. A root in both keeps the dated BCB attribution. ``insurer_map`` (#389,
+    the SUSEP dated map) dates an insurer root it knows, exactly as #330 dates a bank's;
+    holdings SUSEP does not supervise stay on the registry entity."""
     roots = fi_roots(entity_map)
     extra = {r: e for r, e in (extra_roots or {}).items() if r not in roots}
     best: dict[str, dict[str, Any]] = {}
@@ -138,6 +142,11 @@ def select(records: Iterable[Mapping[str, Any]], entity_map: Mapping[str, Any],
             out.update({"regulator": "bcb", "attribution": "dated",
                         "entity_id": eh.entity_at(entity_map, root, as_of) if as_of else None,
                         "direct_entity_id": (eh.entity_at(entity_map, root, as_of, level="direct")
+                                             if as_of else None)})
+        elif insurer_map and root in (insurer_map.get("roots") or {}):
+            out.update({"regulator": "susep", "attribution": "dated",
+                        "entity_id": eh.entity_at(insurer_map, root, as_of) if as_of else None,
+                        "direct_entity_id": (eh.entity_at(insurer_map, root, as_of, level="direct")
                                              if as_of else None)})
         else:
             out.update({"regulator": "susep", "attribution": "registry",

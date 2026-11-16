@@ -178,3 +178,18 @@ def test_insurers_are_kept_and_banks_keep_their_dated_attribution():
     assert rows["12"]["entity_id"] == "hsbc" and rows["12"]["attribution"] == "dated"
     assert h.summarize(list(rows.values()))["by_regulator"] == {"bcb": 2, "susep": 1}
     assert {r["protocol"] for r in h.select(recs, EMAP)} == {"11", "12"}   # banks-only unchanged
+
+
+def test_insurer_roots_in_the_dated_insurer_map_are_attributed_by_date():
+    imap = {"quarters": [201403, 202606], "roots": {"61550141": [
+        {"from": 201403, "to": 202312, "entity_id": "liberty", "group_entity_id": "liberty"},
+        {"from": 202403, "to": 202606, "entity_id": "liberty", "group_entity_id": "hdi"}]}}
+    recs = list(h.year_records(zipped([
+        row("61.550.141/0001-72", "Fato Relevante", ref="2023-11-30", proto="20"),
+        row("61.550.141/0001-72", "Fato Relevante", ref="2024-05-30", proto="21"),
+        row("61.198.164/0001-60", "Fato Relevante", proto="22")])))
+    extra = {"61550141": "liberty", "61198164": "porto_seguro"}
+    rows = {r["protocol"]: r for r in h.select(recs, EMAP, extra, imap)}
+    assert (rows["20"]["entity_id"], rows["20"]["attribution"]) == ("liberty", "dated")
+    assert (rows["21"]["entity_id"], rows["21"]["direct_entity_id"]) == ("hdi", "liberty")
+    assert (rows["22"]["entity_id"], rows["22"]["attribution"]) == ("porto_seguro", "registry")
