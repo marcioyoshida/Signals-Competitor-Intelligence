@@ -1,5 +1,5 @@
 {
-  "_doc": "#389: SUSEP SES economic-group code (Ses_grupos_economicos.cogrupo) -> registry entity. Curated by hand: the registry alias index resolves none of SES's group names. Where the registry has an insurance arm, the group maps to it (the parent chain still reaches the bank). A group with no safe registry match is absent on purpose: its companies stay attributed to their own entity, never to a guessed or later owner. 99999 OUTROS GRUPOS and 01225 INDEPENDENTE are placeholders, not owners (see PLACEHOLDER_GROUPS).",
+  "_doc": "#389: SUSEP SES economic-group code (Ses_grupos_economicos.cogrupo) -> registry entity. Curated by hand: the registry alias index resolves none of SES's group names. Where the registry has an insurance arm, the group maps to it (the parent chain still reaches the bank). An entry with \"from\" (YYYYMM) applies from that quarter only; before it the group is unmapped. A group with no safe registry match is absent on purpose: its companies stay attributed to their own entity, never to a guessed or later owner. 99999 OUTROS GRUPOS and 01225 INDEPENDENTE are placeholders, not owners (see PLACEHOLDER_GROUPS).",
   "groups": {
     "00027": {"name": "BRADESCO", "entity_id": "bradesco_seguros"},
     "00035": {"name": "ITAÚ", "entity_id": "itauseg"},
@@ -10,7 +10,7 @@
     "00230": {"name": "CAIXA ECONÔMICA S/A", "entity_id": "caixa_seguridade"},
     "00531": {"name": "ZURICH", "entity_id": "zurich_seguros"},
     "00078": {"name": "BRASIL", "entity_id": "bb_seguridade"},
-    "01233": {"name": "BBMAPFRE", "entity_id": null, "note": "BB-Mapfre joint venture 2011-2018 with split control: BB led one holding, Mapfre the other (Mapfre Seguros Gerais, Brasilveiculos, Mapfre Vida). Left unmapped so each company keeps its own entity"},
+    "01233": {"name": "BBMAPFRE", "entity_id": "bb_seguridade", "from": 201812, "note": "BB-Mapfre joint venture 2011-2018 had split control (BB led one holding, Mapfre the other), so the group is unmapped before the 2018-12 unwind. From then on the Mapfre-led companies moved to the MAPFRE group and only BB's (Brasilseg, Alianca do Brasil) remain under this code"},
     "01203": {"name": "CARDIF", "entity_id": "cardif"},
     "01204": {"name": "HSBC", "entity_id": "hsbc"},
     "01121": {"name": "MBM", "entity_id": "mbm"},

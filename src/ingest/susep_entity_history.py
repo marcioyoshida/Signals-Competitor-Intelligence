@@ -109,10 +109,25 @@ def parse_groups(content: bytes) -> list[dict[str, str]]:
     return out
 
 
-def load_group_config(path: Path | str = GROUPS_CONFIG) -> dict[str, str]:
-    """{SES group code: registry entity_id} from the curated config."""
+def load_group_config(path: Path | str = GROUPS_CONFIG) -> dict[str, Any]:
+    """{SES group code: registry entity_id, or {"entity_id", "from"} when the mapping only
+    holds from a quarter on} from the curated config."""
     doc = json.loads(Path(path).read_text(encoding="utf-8"))
-    return {code: g["entity_id"] for code, g in (doc.get("groups") or {}).items() if g.get("entity_id")}
+    out: dict[str, Any] = {}
+    for code, g in (doc.get("groups") or {}).items():
+        if g.get("entity_id"):
+            out[code] = ({"entity_id": g["entity_id"], "from": int(g["from"])} if g.get("from")
+                         else g["entity_id"])
+    return out
+
+
+def group_entity(group_map: Mapping[str, Any], group: str, month: str | int) -> str | None:
+    """The registry entity of SES group ``group`` at ``month`` (a dated entry is unmapped
+    before its ``from``)."""
+    g = group_map.get(group)
+    if isinstance(g, Mapping):
+        return g["entity_id"] if int(month) >= g["from"] else None
+    return g
 
 
 def code_roots(susep_rows: Iterable[Mapping[str, Any]]) -> dict[str, str]:
@@ -128,7 +143,7 @@ def code_roots(susep_rows: Iterable[Mapping[str, Any]]) -> dict[str, str]:
 # --- build ------------------------------------------------------------------------
 
 def observations(rows: Iterable[Mapping[str, str]], month: str, roots_by_code: Mapping[str, str],
-                 root_map: Mapping[str, str], group_map: Mapping[str, str],
+                 root_map: Mapping[str, str], group_map: Mapping[str, Any],
                  canon: Mapping[str, str]) -> dict[str, dict[str, Any]]:
     """{SUSEP code: what month ``month`` says about it}."""
     def ent(eid: str | None) -> str | None:
@@ -150,7 +165,7 @@ def observations(rows: Iterable[Mapping[str, str]], month: str, roots_by_code: M
             "group_name": r["nogrupo"] if group else None,
             "entity_id": direct,
             # A placeholder group means "no named owner": the company is its own group.
-            "group_entity_id": ent(group_map.get(group)) if group else direct,
+            "group_entity_id": ent(group_entity(group_map, group, month)) if group else direct,
         }
     return out
 
@@ -177,7 +192,7 @@ def quarter_months(rows: Iterable[Mapping[str, str]]) -> list[str]:
 
 
 def build_map(rows: list[Mapping[str, str]], roots_by_code: Mapping[str, str],
-              root_map: Mapping[str, str], group_map: Mapping[str, str],
+              root_map: Mapping[str, str], group_map: Mapping[str, Any],
               canon: Mapping[str, str] | None = None) -> dict[str, Any]:
     """Collapse quarter-end observations into intervals per SUSEP code and per CNPJ root.
 
@@ -216,7 +231,7 @@ def build_map(rows: list[Mapping[str, str]], roots_by_code: Mapping[str, str],
         "quarters": [int(qs[0]), int(qs[-1])] if qs else [],
         "complete_through": complete_through(rows),
         "built_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
-        "groups": {code: eid for code, eid in sorted(group_map.items())},
+        "groups": dict(sorted(group_map.items())),
         "codes": codes,
         "roots": roots,
     }

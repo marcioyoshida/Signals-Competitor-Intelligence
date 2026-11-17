@@ -68,7 +68,9 @@ def test_code_roots_and_group_config():
     assert sh.code_roots([{"codigo_fip": "05185", "cnpj": "61550141000172"},
                           {"codigo_fip": "", "cnpj": "1"}]) == {"05185": "61550141"}
     g = sh.load_group_config()
-    assert g["01230"] == "hdi" and "01233" not in g          # BB-Mapfre JV deliberately unmapped
+    assert g["01230"] == "hdi"
+    assert g["01233"] == {"entity_id": "bb_seguridade", "from": 201812}   # BB-Mapfre: BB only after the unwind
+    assert sh.group_entity(g, "01233", 201809) is None and sh.group_entity(g, "01233", "201812") == "bb_seguridade"
     raw = json.loads(sh.GROUPS_CONFIG.read_text(encoding="utf-8"))
     assert not set(raw["groups"]) & {"99999", "01225"}       # placeholders are never owners
 
