@@ -1,0 +1,22 @@
+{
+  "_doc": "#336: B3 issuer codes (ISIN characters 3-6, e.g. BRBBDCACNPR8 -> BBDC) that CVM's FCA securities table (fca_cia_aberta_valor_mobiliario, 2010 on) cannot map to a CNPJ, because the issuer delisted before 2010 or its FCA rows have no trading code. Each root here was read from the BCB IF.data register name (entity_history/cadastro snapshots), never typed from memory. The FCA-derived codes are built at run time and need no entry. Foreign banks' BDRs (Santander SA, Citigroup, HSBC Holdings, US banks) are out of scope: their price is not a Brazilian institution's. Unibanco Holdings (UBHD) is left out: a non-bank holding with no IF.data entry.",
+  "supplement": {
+    "BPAC": {"cnpj8": "30306294", "name": "BANCO BTG PACTUAL S.A."},
+    "BBTG": {"cnpj8": "30306294", "name": "BANCO BTG PACTUAL S.A.", "note": "BTG Pactual units 2012-2017, before the BPAC units"},
+    "ITAU": {"cnpj8": "60872504", "name": "BANCO ITAU HOLDING FINANCEIRA S.A.", "note": "renamed ITAU UNIBANCO HOLDING after the 2008-09 merger; same CNPJ as ITUB"},
+    "UBBR": {"cnpj8": "33700394", "name": "UNIBANCO-UNIAO DE BANCOS BRASILEIROS S.A."},
+    "BESP": {"cnpj8": "61411633", "name": "BANCO DO ESTADO DE SAO PAULO S.A. - BANESPA"},
+    "BNCA": {"cnpj8": "43073394", "name": "NOSSA CAIXA - NOSSO BANCO S.A."},
+    "BSCT": {"cnpj8": "83876003", "name": "BANCO DO ESTADO DE SANTA CATARINA S.A."},
+    "BEPA": {"cnpj8": "76492172", "name": "BANCO BANESTADO S.A."},
+    "BECE": {"cnpj8": "07196934", "name": "BANCO DO ESTADO DO CEARA S.A. BEC"},
+    "BAAM": {"cnpj8": "04562120", "name": "BANCO DO ESTADO DO AMAZONAS S.A."},
+    "BFIT": {"cnpj8": "60942638", "name": "BANCO SUDAMERIS BRASIL S.A."},
+    "REAL": {"cnpj8": "17156514", "name": "BANCO REAL S.A."},
+    "BPNM": {"cnpj8": "59285411", "name": "BANCO PANAMERICANO S.A.", "note": "renamed Banco Pan; same CNPJ as BPAN"},
+    "CZRS": {"cnpj8": "62136254", "name": "BANCO CRUZEIRO DO SUL S.A."},
+    "DAYC": {"cnpj8": "62232889", "name": "BANCO DAYCOVAL S.A."},
+    "SFSA": {"cnpj8": "60889128", "name": "BANCO SOFISA S.A."},
+    "BICB": {"cnpj8": "07450604", "name": "BANCO INDUSTRIAL E COMERCIAL S.A."}
+  }
+}
