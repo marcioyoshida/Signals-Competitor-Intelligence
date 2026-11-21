@@ -1,0 +1,348 @@
+{
+ "schema": "board/v1/episode",
+ "scenario": "fail-rural-2013",
+ "kind": "failure",
+ "built_at": "2026-11-21T03:10:41+00:00",
+ "note": "EPISÓDIO HISTÓRICO (#339). Pacote congelado na data com dados públicos; gabarito lido depois do evento.",
+ "focal": "ep-rural",
+ "subject": "ep-rural",
+ "as_of": "2013-08-01",
+ "event_date": "2013-08-02",
+ "trigger": null,
+ "task": "Com os dados públicos disponíveis até hoje, o conselho do Banco Rural deve se preocupar com a solvência ou a liquidez da instituição nos próximos 90 dias? Que sinais de alerta existem, que ações preventivas considerar e o que os dados públicos não permitem afirmar?",
+ "feed": {
+  "as_of": "2013-08-01",
+  "generated_at": "2013-08-01T23:59:59+00:00",
+  "episode": "fail-rural-2013",
+  "entities": [
+   {
+    "entity": "ep-rural",
+    "label": "Banco Rural",
+    "industries": [
+     "banking"
+    ],
+    "fundamentals": {
+     "roe_pct": -83.0,
+     "roa_pct": -6.08,
+     "basileia_headroom_pp": -2.74,
+     "credito_captacoes_pct": 86.77,
+     "carteira_share_pct": 0.12,
+     "lucro_share_pct": -0.59,
+     "ativo_bi": 4.18,
+     "pl_bi": 0.31,
+     "leverage": 13.7,
+     "base_date": 201303
+    },
+    "market_share_pct": 0.12
+   },
+   {
+    "entity": "bmg",
+    "label": "Banco BMG",
+    "industries": [
+     "banking"
+    ],
+    "fundamentals": {
+     "roe_pct": 15.0,
+     "roa_pct": 1.73,
+     "basileia_headroom_pp": 2.34,
+     "credito_captacoes_pct": 192.44,
+     "carteira_share_pct": 1.09,
+     "lucro_share_pct": 1.12,
+     "ativo_bi": 28.1,
+     "pl_bi": 3.23,
+     "leverage": 8.7,
+     "base_date": 201303
+    },
+    "market_share_pct": 1.09
+   },
+   {
+    "entity": "daycoval",
+    "label": "Banco Daycoval",
+    "industries": [
+     "banking"
+    ],
+    "fundamentals": {
+     "roe_pct": 10.7,
+     "roa_pct": 2.05,
+     "basileia_headroom_pp": 9.11,
+     "credito_captacoes_pct": 80.26,
+     "carteira_share_pct": 0.41,
+     "lucro_share_pct": 0.61,
+     "ativo_bi": 12.85,
+     "pl_bi": 2.45,
+     "leverage": 5.3,
+     "base_date": 201303
+    },
+    "market_share_pct": 0.41
+   },
+   {
+    "entity": "banco_pan",
+    "label": "Banco PAN",
+    "industries": [
+     "banking"
+    ],
+    "fundamentals": {
+     "roe_pct": 2.7,
+     "roa_pct": 0.36,
+     "basileia_headroom_pp": 3.81,
+     "credito_captacoes_pct": 93.43,
+     "carteira_share_pct": 0.66,
+     "lucro_share_pct": 0.17,
+     "ativo_bi": 21.04,
+     "pl_bi": 2.82,
+     "leverage": 7.5,
+     "base_date": 201303
+    },
+    "market_share_pct": 0.66
+   },
+   {
+    "entity": "abc_brasil",
+    "label": "Banco ABC Brasil",
+    "industries": [
+     "banking"
+    ],
+    "fundamentals": {
+     "roe_pct": 13.7,
+     "roa_pct": 1.72,
+     "basileia_headroom_pp": 5.23,
+     "credito_captacoes_pct": 87.46,
+     "carteira_share_pct": 0.48,
+     "lucro_share_pct": 0.56,
+     "ativo_bi": 13.98,
+     "pl_bi": 1.76,
+     "leverage": 8.0,
+     "base_date": 201303
+    },
+    "market_share_pct": 0.48
+   },
+   {
+    "entity": "mercantil",
+    "label": "Mercantil",
+    "industries": [
+     "banking"
+    ],
+    "fundamentals": {
+     "roe_pct": 4.7,
+     "roa_pct": 0.31,
+     "basileia_headroom_pp": 1.85,
+     "credito_captacoes_pct": 90.42,
+     "carteira_share_pct": 0.49,
+     "lucro_share_pct": 0.1,
+     "ativo_bi": 13.56,
+     "pl_bi": 0.88,
+     "leverage": 15.4,
+     "base_date": 201303
+    },
+    "market_share_pct": 0.49
+   },
+   {
+    "entity": "fibra",
+    "label": "Fibra",
+    "industries": [
+     "banking"
+    ],
+    "fundamentals": {
+     "roe_pct": -9.1,
+     "roa_pct": -0.9,
+     "basileia_headroom_pp": 2.94,
+     "credito_captacoes_pct": 89.92,
+     "carteira_share_pct": 0.42,
+     "lucro_share_pct": -0.22,
+     "ativo_bi": 10.32,
+     "pl_bi": 1.02,
+     "leverage": 10.1,
+     "base_date": 201303
+    },
+    "market_share_pct": 0.42
+   }
+  ],
+  "feed": [
+   {
+    "id": "b3-daycoval-2013-07-31",
+    "kind": "market:b3",
+    "entities": [
+     "daycoval"
+    ],
+    "date": "2013-07-31",
+    "data_date": "2013-07-31",
+    "abnormal_pct": -9.99,
+    "narrative": "Banco Daycoval: ação DAYC4 variou -19.6% de 2013-06-01 a 2013-07-31 (mediana do setor -9.62%). Preços sem ajuste por proventos."
+   },
+   {
+    "id": "b3-banco_pan-2013-07-31",
+    "kind": "market:b3",
+    "entities": [
+     "banco_pan"
+    ],
+    "date": "2013-07-31",
+    "data_date": "2013-07-31",
+    "abnormal_pct": 3.87,
+    "narrative": "Banco PAN: ação BPNM4 variou -6.19% de 2013-06-01 a 2013-07-31 (mediana do setor -10.06%). Preços sem ajuste por proventos."
+   },
+   {
+    "id": "b3-abc_brasil-2013-07-31",
+    "kind": "market:b3",
+    "entities": [
+     "abc_brasil"
+    ],
+    "date": "2013-07-31",
+    "data_date": "2013-07-31",
+    "abnormal_pct": -9.25,
+    "narrative": "Banco ABC Brasil: ação ABCB4 variou -18.86% de 2013-06-01 a 2013-07-31 (mediana do setor -9.62%). Preços sem ajuste por proventos."
+   },
+   {
+    "id": "b3-mercantil-2013-07-31",
+    "kind": "market:b3",
+    "entities": [
+     "mercantil"
+    ],
+    "date": "2013-07-31",
+    "data_date": "2013-07-31",
+    "abnormal_pct": 19.44,
+    "narrative": "Mercantil: ação BMEB3 variou 9.38% de 2013-06-01 a 2013-07-31 (mediana do setor -10.06%). Preços sem ajuste por proventos."
+   }
+  ],
+  "sector_events": [
+   {
+    "id": "ref-2013-03",
+    "date": "2013-03-31",
+    "industry": "banking",
+    "entities": [],
+    "title": "REF 2013-03 (BCB), 2 Sistema bancário › 2.6 Testes de estresse de capital: No tocante às regras de Basileia III a serem implementadas no Brasil, foram realizados estudos pelo BCB que apontam que não haveria necessidade extra de Capital Principal para o sistema bancário como um todo até 2019, além daqueles valores resultantes das práticas correntes de retenção de resultados. Em 2019, o índice de Capital Principal médio do sistema seria de 10,8%, significativamente superior ao mínimo73 de 7% (Capital Principal mais parcela fixa do Adicional de Capital Principal). Além disso, avaliando as instituições individualmente, não haveria necessidade extra de Capital Principal até 2016.",
+    "sources": [
+     {
+      "source": "BCB Relatório de Estabilidade Financeira",
+      "url": "https://www.bcb.gov.br/content/publicacoes/ref/201303/RELESTAB201303-refP.pdf"
+     }
+    ]
+   }
+  ],
+  "macro": {
+   "selic": {
+    "current": 8.5,
+    "as_of": "2013-08-01",
+    "last_decision": {
+     "date": "2013-07-11",
+     "previous": 8.0,
+     "value": 8.5
+    }
+   }
+  }
+ },
+ "rubric": {
+  "id": "failure",
+  "curated": true,
+  "items": [
+   {
+    "id": "capital_shortfall",
+    "label": "capital abaixo do mínimo ou folga negativa",
+    "any_of": [
+     "abaixo do mínimo",
+     "desenquadramento",
+     "folga negativa",
+     "basileia",
+     "insuficiência de capital"
+    ]
+   },
+   {
+    "id": "losses",
+    "label": "prejuízos recorrentes",
+    "any_of": [
+     "prejuízo",
+     "ROE negativo",
+     "perdas",
+     "resultado negativo"
+    ]
+   },
+   {
+    "id": "supervisory_action",
+    "label": "risco de ação do BCB (intervenção, RAET, liquidação)",
+    "any_of": [
+     "intervenção",
+     "RAET",
+     "liquidação",
+     "Banco Central",
+     "regime especial"
+    ]
+   },
+   {
+    "id": "recapitalization",
+    "label": "aporte de capital, venda ou plano de recuperação",
+    "any_of": [
+     "aporte",
+     "aumento de capital",
+     "venda do banco",
+     "comprador",
+     "plano de recuperação"
+    ]
+   }
+  ]
+ },
+ "answer_key": {
+  "window": [
+   "2013-08-02",
+   "2013-11-30"
+  ],
+  "board_decisions": [],
+  "decision_categories": {},
+  "material_facts_after": [],
+  "ratings_after": [],
+  "market_reaction": {},
+  "prudential_after": [
+   {
+    "quarter": 201303,
+    "roe_pct": -83.0,
+    "basileia_headroom_pp": -2.74,
+    "pl_bi": 0.31,
+    "ativo_bi": 4.18
+   },
+   {
+    "quarter": 201306,
+    "roe_pct": -317.9,
+    "basileia_headroom_pp": null,
+    "pl_bi": 0.15,
+    "ativo_bi": 4.08
+   }
+  ],
+  "outcome": [
+   {
+    "date": "2013-08-02",
+    "regime": "Liquidação extrajudicial",
+    "act": "Ato do Presidente nº 1256",
+    "register_id": 2201
+   }
+  ],
+  "pre_event_signal": {
+   "visible": true,
+   "quarter": 201303,
+   "reasons": [
+    "folga de Basileia -2.74 p.p. (abaixo do mínimo)",
+    "ROE -83.0%"
+   ],
+   "basis": [
+    "prudential"
+   ]
+  }
+ },
+ "coverage": {
+  "entities_with_fundamentals": [
+   "abc_brasil",
+   "banco_pan",
+   "bmg",
+   "daycoval",
+   "ep-rural",
+   "fibra",
+   "mercantil"
+  ],
+  "entities_with_soundness": [],
+  "focal_fundamentals": true,
+  "feed_items": {
+   "market:b3": 4
+  },
+  "sector_events": 1,
+  "selic": true,
+  "reputation": 0
+ },
+ "usable": true,
+ "usable_reason": "desfecho regulatório conhecido (registro do BCB)"
+}

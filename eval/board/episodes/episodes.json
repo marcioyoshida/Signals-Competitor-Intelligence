@@ -1,0 +1,106 @@
+{
+  "schema": "board/v1/episodes",
+  "version": "2026-11-21.1",
+  "note": "Historic replay set (#339). Each episode freezes a feed at as_of from the M1 stores (no fact dated after as_of) and pairs it with an answer key read after the event. Trigger dates were checked 2026-11-20 against the cited public source: Agência Brasil for agency actions and the BTG arrest, the BCB resolution-regime register (api/servico/sitebcb/Regesp_Internet/Detalhamento) for failures.",
+  "excluded": [
+    {"id": "fail-santos-2004", "reason": "Banco Santos (intervention 2004-11): the BCB register lists it without detail (exibirDetalhamento false), so the date is not checkable there; no REF before 2008-11, no board minutes before 2014, no rate data before 2012. The pack would hold one IF.data quarter."}
+  ],
+  "rubrics": {
+    "sovereign": [
+      {"id": "funding_cost", "label": "custo e prazo de captação (externa e doméstica)", "any_of": ["captação", "funding", "custo de captação", "linhas externas", "eurobond", "spread"]},
+      {"id": "rating_ceiling", "label": "teto soberano e rebaixamento do próprio banco", "any_of": ["teto soberano", "rating do banco", "rebaixamento do banco", "acompanhar o soberano", "teto"]},
+      {"id": "capital_buffer", "label": "folga de capital e distribuição de resultados", "any_of": ["basileia", "capital", "dividendos", "juros sobre capital", "folga"]},
+      {"id": "credit_quality", "label": "qualidade de crédito em recessão", "any_of": ["inadimplência", "provisão", "provisões", "qualidade da carteira", "risco de crédito"]},
+      {"id": "liquidity", "label": "liquidez e saída de investidores estrangeiros", "any_of": ["liquidez", "LCR", "saída de recursos", "investidores estrangeiros"]}
+    ],
+    "idiosyncratic": [
+      {"id": "liquidity_run", "label": "risco de corrida e liquidez", "any_of": ["liquidez", "saques", "corrida", "resgates", "FGC"]},
+      {"id": "governance", "label": "governança e sucessão da liderança", "any_of": ["governança", "conselho", "sucessão", "comitê independente", "administração"]},
+      {"id": "asset_sales", "label": "venda de ativos e redução do balanço", "any_of": ["venda de ativos", "alienação", "desinvestimento", "reduzir o balanço"]},
+      {"id": "rating_action", "label": "rebaixamento do rating do banco", "any_of": ["rating", "rebaixamento", "agências"]}
+    ],
+    "failure": [
+      {"id": "capital_shortfall", "label": "capital abaixo do mínimo ou folga negativa", "any_of": ["abaixo do mínimo", "desenquadramento", "folga negativa", "basileia", "insuficiência de capital"]},
+      {"id": "losses", "label": "prejuízos recorrentes", "any_of": ["prejuízo", "ROE negativo", "perdas", "resultado negativo"]},
+      {"id": "supervisory_action", "label": "risco de ação do BCB (intervenção, RAET, liquidação)", "any_of": ["intervenção", "RAET", "liquidação", "Banco Central", "regime especial"]},
+      {"id": "recapitalization", "label": "aporte de capital, venda ou plano de recuperação", "any_of": ["aporte", "aumento de capital", "venda do banco", "comprador", "plano de recuperação"]}
+    ]
+  },
+  "episodes": [
+    {
+      "id": "sov-sp-2015-09", "kind": "sovereign", "rubric": "sovereign",
+      "event_date": "2015-09-09", "as_of": "2015-09-09",
+      "focal": "itau", "peers": ["bradesco", "bb", "santander", "caixa", "btg", "safra"],
+      "trigger": {"text": "A Standard & Poor's rebaixou o rating soberano do Brasil de BBB- para BB+, com perspectiva negativa: o país perdeu o grau de investimento.",
+                  "source": "Agência Brasil", "url": "https://agenciabrasil.ebc.com.br/en/economia/noticia/2015-09/sp-lowers-credit-rating-and-brazil-loses-investment-grade-rating"},
+      "task": "A S&P rebaixou o rating soberano do Brasil para BB+ (perspectiva negativa) e o país perdeu o grau de investimento. Que opções o conselho do Itaú Unibanco deve considerar nos próximos 90 dias para captação, capital e distribuição de resultados, preço de crédito e relacionamento com clientes, e quais gatilhos monitorar?"
+    },
+    {
+      "id": "sov-fitch-2015-12", "kind": "sovereign", "rubric": "sovereign",
+      "event_date": "2015-12-16", "as_of": "2015-12-16",
+      "focal": "bradesco", "peers": ["itau", "bb", "santander", "caixa", "btg", "safra"],
+      "trigger": {"text": "A Fitch rebaixou o rating soberano do Brasil de BBB- para BB+, com perspectiva negativa: segunda agência a retirar o grau de investimento.",
+                  "source": "Agência Brasil", "url": "https://agenciabrasil.ebc.com.br/economia/noticia/2015-12/fitch-rebaixa-brasil-e-pais-perde-grau-de-investimento"},
+      "task": "A Fitch rebaixou o rating soberano do Brasil para BB+ (perspectiva negativa); é a segunda agência a retirar o grau de investimento, o que obriga parte dos fundos estrangeiros a sair. Que opções o conselho do Bradesco deve considerar nos próximos 90 dias para captação, capital, preço de crédito e clientes, e quais gatilhos monitorar?"
+    },
+    {
+      "id": "sov-moodys-2016-02", "kind": "sovereign", "rubric": "sovereign",
+      "event_date": "2016-02-24", "as_of": "2016-02-24",
+      "focal": "bb", "peers": ["itau", "bradesco", "santander", "caixa", "btg", "safra"],
+      "trigger": {"text": "A Moody's rebaixou o rating soberano do Brasil de Baa3 para Ba2, com perspectiva negativa: as três grandes agências passaram a classificar o país abaixo do grau de investimento.",
+                  "source": "Agência Brasil", "url": "https://agenciabrasil.ebc.com.br/economia/noticia/2016-02/agencia-moodys-retira-grau-de-investimento-do-brasil"},
+      "task": "A Moody's rebaixou o rating soberano do Brasil em dois degraus, para Ba2 (perspectiva negativa); agora as três grandes agências classificam o país abaixo do grau de investimento. Que opções o conselho do Banco do Brasil deve considerar nos próximos 90 dias para captação, capital, preço de crédito e clientes, e quais gatilhos monitorar?"
+    },
+    {
+      "id": "sov-sp-2018-01", "kind": "sovereign", "rubric": "sovereign",
+      "event_date": "2018-01-11", "as_of": "2018-01-11",
+      "focal": "santander", "peers": ["itau", "bradesco", "bb", "caixa", "btg", "safra"],
+      "trigger": {"text": "A Standard & Poor's rebaixou o rating soberano do Brasil de BB para BB- (três níveis abaixo do grau de investimento), com perspectiva estável, citando a demora nas reformas, em especial a da previdência.",
+                  "source": "Agência Brasil", "url": "https://agenciabrasil.ebc.com.br/en/economia/noticia/2018-01/standard-poors-downgrades-brazil-three-levels-below-investment-grade"},
+      "task": "A S&P rebaixou o rating soberano do Brasil para BB- (perspectiva estável), três níveis abaixo do grau de investimento. Que opções o conselho do Santander Brasil deve considerar nos próximos 90 dias para captação, capital, preço de crédito e clientes, e quais gatilhos monitorar?"
+    },
+    {
+      "id": "btg-2015-11", "kind": "idiosyncratic", "rubric": "idiosyncratic",
+      "event_date": "2015-11-25", "as_of": "2015-11-25",
+      "focal": "btg", "peers": ["itau", "bradesco", "santander", "safra", "votorantim", "abc_brasil"],
+      "trigger": {"text": "A Polícia Federal prendeu André Esteves, controlador e presidente do BTG Pactual, numa investigação da Operação Lava Jato.",
+                  "source": "Agência Brasil", "url": "https://agenciabrasil.ebc.com.br/geral/noticia/2015-11/pf-prende-banqueiro-andre-esteves-e-senador-delcidio-do-amaral"},
+      "task": "O controlador e presidente do BTG Pactual foi preso hoje numa investigação da Lava Jato. Que opções o conselho do BTG Pactual deve considerar nos próximos 30 e 90 dias para liquidez, governança, balanço e relacionamento com clientes e contrapartes, e quais gatilhos monitorar?"
+    },
+    {
+      "id": "fail-cruzeiro-2012", "kind": "failure", "rubric": "failure",
+      "event_date": "2012-06-04", "as_of": "2012-06-03",
+      "focal": "ep-cruzeiro-do-sul",
+      "episode_entities": {"ep-cruzeiro-do-sul": {"label": "Banco Cruzeiro do Sul", "cnpj8": "62136254"}},
+      "peers": ["bmg", "daycoval", "banco_pan", "abc_brasil", "mercantil", "fibra"],
+      "outcome": [
+        {"date": "2012-06-04", "regime": "RAET", "act": "Ato do Presidente nº 1217", "register_id": 2060},
+        {"date": "2012-09-14", "regime": "Liquidação extrajudicial", "act": "Ato do Presidente nº 1230", "register_id": 2100}
+      ],
+      "task": "Com os dados públicos disponíveis até hoje, o conselho do Banco Cruzeiro do Sul deve se preocupar com a solvência ou a liquidez da instituição nos próximos 90 dias? Que sinais de alerta existem, que ações preventivas considerar e o que os dados públicos não permitem afirmar?"
+    },
+    {
+      "id": "fail-bva-2012", "kind": "failure", "rubric": "failure",
+      "event_date": "2012-10-19", "as_of": "2012-10-18",
+      "focal": "ep-bva",
+      "episode_entities": {"ep-bva": {"label": "Banco BVA", "cnpj8": "32254138"}},
+      "peers": ["bmg", "daycoval", "banco_pan", "abc_brasil", "mercantil", "fibra"],
+      "outcome": [
+        {"date": "2012-10-19", "regime": "Intervenção", "act": "Ato do Presidente nº 1238", "register_id": 2120},
+        {"date": "2013-06-19", "regime": "Liquidação extrajudicial", "act": "Ato do Presidente nº 1251", "register_id": 2200}
+      ],
+      "task": "Com os dados públicos disponíveis até hoje, o conselho do Banco BVA deve se preocupar com a solvência ou a liquidez da instituição nos próximos 90 dias? Que sinais de alerta existem, que ações preventivas considerar e o que os dados públicos não permitem afirmar?"
+    },
+    {
+      "id": "fail-rural-2013", "kind": "failure", "rubric": "failure",
+      "event_date": "2013-08-02", "as_of": "2013-08-01",
+      "focal": "ep-rural",
+      "episode_entities": {"ep-rural": {"label": "Banco Rural", "cnpj8": "33124959"}},
+      "peers": ["bmg", "daycoval", "banco_pan", "abc_brasil", "mercantil", "fibra"],
+      "outcome": [
+        {"date": "2013-08-02", "regime": "Liquidação extrajudicial", "act": "Ato do Presidente nº 1256", "register_id": 2201}
+      ],
+      "task": "Com os dados públicos disponíveis até hoje, o conselho do Banco Rural deve se preocupar com a solvência ou a liquidez da instituição nos próximos 90 dias? Que sinais de alerta existem, que ações preventivas considerar e o que os dados públicos não permitem afirmar?"
+    }
+  ]
+}

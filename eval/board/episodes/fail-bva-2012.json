@@ -1,0 +1,354 @@
+{
+ "schema": "board/v1/episode",
+ "scenario": "fail-bva-2012",
+ "kind": "failure",
+ "built_at": "2026-11-21T03:10:41+00:00",
+ "note": "EPISÓDIO HISTÓRICO (#339). Pacote congelado na data com dados públicos; gabarito lido depois do evento.",
+ "focal": "ep-bva",
+ "subject": "ep-bva",
+ "as_of": "2012-10-18",
+ "event_date": "2012-10-19",
+ "trigger": null,
+ "task": "Com os dados públicos disponíveis até hoje, o conselho do Banco BVA deve se preocupar com a solvência ou a liquidez da instituição nos próximos 90 dias? Que sinais de alerta existem, que ações preventivas considerar e o que os dados públicos não permitem afirmar?",
+ "feed": {
+  "as_of": "2012-10-18",
+  "generated_at": "2012-10-18T23:59:59+00:00",
+  "episode": "fail-bva-2012",
+  "entities": [
+   {
+    "entity": "ep-bva",
+    "label": "Banco BVA",
+    "industries": [
+     "banking"
+    ],
+    "fundamentals": {
+     "roe_pct": -34.3,
+     "roa_pct": -2.44,
+     "basileia_headroom_pp": -1.29,
+     "credito_captacoes_pct": 83.13,
+     "carteira_share_pct": 0.32,
+     "lucro_share_pct": -0.43,
+     "ativo_bi": 7.99,
+     "pl_bi": 0.57,
+     "leverage": 14.1,
+     "base_date": 201206
+    },
+    "market_share_pct": 0.32
+   },
+   {
+    "entity": "bmg",
+    "label": "Banco BMG",
+    "industries": [
+     "banking"
+    ],
+    "fundamentals": {
+     "roe_pct": -17.6,
+     "roa_pct": -2.56,
+     "basileia_headroom_pp": 2.69,
+     "credito_captacoes_pct": 130.32,
+     "carteira_share_pct": 0.87,
+     "lucro_share_pct": -1.25,
+     "ativo_bi": 21.86,
+     "pl_bi": 3.18,
+     "leverage": 6.9,
+     "base_date": 201206
+    },
+    "market_share_pct": 0.87
+   },
+   {
+    "entity": "daycoval",
+    "label": "Banco Daycoval",
+    "industries": [
+     "banking"
+    ],
+    "fundamentals": {
+     "roe_pct": 17.5,
+     "roa_pct": 2.71,
+     "basileia_headroom_pp": 7.56,
+     "credito_captacoes_pct": 75.02,
+     "carteira_share_pct": 0.45,
+     "lucro_share_pct": 0.79,
+     "ativo_bi": 13.03,
+     "pl_bi": 2.01,
+     "leverage": 6.5,
+     "base_date": 201206
+    },
+    "market_share_pct": 0.45
+   },
+   {
+    "entity": "banco_pan",
+    "label": "Banco PAN",
+    "industries": [
+     "banking"
+    ],
+    "fundamentals": {
+     "roe_pct": -22.8,
+     "roa_pct": -4.52,
+     "basileia_headroom_pp": 9.63,
+     "credito_captacoes_pct": 96.72,
+     "carteira_share_pct": 0.45,
+     "lucro_share_pct": -1.44,
+     "ativo_bi": 14.26,
+     "pl_bi": 2.84,
+     "leverage": 5.0,
+     "base_date": 201206
+    },
+    "market_share_pct": 0.45
+   },
+   {
+    "entity": "abc_brasil",
+    "label": "Banco ABC Brasil",
+    "industries": [
+     "banking"
+    ],
+    "fundamentals": {
+     "roe_pct": 14.3,
+     "roa_pct": 1.73,
+     "basileia_headroom_pp": 3.65,
+     "credito_captacoes_pct": 87.41,
+     "carteira_share_pct": 0.52,
+     "lucro_share_pct": 0.5,
+     "ativo_bi": 12.92,
+     "pl_bi": 1.57,
+     "leverage": 8.3,
+     "base_date": 201206
+    },
+    "market_share_pct": 0.52
+   },
+   {
+    "entity": "mercantil",
+    "label": "Mercantil",
+    "industries": [
+     "banking"
+    ],
+    "fundamentals": {
+     "roe_pct": 6.9,
+     "roa_pct": 0.47,
+     "basileia_headroom_pp": 1.93,
+     "credito_captacoes_pct": 81.13,
+     "carteira_share_pct": 0.46,
+     "lucro_share_pct": 0.13,
+     "ativo_bi": 12.43,
+     "pl_bi": 0.86,
+     "leverage": 14.5,
+     "base_date": 201206
+    },
+    "market_share_pct": 0.46
+   },
+   {
+    "entity": "fibra",
+    "label": "Fibra",
+    "industries": [
+     "banking"
+    ],
+    "fundamentals": {
+     "roe_pct": 1.2,
+     "roa_pct": 0.11,
+     "basileia_headroom_pp": 2.24,
+     "credito_captacoes_pct": 88.71,
+     "carteira_share_pct": 0.5,
+     "lucro_share_pct": 0.03,
+     "ativo_bi": 11.57,
+     "pl_bi": 1.01,
+     "leverage": 11.5,
+     "base_date": 201206
+    },
+    "market_share_pct": 0.5
+   }
+  ],
+  "feed": [
+   {
+    "id": "b3-daycoval-2012-10-17",
+    "kind": "market:b3",
+    "entities": [
+     "daycoval"
+    ],
+    "date": "2012-10-17",
+    "data_date": "2012-10-17",
+    "abnormal_pct": 3.62,
+    "narrative": "Banco Daycoval: ação DAYC4 variou 3.32% de 2012-08-18 a 2012-10-17 (mediana do setor -0.29%). Preços sem ajuste por proventos."
+   },
+   {
+    "id": "b3-banco_pan-2012-10-17",
+    "kind": "market:b3",
+    "entities": [
+     "banco_pan"
+    ],
+    "date": "2012-10-17",
+    "data_date": "2012-10-17",
+    "abnormal_pct": 7.7,
+    "narrative": "Banco PAN: ação BPNM4 variou 7.41% de 2012-08-18 a 2012-10-17 (mediana do setor -0.29%). Preços sem ajuste por proventos."
+   },
+   {
+    "id": "b3-abc_brasil-2012-10-17",
+    "kind": "market:b3",
+    "entities": [
+     "abc_brasil"
+    ],
+    "date": "2012-10-17",
+    "data_date": "2012-10-17",
+    "abnormal_pct": -1.66,
+    "narrative": "Banco ABC Brasil: ação ABCB4 variou -1.66% de 2012-08-18 a 2012-10-17 (mediana do setor 0.0%). Preços sem ajuste por proventos."
+   },
+   {
+    "id": "b3-mercantil-2012-10-17",
+    "kind": "market:b3",
+    "entities": [
+     "mercantil"
+    ],
+    "date": "2012-10-17",
+    "data_date": "2012-10-17",
+    "abnormal_pct": -4.31,
+    "narrative": "Mercantil: ação BMEB3 variou -4.31% de 2012-08-18 a 2012-10-17 (mediana do setor 0.0%). Preços sem ajuste por proventos."
+   }
+  ],
+  "sector_events": [
+   {
+    "id": "ref-2012-09",
+    "date": "2012-09-30",
+    "industry": "banking",
+    "entities": [],
+    "title": "REF 2012-09 (BCB), 2 Sistema bancário › 2.6 Testes de estresse: maiores IF é superior a 87% da soma das notas do total do sistema bancário, o que indica que, embora tenhamos 132 bancos ou conglomerados bancários, o risco sistêmico está concentrado em poucas IF. Concluindo, o IB apresentou avanço, apesar do cenário com parâmetros mais estritos de requisitos de capital para os riscos de crédito e de mercado. Além disso, houve redução no índice de imobilização, melhoria nos resultados das simulações de Basileia III e menor comprometimento do PL com ativos contingentes, apesar do maior volume de provisões para inadimplência, corroborando a percepção acerca da maior solidez do sistema bancário alcançada ao longo do semestre.",
+    "sources": [
+     {
+      "source": "BCB Relatório de Estabilidade Financeira",
+      "url": "https://www.bcb.gov.br/content/publicacoes/ref/201209/RELESTAB201209-refP.pdf"
+     }
+    ]
+   }
+  ],
+  "macro": {
+   "selic": {
+    "current": 7.25,
+    "as_of": "2012-10-18",
+    "last_decision": {
+     "date": "2012-10-11",
+     "previous": 7.5,
+     "value": 7.25
+    }
+   }
+  }
+ },
+ "rubric": {
+  "id": "failure",
+  "curated": true,
+  "items": [
+   {
+    "id": "capital_shortfall",
+    "label": "capital abaixo do mínimo ou folga negativa",
+    "any_of": [
+     "abaixo do mínimo",
+     "desenquadramento",
+     "folga negativa",
+     "basileia",
+     "insuficiência de capital"
+    ]
+   },
+   {
+    "id": "losses",
+    "label": "prejuízos recorrentes",
+    "any_of": [
+     "prejuízo",
+     "ROE negativo",
+     "perdas",
+     "resultado negativo"
+    ]
+   },
+   {
+    "id": "supervisory_action",
+    "label": "risco de ação do BCB (intervenção, RAET, liquidação)",
+    "any_of": [
+     "intervenção",
+     "RAET",
+     "liquidação",
+     "Banco Central",
+     "regime especial"
+    ]
+   },
+   {
+    "id": "recapitalization",
+    "label": "aporte de capital, venda ou plano de recuperação",
+    "any_of": [
+     "aporte",
+     "aumento de capital",
+     "venda do banco",
+     "comprador",
+     "plano de recuperação"
+    ]
+   }
+  ]
+ },
+ "answer_key": {
+  "window": [
+   "2012-10-19",
+   "2013-02-16"
+  ],
+  "board_decisions": [],
+  "decision_categories": {},
+  "material_facts_after": [],
+  "ratings_after": [],
+  "market_reaction": {},
+  "prudential_after": [
+   {
+    "quarter": 201206,
+    "roe_pct": -34.3,
+    "basileia_headroom_pp": -1.29,
+    "pl_bi": 0.57,
+    "ativo_bi": 7.99
+   },
+   {
+    "quarter": 201209,
+    "roe_pct": -135.6,
+    "basileia_headroom_pp": null,
+    "pl_bi": 0.28,
+    "ativo_bi": 6.95
+   }
+  ],
+  "outcome": [
+   {
+    "date": "2012-10-19",
+    "regime": "Intervenção",
+    "act": "Ato do Presidente nº 1238",
+    "register_id": 2120
+   },
+   {
+    "date": "2013-06-19",
+    "regime": "Liquidação extrajudicial",
+    "act": "Ato do Presidente nº 1251",
+    "register_id": 2200
+   }
+  ],
+  "pre_event_signal": {
+   "visible": true,
+   "quarter": 201206,
+   "reasons": [
+    "folga de Basileia -1.29 p.p. (abaixo do mínimo)",
+    "ROE -34.3%"
+   ],
+   "basis": [
+    "prudential"
+   ]
+  }
+ },
+ "coverage": {
+  "entities_with_fundamentals": [
+   "abc_brasil",
+   "banco_pan",
+   "bmg",
+   "daycoval",
+   "ep-bva",
+   "fibra",
+   "mercantil"
+  ],
+  "entities_with_soundness": [],
+  "focal_fundamentals": true,
+  "feed_items": {
+   "market:b3": 4
+  },
+  "sector_events": 1,
+  "selic": true,
+  "reputation": 0
+ },
+ "usable": true,
+ "usable_reason": "desfecho regulatório conhecido (registro do BCB)"
+}

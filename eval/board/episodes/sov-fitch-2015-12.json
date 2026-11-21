@@ -1,0 +1,1639 @@
+{
+ "schema": "board/v1/episode",
+ "scenario": "sov-fitch-2015-12",
+ "kind": "sovereign",
+ "built_at": "2026-11-21T03:10:41+00:00",
+ "note": "EPISÓDIO HISTÓRICO (#339). Pacote congelado na data com dados públicos; gabarito lido depois do evento.",
+ "focal": "bradesco",
+ "subject": "bradesco",
+ "as_of": "2015-12-16",
+ "event_date": "2015-12-16",
+ "trigger": {
+  "text": "A Fitch rebaixou o rating soberano do Brasil de BBB- para BB+, com perspectiva negativa: segunda agência a retirar o grau de investimento.",
+  "source": "Agência Brasil",
+  "url": "https://agenciabrasil.ebc.com.br/economia/noticia/2015-12/fitch-rebaixa-brasil-e-pais-perde-grau-de-investimento"
+ },
+ "task": "A Fitch rebaixou o rating soberano do Brasil para BB+ (perspectiva negativa); é a segunda agência a retirar o grau de investimento, o que obriga parte dos fundos estrangeiros a sair. Que opções o conselho do Bradesco deve considerar nos próximos 90 dias para captação, capital, preço de crédito e clientes, e quais gatilhos monitorar?",
+ "feed": {
+  "as_of": "2015-12-16",
+  "generated_at": "2015-12-16T23:59:59+00:00",
+  "episode": "sov-fitch-2015-12",
+  "entities": [
+   {
+    "entity": "bradesco",
+    "label": "Bradesco",
+    "industries": [
+     "banking"
+    ],
+    "fundamentals": {
+     "roe_pct": 20.0,
+     "roa_pct": 2.06,
+     "basileia_headroom_pp": 5.48,
+     "credito_captacoes_pct": 56.49,
+     "carteira_share_pct": 10.51,
+     "lucro_share_pct": 18.2,
+     "ativo_bi": 844.77,
+     "pl_bi": 86.99,
+     "leverage": 9.7,
+     "base_date": 201506
+    },
+    "market_share_pct": 10.51,
+    "soundness": {
+     "indice_basileia": 15.98,
+     "capital_principal": 12.76,
+     "capital_nivel_i": 12.76,
+     "band": "sólido",
+     "base_date": 201506
+    }
+   },
+   {
+    "entity": "itau",
+    "label": "Itaú",
+    "industries": [
+     "banking"
+    ],
+    "fundamentals": {
+     "roe_pct": 20.7,
+     "roa_pct": 1.96,
+     "basileia_headroom_pp": 6.66,
+     "credito_captacoes_pct": 61.57,
+     "carteira_share_pct": 13.42,
+     "lucro_share_pct": 22.93,
+     "ativo_bi": 1120.9,
+     "pl_bi": 105.89,
+     "leverage": 10.6,
+     "base_date": 201506
+    },
+    "market_share_pct": 13.42,
+    "soundness": {
+     "indice_basileia": 17.16,
+     "capital_principal": 13.16,
+     "capital_nivel_i": 13.17,
+     "band": "sólido",
+     "base_date": 201506
+    }
+   },
+   {
+    "entity": "bb",
+    "label": "Banco do Brasil",
+    "industries": [
+     "banking"
+    ],
+    "fundamentals": {
+     "roe_pct": 24.3,
+     "roa_pct": 1.28,
+     "basileia_headroom_pp": 5.68,
+     "credito_captacoes_pct": 62.94,
+     "carteira_share_pct": 20.32,
+     "lucro_share_pct": 18.38,
+     "ativo_bi": 1372.86,
+     "pl_bi": 72.53,
+     "leverage": 18.9,
+     "base_date": 201506
+    },
+    "market_share_pct": 20.32,
+    "soundness": {
+     "indice_basileia": 16.18,
+     "capital_principal": 8.71,
+     "capital_nivel_i": 11.36,
+     "band": "sólido",
+     "base_date": 201506
+    }
+   },
+   {
+    "entity": "santander",
+    "label": "Santander",
+    "industries": [
+     "banking"
+    ],
+    "fundamentals": {
+     "roe_pct": 15.0,
+     "roa_pct": 1.57,
+     "basileia_headroom_pp": 7.55,
+     "credito_captacoes_pct": 62.5,
+     "carteira_share_pct": 7.53,
+     "lucro_share_pct": 9.91,
+     "ativo_bi": 606.37,
+     "pl_bi": 63.11,
+     "leverage": 9.6,
+     "base_date": 201506
+    },
+    "market_share_pct": 7.53,
+    "soundness": {
+     "indice_basileia": 18.05,
+     "capital_principal": 15.49,
+     "capital_nivel_i": 16.55,
+     "band": "sólido",
+     "base_date": 201506
+    }
+   },
+   {
+    "entity": "caixa",
+    "label": "Caixa Econômica Federal",
+    "industries": [
+     "banking"
+    ],
+    "fundamentals": {
+     "roe_pct": 21.2,
+     "roa_pct": 0.5,
+     "basileia_headroom_pp": 3.49,
+     "credito_captacoes_pct": 67.13,
+     "carteira_share_pct": 19.19,
+     "lucro_share_pct": 5.84,
+     "ativo_bi": 1119.16,
+     "pl_bi": 26.44,
+     "leverage": 42.3,
+     "base_date": 201506
+    },
+    "market_share_pct": 19.19,
+    "soundness": {
+     "indice_basileia": 13.99,
+     "capital_principal": 10.43,
+     "capital_nivel_i": 10.43,
+     "band": "sólido",
+     "base_date": 201506
+    }
+   },
+   {
+    "entity": "btg",
+    "label": "BTG Pactual",
+    "industries": [
+     "banking"
+    ],
+    "fundamentals": {
+     "roe_pct": 27.4,
+     "roa_pct": 2.49,
+     "basileia_headroom_pp": 6.6,
+     "credito_captacoes_pct": 20.47,
+     "carteira_share_pct": 0.59,
+     "lucro_share_pct": 4.66,
+     "ativo_bi": 179.35,
+     "pl_bi": 16.3,
+     "leverage": 11.0,
+     "base_date": 201506
+    },
+    "market_share_pct": 0.59,
+    "soundness": {
+     "indice_basileia": 17.1,
+     "capital_principal": 10.77,
+     "capital_nivel_i": 13.86,
+     "band": "sólido",
+     "base_date": 201506
+    }
+   },
+   {
+    "entity": "safra",
+    "label": "Safra",
+    "industries": [
+     "banking"
+    ],
+    "fundamentals": {
+     "roe_pct": 19.0,
+     "roa_pct": 1.24,
+     "basileia_headroom_pp": 3.57,
+     "credito_captacoes_pct": 47.61,
+     "carteira_share_pct": 1.62,
+     "lucro_share_pct": 1.85,
+     "ativo_bi": 142.6,
+     "pl_bi": 9.33,
+     "leverage": 15.3,
+     "base_date": 201506
+    },
+    "market_share_pct": 1.62,
+    "soundness": {
+     "indice_basileia": 14.07,
+     "capital_principal": 10.66,
+     "capital_nivel_i": 11.73,
+     "band": "sólido",
+     "base_date": 201506
+    }
+   }
+  ],
+  "feed": [
+   {
+    "id": "ipe-cvm-fato:001023IPE140820150204223005-33",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bb"
+    ],
+    "date": "2015-08-18",
+    "data_date": "2015-08-18",
+    "narrative": "Banco do Brasil (comunicado na CVM): Teleconferência do Resultado 2T15"
+   },
+   {
+    "id": "ipe-cvm-fato:000906IPE180820150104223511-46",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bradesco"
+    ],
+    "date": "2015-08-19",
+    "data_date": "2015-08-19",
+    "narrative": "Bradesco (comunicado na CVM): Encontro Bradesco APIMEC Belo Horizonte"
+   },
+   {
+    "id": "ipe-cvm-fato:000906IPE200820150104223610-96",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bradesco"
+    ],
+    "date": "2015-08-20",
+    "data_date": "2015-08-20",
+    "narrative": "Bradesco (comunicado na CVM): Encontro Bradesco APIMEC Porto Alegre"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE200820150104223607-48",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2015-08-20",
+    "data_date": "2015-08-20",
+    "narrative": "Itaú (comunicado na CVM): Reunião Pública Apimec SP 2015 - Parte 1"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE200820150104223607-50",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2015-08-20",
+    "data_date": "2015-08-20",
+    "narrative": "Itaú (comunicado na CVM): Reunião Pública Apimec SP 2015 - Parte 2"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE200820150104223607-51",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2015-08-20",
+    "data_date": "2015-08-20",
+    "narrative": "Itaú (comunicado na CVM): Reunião Pública Apimec SP 2015 - Parte 3"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE200820150104223607-52",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2015-08-20",
+    "data_date": "2015-08-20",
+    "narrative": "Itaú (comunicado na CVM): Reunião Pública Apimec SP 2015 - Parte 4"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE200820150104223607-86",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2015-08-20",
+    "data_date": "2015-08-20",
+    "narrative": "Itaú (comunicado na CVM): Reunião Pública Apimec SP 2015"
+   },
+   {
+    "id": "ipe-cvm-fato:000906IPE210820150104223710-96",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bradesco"
+    ],
+    "date": "2015-08-21",
+    "data_date": "2015-08-21",
+    "narrative": "Bradesco (comunicado na CVM): Deliberações da AGE do IRB - Brasil para abertura do capital e oferta pública secundária de ações."
+   },
+   {
+    "id": "ipe-cvm-fato:001023IPE210820150104223710-87",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bb"
+    ],
+    "date": "2015-08-21",
+    "data_date": "2015-08-21",
+    "narrative": "Banco do Brasil (comunicado na CVM): Atualização de Dividendos e JCP"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE210820150104223710-15",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2015-08-21",
+    "data_date": "2015-08-21",
+    "narrative": "Itaú (comunicado na CVM): Venda de ações - oferta IRB"
+   },
+   {
+    "id": "ipe-cvm-fato:001023IPE260820150104224210-78",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bb"
+    ],
+    "date": "2015-08-26",
+    "data_date": "2015-08-26",
+    "narrative": "Banco do Brasil (comunicado na CVM): Dividendos e JCP 2T15 - Atualização até a data do pagamento"
+   },
+   {
+    "id": "ipe-cvm-fato:022616IPE260820150104224210-56",
+    "kind": "filing:fato_relevante",
+    "entities": [
+     "btg"
+    ],
+    "date": "2015-08-26",
+    "data_date": "2015-08-26",
+    "narrative": "BTG Pactual (fato relevante na CVM): Adiamento de Assembleia Geral Extraordinária"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE270820150104224308-57",
+    "kind": "filing:fato_relevante",
+    "entities": [
+     "itau"
+    ],
+    "date": "2015-08-27",
+    "data_date": "2015-08-27",
+    "narrative": "Itaú (fato relevante na CVM): Renovação dos limites para aquisição de ações da Companhia."
+   },
+   {
+    "id": "ipe-cvm-fato:001023IPE280820150104224410-51",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bb"
+    ],
+    "date": "2015-08-28",
+    "data_date": "2015-08-28",
+    "narrative": "Banco do Brasil (comunicado na CVM): Aquisição/Alienação de Participação Acionária (art. 12 da Instr. CVM nº 358)"
+   },
+   {
+    "id": "ipe-cvm-fato:022616IPE280820150104224411-56",
+    "kind": "filing:comunicado",
+    "entities": [
+     "btg"
+    ],
+    "date": "2015-08-28",
+    "data_date": "2015-08-28",
+    "narrative": "BTG Pactual (comunicado na CVM): Aprovação Regulatória"
+   },
+   {
+    "id": "ipe-cvm-fato:020532IPE310820150104224711-25",
+    "kind": "filing:comunicado",
+    "entities": [
+     "santander"
+    ],
+    "date": "2015-08-31",
+    "data_date": "2015-08-31",
+    "narrative": "Santander (comunicado na CVM): Comunicado a respeito da conclusão da operação de venda do negócio de custódia qualificada, com a alienação da totalidade das ações de emissão da subsidiária Santander Securities Services Brasil DTVM."
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE010920150104224807-40",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2015-09-01",
+    "data_date": "2015-09-01",
+    "narrative": "Itaú (comunicado na CVM): Negociação das Próprias Ações para Tesouraria - Agosto/2015"
+   },
+   {
+    "id": "ipe-cvm-fato:022616IPE030920150104225012-86",
+    "kind": "filing:comunicado",
+    "entities": [
+     "btg"
+    ],
+    "date": "2015-09-03",
+    "data_date": "2015-09-03",
+    "narrative": "BTG Pactual (comunicado na CVM): Aquisição/Alienação de Participação Acionária (art. 12 da Instr. CVM nº 358)"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE050920150104225209-12",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2015-09-05",
+    "data_date": "2015-09-05",
+    "narrative": "Itaú (comunicado na CVM): Itaú CorpBanca: Aprovação da Fusão pelo Regulador Chileno"
+   },
+   {
+    "id": "ipe-cvm-fato:001023IPE080920150104225505-56",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bb"
+    ],
+    "date": "2015-09-08",
+    "data_date": "2015-09-08",
+    "narrative": "Banco do Brasil (comunicado na CVM): Apresentação APIMECs RS, BA, DF, MG e RJ"
+   },
+   {
+    "id": "ipe-cvm-fato:020532IPE090920150104225605-40",
+    "kind": "filing:comunicado",
+    "entities": [
+     "santander"
+    ],
+    "date": "2015-09-09",
+    "data_date": "2015-09-09",
+    "narrative": "Santander (comunicado na CVM): mudança na administração"
+   },
+   {
+    "id": "ipe-cvm-fato:022616IPE090920150104225708-59",
+    "kind": "filing:fato_relevante",
+    "entities": [
+     "btg"
+    ],
+    "date": "2015-09-10",
+    "data_date": "2015-09-10",
+    "narrative": "BTG Pactual (fato relevante na CVM): Relação de Substituição Efetiva da AGE de 15/09/2015"
+   },
+   {
+    "id": "ipe-cvm-fato:001023IPE100920150104225710-10",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bb"
+    ],
+    "date": "2015-09-10",
+    "data_date": "2015-09-10",
+    "narrative": "Banco do Brasil (comunicado na CVM): Índice Dow Jones de Sustentabilidade da Bolsa de Nova Iorque"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE100920150104225709-12",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2015-09-10",
+    "data_date": "2015-09-10",
+    "narrative": "Itaú (comunicado na CVM): Itaúsa e o Itaú Unibanco compõem novamente o Dow Jones Sustainability World Index 2015/2016 (DJSI)"
+   },
+   {
+    "id": "ipe-cvm-fato:001023IPE110920150104225810-32",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bb"
+    ],
+    "date": "2015-09-11",
+    "data_date": "2015-09-11",
+    "narrative": "Banco do Brasil (comunicado na CVM): Resposta Ofício 2736/2015-GAE - ref: valor atualizado de juros sobre capital próprio"
+   },
+   {
+    "id": "ipe-cvm-fato:022616IPE150920150104226106-76",
+    "kind": "filing:fato_relevante",
+    "entities": [
+     "btg"
+    ],
+    "date": "2015-09-15",
+    "data_date": "2015-09-15",
+    "narrative": "BTG Pactual (fato relevante na CVM): Incorporação de Socierdade"
+   },
+   {
+    "id": "ipe-cvm-fato:000906IPE160920150104226305-19",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bradesco"
+    ],
+    "date": "2015-09-16",
+    "data_date": "2015-09-16",
+    "narrative": "Bradesco (comunicado na CVM): Pagamento de juros sobre o capital próprio mensais relativos ao mês de outubro/2015."
+   },
+   {
+    "id": "ipe-cvm-fato:020532IPE230920150104227004-16",
+    "kind": "filing:fato_relevante",
+    "entities": [
+     "santander"
+    ],
+    "date": "2015-09-23",
+    "data_date": "2015-09-23",
+    "narrative": "Santander (fato relevante na CVM): Projeções para alguns de seus indicadores para o ano de 2018"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE051020150104227909-03",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2015-10-05",
+    "data_date": "2015-10-05",
+    "narrative": "Itaú (comunicado na CVM): Negociação das Próprias Ações para Tesouraria - Setembro/2015"
+   },
+   {
+    "id": "ipe-cvm-fato:000906IPE191020150104229610-27",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bradesco"
+    ],
+    "date": "2015-10-19",
+    "data_date": "2015-10-19",
+    "narrative": "Bradesco (comunicado na CVM): Pagamento de juros sobre o capital próprio mensais relativos ao mês de novembro/2015."
+   },
+   {
+    "id": "ipe-cvm-fato:001023IPE201020150104229710-53",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bb"
+    ],
+    "date": "2015-10-20",
+    "data_date": "2015-10-20",
+    "narrative": "Banco do Brasil (comunicado na CVM): Período de Silêncio"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE201020150104229804-88",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2015-10-21",
+    "data_date": "2015-10-21",
+    "narrative": "Itaú (comunicado na CVM): Aquisição/Alienação de Participação Acionária (art. 12 da Instr. CVM nº 358)"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE211020150104229810-39",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2015-10-21",
+    "data_date": "2015-10-21",
+    "narrative": "Itaú (comunicado na CVM): Aquisição de ações da Conectcar"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE221020150104229810-14",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2015-10-22",
+    "data_date": "2015-10-22",
+    "narrative": "Itaú (comunicado na CVM): Teleconferência de Resultados 3T2015"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE231020150104230010-41",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2015-10-23",
+    "data_date": "2015-10-23",
+    "narrative": "Itaú (comunicado na CVM): Nova forma de Apresentação da Margem Financeira Gerencial com Clientes"
+   },
+   {
+    "id": "ipe-cvm-fato:000906IPE300920150104230604-63",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bradesco"
+    ],
+    "date": "2015-10-29",
+    "data_date": "2015-10-29",
+    "narrative": "Bradesco (comunicado na CVM): REPORT ON ECONOMIC AND FINANCIAL ANALYSIS"
+   },
+   {
+    "id": "ipe-cvm-fato:020532IPE291020150104230511-75",
+    "kind": "filing:comunicado",
+    "entities": [
+     "santander"
+    ],
+    "date": "2015-10-29",
+    "data_date": "2015-10-29",
+    "narrative": "Santander (comunicado na CVM): Apresentação Teleconferência 3T15"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE031120150104230610-08",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2015-11-03",
+    "data_date": "2015-11-03",
+    "narrative": "Itaú (comunicado na CVM): Informações consolidadas dos exercícios findos em 30 de setembro de 2015 e 2014."
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE031120150104230610-16",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2015-11-03",
+    "data_date": "2015-11-03",
+    "narrative": "Itaú (comunicado na CVM): Divulgação dos resultados do terceiro trimestre de 2015, de acordo com o padrão contábil internacional - IFRS"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE031120150104230610-24",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2015-11-03",
+    "data_date": "2015-11-03",
+    "narrative": "Itaú (comunicado na CVM): Resultados do 3º trimestre de 2015 (Sumário)"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE031120150104231109-23",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2015-11-03",
+    "data_date": "2015-11-03",
+    "narrative": "Itaú (comunicado na CVM): Negociação das Próprias Ações para Tesouraria - Outubro/2015"
+   },
+   {
+    "id": "ipe-cvm-fato:020532IPE031120150104231111-62",
+    "kind": "filing:fato_relevante",
+    "entities": [
+     "santander"
+    ],
+    "date": "2015-11-03",
+    "data_date": "2015-11-03",
+    "narrative": "Santander (fato relevante na CVM): Aquisição de Ações de Emissão da Própria Companhia"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE041120150104231205-77",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2015-11-04",
+    "data_date": "2015-11-04",
+    "narrative": "Itaú (comunicado na CVM): Teleconferência dos Resultados do 3º trimestre de 2015"
+   },
+   {
+    "id": "ipe-cvm-fato:022616IPE041120150104231212-79",
+    "kind": "filing:fato_relevante",
+    "entities": [
+     "btg"
+    ],
+    "date": "2015-11-04",
+    "data_date": "2015-11-04",
+    "narrative": "BTG Pactual (fato relevante na CVM): Incorporação de Sociedade pelo Banco BTG Pactual S.A."
+   },
+   {
+    "id": "ipe-cvm-fato:020532IPE041120150104231406-47",
+    "kind": "filing:comunicado",
+    "entities": [
+     "santander"
+    ],
+    "date": "2015-11-06",
+    "data_date": "2015-11-06",
+    "narrative": "Santander (comunicado na CVM): APIMEC PORTO ALEGRE"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE051120150104231309-40",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2015-11-06",
+    "data_date": "2015-11-06",
+    "narrative": "Itaú (comunicado na CVM): Notícia divulgada na mídia"
+   },
+   {
+    "id": "ipe-cvm-fato:020532IPE091120150104231807-56",
+    "kind": "filing:comunicado",
+    "entities": [
+     "santander"
+    ],
+    "date": "2015-11-10",
+    "data_date": "2015-11-10",
+    "narrative": "Santander (comunicado na CVM): APIMEC BH"
+   },
+   {
+    "id": "ipe-cvm-fato:000906IPE111120150104231910-53",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bradesco"
+    ],
+    "date": "2015-11-11",
+    "data_date": "2015-11-11",
+    "narrative": "Bradesco (comunicado na CVM): Alteração do Calendário de Eventos Corporativos 2015"
+   },
+   {
+    "id": "ipe-cvm-fato:001023IPE121120150104232003-99",
+    "kind": "filing:fato_relevante",
+    "entities": [
+     "bb"
+    ],
+    "date": "2015-11-12",
+    "data_date": "2015-11-12",
+    "narrative": "Banco do Brasil (fato relevante na CVM): Projeções 2015"
+   },
+   {
+    "id": "ipe-cvm-fato:001023IPE121120150104232005-22",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bb"
+    ],
+    "date": "2015-11-12",
+    "data_date": "2015-11-12",
+    "narrative": "Banco do Brasil (comunicado na CVM): Coletiva de Imprensa 3T15"
+   },
+   {
+    "id": "ipe-cvm-fato:000906IPE161120150104232405-12",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bradesco"
+    ],
+    "date": "2015-11-16",
+    "data_date": "2015-11-16",
+    "narrative": "Bradesco (comunicado na CVM): Esclarecimento sobre consulta CVM/Bovespa"
+   },
+   {
+    "id": "ipe-cvm-fato:000906IPE161120150104232405-71",
+    "kind": "filing:fato_relevante",
+    "entities": [
+     "bradesco"
+    ],
+    "date": "2015-11-16",
+    "data_date": "2015-11-16",
+    "narrative": "Bradesco (fato relevante na CVM): proposta para aumento do capital social||proposta para pagamento de juros sobre o capital próprio complementares"
+   },
+   {
+    "id": "ipe-cvm-fato:000906IPE161120150104232410-53",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bradesco"
+    ],
+    "date": "2015-11-16",
+    "data_date": "2015-11-16",
+    "narrative": "Bradesco (comunicado na CVM): Pagamento de Juros sobre o capital próprio mensal - Dezembro/2015"
+   },
+   {
+    "id": "ipe-cvm-fato:001023IPE161120150104232411-58",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bb"
+    ],
+    "date": "2015-11-16",
+    "data_date": "2015-11-16",
+    "narrative": "Banco do Brasil (comunicado na CVM): Eleição de Vice-Presidente de Governo"
+   },
+   {
+    "id": "ipe-cvm-fato:001023IPE131120150304232105-28",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bb"
+    ],
+    "date": "2015-11-18",
+    "data_date": "2015-11-18",
+    "narrative": "Banco do Brasil (comunicado na CVM): Teleconferência do Resultado 3T15"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE031120150204230610-22",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2015-11-19",
+    "data_date": "2015-11-19",
+    "narrative": "Itaú (comunicado na CVM): Gerenciamento de Riscos - Pilar 3"
+   },
+   {
+    "id": "ipe-cvm-fato:000906IPE231120150104233105-05",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bradesco"
+    ],
+    "date": "2015-11-23",
+    "data_date": "2015-11-23",
+    "narrative": "Bradesco (comunicado na CVM): Pedido de interrupção do prazo de análise do registro da Oferta Pública do IRB"
+   },
+   {
+    "id": "ipe-cvm-fato:001023IPE231120150104233110-49",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bb"
+    ],
+    "date": "2015-11-23",
+    "data_date": "2015-11-23",
+    "narrative": "Banco do Brasil (comunicado na CVM): JCP 3T15 ratificação do valor"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE231120150104232706-85",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2015-11-23",
+    "data_date": "2015-11-23",
+    "narrative": "Itaú (comunicado na CVM): Itaú é reconhecido pelo Carbon Disclosure Project (CDP) como Líder em Transparência"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE231120150104232706-87",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2015-11-23",
+    "data_date": "2015-11-23",
+    "narrative": "Itaú (comunicado na CVM): Oferta IRB - status"
+   },
+   {
+    "id": "ipe-cvm-fato:000906IPE241120150304233209-96",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bradesco"
+    ],
+    "date": "2015-11-25",
+    "data_date": "2015-11-25",
+    "narrative": "Bradesco (comunicado na CVM): Encontro Bradesco APIMEC RJ"
+   },
+   {
+    "id": "ipe-cvm-fato:022616IPE251120150104233309-69",
+    "kind": "filing:fato_relevante",
+    "entities": [
+     "btg"
+    ],
+    "date": "2015-11-25",
+    "data_date": "2015-11-25",
+    "narrative": "BTG Pactual (fato relevante na CVM): Programa de Recompra e Outros Assuntos"
+   },
+   {
+    "id": "ipe-cvm-fato:000906IPE261120150104233405-33",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bradesco"
+    ],
+    "date": "2015-11-26",
+    "data_date": "2015-11-26",
+    "narrative": "Bradesco (comunicado na CVM): Notícia divulgada na mídia"
+   },
+   {
+    "id": "ipe-cvm-fato:000906IPE261120150104233411-62",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bradesco"
+    ],
+    "date": "2015-11-26",
+    "data_date": "2015-11-26",
+    "narrative": "Bradesco (comunicado na CVM): Encontro Bradesco APIMEC Brasília"
+   },
+   {
+    "id": "ipe-cvm-fato:001023IPE261120150104233405-06",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bb"
+    ],
+    "date": "2015-11-26",
+    "data_date": "2015-11-26",
+    "narrative": "Banco do Brasil (comunicado na CVM): Resposta ao Ofício CVM SAE 3528/2015 de 25/11/2015"
+   },
+   {
+    "id": "ipe-cvm-fato:001023IPE261120150104233410-53",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bb"
+    ],
+    "date": "2015-11-26",
+    "data_date": "2015-11-26",
+    "narrative": "Banco do Brasil (comunicado na CVM): Indice de Sustentabilidade Empresarial - ISE 2016"
+   },
+   {
+    "id": "ipe-cvm-fato:022616IPE261120150104233412-97",
+    "kind": "filing:comunicado",
+    "entities": [
+     "btg"
+    ],
+    "date": "2015-11-26",
+    "data_date": "2015-11-26",
+    "narrative": "BTG Pactual (comunicado na CVM): Notícia divulgada na mídia"
+   },
+   {
+    "id": "ipe-cvm-fato:022616IPE261120150104233413-09",
+    "kind": "filing:comunicado",
+    "entities": [
+     "btg"
+    ],
+    "date": "2015-11-26",
+    "data_date": "2015-11-26",
+    "narrative": "BTG Pactual (comunicado na CVM): Notícia divulgada na mídia"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE261120150104233409-01",
+    "kind": "filing:fato_relevante",
+    "entities": [
+     "itau"
+    ],
+    "date": "2015-11-27",
+    "data_date": "2015-11-27",
+    "narrative": "Itaú (fato relevante na CVM): Juros sobre o Capital Próprio"
+   },
+   {
+    "id": "ipe-cvm-fato:022616IPE271120150104233510-74",
+    "kind": "filing:comunicado",
+    "entities": [
+     "btg"
+    ],
+    "date": "2015-11-27",
+    "data_date": "2015-11-27",
+    "narrative": "BTG Pactual (comunicado na CVM): Notícia divulgada na mídia"
+   },
+   {
+    "id": "ipe-cvm-fato:022616IPE291120150104233713-71",
+    "kind": "filing:fato_relevante",
+    "entities": [
+     "btg"
+    ],
+    "date": "2015-11-29",
+    "data_date": "2015-11-29",
+    "narrative": "BTG Pactual (fato relevante na CVM): Alterações na Administração"
+   },
+   {
+    "id": "ipe-cvm-fato:000906IPE301120150104233807-46",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bradesco"
+    ],
+    "date": "2015-11-30",
+    "data_date": "2015-11-30",
+    "narrative": "Bradesco (comunicado na CVM): Encontro Bradesco APIMEC SP"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE301120150104233805-13",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2015-11-30",
+    "data_date": "2015-11-30",
+    "narrative": "Itaú (comunicado na CVM): Itaúsa, Itaú Unibanco e Duratex compõem novamente o Índice de Sustentabilidade Empresarial da BM&ampFBOVESPA (ISE)"
+   },
+   {
+    "id": "ipe-cvm-fato:022616IPE011220150104233908-97",
+    "kind": "filing:comunicado",
+    "entities": [
+     "btg"
+    ],
+    "date": "2015-12-01",
+    "data_date": "2015-12-01",
+    "narrative": "BTG Pactual (comunicado na CVM): Notícia divulgada na mídia"
+   },
+   {
+    "id": "ipe-cvm-fato:022616IPE011220150104233910-46",
+    "kind": "filing:comunicado",
+    "entities": [
+     "btg"
+    ],
+    "date": "2015-12-01",
+    "data_date": "2015-12-01",
+    "narrative": "BTG Pactual (comunicado na CVM): Notícia divulgada na mídia"
+   },
+   {
+    "id": "ipe-cvm-fato:022616IPE011220150104233910-55",
+    "kind": "filing:comunicado",
+    "entities": [
+     "btg"
+    ],
+    "date": "2015-12-01",
+    "data_date": "2015-12-01",
+    "narrative": "BTG Pactual (comunicado na CVM): Notícia divulgada na mídia"
+   },
+   {
+    "id": "ipe-cvm-fato:022616IPE011220150104233910-58",
+    "kind": "filing:comunicado",
+    "entities": [
+     "btg"
+    ],
+    "date": "2015-12-01",
+    "data_date": "2015-12-01",
+    "narrative": "BTG Pactual (comunicado na CVM): Esclarecimentos sobre Consultas CVM/BOVESPA"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE021220150104234010-95",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2015-12-02",
+    "data_date": "2015-12-02",
+    "narrative": "Itaú (comunicado na CVM): Negociação das Próprias Ações para Tesouraria - Novembro/2015"
+   },
+   {
+    "id": "ipe-cvm-fato:022616IPE021220150104234004-74",
+    "kind": "filing:comunicado",
+    "entities": [
+     "btg"
+    ],
+    "date": "2015-12-02",
+    "data_date": "2015-12-02",
+    "narrative": "BTG Pactual (comunicado na CVM): Alienação de Participação na Rede D'Or"
+   },
+   {
+    "id": "ipe-cvm-fato:022616IPE021220150104234005-90",
+    "kind": "filing:fato_relevante",
+    "entities": [
+     "btg"
+    ],
+    "date": "2015-12-02",
+    "data_date": "2015-12-02",
+    "narrative": "BTG Pactual (fato relevante na CVM): Alteração do Controle Societário"
+   },
+   {
+    "id": "ipe-cvm-fato:022616IPE021220150104234008-27",
+    "kind": "filing:comunicado",
+    "entities": [
+     "btg"
+    ],
+    "date": "2015-12-02",
+    "data_date": "2015-12-02",
+    "narrative": "BTG Pactual (comunicado na CVM): Esclarecimentos sobre Fato Relevante"
+   },
+   {
+    "id": "ipe-cvm-fato:001023IPE031220150104234010-75",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bb"
+    ],
+    "date": "2015-12-03",
+    "data_date": "2015-12-03",
+    "narrative": "Banco do Brasil (comunicado na CVM): Apresentação Apimec São Paulo"
+   },
+   {
+    "id": "ipe-cvm-fato:022616IPE031220150104234108-63",
+    "kind": "filing:comunicado",
+    "entities": [
+     "btg"
+    ],
+    "date": "2015-12-03",
+    "data_date": "2015-12-03",
+    "narrative": "BTG Pactual (comunicado na CVM): Notícia divulgada na mídia"
+   },
+   {
+    "id": "ipe-cvm-fato:022616IPE031220150104234108-71",
+    "kind": "filing:comunicado",
+    "entities": [
+     "btg"
+    ],
+    "date": "2015-12-03",
+    "data_date": "2015-12-03",
+    "narrative": "BTG Pactual (comunicado na CVM): Notícia divulgada na mídia"
+   },
+   {
+    "id": "ipe-cvm-fato:022616IPE041220150104234113-24",
+    "kind": "filing:comunicado",
+    "entities": [
+     "btg"
+    ],
+    "date": "2015-12-04",
+    "data_date": "2015-12-04",
+    "narrative": "BTG Pactual (comunicado na CVM): Aprovação Bacen"
+   },
+   {
+    "id": "ipe-cvm-fato:022616IPE041220150104234113-27",
+    "kind": "filing:comunicado",
+    "entities": [
+     "btg"
+    ],
+    "date": "2015-12-04",
+    "data_date": "2015-12-04",
+    "narrative": "BTG Pactual (comunicado na CVM): Comitê Independente"
+   },
+   {
+    "id": "ipe-cvm-fato:022616IPE041220150104234206-30",
+    "kind": "filing:comunicado",
+    "entities": [
+     "btg"
+    ],
+    "date": "2015-12-04",
+    "data_date": "2015-12-04",
+    "narrative": "BTG Pactual (comunicado na CVM): Linha de Assistência Financeira FGC"
+   },
+   {
+    "id": "ipe-cvm-fato:022616IPE041220150104234211-75",
+    "kind": "filing:comunicado",
+    "entities": [
+     "btg"
+    ],
+    "date": "2015-12-04",
+    "data_date": "2015-12-04",
+    "narrative": "BTG Pactual (comunicado na CVM): Esclarecimento sobre Consulta BM&ampFBOVESPA"
+   },
+   {
+    "id": "ipe-cvm-fato:022616IPE041220150104234211-78",
+    "kind": "filing:comunicado",
+    "entities": [
+     "btg"
+    ],
+    "date": "2015-12-04",
+    "data_date": "2015-12-04",
+    "narrative": "BTG Pactual (comunicado na CVM): Notícia divulgada na mídia"
+   },
+   {
+    "id": "ipe-cvm-fato:000906IPE071220150104234505-71",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bradesco"
+    ],
+    "date": "2015-12-07",
+    "data_date": "2015-12-07",
+    "narrative": "Bradesco (comunicado na CVM): Celebração de aditamentos de contratos vigentes com a Via Varejo S.A."
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE081220150104234608-46",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2015-12-08",
+    "data_date": "2015-12-08",
+    "narrative": "Itaú (comunicado na CVM): Itaú Unibanco passa a integrar o Índice de Sustentabilidade Euronext Vigeo - Emerging 70"
+   },
+   {
+    "id": "ipe-cvm-fato:020532IPE081220150104234611-13",
+    "kind": "filing:fato_relevante",
+    "entities": [
+     "santander"
+    ],
+    "date": "2015-12-08",
+    "data_date": "2015-12-08",
+    "narrative": "Santander (fato relevante na CVM): Contratação de prestador de serviços de formação de mercado"
+   },
+   {
+    "id": "ipe-cvm-fato:001023IPE101220150104234805-14",
+    "kind": "filing:fato_relevante",
+    "entities": [
+     "bb"
+    ],
+    "date": "2015-12-10",
+    "data_date": "2015-12-10",
+    "narrative": "Banco do Brasil (fato relevante na CVM): Recompra de Títulos de Dívida"
+   },
+   {
+    "id": "ipe-cvm-fato:022616IPE101220150104234813-81",
+    "kind": "filing:comunicado",
+    "entities": [
+     "btg"
+    ],
+    "date": "2015-12-10",
+    "data_date": "2015-12-10",
+    "narrative": "BTG Pactual (comunicado na CVM): Notícia divulgada na mídia"
+   },
+   {
+    "id": "ipe-cvm-fato:001023IPE111220150104234910-37",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bb"
+    ],
+    "date": "2015-12-11",
+    "data_date": "2015-12-11",
+    "narrative": "Banco do Brasil (comunicado na CVM): Pagamento de JCP - Ajuste pelo Programa de Recompra"
+   },
+   {
+    "id": "ipe-cvm-fato:022616IPE111220150104234813-84",
+    "kind": "filing:comunicado",
+    "entities": [
+     "btg"
+    ],
+    "date": "2015-12-11",
+    "data_date": "2015-12-11",
+    "narrative": "BTG Pactual (comunicado na CVM): Formação de Comitê Especial e Outros Assuntos"
+   },
+   {
+    "id": "ipe-cvm-fato:022616IPE141220150104235204-66",
+    "kind": "filing:fato_relevante",
+    "entities": [
+     "btg"
+    ],
+    "date": "2015-12-14",
+    "data_date": "2015-12-14",
+    "narrative": "BTG Pactual (fato relevante na CVM): Cancelamento de Ações e Programa de Recompra"
+   },
+   {
+    "id": "ipe-cvm-fato:022616IPE141220150204235209-96",
+    "kind": "filing:comunicado",
+    "entities": [
+     "btg"
+    ],
+    "date": "2015-12-15",
+    "data_date": "2015-12-15",
+    "narrative": "BTG Pactual (comunicado na CVM): Notícia divulgada na mídia"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE151220150104235307-04",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2015-12-15",
+    "data_date": "2015-12-15",
+    "narrative": "Itaú (comunicado na CVM): Reunião Pública Apimec Fortaleza - CE 2015."
+   },
+   {
+    "id": "ipe-cvm-fato:000906IPE161220150104235304-58",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bradesco"
+    ],
+    "date": "2015-12-15",
+    "data_date": "2015-12-15",
+    "narrative": "Bradesco (comunicado na CVM): ENCONTRO BRADESCO APIMEC FORTALEZA"
+   },
+   {
+    "id": "b3-bradesco-2015-12-15",
+    "kind": "market:b3",
+    "entities": [
+     "bradesco"
+    ],
+    "date": "2015-12-15",
+    "data_date": "2015-12-15",
+    "abnormal_pct": -7.57,
+    "narrative": "Bradesco: ação BBDC4 variou -7.61% de 2015-10-16 a 2015-12-15 (mediana do setor -0.04%). Preços sem ajuste por proventos."
+   },
+   {
+    "id": "b3-itau-2015-12-15",
+    "kind": "market:b3",
+    "entities": [
+     "itau"
+    ],
+    "date": "2015-12-15",
+    "data_date": "2015-12-15",
+    "abnormal_pct": 8.18,
+    "narrative": "Itaú: ação ITUB4 variou 3.85% de 2015-10-16 a 2015-12-15 (mediana do setor -4.32%). Preços sem ajuste por proventos."
+   },
+   {
+    "id": "b3-bb-2015-12-15",
+    "kind": "market:b3",
+    "entities": [
+     "bb"
+    ],
+    "date": "2015-12-15",
+    "data_date": "2015-12-15",
+    "abnormal_pct": 5.47,
+    "narrative": "Banco do Brasil: ação BBAS3 variou 1.15% de 2015-10-16 a 2015-12-15 (mediana do setor -4.32%). Preços sem ajuste por proventos."
+   },
+   {
+    "id": "b3-santander-2015-12-15",
+    "kind": "market:b3",
+    "entities": [
+     "santander"
+    ],
+    "date": "2015-12-15",
+    "data_date": "2015-12-15",
+    "abnormal_pct": 17.78,
+    "narrative": "Santander: ação SANB11 variou 13.45% de 2015-10-16 a 2015-12-15 (mediana do setor -4.32%). Preços sem ajuste por proventos."
+   },
+   {
+    "id": "b3-btg-2015-12-15",
+    "kind": "market:b3",
+    "entities": [
+     "btg"
+    ],
+    "date": "2015-12-15",
+    "data_date": "2015-12-15",
+    "abnormal_pct": -46.66,
+    "narrative": "BTG Pactual: ação BBTG11 variou -46.7% de 2015-10-16 a 2015-12-15 (mediana do setor -0.04%). Preços sem ajuste por proventos."
+   },
+   {
+    "id": "ipe-cvm-fato:022616IPE161220150104235406-94",
+    "kind": "filing:comunicado",
+    "entities": [
+     "btg"
+    ],
+    "date": "2015-12-16",
+    "data_date": "2015-12-16",
+    "narrative": "BTG Pactual (comunicado na CVM): Notícia divulgada na mídia"
+   },
+   {
+    "id": "ipe-cvm-fato:022616IPE161220150104235406-96",
+    "kind": "filing:comunicado",
+    "entities": [
+     "btg"
+    ],
+    "date": "2015-12-16",
+    "data_date": "2015-12-16",
+    "narrative": "BTG Pactual (comunicado na CVM): Notícia divulgada na mídia"
+   }
+  ],
+  "sector_events": [
+   {
+    "id": "trigger-sov-fitch-2015-12",
+    "date": "2015-12-16",
+    "title": "A Fitch rebaixou o rating soberano do Brasil de BBB- para BB+, com perspectiva negativa: segunda agência a retirar o grau de investimento.",
+    "industry": "banking",
+    "entities": [],
+    "sources": [
+     {
+      "source": "Agência Brasil",
+      "url": "https://agenciabrasil.ebc.com.br/economia/noticia/2015-12/fitch-rebaixa-brasil-e-pais-perde-grau-de-investimento"
+     }
+    ]
+   },
+   {
+    "id": "ref-2015-10",
+    "date": "2015-10-31",
+    "industry": "banking",
+    "entities": [],
+    "title": "REF 2015-10 (BCB), 2 Sistema financeiro › 2.6 Testes de estresse de capital: 2.6 Testes de estresse de capital52 Com a finalidade de mensurar a resistência, bem como a capacidade de absorção de perdas causadas por eventual materialização dos principais riscos a que o sistema bancário se encontra exposto, foram simuladas alterações extremas e adversas nas principais variáveis econômicas e financeiras.",
+    "sources": [
+     {
+      "source": "BCB Relatório de Estabilidade Financeira",
+      "url": "https://www.bcb.gov.br/content/publicacoes/ref/201510/RELESTAB201510-refPub.pdf"
+     }
+    ]
+   }
+  ],
+  "macro": {
+   "selic": {
+    "current": 14.25,
+    "as_of": "2015-12-16",
+    "last_decision": {
+     "date": "2015-07-30",
+     "previous": 13.75,
+     "value": 14.25
+    }
+   }
+  },
+  "reputation": [
+   {
+    "id": "rk-bradesco-2015-S1",
+    "entity": "bradesco",
+    "source": "BCB ranking de reclamações",
+    "company": "BRADESCO (conglomerado)",
+    "rank": 2,
+    "index": 57.98,
+    "category": "Mais de dois milhões de clientes",
+    "period": "2015-S1"
+   },
+   {
+    "id": "rk-itau-2015-S1",
+    "entity": "itau",
+    "source": "BCB ranking de reclamações",
+    "company": "ITAU (conglomerado)",
+    "rank": 5,
+    "index": 29.52,
+    "category": "Mais de dois milhões de clientes",
+    "period": "2015-S1"
+   },
+   {
+    "id": "rk-bb-2015-S1",
+    "entity": "bb",
+    "source": "BCB ranking de reclamações",
+    "company": "BB (conglomerado)",
+    "rank": 7,
+    "index": 27.38,
+    "category": "Mais de dois milhões de clientes",
+    "period": "2015-S1"
+   },
+   {
+    "id": "rk-santander-2015-S1",
+    "entity": "santander",
+    "source": "BCB ranking de reclamações",
+    "company": "SANTANDER (conglomerado)",
+    "rank": 4,
+    "index": 40.61,
+    "category": "Mais de dois milhões de clientes",
+    "period": "2015-S1"
+   },
+   {
+    "id": "rk-caixa-2015-S1",
+    "entity": "caixa",
+    "source": "BCB ranking de reclamações",
+    "company": "CAIXA ECONÔMICA FEDERAL (conglomerado)",
+    "rank": 1,
+    "index": 60.11,
+    "category": "Mais de dois milhões de clientes",
+    "period": "2015-S1"
+   },
+   {
+    "id": "rk-btg-2015-S1",
+    "entity": "btg",
+    "source": "BCB ranking de reclamações",
+    "company": "BTG PACTUAL (conglomerado)",
+    "rank": null,
+    "index": null,
+    "category": "Menos de dois milhões de clientes",
+    "period": "2015-S1"
+   },
+   {
+    "id": "rk-safra-2015-S1",
+    "entity": "safra",
+    "source": "BCB ranking de reclamações",
+    "company": "SAFRA (conglomerado)",
+    "rank": 8,
+    "index": 102.34,
+    "category": "Menos de dois milhões de clientes",
+    "period": "2015-S1"
+   }
+  ]
+ },
+ "rubric": {
+  "id": "sovereign",
+  "curated": true,
+  "items": [
+   {
+    "id": "funding_cost",
+    "label": "custo e prazo de captação (externa e doméstica)",
+    "any_of": [
+     "captação",
+     "funding",
+     "custo de captação",
+     "linhas externas",
+     "eurobond",
+     "spread"
+    ]
+   },
+   {
+    "id": "rating_ceiling",
+    "label": "teto soberano e rebaixamento do próprio banco",
+    "any_of": [
+     "teto soberano",
+     "rating do banco",
+     "rebaixamento do banco",
+     "acompanhar o soberano",
+     "teto"
+    ]
+   },
+   {
+    "id": "capital_buffer",
+    "label": "folga de capital e distribuição de resultados",
+    "any_of": [
+     "basileia",
+     "capital",
+     "dividendos",
+     "juros sobre capital",
+     "folga"
+    ]
+   },
+   {
+    "id": "credit_quality",
+    "label": "qualidade de crédito em recessão",
+    "any_of": [
+     "inadimplência",
+     "provisão",
+     "provisões",
+     "qualidade da carteira",
+     "risco de crédito"
+    ]
+   },
+   {
+    "id": "liquidity",
+    "label": "liquidez e saída de investidores estrangeiros",
+    "any_of": [
+     "liquidez",
+     "LCR",
+     "saída de recursos",
+     "investidores estrangeiros"
+    ]
+   }
+  ]
+ },
+ "answer_key": {
+  "window": [
+   "2015-12-16",
+   "2016-04-14"
+  ],
+  "board_decisions": [
+   {
+    "date": "2015-12-24",
+    "doc_class": "ata_rca",
+    "subject": "Falecimento de Administrador",
+    "category": "governance",
+    "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=496417&numSequencia=39165&numVersao=2"
+   },
+   {
+    "date": "2015-12-24",
+    "doc_class": "ata_rca",
+    "subject": "Falecimento de Administrador",
+    "category": "governance",
+    "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=496426&numSequencia=39174&numVersao=2"
+   },
+   {
+    "date": "2015-12-24",
+    "doc_class": "ata_rca",
+    "subject": "Pedido de renúncia formulado pelo senhor Antônio Bornia, membro do Conselho de Administração.",
+    "category": "governance",
+    "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=496427&numSequencia=39175&numVersao=2"
+   },
+   {
+    "date": "2015-12-24",
+    "doc_class": "ata_rca",
+    "subject": "Pedido de renúncia formulado pelo senhor Mário da Silveira Teixeira Júnior, ao cargo de Membro do Conselho de Administração.",
+    "category": "governance",
+    "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=496418&numSequencia=39166&numVersao=2"
+   },
+   {
+    "date": "2016-01-11",
+    "doc_class": "ata_rca",
+    "subject": "Pedido de renúncia formulado pelo senhor Antônio Bornia, membro do Conselho de Administração.",
+    "category": "governance",
+    "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=497929&numSequencia=40677&numVersao=2"
+   },
+   {
+    "date": "2016-03-21",
+    "doc_class": "ata_rca",
+    "subject": "Aprovação de proposta da Diretoria para pagamento de juros sobre o capital próprio complementares",
+    "category": "capital_return",
+    "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=505725&numSequencia=48473&numVersao=2"
+   },
+   {
+    "date": "2016-03-21",
+    "doc_class": "ata_rca",
+    "subject": "Eleição de Diretor(es)||Renúncia de Diretores",
+    "category": "governance",
+    "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=505716&numSequencia=48464&numVersao=2"
+   }
+  ],
+  "decision_categories": {
+   "governance": 6,
+   "capital_return": 1
+  },
+  "material_facts_after": [
+   {
+    "date": "2016-01-28",
+    "doc_class": "fato_relevante",
+    "subject": "Projeções de crescimento para o ano de 2016.",
+    "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=499085&numSequencia=41833&numVersao=1"
+   },
+   {
+    "date": "2016-02-03",
+    "doc_class": "fato_relevante",
+    "subject": "Cancelamento do aumento do capital social por subscrição particular de ações, deliberado na AGE de 17.12.2015",
+    "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=499654&numSequencia=42402&numVersao=1"
+   },
+   {
+    "date": "2016-02-03",
+    "doc_class": "fato_relevante",
+    "subject": "Aumento do capital social com reservas livres e bonificação em ações",
+    "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=499775&numSequencia=42523&numVersao=1"
+   },
+   {
+    "date": "2016-02-05",
+    "doc_class": "fato_relevante",
+    "subject": "Esclarecimentos adicionais ao Fato Relevante divulgado no dia 3.2.2016",
+    "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=500416&numSequencia=43164&numVersao=1"
+   }
+  ],
+  "ratings_after": [],
+  "market_reaction": {
+   "5d": {
+    "ticker": "BBDC4",
+    "from": "2015-12-15",
+    "to": "2015-12-21",
+    "return_pct": -6.7,
+    "sector_median_pct": -3.51,
+    "abnormal_pct": -3.19
+   },
+   "30d": {
+    "ticker": "BBDC4",
+    "from": "2015-12-15",
+    "to": "2016-01-15",
+    "return_pct": -15.65,
+    "sector_median_pct": -15.57,
+    "abnormal_pct": -0.07
+   }
+  },
+  "prudential_after": [
+   {
+    "quarter": 201506,
+    "roe_pct": 20.0,
+    "basileia_headroom_pp": 5.48,
+    "pl_bi": 86.99,
+    "ativo_bi": 844.77
+   },
+   {
+    "quarter": 201509,
+    "roe_pct": 6.4,
+    "basileia_headroom_pp": 3.96,
+    "pl_bi": 86.25,
+    "ativo_bi": 875.33
+   },
+   {
+    "quarter": 201512,
+    "roe_pct": 9.5,
+    "basileia_headroom_pp": 6.3,
+    "pl_bi": 88.92,
+    "ativo_bi": 883.98
+   },
+   {
+    "quarter": 201603,
+    "roe_pct": 17.7,
+    "basileia_headroom_pp": 6.36,
+    "pl_bi": 93.34,
+    "ativo_bi": 875.14
+   }
+  ]
+ },
+ "coverage": {
+  "entities_with_fundamentals": [
+   "bb",
+   "bradesco",
+   "btg",
+   "caixa",
+   "itau",
+   "safra",
+   "santander"
+  ],
+  "entities_with_soundness": [
+   "bb",
+   "bradesco",
+   "btg",
+   "caixa",
+   "itau",
+   "safra",
+   "santander"
+  ],
+  "focal_fundamentals": true,
+  "feed_items": {
+   "filing:comunicado": 87,
+   "filing:fato_relevante": 16,
+   "market:b3": 5
+  },
+  "sector_events": 2,
+  "selic": true,
+  "reputation": 7
+ },
+ "usable": true,
+ "usable_reason": "7 decisão(ões) não rotineira(s) do conselho; reação de mercado disponível"
+}

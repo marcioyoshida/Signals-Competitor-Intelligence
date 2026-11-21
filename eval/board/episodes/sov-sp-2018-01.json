@@ -1,0 +1,1405 @@
+{
+ "schema": "board/v1/episode",
+ "scenario": "sov-sp-2018-01",
+ "kind": "sovereign",
+ "built_at": "2026-11-21T03:10:41+00:00",
+ "note": "EPISÓDIO HISTÓRICO (#339). Pacote congelado na data com dados públicos; gabarito lido depois do evento.",
+ "focal": "santander",
+ "subject": "santander",
+ "as_of": "2018-01-11",
+ "event_date": "2018-01-11",
+ "trigger": {
+  "text": "A Standard & Poor's rebaixou o rating soberano do Brasil de BB para BB- (três níveis abaixo do grau de investimento), com perspectiva estável, citando a demora nas reformas, em especial a da previdência.",
+  "source": "Agência Brasil",
+  "url": "https://agenciabrasil.ebc.com.br/en/economia/noticia/2018-01/standard-poors-downgrades-brazil-three-levels-below-investment-grade"
+ },
+ "task": "A S&P rebaixou o rating soberano do Brasil para BB- (perspectiva estável), três níveis abaixo do grau de investimento. Que opções o conselho do Santander Brasil deve considerar nos próximos 90 dias para captação, capital, preço de crédito e clientes, e quais gatilhos monitorar?",
+ "feed": {
+  "as_of": "2018-01-11",
+  "generated_at": "2018-01-11T23:59:59+00:00",
+  "episode": "sov-sp-2018-01",
+  "entities": [
+   {
+    "entity": "santander",
+    "label": "Santander",
+    "industries": [
+     "banking"
+    ],
+    "fundamentals": {
+     "roe_pct": 3.9,
+     "roa_pct": 0.38,
+     "basileia_headroom_pp": 5.65,
+     "credito_captacoes_pct": 56.29,
+     "carteira_share_pct": 8.02,
+     "lucro_share_pct": 8.96,
+     "ativo_bi": 676.46,
+     "pl_bi": 64.86,
+     "leverage": 10.4,
+     "base_date": 201709
+    },
+    "market_share_pct": 8.02,
+    "soundness": {
+     "indice_basileia": 16.15,
+     "capital_principal": 14.14,
+     "capital_nivel_i": 15.15,
+     "razao_alavancagem": 9.42,
+     "band": "sólido",
+     "base_date": 201709
+    }
+   },
+   {
+    "entity": "itau",
+    "label": "Itaú",
+    "industries": [
+     "banking"
+    ],
+    "fundamentals": {
+     "roe_pct": 5.3,
+     "roa_pct": 0.56,
+     "basileia_headroom_pp": 8.97,
+     "credito_captacoes_pct": 53.64,
+     "carteira_share_pct": 14.27,
+     "lucro_share_pct": 25.44,
+     "ativo_bi": 1293.77,
+     "pl_bi": 136.89,
+     "leverage": 9.5,
+     "base_date": 201709
+    },
+    "market_share_pct": 14.27,
+    "soundness": {
+     "indice_basileia": 19.47,
+     "capital_principal": 16.71,
+     "capital_nivel_i": 16.72,
+     "razao_alavancagem": 9.01,
+     "band": "sólido",
+     "base_date": 201709
+    }
+   },
+   {
+    "entity": "bradesco",
+    "label": "Bradesco",
+    "industries": [
+     "banking"
+    ],
+    "fundamentals": {
+     "roe_pct": 3.5,
+     "roa_pct": 0.38,
+     "basileia_headroom_pp": 7.15,
+     "credito_captacoes_pct": 50.53,
+     "carteira_share_pct": 11.24,
+     "lucro_share_pct": 13.53,
+     "ativo_bi": 1018.91,
+     "pl_bi": 110.32,
+     "leverage": 9.2,
+     "base_date": 201709
+    },
+    "market_share_pct": 11.24,
+    "soundness": {
+     "indice_basileia": 17.65,
+     "capital_principal": 12.47,
+     "capital_nivel_i": 13.38,
+     "razao_alavancagem": 7.43,
+     "band": "sólido",
+     "base_date": 201709
+    }
+   },
+   {
+    "entity": "bb",
+    "label": "Banco do Brasil",
+    "industries": [
+     "banking"
+    ],
+    "fundamentals": {
+     "roe_pct": 4.6,
+     "roa_pct": 0.27,
+     "basileia_headroom_pp": 8.65,
+     "credito_captacoes_pct": 57.41,
+     "carteira_share_pct": 19.2,
+     "lucro_share_pct": 13.49,
+     "ativo_bi": 1397.65,
+     "pl_bi": 82.58,
+     "leverage": 16.9,
+     "base_date": 201709
+    },
+    "market_share_pct": 19.2,
+    "soundness": {
+     "indice_basileia": 19.15,
+     "capital_principal": 10.04,
+     "capital_nivel_i": 13.29,
+     "razao_alavancagem": 8.04,
+     "band": "sólido",
+     "base_date": 201709
+    }
+   },
+   {
+    "entity": "caixa",
+    "label": "Caixa Econômica Federal",
+    "industries": [
+     "banking"
+    ],
+    "fundamentals": {
+     "roe_pct": 9.5,
+     "roa_pct": 0.23,
+     "basileia_headroom_pp": 4.74,
+     "credito_captacoes_pct": 66.52,
+     "carteira_share_pct": 21.73,
+     "lucro_share_pct": 10.17,
+     "ativo_bi": 1270.97,
+     "pl_bi": 30.31,
+     "leverage": 41.9,
+     "base_date": 201709
+    },
+    "market_share_pct": 21.73,
+    "soundness": {
+     "indice_basileia": 15.24,
+     "capital_principal": 9.54,
+     "capital_nivel_i": 9.54,
+     "razao_alavancagem": 3.92,
+     "band": "sólido",
+     "base_date": 201709
+    }
+   },
+   {
+    "entity": "btg",
+    "label": "BTG Pactual",
+    "industries": [
+     "banking"
+    ],
+    "fundamentals": {
+     "roe_pct": 5.2,
+     "roa_pct": 0.86,
+     "basileia_headroom_pp": 6.75,
+     "credito_captacoes_pct": 27.66,
+     "carteira_share_pct": 0.41,
+     "lucro_share_pct": 3.41,
+     "ativo_bi": 113.07,
+     "pl_bi": 18.56,
+     "leverage": 6.1,
+     "base_date": 201709
+    },
+    "market_share_pct": 0.41,
+    "soundness": {
+     "indice_basileia": 17.25,
+     "capital_principal": 11.16,
+     "capital_nivel_i": 14.87,
+     "razao_alavancagem": 13.25,
+     "band": "sólido",
+     "base_date": 201709
+    }
+   },
+   {
+    "entity": "safra",
+    "label": "Safra",
+    "industries": [
+     "banking"
+    ],
+    "fundamentals": {
+     "roe_pct": 6.5,
+     "roa_pct": 0.44,
+     "basileia_headroom_pp": 4.82,
+     "credito_captacoes_pct": 44.98,
+     "carteira_share_pct": 1.65,
+     "lucro_share_pct": 2.29,
+     "ativo_bi": 147.96,
+     "pl_bi": 9.99,
+     "leverage": 14.8,
+     "base_date": 201709
+    },
+    "market_share_pct": 1.65,
+    "soundness": {
+     "indice_basileia": 15.32,
+     "capital_principal": 11.64,
+     "capital_nivel_i": 12.76,
+     "razao_alavancagem": 6.32,
+     "band": "sólido",
+     "base_date": 201709
+    }
+   }
+  ],
+  "feed": [
+   {
+    "id": "ipe-cvm-fato:022616IPE140920170104299212-85",
+    "kind": "filing:comunicado",
+    "entities": [
+     "btg"
+    ],
+    "date": "2017-09-14",
+    "data_date": "2017-09-14",
+    "narrative": "BTG Pactual (comunicado na CVM): Adesão ao PERT"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE150920170104299307-08",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2017-09-15",
+    "data_date": "2017-09-15",
+    "narrative": "Itaú (comunicado na CVM): Acordo de Acionistas do Itaú CorpBanca - Aquisição de Ações"
+   },
+   {
+    "id": "ipe-cvm-fato:020532IPE190920170104299806-49",
+    "kind": "filing:comunicado",
+    "entities": [
+     "santander"
+    ],
+    "date": "2017-09-20",
+    "data_date": "2017-09-20",
+    "narrative": "Santander (comunicado na CVM): APIMEC Santos"
+   },
+   {
+    "id": "ipe-cvm-fato:001023IPE220920170104300004-87",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bb"
+    ],
+    "date": "2017-09-22",
+    "data_date": "2017-09-22",
+    "narrative": "Banco do Brasil (comunicado na CVM): Alteração de endereço e telefone URI Sao Paulo"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE260920170104300310-57",
+    "kind": "filing:fato_relevante",
+    "entities": [
+     "itau"
+    ],
+    "date": "2017-09-26",
+    "data_date": "2017-09-26",
+    "narrative": "Itaú (fato relevante na CVM): Índice de Solvabilidade e Pagamento de Dividendos"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE260920170104300408-68",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2017-09-26",
+    "data_date": "2017-09-26",
+    "narrative": "Itaú (comunicado na CVM): Telas Ciclo APIMEC 2017 - ITAÚ UNIBANCO HOLDING S.A. - SÃO PAULO/SP"
+   },
+   {
+    "id": "ipe-cvm-fato:001023IPE180920170104300610-65",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bb"
+    ],
+    "date": "2017-09-28",
+    "data_date": "2017-09-28",
+    "narrative": "Banco do Brasil (comunicado na CVM): Mudança na composição do comitê de auditoria estatutário"
+   },
+   {
+    "id": "ipe-cvm-fato:000906IPE021020170104301011-49",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bradesco"
+    ],
+    "date": "2017-10-02",
+    "data_date": "2017-10-02",
+    "narrative": "Bradesco (comunicado na CVM): Decisão sobre o pedido de extinção da Ação Coletiva (\"Class Action\")"
+   },
+   {
+    "id": "ipe-cvm-fato:022616IPE021020170104300912-71",
+    "kind": "filing:fato_relevante",
+    "entities": [
+     "btg"
+    ],
+    "date": "2017-10-02",
+    "data_date": "2017-10-02",
+    "narrative": "BTG Pactual (fato relevante na CVM): Aquisição de Ações de Emissão da Própria Companhia"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE031020170104301105-96",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2017-10-03",
+    "data_date": "2017-10-03",
+    "narrative": "Itaú (comunicado na CVM): Negociação das Próprias Ações para Tesouraria - Setembro/2017"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE061020170104301307-42",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2017-10-06",
+    "data_date": "2017-10-06",
+    "narrative": "Itaú (comunicado na CVM): Novo Diretor de Relações com Investidores"
+   },
+   {
+    "id": "ipe-cvm-fato:020532IPE091020170104301712-16",
+    "kind": "filing:comunicado",
+    "entities": [
+     "santander"
+    ],
+    "date": "2017-10-09",
+    "data_date": "2017-10-09",
+    "narrative": "Santander (comunicado na CVM): Nova agenda de Publicação de Resultados"
+   },
+   {
+    "id": "ipe-cvm-fato:000906IPE101020170104301810-56",
+    "kind": "filing:fato_relevante",
+    "entities": [
+     "bradesco"
+    ],
+    "date": "2017-10-10",
+    "data_date": "2017-10-10",
+    "narrative": "Bradesco (fato relevante na CVM): Alterações no Conselho de Administração"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE101020170104301806-30",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2017-10-10",
+    "data_date": "2017-10-10",
+    "narrative": "Itaú (comunicado na CVM): Telas Ciclo APIMEC 2017 - ITAÚ UNIBANCO HOLDING S.A. - Brasília/DF"
+   },
+   {
+    "id": "ipe-cvm-fato:020532IPE101020170104301910-44",
+    "kind": "filing:comunicado",
+    "entities": [
+     "santander"
+    ],
+    "date": "2017-10-11",
+    "data_date": "2017-10-11",
+    "narrative": "Santander (comunicado na CVM): Notícia divulgada na mídia"
+   },
+   {
+    "id": "ipe-cvm-fato:001023IPE191020170104302705-35",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bb"
+    ],
+    "date": "2017-10-19",
+    "data_date": "2017-10-19",
+    "narrative": "Banco do Brasil (comunicado na CVM): Emissão de Dívida"
+   },
+   {
+    "id": "ipe-cvm-fato:021466IPE201020170104302811-71",
+    "kind": "filing:fato_relevante",
+    "entities": [
+     "santander"
+    ],
+    "date": "2017-10-20",
+    "data_date": "2017-10-20",
+    "narrative": "Santander (fato relevante na CVM): Pedido de análise prévia para registro de oferta pública de letras financeiras"
+   },
+   {
+    "id": "ipe-cvm-fato:001023IPE231020170104303104-94",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bb"
+    ],
+    "date": "2017-10-23",
+    "data_date": "2017-10-23",
+    "narrative": "Banco do Brasil (comunicado na CVM): Período de Silêncio 3T17"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE241020170104303205-75",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2017-10-24",
+    "data_date": "2017-10-24",
+    "narrative": "Itaú (comunicado na CVM): CONVITE PARA A TELECONFERÊNCIA SOBRE OS RESULTADOS DO 3º TRIMESTRE DE 2017"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE261020170104303408-44",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2017-10-26",
+    "data_date": "2017-10-26",
+    "narrative": "Itaú (comunicado na CVM): Aquisição das Operações de Varejo do Citibank - Conclusão"
+   },
+   {
+    "id": "ipe-cvm-fato:020532IPE261020170104303405-43",
+    "kind": "filing:comunicado",
+    "entities": [
+     "santander"
+    ],
+    "date": "2017-10-26",
+    "data_date": "2017-10-26",
+    "narrative": "Santander (comunicado na CVM): Apresentação Teleconferência 3T17"
+   },
+   {
+    "id": "ipe-cvm-fato:020532IPE271020170104303511-06",
+    "kind": "filing:comunicado",
+    "entities": [
+     "santander"
+    ],
+    "date": "2017-10-27",
+    "data_date": "2017-10-27",
+    "narrative": "Santander (comunicado na CVM): Aceite da proposta para compra da BW Guirapá I S.A."
+   },
+   {
+    "id": "ipe-cvm-fato:022616IPE271020170104303511-09",
+    "kind": "filing:fato_relevante",
+    "entities": [
+     "btg"
+    ],
+    "date": "2017-10-27",
+    "data_date": "2017-10-27",
+    "narrative": "BTG Pactual (fato relevante na CVM): Reorganização Societária - Incorporação, Cisão ou Fusão da Companhia"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE301020170104303305-24",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2017-10-30",
+    "data_date": "2017-10-30",
+    "narrative": "Itaú (comunicado na CVM): Informações consolidadas dos exercícios findos em 30 de setembro de 2017 e 2016."
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE301020170104303305-37",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2017-10-30",
+    "data_date": "2017-10-30",
+    "narrative": "Itaú (comunicado na CVM): Resultados do 3º trimestre de 2017 (Sumário)"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE301020170104303305-40",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2017-10-30",
+    "data_date": "2017-10-30",
+    "narrative": "Itaú (comunicado na CVM): Divulgação dos resultados do terceiro trimestre de 2017, de acordo com o padrão contábil internacional - IFRS"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE301020170104303305-42",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2017-10-30",
+    "data_date": "2017-10-30",
+    "narrative": "Itaú (comunicado na CVM): Gerenciamento de Riscos - Pilar 3"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE301020170104303305-45",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2017-10-30",
+    "data_date": "2017-10-30",
+    "narrative": "Itaú (comunicado na CVM): Apresentação Institucional 3T17 - Informações Institucionais"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE301020170104303809-16",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2017-10-30",
+    "data_date": "2017-10-30",
+    "narrative": "Itaú (comunicado na CVM): Teleconferência sobre os Resultados do 3º Trimestre de 2017."
+   },
+   {
+    "id": "ipe-cvm-fato:000906IPE311020170104303905-47",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bradesco"
+    ],
+    "date": "2017-10-31",
+    "data_date": "2017-10-31",
+    "narrative": "Bradesco (comunicado na CVM): Decisão do autor líder da Class Action de não apresentar aditamento ao pedido inicial."
+   },
+   {
+    "id": "ipe-cvm-fato:000906IPE300920170104304003-63",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bradesco"
+    ],
+    "date": "2017-11-01",
+    "data_date": "2017-11-01",
+    "narrative": "Bradesco (comunicado na CVM): REPORT ON ECONOMIC AND FINANCIAL ANALYSIS"
+   },
+   {
+    "id": "ipe-cvm-fato:020532IPE011120170104304010-97",
+    "kind": "filing:fato_relevante",
+    "entities": [
+     "santander"
+    ],
+    "date": "2017-11-01",
+    "data_date": "2017-11-01",
+    "narrative": "Santander (fato relevante na CVM): Renovação do Programa de Recompra"
+   },
+   {
+    "id": "ipe-cvm-fato:022616IPE011120170104304005-06",
+    "kind": "filing:comunicado",
+    "entities": [
+     "btg"
+    ],
+    "date": "2017-11-01",
+    "data_date": "2017-11-01",
+    "narrative": "BTG Pactual (comunicado na CVM): Informações sobre a Recompra de Notes"
+   },
+   {
+    "id": "ipe-cvm-fato:001023IPE071120170104304605-29",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bb"
+    ],
+    "date": "2017-11-07",
+    "data_date": "2017-11-07",
+    "narrative": "Banco do Brasil (comunicado na CVM): IHCD - TCU"
+   },
+   {
+    "id": "ipe-cvm-fato:022616IPE071120170104304604-67",
+    "kind": "filing:comunicado",
+    "entities": [
+     "btg"
+    ],
+    "date": "2017-11-07",
+    "data_date": "2017-11-07",
+    "narrative": "BTG Pactual (comunicado na CVM): Potencial Alienação"
+   },
+   {
+    "id": "ipe-cvm-fato:001023IPE081120170204304712-57",
+    "kind": "filing:fato_relevante",
+    "entities": [
+     "bb"
+    ],
+    "date": "2017-11-09",
+    "data_date": "2017-11-09",
+    "narrative": "Banco do Brasil (fato relevante na CVM): Neoenergia - alienação ações BB-BI Oferta secundária"
+   },
+   {
+    "id": "ipe-cvm-fato:001023IPE091120170104304805-57",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bb"
+    ],
+    "date": "2017-11-09",
+    "data_date": "2017-11-09",
+    "narrative": "Banco do Brasil (comunicado na CVM): Coletiva de Imprensa 3T17"
+   },
+   {
+    "id": "ipe-cvm-fato:001023IPE101120170104304905-22",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bb"
+    ],
+    "date": "2017-11-10",
+    "data_date": "2017-11-10",
+    "narrative": "Banco do Brasil (comunicado na CVM): IG-SEST - Indicador de Governança - Banco do Brasil"
+   },
+   {
+    "id": "ipe-cvm-fato:001023IPE101120170104304905-37",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bb"
+    ],
+    "date": "2017-11-10",
+    "data_date": "2017-11-10",
+    "narrative": "Banco do Brasil (comunicado na CVM): Teleconferência do Resultado 3T17"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE101120170104304906-80",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2017-11-10",
+    "data_date": "2017-11-10",
+    "narrative": "Itaú (comunicado na CVM): Negociação das Próprias Ações para Tesouraria - Outubro/2017"
+   },
+   {
+    "id": "ipe-cvm-fato:020532IPE081120170104305308-06",
+    "kind": "filing:comunicado",
+    "entities": [
+     "santander"
+    ],
+    "date": "2017-11-14",
+    "data_date": "2017-11-14",
+    "narrative": "Santander (comunicado na CVM): APIMEC Campinas"
+   },
+   {
+    "id": "ipe-cvm-fato:001023IPE141120170104305305-14",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bb"
+    ],
+    "date": "2017-11-14",
+    "data_date": "2017-11-14",
+    "narrative": "Banco do Brasil (comunicado na CVM): Kepler Weber"
+   },
+   {
+    "id": "ipe-cvm-fato:001023IPE161120170104305506-64",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bb"
+    ],
+    "date": "2017-11-16",
+    "data_date": "2017-11-16",
+    "narrative": "Banco do Brasil (comunicado na CVM): Apresentação Institucional 3T17"
+   },
+   {
+    "id": "ipe-cvm-fato:020532IPE161120170104305511-16",
+    "kind": "filing:comunicado",
+    "entities": [
+     "santander"
+    ],
+    "date": "2017-11-16",
+    "data_date": "2017-11-16",
+    "narrative": "Santander (comunicado na CVM): Notícia divulgada na mídia"
+   },
+   {
+    "id": "ipe-cvm-fato:001023IPE201120170204305913-27",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bb"
+    ],
+    "date": "2017-11-21",
+    "data_date": "2017-11-21",
+    "narrative": "Banco do Brasil (comunicado na CVM): Renúncia e indicação de Diretor com Relações Com Investidores"
+   },
+   {
+    "id": "ipe-cvm-fato:001023IPE211120170104306000-03",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bb"
+    ],
+    "date": "2017-11-21",
+    "data_date": "2017-11-21",
+    "narrative": "Banco do Brasil (comunicado na CVM): Novo Gerente Geral de Relações com Investidores"
+   },
+   {
+    "id": "ipe-cvm-fato:001023IPE231120170104306211-45",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bb"
+    ],
+    "date": "2017-11-23",
+    "data_date": "2017-11-23",
+    "narrative": "Banco do Brasil (comunicado na CVM): ISE 2018"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE231120170104306210-57",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2017-11-23",
+    "data_date": "2017-11-23",
+    "narrative": "Itaú (comunicado na CVM): Itaúsa, Itaú Unibanco e Duratex compõem novamente o Índice de Sustentabilidade Empresarial da B3 (ISE) - 2018"
+   },
+   {
+    "id": "ipe-cvm-fato:020532IPE231120170104306211-88",
+    "kind": "filing:comunicado",
+    "entities": [
+     "santander"
+    ],
+    "date": "2017-11-23",
+    "data_date": "2017-11-23",
+    "narrative": "Santander (comunicado na CVM): Índice de Sustentabilidade Empresarial (ISE)"
+   },
+   {
+    "id": "ipe-cvm-fato:021466IPE231120170104306205-27",
+    "kind": "filing:comunicado",
+    "entities": [
+     "santander"
+    ],
+    "date": "2017-11-23",
+    "data_date": "2017-11-23",
+    "narrative": "Santander (comunicado na CVM): DISPONIBILIZAÇÃO DE NOVA VERSÃO DO PROSPECTO PRELIMINAR DE DISTRIBUIÇÃO PÚBLICA DE LETRAS FINANCEIRAS"
+   },
+   {
+    "id": "ipe-cvm-fato:022616IPE241120170104306312-56",
+    "kind": "filing:comunicado",
+    "entities": [
+     "btg"
+    ],
+    "date": "2017-11-24",
+    "data_date": "2017-11-24",
+    "narrative": "BTG Pactual (comunicado na CVM): Notícia divulgada na mídia"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE271120170104306608-97",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2017-11-27",
+    "data_date": "2017-11-27",
+    "narrative": "Itaú (comunicado na CVM): Itaú Unibanco e BID Invest anunciam parceria de US$ 100 milhões para financiar empreendedorismo feminino"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE301120170104306907-02",
+    "kind": "filing:fato_relevante",
+    "entities": [
+     "itau"
+    ],
+    "date": "2017-11-30",
+    "data_date": "2017-11-30",
+    "narrative": "Itaú (fato relevante na CVM): Juros sobre o Capital Próprio"
+   },
+   {
+    "id": "ipe-cvm-fato:020532IPE301120170204306910-75",
+    "kind": "filing:comunicado",
+    "entities": [
+     "santander"
+    ],
+    "date": "2017-11-30",
+    "data_date": "2017-11-30",
+    "narrative": "Santander (comunicado na CVM): Santander - Título de Banco do Ano no Brasil concedido pelo The Bank of the Year Awards"
+   },
+   {
+    "id": "ipe-cvm-fato:001023IPE011220170104307010-19",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bb"
+    ],
+    "date": "2017-12-01",
+    "data_date": "2017-12-01",
+    "narrative": "Banco do Brasil (comunicado na CVM): Esclarecimento acerca de processos judiciais"
+   },
+   {
+    "id": "ipe-cvm-fato:022616IPE011220170104307013-30",
+    "kind": "filing:comunicado",
+    "entities": [
+     "btg"
+    ],
+    "date": "2017-12-01",
+    "data_date": "2017-12-01",
+    "narrative": "BTG Pactual (comunicado na CVM): Notícia divulgada na mídia"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE041220170104307310-18",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2017-12-04",
+    "data_date": "2017-12-04",
+    "narrative": "Itaú (comunicado na CVM): Negociação das Próprias Ações para Tesouraria - Novembro/2017"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE051220170104307410-84",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2017-12-05",
+    "data_date": "2017-12-05",
+    "narrative": "Itaú (comunicado na CVM): Notas Subordinadas Perpétuas - Dezembro/2017"
+   },
+   {
+    "id": "ipe-cvm-fato:001023IPE061220170104307508-18",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bb"
+    ],
+    "date": "2017-12-06",
+    "data_date": "2017-12-06",
+    "narrative": "Banco do Brasil (comunicado na CVM): Apresentação Apimec São Paulo - SP"
+   },
+   {
+    "id": "ipe-cvm-fato:000906IPE071220170104307610-88",
+    "kind": "filing:fato_relevante",
+    "entities": [
+     "bradesco"
+    ],
+    "date": "2017-12-07",
+    "data_date": "2017-12-07",
+    "narrative": "Bradesco (fato relevante na CVM): Proposta da Diretoria para pagamento de juros sobre o capital próprio complementares"
+   },
+   {
+    "id": "ipe-cvm-fato:022616IPE071220170104307612-40",
+    "kind": "filing:comunicado",
+    "entities": [
+     "btg"
+    ],
+    "date": "2017-12-07",
+    "data_date": "2017-12-07",
+    "narrative": "BTG Pactual (comunicado na CVM): Emissão de Senior Notes"
+   },
+   {
+    "id": "ipe-cvm-fato:000906IPE051220170204307410-02",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bradesco"
+    ],
+    "date": "2017-12-08",
+    "data_date": "2017-12-08",
+    "narrative": "Bradesco (comunicado na CVM): Apresentação APIMEC Belo Horizonte"
+   },
+   {
+    "id": "ipe-cvm-fato:020532IPE111220170104308011-30",
+    "kind": "filing:comunicado",
+    "entities": [
+     "santander"
+    ],
+    "date": "2017-12-11",
+    "data_date": "2017-12-11",
+    "narrative": "Santander (comunicado na CVM): Notícia divulgada na mídia"
+   },
+   {
+    "id": "ipe-cvm-fato:020532IPE051220170104308111-45",
+    "kind": "filing:comunicado",
+    "entities": [
+     "santander"
+    ],
+    "date": "2017-12-12",
+    "data_date": "2017-12-12",
+    "narrative": "Santander (comunicado na CVM): Apresentação da Apimec Goiânia"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE131220170104308110-12",
+    "kind": "filing:fato_relevante",
+    "entities": [
+     "itau"
+    ],
+    "date": "2017-12-13",
+    "data_date": "2017-12-13",
+    "narrative": "Itaú (fato relevante na CVM): Participação em leilão para compra e venda de ações ordinárias de emissão da Companhia"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE151220170104308412-39",
+    "kind": "filing:fato_relevante",
+    "entities": [
+     "itau"
+    ],
+    "date": "2017-12-15",
+    "data_date": "2017-12-15",
+    "narrative": "Itaú (fato relevante na CVM): a) cancelamento de ações em tesouraria||b) renovação do programa de recompra de ações."
+   },
+   {
+    "id": "ipe-cvm-fato:001023IPE141220170304308313-14",
+    "kind": "filing:fato_relevante",
+    "entities": [
+     "bb"
+    ],
+    "date": "2017-12-18",
+    "data_date": "2017-12-18",
+    "narrative": "Banco do Brasil (fato relevante na CVM): Neoenergia - alienação ações BB-BI - Cancelamento de oferta secundária"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE201220170104308910-90",
+    "kind": "filing:fato_relevante",
+    "entities": [
+     "itau"
+    ],
+    "date": "2017-12-20",
+    "data_date": "2017-12-20",
+    "narrative": "Itaú (fato relevante na CVM): Participação em leilão para compra de ações ordinárias de emissão da Companhia"
+   },
+   {
+    "id": "ipe-cvm-fato:020532IPE201220170204308911-63",
+    "kind": "filing:fato_relevante",
+    "entities": [
+     "santander"
+    ],
+    "date": "2017-12-20",
+    "data_date": "2017-12-20",
+    "narrative": "Santander (fato relevante na CVM): Parceria para a emissão, oferta e comercialização de seguros de automóveis com a HDI Seguros S.A."
+   },
+   {
+    "id": "ipe-cvm-fato:000906IPE211220170104309010-93",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bradesco"
+    ],
+    "date": "2017-12-21",
+    "data_date": "2017-12-21",
+    "narrative": "Bradesco (comunicado na CVM): Notícia Divulgada na Mídia"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE211220170104309010-99",
+    "kind": "filing:fato_relevante",
+    "entities": [
+     "itau"
+    ],
+    "date": "2017-12-21",
+    "data_date": "2017-12-21",
+    "narrative": "Itaú (fato relevante na CVM): Participação em leilão para compra de ações ordinárias de emissão da Companhia"
+   },
+   {
+    "id": "ipe-cvm-fato:020532IPE221220170104309111-38",
+    "kind": "filing:comunicado",
+    "entities": [
+     "santander"
+    ],
+    "date": "2017-12-22",
+    "data_date": "2017-12-22",
+    "narrative": "Santander (comunicado na CVM): Venda da participação detida na BW Guirapá I S.A."
+   },
+   {
+    "id": "ipe-cvm-fato:001023IPE271220170104309613-25",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bb"
+    ],
+    "date": "2017-12-27",
+    "data_date": "2017-12-27",
+    "narrative": "Banco do Brasil (comunicado na CVM): Aumento de Capital Neoenergia"
+   },
+   {
+    "id": "ipe-cvm-fato:020532IPE281220170104309710-55",
+    "kind": "filing:fato_relevante",
+    "entities": [
+     "santander"
+    ],
+    "date": "2017-12-28",
+    "data_date": "2017-12-28",
+    "narrative": "Santander (fato relevante na CVM): Contratação de novo prestador de serviços de formação de mercado"
+   },
+   {
+    "id": "ipe-cvm-fato:019348IPE020120180104310210-37",
+    "kind": "filing:comunicado",
+    "entities": [
+     "itau"
+    ],
+    "date": "2018-01-02",
+    "data_date": "2018-01-02",
+    "narrative": "Itaú (comunicado na CVM): Negociação das Próprias Ações para Tesouraria - Dezembro/2017"
+   },
+   {
+    "id": "ipe-cvm-fato:001023IPE050120180104310505-28",
+    "kind": "filing:comunicado",
+    "entities": [
+     "bb"
+    ],
+    "date": "2018-01-05",
+    "data_date": "2018-01-05",
+    "narrative": "Banco do Brasil (comunicado na CVM): Ações para melhoria do atendimento"
+   },
+   {
+    "id": "b3-santander-2018-01-10",
+    "kind": "market:b3",
+    "entities": [
+     "santander"
+    ],
+    "date": "2018-01-10",
+    "data_date": "2018-01-10",
+    "abnormal_pct": 4.82,
+    "narrative": "Santander: ação SANB11 variou 10.05% de 2017-11-11 a 2018-01-10 (mediana do setor 5.23%). Preços sem ajuste por proventos."
+   },
+   {
+    "id": "b3-itau-2018-01-10",
+    "kind": "market:b3",
+    "entities": [
+     "itau"
+    ],
+    "date": "2018-01-10",
+    "data_date": "2018-01-10",
+    "abnormal_pct": 1.83,
+    "narrative": "Itaú: ação ITUB4 variou 7.06% de 2017-11-11 a 2018-01-10 (mediana do setor 5.23%). Preços sem ajuste por proventos."
+   },
+   {
+    "id": "b3-bradesco-2018-01-10",
+    "kind": "market:b3",
+    "entities": [
+     "bradesco"
+    ],
+    "date": "2018-01-10",
+    "data_date": "2018-01-10",
+    "abnormal_pct": 1.06,
+    "narrative": "Bradesco: ação BBDC4 variou 6.29% de 2017-11-11 a 2018-01-10 (mediana do setor 5.23%). Preços sem ajuste por proventos."
+   },
+   {
+    "id": "b3-bb-2018-01-10",
+    "kind": "market:b3",
+    "entities": [
+     "bb"
+    ],
+    "date": "2018-01-10",
+    "data_date": "2018-01-10",
+    "abnormal_pct": 1.13,
+    "narrative": "Banco do Brasil: ação BBAS3 variou 6.36% de 2017-11-11 a 2018-01-10 (mediana do setor 5.23%). Preços sem ajuste por proventos."
+   }
+  ],
+  "sector_events": [
+   {
+    "id": "trigger-sov-sp-2018-01",
+    "date": "2018-01-11",
+    "title": "A Standard & Poor's rebaixou o rating soberano do Brasil de BB para BB- (três níveis abaixo do grau de investimento), com perspectiva estável, citando a demora nas reformas, em especial a da previdência.",
+    "industry": "banking",
+    "entities": [],
+    "sources": [
+     {
+      "source": "Agência Brasil",
+      "url": "https://agenciabrasil.ebc.com.br/en/economia/noticia/2018-01/standard-poors-downgrades-brazil-three-levels-below-investment-grade"
+     }
+    ]
+   },
+   {
+    "id": "ref-2017-10",
+    "date": "2017-10-31",
+    "industry": "banking",
+    "entities": [],
+    "title": "REF 2017-10 (BCB), 1 Panorama do sistema financeiro › 1.5 Testes de estresse de capital: A necessidade projetada de capital, considerando a plena implementação de Basileia III em 2019, reduziu 50,5%, de R$20,5 para R$10,1 bilhões em junho de 2017 (Gráfico 1.4.2), equivalente a 1,7% do PR projetado, com destaque para a redução dos bancos privados (77,5%). Em linha com a melhora das margens de capital, a projeção do Índice de Basileia, considerando a plena implementação de Basileia III, apresentou crescimento de 1,3 p.p. em relação a dezembro de 2016, atingindo 15,5% (Gráfico 1.4.3).",
+    "sources": [
+     {
+      "source": "BCB Relatório de Estabilidade Financeira",
+      "url": "https://www.bcb.gov.br/content/publicacoes/ref/201710/RELESTAB201710-refPub.pdf"
+     }
+    ]
+   }
+  ],
+  "macro": {
+   "selic": {
+    "current": 7.0,
+    "as_of": "2018-01-11",
+    "last_decision": {
+     "date": "2017-12-07",
+     "previous": 7.5,
+     "value": 7.0
+    }
+   }
+  },
+  "reputation": [
+   {
+    "id": "rk-santander-2017-T3",
+    "entity": "santander",
+    "source": "BCB ranking de reclamações",
+    "company": "SANTANDER (conglomerado)",
+    "rank": 1,
+    "index": 41.16,
+    "category": "Mais de quatro milhões de clientes",
+    "period": "2017-T3"
+   },
+   {
+    "id": "rk-itau-2017-T3",
+    "entity": "itau",
+    "source": "BCB ranking de reclamações",
+    "company": "ITAU (conglomerado)",
+    "rank": 6,
+    "index": 17.2,
+    "category": "Mais de quatro milhões de clientes",
+    "period": "2017-T3"
+   },
+   {
+    "id": "rk-bradesco-2017-T3",
+    "entity": "bradesco",
+    "source": "BCB ranking de reclamações",
+    "company": "BRADESCO (conglomerado)",
+    "rank": 4,
+    "index": 23.99,
+    "category": "Mais de quatro milhões de clientes",
+    "period": "2017-T3"
+   },
+   {
+    "id": "rk-bb-2017-T3",
+    "entity": "bb",
+    "source": "BCB ranking de reclamações",
+    "company": "BB (conglomerado)",
+    "rank": 5,
+    "index": 22.0,
+    "category": "Mais de quatro milhões de clientes",
+    "period": "2017-T3"
+   },
+   {
+    "id": "rk-caixa-2017-T3",
+    "entity": "caixa",
+    "source": "BCB ranking de reclamações",
+    "company": "CAIXA ECONÔMICA FEDERAL (conglomerado)",
+    "rank": 3,
+    "index": 31.88,
+    "category": "Mais de quatro milhões de clientes",
+    "period": "2017-T3"
+   },
+   {
+    "id": "rk-btg-2017-T3",
+    "entity": "btg",
+    "source": "BCB ranking de reclamações",
+    "company": "BTG PACTUAL (conglomerado)",
+    "rank": null,
+    "index": null,
+    "category": "Menos de quatro milhões de clientes",
+    "period": "2017-T3"
+   },
+   {
+    "id": "rk-safra-2017-T3",
+    "entity": "safra",
+    "source": "BCB ranking de reclamações",
+    "company": "SAFRA (conglomerado)",
+    "rank": 5,
+    "index": 52.08,
+    "category": "Menos de quatro milhões de clientes",
+    "period": "2017-T3"
+   }
+  ]
+ },
+ "rubric": {
+  "id": "sovereign",
+  "curated": true,
+  "items": [
+   {
+    "id": "funding_cost",
+    "label": "custo e prazo de captação (externa e doméstica)",
+    "any_of": [
+     "captação",
+     "funding",
+     "custo de captação",
+     "linhas externas",
+     "eurobond",
+     "spread"
+    ]
+   },
+   {
+    "id": "rating_ceiling",
+    "label": "teto soberano e rebaixamento do próprio banco",
+    "any_of": [
+     "teto soberano",
+     "rating do banco",
+     "rebaixamento do banco",
+     "acompanhar o soberano",
+     "teto"
+    ]
+   },
+   {
+    "id": "capital_buffer",
+    "label": "folga de capital e distribuição de resultados",
+    "any_of": [
+     "basileia",
+     "capital",
+     "dividendos",
+     "juros sobre capital",
+     "folga"
+    ]
+   },
+   {
+    "id": "credit_quality",
+    "label": "qualidade de crédito em recessão",
+    "any_of": [
+     "inadimplência",
+     "provisão",
+     "provisões",
+     "qualidade da carteira",
+     "risco de crédito"
+    ]
+   },
+   {
+    "id": "liquidity",
+    "label": "liquidez e saída de investidores estrangeiros",
+    "any_of": [
+     "liquidez",
+     "LCR",
+     "saída de recursos",
+     "investidores estrangeiros"
+    ]
+   }
+  ]
+ },
+ "answer_key": {
+  "window": [
+   "2018-01-11",
+   "2018-05-11"
+  ],
+  "board_decisions": [
+   {
+    "date": "2018-01-29",
+    "doc_class": "ata_rca",
+    "subject": "Eleição de Diretor(es)||Eleição do Diretor de Relações com Investidores",
+    "category": "governance",
+    "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=594675&numSequencia=137471&numVersao=1"
+   },
+   {
+    "date": "2018-02-01",
+    "doc_class": "ata_rca",
+    "subject": "Eleição Diretores e membro Comitê de Riscos e Compliance",
+    "category": "governance",
+    "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=594989&numSequencia=137785&numVersao=1"
+   },
+   {
+    "date": "2018-02-26",
+    "doc_class": "ata_rca",
+    "subject": "Eleição de Diretor(es)||Renúncia de Diretor",
+    "category": "governance",
+    "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=598056&numSequencia=140852&numVersao=1"
+   },
+   {
+    "date": "2018-02-26",
+    "doc_class": "ata_rca",
+    "subject": "Exoneração de Diretor",
+    "category": "governance",
+    "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=598059&numSequencia=140855&numVersao=1"
+   },
+   {
+    "date": "2018-03-06",
+    "doc_class": "ata_rca",
+    "subject": "Conhecer renúncia apresentada por Diretor",
+    "category": "governance",
+    "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=599187&numSequencia=141983&numVersao=1"
+   },
+   {
+    "date": "2018-03-20",
+    "doc_class": "ata_rca",
+    "subject": "Eleição de Diretor(es)",
+    "category": "governance",
+    "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=602031&numSequencia=144716&numVersao=1"
+   },
+   {
+    "date": "2018-03-20",
+    "doc_class": "ata_rca",
+    "subject": "Emissão de Valores Mobiliários",
+    "category": "funding",
+    "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=602030&numSequencia=144715&numVersao=1"
+   },
+   {
+    "date": "2018-03-20",
+    "doc_class": "ata_rca",
+    "subject": "Renúncia Diretor",
+    "category": "governance",
+    "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=602125&numSequencia=144787&numVersao=1"
+   },
+   {
+    "date": "2018-03-21",
+    "doc_class": "ata_rca",
+    "subject": "Aprovação de contas||Aprovação Estudo Técnico de Realização dos Créditos Tributários||Destinação de resultados",
+    "category": "accounts",
+    "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=602267&numSequencia=144916&numVersao=1"
+   },
+   {
+    "date": "2018-03-27",
+    "doc_class": "ata_rca",
+    "subject": "Distribuição de Dividendos/Juros sobre Capital Próprio",
+    "category": "capital_return",
+    "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=603956&numSequencia=146428&numVersao=1"
+   },
+   {
+    "date": "2018-04-10",
+    "doc_class": "ata_rca",
+    "subject": "Alteração nos Comitês de Auditoria e Riscos e Compliance",
+    "category": "governance",
+    "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=608635&numSequencia=149805&numVersao=1"
+   },
+   {
+    "date": "2018-04-18",
+    "doc_class": "ata_rca",
+    "subject": "Exoneração de Diretor",
+    "category": "governance",
+    "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=610946&numSequencia=151258&numVersao=1"
+   },
+   {
+    "date": "2018-05-07",
+    "doc_class": "ata_rca",
+    "subject": "Eleição de Diretor(es)",
+    "category": "governance",
+    "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=620160&numSequencia=156858&numVersao=1"
+   },
+   {
+    "date": "2018-05-10",
+    "doc_class": "ata_rca",
+    "subject": "Aprovar a eleição dos membros do Comitê de Auditoria da Companhia",
+    "category": "governance",
+    "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=622107&numSequencia=158242&numVersao=1"
+   },
+   {
+    "date": "2018-05-10",
+    "doc_class": "ata_rca",
+    "subject": "Distribuição de Dividendos/Juros sobre Capital Próprio",
+    "category": "capital_return",
+    "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=621737&numSequencia=157946&numVersao=1"
+   }
+  ],
+  "decision_categories": {
+   "governance": 11,
+   "funding": 1,
+   "accounts": 1,
+   "capital_return": 2
+  },
+  "material_facts_after": [
+   {
+    "date": "2018-02-20",
+    "doc_class": "fato_relevante",
+    "subject": "Aprovação da compra pelo Santander Brasil da totalidade das ações da Isban Brasil S.A. e Produban Serviços de Informática S.A.",
+    "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=597257&numSequencia=140053&numVersao=1"
+   }
+  ],
+  "ratings_after": [],
+  "market_reaction": {
+   "5d": {
+    "ticker": "SANB11",
+    "from": "2018-01-10",
+    "to": "2018-01-16",
+    "return_pct": 0.43,
+    "sector_median_pct": 2.03,
+    "abnormal_pct": -1.6
+   },
+   "30d": {
+    "ticker": "SANB11",
+    "from": "2018-01-10",
+    "to": "2018-02-10",
+    "return_pct": 7.84,
+    "sector_median_pct": 5.41,
+    "abnormal_pct": 2.44
+   }
+  },
+  "prudential_after": [
+   {
+    "quarter": 201709,
+    "roe_pct": 3.9,
+    "basileia_headroom_pp": 5.65,
+    "pl_bi": 64.86,
+    "ativo_bi": 676.46
+   },
+   {
+    "quarter": 201712,
+    "roe_pct": 7.3,
+    "basileia_headroom_pp": 5.35,
+    "pl_bi": 61.89,
+    "ativo_bi": 682.99
+   },
+   {
+    "quarter": 201803,
+    "roe_pct": 17.9,
+    "basileia_headroom_pp": 4.8,
+    "pl_bi": 64.76,
+    "ativo_bi": 723.13
+   },
+   {
+    "quarter": 201806,
+    "roe_pct": 18.1,
+    "basileia_headroom_pp": 4.26,
+    "pl_bi": 65.94,
+    "ativo_bi": 737.89
+   }
+  ]
+ },
+ "coverage": {
+  "entities_with_fundamentals": [
+   "bb",
+   "bradesco",
+   "btg",
+   "caixa",
+   "itau",
+   "safra",
+   "santander"
+  ],
+  "entities_with_soundness": [
+   "bb",
+   "bradesco",
+   "btg",
+   "caixa",
+   "itau",
+   "safra",
+   "santander"
+  ],
+  "focal_fundamentals": true,
+  "feed_items": {
+   "filing:comunicado": 60,
+   "filing:fato_relevante": 16,
+   "market:b3": 4
+  },
+  "sector_events": 2,
+  "selic": true,
+  "reputation": 7
+ },
+ "usable": true,
+ "usable_reason": "14 decisão(ões) não rotineira(s) do conselho; reação de mercado disponível"
+}
