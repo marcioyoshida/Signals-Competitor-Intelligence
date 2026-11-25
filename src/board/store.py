@@ -154,3 +154,41 @@ def link_decision(table: Any, *, tenant: str, run_id: str, decision: dict[str, A
         if _code(exc) == "ConditionalCheckFailedException":
             return False
         raise
+
+
+EVAL_TENANT = "_eval"          # #340: harness scores live apart from every customer tenant
+EVAL_RETENTION_DAYS = 365      # public data and synthetic packs only, nothing of a customer
+
+
+def eval_key(run_id: str, gate_version: Any) -> str:
+    return f"RUN#{run_id}#EVAL#v{gate_version}"
+
+
+def put_eval(table: Any, *, run_id: str, scores: dict[str, Any], tenant: str = EVAL_TENANT,
+             now: dt.datetime | None = None) -> bool:
+    """#340: one score per run and gate version, written once. Also creates the run item for
+    a dry run scored from a file, so ``list_runs(_eval)`` lists it. False if already scored."""
+    now = now or _now()
+    g = scores.get("gate") or {}
+    if tenant == EVAL_TENANT:
+        run = {"tenant": tenant, "sk": f"RUN#{run_id}", "run_id": run_id, "status": scores.get("status"),
+               "task": scores.get("scenario"), "target": scores.get("scenario"), "model": scores.get("model"),
+               "provider": scores.get("provider"), "pack_sha": scores.get("pack_sha256"),
+               "created_at": now.isoformat(timespec="seconds"),
+               "expires_at": _expires(now, EVAL_RETENTION_DAYS)}
+        try:
+            table.put_item(Item=_ddb(run), ConditionExpression="attribute_not_exists(sk)")
+        except Exception as exc:
+            if _code(exc) != "ConditionalCheckFailedException":
+                raise
+    item = {"tenant": tenant, "sk": eval_key(run_id, g.get("version")), "run_id": run_id,
+            "scenario": scores.get("scenario"), "passed": bool(g.get("passed")),
+            "scores": _ddb(scores), "at": now.isoformat(timespec="seconds"),
+            "expires_at": _expires(now, EVAL_RETENTION_DAYS)}
+    try:
+        table.put_item(Item=item, ConditionExpression="attribute_not_exists(sk)")
+        return True
+    except Exception as exc:
+        if _code(exc) == "ConditionalCheckFailedException":
+            return False
+        raise

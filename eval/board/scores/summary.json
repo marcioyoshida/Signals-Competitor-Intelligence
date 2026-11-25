@@ -1,0 +1,69 @@
+{
+ "schema": "board/v1/eval-summary",
+ "gate_version": 1,
+ "release_gate": {
+  "passed": false,
+  "required": [
+   "competitor-v2",
+   "downgrade-v1",
+   "btg-2015-11",
+   "fail-bva-2012",
+   "fail-cruzeiro-2012",
+   "fail-rural-2013",
+   "sov-fitch-2015-12",
+   "sov-moodys-2016-02",
+   "sov-sp-2015-09",
+   "sov-sp-2018-01"
+  ],
+  "missing": [
+   "btg-2015-11",
+   "fail-bva-2012",
+   "fail-cruzeiro-2012",
+   "fail-rural-2013",
+   "sov-fitch-2015-12",
+   "sov-moodys-2016-02",
+   "sov-sp-2015-09",
+   "sov-sp-2018-01"
+  ],
+  "failed": [],
+  "warnings": {}
+ },
+ "runs": [
+  {
+   "run_id": "dry-competitor-v2-20261115T0730Z",
+   "scenario": "competitor-v2",
+   "model": "sonnet",
+   "passed": false,
+   "fails": [
+    "pack sha differs from the run's: citations checked against a rebuilt pack"
+   ],
+   "warnings": []
+  },
+  {
+   "run_id": "dry-competitor-v2-20261115T0738Z",
+   "scenario": "competitor-v2",
+   "model": "sonnet",
+   "passed": true,
+   "fails": [],
+   "warnings": []
+  },
+  {
+   "run_id": "dry-downgrade-v1-20261115T0445Z",
+   "scenario": "downgrade-v1",
+   "model": "sonnet",
+   "passed": false,
+   "fails": [
+    "options traced 0.0"
+   ],
+   "warnings": []
+  },
+  {
+   "run_id": "dry-downgrade-v1-20261115T0502Z",
+   "scenario": "downgrade-v1",
+   "model": "sonnet",
+   "passed": true,
+   "fails": [],
+   "warnings": []
+  }
+ ]
+}

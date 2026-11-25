@@ -1,0 +1,87 @@
+{
+ "run_id": "dry-competitor-v2-20261115T0730Z",
+ "scenario": "competitor-v2",
+ "model": "sonnet",
+ "provider": "claude-cli (subscription)",
+ "status": "complete",
+ "pack_sha256": "d7513ec28291898f3fcf5f852bfc12758996cd038df739d43282bac43efa2aea",
+ "pack_matches": false,
+ "gaps": [],
+ "citations": {
+  "citations": 205,
+  "invalid": [],
+  "citation_validity": 1.0,
+  "figures": 40,
+  "ungrounded_figures": [
+   "75%",
+   "55%",
+   "30%",
+   "15%"
+  ],
+  "numbers_grounded": 0.9,
+  "dropped_by_guard": 0
+ },
+ "regulatory": {
+  "covered": [
+   "capital",
+   "liquidity",
+   "credit",
+   "conduct"
+  ],
+  "missing": [
+   "disclosure",
+   "supervisor"
+  ],
+  "n": 4,
+  "of": 6,
+  "coverage": 0.6667
+ },
+ "dissent": {
+  "challenges": 3,
+  "problems": [],
+  "contested_options": 3,
+  "dissent_preservation": 1.0
+ },
+ "options": {
+  "options": 3,
+  "triggers": 6,
+  "option_traced": 1.0,
+  "with_capital_liquidity_effect": 3,
+  "with_impact_band": 3,
+  "max_jaccard": 0.122,
+  "impact_bands": [
+   "high",
+   "low",
+   "medium"
+  ]
+ },
+ "cost": {
+  "calls": 12,
+  "tokens_in": 356255,
+  "tokens_out": 29852,
+  "tokens": 386107,
+  "cache_read": 693606,
+  "token_cap": 400000,
+  "tokens_by_phase": {
+   "diagnosis": 231940,
+   "challenge": 37087,
+   "quantify": 81996,
+   "synthesize": 35084
+  }
+ },
+ "latency": {
+  "elapsed_s": 231.0,
+  "slowest_call_s": 27.9,
+  "mean_call_s": 19.3,
+  "call_errors": [],
+  "timeouts": 0
+ },
+ "gate": {
+  "version": 1,
+  "passed": false,
+  "fails": [
+   "pack sha differs from the run's: citations checked against a rebuilt pack"
+  ],
+  "warnings": []
+ }
+}

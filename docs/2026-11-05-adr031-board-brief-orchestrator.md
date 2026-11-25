@@ -36,7 +36,7 @@ deposit betas and cohort economics. An orchestrator only has to sequence them.
 | Run store / audit | Append-only curation log, the `/api/act` journal, `DECISION#` items with ADR-018 provenance and rollback. |
 | Human gate | `record_decision`, `set_outcome`, `set_board_adoption` intents. |
 | Challenge round, schema enforcement | None. |
-| Replay / evaluation harness | None. |
+| Replay / evaluation harness | #339 episodes + #340 scoring and release gate (`src/board/evaluate.py`, `scripts/board_eval.py`). |
 | Customer-impact score | External proxies only (complaints, rates, reputation). No customer data. |
 | MCP surface | Four read-only tools (`lookup_entity`, `entity_signals`, `regulatory_events`, `ask`). Write tools go to tenant connectors only (agent-discovery ADR). |
 
@@ -255,6 +255,39 @@ buyback, management changes and an independent committee within two weeks.
 | Entity continuity | Mergers and renames (HSBC→Bradesco, Citi retail→Itaú) | **Built (#330).** `bcb_entity_history`: IF.data `IfDataCadastro`, 2000-03 onward, `entity_history/cnpj_map.json`. Asset-only deals (Citi retail) need a curated override |
 | Insurer ownership continuity | SUSEP SES economic groups (`Ses_grupos_economicos`) | **Built (#389).** `susep_entity_history`: 1999-06 onward, quarterly, `entity_history/susep_map.json.gz`, same shape as #330 so `entity_at` works unchanged, plus a `codes` index by SUSEP company code for the SES financial tables (#390). One 0.6 MB member read from the 580 MB `BaseCompleta.zip` by HTTP range requests. 453 companies, 231 with a CNPJ (SES has none; codes join SUSEP's current list, so companies that left the market are code-only). Groups map to registry entities through the curated `config/susep_groups.json` (40 of 122 groups; the alias index resolves none). `OUTROS GRUPOS`, `INDEPENDENTE` and blank are placeholders, never owners: the company is its own group. The BB-Mapfre group is unmapped before its 2018-12 unwind (split control) and maps to BB Seguridade after it, when only BB's companies remain under the code (a dated `from` entry). A partial newest month (late filers) is dropped. 80 named-group moves, e.g. HSBC→Bradesco 2016-09, the BB-Mapfre unwind 2018-12, Liberty→Talanx 2024-03 |
 | Insurer financials | SUSEP SES `Ses_seguros`, `Ses_pl_margem`, `Ses_prov` | **Built (#390).** `susep_history`: `board_history/susep/series.json.gz`, per company and quarter (flows summed, stocks at quarter end) and per group (companies summed at each date, ratios recomputed), attributed by date through #389. Earned and written premium, claims, commercial expense, equity, adjusted equity, minimum required capital, provisions; loss, commission and solvency (adjusted equity / CMR) ratios. Premiums and claims 1995 onward, solvency 2016 onward (CMR), provisions 1999 onward. **Break 2013-12:** the FIP form moved claims from `sinistro_retido` to `sinistro_ocorrido` and took VGBL out of written premium; no row fills both claim columns, so claims sum both and each point records `basis` (`fip_pre2014`, `fip_2014`, `mixed` for 2013-Q4). Written premium is not comparable across the break; earned premium is. 22,180 company-quarters, 400 companies, 109 groups. Guards on read blank ratios under R$1 mi earned premium or with fewer than three months. Not covered: reinsurers' premiums (IRB Re has solvency only; reinsurance flows are in `SES_VALORESRESMOVGRUPOS`), health plans (ANS, not SUSEP), capitalização and pension flows (`Ses_Dados_Cap`, `Ses_Contrib_Benef`) |
+
+**Scoring and release gate (#340).** `src/board/evaluate.py` scores one run against the pack
+it ran on: the pack is rebuilt from its scenario file and must carry the run's sha256.
+- *Citation validity:* every citation in every officer position and in the synthesis is a pack
+  fact (bar 100%). Every figure the synthesis states (with a decimal or a unit) appears in the
+  pack at the precision written (bar 80%). A number the model computed, such as a 24% cut
+  from 5.8% to 4.4%, is listed as ungrounded for the reader, so the bar leaves room for that.
+- *Regulatory completeness:* a fixed six-item checklist (capital, liquidity, credit, conduct,
+  disclosure, supervisor), at least 4 of 6, plus the episode's curated rubric.
+- *Dissent preservation:* each validated challenge reply is a dissent, equal to the reply and
+  printed verbatim, red lines included, in the rendered board pack (bar 100%).
+- *Option coherence:* 2–3 options, each traced to an officer's own option, distinct (word
+  Jaccard ≤ 0.6), with at least one trigger. For episodes, the share of the board's real
+  non-routine decision categories that some option covers, and whether a visible pre-event
+  signal is named.
+- *Cost and latency:* tokens ≤ 400k, ≤ 900 s, no call errors.
+
+The rubric, answer-key and signal checks are **soft** (warnings): eight episodes cannot
+calibrate them. The thresholds live in `config/board_eval_gate.json` (v1, fixed 2026-11-25
+against the four synthetic dry runs of 2026-11-15 before any episode run). Changing one is a
+reviewed commit with a `changes` line. `scripts/board_eval.py` writes
+`eval/board/scores/<run_id>.json` and `summary.json`. `--record` stores each score in
+OncaBoardRuns under tenant `_eval`: a run item plus `RUN#<id>#EVAL#v<gate>`, written once,
+kept 365 days (public and synthetic data only). `--gate` exits 1 unless the latest run of
+every synthetic scenario and every usable episode passes; that is the release gate for any
+change to the runner, contracts or prompts. `scripts/board_dry_run.py --episode <id>` runs an
+episode and prints its gate verdict.
+
+First scores: the latest synthetic runs pass. Two older runs fail for real reasons. The 04:45
+downgrade run predates option tracing (`derived_from`). The 07:30 competitor run's pack
+differs from today's scenario, so its citations cannot be checked against the pack it read.
+The release gate stays red until the eight episodes are run: about 12 model calls each, owner
+approval.
 
 Out of scope: sovereign CDS, bank bond spreads and other paid market data (Bloomberg,
 LSEG, ANBIMA curves). They are a stated blind spot of the brief.

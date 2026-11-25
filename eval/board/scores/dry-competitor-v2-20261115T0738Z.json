@@ -1,0 +1,84 @@
+{
+ "run_id": "dry-competitor-v2-20261115T0738Z",
+ "scenario": "competitor-v2",
+ "model": "sonnet",
+ "provider": "claude-cli (subscription)",
+ "status": "complete",
+ "pack_sha256": "d7513ec28291898f3fcf5f852bfc12758996cd038df739d43282bac43efa2aea",
+ "pack_matches": true,
+ "gaps": [],
+ "citations": {
+  "citations": 212,
+  "invalid": [],
+  "citation_validity": 1.0,
+  "figures": 39,
+  "ungrounded_figures": [
+   "24%",
+   "30%",
+   "24%"
+  ],
+  "numbers_grounded": 0.9231,
+  "dropped_by_guard": 0
+ },
+ "regulatory": {
+  "covered": [
+   "capital",
+   "liquidity",
+   "credit",
+   "conduct",
+   "disclosure"
+  ],
+  "missing": [
+   "supervisor"
+  ],
+  "n": 5,
+  "of": 6,
+  "coverage": 0.8333
+ },
+ "dissent": {
+  "challenges": 3,
+  "problems": [],
+  "contested_options": 3,
+  "dissent_preservation": 1.0
+ },
+ "options": {
+  "options": 3,
+  "triggers": 6,
+  "option_traced": 1.0,
+  "with_capital_liquidity_effect": 3,
+  "with_impact_band": 3,
+  "max_jaccard": 0.1,
+  "impact_bands": [
+   "high",
+   "low",
+   "medium"
+  ]
+ },
+ "cost": {
+  "calls": 13,
+  "tokens_in": 244282,
+  "tokens_out": 33465,
+  "tokens": 277747,
+  "cache_read": 882125,
+  "token_cap": 400000,
+  "tokens_by_phase": {
+   "diagnosis": 42232,
+   "challenge": 88847,
+   "quantify": 110638,
+   "synthesize": 36030
+  }
+ },
+ "latency": {
+  "elapsed_s": 252.5,
+  "slowest_call_s": 25.1,
+  "mean_call_s": 19.4,
+  "call_errors": [],
+  "timeouts": 0
+ },
+ "gate": {
+  "version": 1,
+  "passed": true,
+  "fails": [],
+  "warnings": []
+ }
+}

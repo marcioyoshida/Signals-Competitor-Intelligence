@@ -11,6 +11,10 @@ Credentials: the CLI's own login on this machine. No token is read, written or p
 
     .venv/bin/python scripts/board_dry_run.py                      # scenario downgrade-v1
     .venv/bin/python scripts/board_dry_run.py --model sonnet --cap 400000
+    .venv/bin/python scripts/board_dry_run.py --episode btg-2015-11     # #339 historic episode
+
+Each run is scored at the end by the #340 harness (src/board/evaluate.py, no model call);
+``scripts/board_eval.py --gate`` applies the release gate over the whole set.
 """
 from __future__ import annotations
 
@@ -26,13 +30,11 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from src.board import gate, pack as packmod, runner  # noqa: E402
+from src.board import evaluate as ev, gate, pack as packmod, runner  # noqa: E402
 
 SCENARIO = ROOT / "eval" / "board" / "scenario-downgrade-v1.json"
 OUT_DIR = ROOT / "eval" / "board" / "runs"
-TASK = ("O Banco Aurora (fictício) teve o rating rebaixado de AA para A+ com perspectiva negativa. "
-        "Que opções o conselho deve considerar nos próximos 90 dias para funding, preço de crédito "
-        "e relacionamento com clientes, e quais gatilhos monitorar?")
+TASK = ev.SYNTHETIC_TASK
 CALL_TIMEOUT_S = 300
 CLI_CWD = "/var/tmp/board/cli"
 
@@ -78,15 +80,15 @@ def main() -> int:
     ap.add_argument("--model", default="sonnet")
     ap.add_argument("--cap", type=int, default=gate.DEFAULT_TOKEN_CAP)
     ap.add_argument("--scenario", type=Path, default=SCENARIO)
+    ap.add_argument("--episode", default=None, help="a #339 episode id (eval/board/episodes/<id>.json)")
     a = ap.parse_args()
 
-    sc = json.loads(a.scenario.read_text(encoding="utf-8"))
-    if "feed" in sc:   # #386: a synthetic FEED through the real pack builder + proximity
-        p = packmod.seal({**packmod.build_pack(sc["feed"], sc["focal"], subject=sc.get("subject")),
-                          "scenario": sc["scenario"]})
-        task = sc.get("task") or TASK
-    else:              # v1: a hand-written pack (no focal/proximity)
-        p, task = packmod.seal(sc), TASK
+    path = ROOT / "eval" / "board" / "episodes" / f"{a.episode}.json" if a.episode else a.scenario
+    sc = json.loads(path.read_text(encoding="utf-8"))
+    if sc.get("schema") == "board/v1/episode" and not sc.get("usable"):
+        raise SystemExit(f"{path.name}: episode not usable ({sc.get('usable_reason')})")
+    # #386: a feed goes through the real pack builder + proximity; v1 is a hand-written pack
+    p, task = ev.scenario_pack(sc)
     ctx = packmod.context_text(p)
     log: list[dict[str, Any]] = []
     call = cli_call(a.model, log, ctx)
@@ -106,15 +108,20 @@ def main() -> int:
                                          "quantify": 1000, "synthesize": 400})
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     out = OUT_DIR / f"{run_id}.json"
-    out.write_text(json.dumps({"model": a.model, "provider": "claude-cli (subscription)",
-                               "scenario": p["scenario"], "pack_sha256": p["sha256"],
-                               "usage": call.meter.summary(), "calls": log, "result": result,
-                               "focal": p.get("focal"), "subject": p.get("subject"),
-                               "proximity": p.get("proximity")},
-                              ensure_ascii=False, indent=2), encoding="utf-8")
+    doc = {"model": a.model, "provider": "claude-cli (subscription)",
+           "scenario": p["scenario"], "pack_sha256": p["sha256"],
+           "usage": call.meter.summary(), "calls": log, "result": result,
+           "focal": p.get("focal"), "subject": p.get("subject"),
+           "proximity": p.get("proximity")}
+    out.write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"status {result['status']} · {call.meter.summary()} · gaps {len(result['gaps'])} · "
           f"dropped {len(result['dropped'])} · {result['elapsed_s']} s")
     print(f"wrote {out.relative_to(ROOT)}")
+    sc_doc = sc if sc.get("schema") == "board/v1/episode" else None
+    s = ev.score(doc, p, episode=sc_doc)
+    print(f"#340 gate v{s['gate']['version']}: {'PASS' if s['gate']['passed'] else 'FAIL'}"
+          + "".join(f"\n    fail: {x}" for x in s["gate"]["fails"])
+          + "".join(f"\n    warn: {x}" for x in s["gate"]["warnings"]))
     return 0
 
 

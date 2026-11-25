@@ -1,0 +1,47 @@
+{
+  "_doc": "#340: scoring and release gate for board-brief runs (ADR 031, Evaluation harness). Thresholds are fixed BEFORE the episode runs; changing one is a reviewed commit with a line in `changes`, never an edit after seeing a result. v1 was set against the four synthetic dry runs of 2026-11-15 (eval/board/runs), the only runs that existed. Eight episodes plus two synthetic scenarios is a sanity gate, not a calibration.",
+  "version": 1,
+  "fixed_on": "2026-11-25",
+  "hard": {
+    "status": "complete",
+    "citation_validity_min": 1.0,
+    "numbers_grounded_min": 0.8,
+    "dissent_preservation_min": 1.0,
+    "options_min": 2,
+    "options_max": 3,
+    "option_traced_min": 1.0,
+    "option_distinct_max_jaccard": 0.6,
+    "triggers_min": 1,
+    "regulatory_min": 4,
+    "max_tokens": 400000,
+    "max_elapsed_s": 900,
+    "max_call_errors": 0
+  },
+  "soft": {
+    "rubric_coverage_min": 0.5,
+    "answer_key_alignment_min": 0.5,
+    "signal_caught": true
+  },
+  "regulatory_checklist": [
+    {"id": "capital", "label": "capital e Basileia", "any_of": ["basileia", "capital", "índice de capital", "cet1", "patrimônio de referência"]},
+    {"id": "liquidity", "label": "liquidez e captação", "any_of": ["liquidez", "lcr", "nsfr", "captação", "funding", "depósitos"]},
+    {"id": "credit", "label": "risco de crédito e provisões", "any_of": ["inadimplência", "provisão", "provisões", "risco de crédito", "carteira de crédito", "npl"]},
+    {"id": "conduct", "label": "conduta e consumidor", "any_of": ["reclamaç", "consumidor", "cliente", "ouvidoria", "conduta", "renegociação"]},
+    {"id": "disclosure", "label": "divulgação ao mercado", "any_of": ["fato relevante", "divulgação", "cvm", "comunicado", "transparência", "investidores"]},
+    {"id": "supervisor", "label": "relação com o supervisor", "any_of": ["banco central", "bcb", "supervis", "regulador", "resolução"]}
+  ],
+  "decision_keywords": {
+    "capital_return": ["dividendo", "juros sobre capital", "jcp", "payout", "recompra", "distribuição"],
+    "capital_raise": ["aumento de capital", "aporte", "emissão de ações", "capitalização"],
+    "funding": ["captação", "funding", "debênture", "letra financeira", "emissão", "linhas"],
+    "strategic": ["venda de ativos", "alienação", "desinvestimento", "aquisição", "parceria", "reestruturação"],
+    "independent_review": ["comitê independente", "investigação independente", "auditoria independente", "apuração"],
+    "governance": ["governança", "conselho", "sucessão", "administração", "diretoria", "liderança"],
+    "risk": ["risco", "limite", "apetite", "exposição"]
+  },
+  "signal_keywords": {
+    "prudential": ["basileia", "capital", "prejuízo", "roe", "folga", "abaixo do mínimo"],
+    "market": ["ação", "ações", "cotação", "queda", "mercado", "preço"]
+  },
+  "changes": {}
+}
