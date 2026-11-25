@@ -1,0 +1,109 @@
+{
+ "run_id": "dry-fail-rural-2013-20261125T0453Z",
+ "scenario": "fail-rural-2013",
+ "model": "sonnet",
+ "provider": "claude-cli (subscription)",
+ "status": "complete",
+ "pack_sha256": "a6f045b76efdbc68d603bd33265409df9f604d0aaf0c0f9a8d9399798ebaec5c",
+ "pack_matches": true,
+ "gaps": [],
+ "citations": {
+  "citations": 102,
+  "invalid": [],
+  "citation_validity": 1.0,
+  "figures": 24,
+  "ungrounded_figures": [],
+  "numbers_grounded": 1.0,
+  "dropped_by_guard": 0
+ },
+ "regulatory": {
+  "covered": [
+   "capital",
+   "liquidity",
+   "credit",
+   "conduct",
+   "disclosure",
+   "supervisor"
+  ],
+  "missing": [],
+  "n": 6,
+  "of": 6,
+  "coverage": 1.0
+ },
+ "dissent": {
+  "challenges": 3,
+  "problems": [],
+  "contested_options": 3,
+  "dissent_preservation": 1.0
+ },
+ "options": {
+  "options": 3,
+  "triggers": 4,
+  "option_traced": 1.0,
+  "with_capital_liquidity_effect": 3,
+  "with_impact_band": 3,
+  "max_jaccard": 0.0641,
+  "impact_bands": [
+   "high",
+   "low",
+   "medium"
+  ]
+ },
+ "cost": {
+  "calls": 13,
+  "tokens_in": 157189,
+  "tokens_out": 25166,
+  "tokens": 182355,
+  "cache_read": 1254547,
+  "token_cap": 400000,
+  "tokens_by_phase": {
+   "diagnosis": 49333,
+   "challenge": 33993,
+   "quantify": 69253,
+   "synthesize": 29776
+  }
+ },
+ "latency": {
+  "elapsed_s": 221.5,
+  "slowest_call_s": 20.2,
+  "mean_call_s": 17.0,
+  "call_errors": [],
+  "timeouts": 0
+ },
+ "episode": {
+  "rubric": {
+   "covered": [
+    "capital_shortfall",
+    "losses",
+    "supervisory_action",
+    "recapitalization"
+   ],
+   "missing": [],
+   "n": 4,
+   "of": 4,
+   "coverage": 1.0
+  },
+  "signal": {
+   "basis": [
+    "prudential"
+   ],
+   "caught": true,
+   "matched": {
+    "prudential": [
+     "basileia",
+     "capital",
+     "prejuízo",
+     "roe",
+     "folga",
+     "abaixo do mínimo"
+    ]
+   }
+  }
+ },
+ "gate": {
+  "version": 1,
+  "passed": true,
+  "fails": [],
+  "warnings": []
+ }
+}

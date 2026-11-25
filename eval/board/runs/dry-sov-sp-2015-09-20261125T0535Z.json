@@ -1,0 +1,2109 @@
+{
+  "model": "sonnet",
+  "provider": "claude-cli (subscription)",
+  "scenario": "sov-sp-2015-09",
+  "pack_sha256": "18187859be3f7137f146c4a99b9aa85e5336e54b04be6301b4ee7e7ab97a14c0",
+  "usage": {
+    "calls": 14,
+    "tokens_in": 157874,
+    "tokens_out": 43466,
+    "cache_read": 22715,
+    "token_cap": 400000
+  },
+  "calls": [
+    {
+      "officer": "cso",
+      "phase": "diagnosis",
+      "s": 26.0,
+      "input_tokens": 2,
+      "cache_read": 5673,
+      "output_tokens": 3846,
+      "is_error": false
+    },
+    {
+      "officer": "cso",
+      "phase": "diagnosis",
+      "s": 30.2,
+      "input_tokens": 5733,
+      "cache_read": 0,
+      "output_tokens": 2198,
+      "is_error": false
+    },
+    {
+      "officer": "risk",
+      "phase": "diagnosis",
+      "s": 28.6,
+      "input_tokens": 2,
+      "cache_read": 5701,
+      "output_tokens": 4023,
+      "is_error": false
+    },
+    {
+      "officer": "risk",
+      "phase": "diagnosis",
+      "s": 25.9,
+      "input_tokens": 5761,
+      "cache_read": 0,
+      "output_tokens": 3696,
+      "is_error": false
+    },
+    {
+      "officer": "cco",
+      "phase": "diagnosis",
+      "s": 43.8,
+      "input_tokens": 2,
+      "cache_read": 5679,
+      "output_tokens": 2047,
+      "is_error": false
+    },
+    {
+      "officer": "cpo",
+      "phase": "diagnosis",
+      "s": 48.7,
+      "input_tokens": 2,
+      "cache_read": 5662,
+      "output_tokens": 2505,
+      "is_error": false
+    },
+    {
+      "officer": "cro",
+      "phase": "diagnosis",
+      "s": 18.4,
+      "input_tokens": 5655,
+      "cache_read": 0,
+      "output_tokens": 2366,
+      "is_error": false
+    },
+    {
+      "officer": "cro",
+      "phase": "challenge",
+      "s": 76.6,
+      "input_tokens": 10841,
+      "cache_read": 0,
+      "output_tokens": 4879,
+      "is_error": false
+    },
+    {
+      "officer": "cco",
+      "phase": "challenge",
+      "s": 41.2,
+      "input_tokens": 10867,
+      "cache_read": 0,
+      "output_tokens": 4278,
+      "is_error": false
+    },
+    {
+      "officer": "risk",
+      "phase": "challenge",
+      "s": 47.4,
+      "input_tokens": 8024,
+      "cache_read": 0,
+      "output_tokens": 2291,
+      "is_error": false
+    },
+    {
+      "officer": "risk",
+      "phase": "quantify",
+      "s": 60.3,
+      "input_tokens": 25822,
+      "cache_read": 0,
+      "output_tokens": 2577,
+      "is_error": false
+    },
+    {
+      "officer": "cpo",
+      "phase": "quantify",
+      "s": 41.8,
+      "input_tokens": 25751,
+      "cache_read": 0,
+      "output_tokens": 2647,
+      "is_error": false
+    },
+    {
+      "officer": "cso",
+      "phase": "quantify",
+      "s": 41.3,
+      "input_tokens": 25749,
+      "cache_read": 0,
+      "output_tokens": 2714,
+      "is_error": false
+    },
+    {
+      "officer": "secretary",
+      "phase": "synthesize",
+      "s": 61.2,
+      "input_tokens": 33663,
+      "cache_read": 0,
+      "output_tokens": 3399,
+      "is_error": false
+    }
+  ],
+  "result": {
+    "run_id": "dry-sov-sp-2015-09-20261125T0535Z",
+    "shared_context_id": "18187859be3f7137f146c4a99b9aa85e5336e54b04be6301b4ee7e7ab97a14c0",
+    "task": "A S&P rebaixou o rating soberano do Brasil para BB+ (perspectiva negativa) e o país perdeu o grau de investimento. Que opções o conselho do Itaú Unibanco deve considerar nos próximos 90 dias para captação, capital e distribuição de resultados, preço de crédito e relacionamento com clientes, e quais gatilhos monitorar?",
+    "status": "complete",
+    "phases": {
+      "diagnosis": {
+        "cso": {
+          "officer": "cso",
+          "phase": "diagnosis",
+          "run_id": "dry-sov-sp-2015-09-20261125T0535Z",
+          "status": "ok",
+          "attempts": 2,
+          "position": {
+            "officer": "cso",
+            "diagnosis": "Itaú entra no rebaixamento soberano (S&P, BB+ negativa, 2015-09-09) com solidez: Basileia 15,35%, capital principal 11,62%, folga 4,85 pp, ROE 22,4% (IF.data 2015-03). Ação ITUB4 -20,65% de 10/07 a 08/09, pior que Bradesco (-16,4%, proximidade 0,95) e mediana (-13,19%), melhor que BB (-26,17%, proximidade 0,93). Itaú tem a maior fatia de lucro entre pares comparáveis (25,27%) com carteira de 13,73%, e reclamações em 5º lugar (índice 29,52, 1S15), contra Caixa 1º (60,11; proximidade 0,83, modelo de negócio distante, 0,41) e Bradesco 2º (57,98). A tese: usar solidez para ganhar terreno, sem relaxar disciplina. Selic 14,25% pressiona custo de captação. Não há dados no pacote sobre spreads, funding externo ou inadimplência.",
+            "constraints": [
+              "Dados de balanço são de 2015-03, defasados; não refletem o impacto do rebaixamento de 2015-09-09.",
+              "O pacote não traz custo de captação externa, liquidez nem inadimplência: opções são qualitativas.",
+              "Selic 14,25% (decisão 2015-07-30) mantém custo de funding alto.",
+              "Concorrentes distantes em modelo de negócio (Caixa 0,41; Santander 0,43) pesam menos como referência de preço e relacionamento.",
+              "Briefing externo (outside-in): não é decisão de capital nem de preço."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Postura defensiva de capital: manter payout e recompra de ações em tesouraria (renovada em 2015-08-27) sob revisão, preservando a folga de 4,85 pp acima do mínimo e priorizando captação local, até clareza sobre o impacto do rating.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Preserva capital principal de 11,62% (2015-03) e reduz risco de depender de funding externo; custo é menor retorno imediato ao acionista.",
+                "red_lines": [
+                  "Não romper o piso de capital regulatório nem o nível de folga que o conselho definir.",
+                  "Não depender de funding externo em janela de estresse."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Ofensiva seletiva de relacionamento: aproveitar a posição 5 em reclamações (índice 29,52) frente a Caixa (60,11) e Bradesco (57,98) para atrair clientes, com preço de crédito disciplinado e seletivo.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Crescimento de carteira consome capital; com folga de 4,85 pp e ROE de 22,4% (2015-03) é viável se feito de forma gradual.",
+                "red_lines": [
+                  "Não reduzir spread abaixo do custo de funding com Selic a 14,25%.",
+                  "Não crescer carteira em segmentos sem evidência de qualidade de crédito."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Repricing prudente: repassar parte do maior custo de captação ao preço do crédito, mantendo condições a clientes de maior qualidade, e monitorar a reação de Bradesco e BB antes de ampliar o repasse.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Protege margem e ROA (1,9% em 2015-03), com risco de perda de volume se Bradesco (ROA 1,96%) e BB seguirem preços menores.",
+                "red_lines": [
+                  "Não repassar custo de forma uniforme a clientes de baixo risco.",
+                  "Não agir antes de observar o movimento dos pares próximos."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-sector-event-trigger-sov-sp-2015-09",
+                "source": "Agência Brasil",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-soundness-itau",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-itau",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-itau-2015-09-08",
+                "source": "Onça market:b3",
+                "as_of": "2015-09-08"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-bradesco-2015-09-08",
+                "source": "Onça market:b3",
+                "as_of": "2015-09-08"
+              },
+              {
+                "pack_fact_id": "f-proximity-bradesco",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-bb-2015-09-08",
+                "source": "Onça market:b3",
+                "as_of": "2015-09-08"
+              },
+              {
+                "pack_fact_id": "f-proximity-bb",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-itau-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-caixa-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              },
+              {
+                "pack_fact_id": "f-proximity-caixa",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-bradesco-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-bradesco",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-proximity-santander",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-019348ipe270820150104224308-57",
+                "source": "Onça filing:fato_relevante",
+                "as_of": "2015-08-27"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "risk": {
+          "officer": "risk",
+          "phase": "diagnosis",
+          "run_id": "dry-sov-sp-2015-09-20261125T0535Z",
+          "status": "ok",
+          "attempts": 2,
+          "position": {
+            "officer": "risk",
+            "diagnosis": "Itaú (IF.data, 2015-03, defasado e anterior ao rebaixamento de 2015-09-09): Basileia 15,35%, capital principal 11,62%, headroom 4,85 pp, ROE 22,4%, ROA 1,9%, crédito/captações 59,22%; banda sólida. O mercado já precifica risco: ITUB4 -20,65% de 10/07 a 08/09, contra mediana do setor de -13,19%. Selic em 14,25%. O pacote não traz LCR, provisões, inadimplência nem exposição a soberano, então não dá para quantificar o impacto do rebaixamento. Pares: Bradesco (proximidade 0,95) tem capital principal de 12,06%. BB (0,93) tem 8,68% e queda de -26,17% na ação. Caixa (0,83, mais distante) tem Basileia de 14,58% e headroom de 4,08 pp. Itaú está em 5º no ranking de reclamações (índice 29,52, 2015-S1).",
+            "constraints": [
+              "Dados de solvência são de 2015-03; sem LCR, provisões ou inadimplência no pacote, a liquidez e a qualidade da carteira não podem ser afirmadas.",
+              "O briefing é outside-in: não define preço nem montante de capital.",
+              "Gatilhos a monitorar: ITUB4 frente à mediana do setor (-13,19%); novos rebaixamentos ou revisão de perspectiva; Selic após 14,25%; próximo IF.data (Basileia e headroom de 4,85 pp).",
+              "Gatilhos de pares: queda de capital principal ou de Basileia em BB (proximidade 0,93) e Caixa (0,83), e sinais de estresse em Bradesco (0,95).",
+              "Reputação: acompanhar o índice de reclamações do Itaú (29,52, 5º lugar) no próximo semestre."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Preservar capital: manter a recompra autorizada (fato relevante de 2015-08-27) em ritmo cauteloso ou condicionado a gatilhos, e priorizar retenção de resultados enquanto o impacto do rebaixamento não for medido.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Retenção protege o headroom de 4,85 pp (Basileia 15,35%, 2015-03). Menos recompra reduz a distribuição ao acionista, num momento em que a ação já cai -20,65%.",
+                "red_lines": [
+                  "Não deixar o headroom de Basileia cair sem decisão explícita do conselho.",
+                  "Não comunicar a pausa como sinal de fragilidade."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Reforçar captação: alongar prazos e diversificar fontes, com teste de estresse de liquidez para um cenário de custo externo maior. Repassar o custo de forma seletiva no preço de crédito, em linha com a Selic de 14,25%.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Crédito/captações de 59,22% (2015-03) dá folga relativa a Caixa (67,51%) e Santander (66,62%), ambos de proximidade menor. O custo de funding sobe com captação mais longa; o LCR não está no pacote.",
+                "red_lines": [
+                  "Não depender de funding de curto prazo para financiar crédito de prazo longo.",
+                  "Não repassar custo de forma que prejudique clientes de menor risco."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Proteger o relacionamento: manter crédito a clientes centrais com preço diferenciado por risco e reforçar o atendimento, para consolidar a 5ª posição em reclamações (índice 29,52) frente a Bradesco (índice 57,98, 2º) e Caixa (60,11, 1º).",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Sustenta ROA de 1,9% e receita. Mais crédito consome capital, e o headroom de 4,85 pp limita a expansão. Efeito sobre provisões não quantificável com o pacote.",
+                "red_lines": [
+                  "Não expandir carteira de risco maior sem checar o headroom de capital.",
+                  "Não competir por preço abaixo do custo de funding."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-soundness-itau",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-itau",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-sector-event-trigger-sov-sp-2015-09",
+                "source": "Agência Brasil",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-itau-2015-09-08",
+                "source": "Onça market:b3",
+                "as_of": "2015-09-08"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-itau-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-019348ipe270820150104224308-57",
+                "source": "Onça filing:fato_relevante",
+                "as_of": "2015-08-27"
+              },
+              {
+                "pack_fact_id": "f-proximity-bradesco",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-soundness-bradesco",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-bradesco-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              },
+              {
+                "pack_fact_id": "f-proximity-bb",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-soundness-bb",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-bb-2015-09-08",
+                "source": "Onça market:b3",
+                "as_of": "2015-09-08"
+              },
+              {
+                "pack_fact_id": "f-proximity-caixa",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-soundness-caixa",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-caixa",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-caixa-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              },
+              {
+                "pack_fact_id": "f-proximity-santander",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-santander",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cco": {
+          "officer": "cco",
+          "phase": "diagnosis",
+          "run_id": "dry-sov-sp-2015-09-20261125T0535Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cco",
+            "diagnosis": "Em 2015-09-09 a S&P rebaixou o Brasil a BB+ (perspectiva negativa), perdendo grau de investimento. Para o Itaú, a base é sólida (IF.data 2015-03): Basileia 15,35%, capital principal 11,62%, folga 4,85 p.p., ROE 22,4%. Ação ITUB4 -20,65% de 10/07 a 08/09 vs mediana do setor -13,19%, sinal de pressão de mercado acima do setor. Selic 14,25%. Na lente de conduta: reputação em 2015-S1 é posição 5 no ranking de reclamações (índice 29,52), melhor que Bradesco (2º, 57,98; proximidade 0,95) e Caixa (1ª, 60,11; proximidade 0,83). Repricing de crédito e cobrança em estresse elevam risco de reclamações e de conduta. O pacote não traz sanções, CEIS/CNEP, CADE nem impacto do rebaixamento em custo de captação do Itaú; não afirmo nada sobre isso.",
+            "constraints": [
+              "Dados de capital são de 2015-03, anteriores ao rebaixamento; não refletem efeito do evento.",
+              "Pacote sem dados de custo de captação, liquidez, spreads ou carteira inadimplente do Itaú: opções de captação e preço não podem ser dimensionadas.",
+              "Pacote sem sanções, CEIS/CNEP, listas internacionais ou CADE sobre o Itaú: ausência de achados não equivale a conformidade atestada.",
+              "Concorrentes pesam pela proximidade (Bradesco 0,95, BB 0,93, Caixa 0,83, Santander 0,79, Safra 0,67); pressão competitiva sem dados.",
+              "Briefing externo: não é decisão de capital ou de preço."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Preservar capital: manter a política de distribuição em revisão por 90 dias, priorizando retenção de resultados. Há folga de 4,85 p.p. sobre o mínimo (2015-03), mas recompra de ações segue autorizada (renovação de limites em 2015-08-27); reavaliar o ritmo da tesouraria conforme gatilhos.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Retenção reforça capital principal (11,62% em 2015-03) contra choque de RWA e câmbio; efeito quantitativo não estimável com o pacote. Custo: menor retorno imediato ao acionista.",
+                "red_lines": [
+                  "Não comunicar mudança de distribuição fora de fato relevante/CVM.",
+                  "Não usar informação privilegiada na janela de recompra."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Repricing seletivo e disciplinado de crédito: ajustar preço por risco em segmentos mais sensíveis ao câmbio e à Selic (14,25%), com governança de conduta e comunicação transparente a clientes afetados.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Protege margem se o custo de captação subir, mas sem dados de captação do Itaú o efeito não é quantificável; pode reduzir volume e elevar reclamações.",
+                "red_lines": [
+                  "Sem repasse abusivo ou de venda casada.",
+                  "Aviso prévio e informação clara de custo total ao cliente.",
+                  "Monitorar o índice de reclamações (29,52 em 2015-S1) antes e depois."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Pacote de relacionamento: renegociação proativa para clientes expostos, canal prioritário de atendimento e trilha de auditoria da curadoria de reclamações, para defender a posição 5 frente a Bradesco (2º) e Caixa (1ª).",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Pode elevar provisões e reduzir receita de curto prazo; magnitude não sustentada pelo pacote.",
+                "red_lines": [
+                  "Sem tratamento desigual entre clientes sem critério documentado.",
+                  "Sem promessas de condições que o capital não suporte.",
+                  "Registrar todas as renegociações no log de curadoria."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-sector-event-trigger-sov-sp-2015-09",
+                "source": "Agência Brasil",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-soundness-itau",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-itau",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-itau-2015-09-08",
+                "source": "Onça market:b3",
+                "as_of": "2015-09-08"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-itau-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-bradesco-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              },
+              {
+                "pack_fact_id": "f-proximity-bradesco",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-caixa-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              },
+              {
+                "pack_fact_id": "f-proximity-caixa",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-019348ipe270820150104224308-57",
+                "source": "Onça filing:fato_relevante",
+                "as_of": "2015-08-27"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cpo": {
+          "officer": "cpo",
+          "phase": "diagnosis",
+          "run_id": "dry-sov-sp-2015-09-20261125T0535Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cpo",
+            "diagnosis": "Em 2015-09-09 a S&P cortou o Brasil para BB+ (perspectiva negativa). O pacote mostra Itaú sólido em 2015-03: Basileia 15,35%, capital principal 11,62%, headroom 4,85 pp, ROE 22,4%, crédito/captações 59,22%. Mercado já penalizou: ITUB4 -20,65% de 2015-07-10 a 2015-09-08 (mediana setor -13,19%), pior que Bradesco (-16,4%) e Santander (-12,45%). Selic 14,25% pressiona custo de captação e inadimplência. Pontos cegos: o pacote não traz carteira de títulos públicos, exposição cambial/captação externa, inadimplência, spreads nem fluxo de depósitos; logo não dá para dimensionar impacto do rebaixamento em funding externo ou capital. Dados de capital têm defasagem (2015-03), anteriores ao evento.",
+            "constraints": [
+              "Dados prudenciais são de 2015-03; não refletem o rebaixamento nem o 2º trimestre.",
+              "Sem dados no pacote de captação externa, rating do Itaú, inadimplência ou carteira soberana: não quantificar o efeito.",
+              "Pressão competitiva não coberta pelo cálculo de proximidade (lacuna declarada em todos os concorrentes).",
+              "Briefing outside-in: não é decisão de capital nem de preço.",
+              "Recompra (renovação de limites em 2015-08-27) e fusão Itaú CorpBanca (aprovação chilena em 2015-09-05) têm efeitos de capital não quantificados no pacote."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Preservar capital e liquidez: manter a recompra autorizada, porém com execução condicionada a gatilhos, e priorizar retenção de resultado. Reforça a margem sobre o mínimo (headroom 4,85 pp em 2015-03) enquanto o mercado e o custo de funding se esclarecem.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Preserva capital principal (11,62% em 2015-03); reduz a distribuição via recompra; efeito líquido a validar com dados posteriores a 2015-03.",
+                "red_lines": [
+                  "Não executar recompra que reduza a margem de capital abaixo do apetite interno do conselho.",
+                  "Não depender de captação externa sem confirmar condições pós-rebaixamento.",
+                  "Não comunicar mudança de payout sem fato relevante à CVM."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Priorizar funding e preço de crédito: alongar e diversificar captação local, repassar seletivamente o custo (Selic 14,25%) a segmentos de maior risco e proteger o crédito a clientes de boa qualidade. Base de comparação: Bradesco (proximidade 0,95) tem crédito/captações 53,66% e BB (0,93), 62,91%, contra 59,22% do Itaú.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Protege margem e liquidez; repasse de preço pode reduzir volume; efeito em RWA depende do mix, não quantificado no pacote.",
+                "red_lines": [
+                  "Não repassar custo de forma indiscriminada a clientes de baixo risco.",
+                  "Não crescer carteira acima da captação estável disponível.",
+                  "Não precificar sem monitorar a reação de Bradesco e BB, os mais próximos."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Defender relacionamento e reputação: manter oferta e atendimento estáveis enquanto concorrentes sofrem. Itaú está na posição 5 no ranking de reclamações 2015-S1 (índice 29,52), melhor que Bradesco (pos. 2; índice 57,98; proximidade 0,95) e Santander (pos. 4; índice 40,61; proximidade 0,79); BB (pos. 7; 27,38; proximidade 0,93) é um pouco melhor.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Efeito direto limitado em capital; custo de atendimento e retenção não quantificados no pacote.",
+                "red_lines": [
+                  "Não cortar canais de atendimento para poupar custo.",
+                  "Não prometer condições de crédito sem respaldo de funding.",
+                  "Não ignorar a deterioração de reclamações se o ranking piorar."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-sector-event-trigger-sov-sp-2015-09",
+                "source": "Agência Brasil",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-soundness-itau",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-itau",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-itau-2015-09-08",
+                "source": "Onça market:b3",
+                "as_of": "2015-09-08"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-bradesco-2015-09-08",
+                "source": "Onça market:b3",
+                "as_of": "2015-09-08"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-santander-2015-09-08",
+                "source": "Onça market:b3",
+                "as_of": "2015-09-08"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-019348ipe270820150104224308-57",
+                "source": "Onça filing:fato_relevante",
+                "as_of": "2015-08-27"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-019348ipe050920150104225209-12",
+                "source": "Onça filing:comunicado",
+                "as_of": "2015-09-05"
+              },
+              {
+                "pack_fact_id": "f-proximity-bradesco",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-proximity-bb",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-proximity-santander",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-bradesco",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-bb",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-itau-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-bradesco-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-santander-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-bb-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cro": {
+          "officer": "cro",
+          "phase": "diagnosis",
+          "run_id": "dry-sov-sp-2015-09-20261125T0535Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cro",
+            "diagnosis": "Em 2015-09-09 a S&P rebaixou o Brasil a BB+ (perspectiva negativa), perdendo o grau de investimento. Para o Itaú, o ponto de partida é sólido (dados 2015-03): Basileia 15,35%, capital principal 11,62%, headroom 4,85 pp, ROE 22,4%, crédito/captações 59,22%. Selic em 14,25% (2015-07-30). ITUB4 caiu -20,65% de 10/07 a 08/09, contra mediana do setor de -13,19%, indicando pressão de mercado acima do setor. O pacote não traz dados de custo de funding externo, spreads, inadimplência nem liquidez pós-rebaixamento; portanto, as opções abaixo são qualitativas e dependem dos gatilhos. Os dados de capital têm defasagem (2015-03) e não refletem o efeito do rebaixamento.",
+            "constraints": [
+              "Dados prudenciais são de 2015-03; não há medida pós-rebaixamento de capital, liquidez ou custo de captação externa no pacote.",
+              "Não há fato sobre exigência regulatória nova ou prazo de vigência decorrente do rebaixamento; nenhuma mudança normativa é afirmada.",
+              "O REF 2015-03 do BCB (data 2015-03-31) é anterior ao rebaixamento e só sustenta o ponto de partida de solvência elevada.",
+              "Concorrentes servem só de referência: Bradesco (proximidade 0,95) e BB (0,93) são os mais próximos; Safra (0,67) pesa menos.",
+              "Sem dados de pressão competitiva (lacuna declarada nos fatos de proximidade) nem de preço de crédito praticado."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Preservar capital e liquidez: manter a recompra de ações em ritmo condicionado (limites renovados em 2015-08-27, tesouraria em agosto) e priorizar captação local de longo prazo, reavaliando a distribuição a cada trimestre conforme os gatilhos.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Retém capital sobre base de 11,62% de capital principal e 4,85 pp de headroom (2015-03); reduz dependência de funding externo. Efeito quantitativo não sustentado pelo pacote.",
+                "red_lines": [
+                  "Não romper o headroom de Basileia sem prévia avaliação do conselho",
+                  "Não depender de funding externo para rolagem sem teste de liquidez",
+                  "Não alterar distribuição sem comunicação ao mercado (fato relevante)"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Repricing seletivo do crédito: repassar custo de funding e risco apenas em segmentos mais sensíveis, mantendo condições para clientes de maior relacionamento. Referência de posição: reclamações do Itaú em 5º lugar (índice 29,52, 2015-S1), melhor que Bradesco (2º, 57,98) e Santander (4º, 40,61).",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Protege margem num cenário de Selic 14,25% e funding mais caro; ganho de resultado não quantificável com o pacote. Risco de elevar reclamações e perder clientes.",
+                "red_lines": [
+                  "Não repassar custos de forma generalizada sem comunicação clara",
+                  "Não degradar o índice de reclamações (29,52 em 2015-S1)",
+                  "Não reduzir crédito a segmentos essenciais sem avaliação de risco"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Manter a execução estratégica e a comunicação ativa com investidores (APIMEC, tesouraria) e clientes, mantendo a integração do Itaú CorpBanca (aprovação chilena em 2015-09-05) e reforçando disclosure de solidez para conter a queda relativa da ação.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Sem efeito direto de capital; exposição internacional (Chile) exige monitorar consumo de capital, não quantificado no pacote.",
+                "red_lines": [
+                  "Não assumir novos compromissos de capital sem teste de estresse pós-rebaixamento",
+                  "Não divulgar projeções sem sustentação em dados atualizados"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-sector-event-trigger-sov-sp-2015-09",
+                "source": "Agência Brasil",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-soundness-itau",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-itau",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-itau-2015-09-08",
+                "source": "Onça market:b3",
+                "as_of": "2015-09-08"
+              },
+              {
+                "pack_fact_id": "f-sector-event-ref-2015-03",
+                "source": "BCB Relatório de Estabilidade Financeira",
+                "as_of": "2015-03-31"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-019348ipe270820150104224308-57",
+                "source": "Onça filing:fato_relevante",
+                "as_of": "2015-08-27"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-019348ipe010920150104224807-40",
+                "source": "Onça filing:comunicado",
+                "as_of": "2015-09-01"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-019348ipe050920150104225209-12",
+                "source": "Onça filing:comunicado",
+                "as_of": "2015-09-05"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-itau-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-bradesco-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-santander-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              },
+              {
+                "pack_fact_id": "f-proximity-bradesco",
+                "source": "Onça (cálculo de proximidade)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-proximity-bb",
+                "source": "Onça (cálculo de proximidade)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-proximity-santander",
+                "source": "Onça (cálculo de proximidade)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-proximity-safra",
+                "source": "Onça (cálculo de proximidade)",
+                "as_of": "2015-09-09"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        }
+      },
+      "challenge": {
+        "cro": {
+          "officer": "cro",
+          "phase": "challenge",
+          "run_id": "dry-sov-sp-2015-09-20261125T0535Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cro",
+            "diagnosis": "Contestação a cpo e risk, pela lente regulatória. Ambos tratam o headroom de 4,85 pp (Basileia 15,35%, capital principal 11,62%, IF.data 2015-03) como folga atual, mas esses dados são anteriores ao rebaixamento da S&P a BB+ (2015-09-09) e não trazem LCR, provisões nem exposição soberana. O REF 2015-03 cita mudança no cálculo do RWA e um futuro requerimento de razão de alavancagem; nenhuma opção diz como isso afeta o headroom. Ambos mantêm a recompra renovada em 2015-08-27 sem limite, gatilho ou rito de divulgação. Ignoram a fusão Itaú CorpBanca (aprovação chilena em 2015-09-05) e seu efeito em capital. O risk pede que a pausa não seja lida como fragilidade, o que não deve orientar o texto de um fato relevante. O cpo fala em concorrentes que sofrem, sem respaldo no pacote.",
+            "constraints": [
+              "Capital e solvência são de 2015-03; sem IF.data posterior, o headroom de 4,85 pp não prova folga pós-rebaixamento.",
+              "O pacote não traz prazos ou normas de Basileia III, LCR ou razão de alavancagem. O REF 2015-03 apenas cita o futuro requerimento de alavancagem e a mudança no RWA; vigência e impacto no Itaú ficam sem quantificação.",
+              "Concorrentes de modelo de negócio distante pesam menos: Caixa (proximidade 0,83; modelo 0,41) e Santander (0,79; modelo 0,43) não sustentam comparação de crédito/captações. Bradesco (0,95) e BB (0,93) são as referências válidas.",
+              "Comparação de crédito/captações: Itaú 59,22% fica entre Bradesco 53,66% e BB 62,91%, o que não mostra folga nem aperto relativo.",
+              "Sem dados de rating do Itaú, de outras agências ou de cláusulas atreladas a rating, o efeito no custo de captação externa não é mensurável."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Recompra só com limite e gatilhos aprovados antes: IF.data pós-rebaixamento, nova perspectiva de rating, ITUB4 contra a mediana (-13,19%). Qualquer mudança de ritmo ou payout é divulgada de forma factual pelo canal CVM. Antes de decidir, quantificar o efeito de capital da fusão Itaú CorpBanca e da mudança no RWA.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Protege o headroom de 4,85 pp (2015-03) até haver dado posterior. O efeito da fusão e do RWA em capital não está no pacote; sem ele a recompra não é dimensionável.",
+                "red_lines": [
+                  "Não executar recompra sem limite de capital aprovado pelo conselho e dado posterior a 2015-03.",
+                  "Não divulgar mudança de payout fora de fato relevante, nem usar a redação para gerir percepção.",
+                  "Não tratar a fusão Itaú CorpBanca como neutra para capital sem quantificação."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Alongar e diversificar a captação local, com teste de estresse de liquidez antes de qualquer repasse de preço. O repasse seletivo da Selic (14,25%) só avança após verificar as regras de conduta e de transparência de preço aplicáveis. O pacote não traz essas regras, e o repasse pode elevar reclamações.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Protege liquidez, mas encarece o funding. LCR, spreads e inadimplência não estão no pacote, então o ganho líquido é incerto. O efeito em RWA depende do mix.",
+                "red_lines": [
+                  "Não repassar preço antes do teste de estresse de liquidez e da checagem de conformidade.",
+                  "Não financiar crédito longo com captação curta.",
+                  "Não afirmar folga relativa com base em Caixa ou Santander, de modelo distante.",
+                  "Não precificar sem monitorar Bradesco (0,95) e BB (0,93)."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Proteger o relacionamento com meta sobre o índice de reclamações (29,52, 5º lugar, 2015-S1), e não sobre a posição, porque o BB tem índice menor (27,38) em 7º. Gatilho: piora do índice no próximo semestre, sobretudo se houver repasse de preço. Não usar como base a dor de Caixa (índice 60,11) ou Bradesco (57,98).",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Efeito direto em capital limitado. Crédito mais amplo consome o headroom de 4,85 pp. Custo de retenção e provisões não estão no pacote.",
+                "red_lines": [
+                  "Não expandir carteira sem checar o headroom com dado pós-rebaixamento.",
+                  "Não cortar canais de atendimento para poupar custo.",
+                  "Não prometer condições de crédito sem respaldo de funding."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-sector-event-trigger-sov-sp-2015-09",
+                "source": "Agência Brasil",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-soundness-itau",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-itau",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-sector-event-ref-2015-03",
+                "source": "BCB Relatório de Estabilidade Financeira",
+                "as_of": "2015-03-31"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-019348ipe270820150104224308-57",
+                "source": "Onça filing:fato_relevante",
+                "as_of": "2015-08-27"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-019348ipe050920150104225209-12",
+                "source": "Onça filing:comunicado",
+                "as_of": "2015-09-05"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-itau-2015-09-08",
+                "source": "Onça market:b3",
+                "as_of": "2015-09-08"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-bradesco",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-bb",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-proximity-bradesco",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-proximity-bb",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-proximity-caixa",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-proximity-santander",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-itau-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-bb-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-bradesco-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-caixa-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cco": {
+          "officer": "cco",
+          "phase": "challenge",
+          "run_id": "dry-sov-sp-2015-09-20261125T0535Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cco",
+            "diagnosis": "Contesto cpo e risk pela lente de conduta. (1) Ambos mantêm a recompra autorizada em 2015-08-27 'condicionada a gatilhos' sem tratar de informação privilegiada: após o rebaixamento (2015-09-09) a administração pode ter informação material sobre funding e capital que o mercado não tem. (2) A red line de risk, 'não comunicar a pausa como sinal de fragilidade', beira o controle de narrativa; a comunicação tem de ser exata e simultânea. (3) cpo opt-2 manda monitorar Bradesco (0,95) e BB (0,93) ao precificar: isso é risco CADE se vier de qualquer coisa além de dados públicos. (4) O repasse seletivo a segmentos de maior risco carece de salvaguarda de conduta (Procon/BCB). O pacote não traz sanções, CEIS/CNEP, listas internacionais, processos CADE nem log de curadoria sobre Itaú: ausência de dado, não ausência de risco. Dados de capital são de 2015-03 e o ranking de reclamações é de 2015-S1, ambos anteriores ao evento.",
+            "constraints": [
+              "O pacote não traz sanções BCB/CVM/Procon, CEIS/CNEP, listas internacionais, processos CADE nem log de curadoria sobre Itaú; não afirmar 'sem pendências'.",
+              "Dados prudenciais (2015-03) e reclamações (2015-S1) são anteriores ao rebaixamento de 2015-09-09; não sustentam afirmações de conduta pós-evento.",
+              "Comparações com concorrentes só com dados públicos e peso pela proximidade: Bradesco 0,95, BB 0,93, Caixa 0,83, Santander 0,79; pressão competitiva não está coberta no cálculo.",
+              "Efeitos de capital da recompra e da fusão Itaú CorpBanca (aprovação chilena em 2015-09-05) não estão quantificados; integração transfronteiriça traz risco de conformidade não avaliado.",
+              "Briefing outside-in: não é decisão de capital nem de preço."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Recompra e payout sob governança de divulgação: antes de qualquer execução pós-rebaixamento, comitê de divulgação avalia se há informação material não pública (funding, capital). Se houver, suspender negociações e divulgar por fato relevante/comunicado CVM. Contesta a recompra 'por gatilhos' de cpo e risk, sem esse filtro.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Preserva o headroom de 4,85 pp (Basileia 15,35%, capital principal 11,62%, 2015-03) enquanto a avaliação ocorre; efeito pós-evento não mensurável com o pacote. ITUB4 caiu -20,65% vs mediana -13,19% (até 2015-09-08), o que aumenta o incentivo a recomprar.",
+                "red_lines": [
+                  "Não recomprar com informação material não divulgada.",
+                  "Não alterar payout sem fato relevante à CVM.",
+                  "Não dar a investidores seletivos (Apimec, analistas) informação que não seja pública.",
+                  "Comunicação sobre a recompra deve ser fiel ao fato, sem enquadramento para esconder fragilidade."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Preço de crédito com salvaguardas de conduta e antitruste: repasse seletivo da Selic (14,25%) só com critérios de risco documentados e testados contra efeito sobre clientes vulneráveis; precificação decidida de forma unilateral, usando apenas dados públicos de Bradesco e BB, sem troca de informação com concorrentes.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Protege margem; crédito/captações de 59,22% (2015-03) contra Bradesco 53,66% (0,95) e BB 62,91% (0,93). Efeito em RWA e provisões não quantificável com o pacote.",
+                "red_lines": [
+                  "Não precificar com base em informação não pública de concorrentes nem em contatos com eles.",
+                  "Não repassar custo de forma que gere queixa de abusividade a clientes de baixo risco.",
+                  "Não vender crédito sem adequação ao perfil do cliente.",
+                  "Não crescer carteira acima da captação estável disponível."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Relacionamento sem oportunismo: manter atendimento e fazer seguimento das reclamações (Itaú 5º, índice 29,52, 2015-S1) como indicador de conduta. Não usar o ranking em publicidade comparativa nem explorar a fragilidade de Caixa (1º, 60,11; 0,83) ou Bradesco (2º, 57,98; 0,95). Contesta cpo opt-3, que se apoia em 'concorrentes sofrem'.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Efeito direto em capital limitado; custo de atendimento e retenção não estão no pacote. O ranking é de antes do rebaixamento e pode piorar com renegociações e repasse de preço.",
+                "red_lines": [
+                  "Não cortar canais de atendimento nem de reclamação.",
+                  "Não fazer publicidade comparativa baseada em dados de ranking defasados (2015-S1).",
+                  "Não prometer condições de crédito sem respaldo de funding.",
+                  "Não ignorar piora do índice de reclamações no próximo semestre."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-sector-event-trigger-sov-sp-2015-09",
+                "source": "Agência Brasil",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-soundness-itau",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-itau",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-bradesco",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-bb",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-itau-2015-09-08",
+                "source": "Onça market:b3",
+                "as_of": "2015-09-08"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-019348ipe270820150104224308-57",
+                "source": "Onça filing:fato_relevante",
+                "as_of": "2015-08-27"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-019348ipe050920150104225209-12",
+                "source": "Onça filing:comunicado",
+                "as_of": "2015-09-05"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-itau-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-caixa-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-bradesco-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              },
+              {
+                "pack_fact_id": "f-proximity-bradesco",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-proximity-bb",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-proximity-caixa",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-proximity-santander",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-09-09"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "risk": {
+          "officer": "risk",
+          "phase": "challenge",
+          "run_id": "dry-sov-sp-2015-09-20261125T0535Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "risk",
+            "diagnosis": "Contesto o CSO: a tese de 'usar solidez para ganhar terreno' parte de dados defasados (IF.data 2015-03: Basileia 15,35%, capital principal 11,62%, folga 4,85 pp), anteriores ao rebaixamento da S&P a BB+ negativa (2015-09-09). Folga de Itaú (4,85) é praticamente igual à de Bradesco (4,73; proximidade 0,95) e inferior a BB (5,52) e Santander (5,48): solidez não é vantagem diferencial. O pacote não traz liquidez (LCR), inadimplência, provisões, funding externo nem exposição a títulos soberanos; sem isso, ofensiva de crédito (opt-2) é prematura. Selic subiu a 14,25% (2015-07-30) e ITUB4 caiu 20,65% vs mediana -13,19% (2015-09-08): o mercado já precifica risco acima do setor.",
+            "constraints": [
+              "Balanço de 2015-03 não reflete o rebaixamento de 2015-09-09; toda folga citada é pré-evento.",
+              "Sem LCR, inadimplência, provisões, custo de funding externo ou exposição soberana no pacote: não há como testar estresse de liquidez nem de qualidade de carteira.",
+              "Reclamações (Itaú 5º, índice 29,52, 2015-S1) medem atendimento, não risco de crédito nem solidez; não sustentam captura de clientes.",
+              "Caixa (proximidade 0,83, modelo de negócio 0,41) e Santander (0,79; 0,43) são pouco comparáveis em preço e relacionamento; pesam menos.",
+              "Briefing externo: não é decisão de capital nem de preço."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Preservação de capital e liquidez: manter a recompra (renovada em 2015-08-27) e o payout sob revisão e condicionar qualquer distribuição extra a gatilhos de capital e liquidez definidos pelo conselho, com priorização de captação local, até medir o efeito do rebaixamento.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Protege a folga de 4,85 pp (2015-03) e reduz dependência de funding externo; custo: menor retorno ao acionista com a ação já -20,65% (2015-09-08). O efeito real não é mensurável sem dados pós-evento.",
+                "red_lines": [
+                  "Não romper o piso regulatório nem a folga mínima fixada pelo conselho.",
+                  "Não depender de funding externo em janela de estresse.",
+                  "Não recomprar ações sem checar a folga de capital atualizada."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Ofensiva de relacionamento só após validação: condicionar a expansão de carteira à evidência de qualidade de crédito e liquidez pós-rebaixamento; começar por clientes atuais de menor risco, não por captura de clientes de Caixa/Bradesco.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Crescimento consome capital; com ROE de 22,4% (2015-03) é financiável, mas Bradesco, com folga similar (4,73) e proximidade 0,95, pode reagir. Sem dados de inadimplência, o risco é cego.",
+                "red_lines": [
+                  "Não crescer carteira sem dados de inadimplência e provisões atualizados.",
+                  "Não precificar abaixo do custo de funding com Selic a 14,25%.",
+                  "Não usar o ranking de reclamações como argumento de solidez."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Repricing seletivo por risco: repassar o maior custo de captação de forma diferenciada, preservando clientes de melhor qualidade, e acompanhar Bradesco (0,95) e BB (0,93) como referência de preço, sem esperar passivamente se a margem se deteriorar.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Protege margem e ROA (1,9%, 2015-03); risco de perder volume se os pares próximos não acompanharem. BB, com ROE de 31,6% e ação -26,17%, pode competir por volume.",
+                "red_lines": [
+                  "Não repassar custo de forma uniforme a clientes de baixo risco.",
+                  "Não deixar a margem corroer por esperar o movimento dos pares."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-sector-event-trigger-sov-sp-2015-09",
+                "source": "Agência Brasil",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-soundness-itau",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-itau",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-bradesco",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-bb",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-santander",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-proximity-bradesco",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-proximity-bb",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-proximity-caixa",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-proximity-santander",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-itau-2015-09-08",
+                "source": "Onça market:b3",
+                "as_of": "2015-09-08"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-bb-2015-09-08",
+                "source": "Onça market:b3",
+                "as_of": "2015-09-08"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-itau-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-019348ipe270820150104224308-57",
+                "source": "Onça filing:fato_relevante",
+                "as_of": "2015-08-27"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        }
+      },
+      "quantify": {
+        "risk": {
+          "officer": "risk",
+          "phase": "quantify",
+          "run_id": "dry-sov-sp-2015-09-20261125T0535Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "risk",
+            "diagnosis": "Quantificação (IF.data 2015-03, defasagem ~5 meses; anterior ao rebaixamento S&P de 2015-09-09). Itaú: Basileia 15,35%, capital principal 11,62%, folga 4,85 pp. Vs pares: Bradesco (prox. 0,95) 15,23% / 12,06% / 4,73 pp → Itaú +0,12 pp Basileia, -0,44 pp CP; BB (0,93) 16,02% / 8,68% / 5,52 → -0,67 pp Basileia, +2,94 pp CP; Caixa (0,83) 14,58% / 10,9% → +0,77 / +0,72; Santander (0,79) 15,98% / 13,42% → -0,63 / -1,80; Safra (0,67) 13,3% / 10,1% → +2,05 / +1,52. Itaú fica no meio do grupo, sem diferencial. Alavancagem, LCR/NSFR e inadimplência: não constam do pacote, não quantifico. Proxy: crédito/captações Itaú 59,22% vs Bradesco 53,66% e BB 62,91%.",
+            "constraints": [
+              "Basileia, capital principal e folga são de 2015-03; não refletem o rebaixamento nem o 2º trimestre.",
+              "Sem razão de alavancagem, LCR, NSFR, inadimplência ou provisões no pacote: não há diferença quantificável nessas métricas.",
+              "Pares de modelo distante (Caixa 0,41; Santander 0,43; Safra porte 0,13×) pesam menos; referências principais são Bradesco (0,95) e BB (0,93).",
+              "Capital principal do BB (8,68%) é bem inferior ao do Itaú, mas sua Basileia é maior (16,02%): composição distinta, comparar com cautela.",
+              "Briefing outside-in: não define preço nem montante de capital."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Preservar capital: manter a recompra (limites renovados em 2015-08-27) condicionada a gatilhos e retenção de resultado até haver IF.data posterior a 2015-03. Folga de 4,85 pp é ~igual à do Bradesco (4,73) e menor que BB (5,52) e Santander (5,48).",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Protege a folga de 4,85 pp e o capital principal de 11,62% (2015-03); custo é menor distribuição com ITUB4 -20,65% vs mediana -13,19% (2015-09-08). Efeito pós-evento não mensurável.",
+                "red_lines": [
+                  "Não recomprar sem checar folga de capital atualizada.",
+                  "Não romper a folga mínima definida pelo conselho.",
+                  "Mudança de payout só por fato relevante à CVM."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Captação: alongar e diversificar fontes locais com teste de estresse de liquidez. Crédito/captações de 59,22% fica entre Bradesco (53,66%) e BB (62,91%), sem folga relativa clara. Sem LCR/NSFR no pacote, o teste interno é pré-requisito.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Reduz dependência de funding externo; encarece o custo com Selic a 14,25% (2015-07-30). Ganho líquido incerto sem LCR, spreads e custo externo.",
+                "red_lines": [
+                  "Não financiar crédito longo com captação curta.",
+                  "Não depender de funding externo em janela de estresse.",
+                  "Não afirmar folga com base em Caixa ou Santander, de modelo distante."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Preço e relacionamento seletivos: repassar custo por risco, preservando clientes de melhor qualidade, e crescer carteira só com dados de inadimplência pós-rebaixamento. Acompanhar Bradesco (0,95) e BB (0,93) por dados públicos. Reclamações: Itaú índice 29,52 (2015-S1).",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Protege margem e ROA de 1,9% (2015-03); crescimento consome a folga de 4,85 pp. Provisões e inadimplência não quantificáveis com o pacote.",
+                "red_lines": [
+                  "Não precificar abaixo do custo de funding com Selic a 14,25%.",
+                  "Não repassar custo uniformemente a clientes de baixo risco.",
+                  "Não crescer carteira sem dados de inadimplência atualizados."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-sector-event-trigger-sov-sp-2015-09",
+                "source": "Agência Brasil",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-soundness-itau",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-soundness-bradesco",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-soundness-bb",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-soundness-caixa",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-soundness-santander",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-soundness-safra",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-itau",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-bradesco",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-bb",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-santander",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-proximity-bradesco",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-proximity-bb",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-proximity-caixa",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-proximity-santander",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-proximity-safra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-itau-2015-09-08",
+                "source": "Onça market:b3",
+                "as_of": "2015-09-08"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-019348ipe270820150104224308-57",
+                "source": "Onça filing:fato_relevante",
+                "as_of": "2015-08-27"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-itau-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cpo": {
+          "officer": "cpo",
+          "phase": "quantify",
+          "run_id": "dry-sov-sp-2015-09-20261125T0535Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cpo",
+            "diagnosis": "Em 2015-09-09 a S&P cortou o Brasil para BB+ (negativa). Ponto de partida do Itaú (IF.data 2015-03, pré-evento): Basileia 15,35%, capital principal 11,62%, folga 4,85 pp, ROE 22,4%, crédito/captações 59,22%. ITUB4 -20,65% de 10/07 a 08/09 vs mediana -13,19%. Selic 14,25%. Cobertura: o pacote não traz custo de funding externo, spreads, inadimplência, LCR, carteira soberana nem pressão competitiva (lacuna em todos os f-proximity). Reclamações 2015-S1 (Itaú 5º, índice 29,52) são anteriores ao evento. Folga do Itaú (4,85) é similar à do Bradesco (4,73) e menor que BB (5,52): solidez não é vantagem diferencial. Opções são qualitativas; prioridade é fechar pontos cegos de dados.",
+            "constraints": [
+              "Capital e fundamentos são de 2015-03 e reclamações de 2015-S1, ambos anteriores ao rebaixamento de 2015-09-09; não medem o efeito do evento.",
+              "Sem dados de funding externo, spreads, inadimplência, LCR ou exposição soberana: nenhum efeito é dimensionável.",
+              "Pesos por proximidade: Bradesco 0,95 e BB 0,93 são as referências válidas; Caixa 0,83 (modelo 0,41) e Santander 0,79 (modelo 0,43) pesam menos em preço e relacionamento.",
+              "Efeito de capital da recompra (limites renovados em 2015-08-27) e da fusão Itaú CorpBanca (aprovação chilena em 2015-09-05) não está quantificado.",
+              "Briefing outside-in: não é decisão de capital nem de preço."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Preservar capital e liquidez: manter a recompra autorizada em ritmo condicionado a gatilhos (IF.data posterior, perspectiva de rating, ITUB4 vs mediana) e priorizar retenção e captação local longa até medir o efeito do rebaixamento.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Protege a folga de 4,85 pp e o capital principal de 11,62% (2015-03); reduz a dependência de funding externo. Custo: menor retorno ao acionista com a ação já -20,65%. Efeito pós-evento não mensurável.",
+                "red_lines": [
+                  "Não recomprar sem checar a folga de capital atualizada.",
+                  "Não depender de funding externo sem confirmar condições pós-rebaixamento.",
+                  "Mudança de payout só por fato relevante à CVM, sem uso de informação material não divulgada."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Funding e preço de crédito seletivo: alongar e diversificar captação local, com teste de estresse de liquidez, e repassar parte do custo (Selic 14,25%) por risco. Referência: crédito/captações Itaú 59,22% vs Bradesco 53,66% (0,95) e BB 62,91% (0,93).",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Protege margem e ROA (1,9%, 2015-03); repasse pode reduzir volume se Bradesco e BB não acompanharem. Efeito em RWA depende do mix, sem dados no pacote.",
+                "red_lines": [
+                  "Não repassar custo de forma uniforme a clientes de baixo risco.",
+                  "Não financiar crédito longo com captação curta.",
+                  "Não precificar abaixo do custo de funding.",
+                  "Decidir preço de forma unilateral, só com dados públicos dos pares."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Defender relacionamento sem ofensiva: manter atendimento e acompanhar o índice de reclamações (Itaú 29,52, 5º) como meta de índice, não de posição: BB tem 27,38 (7º, 0,93); Bradesco 57,98 (2º, 0,95); Caixa 60,11 (1º, 0,83). Expansão só após dados de qualidade de crédito.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Efeito direto em capital limitado; crescimento de carteira consome a folga de 4,85 pp. Custo de retenção e provisões não estão no pacote.",
+                "red_lines": [
+                  "Não cortar canais de atendimento.",
+                  "Não crescer carteira sem dados de inadimplência pós-rebaixamento.",
+                  "Não prometer condições de crédito sem respaldo de funding.",
+                  "Não usar o ranking defasado (2015-S1) como argumento comparativo."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-sector-event-trigger-sov-sp-2015-09",
+                "source": "Agência Brasil",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-soundness-itau",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-itau",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-bradesco",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-bb",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-itau-2015-09-08",
+                "source": "Onça market:b3",
+                "as_of": "2015-09-08"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-019348ipe270820150104224308-57",
+                "source": "Onça filing:fato_relevante",
+                "as_of": "2015-08-27"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-019348ipe050920150104225209-12",
+                "source": "Onça filing:comunicado",
+                "as_of": "2015-09-05"
+              },
+              {
+                "pack_fact_id": "f-proximity-bradesco",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-proximity-bb",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-proximity-caixa",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-proximity-santander",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-itau-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-bb-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-bradesco-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-caixa-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cso": {
+          "officer": "cso",
+          "phase": "quantify",
+          "run_id": "dry-sov-sp-2015-09-20261125T0535Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cso",
+            "diagnosis": "Ordenação por encaixe estratégico (1º a 3º): preservar capital, repricing seletivo, ofensiva de relacionamento. Itaú entra no rebaixamento (S&P BB+ negativa, 2015-09-09) sólido, mas com dados pré-evento (IF.data 2015-03): Basileia 15,35%, capital principal 11,62%, folga 4,85 pp, ROE 22,4%. Solidez não diferencia: Bradesco (proximidade 0,95) tem folga 4,73 pp e BB (0,93) 5,52 pp. ITUB4 -20,65% vs mediana -13,19% (até 2015-09-08), pior que Bradesco (-16,4%), melhor que BB (-26,17%). Itaú tem 25,27% do lucro com 13,73% da carteira. Reclamações em 5º (índice 29,52, 2015-S1), mas BB tem índice menor (27,38). Sem dados de funding, spreads ou inadimplência: ordenação qualitativa.",
+            "constraints": [
+              "Balanço de 2015-03 e reclamações de 2015-S1 são anteriores ao rebaixamento; não medem o efeito do evento.",
+              "Pacote sem custo de captação, liquidez (LCR), inadimplência ou exposição soberana: nenhum efeito é quantificável, só ordenável.",
+              "Selic 14,25% (decisão 2015-07-30) mantém funding caro e limita preço de crédito.",
+              "Caixa (proximidade 0,83; modelo de negócio 0,41) e Santander (0,79; 0,43) pesam menos como referência de preço e relacionamento; Bradesco (0,95) e BB (0,93) são as referências.",
+              "Briefing outside-in: não é decisão de capital nem de preço."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "1º encaixe. Preservar capital: manter a recompra (limites renovados em 2015-08-27) em ritmo condicionado a gatilhos aprovados, priorizar retenção e captação local longa. Protege a folga de 4,85 pp, igual à de Bradesco, sem vantagem a perder. Quantificar antes o efeito da fusão Itaú CorpBanca (aprovação chilena 2015-09-05).",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Preserva capital principal de 11,62% e folga de 4,85 pp (2015-03) e reduz dependência de funding externo; custo é menor retorno com a ação em -20,65%. Efeito pós-evento não mensurável no pacote.",
+                "red_lines": [
+                  "Não executar recompra sem dado de capital posterior a 2015-03 nem com informação material não divulgada.",
+                  "Não alterar payout fora de fato relevante à CVM.",
+                  "Não depender de funding externo sem teste de liquidez.",
+                  "Não tratar a fusão Itaú CorpBanca como neutra para capital."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "2º encaixe. Repricing seletivo por risco: repassar parte do custo de funding (Selic 14,25%) onde o risco for maior, protegendo clientes de boa qualidade. Decisão unilateral, com dados públicos de Bradesco (0,95) e BB (0,93) como referência; BB (ROE 31,6%) pode disputar volume.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Protege margem e ROA (1,9%, 2015-03); risco de perder volume se os pares próximos não acompanharem. Ganho líquido não quantificável sem spreads e inadimplência.",
+                "red_lines": [
+                  "Não repassar custo de forma uniforme a clientes de baixo risco.",
+                  "Não precificar com informação não pública de concorrentes.",
+                  "Não deixar a margem corroer esperando passivamente os pares.",
+                  "Não precificar abaixo do custo de funding."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "3º encaixe. Ofensiva de relacionamento só após validação: expandir carteira gradualmente, começando por clientes atuais de menor risco, quando houver dados pós-rebaixamento de inadimplência e liquidez. A vantagem em reclamações é frágil (BB 27,38 vs Itaú 29,52) e pré-evento.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Crescimento consome a folga de 4,85 pp; com ROE de 22,4% (2015-03) é financiável se gradual, mas o risco de crédito é cego sem dados de inadimplência.",
+                "red_lines": [
+                  "Não crescer carteira sem inadimplência e provisões atualizados.",
+                  "Não competir por preço abaixo do custo de funding.",
+                  "Não usar o ranking de 2015-S1 em publicidade comparativa nem explorar Caixa (60,11) ou Bradesco (57,98)."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-sector-event-trigger-sov-sp-2015-09",
+                "source": "Agência Brasil",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-soundness-itau",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-itau",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-bradesco",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-bb",
+                "source": "BCB IF.data",
+                "as_of": "2015-03"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-itau-2015-09-08",
+                "source": "Onça market:b3",
+                "as_of": "2015-09-08"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-bradesco-2015-09-08",
+                "source": "Onça market:b3",
+                "as_of": "2015-09-08"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-bb-2015-09-08",
+                "source": "Onça market:b3",
+                "as_of": "2015-09-08"
+              },
+              {
+                "pack_fact_id": "f-proximity-bradesco",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-proximity-bb",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-proximity-caixa",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-proximity-santander",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-itau-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-bb-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-caixa-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-bradesco-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2015-09-09"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-019348ipe270820150104224308-57",
+                "source": "Onça filing:fato_relevante",
+                "as_of": "2015-08-27"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-019348ipe050920150104225209-12",
+                "source": "Onça filing:comunicado",
+                "as_of": "2015-09-05"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        }
+      },
+      "synthesize": {
+        "secretary": {
+          "status": "ok"
+        }
+      }
+    },
+    "synthesis": {
+      "summary": "Em 2015-09-09 a S&P rebaixou o Brasil a BB+ (perspectiva negativa). O Itaú parte de posição sólida, mas com dados pré-evento (IF.data 2015-03): Basileia 15,35%, capital principal 11,62%, folga de 4,85 pp, praticamente igual à do Bradesco (4,73 pp) e menor que a do BB (5,52 pp). A solidez não é diferencial. ITUB4 caiu -20,65% contra mediana de -13,19%, e a Selic está em 14,25%. O pacote não traz LCR, inadimplência, spreads, custo de funding externo nem exposição soberana, então as opções são qualitativas e dependem de dados posteriores a 2015-03. Os cinco oficiais convergem para: (1) preservar capital com recompra condicionada a gatilhos e governança de divulgação; (2) reforçar captação local e precificar o crédito por risco, de forma unilateral; (3) defender o relacionamento sem ofensiva até haver dados de qualidade de crédito. Briefing externo, não é decisão de capital nem de preço.",
+      "options": [
+        {
+          "id": "opt-1",
+          "description": "Preservar capital e proteger a divulgação: manter a recompra (limites renovados em 2015-08-27) só com limite e gatilhos aprovados antes (IF.data posterior a 2015-03, perspectiva de rating, ITUB4 contra a mediana) e priorizar retenção de resultados por 90 dias. Antes de executar, o comitê de divulgação verifica se há informação material não pública; qualquer mudança de payout sai por fato relevante à CVM, redigida de forma factual. Quantificar o efeito de capital da fusão Itaú CorpBanca (aprovação chilena em 2015-09-05) e da mudança no cálculo do RWA.",
+          "customer_impact": "low",
+          "capital_liquidity_effect": "Protege a folga de 4,85 pp e o capital principal de 11,62% (2015-03) e reduz dependência de funding externo. O custo é menor distribuição com a ação já em -20,65% contra mediana de -13,19%. Efeito pós-rebaixamento, da recompra e da fusão não é mensurável com o pacote.",
+          "citations": [
+            "f-sector-event-trigger-sov-sp-2015-09",
+            "f-soundness-itau",
+            "f-fundamentals-itau",
+            "f-fundamentals-bradesco",
+            "f-fundamentals-bb",
+            "f-narrative-b3-itau-2015-09-08",
+            "f-narrative-ipe-cvm-fato-019348ipe270820150104224308-57",
+            "f-narrative-ipe-cvm-fato-019348ipe050920150104225209-12",
+            "f-sector-event-ref-2015-03"
+          ],
+          "derived_from": [
+            {
+              "officer": "cso",
+              "option": "opt-1"
+            },
+            {
+              "officer": "risk",
+              "option": "opt-1"
+            },
+            {
+              "officer": "cco",
+              "option": "opt-1"
+            },
+            {
+              "officer": "cpo",
+              "option": "opt-1"
+            },
+            {
+              "officer": "cro",
+              "option": "opt-1"
+            }
+          ],
+          "supported_by": [
+            "cso",
+            "risk",
+            "cco",
+            "cpo",
+            "cro"
+          ],
+          "contested_by": [
+            "risk",
+            "cco",
+            "cro"
+          ],
+          "competitor_signals": [
+            {
+              "entity": "bradesco",
+              "proximity": 0.949
+            },
+            {
+              "entity": "bb",
+              "proximity": 0.934
+            }
+          ]
+        },
+        {
+          "id": "opt-2",
+          "description": "Captação e preço de crédito seletivo: alongar e diversificar a captação local, com teste de estresse de liquidez antes de qualquer repasse. Depois, repassar parte do custo de funding (Selic 14,25%) por risco, preservando clientes de melhor qualidade. A decisão de preço é unilateral, com apenas dados públicos de Bradesco (0,95) e BB (0,93), sem troca de informação com concorrentes. Crédito/captações do Itaú (59,22%) fica entre Bradesco (53,66%) e BB (62,91%), sem folga relativa clara. Caixa e Santander, de modelo distante, não servem de base de comparação.",
+          "customer_impact": "medium",
+          "capital_liquidity_effect": "Protege margem e ROA (1,9% em 2015-03) e reduz dependência de funding externo, mas encarece o funding. Risco de perda de volume se Bradesco e BB não acompanharem, e de aumento de reclamações. Ganho líquido incerto sem LCR, spreads, inadimplência e custo externo.",
+          "citations": [
+            "f-macro-selic",
+            "f-fundamentals-itau",
+            "f-fundamentals-bradesco",
+            "f-fundamentals-bb",
+            "f-proximity-bradesco",
+            "f-proximity-bb",
+            "f-proximity-caixa",
+            "f-proximity-santander",
+            "f-narrative-b3-bb-2015-09-08",
+            "f-sector-event-trigger-sov-sp-2015-09"
+          ],
+          "derived_from": [
+            {
+              "officer": "cso",
+              "option": "opt-2"
+            },
+            {
+              "officer": "risk",
+              "option": "opt-2"
+            },
+            {
+              "officer": "risk",
+              "option": "opt-3"
+            },
+            {
+              "officer": "cco",
+              "option": "opt-2"
+            },
+            {
+              "officer": "cpo",
+              "option": "opt-2"
+            },
+            {
+              "officer": "cro",
+              "option": "opt-2"
+            }
+          ],
+          "supported_by": [
+            "cso",
+            "risk",
+            "cco",
+            "cpo",
+            "cro"
+          ],
+          "contested_by": [
+            "risk",
+            "cco",
+            "cro"
+          ],
+          "competitor_signals": [
+            {
+              "entity": "bradesco",
+              "proximity": 0.949
+            },
+            {
+              "entity": "bb",
+              "proximity": 0.934
+            },
+            {
+              "entity": "caixa",
+              "proximity": 0.826
+            },
+            {
+              "entity": "santander",
+              "proximity": 0.793
+            }
+          ]
+        },
+        {
+          "id": "opt-3",
+          "description": "Defender o relacionamento sem ofensiva, com expansão só depois de validação: manter atendimento e canais de reclamação, renegociar de forma proativa com clientes expostos por critérios documentados e expandir a carteira de forma gradual, começando por clientes atuais de menor risco, quando houver dados pós-rebaixamento de inadimplência e liquidez. Usar meta sobre o índice de reclamações (Itaú 29,52, 5º; BB 27,38, 7º), não sobre a posição. Não usar o ranking defasado (2015-S1) em publicidade comparativa nem explorar a fragilidade de Caixa (60,11) ou Bradesco (57,98).",
+          "customer_impact": "medium",
+          "capital_liquidity_effect": "Efeito direto em capital limitado; crescimento de carteira consome a folga de 4,85 pp, e renegociações podem elevar provisões e reduzir receita de curto prazo. Magnitude não sustentada pelo pacote.",
+          "citations": [
+            "f-reputation-rk-itau-2015-s1",
+            "f-reputation-rk-bb-2015-s1",
+            "f-reputation-rk-bradesco-2015-s1",
+            "f-reputation-rk-caixa-2015-s1",
+            "f-soundness-itau",
+            "f-fundamentals-itau",
+            "f-proximity-bb",
+            "f-proximity-bradesco"
+          ],
+          "derived_from": [
+            {
+              "officer": "cso",
+              "option": "opt-3"
+            },
+            {
+              "officer": "risk",
+              "option": "opt-3"
+            },
+            {
+              "officer": "cco",
+              "option": "opt-3"
+            },
+            {
+              "officer": "cpo",
+              "option": "opt-3"
+            },
+            {
+              "officer": "cro",
+              "option": "opt-3"
+            }
+          ],
+          "supported_by": [
+            "cso",
+            "risk",
+            "cco",
+            "cpo",
+            "cro"
+          ],
+          "contested_by": [
+            "risk",
+            "cco",
+            "cro"
+          ],
+          "competitor_signals": [
+            {
+              "entity": "bradesco",
+              "proximity": 0.949
+            },
+            {
+              "entity": "bb",
+              "proximity": 0.934
+            },
+            {
+              "entity": "caixa",
+              "proximity": 0.826
+            }
+          ]
+        }
+      ],
+      "residual_regulatory_risk": "Os dados prudenciais (2015-03) e de reclamações (2015-S1) são anteriores ao rebaixamento, e o pacote não traz LCR, razão de alavancagem, inadimplência, provisões, exposição soberana nem custo de captação externa. O REF 2015-03 menciona mudança no cálculo do RWA e futuro requerimento de razão de alavancagem, sem vigência ou impacto no Itaú. O pacote também não traz sanções, CEIS/CNEP, CADE nem log de curadoria sobre o Itaú: a ausência de dado não equivale a conformidade. Riscos residuais: informação privilegiada na recompra, conduta e transparência no repasse de preço (reclamações) e antitruste na observação de pares.",
+      "monitoring_triggers": [
+        {
+          "text": "Novo IF.data posterior a 2015-03: queda da folga de 4,85 pp, da Basileia (15,35%) ou do capital principal (11,62%) do Itaú, ou piora relativa frente a Bradesco (4,73 pp) e BB (5,52 pp).",
+          "citations": [
+            "f-soundness-itau",
+            "f-fundamentals-itau",
+            "f-fundamentals-bradesco",
+            "f-fundamentals-bb"
+          ]
+        },
+        {
+          "text": "Novos rebaixamentos, revisão da perspectiva negativa ou ação de outras agências sobre o soberano.",
+          "citations": [
+            "f-sector-event-trigger-sov-sp-2015-09"
+          ]
+        },
+        {
+          "text": "ITUB4 em relação à mediana do setor (-13,19%): ampliação do desvio atual (-20,65%) ou divergência frente a Bradesco (-16,4%) e BB (-26,17%).",
+          "citations": [
+            "f-narrative-b3-itau-2015-09-08",
+            "f-narrative-b3-bradesco-2015-09-08",
+            "f-narrative-b3-bb-2015-09-08"
+          ]
+        },
+        {
+          "text": "Próxima decisão do Copom: Selic acima de 14,25% eleva o custo de funding e a pressão sobre o preço de crédito.",
+          "citations": [
+            "f-macro-selic"
+          ]
+        },
+        {
+          "text": "Índice de reclamações do Itaú (29,52, 5º) no próximo semestre, sobretudo após repasse de preço ou renegociações; comparar com BB (27,38) e Bradesco (57,98).",
+          "citations": [
+            "f-reputation-rk-itau-2015-s1",
+            "f-reputation-rk-bb-2015-s1",
+            "f-reputation-rk-bradesco-2015-s1"
+          ]
+        },
+        {
+          "text": "Comunicados à CVM do Itaú sobre recompra e tesouraria (renovação de 2015-08-27) e sobre a fusão Itaú CorpBanca (aprovação chilena em 2015-09-05), por efeito em capital.",
+          "citations": [
+            "f-narrative-ipe-cvm-fato-019348ipe270820150104224308-57",
+            "f-narrative-ipe-cvm-fato-019348ipe010920150104224807-40",
+            "f-narrative-ipe-cvm-fato-019348ipe050920150104225209-12"
+          ]
+        },
+        {
+          "text": "Movimento público de preço e capital de Bradesco (proximidade 0,95) e BB (0,93), referências mais próximas, e sinais de estresse neles, em especial o capital principal do BB (8,68%).",
+          "citations": [
+            "f-proximity-bradesco",
+            "f-proximity-bb",
+            "f-soundness-bb",
+            "f-soundness-bradesco"
+          ]
+        }
+      ]
+    },
+    "dissents": [
+      {
+        "officer": "cro",
+        "challenged": [
+          "cpo",
+          "risk"
+        ],
+        "text": "Contestação a cpo e risk, pela lente regulatória. Ambos tratam o headroom de 4,85 pp (Basileia 15,35%, capital principal 11,62%, IF.data 2015-03) como folga atual, mas esses dados são anteriores ao rebaixamento da S&P a BB+ (2015-09-09) e não trazem LCR, provisões nem exposição soberana. O REF 2015-03 cita mudança no cálculo do RWA e um futuro requerimento de razão de alavancagem; nenhuma opção diz como isso afeta o headroom. Ambos mantêm a recompra renovada em 2015-08-27 sem limite, gatilho ou rito de divulgação. Ignoram a fusão Itaú CorpBanca (aprovação chilena em 2015-09-05) e seu efeito em capital. O risk pede que a pausa não seja lida como fragilidade, o que não deve orientar o texto de um fato relevante. O cpo fala em concorrentes que sofrem, sem respaldo no pacote.",
+        "red_lines": [
+          "Não executar recompra sem limite de capital aprovado pelo conselho e dado posterior a 2015-03.",
+          "Não divulgar mudança de payout fora de fato relevante, nem usar a redação para gerir percepção.",
+          "Não tratar a fusão Itaú CorpBanca como neutra para capital sem quantificação.",
+          "Não repassar preço antes do teste de estresse de liquidez e da checagem de conformidade.",
+          "Não financiar crédito longo com captação curta.",
+          "Não afirmar folga relativa com base em Caixa ou Santander, de modelo distante.",
+          "Não precificar sem monitorar Bradesco (0,95) e BB (0,93).",
+          "Não expandir carteira sem checar o headroom com dado pós-rebaixamento.",
+          "Não cortar canais de atendimento para poupar custo.",
+          "Não prometer condições de crédito sem respaldo de funding."
+        ]
+      },
+      {
+        "officer": "cco",
+        "challenged": [
+          "cpo",
+          "risk"
+        ],
+        "text": "Contesto cpo e risk pela lente de conduta. (1) Ambos mantêm a recompra autorizada em 2015-08-27 'condicionada a gatilhos' sem tratar de informação privilegiada: após o rebaixamento (2015-09-09) a administração pode ter informação material sobre funding e capital que o mercado não tem. (2) A red line de risk, 'não comunicar a pausa como sinal de fragilidade', beira o controle de narrativa; a comunicação tem de ser exata e simultânea. (3) cpo opt-2 manda monitorar Bradesco (0,95) e BB (0,93) ao precificar: isso é risco CADE se vier de qualquer coisa além de dados públicos. (4) O repasse seletivo a segmentos de maior risco carece de salvaguarda de conduta (Procon/BCB). O pacote não traz sanções, CEIS/CNEP, listas internacionais, processos CADE nem log de curadoria sobre Itaú: ausência de dado, não ausência de risco. Dados de capital são de 2015-03 e o ranking de reclamações é de 2015-S1, ambos anteriores ao evento.",
+        "red_lines": [
+          "Não recomprar com informação material não divulgada.",
+          "Não alterar payout sem fato relevante à CVM.",
+          "Não dar a investidores seletivos (Apimec, analistas) informação que não seja pública.",
+          "Comunicação sobre a recompra deve ser fiel ao fato, sem enquadramento para esconder fragilidade.",
+          "Não precificar com base em informação não pública de concorrentes nem em contatos com eles.",
+          "Não repassar custo de forma que gere queixa de abusividade a clientes de baixo risco.",
+          "Não vender crédito sem adequação ao perfil do cliente.",
+          "Não crescer carteira acima da captação estável disponível.",
+          "Não cortar canais de atendimento nem de reclamação.",
+          "Não fazer publicidade comparativa baseada em dados de ranking defasados (2015-S1).",
+          "Não prometer condições de crédito sem respaldo de funding.",
+          "Não ignorar piora do índice de reclamações no próximo semestre."
+        ]
+      },
+      {
+        "officer": "risk",
+        "challenged": [
+          "cso"
+        ],
+        "text": "Contesto o CSO: a tese de 'usar solidez para ganhar terreno' parte de dados defasados (IF.data 2015-03: Basileia 15,35%, capital principal 11,62%, folga 4,85 pp), anteriores ao rebaixamento da S&P a BB+ negativa (2015-09-09). Folga de Itaú (4,85) é praticamente igual à de Bradesco (4,73; proximidade 0,95) e inferior a BB (5,52) e Santander (5,48): solidez não é vantagem diferencial. O pacote não traz liquidez (LCR), inadimplência, provisões, funding externo nem exposição a títulos soberanos; sem isso, ofensiva de crédito (opt-2) é prematura. Selic subiu a 14,25% (2015-07-30) e ITUB4 caiu 20,65% vs mediana -13,19% (2015-09-08): o mercado já precifica risco acima do setor.",
+        "red_lines": [
+          "Não romper o piso regulatório nem a folga mínima fixada pelo conselho.",
+          "Não depender de funding externo em janela de estresse.",
+          "Não recomprar ações sem checar a folga de capital atualizada.",
+          "Não crescer carteira sem dados de inadimplência e provisões atualizados.",
+          "Não precificar abaixo do custo de funding com Selic a 14,25%.",
+          "Não usar o ranking de reclamações como argumento de solidez.",
+          "Não repassar custo de forma uniforme a clientes de baixo risco.",
+          "Não deixar a margem corroer por esperar o movimento dos pares."
+        ]
+      }
+    ],
+    "dropped": [],
+    "gaps": [],
+    "elapsed_s": 591.3
+  },
+  "focal": "itau",
+  "subject": "itau",
+  "proximity": [
+    {
+      "peer": "bradesco",
+      "label": "Bradesco",
+      "score": 0.949,
+      "coverage": 0.85,
+      "low_coverage": false,
+      "components": {
+        "size": 0.928,
+        "market": 1.0,
+        "business_model": 0.91,
+        "prudential": 0.976
+      },
+      "missing": [
+        "pressure"
+      ]
+    },
+    {
+      "peer": "bb",
+      "label": "Banco do Brasil",
+      "score": 0.934,
+      "coverage": 0.85,
+      "low_coverage": false,
+      "components": {
+        "size": 0.967,
+        "market": 1.0,
+        "business_model": 0.871,
+        "prudential": 0.866
+      },
+      "missing": [
+        "pressure"
+      ]
+    },
+    {
+      "peer": "caixa",
+      "label": "Caixa Econômica Federal",
+      "score": 0.826,
+      "coverage": 0.85,
+      "low_coverage": false,
+      "components": {
+        "size": 0.976,
+        "market": 1.0,
+        "business_model": 0.41,
+        "prudential": 0.846
+      },
+      "missing": [
+        "pressure"
+      ]
+    },
+    {
+      "peer": "santander",
+      "label": "Santander",
+      "score": 0.793,
+      "coverage": 0.85,
+      "low_coverage": false,
+      "components": {
+        "size": 0.853,
+        "market": 1.0,
+        "business_model": 0.434,
+        "prudential": 0.874
+      },
+      "missing": [
+        "pressure"
+      ]
+    },
+    {
+      "peer": "safra",
+      "label": "Safra",
+      "score": 0.672,
+      "coverage": 0.85,
+      "low_coverage": false,
+      "components": {
+        "size": 0.55,
+        "market": 1.0,
+        "business_model": 0.59,
+        "prudential": 0.59
+      },
+      "missing": [
+        "pressure"
+      ]
+    }
+  ]
+}

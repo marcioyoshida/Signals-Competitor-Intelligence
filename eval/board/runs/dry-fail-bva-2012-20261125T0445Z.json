@@ -1,0 +1,1826 @@
+{
+  "model": "sonnet",
+  "provider": "claude-cli (subscription)",
+  "scenario": "fail-bva-2012",
+  "pack_sha256": "cf9419a31197a996973b42e4b35dee147117fb3a1d782a41c9b8d505b682fd17",
+  "usage": {
+    "calls": 15,
+    "tokens_in": 357089,
+    "tokens_out": 31100,
+    "cache_read": 1253802,
+    "token_cap": 400000
+  },
+  "calls": [
+    {
+      "officer": "cso",
+      "phase": "diagnosis",
+      "s": 17.8,
+      "input_tokens": 101738,
+      "cache_read": 0,
+      "output_tokens": 1876,
+      "is_error": false
+    },
+    {
+      "officer": "cso",
+      "phase": "diagnosis",
+      "s": 16.4,
+      "input_tokens": 84660,
+      "cache_read": 0,
+      "output_tokens": 1909,
+      "is_error": false
+    },
+    {
+      "officer": "risk",
+      "phase": "diagnosis",
+      "s": 16.5,
+      "input_tokens": 6736,
+      "cache_read": 96340,
+      "output_tokens": 1722,
+      "is_error": false
+    },
+    {
+      "officer": "cco",
+      "phase": "diagnosis",
+      "s": 17.4,
+      "input_tokens": 6714,
+      "cache_read": 96340,
+      "output_tokens": 1994,
+      "is_error": false
+    },
+    {
+      "officer": "cpo",
+      "phase": "diagnosis",
+      "s": 14.9,
+      "input_tokens": 6697,
+      "cache_read": 96340,
+      "output_tokens": 1661,
+      "is_error": false
+    },
+    {
+      "officer": "cpo",
+      "phase": "diagnosis",
+      "s": 15.9,
+      "input_tokens": 6626,
+      "cache_read": 96495,
+      "output_tokens": 1901,
+      "is_error": false
+    },
+    {
+      "officer": "cro",
+      "phase": "diagnosis",
+      "s": 19.2,
+      "input_tokens": 6688,
+      "cache_read": 96340,
+      "output_tokens": 2170,
+      "is_error": false
+    },
+    {
+      "officer": "cro",
+      "phase": "challenge",
+      "s": 18.3,
+      "input_tokens": 10325,
+      "cache_read": 96487,
+      "output_tokens": 2358,
+      "is_error": false
+    },
+    {
+      "officer": "cco",
+      "phase": "challenge",
+      "s": 17.5,
+      "input_tokens": 10325,
+      "cache_read": 96513,
+      "output_tokens": 2226,
+      "is_error": false
+    },
+    {
+      "officer": "risk",
+      "phase": "challenge",
+      "s": 17.7,
+      "input_tokens": 8564,
+      "cache_read": 96535,
+      "output_tokens": 2090,
+      "is_error": false
+    },
+    {
+      "officer": "risk",
+      "phase": "challenge",
+      "s": 15.1,
+      "input_tokens": 8646,
+      "cache_read": 96535,
+      "output_tokens": 2117,
+      "is_error": false
+    },
+    {
+      "officer": "risk",
+      "phase": "quantify",
+      "s": 16.1,
+      "input_tokens": 23250,
+      "cache_read": 96535,
+      "output_tokens": 2222,
+      "is_error": false
+    },
+    {
+      "officer": "cpo",
+      "phase": "quantify",
+      "s": 14.6,
+      "input_tokens": 23219,
+      "cache_read": 96495,
+      "output_tokens": 2008,
+      "is_error": false
+    },
+    {
+      "officer": "cso",
+      "phase": "quantify",
+      "s": 16.3,
+      "input_tokens": 23205,
+      "cache_read": 96507,
+      "output_tokens": 2227,
+      "is_error": false
+    },
+    {
+      "officer": "secretary",
+      "phase": "synthesize",
+      "s": 18.8,
+      "input_tokens": 29696,
+      "cache_read": 96340,
+      "output_tokens": 2619,
+      "is_error": false
+    }
+  ],
+  "result": {
+    "run_id": "dry-fail-bva-2012-20261125T0445Z",
+    "shared_context_id": "cf9419a31197a996973b42e4b35dee147117fb3a1d782a41c9b8d505b682fd17",
+    "task": "Com os dados públicos disponíveis até hoje, o conselho do Banco BVA deve se preocupar com a solvência ou a liquidez da instituição nos próximos 90 dias? Que sinais de alerta existem, que ações preventivas considerar e o que os dados públicos não permitem afirmar?",
+    "status": "complete",
+    "phases": {
+      "diagnosis": {
+        "cso": {
+          "officer": "cso",
+          "phase": "diagnosis",
+          "run_id": "dry-fail-bva-2012-20261125T0445Z",
+          "status": "ok",
+          "attempts": 2,
+          "position": {
+            "officer": "cso",
+            "diagnosis": "Com dados de 2012-06 (IF.data), o BVA é o caso mais frágil do grupo: Basileia com headroom de -1,29 p.p. (único negativo; pares de +1,93 a +9,63 p.p.), ROE -34,3% e ROA -2,44%, ativo de R$ 7,99 bi (o menor; pares de 11,57 a 14,26 bi). Carteira/captações 83,13%. A solvência merece preocupação prioritária nos próximos 90 dias: capital abaixo do colchão exige recomposição. Liquidez: os dados não trazem caixa, vencimentos nem perfil de captação, então nenhum sinal direto de liquidez é afirmável. Selic caiu a 7,25% (2012-10-11), sem efeito mensurável sobre o BVA aqui. O REF 2012-09 aponta sistema mais sólido, mas risco concentrado em poucas IFs.",
+            "constraints": [
+              "Dados de 2012-06 (IF.data) têm defasagem de ~4 meses; a posição atual de capital e caixa pode ser diferente.",
+              "O pacote não traz perfil de captação, vencimentos, caixa nem concentração de depositantes: liquidez não é avaliável.",
+              "Proximidade dos pares é parcial (cobertura 70%, sem perfil prudencial nem pressão competitiva); comparações são indicativas.",
+              "Headroom de Basileia negativo vem de um único ponto de dados; não se sabe a causa (perdas, ativos ponderados) nem planos de capital em curso.",
+              "Briefing outside-in: não é decisão de capital nem de preço."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Priorizar recomposição de capital: aporte dos controladores ou capital subordinado/híbrido, com validação interna da posição de Basileia posterior a 2012-06 e diálogo preventivo com o regulador.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Fecha o headroom de -1,29 p.p.; o tamanho exigido depende de dados internos não disponíveis ao público.",
+                "red_lines": [
+                  "Não operar abaixo do mínimo regulatório sem plano de enquadramento aprovado",
+                  "Não distribuir dividendos enquanto o headroom for negativo"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Reduzir ativos ponderados pelo risco: conter originação de maior risco e avaliar cessão de carteira, mantendo clientes essenciais, para elevar o índice sem depender só de aporte.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Libera capital regulatório e liquidez, mas pode realizar perdas e pressionar o ROE de -34,3%; carteira/captações de 83,13% oferece margem limitada.",
+                "red_lines": [
+                  "Não vender ativos com desconto que agrave o capital",
+                  "Não reduzir crédito de forma abrupta a clientes-chave"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Montar monitoramento diário de liquidez e plano de contingência (linhas, colateral, comunicação) para reagir a saques ou perda de captação, dado o sinal negativo de capital.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Cobre a lacuna de visibilidade sobre liquidez; custo de captação pode subir se o mercado perceber a fragilidade.",
+                "red_lines": [
+                  "Não comunicar publicamente números de capital não validados",
+                  "Não depender de uma única fonte de captação"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-fundamentals-ep-bva",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-mercantil",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-mercantil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-fibra",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-fibra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-abc-brasil",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-abc-brasil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-daycoval",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-daycoval",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-pan",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-pan",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-sector-event-ref-2012-09",
+                "source": "BCB Relatório de Estabilidade Financeira",
+                "as_of": "2012-09-30"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "risk": {
+          "officer": "risk",
+          "phase": "diagnosis",
+          "run_id": "dry-fail-bva-2012-20261125T0445Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "risk",
+            "diagnosis": "Dados públicos de 2012-06 (IF.data, defasados ~4 meses) mostram o BVA como a instituição mais frágil do conjunto: Basileia com headroom de -1,29 p.p. (abaixo do mínimo regulatório), ROE -34,3%, ROA -2,44%, prejuízo (lucro_share -0,43), ativo R$ 7,99 bi (o menor do grupo). Pares próximos têm headroom positivo (ABC 3,65; Daycoval 7,56; PAN 9,63 apesar do ROE -22,8%). Insuficiência de capital com prejuízo recorrente é o sinal mais grave: justifica preocupação com solvência e com enquadramento/medidas do BCB em 90 dias. Liquidez não é mensurável: não há LCR, captação, vencimentos nem depósitos no pacote. Crédito/captações 83,1% é só indicador parcial. O REF 2012-09 aponta sistema mais sólido, o que contrasta com o BVA e o isola.",
+            "constraints": [
+              "Basileia (-1,29 p.p. em 2012-06) e resultado são de 2012-06; a posição atual pode ser melhor ou pior.",
+              "Sem dados de LCR, perfil de captação, concentração de depositantes, vencimentos ou provisões/inadimplência: liquidez não pode ser avaliada.",
+              "Sem dados sobre ações de supervisão do BCB, rating, aportes de acionistas ou qualidade da carteira; não se afirma resolução iminente.",
+              "Proximidade dos pares (0,76-0,81, cobertura 70%) sem perfil prudencial: comparação é de porte/mercado, não de risco.",
+              "Ações de mercado dos pares (b3) não cobrem o BVA e pouco informam sobre solvência."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Recomposição imediata de capital: aporte de acionistas, retenção de lucros/suspensão de distribuições e venda de ativos ou carteiras para elevar o índice acima do mínimo, com plano de capital formal ao BCB.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Fecha o déficit de 1,29 p.p. e reduz o risco de medida supervisória; depende da capacidade dos acionistas.",
+                "red_lines": [
+                  "Não operar abaixo do mínimo de Basileia sem plano aprovado",
+                  "Nenhuma distribuição de dividendos enquanto houver déficit",
+                  "Não ocultar o enquadramento ao regulador"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Reduzir risco-ponderado: frear novas concessões, desacelerar a carteira (crédito/captações 83,1%) e reforçar provisões, preservando caixa e colchão de liquidez de curto prazo.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Melhora o índice pela redução do denominador e protege a liquidez; reduz a receita e pode aprofundar o prejuízo.",
+                "red_lines": [
+                  "Não ampliar captação cara para financiar crescimento",
+                  "Manter caixa suficiente para saques de 30 dias"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Sondar alternativas estratégicas (parceiro, comprador ou fusão) e preparar plano de contingência de liquidez e de comunicação a depositantes e ao BCB.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Possível entrada de capital externo; evita resolução desordenada, mas sinalizar fragilidade pode pressionar a captação.",
+                "red_lines": [
+                  "Sigilo da negociação até comunicação ao BCB",
+                  "Não discriminar credores nem depositantes"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-fundamentals-ep-bva",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-abc-brasil",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-daycoval",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-pan",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-abc-brasil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-proximity-daycoval",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-pan",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-sector-event-ref-2012-09",
+                "source": "BCB Relatório de Estabilidade Financeira",
+                "as_of": "2012-09-30"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cco": {
+          "officer": "cco",
+          "phase": "diagnosis",
+          "run_id": "dry-fail-bva-2012-20261125T0445Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cco",
+            "diagnosis": "Perspectiva de conduta/integridade, com a ressalva de que o pacote não traz nenhum fato de sanção, CEIS/CNEP, CADE ou listas internacionais sobre o BVA; não afirmo ausência, apenas que não há dado. Sobre solvência: o BVA é o caso mais frágil do grupo em IF.data 2012-06: ROE -34,3%, ROA -2,44%, folga de Basileia -1,29 p.p. (abaixo do mínimo), ativo R$ 7,99 bi. Os pares têm folga positiva (+1,93 a +9,63 p.p.). Isso é sinal de alerta de solvência para 90 dias; o dado tem defasagem (jun/2012, ~4 meses). Liquidez não é mensurável com o pacote. Selic em queda (7,25%) e REF 2012-09 apontando solidez sistêmica não mitigam o risco idiossincrático do BVA.",
+            "constraints": [
+              "Sem dados de liquidez (LCR/NSFR, captação, vencimentos, depósitos): não é possível afirmar risco de liquidez nem descartá-lo.",
+              "Fundamentos são de 2012-06 (IF.data); não refletem set/out 2012 nem eventuais medidas de capital posteriores.",
+              "Não há fato sobre sanções, processos administrativos, reputação ou comunicação do BCB ao BVA; ausência no pacote não é ausência de risco.",
+              "Pares (proximidade 0,76 a 0,81, cobertura 70%, sem perfil prudencial) são referência de contraste, não evidência sobre o BVA.",
+              "Briefing outside-in: não constitui decisão de capital ou preço."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Tratar a folga de Basileia negativa (-1,29 p.p., 2012-06) como evento de governança: pedir à gestão o índice atualizado, plano de recomposição de capital e cronograma, com validação jurídica e de compliance sobre o que deve ser comunicado ao BCB.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Esclarece a distância ao mínimo regulatório; sem efeito direto até a execução do plano.",
+                "red_lines": [
+                  "Não atrasar comunicações regulatórias devidas",
+                  "Não divulgar a clientes/mercado informação seletiva ou imprecisa sobre solvência"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Encomendar teste interno de liquidez a 90 dias (concentração e prazo de captação, depósitos, linhas disponíveis) e gatilhos de escalonamento ao conselho, já que o pacote não permite avaliá-la.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Fecha a lacuna de dados de liquidez; pode indicar necessidade de reforçar colchão de liquidez.",
+                "red_lines": [
+                  "Não tratar tratamento diferenciado a credores/partes relacionadas",
+                  "Não realizar operações que prejudiquem a igualdade entre depositantes"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Preparar medidas de capital (aporte de acionistas, retenção de lucros, redução de ativos ponderados) e protocolo de comunicação e conduta com BCB, clientes e mercado em cenário de estresse.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Aporte ou redução de ativos elevaria a folga; vender carteira ou cortar crédito reduz exposição, mas pode pressionar receita e clientes.",
+                "red_lines": [
+                  "Não ocultar o enquadramento de capital ao regulador",
+                  "Não vender ativos a partes relacionadas fora de condições de mercado",
+                  "Não prometer capitalização não aprovada"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-fundamentals-ep-bva",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-abc-brasil",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-pan",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-daycoval",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-fibra",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-mercantil",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-mercantil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-proximity-fibra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-proximity-abc-brasil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-proximity-daycoval",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-pan",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-sector-event-ref-2012-09",
+                "source": "BCB Relatório de Estabilidade Financeira",
+                "as_of": "2012-09-30"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cpo": {
+          "officer": "cpo",
+          "phase": "diagnosis",
+          "run_id": "dry-fail-bva-2012-20261125T0445Z",
+          "status": "ok",
+          "attempts": 2,
+          "position": {
+            "officer": "cpo",
+            "diagnosis": "Banco BVA (IF.data 2012-06) mostra sinais de alerta de solvência: ROE -34.3%, ROA -2.44%, prejuízo (lucro_share -0.43) e Basileia headroom de -1.29 pp, isto é, abaixo do mínimo regulatório. Capital é o ponto crítico; os dados não medem liquidez (sem caixa, vencimentos ou captação por prazo). Credito/captações 83.13% é só uma proxy de dependência de funding. Pares: Mercantil (proximidade 0.81) tem headroom 1.93 pp e ROE 6.9%; Fibra (0.80) 2.24 pp e ROE 1.2%; ABC Brasil (0.80) 3.65 pp e ROE 14.3%; Daycoval (0.78) 7.56 pp e ROE 17.5%; Banco PAN (0.76) 9.63 pp apesar de ROE -22.8%. BVA é a única com headroom negativo e fica abaixo de todos os pares próximos. Preocupação com solvência é fundada; liquidez em 90 dias não é afirmável com dados públicos.",
+            "constraints": [
+              "Dados de 2012-06 (IF.data) têm defasagem de ~4 meses; a situação atual de capital e liquidez pode ser diferente.",
+              "Não há dados públicos sobre liquidez (caixa, vencimentos, captação por prazo, linhas interbancárias); não afirmar risco de liquidez em 90 dias.",
+              "Proximidade dos pares cobre 70% e não inclui perfil prudencial nem pressão competitiva; comparações são indicativas.",
+              "Pacote não traz qualidade da carteira, provisões nem ativos de garantia; a origem da perda não é identificável.",
+              "Briefing outside-in: não é decisão de capital ou preço."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Pedir à gestão um diagnóstico interno imediato de Basileia, liquidez e provisões, com projeção a 90 dias, para confirmar o déficit de capital e a dimensão da perda.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Sem efeito direto; reduz a incerteza e dá base para decidir. Headroom público de -1.29 pp (2012-06) precisa de confirmação atual.",
+                "red_lines": [
+                  "Não divulgar conclusões fora do conselho antes de verificar.",
+                  "Não basear decisão apenas em dados defasados de 2012-06."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Preparar plano de recomposição de capital (aporte de acionistas, redução de ativos ponderados, contenção de risco) e antecipar o diálogo com o regulador.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Visa elevar o headroom de -1.29 pp ao nível dos pares (1.93 a 9.63 pp); reduzir carteira (ativo 7.99 bi) poupa capital e restringe crédito.",
+                "red_lines": [
+                  "Não omitir o déficit ao regulador.",
+                  "Não distribuir lucros ou dividendos enquanto o capital estiver abaixo do mínimo."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Montar plano de contingência de liquidez e comunicação, com cenários de saída de captação e acesso a fontes de funding, mesmo sem sinal público de estresse de liquidez.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Protege contra efeito de confiança decorrente do capital fraco; custo de carregar mais liquidez reduz margem, já negativa (ROA -2.44%).",
+                "red_lines": [
+                  "Não fazer comunicação pública que sugira ou negue problema sem base verificada.",
+                  "Não privilegiar credores específicos."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-fundamentals-ep-bva",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-mercantil",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-mercantil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-fibra",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-fibra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-abc-brasil",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-abc-brasil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-daycoval",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-daycoval",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-pan",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-pan",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cro": {
+          "officer": "cro",
+          "phase": "diagnosis",
+          "run_id": "dry-fail-bva-2012-20261125T0445Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cro",
+            "diagnosis": "Sinais de alerta fortes, com defasagem (IF.data 2012-06, dado de ~4 meses). Banco BVA tem Basileia headroom de -1.29 pp (abaixo do mínimo regulatório), ROE -34.3% e ROA -2.44%, o pior ROE do grupo (pares: ABC +14.3%, Daycoval +17.5%, Mercantil +6.9%, Fibra +1.2%, Pan -22.8%). Ativo de 7.99 bi é o menor do grupo e carteira_share 0.32 contra 0.45-0.52 dos pares. Crédito/captações 83.13% é similar aos pares (75-97%), então os dados não indicam descasamento de liquidez diferenciado. A preocupação principal é solvência/capital; liquidez é um risco secundário, não demonstrado pelo pacote.",
+            "constraints": [
+              "Dados IF.data são de 2012-06; nada do pacote mostra a posição de capital ou de caixa após junho, nem o estado atual até 2012-10-18.",
+              "O pacote não traz perfil prudencial detalhado, vencimentos de captação, volume de depósitos a prazo, liquidez de curto prazo nem composição da carteira: não é possível afirmar risco de corrida ou de liquidez em 90 dias.",
+              "Sem dados de qualidade de ativos, provisões ou garantias, não é possível explicar a causa da perda (ROE -34.3%) nem projetar sua trajetória.",
+              "Os pares são proximidade 0.76-0.81 (cobertura 70%, sem perfil prudencial): são referência de contexto, com modelo de negócio distante (0.33-0.47); BVA é menor (pares com 1.45-1.78× seu porte).",
+              "O REF 2012-09 aponta solidez geral do sistema, mas isso não se aplica por si só ao BVA, que está em posição individual divergente."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Plano imediato de recomposição de capital: aporte dos controladores, retenção de resultados, emissão de instrumentos elegíveis e/ou venda de ativos/carteiras para trazer o índice de Basileia acima do mínimo, com antecipação do diálogo com o BCB.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Eleva o capital e o headroom de Basileia (hoje -1.29 pp, jun/2012); ativos vendidos reduzem a RWA e podem gerar perda ou realizar liquidez.",
+                "red_lines": [
+                  "Não operar abaixo do mínimo regulatório sem plano formal acordado com o BCB.",
+                  "Não distribuir dividendos ou JCP enquanto o headroom for negativo.",
+                  "Não vender ativos a preço que agrave o prejuízo sem avaliação do efeito sobre o capital."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Reforçar a gestão de liquidez: mapear vencimentos de captação, constituir colchão de ativos líquidos e testar cenários de saque (stress) para 90 dias, com monitoramento diário e plano de contingência.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Protege o caixa frente a uma eventual perda de confiança; pode reduzir a margem pelo carrego de ativos líquidos. O efeito sobre o capital é limitado.",
+                "red_lines": [
+                  "Não depender de uma única fonte de funding de curto prazo.",
+                  "Não comprometer o colchão mínimo de liquidez definido pelo conselho."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Reduzir a exposição de risco: conter novas concessões de crédito e priorizar produtos de menor consumo de capital e maior retorno, até a recomposição do capital, com comunicação coordenada a clientes e ao mercado.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Reduz a RWA e a necessidade de capital; menor crescimento e receita no curto prazo; risco reputacional se a comunicação for mal conduzida.",
+                "red_lines": [
+                  "Não interromper abruptamente linhas de clientes essenciais sem análise de impacto.",
+                  "Não fazer comunicação seletiva a investidores ou credores."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-fundamentals-ep-bva",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-abc-brasil",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-daycoval",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-mercantil",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-fibra",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-pan",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-mercantil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-proximity-abc-brasil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-proximity-daycoval",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-proximity-fibra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-pan",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-sector-event-ref-2012-09",
+                "source": "BCB Relatório de Estabilidade Financeira",
+                "as_of": "2012-09-30"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        }
+      },
+      "challenge": {
+        "cro": {
+          "officer": "cro",
+          "phase": "challenge",
+          "run_id": "dry-fail-bva-2012-20261125T0445Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cro",
+            "diagnosis": "Contesto cpo e risk: ambos acertam que o capital é o ponto crítico (BVA, IF.data 2012-06: headroom Basileia -1,29 pp, ROE -34,3%, ROA -2,44%, ativo R$ 7,99 bi), mas ambos tratam o déficit como fato atual quando é dado de ~4 meses atrás, e nenhum fixa o que fazer se o déficit já tiver sido fechado ou aprofundado. O cpo não propõe nenhum gatilho de escalonamento; o risk salta para venda de ativos, parceiro/comprador e freio de carteira (opt-2 alto impacto) sem diagnóstico confirmado, o que pode precipitar o risco de confiança que quer evitar. Comparação com pares é indicativa: Mercantil (prox. 0,81) 1,93 pp, Fibra (0,80) 2,24 pp, ABC (0,80) 3,65 pp, Daycoval (0,78) 7,56 pp; PAN (0,76) tem ROE -22,8% mas headroom 9,63 pp, sem perfil prudencial no cálculo (cobertura 70%). Solvência: preocupação fundada. Liquidez em 90 dias: não afirmável com dados públicos. O REF 2012-09 descreve sistema mais sólido, o que isola o BVA, mas não fala dele.",
+            "constraints": [
+              "Dados de 2012-06 (IF.data); a posição de capital em 2012-10 é desconhecida, pode ter melhorado (aporte) ou piorado (prejuízo continuado).",
+              "Sem dados de caixa, vencimentos, captação por prazo, depositantes ou linhas interbancárias: nada sustenta afirmar ou descartar risco de liquidez em 90 dias.",
+              "Sem qualidade de carteira, provisões, rating ou ações de supervisão do BCB; a origem da perda e a reação do regulador são desconhecidas.",
+              "Proximidade dos pares (0,76-0,81) cobre 70% e exclui perfil prudencial; PAN mostra que ROE negativo convive com headroom alto, então ROE sozinho não indica insolvência.",
+              "Briefing outside-in: não é decisão de capital ou preço; ações de mercado (b3) dos pares não cobrem o BVA e não informam solvência."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Primeiro passo obrigatório: diagnóstico interno de Basileia, liquidez e provisões, com projeção a 90 dias e gatilhos pré-aprovados (ex.: índice abaixo do mínimo, queda de captação) que ativam recomposição de capital e contato antecipado com o BCB.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Sem efeito direto; confirma se o headroom de -1,29 pp (2012-06) persiste e define quando as ações mais custosas entram, evitando agir às cegas.",
+                "red_lines": [
+                  "Não decidir venda de ativos, freio de crédito ou parceiro com base só em dado de 2012-06",
+                  "Sigilo no conselho até a verificação; sem comunicação pública não verificada",
+                  "Não omitir déficit confirmado ao BCB"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Em paralelo, preparar (sem executar) plano de recomposição de capital com acionistas e plano de contingência de liquidez e comunicação, com prazos e responsáveis, para execução imediata se o diagnóstico confirmar o déficit.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Visa levar o headroom de -1,29 pp ao nível dos pares (1,93 a 9,63 pp); carregar liquidez extra pesa sobre margem já negativa (ROA -2,44%).",
+                "red_lines": [
+                  "Nenhuma distribuição de dividendos enquanto houver déficit",
+                  "Não privilegiar credores ou depositantes específicos",
+                  "Não operar abaixo do mínimo sem plano formal perante o BCB"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Condicionar alternativas estratégicas (parceiro, comprador, fusão) e freio de carteira apenas ao gatilho confirmado de déficit sem aporte viável, com sondagem confidencial e prévia ciência do BCB.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Pode trazer capital externo e evitar resolução desordenada; sinalizar fragilidade ou reduzir carteira antes da hora pode pressionar captação e aprofundar o prejuízo.",
+                "red_lines": [
+                  "Sigilo da negociação até comunicação ao BCB",
+                  "Não discriminar credores nem depositantes",
+                  "Não ampliar captação cara para financiar crescimento"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-fundamentals-ep-bva",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-mercantil",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-mercantil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-fibra",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-fibra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-abc-brasil",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-abc-brasil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-daycoval",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-daycoval",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-pan",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-pan",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-sector-event-ref-2012-09",
+                "source": "BCB Relatório de Estabilidade Financeira",
+                "as_of": "2012-09-30"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cco": {
+          "officer": "cco",
+          "phase": "challenge",
+          "run_id": "dry-fail-bva-2012-20261125T0445Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cco",
+            "diagnosis": "Contesto cpo e risk: ambos acertam que a solvência é o ponto crítico do BVA (IF.data 2012-06: Basileia headroom -1,29 pp, ROE -34,3%, ROA -2,44%, ativo R$ 7,99 bi, o menor do grupo), mas deixam lacunas. (1) Nenhum cita o REF 2012-09 como contexto: sistema mais sólido isola o BVA. (2) A opção risk opt-2 (frear carteira, reforçar provisões) agrava o prejuízo e pode acelerar perda de confiança, sem base no pacote para a origem da perda. (3) Risk opt-3 (sondar comprador) e cpo opt-3 (contingência de liquidez) tratam de liquidez sem nenhum dado de liquidez; o gatilho de conduta é comunicação a depositantes/credores. (4) Os dados têm ~4 meses de defasagem; 'headroom -1,29 pp' pode já estar superado. Conclusão: preocupação com solvência é fundada; liquidez em 90 dias não é afirmável.",
+            "constraints": [
+              "Dados de IF.data são de 2012-06 (~4 meses de defasagem); o déficit de capital atual é desconhecido.",
+              "Sem dados públicos de liquidez (caixa, vencimentos, captação por prazo, linhas interbancárias): não afirmar risco de liquidez em 90 dias.",
+              "Pacote não traz sanções, processos do BCB/CVM/CADE, CEIS/CNEP, reclamações Procon nem log de curadoria sobre o BVA: não afirmar ausência nem existência de achados de integridade.",
+              "Proximidade dos pares (0,76 a 0,81, cobertura 70%) sem perfil prudencial: comparação indicativa; o PAN (0,76, headroom 9,63 pp, ROE -22,8%) é o par mais distante.",
+              "Briefing outside-in; não é decisão de capital ou preço, nem indica resolução ou intervenção iminente."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Pedir à gestão confirmação interna imediata de Basileia, liquidez e provisões, com projeção a 90 dias, e registrar no conselho o déficit de capital e a data dos números antes de qualquer outra medida.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Sem efeito direto; substitui o headroom público de -1,29 pp (2012-06) por dado atual e define se há déficit real.",
+                "red_lines": [
+                  "Não decidir com base apenas em dados de 2012-06.",
+                  "Não divulgar conclusões fora do conselho antes de verificadas.",
+                  "Não ocultar eventual enquadramento ao regulador."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Se o déficit se confirmar, formalizar plano de capital (aporte de acionistas, suspensão de distribuições) e comunicar o BCB de forma antecipada e tempestiva, antes de frear a carteira de forma ampla.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Visa levar o headroom de -1,29 pp ao nível dos pares (1,93 a 9,63 pp, 2012-06); preferível à contração abrupta de crédito, que agravaria o ROA de -2,44%.",
+                "red_lines": [
+                  "Nenhum dividendo ou distribuição enquanto houver déficit de capital.",
+                  "Não omitir ou atrasar informação ao regulador.",
+                  "Não operar abaixo do mínimo sem plano aprovado."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Preparar protocolo de comunicação e tratamento equitativo de depositantes e credores, e conduzir qualquer sondagem de parceiro ou comprador sob sigilo e com ciência do BCB, sem sinalizar fragilidade ao mercado.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Preserva a confiança da captação (crédito/captações 83,13%, 2012-06) e evita assimetria de informação; sem efeito direto sobre capital.",
+                "red_lines": [
+                  "Não discriminar depositantes ou credores.",
+                  "Não fazer comunicação pública que sugira ou negue problema sem base verificada.",
+                  "Sigilo de negociação até comunicação ao BCB.",
+                  "Não usar informação privilegiada para favorecer terceiros."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-fundamentals-ep-bva",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-mercantil",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-mercantil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-fibra",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-fibra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-abc-brasil",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-abc-brasil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-daycoval",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-daycoval",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-pan",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-pan",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-sector-event-ref-2012-09",
+                "source": "BCB Relatório de Estabilidade Financeira",
+                "as_of": "2012-09-30"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "risk": {
+          "officer": "risk",
+          "phase": "challenge",
+          "run_id": "dry-fail-bva-2012-20261125T0445Z",
+          "status": "ok",
+          "attempts": 2,
+          "position": {
+            "officer": "risk",
+            "diagnosis": "Dados BCB IF.data de 2012-06 (defasagem ~4 meses). O BVA é o caso mais frágil: headroom de Basileia -1,29 p.p. (único negativo; pares de +1,93 a +9,63 p.p.), ROE -34,3%, ROA -2,44%, ativo R$ 7,99 bi (menor do grupo; pares 11,57 a 14,26 bi). Carteira/captações 83,13%. Para os próximos 90 dias, a solvência exige atenção prioritária: capital abaixo do colchão pede recomposição, e prejuízo persistente corrói ainda mais o capital. Liquidez: o pacote não traz caixa, vencimentos nem perfil de captação, então não é possível afirmar nada direto. Os pares são comparáveis apenas de forma indicativa: Mercantil (proximidade 0,81), Fibra (0,80), ABC Brasil (0,80), Daycoval (0,78) e PAN (0,76), todos próximos, mas com 70% de cobertura. O REF 2012-09 aponta sistema mais sólido, com risco concentrado em poucas IFs.",
+            "constraints": [
+              "Dados de 2012-06 (IF.data) têm defasagem de ~4 meses; capital e caixa atuais podem diferir.",
+              "O pacote não traz perfil de captação, vencimentos, caixa nem concentração de depositantes: liquidez não é avaliável.",
+              "Proximidade dos pares tem cobertura de 70% (sem perfil prudencial nem pressão competitiva); comparações são indicativas.",
+              "Headroom negativo vem de um único ponto de dados; causa (perdas, ativos ponderados) e planos de capital em curso são desconhecidos.",
+              "Briefing outside-in: não é decisão de capital nem de preço; Selic 7,25% (2012-10-11) sem efeito mensurável sobre o BVA aqui."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Priorizar recomposição de capital: aporte dos controladores ou dívida subordinada/híbrida, com validação interna da posição de Basileia posterior a 2012-06 e diálogo preventivo com o regulador, antes que um enquadramento forçado limite as opções.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Fecha o headroom de -1,29 p.p.; o tamanho necessário depende de dados internos não públicos. Os pares têm headroom de +1,93 a +9,63 p.p., então o BVA fica atrás de todos.",
+                "red_lines": [
+                  "Não operar abaixo do mínimo regulatório sem plano de enquadramento aprovado",
+                  "Não distribuir dividendos enquanto o headroom for negativo"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Reduzir ativos ponderados pelo risco: conter originação de maior risco e avaliar cessão de carteira, preservando clientes essenciais, para elevar o índice sem depender só de aporte.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Libera capital regulatório e liquidez, mas pode realizar perdas e agravar o ROE de -34,3%; carteira/captações de 83,13% dá margem limitada.",
+                "red_lines": [
+                  "Não vender ativos com desconto que agrave o capital",
+                  "Não reduzir crédito de forma abrupta a clientes-chave"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Monitoramento diário de liquidez e plano de contingência (linhas, colateral, comunicação), cobrindo a lacuna de visibilidade, dado o sinal negativo de capital.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Cobre a falta de dados de liquidez; o custo de captação pode subir se o mercado perceber a fragilidade.",
+                "red_lines": [
+                  "Não comunicar publicamente números de capital não validados",
+                  "Não depender de uma única fonte de captação"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-fundamentals-ep-bva",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-mercantil",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-mercantil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-fibra",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-fibra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-abc-brasil",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-abc-brasil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-daycoval",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-daycoval",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-pan",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-pan",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-sector-event-ref-2012-09",
+                "source": "BCB Relatório de Estabilidade Financeira",
+                "as_of": "2012-09-30"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        }
+      },
+      "quantify": {
+        "risk": {
+          "officer": "risk",
+          "phase": "quantify",
+          "run_id": "dry-fail-bva-2012-20261125T0445Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "risk",
+            "diagnosis": "Dados BCB IF.data de 2012-06 (defasagem ~4 meses vs. 2012-10-18). O BVA é o mais frágil do grupo: headroom de Basileia -1,29 p.p. (único negativo; pares +1,93 a +9,63 p.p.), ROE -34,3% (pior; PAN -22,8%, demais de +1,2% a +17,5%), ROA -2,44% (PAN -4,52%) e ativo R$ 7,99 bi (menor; pares 11,57 a 14,26 bi). Capital abaixo do mínimo com prejuízo corrente justifica preocupação prioritária com solvência e com medida supervisória do BCB em 90 dias. Contraste: PAN (proximidade 0,76, a mais distante) tem ROE/ROA piores no ROA, mas headroom de 9,63 p.p. Liquidez não é mensurável: sem LCR/NSFR, vencimentos, depósitos; crédito/captações 83,13% fica na faixa dos pares (75,0 a 96,7). Alavancagem e inadimplência: sem dados no pacote.",
+            "constraints": [
+              "Dados de 2012-06 (IF.data); capital e resultado atuais (2012-09/10) são desconhecidos, podendo ter melhorado (aporte) ou piorado.",
+              "LCR, NSFR, alavancagem e inadimplência/provisões não constam do pacote: a quantificação pedida só cobre Basileia (headroom), ROE, ROA e crédito/captações.",
+              "Sem dados de supervisão do BCB, rating, aportes de acionistas ou qualidade da carteira; não se afirma resolução, intervenção ou liquidação iminente.",
+              "Proximidade dos pares (0,76 a 0,81, cobertura 70%) sem perfil prudencial: comparação é de porte e mercado, não de risco; modelo de negócio distante (0,33 a 0,47).",
+              "O REF 2012-09 descreve sistema mais sólido, mas não cita o BVA; ações b3 dos pares não informam solvência."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Diagnóstico interno imediato de Basileia, liquidez e provisões com projeção a 90 dias e gatilhos pré-aprovados (índice abaixo do mínimo, queda de captação) que ativam recomposição de capital e contato antecipado com o BCB.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Sem efeito direto; confirma se o headroom de -1,29 p.p. (2012-06) persiste e dimensiona o aporte necessário, hoje desconhecido publicamente.",
+                "red_lines": [
+                  "Não decidir venda de ativos ou freio de crédito só com dado de 2012-06",
+                  "Não omitir déficit confirmado ao BCB",
+                  "Sigilo no conselho até a verificação"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Preparar recomposição de capital (aporte dos controladores, retenção de resultados, instrumentos elegíveis) para execução imediata se o déficit se confirmar, com plano formal ao BCB.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Visa levar o headroom de -1,29 p.p. ao nível dos pares (1,93 a 9,63 p.p.); depende da capacidade dos acionistas.",
+                "red_lines": [
+                  "Nenhuma distribuição de dividendos/JCP com headroom negativo",
+                  "Não operar abaixo do mínimo sem plano aprovado pelo BCB",
+                  "Não ocultar o enquadramento ao regulador"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Contingência de liquidez e comunicação: mapear vencimentos de captação, colchão de ativos líquidos, monitoramento diário e protocolo equitativo a depositantes; sondagem de parceiro só sob sigilo e com ciência do BCB.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Cobre a lacuna de visibilidade de liquidez; carregar ativos líquidos pesa sobre margem já negativa (ROA -2,44%) e sinalizar fragilidade pode elevar o custo de captação.",
+                "red_lines": [
+                  "Não discriminar depositantes ou credores",
+                  "Não depender de uma única fonte de captação",
+                  "Não comunicar publicamente números de capital não validados"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-fundamentals-ep-bva",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-mercantil",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-mercantil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-fibra",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-fibra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-abc-brasil",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-abc-brasil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-daycoval",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-daycoval",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-pan",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-pan",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-sector-event-ref-2012-09",
+                "source": "BCB Relatório de Estabilidade Financeira",
+                "as_of": "2012-09-30"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cpo": {
+          "officer": "cpo",
+          "phase": "quantify",
+          "run_id": "dry-fail-bva-2012-20261125T0445Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cpo",
+            "diagnosis": "Lente de cobertura: com IF.data 2012-06 (defasagem ~4 meses), a solvência do BVA merece preocupação fundada; a liquidez não é avaliável. Sinais: Basileia headroom -1,29 pp (único negativo; pares +1,93 a +9,63 pp), ROE -34,3%, ROA -2,44%, ativo R$ 7,99 bi (menor do grupo). Crédito/captações 83,13% fica na faixa dos pares (75-97%), sem indício diferenciado de descasamento. Ponto cego: o pacote não traz taxas, reclamações nem reputação do BVA, então não há evidência quantificada nessas três dimensões para sustentar ou contrariar nenhuma opção; é lacuna de cobertura a abrir. O REF 2012-09 aponta sistema mais sólido, o que isola o BVA, mas não o cita.",
+            "constraints": [
+              "Dados de 2012-06 (IF.data), ~4 meses de defasagem; capital atual pode ter melhorado ou piorado.",
+              "Sem taxas, reclamações (ex.: Procon/BCB) nem reputação sobre o BVA no pacote: não é possível anexar essa evidência nem afirmar sua ausência.",
+              "Sem caixa, vencimentos, captação por prazo ou depositantes: risco de liquidez em 90 dias não é afirmável nem descartável.",
+              "Proximidade dos pares 0,76-0,81 com cobertura 70% (sem perfil prudencial); modelo de negócio distante (0,33-0,47): comparação indicativa.",
+              "Briefing outside-in: não é decisão de capital nem de preço."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Pedir à gestão diagnóstico interno de Basileia, liquidez e provisões com projeção a 90 dias, para confirmar se o headroom de -1,29 pp (2012-06) persiste, antes de decisões custosas.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Sem efeito direto; substitui dado público defasado por posição atual e dimensiona o déficit.",
+                "red_lines": [
+                  "Não decidir venda de ativos ou freio de crédito só com dado de 2012-06",
+                  "Não divulgar conclusões fora do conselho antes de verificar",
+                  "Não omitir déficit confirmado ao regulador"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Preparar plano de recomposição de capital (aporte dos controladores, capital subordinado, redução de ativos ponderados) e diálogo antecipado com o BCB, a executar se o déficit se confirmar.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Visa levar o headroom de -1,29 pp ao nível dos pares (1,93 a 9,63 pp); reduzir carteira libera capital mas pode realizar perdas sobre ROE de -34,3%.",
+                "red_lines": [
+                  "Não operar abaixo do mínimo sem plano aprovado",
+                  "Nenhum dividendo enquanto o headroom for negativo",
+                  "Não vender ativos com desconto que agrave o capital"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Montar monitoramento de taxas, reclamações e reputação do BVA e plano de contingência de liquidez e comunicação, cobrindo os pontos cegos do pacote e o risco de confiança.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Cobre a lacuna de visibilidade; carregar liquidez extra pesa sobre margem já negativa (ROA -2,44%).",
+                "red_lines": [
+                  "Não comunicar publicamente números de capital não validados",
+                  "Não depender de uma única fonte de captação",
+                  "Não privilegiar credores específicos"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-fundamentals-ep-bva",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-mercantil",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-mercantil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-fibra",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-fibra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-abc-brasil",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-abc-brasil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-daycoval",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-daycoval",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-pan",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-pan",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-sector-event-ref-2012-09",
+                "source": "BCB Relatório de Estabilidade Financeira",
+                "as_of": "2012-09-30"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cso": {
+          "officer": "cso",
+          "phase": "quantify",
+          "run_id": "dry-fail-bva-2012-20261125T0445Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cso",
+            "diagnosis": "Tese competitiva: o BVA está isolado e em perda de terreno. Em IF.data 2012-06 (defasagem ~4 meses) é o único com headroom de Basileia negativo (-1,29 p.p.), com ROE -34,3%, ROA -2,44% e ativo de R$ 7,99 bi, o menor do grupo (pares próximos têm 1,45-1,78× seu porte). Mercantil (prox. 0,81, folga 1,93 p.p.), Fibra (0,80, 2,24), ABC (0,80, 3,65) e Daycoval (0,78, 7,56) têm folga positiva; PAN (0,76, o mais distante) tem ROE -22,8% mas folga de 9,63 p.p., logo ROE negativo isolado não indica insolvência. Solvência: preocupação fundada nos 90 dias. Liquidez: os dados públicos não permitem afirmar nem descartar. O REF 2012-09 (sistema mais sólido) acentua o isolamento do BVA.",
+            "constraints": [
+              "Dados de 2012-06 (IF.data) com ~4 meses de defasagem: o capital atual pode ter melhorado (aporte) ou piorado (prejuízo continuado).",
+              "Sem caixa, vencimentos, captação por prazo ou concentração de depositantes: risco de liquidez em 90 dias não é afirmável nem descartável.",
+              "Proximidade dos pares (0,76-0,81, cobertura 70%, sem perfil prudencial nem pressão competitiva): comparação indicativa; modelo de negócio distante (0,33-0,47).",
+              "Headroom negativo vem de um único ponto de dados; causa da perda, qualidade da carteira e eventual reação do BCB são desconhecidas.",
+              "Briefing outside-in: não é decisão de capital nem de preço; ações B3 dos pares não cobrem o BVA."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Confirmar e recompor capital: diagnóstico interno atualizado de Basileia, liquidez e provisões a 90 dias, com plano de capital (aporte dos controladores/instrumentos elegíveis) e diálogo antecipado com o BCB. Melhor encaixe: ataca o ponto em que o BVA fica atrás de todos os pares.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Visa levar o headroom de -1,29 p.p. ao nível dos pares (1,93 a 9,63 p.p., 2012-06); tamanho do aporte depende de dados internos não públicos.",
+                "red_lines": [
+                  "Não operar abaixo do mínimo regulatório sem plano formal perante o BCB",
+                  "Nenhum dividendo enquanto o headroom for negativo",
+                  "Não omitir ou atrasar informação ao regulador",
+                  "Não decidir só com dado de 2012-06"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Contingência de liquidez e comunicação preparada (sem executar): monitoramento diário, linhas e colateral, tratamento equitativo de depositantes, para ativar por gatilho. Encaixe médio: protege a confiança, mas cobre lacuna de dados, não um sinal observado.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Cobre a falta de visibilidade de liquidez; carregar liquidez extra pesa sobre margem já negativa (ROA -2,44%) e a percepção de fragilidade pode encarecer a captação.",
+                "red_lines": [
+                  "Não comunicar publicamente números de capital não validados",
+                  "Não depender de uma única fonte de captação",
+                  "Não privilegiar credores ou depositantes específicos"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Reduzir ativos ponderados e/ou sondar parceiro ou comprador, apenas se o déficit se confirmar sem aporte viável, sob sigilo e com ciência do BCB. Pior encaixe agora: tese defensiva de maior custo, que sinaliza fragilidade e pode realizar perdas.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Libera capital e pode trazer capital externo; vender carteira com desconto ou frear crédito antes da hora pode aprofundar o ROE de -34,3% e pressionar a captação (carteira/captações 83,13%).",
+                "red_lines": [
+                  "Não vender ativos com desconto que agrave o capital",
+                  "Não reduzir crédito de forma abrupta a clientes-chave",
+                  "Sigilo da negociação até comunicação ao BCB",
+                  "Não discriminar credores nem depositantes"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-fundamentals-ep-bva",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-mercantil",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-mercantil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-fibra",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-fibra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-abc-brasil",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-abc-brasil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-daycoval",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-daycoval",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-pan",
+                "source": "BCB IF.data",
+                "as_of": "2012-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-pan",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-10-18"
+              },
+              {
+                "pack_fact_id": "f-sector-event-ref-2012-09",
+                "source": "BCB Relatório de Estabilidade Financeira",
+                "as_of": "2012-09-30"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        }
+      },
+      "synthesize": {
+        "secretary": {
+          "status": "ok"
+        }
+      }
+    },
+    "synthesis": {
+      "summary": "Com dados públicos de IF.data 2012-06 (defasados ~4 meses), a preocupação com a solvência do BVA é fundada: é o único do grupo com folga de Basileia negativa (-1,29 p.p.), com ROE -34,3% e ROA -2,44%, e o menor ativo (R$ 7,99 bi). A liquidez em 90 dias não pode ser afirmada nem descartada, porque o pacote não traz caixa, vencimentos nem perfil de captação. Os cinco oficiais convergem: confirmar internamente a posição atual de capital, preparar a recomposição sem executar medidas custosas antes do diagnóstico, e montar contingência de liquidez e comunicação. Este é um briefing outside-in, não uma decisão de capital ou preço.",
+      "options": [
+        {
+          "id": "opt-1",
+          "description": "Diagnóstico interno imediato de Basileia, liquidez e provisões com projeção a 90 dias, para substituir o dado público de 2012-06 pela posição atual, com gatilhos pré-aprovados que ativem a recomposição de capital e o contato antecipado com o BCB. Não decidir venda de ativos ou freio de crédito apenas com o dado defasado.",
+          "customer_impact": "low",
+          "capital_liquidity_effect": "Sem efeito direto. Confirma se o headroom de -1,29 p.p. (2012-06) persiste e dimensiona o aporte necessário, hoje desconhecido publicamente. Os pares têm folga de +1,93 a +9,63 p.p.",
+          "citations": [
+            "f-fundamentals-ep-bva",
+            "f-fundamentals-mercantil",
+            "f-fundamentals-fibra",
+            "f-fundamentals-abc-brasil",
+            "f-fundamentals-daycoval",
+            "f-fundamentals-banco-pan"
+          ],
+          "derived_from": [
+            {
+              "officer": "cpo",
+              "option": "opt-1"
+            },
+            {
+              "officer": "cco",
+              "option": "opt-1"
+            },
+            {
+              "officer": "cro",
+              "option": "opt-1"
+            },
+            {
+              "officer": "risk",
+              "option": "opt-1"
+            },
+            {
+              "officer": "cso",
+              "option": "opt-1"
+            }
+          ],
+          "supported_by": [
+            "cso",
+            "risk",
+            "cco",
+            "cpo",
+            "cro"
+          ],
+          "contested_by": [
+            "risk",
+            "cco",
+            "cro"
+          ],
+          "competitor_signals": [
+            {
+              "entity": "mercantil",
+              "proximity": 0.809
+            },
+            {
+              "entity": "fibra",
+              "proximity": 0.803
+            },
+            {
+              "entity": "abc_brasil",
+              "proximity": 0.797
+            },
+            {
+              "entity": "daycoval",
+              "proximity": 0.783
+            },
+            {
+              "entity": "banco_pan",
+              "proximity": 0.755
+            }
+          ]
+        },
+        {
+          "id": "opt-2",
+          "description": "Preparar a recomposição de capital (aporte dos controladores, capital subordinado ou híbrido, retenção de resultados, redução de ativos ponderados pelo risco), para execução imediata se o déficit se confirmar. Incluir plano formal e diálogo antecipado com o BCB, sem distribuição de dividendos enquanto a folga for negativa. A contração ampla de carteira fica condicionada à confirmação do déficit, para não precipitar perda de confiança.",
+          "customer_impact": "medium",
+          "capital_liquidity_effect": "Visa levar a folga de -1,29 p.p. ao nível dos pares (1,93 a 9,63 p.p.). Depende da capacidade dos acionistas. Vender carteira com desconto ou frear crédito pode realizar perdas e aprofundar o ROE de -34,3%.",
+          "citations": [
+            "f-fundamentals-ep-bva",
+            "f-fundamentals-mercantil",
+            "f-fundamentals-fibra",
+            "f-fundamentals-abc-brasil",
+            "f-fundamentals-daycoval",
+            "f-fundamentals-banco-pan",
+            "f-proximity-mercantil",
+            "f-proximity-fibra",
+            "f-proximity-abc-brasil",
+            "f-proximity-daycoval",
+            "f-proximity-banco-pan"
+          ],
+          "derived_from": [
+            {
+              "officer": "cso",
+              "option": "opt-1"
+            },
+            {
+              "officer": "risk",
+              "option": "opt-1"
+            },
+            {
+              "officer": "risk",
+              "option": "opt-2"
+            },
+            {
+              "officer": "cco",
+              "option": "opt-2"
+            },
+            {
+              "officer": "cco",
+              "option": "opt-3"
+            },
+            {
+              "officer": "cpo",
+              "option": "opt-2"
+            },
+            {
+              "officer": "cro",
+              "option": "opt-2"
+            },
+            {
+              "officer": "cro",
+              "option": "opt-3"
+            }
+          ],
+          "supported_by": [
+            "cso",
+            "risk",
+            "cco",
+            "cpo",
+            "cro"
+          ],
+          "contested_by": [
+            "risk",
+            "cco",
+            "cro"
+          ],
+          "competitor_signals": [
+            {
+              "entity": "mercantil",
+              "proximity": 0.809
+            },
+            {
+              "entity": "fibra",
+              "proximity": 0.803
+            },
+            {
+              "entity": "abc_brasil",
+              "proximity": 0.797
+            },
+            {
+              "entity": "daycoval",
+              "proximity": 0.783
+            },
+            {
+              "entity": "banco_pan",
+              "proximity": 0.755
+            }
+          ]
+        },
+        {
+          "id": "opt-3",
+          "description": "Contingência de liquidez e comunicação: monitoramento diário, mapa de vencimentos de captação, colchão de ativos líquidos, linhas e colateral, e protocolo de tratamento equitativo de depositantes e credores. Qualquer sondagem de parceiro ou comprador só sob sigilo, com ciência do BCB e se o déficit se confirmar sem aporte viável. Cobre a lacuna de dados de liquidez, não um sinal observado.",
+          "customer_impact": "medium",
+          "capital_liquidity_effect": "Cobre a falta de visibilidade de liquidez. Carregar ativos líquidos pesa sobre uma margem já negativa (ROA -2,44%), e a percepção de fragilidade pode encarecer a captação (carteira/captações 83,13%, na faixa dos pares de 75,0 a 96,7).",
+          "citations": [
+            "f-fundamentals-ep-bva",
+            "f-fundamentals-abc-brasil",
+            "f-fundamentals-daycoval",
+            "f-fundamentals-banco-pan",
+            "f-sector-event-ref-2012-09"
+          ],
+          "derived_from": [
+            {
+              "officer": "cso",
+              "option": "opt-2"
+            },
+            {
+              "officer": "cso",
+              "option": "opt-3"
+            },
+            {
+              "officer": "risk",
+              "option": "opt-3"
+            },
+            {
+              "officer": "cco",
+              "option": "opt-2"
+            },
+            {
+              "officer": "cpo",
+              "option": "opt-3"
+            },
+            {
+              "officer": "cro",
+              "option": "opt-2"
+            }
+          ],
+          "supported_by": [
+            "cso",
+            "risk",
+            "cco",
+            "cpo",
+            "cro"
+          ],
+          "contested_by": [
+            "risk",
+            "cco",
+            "cro"
+          ],
+          "competitor_signals": [
+            {
+              "entity": "abc_brasil",
+              "proximity": 0.797
+            },
+            {
+              "entity": "daycoval",
+              "proximity": 0.783
+            },
+            {
+              "entity": "banco_pan",
+              "proximity": 0.755
+            }
+          ]
+        }
+      ],
+      "residual_regulatory_risk": "Mesmo com as ações acima, permanece o risco de enquadramento ou medida supervisória do BCB caso o índice de Basileia continue abaixo do mínimo regulatório. O pacote não traz dados sobre ações de supervisão, rating, aportes de acionistas, qualidade da carteira nem posição pós-2012-06, então não se afirma nem se descarta resolução, intervenção ou liquidação. A comparação com os pares é indicativa: cobertura de 70%, sem perfil prudencial, e modelo de negócio distante.",
+      "monitoring_triggers": [
+        {
+          "text": "Confirmação interna ou publicação de índice de Basileia abaixo do mínimo regulatório (folga ainda negativa em relação ao -1,29 p.p. de 2012-06): ativar o plano de capital e comunicar o BCB de forma tempestiva.",
+          "citations": [
+            "f-fundamentals-ep-bva"
+          ]
+        },
+        {
+          "text": "Novo balanço (IF.data) que mostre prejuízo persistente (ROE ou ROA ainda negativos, em relação a -34,3% e -2,44% em 2012-06), o que corrói o capital adicionalmente. Comparar com os pares, entre os quais só o PAN tem ROE negativo (-22,8%), mas com folga de 9,63 p.p.",
+          "citations": [
+            "f-fundamentals-ep-bva",
+            "f-fundamentals-banco-pan"
+          ]
+        },
+        {
+          "text": "Queda de captação ou piora da relação carteira/captações em relação a 83,13% (2012-06), dado que o pacote não traz perfil de vencimentos: aciona a contingência de liquidez e o monitoramento diário.",
+          "citations": [
+            "f-fundamentals-ep-bva"
+          ]
+        },
+        {
+          "text": "Sinais de isolamento em relação ao sistema: o REF 2012-09 descreve um sistema mais sólido, com risco concentrado em poucas instituições. Uma deterioração adicional do BVA frente aos pares, com folgas de +1,93 a +9,63 p.p., reforça a necessidade de agir antes de um enquadramento forçado.",
+          "citations": [
+            "f-sector-event-ref-2012-09",
+            "f-fundamentals-mercantil",
+            "f-fundamentals-fibra",
+            "f-fundamentals-abc-brasil",
+            "f-fundamentals-daycoval",
+            "f-fundamentals-banco-pan"
+          ]
+        }
+      ]
+    },
+    "dissents": [
+      {
+        "officer": "cro",
+        "challenged": [
+          "cpo",
+          "risk"
+        ],
+        "text": "Contesto cpo e risk: ambos acertam que o capital é o ponto crítico (BVA, IF.data 2012-06: headroom Basileia -1,29 pp, ROE -34,3%, ROA -2,44%, ativo R$ 7,99 bi), mas ambos tratam o déficit como fato atual quando é dado de ~4 meses atrás, e nenhum fixa o que fazer se o déficit já tiver sido fechado ou aprofundado. O cpo não propõe nenhum gatilho de escalonamento; o risk salta para venda de ativos, parceiro/comprador e freio de carteira (opt-2 alto impacto) sem diagnóstico confirmado, o que pode precipitar o risco de confiança que quer evitar. Comparação com pares é indicativa: Mercantil (prox. 0,81) 1,93 pp, Fibra (0,80) 2,24 pp, ABC (0,80) 3,65 pp, Daycoval (0,78) 7,56 pp; PAN (0,76) tem ROE -22,8% mas headroom 9,63 pp, sem perfil prudencial no cálculo (cobertura 70%). Solvência: preocupação fundada. Liquidez em 90 dias: não afirmável com dados públicos. O REF 2012-09 descreve sistema mais sólido, o que isola o BVA, mas não fala dele.",
+        "red_lines": [
+          "Não decidir venda de ativos, freio de crédito ou parceiro com base só em dado de 2012-06",
+          "Sigilo no conselho até a verificação; sem comunicação pública não verificada",
+          "Não omitir déficit confirmado ao BCB",
+          "Nenhuma distribuição de dividendos enquanto houver déficit",
+          "Não privilegiar credores ou depositantes específicos",
+          "Não operar abaixo do mínimo sem plano formal perante o BCB",
+          "Sigilo da negociação até comunicação ao BCB",
+          "Não discriminar credores nem depositantes",
+          "Não ampliar captação cara para financiar crescimento"
+        ]
+      },
+      {
+        "officer": "cco",
+        "challenged": [
+          "cpo",
+          "risk"
+        ],
+        "text": "Contesto cpo e risk: ambos acertam que a solvência é o ponto crítico do BVA (IF.data 2012-06: Basileia headroom -1,29 pp, ROE -34,3%, ROA -2,44%, ativo R$ 7,99 bi, o menor do grupo), mas deixam lacunas. (1) Nenhum cita o REF 2012-09 como contexto: sistema mais sólido isola o BVA. (2) A opção risk opt-2 (frear carteira, reforçar provisões) agrava o prejuízo e pode acelerar perda de confiança, sem base no pacote para a origem da perda. (3) Risk opt-3 (sondar comprador) e cpo opt-3 (contingência de liquidez) tratam de liquidez sem nenhum dado de liquidez; o gatilho de conduta é comunicação a depositantes/credores. (4) Os dados têm ~4 meses de defasagem; 'headroom -1,29 pp' pode já estar superado. Conclusão: preocupação com solvência é fundada; liquidez em 90 dias não é afirmável.",
+        "red_lines": [
+          "Não decidir com base apenas em dados de 2012-06.",
+          "Não divulgar conclusões fora do conselho antes de verificadas.",
+          "Não ocultar eventual enquadramento ao regulador.",
+          "Nenhum dividendo ou distribuição enquanto houver déficit de capital.",
+          "Não omitir ou atrasar informação ao regulador.",
+          "Não operar abaixo do mínimo sem plano aprovado.",
+          "Não discriminar depositantes ou credores.",
+          "Não fazer comunicação pública que sugira ou negue problema sem base verificada.",
+          "Sigilo de negociação até comunicação ao BCB.",
+          "Não usar informação privilegiada para favorecer terceiros."
+        ]
+      },
+      {
+        "officer": "risk",
+        "challenged": [
+          "cso"
+        ],
+        "text": "Dados BCB IF.data de 2012-06 (defasagem ~4 meses). O BVA é o caso mais frágil: headroom de Basileia -1,29 p.p. (único negativo; pares de +1,93 a +9,63 p.p.), ROE -34,3%, ROA -2,44%, ativo R$ 7,99 bi (menor do grupo; pares 11,57 a 14,26 bi). Carteira/captações 83,13%. Para os próximos 90 dias, a solvência exige atenção prioritária: capital abaixo do colchão pede recomposição, e prejuízo persistente corrói ainda mais o capital. Liquidez: o pacote não traz caixa, vencimentos nem perfil de captação, então não é possível afirmar nada direto. Os pares são comparáveis apenas de forma indicativa: Mercantil (proximidade 0,81), Fibra (0,80), ABC Brasil (0,80), Daycoval (0,78) e PAN (0,76), todos próximos, mas com 70% de cobertura. O REF 2012-09 aponta sistema mais sólido, com risco concentrado em poucas IFs.",
+        "red_lines": [
+          "Não operar abaixo do mínimo regulatório sem plano de enquadramento aprovado",
+          "Não distribuir dividendos enquanto o headroom for negativo",
+          "Não vender ativos com desconto que agrave o capital",
+          "Não reduzir crédito de forma abrupta a clientes-chave",
+          "Não comunicar publicamente números de capital não validados",
+          "Não depender de uma única fonte de captação"
+        ]
+      }
+    ],
+    "dropped": [],
+    "gaps": [],
+    "elapsed_s": 252.6
+  },
+  "focal": "ep-bva",
+  "subject": "ep-bva",
+  "proximity": [
+    {
+      "peer": "mercantil",
+      "label": "Mercantil",
+      "score": 0.809,
+      "coverage": 0.7,
+      "low_coverage": false,
+      "components": {
+        "size": 0.904,
+        "market": 1.0,
+        "business_model": 0.475
+      },
+      "missing": [
+        "prudential",
+        "pressure"
+      ]
+    },
+    {
+      "peer": "fibra",
+      "label": "Fibra",
+      "score": 0.803,
+      "coverage": 0.7,
+      "low_coverage": false,
+      "components": {
+        "size": 0.92,
+        "market": 1.0,
+        "business_model": 0.43
+      },
+      "missing": [
+        "prudential",
+        "pressure"
+      ]
+    },
+    {
+      "peer": "abc_brasil",
+      "label": "Banco ABC Brasil",
+      "score": 0.797,
+      "coverage": 0.7,
+      "low_coverage": false,
+      "components": {
+        "size": 0.896,
+        "market": 1.0,
+        "business_model": 0.447
+      },
+      "missing": [
+        "prudential",
+        "pressure"
+      ]
+    },
+    {
+      "peer": "daycoval",
+      "label": "Banco Daycoval",
+      "score": 0.783,
+      "coverage": 0.7,
+      "low_coverage": false,
+      "components": {
+        "size": 0.894,
+        "market": 1.0,
+        "business_model": 0.399
+      },
+      "missing": [
+        "prudential",
+        "pressure"
+      ]
+    },
+    {
+      "peer": "banco_pan",
+      "label": "Banco PAN",
+      "score": 0.755,
+      "coverage": 0.7,
+      "low_coverage": false,
+      "components": {
+        "size": 0.874,
+        "market": 1.0,
+        "business_model": 0.33
+      },
+      "missing": [
+        "prudential",
+        "pressure"
+      ]
+    }
+  ]
+}

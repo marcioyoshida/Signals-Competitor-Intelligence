@@ -1,0 +1,2099 @@
+{
+  "model": "sonnet",
+  "provider": "claude-cli (subscription)",
+  "scenario": "sov-sp-2018-01",
+  "pack_sha256": "14bded34eb1c0ffde8f442cc5bd17d437d327dbaeec5843e46ec3d9ce6310bd0",
+  "usage": {
+    "calls": 14,
+    "tokens_in": 178401,
+    "tokens_out": 39699,
+    "cache_read": 0,
+    "token_cap": 400000
+  },
+  "calls": [
+    {
+      "officer": "cso",
+      "phase": "diagnosis",
+      "s": 25.6,
+      "input_tokens": 5752,
+      "cache_read": 0,
+      "output_tokens": 2176,
+      "is_error": false
+    },
+    {
+      "officer": "risk",
+      "phase": "diagnosis",
+      "s": 30.2,
+      "input_tokens": 5780,
+      "cache_read": 0,
+      "output_tokens": 3664,
+      "is_error": false
+    },
+    {
+      "officer": "cco",
+      "phase": "diagnosis",
+      "s": 46.8,
+      "input_tokens": 5758,
+      "cache_read": 0,
+      "output_tokens": 3444,
+      "is_error": false
+    },
+    {
+      "officer": "cpo",
+      "phase": "diagnosis",
+      "s": 21.4,
+      "input_tokens": 5741,
+      "cache_read": 0,
+      "output_tokens": 2335,
+      "is_error": false
+    },
+    {
+      "officer": "cpo",
+      "phase": "diagnosis",
+      "s": 16.4,
+      "input_tokens": 5808,
+      "cache_read": 0,
+      "output_tokens": 2285,
+      "is_error": false
+    },
+    {
+      "officer": "cro",
+      "phase": "diagnosis",
+      "s": 49.1,
+      "input_tokens": 5732,
+      "cache_read": 0,
+      "output_tokens": 3700,
+      "is_error": false
+    },
+    {
+      "officer": "cro",
+      "phase": "diagnosis",
+      "s": 19.2,
+      "input_tokens": 5774,
+      "cache_read": 0,
+      "output_tokens": 2273,
+      "is_error": false
+    },
+    {
+      "officer": "cro",
+      "phase": "challenge",
+      "s": 106.3,
+      "input_tokens": 10875,
+      "cache_read": 0,
+      "output_tokens": 1831,
+      "is_error": false
+    },
+    {
+      "officer": "cco",
+      "phase": "challenge",
+      "s": 42.8,
+      "input_tokens": 10901,
+      "cache_read": 0,
+      "output_tokens": 2420,
+      "is_error": false
+    },
+    {
+      "officer": "risk",
+      "phase": "challenge",
+      "s": 40.8,
+      "input_tokens": 8079,
+      "cache_read": 0,
+      "output_tokens": 3813,
+      "is_error": false
+    },
+    {
+      "officer": "risk",
+      "phase": "quantify",
+      "s": 32.2,
+      "input_tokens": 25088,
+      "cache_read": 0,
+      "output_tokens": 3490,
+      "is_error": false
+    },
+    {
+      "officer": "cpo",
+      "phase": "quantify",
+      "s": 16.1,
+      "input_tokens": 25017,
+      "cache_read": 0,
+      "output_tokens": 2707,
+      "is_error": false
+    },
+    {
+      "officer": "cso",
+      "phase": "quantify",
+      "s": 16.8,
+      "input_tokens": 25015,
+      "cache_read": 0,
+      "output_tokens": 2561,
+      "is_error": false
+    },
+    {
+      "officer": "secretary",
+      "phase": "synthesize",
+      "s": 19.3,
+      "input_tokens": 33081,
+      "cache_read": 0,
+      "output_tokens": 3000,
+      "is_error": false
+    }
+  ],
+  "result": {
+    "run_id": "dry-sov-sp-2018-01-20261125T0526Z",
+    "shared_context_id": "14bded34eb1c0ffde8f442cc5bd17d437d327dbaeec5843e46ec3d9ce6310bd0",
+    "task": "A S&P rebaixou o rating soberano do Brasil para BB- (perspectiva estável), três níveis abaixo do grau de investimento. Que opções o conselho do Santander Brasil deve considerar nos próximos 90 dias para captação, capital, preço de crédito e clientes, e quais gatilhos monitorar?",
+    "status": "complete",
+    "phases": {
+      "diagnosis": {
+        "cso": {
+          "officer": "cso",
+          "phase": "diagnosis",
+          "run_id": "dry-sov-sp-2018-01-20261125T0526Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cso",
+            "diagnosis": "O rebaixamento soberano (S&P, BB→BB-, 2018-01-11) é choque sistêmico: atinge todos os pares, então o ganho/perda relativo do Santander depende de capital, funding e reputação. Pontos fortes (IF.data 2017-09): Basileia 16,15%, capital principal 14,14%, alavancagem 9,42 (a melhor do grupo), ação +10,05% em 2 meses vs mediana 5,23%. Fragilidades: ROE 3,9% (o menor entre os pares, com BB 4,6% e Bradesco 3,5% próximos), headroom Basileia 5,65 pp (abaixo de Itaú 8,97 e BB 8,65), posição 1 no ranking de reclamações (índice 41,16, 2017-T3) e porte 676 bi, cerca de metade de Bradesco/Itaú. Selic em 7,0% sustenta margem de manobra no preço. Sem dados de funding externo ou exposição a títulos públicos: lacuna.",
+            "constraints": [
+              "Briefing outside-in: não é decisão de capital nem de preço; opções são para análise do conselho.",
+              "Dados de balanço são de 2017-09 e reclamações de 2017-T3; defasados frente ao evento de 2018-01-11.",
+              "Sem dados no pacote sobre custo de funding externo, exposição a dívida soberana ou liquidez: não se pode quantificar o impacto direto do rebaixamento.",
+              "Proximidade sem componente de pressão competitiva (cobertura 85%): leitura de rivais é parcial.",
+              "Concorrentes mais próximos (Bradesco 0,88, Itaú 0,86, BB 0,85) pesam mais; Safra (0,76) e Caixa (0,81) pesam menos."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Postura defensiva de captação e capital: antecipar funding e preservar o capital principal de 14,14%, sem distribuição extra, enquanto o headroom de 5,65 pp é inferior ao de Itaú (0,86 de proximidade) e BB (0,85).",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Preserva capital e liquidez; custo de carrego do funding antecipado e menor retorno sobre o capital (ROE 3,9%, 2017-09).",
+                "red_lines": [
+                  "Não comprometer o índice de Basileia (16,15%) com distribuição ou crescimento de ativos além do plano.",
+                  "Não depender de funding de curto prazo sensível ao rating."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Seletividade no preço de crédito: repassar risco soberano apenas onde o custo de funding subir, mantendo preço competitivo em segmentos com margem, dado Selic 7,0% e pares próximos (Bradesco 0,88, Itaú 0,86) com folga de capital.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Protege a margem com ROA de 0,38%; risco de perder volume para Itaú (capital principal 16,71%) se o repasse for amplo.",
+                "red_lines": [
+                  "Não repassar o choque de forma linear a toda a carteira.",
+                  "Não precificar abaixo do custo marginal de funding."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Defesa e ganho de clientes: priorizar a retenção e a redução de reclamações (posição 1, índice 41,16, 2017-T3) e usar parcerias recentes, como o seguro auto com HDI (fato relevante, 2017-12-20), para receitas de tarifas menos dependentes do crédito.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Baixo consumo de capital; receita de serviços pode compensar margem, mas o ganho não está quantificado no pacote.",
+                "red_lines": [
+                  "Não sacrificar a qualidade de crédito para ganhar volume.",
+                  "Não comunicar o rebaixamento ao cliente de forma que gere alarme."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-sector-event-trigger-sov-sp-2018-01",
+                "source": "Agência Brasil",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-soundness-santander",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-santander",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-bb",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-bradesco",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-itau",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-soundness-itau",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-santander-2018-01-10",
+                "source": "Onça market:b3",
+                "as_of": "2018-01-10"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-santander-2017-t3",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2017-T3"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-bradesco",
+                "source": "Onça (cálculo de proximidade)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-itau",
+                "source": "Onça (cálculo de proximidade)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-bb",
+                "source": "Onça (cálculo de proximidade)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-caixa",
+                "source": "Onça (cálculo de proximidade)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-safra",
+                "source": "Onça (cálculo de proximidade)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-020532ipe201220170204308911-63",
+                "source": "Onça filing:fato_relevante",
+                "as_of": "2017-12-20"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "risk": {
+          "officer": "risk",
+          "phase": "diagnosis",
+          "run_id": "dry-sov-sp-2018-01-20261125T0526Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "risk",
+            "diagnosis": "O rebaixamento soberano para BB- (S&P, 2018-01-11, perspectiva estável) chega a um Santander sólido, mas com a menor folga entre os pares mais próximos. Em 2017-09 (BCB IF.data): Basileia 16,15%, capital principal 14,14%, alavancagem 9,42 e folga de 5,65 p.p. Itaú (proximidade 0,86) tem folga de 8,97 p.p., Banco do Brasil (0,85) 8,65 e Bradesco (0,88) 7,15. Só Caixa (0,81) e Safra (0,76), mais distantes, ficam abaixo, com cerca de 4,8 p.p. A rentabilidade é baixa (ROE 3,9%, ROA 0,38%) e o crédito é 56,29% das captações. O Santander lidera o ranking de reclamações (posição 1, índice 41,16, 2017-T3), o que reduz a tolerância a repasse de preço. A ação subiu 10,05% em dois meses, contra mediana de 5,23%, e o mercado pode já ter precificado parte do risco. O pacote não traz LCR, inadimplência, custo de captação externa nem exposição a títulos soberanos, então não dá para quantificar o impacto.",
+            "constraints": [
+              "Dados prudenciais são de 2017-09 e anteriores ao rebaixamento; o efeito sobre capital e liquidez não está medido no pacote.",
+              "O pacote não traz LCR, provisões, inadimplência, custo de funding externo nem carteira de títulos públicos: sem essas medidas, evitar afirmar o tamanho do impacto.",
+              "A margem de capital (5,65 p.p.) é menor que a de Itaú, BB e Bradesco; o crescimento de ativos ponderados por risco precisa caber nela.",
+              "Alta de preço de crédito esbarra na posição 1 no ranking de reclamações (2017-T3); reprecificação ampla tem risco reputacional.",
+              "Gatilhos a monitorar: novo rebaixamento ou mudança de perspectiva do soberano, spread de captação vs. pares, próximo IF.data (Basileia, capital principal, folga), Selic (7,0% após corte de 7,5%) e o próximo REF do BCB."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Antecipar e alongar captação nos próximos 90 dias, diversificando fontes e prazos, e rodar testes de estresse de liquidez com o cenário BB- antes de qualquer ação comercial. Estabelecer gatilhos internos de spread de captação relativo a Itaú, Bradesco e BB.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Reforça a liquidez com custo marginal de carregamento; sem LCR no pacote, o benefício não é quantificável. Não consome capital relevante.",
+                "red_lines": [
+                  "Não captar a qualquer custo apenas para encher o caixa",
+                  "Não concentrar vencimentos em uma só fonte ou janela",
+                  "Não depender de uma única linha de captação externa"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Proteger capital: reter resultados, moderar o crescimento de ativos ponderados por risco e priorizar iniciativas leves em capital, como a parceria de seguros com a HDI (fato relevante, 2017-12-20) e a venda da participação na BW Guirapá I (2017-12-22).",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Preserva a margem de Basileia (5,65 p.p. em 2017-09), a mais estreita entre os pares próximos; o efeito numérico das operações não consta do pacote.",
+                "red_lines": [
+                  "Não deixar a margem de capital cair abaixo do piso interno aprovado pelo conselho",
+                  "Não vender ativos em condições forçadas",
+                  "Não cortar crédito de forma abrupta a clientes-chave"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Reprecificação seletiva do crédito por risco e prazo, repassando só o custo de captação comprovado, com comunicação ativa e atendimento reforçado aos clientes de maior exposição, dada a liderança no ranking de reclamações.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Protege a margem sem restringir volume em toda a carteira; o ganho depende do repasse de custo, que o pacote não permite estimar. Risco de perda de clientes para pares com mais folga.",
+                "red_lines": [
+                  "Não repassar preço de forma linear a toda a carteira",
+                  "Não agravar o índice de reclamações (41,16 em 2017-T3)",
+                  "Não mudar condições de contratos vigentes sem base contratual"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-sector-event-trigger-sov-sp-2018-01",
+                "source": "Agência Brasil",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-soundness-santander",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-santander",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-itau",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-bb",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-bradesco",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-caixa",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-safra",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-proximity-itau",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-bb",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-bradesco",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-caixa",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-safra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-santander-2017-t3",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2017-T3"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-santander-2018-01-10",
+                "source": "Onça market:b3",
+                "as_of": "2018-01-10"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-020532ipe201220170204308911-63",
+                "source": "Onça filing:fato_relevante",
+                "as_of": "2017-12-20"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-020532ipe221220170104309111-38",
+                "source": "Onça filing:comunicado",
+                "as_of": "2017-12-22"
+              },
+              {
+                "pack_fact_id": "f-sector-event-ref-2017-10",
+                "source": "BCB Relatório de Estabilidade Financeira",
+                "as_of": "2017-10-31"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cco": {
+          "officer": "cco",
+          "phase": "diagnosis",
+          "run_id": "dry-sov-sp-2018-01-20261125T0526Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cco",
+            "diagnosis": "Em 2018-01-11 a S&P rebaixou o Brasil para BB- (estável) por demora nas reformas. O pacote não traz dados de custo de captação do Santander nem sanções (BCB, CVM, Procon, CADE, CEIS/CNEP, listas internacionais), então não há achado de integridade a reportar. O risco de conduta é de reputação: o Santander está em 1º no ranking de reclamações do BCB (índice 41,16, 2017-T3, mais de 4 mi de clientes), contra Caixa 31,88 (proximidade 0,81, distante) e Bradesco 23,99 (proximidade 0,88, próximo). Repasse de preço, renegociação ou cobrança num ambiente de estresse sobre o rating tendem a elevar esse índice. Base de capital (IF.data, 2017-09): Basileia 16,15, capital principal 14,14, folga 5,65 p.p., ROE 3,9%. A folga é menor que a de Itaú (8,97) e BB (8,65).",
+            "constraints": [
+              "Dados de balanço são de 2017-09 e reclamações de 2017-T3; não refletem o efeito do rebaixamento.",
+              "O pacote não tem custo de captação, spreads, inadimplência nem pressão competitiva (sem dados); não se pode quantificar o impacto do rating no funding.",
+              "Sem dados de sanções ou processos em curso contra o Santander; ausência no pacote não prova ausência de passivos.",
+              "Proximidade à focal: Bradesco 0,88, Itaú 0,86, BB 0,85, Caixa 0,81, Safra 0,76; Safra está em outra faixa de clientes (menos de 4 mi) e pesa menos na comparação de reclamações.",
+              "Gatilhos a monitorar: novo ranking de reclamações do BCB, comunicados do Santander na CVM, Copom (Selic 7,0% após 7,5%), rumo da reforma da previdência citada pela S&P e atualização do IF.data."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Plano de conduta de 90 dias focado em reduzir reclamações antes de qualquer mudança de preço: metas por canal, acompanhamento semanal do índice do BCB, relatório ao conselho. O BB divulgou ações de melhoria de atendimento em 2018-01-05 (proximidade 0,85, próximo).",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Sem efeito direto em capital ou liquidez; custo operacional de atendimento não está no pacote.",
+                "red_lines": [
+                  "Não reduzir controles de atendimento para conter custos.",
+                  "Não divulgar metas de reclamações sem lastro nos dados do BCB."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Repasse de preço de crédito, se necessário, com transparência: comunicação prévia, revisão jurídica e de consumidor (Procon/CDC) e priorização por segmento. Avaliar contra a folga de Basileia de 5,65 p.p. e o ROE de 3,9% (2017-09).",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Pode proteger a margem se o funding encarecer, mas o pacote não quantifica esse custo. Capital principal de 14,14 (2017-09) dá espaço, sem estimativa para o rebaixamento.",
+                "red_lines": [
+                  "Sem repasse retroativo nem alteração unilateral sem aviso e base contratual.",
+                  "Sem repasse discriminatório que gere risco de conduta ou de concorrência.",
+                  "Sem comunicação seletiva ao mercado fora dos canais CVM."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Governança de venda dos novos produtos, em especial o seguro de automóveis com a HDI (fato relevante de 2017-12-20): checagem de adequação, proibição de venda casada, monitoramento de reclamações, e disciplina de divulgação nos comunicados à CVM.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Sem efeito de capital mensurável no pacote; receita de seguros e comissão não está quantificada.",
+                "red_lines": [
+                  "Sem condicionar crédito à contratação de seguro.",
+                  "Sem metas de venda que ignorem a adequação ao cliente."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-sector-event-trigger-sov-sp-2018-01",
+                "source": "Agência Brasil",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-santander-2017-t3",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2017-T3"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-caixa-2017-t3",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2017-T3"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-bradesco-2017-t3",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2017-T3"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-safra-2017-t3",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2017-T3"
+              },
+              {
+                "pack_fact_id": "f-proximity-caixa",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-bradesco",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-bb",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-itau",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-safra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-soundness-santander",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-santander",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-itau",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-bb",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-001023ipe050120180104310505-28",
+                "source": "Onça filing:comunicado",
+                "as_of": "2018-01-05"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-020532ipe201220170204308911-63",
+                "source": "Onça filing:fato_relevante",
+                "as_of": "2017-12-20"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2018-01-11"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cpo": {
+          "officer": "cpo",
+          "phase": "diagnosis",
+          "run_id": "dry-sov-sp-2018-01-20261125T0526Z",
+          "status": "ok",
+          "attempts": 2,
+          "position": {
+            "officer": "cpo",
+            "diagnosis": "Dados BCB IF.data de 2017-09 (defasados) mostram Santander sólido: Basileia 16,15%, capital principal 14,14%, headroom 5,65 pp (abaixo de Itaú 8,97 e BB 8,65), ROE 3,9%. O rebaixamento soberano da S&P para BB- (2018-01-11) pressiona custo de funding e preço de crédito do setor. Ponto cego de produto: Santander é 1º no ranking de reclamações 2017-T3 (índice 41,16, acima de Itaú 17,2 e Bradesco 23,99), o que expõe retenção de clientes se houver repricing. Ação SANB11 subiu 10,05% em 2 meses (setor 5,23%), então o mercado ainda não precificou o choque. Sem dados no pacote sobre funding externo, spreads ou inadimplência: não sustento afirmações sobre eles.",
+            "constraints": [
+              "Dados de capital e fundamentos são de 2017-09; reavaliar com o balanço mais recente antes de decidir.",
+              "Pacote não traz dados de funding externo, vencimentos, spreads ou inadimplência; lacuna de cobertura a preencher.",
+              "Proximidade omite pressão competitiva (sem dados), então a leitura de reação dos pares é parcial.",
+              "Briefing outside-in: não é decisão de capital nem de preço.",
+              "Headroom de 5,65 pp é menor que o de Itaú e BB, limitando folga para crescer carteira."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Preservar capital e liquidez: manter headroom de Basileia (5,65 pp), crescimento seletivo de carteira e priorizar captação local estável antes de qualquer repasse de custo. Monitorar gatilhos de funding nos 90 dias.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Protege Basileia (16,15%) e capital principal (14,14%); sacrifica parte do crescimento de carteira (share 8,02%).",
+                "red_lines": [
+                  "Não comprometer o piso regulatório de capital",
+                  "Não depender de funding externo não evidenciado no pacote",
+                  "Não decidir preço sem dados de custo de captação atualizados"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Repricing gradual e seletivo do crédito conforme custo de funding, comparando com pares próximos: Bradesco (proximidade 0,88), Itaú (0,86), BB (0,85). Mais distantes pesam menos: Caixa (0,81, ROE 9,5%, headroom 4,74 pp) e Safra (0,76, porte 0,22× Santander, headroom 4,82 pp).",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Defende margem (ROA 0,38%, ROE 3,9%) se o custo subir; risco de perder volume para pares com mais folga de capital (Itaú 8,97 pp, BB 8,65 pp).",
+                "red_lines": [
+                  "Não repassar custo uniformemente a clientes de alta reclamação",
+                  "Não repricing agressivo enquanto for 1º em reclamações",
+                  "Não agir sem visão da reação dos pares (pressão competitiva sem dados)"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Plano de retenção de clientes: atacar o 1º lugar em reclamações (índice 41,16 em 2017-T3) com foco em atendimento, antes e durante qualquer repricing. BB já divulgou ações de melhoria do atendimento (comunicado 2018-01-05; proximidade 0,85).",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Efeito direto em capital pequeno; custo operacional adicional não quantificado no pacote.",
+                "red_lines": [
+                  "Não prometer metas de reclamação sem baseline interno",
+                  "Não reduzir controles de crédito para reter clientes",
+                  "Não tratar o ranking 2017-T3 como atual sem nova divulgação"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-sector-event-trigger-sov-sp-2018-01",
+                "source": "Agência Brasil",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-soundness-santander",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-santander",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-santander-2017-t3",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2017-T3"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-itau-2017-t3",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2017-T3"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-bradesco-2017-t3",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2017-T3"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-santander-2018-01-10",
+                "source": "Onça market:b3",
+                "as_of": "2018-01-10"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-itau",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-bb",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-caixa",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-safra",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-proximity-bradesco",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-itau",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-bb",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-caixa",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-safra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-001023ipe050120180104310505-28",
+                "source": "Onça filing:comunicado",
+                "as_of": "2018-01-05"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cro": {
+          "officer": "cro",
+          "phase": "diagnosis",
+          "run_id": "dry-sov-sp-2018-01-20261125T0526Z",
+          "status": "ok",
+          "attempts": 2,
+          "position": {
+            "officer": "cro",
+            "diagnosis": "Rebaixamento da S&P (2018-01-11) para BB-, estável, três níveis abaixo do grau de investimento. Santander tem capital sólido em 2017-09: Basileia 16,15%, capital principal 14,14%, alavancagem 9,42, headroom 5,65 p.p. (menor que Itaú 8,97 e BB 8,65). ROE 3,9% e ROA 0,38% são baixos; crédito/captações 56,29%. Posição 1 no ranking de reclamações 2017-T3 (índice 41,16) é vulnerabilidade reputacional se o preço de crédito subir. Selic caiu a 7,0% (2017-12-07), o que alivia o custo de funding. O REF 2017-10 mostra o sistema com margem de capital. Os dados são de 2017-09 e não captam efeitos do rebaixamento; o pacote não traz spreads, CDS nem custo de funding externo.",
+            "constraints": [
+              "Dados prudenciais de 2017-09 (BCB IF.data): defasados, anteriores ao rebaixamento de 2018-01-11.",
+              "O pacote não traz spreads, CDS, vencimentos de dívida externa nem composição do funding: opções de captação não são dimensionáveis aqui.",
+              "Headroom de Basileia de 5,65 p.p. é menor que o de Itaú (8,97) e BB (8,65): menos folga para absorver choque ou crescer carteira.",
+              "Posição 1 no ranking de reclamações (2017-T3, índice 41,16) limita repasse agressivo de preço ao cliente.",
+              "Concorrentes servem de referência com peso pela proximidade (0,76 a 0,88); Caixa (0,81) e Safra (0,76) são mais distantes."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Preservar capital e liquidez: manter capital principal (14,14% em 2017-09) acima do atual, priorizar captação local e alongar prazos, e adiar expansão de carteira de maior risco até leitura dos spreads pós-rebaixamento.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Protege o headroom de 5,65 p.p. (2017-09); sacrifica crescimento de carteira e pode manter ROE (3,9%) baixo no curto prazo.",
+                "red_lines": [
+                  "Não deixar o índice de Basileia se aproximar do mínimo regulatório.",
+                  "Não depender de funding externo de curto prazo sem teste de estresse.",
+                  "Não elevar alavancagem para sustentar crescimento."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Repasse seletivo de preço: reprecificar apenas segmentos de maior risco ou prazo longo conforme o custo de funding subir, e proteger clientes de maior valor e o crédito de baixo risco, com queda da Selic (7,0%) como compensação parcial.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Defende margem sem consumir capital; risco de perder volume para Bradesco (0,88), Itaú (0,86) e BB (0,85), cujo headroom e capital principal são maiores.",
+                "red_lines": [
+                  "Não repassar aumento uniforme a toda a base com Santander em 1º nas reclamações.",
+                  "Não precificar abaixo do custo de funding para defender participação.",
+                  "Não violar regras de transparência de tarifas e juros ao cliente."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Postura defensiva com clientes: reforçar comunicação e atendimento a depositantes e empresas, e monitorar saídas de depósitos e reclamações. Usar o rebaixamento soberano como ponto de contato comercial em vez de reduzir oferta.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Custo operacional adicional; reduz risco reputacional e de fuga de depósitos, sem efeito direto no capital.",
+                "red_lines": [
+                  "Não minimizar o rebaixamento em comunicação pública.",
+                  "Não prometer condições que o funding não sustente.",
+                  "Não deixar o índice de reclamações piorar em relação a 2017-T3."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-sector-event-trigger-sov-sp-2018-01",
+                "source": "Agência Brasil",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-soundness-santander",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-santander",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-itau",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-bb",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-santander-2017-t3",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2017-T3"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-sector-event-ref-2017-10",
+                "source": "BCB Relatório de Estabilidade Financeira",
+                "as_of": "2017-10-31"
+              },
+              {
+                "pack_fact_id": "f-proximity-bradesco",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-itau",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-bb",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-caixa",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-safra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-soundness-itau",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-soundness-bradesco",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        }
+      },
+      "challenge": {
+        "cro": {
+          "officer": "cro",
+          "phase": "challenge",
+          "run_id": "dry-sov-sp-2018-01-20261125T0526Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cro",
+            "diagnosis": "Contesto CPO e Risk em três pontos. (1) Ambos tratam a folga de 5,65 p.p. (IF.data 2017-09, pré-rebaixamento) como restrição central, mas nenhum mostra o piso regulatório ou interno, então 'menor folga' não vira limite operacional. (2) Ambos citam a HDI (fato relevante 2017-12-20) e a BW Guirapá (2017-12-22) como iniciativas leves em capital, sem efeito numérico no pacote. (3) Nenhum aponta que o REF 2017-10 projeta Basileia III pleno em 15,5% para o sistema, com necessidade de capital em queda de 50,5%: o ponto de partida do setor era benigno, e o choque soberano é novo. Faltam LCR, carteira de soberanos, custo de funding, inadimplência e a reação dos pares (pressão competitiva sem dados). Briefing outside-in, sem decisão de capital ou preço.",
+            "constraints": [
+              "Dados de capital e fundamentos são de 2017-09, anteriores ao rebaixamento de 2018-01-11; nenhum impacto foi medido.",
+              "Pacote sem LCR, inadimplência, custo de funding, exposição a soberanos e piso interno de capital: não afirmar magnitude.",
+              "Santander é 1º em reclamações (índice 41,16, 2017-T3, defasado) contra Itaú 17,2 e Bradesco 23,99; ranking pode ter mudado.",
+              "Pares só pesam pela proximidade: Bradesco 0,88, Itaú 0,86, BB 0,85 contam mais; Caixa 0,81 e Safra 0,76 menos, e a pressão competitiva não tem dados.",
+              "Rali de 10,05% da SANB11 (setor 5,23%, até 2018-01-10) é anterior ao rebaixamento e não prova que o mercado precificou o choque."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Teste de estresse de liquidez e capital com cenário BB- antes de qualquer ação comercial, e alongamento seletivo da captação. Contesto a ideia de 'captação local estável' como dado: o pacote não mostra a composição do funding (crédito/captações 56,29%, 2017-09).",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Custo de carregamento não quantificável sem LCR e custo de funding. Não consome capital relevante; revela a folga real contra o piso, hoje desconhecido.",
+                "red_lines": [
+                  "Não captar a qualquer custo só para elevar o caixa",
+                  "Não concentrar vencimentos em uma fonte ou janela",
+                  "Não agir sem medir antes a exposição a soberanos"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-sector-event-trigger-sov-sp-2018-01",
+                "source": "Agência Brasil",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-soundness-santander",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-santander",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-sector-event-ref-2017-10",
+                "source": "BCB Relatório de Estabilidade Financeira",
+                "as_of": "2017-10-31"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-santander-2017-t3",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2017-T3"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-itau-2017-t3",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2017-T3"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-bradesco-2017-t3",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2017-T3"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-santander-2018-01-10",
+                "source": "Onça market:b3",
+                "as_of": "2018-01-10"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-020532ipe201220170204308911-63",
+                "source": "Onça filing:fato_relevante",
+                "as_of": "2017-12-20"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-020532ipe221220170104309111-38",
+                "source": "Onça filing:comunicado",
+                "as_of": "2017-12-22"
+              },
+              {
+                "pack_fact_id": "f-proximity-bradesco",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-itau",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-bb",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-caixa",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-safra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cco": {
+          "officer": "cco",
+          "phase": "challenge",
+          "run_id": "dry-sov-sp-2018-01-20261125T0526Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cco",
+            "diagnosis": "Lente de conduta e integridade: o pacote não traz nenhuma sanção, processo CEIS/CNEP, lista internacional ou caso CADE contra o Santander, e isso não equivale a ausência (não houve checagem de listas). O achado de conduta mais relevante é o 1º lugar no ranking de reclamações do BCB (índice 41,16, 2017-T3, contra Itaú 17,2 e Bradesco 23,99). Reprecificar com esse histórico expõe a instituição a Procon/SPA e BCB. Os opções anteriores (cpo, risk) tratam o repasse de preço como questão comercial, mas ele é questão de conduta: sem base contratual, comunicação clara e tratamento por perfil, vira risco sancionatório. O headroom de 5,65 p.p. (2017-09) é o menor entre os pares próximos, o que reduz a tolerância a erro. Dados defasados (2017-09/T3), anteriores ao rebaixamento da S&P (BB-, 2018-01-11).",
+            "constraints": [
+              "Pacote sem dados de sanções, CEIS/CNEP, listas internacionais, CADE ou processos Procon/SPA: ausência de achado não é ausência de risco; checagem pendente.",
+              "Ranking de reclamações é de 2017-T3 e capital/fundamentos de 2017-09, anteriores ao rebaixamento; não tratar como estado atual.",
+              "Sem dados de funding, spreads, inadimplência ou custo de captação: não há como provar que o repasse de preço é 'custo comprovado'.",
+              "Pressão competitiva sem dados na proximidade: coordenação de preços com pares é risco antitruste e não pode ser inferida do pacote.",
+              "Briefing outside-in: não é decisão de capital nem de preço."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Antes de qualquer repricing, exigir revisão de conformidade: base contratual por produto, trilha documental do custo de captação repassado, e baseline interno de reclamações. Reprecificar só com esse dossiê aprovado, e por segmento de risco, não de forma linear.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Efeito direto em capital pequeno; atrasa a defesa de margem (ROE 3,9%, ROA 0,38%, 2017-09) em troca de menor risco sancionatório. Custo de conformidade não quantificado no pacote.",
+                "red_lines": [
+                  "Não alterar contratos vigentes sem base contratual",
+                  "Não repassar custo sem trilha documental",
+                  "Não aplicar aumento uniforme a clientes com reclamações abertas",
+                  "Não comunicar o repasse de forma opaca ou tardia"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Plano de remediação de conduta no atendimento: tratar o 1º lugar no ranking (41,16, 2017-T3) com governança de reclamações reportada ao conselho, meta só após baseline interno, e monitorar o próximo ranking BCB. BB (proximidade 0,85) divulgou ações de atendimento em 2018-01-05, sinal de reação do par próximo.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Custo operacional adicional não quantificado; sem efeito relevante sobre Basileia (16,15%) e capital principal (14,14%), 2017-09.",
+                "red_lines": [
+                  "Não prometer metas públicas sem baseline",
+                  "Não afrouxar controles de crédito ou KYC para reter clientes",
+                  "Não tratar ranking 2017-T3 como atual",
+                  "Não esconder reclamações por reclassificação"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Disciplina de conduta na captação e no mercado: checar contrapartes e fontes de funding novas contra CEIS/CNEP e listas internacionais, e vetar qualquer troca de informação sobre preço com Bradesco (0,88), Itaú (0,86) ou BB (0,85). Divulgar mudanças relevantes ao mercado via CVM, como nos fatos de dezembro/2017.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Sem efeito direto em capital; reduz risco de captação com contraparte restrita ao diversificar fontes. Custo de diligência não quantificado.",
+                "red_lines": [
+                  "Não captar de contraparte sem due diligence de sanções",
+                  "Não alinhar preço ou condições com concorrentes",
+                  "Não omitir ao mercado fato relevante de captação ou capital",
+                  "Não usar a distância a pares mais afastados (Caixa 0,81, Safra 0,76) como justificativa de preço"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-sector-event-trigger-sov-sp-2018-01",
+                "source": "Agência Brasil",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-santander-2017-t3",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2017-T3"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-itau-2017-t3",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2017-T3"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-bradesco-2017-t3",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2017-T3"
+              },
+              {
+                "pack_fact_id": "f-soundness-santander",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-santander",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-proximity-bradesco",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-itau",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-bb",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-caixa",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-safra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-001023ipe050120180104310505-28",
+                "source": "Onça filing:comunicado",
+                "as_of": "2018-01-05"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-020532ipe201220170204308911-63",
+                "source": "Onça filing:fato_relevante",
+                "as_of": "2017-12-20"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-020532ipe281220170104309710-55",
+                "source": "Onça filing:fato_relevante",
+                "as_of": "2017-12-28"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "risk": {
+          "officer": "risk",
+          "phase": "challenge",
+          "run_id": "dry-sov-sp-2018-01-20261125T0526Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "risk",
+            "diagnosis": "O CSO acerta ao tratar o rebaixamento (S&P, BB→BB-, 2018-01-11) como choque sistêmico, mas há falhas. (1) Diz que o ROE de 3,9% é o menor entre os pares, porém o Bradesco tem 3,5% (IF.data 2017-09). (2) O porte do Santander (676 bi) é cerca de 66% do Bradesco (1,51×) e 52% do Itaú (1,91×), não \"metade\" de ambos. (3) Nenhuma opção traz gatilhos de monitoramento, que a tarefa pedia. (4) Faltam LCR, inadimplência/provisões, exposição a títulos públicos e funding externo, então nenhuma opção é dimensionável. Solidez: Basileia 16,15%, capital principal 14,14%, alavancagem 9,42 (a maior do grupo) e headroom de 5,65 pp, abaixo de Itaú (8,97), BB (8,65) e Bradesco (7,15), mas acima de Caixa (4,74) e Safra (4,82). O REF 2017-10 projeta Basileia III plena do sistema em 15,5%, e o Santander já está acima disso. Os dados são anteriores ao evento.",
+            "constraints": [
+              "Balanços de 2017-09 e reclamações de 2017-T3 são anteriores ao rebaixamento de 2018-01-11; nada mede o efeito já ocorrido.",
+              "O pacote não traz LCR, inadimplência, provisões, composição do funding nem exposição soberana; o CSO afirma efeitos sem lastro nesses itens.",
+              "Rivais pesam pela proximidade: Bradesco 0,88, Itaú 0,86 e BB 0,85 pesam mais; Caixa 0,81 (prudencial 0,41) e Safra 0,76 pesam menos. Não há componente de pressão competitiva (cobertura 85%).",
+              "Alta de 10,05% da SANB11 em 2 meses (preços sem ajuste por proventos, até 2018-01-10) não prova solidez e precede o rebaixamento.",
+              "Briefing outside-in: não é decisão de capital nem de preço."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Defensiva de captação e capital (opção do CSO), mas com limites explícitos. O CSO cita o headroom de 5,65 pp sem fixar piso de Basileia, meta de liquidez ou prazo do funding antecipado. O conselho deve definir esses limites e pedir LCR e a composição do funding antes de aprovar.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Preserva capital (principal 14,14%, 2017-09), mas pressiona um ROE de 3,9% já baixo. Sem LCR e funding externo, o benefício não é mensurável. Crédito/captações de 56,29% fica entre Bradesco (50,53%) e BB (57,41%).",
+                "red_lines": [
+                  "Sem piso de Basileia e de capital principal definido pelo conselho, a opção é incompleta.",
+                  "Não depender de funding de curto prazo sensível ao rating.",
+                  "Não aprovar antecipação de funding sem custo de carrego estimado."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Seletividade no preço de crédito, mas sem dados de inadimplência e provisões não se sabe onde o risco soberano deve ser repassado. O CSO ignora o risco de churn: o Santander lidera as reclamações (índice 41,16, 2017-T3), e repasse de preço agrava a saída de clientes para Itaú (0,86) e Bradesco (0,88).",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "ROA de 0,38% (igual ao Bradesco, abaixo do Itaú, 0,56%) deixa pouca margem para absorver custo de funding. Repasse amplo cede volume; repasse insuficiente corrói margem.",
+                "red_lines": [
+                  "Não repassar o choque de forma linear a toda a carteira.",
+                  "Não precificar abaixo do custo marginal de funding.",
+                  "Não ampliar prazo ou risco para compensar volume perdido."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Retenção e receita de serviços (HDI, fato relevante de 2017-12-20) é a mais frágil do CSO: o ganho não está quantificado, e vender seguros a uma base com reclamações em posição 1 pode elevar reclamações e risco operacional e de conduta. Condicionar a expansão de vendas à queda do índice de reclamações.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Baixo consumo de capital, mas sem receita estimada não compensa a pressão de margem. Risco reputacional e operacional se a venda cruzada elevar reclamações.",
+                "red_lines": [
+                  "Não sacrificar a qualidade de crédito para ganhar volume.",
+                  "Não comunicar o rebaixamento ao cliente de forma que gere alarme.",
+                  "Não expandir venda cruzada enquanto o índice de reclamações não cair."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-sector-event-trigger-sov-sp-2018-01",
+                "source": "Agência Brasil",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-soundness-santander",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-santander",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-bradesco",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-itau",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-bb",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-caixa",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-safra",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-soundness-itau",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-santander-2017-t3",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2017-T3"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-santander-2018-01-10",
+                "source": "Onça market:b3",
+                "as_of": "2018-01-10"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-020532ipe201220170204308911-63",
+                "source": "Onça filing:fato_relevante",
+                "as_of": "2017-12-20"
+              },
+              {
+                "pack_fact_id": "f-sector-event-ref-2017-10",
+                "source": "BCB Relatório de Estabilidade Financeira",
+                "as_of": "2017-10-31"
+              },
+              {
+                "pack_fact_id": "f-proximity-bradesco",
+                "source": "Onça (cálculo de proximidade)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-itau",
+                "source": "Onça (cálculo de proximidade)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-bb",
+                "source": "Onça (cálculo de proximidade)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-caixa",
+                "source": "Onça (cálculo de proximidade)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-safra",
+                "source": "Onça (cálculo de proximidade)",
+                "as_of": "2018-01-11"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        }
+      },
+      "quantify": {
+        "risk": {
+          "officer": "risk",
+          "phase": "quantify",
+          "run_id": "dry-sov-sp-2018-01-20261125T0526Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "risk",
+            "diagnosis": "Quantificação (BCB IF.data, 2017-09, cerca de 3,5 meses antes do rebaixamento de 2018-01-11). Santander menos par, em p.p.: Basileia 16,15% vs Bradesco 17,65 (-1,50; prox. 0,88), Itaú 19,47 (-3,32; 0,86), BB 19,15 (-3,00; 0,85), Caixa 15,24 (+0,91; 0,81), Safra 15,32 (+0,83; 0,76). Capital principal 14,14%: Itaú -2,57, Bradesco +1,67, BB +4,10. Alavancagem 9,42: maior do grupo (Itaú 9,01, +0,41; Bradesco 7,43, +1,99; BB 8,04, +1,38). A folga de Basileia (5,65 p.p.) é a menor entre os três pares mais próximos. LCR, NSFR e inadimplência não constam do pacote, então não há diferença a anexar. O impacto do BB- não está medido.",
+            "constraints": [
+              "Dados prudenciais de 2017-09 (IF.data), anteriores ao rebaixamento da S&P (BB-, estável, 2018-01-11): o efeito sobre capital e liquidez não está medido.",
+              "LCR, NSFR, inadimplência, provisões, custo de funding externo e exposição a soberanos não constam do pacote: lacuna a pedir ao BCB/área financeira antes de dimensionar qualquer opção.",
+              "Pares pesam pela proximidade: Bradesco 0,88, Itaú 0,86 e BB 0,85 contam mais; Caixa 0,81 (prudencial 0,41) e Safra 0,76 contam menos. Pressão competitiva sem dados (cobertura 85%).",
+              "Reclamações são de 2017-T3 (Santander 1º, índice 41,16) e limitam o repasse de preço.",
+              "Gatilhos: novo rebaixamento ou mudança de perspectiva do soberano; spread de captação vs Itaú/Bradesco/BB; próximo IF.data (Basileia, capital principal, folga); Copom (Selic 7,0%); próximo REF e ranking de reclamações."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Teste de estresse de capital e liquidez com cenário BB- e pedido de LCR, NSFR e composição do funding. Em seguida, alongar e diversificar a captação, com gatilhos de spread relativo a Itaú, Bradesco e BB. Conselho define piso interno de Basileia e capital principal.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Protege a folga de 5,65 p.p. (2017-09), a menor entre os pares próximos. Custo de carrego e benefício de liquidez não quantificáveis sem LCR e custo de funding.",
+                "red_lines": [
+                  "Não captar a qualquer custo só para elevar o caixa",
+                  "Não concentrar vencimentos em uma fonte ou janela",
+                  "Não depender de funding de curto prazo sensível ao rating",
+                  "Não aprovar sem piso de capital definido pelo conselho"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Moderar o crescimento de ativos ponderados por risco e reter resultado, para manter capital principal de 14,14% e Basileia de 16,15% (2017-09). Itaú tem 2,57 p.p. a mais de capital principal e 3,32 p.p. a mais de Basileia, e pode ganhar volume.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Preserva a margem de capital; sacrifica volume e mantém ROE de 3,9% baixo. Efeito numérico não estimável sem dados de carteira pós-evento.",
+                "red_lines": [
+                  "Não cortar crédito de forma abrupta a clientes-chave",
+                  "Não vender ativos em condições forçadas",
+                  "Não deixar a folga cair abaixo do piso interno do conselho"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Reprecificação seletiva do crédito por risco e prazo, só após medir o custo de funding pós-rebaixamento e com dados de inadimplência. Com Santander em 1º nas reclamações (41,16, 2017-T3) frente a Itaú (17,2) e Bradesco (23,99), evitar repasse linear.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Defende ROA de 0,38% se o funding encarecer; risco de perder clientes para pares com mais folga. Ganho do repasse não estimável com o pacote.",
+                "red_lines": [
+                  "Não repassar preço de forma linear a toda a carteira",
+                  "Não precificar abaixo do custo marginal de funding",
+                  "Não agravar o índice de reclamações de 2017-T3",
+                  "Não alterar contratos vigentes sem base contratual"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-sector-event-trigger-sov-sp-2018-01",
+                "source": "Agência Brasil",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-soundness-santander",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-soundness-bradesco",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-soundness-itau",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-soundness-bb",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-soundness-caixa",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-soundness-safra",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-santander",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-bradesco",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-itau",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-bb",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-caixa",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-safra",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-proximity-bradesco",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-itau",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-bb",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-caixa",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-safra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-santander-2017-t3",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2017-T3"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-itau-2017-t3",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2017-T3"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-bradesco-2017-t3",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2017-T3"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-sector-event-ref-2017-10",
+                "source": "BCB Relatório de Estabilidade Financeira",
+                "as_of": "2017-10-31"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cpo": {
+          "officer": "cpo",
+          "phase": "quantify",
+          "run_id": "dry-sov-sp-2018-01-20261125T0526Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cpo",
+            "diagnosis": "Lente de produto e cobertura. O rebaixamento da S&P (BB-, estável, 2018-01-11) é choque sistêmico; o diferencial do Santander está em capital, funding e clientes. Em 2017-09 (IF.data): Basileia 16,15%, capital principal 14,14%, alavancagem 9,42, headroom 5,65 pp (Itaú 8,97, BB 8,65, Bradesco 7,15), ROE 3,9%, ROA 0,38%. Ponto cego de produto: 1º no ranking de reclamações (índice 41,16, 2017-T3) contra Itaú 17,2 e Bradesco 23,99, o que torna o repricing um risco de retenção. Lacunas de cobertura: o pacote não traz custo de funding, spreads, LCR, inadimplência, exposição a soberanos nem pressão competitiva dos pares; o impacto direto do rebaixamento não é quantificável. A alta de 10,05% da SANB11 (até 2018-01-10) precede o evento e não prova que o choque foi precificado.",
+            "constraints": [
+              "Dados de capital e fundamentos são de 2017-09 e reclamações de 2017-T3, anteriores ao rebaixamento de 2018-01-11; nenhum efeito foi medido.",
+              "Lacuna de cobertura: sem funding, spreads, LCR, inadimplência, exposição soberana e pressão competitiva; a fila de dados a obter precede qualquer dimensionamento.",
+              "Pares pesam pela proximidade: Bradesco 0,88, Itaú 0,86 e BB 0,85 pesam mais; Caixa 0,81 e Safra 0,76 pesam menos.",
+              "Gatilhos a monitorar: novo ranking de reclamações do BCB, próximo IF.data (Basileia, headroom), spread de captação vs. pares, Copom (Selic 7,0% após 7,5%) e rumo da reforma da previdência citada pela S&P.",
+              "Briefing outside-in: não é decisão de capital nem de preço."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Preservar capital e liquidez nos 90 dias: manter o headroom (5,65 pp, 2017-09), moderar o crescimento de carteira (share 8,02%) e exigir antes LCR, composição do funding e exposição a soberanos, hoje fora do pacote.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Protege Basileia (16,15%) e capital principal (14,14%), 2017-09; sacrifica crescimento e mantém o ROE de 3,9% pressionado. Custo de carrego não quantificável sem dados.",
+                "red_lines": [
+                  "Não comprometer o piso de capital definido pelo conselho.",
+                  "Não depender de funding de curto prazo sensível ao rating.",
+                  "Não decidir preço sem custo de captação atualizado."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Repricing gradual e seletivo, só onde o custo de funding comprovadamente subir, poupando clientes de maior valor e crédito de baixo risco. Referências: Bradesco (0,88), Itaú (0,86), BB (0,85); Selic 7,0% dá alívio parcial.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Defende a margem (ROA 0,38%, ROE 3,9%, 2017-09); risco de perder volume para Itaú (capital principal 16,71%) e BB, com mais folga. Ganho não estimável sem dados de funding.",
+                "red_lines": [
+                  "Não repassar o custo de forma linear a toda a carteira.",
+                  "Não fazer repricing agressivo enquanto for 1º em reclamações.",
+                  "Não precificar abaixo do custo marginal de funding."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Plano de retenção: atacar o 1º lugar em reclamações (41,16, 2017-T3) antes e durante qualquer repricing, com baseline interno. BB (0,85) divulgou ações de atendimento em 2018-01-05. Vender seguro HDI (fato relevante de 2017-12-20) só com adequação ao cliente.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Baixo consumo de capital; custo operacional e receita de seguros não estão quantificados no pacote.",
+                "red_lines": [
+                  "Não prometer metas públicas sem baseline interno.",
+                  "Não afrouxar controles de crédito para reter clientes.",
+                  "Não expandir venda cruzada enquanto o índice de reclamações não cair.",
+                  "Não tratar o ranking 2017-T3 como atual."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-sector-event-trigger-sov-sp-2018-01",
+                "source": "Agência Brasil",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-soundness-santander",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-santander",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-itau",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-soundness-itau",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-bb",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-bradesco",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-santander-2017-t3",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2017-T3"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-itau-2017-t3",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2017-T3"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-bradesco-2017-t3",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2017-T3"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-santander-2018-01-10",
+                "source": "Onça market:b3",
+                "as_of": "2018-01-10"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-bradesco",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-itau",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-bb",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-caixa",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-safra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-001023ipe050120180104310505-28",
+                "source": "Onça filing:comunicado",
+                "as_of": "2018-01-05"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-020532ipe201220170204308911-63",
+                "source": "Onça filing:fato_relevante",
+                "as_of": "2017-12-20"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cso": {
+          "officer": "cso",
+          "phase": "quantify",
+          "run_id": "dry-sov-sp-2018-01-20261125T0526Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cso",
+            "diagnosis": "O rebaixamento (S&P, BB-, estável, 2018-01-11) é choque sistêmico: o ganho relativo do Santander depende de capital, funding e reputação. Correção ao que eu disse antes: o porte (676 bi) é ~66% do Bradesco e ~52% do Itaú, não 'metade' de ambos. Pontos fortes (IF.data 2017-09): Basileia 16,15%, capital principal 14,14%, alavancagem 9,42 (a maior do grupo). Fragilidades: ROE 3,9% (Bradesco 3,5% é menor), ROA 0,38% (Itaú 0,56%), headroom 5,65 pp (Itaú 8,97; BB 8,65; Bradesco 7,15) e 1º lugar em reclamações (41,16, 2017-T3). Selic 7,0% alivia o funding. Sem LCR, funding externo, soberanos ou inadimplência: o impacto direto não é quantificável. Ordem por encaixe: (1) defender capital/funding com limites; (2) preço seletivo; (3) retenção com receita de serviços.",
+            "constraints": [
+              "Briefing outside-in: não é decisão de capital nem de preço; ordenação é de encaixe estratégico, não dimensionamento.",
+              "Balanço de 2017-09 e reclamações de 2017-T3 antecedem o rebaixamento; o efeito não está medido.",
+              "Pacote sem LCR, custo de funding, exposição soberana, inadimplência e piso interno de capital; magnitudes não podem ser afirmadas.",
+              "Pares pesam pela proximidade: Bradesco 0,88, Itaú 0,86, BB 0,85; Caixa 0,81 e Safra 0,76 pesam menos; sem componente de pressão competitiva (cobertura 85%).",
+              "Alta de 10,05% da SANB11 (até 2018-01-10) precede o evento e não prova que o choque foi precificado."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "1º no encaixe: defender capital e funding. Rodar estresse de liquidez com cenário BB-, alongar e diversificar captação e reter resultados, preservando o headroom de 5,65 pp, o menor entre os pares próximos (Itaú 0,86 e BB 0,85 têm 8,97 e 8,65). Alavancagem 9,42 sustenta a tese; o ROE de 3,9% é o custo.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Preserva Basileia 16,15% e capital principal 14,14% (2017-09); carrego do funding antecipado pressiona ROE e ROA, sem LCR para medir o benefício.",
+                "red_lines": [
+                  "Conselho fixar piso de Basileia e de capital principal antes de aprovar.",
+                  "Não depender de funding de curto prazo sensível ao rating nem concentrar vencimentos.",
+                  "Não antecipar funding sem custo de carrego estimado."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "2º: preço de crédito seletivo, repassando só o custo de funding comprovado por segmento e prazo, com revisão de conformidade e base contratual. Itaú (0,86; capital principal 16,71%) e Bradesco (0,88) podem absorver volume se o repasse for amplo; o 1º lugar em reclamações limita o espaço.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Protege margem (ROA 0,38%) sem consumir capital; risco de perder volume e elevar reclamações. Ganho não estimável sem custo de funding e inadimplência.",
+                "red_lines": [
+                  "Não repassar de forma linear a toda a carteira.",
+                  "Não precificar abaixo do custo marginal de funding.",
+                  "Não alterar contratos vigentes sem base contratual nem trilha documental."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "3º: retenção de clientes e receitas de serviços. Atacar as reclamações (41,16, 2017-T3) e só expandir a venda cruzada, como o seguro auto com HDI (fato relevante 2017-12-20), quando o índice cair. BB (0,85) já anunciou ações de atendimento em 2018-01-05. Menor encaixe imediato: ganho não quantificado.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Baixo consumo de capital; custo operacional e receita de serviços não constam do pacote, então não compensa a margem comprovadamente.",
+                "red_lines": [
+                  "Não expandir venda cruzada enquanto o índice de reclamações não cair.",
+                  "Não afrouxar crédito ou KYC para reter clientes.",
+                  "Não prometer metas públicas sem baseline interno.",
+                  "Não comunicar o rebaixamento de forma que gere alarme."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-sector-event-trigger-sov-sp-2018-01",
+                "source": "Agência Brasil",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-soundness-santander",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-santander",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-bradesco",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-itau",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-bb",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-soundness-itau",
+                "source": "BCB IF.data",
+                "as_of": "2017-09"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-santander-2017-t3",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2017-T3"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-santander-2018-01-10",
+                "source": "Onça market:b3",
+                "as_of": "2018-01-10"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-020532ipe201220170204308911-63",
+                "source": "Onça filing:fato_relevante",
+                "as_of": "2017-12-20"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-001023ipe050120180104310505-28",
+                "source": "Onça filing:comunicado",
+                "as_of": "2018-01-05"
+              },
+              {
+                "pack_fact_id": "f-proximity-bradesco",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-itau",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-bb",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-caixa",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              },
+              {
+                "pack_fact_id": "f-proximity-safra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2018-01-11"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        }
+      },
+      "synthesize": {
+        "secretary": {
+          "status": "ok"
+        }
+      }
+    },
+    "synthesis": {
+      "summary": "A S&P rebaixou o soberano para BB- (estável, 2018-01-11), choque sistêmico que atinge todos os pares. O Santander chega sólido (Basileia 16,15%, capital principal 14,14%, alavancagem 9,42, a maior do grupo), mas com a menor folga de Basileia entre os pares próximos (5,65 p.p. vs Itaú 8,97, BB 8,65, Bradesco 7,15), ROE de 3,9% e 1º lugar em reclamações (41,16, 2017-T3). Os dados são de 2017-09 e anteriores ao evento; o pacote não traz LCR, custo de funding, inadimplência nem exposição a soberanos, então nenhum impacto é dimensionável. Três opções para análise do conselho: defender capital e funding com limites, preço seletivo com dossiê de conformidade e retenção de clientes com disciplina de venda. Briefing outside-in, não é decisão de capital nem de preço.",
+      "options": [
+        {
+          "id": "opt-1",
+          "description": "Defender capital e funding nos 90 dias: rodar estresse de liquidez e capital com cenário BB- antes de qualquer ação comercial, pedir LCR, composição do funding e exposição a soberanos, alongar e diversificar a captação e moderar o crescimento de ativos ponderados por risco. O conselho fixa antes o piso de Basileia e de capital principal. Itaú (0,86) tem 3,32 p.p. a mais de Basileia e 2,57 p.p. a mais de capital principal e pode ganhar volume.",
+          "customer_impact": "low",
+          "capital_liquidity_effect": "Preserva a folga de 5,65 p.p., a menor entre os pares próximos, e Basileia 16,15% e capital principal 14,14% (2017-09). O carrego do funding antecipado e a menor expansão pressionam o ROE de 3,9% e o ROA de 0,38%. Sem LCR e custo de funding, o benefício e o custo não são quantificáveis.",
+          "citations": [
+            "f-sector-event-trigger-sov-sp-2018-01",
+            "f-soundness-santander",
+            "f-soundness-itau",
+            "f-soundness-bradesco",
+            "f-soundness-bb",
+            "f-fundamentals-santander",
+            "f-fundamentals-itau",
+            "f-fundamentals-bb",
+            "f-fundamentals-bradesco",
+            "f-proximity-itau",
+            "f-proximity-bradesco",
+            "f-proximity-bb",
+            "f-macro-selic",
+            "f-sector-event-ref-2017-10"
+          ],
+          "derived_from": [
+            {
+              "officer": "cso",
+              "option": "opt-1"
+            },
+            {
+              "officer": "risk",
+              "option": "opt-1"
+            },
+            {
+              "officer": "risk",
+              "option": "opt-2"
+            },
+            {
+              "officer": "cpo",
+              "option": "opt-1"
+            },
+            {
+              "officer": "cro",
+              "option": "opt-1"
+            }
+          ],
+          "supported_by": [
+            "cso",
+            "risk",
+            "cpo",
+            "cro"
+          ],
+          "contested_by": [
+            "risk",
+            "cco",
+            "cro"
+          ],
+          "competitor_signals": [
+            {
+              "entity": "bradesco",
+              "proximity": 0.881
+            },
+            {
+              "entity": "itau",
+              "proximity": 0.861
+            },
+            {
+              "entity": "bb",
+              "proximity": 0.849
+            }
+          ]
+        },
+        {
+          "id": "opt-2",
+          "description": "Preço de crédito seletivo e documentado: repassar apenas o custo de funding comprovado, por segmento de risco e prazo, e só depois de medir o custo pós-rebaixamento. Exige revisão de conformidade (base contratual, trilha documental, comunicação prévia) e proíbe qualquer troca de informação de preço com concorrentes. Selic em 7,0% dá alívio parcial.",
+          "customer_impact": "medium",
+          "capital_liquidity_effect": "Defende a margem (ROA 0,38%, ROE 3,9%) se o funding encarecer, sem consumir capital relevante. Há risco de perder volume para Itaú (capital principal 16,71%), Bradesco e BB, e de elevar reclamações. O ganho não é estimável sem custo de funding e inadimplência.",
+          "citations": [
+            "f-sector-event-trigger-sov-sp-2018-01",
+            "f-fundamentals-santander",
+            "f-fundamentals-itau",
+            "f-soundness-itau",
+            "f-reputation-rk-santander-2017-t3",
+            "f-reputation-rk-itau-2017-t3",
+            "f-reputation-rk-bradesco-2017-t3",
+            "f-macro-selic",
+            "f-proximity-bradesco",
+            "f-proximity-itau",
+            "f-proximity-bb"
+          ],
+          "derived_from": [
+            {
+              "officer": "cso",
+              "option": "opt-2"
+            },
+            {
+              "officer": "risk",
+              "option": "opt-3"
+            },
+            {
+              "officer": "cco",
+              "option": "opt-1"
+            },
+            {
+              "officer": "cco",
+              "option": "opt-2"
+            },
+            {
+              "officer": "cpo",
+              "option": "opt-2"
+            },
+            {
+              "officer": "cro",
+              "option": "opt-2"
+            }
+          ],
+          "supported_by": [
+            "cso",
+            "risk",
+            "cco",
+            "cpo",
+            "cro"
+          ],
+          "contested_by": [
+            "risk",
+            "cco",
+            "cro"
+          ],
+          "competitor_signals": [
+            {
+              "entity": "bradesco",
+              "proximity": 0.881
+            },
+            {
+              "entity": "itau",
+              "proximity": 0.861
+            },
+            {
+              "entity": "bb",
+              "proximity": 0.849
+            }
+          ]
+        },
+        {
+          "id": "opt-3",
+          "description": "Retenção de clientes e receita de serviços com disciplina: atacar o 1º lugar em reclamações (41,16, 2017-T3) com baseline interno, governança reportada ao conselho e atendimento reforçado a depositantes e empresas. A venda cruzada, como o seguro auto com HDI (fato relevante de 2017-12-20), só avança com adequação ao cliente e depois da queda do índice. O BB (0,85) divulgou ações de atendimento em 2018-01-05.",
+          "customer_impact": "high",
+          "capital_liquidity_effect": "Baixo consumo de capital. O custo operacional e a receita de seguros e tarifas não estão no pacote, então não se pode afirmar que compensem a margem. Reduz o risco reputacional e de fuga de depósitos.",
+          "citations": [
+            "f-reputation-rk-santander-2017-t3",
+            "f-reputation-rk-itau-2017-t3",
+            "f-reputation-rk-bradesco-2017-t3",
+            "f-narrative-ipe-cvm-fato-020532ipe201220170204308911-63",
+            "f-narrative-ipe-cvm-fato-001023ipe050120180104310505-28",
+            "f-proximity-bb",
+            "f-sector-event-trigger-sov-sp-2018-01"
+          ],
+          "derived_from": [
+            {
+              "officer": "cso",
+              "option": "opt-3"
+            },
+            {
+              "officer": "cco",
+              "option": "opt-3"
+            },
+            {
+              "officer": "cpo",
+              "option": "opt-3"
+            },
+            {
+              "officer": "cro",
+              "option": "opt-3"
+            }
+          ],
+          "supported_by": [
+            "cso",
+            "cco",
+            "cpo",
+            "cro"
+          ],
+          "contested_by": [
+            "risk",
+            "cco",
+            "cro"
+          ],
+          "competitor_signals": [
+            {
+              "entity": "bradesco",
+              "proximity": 0.881
+            },
+            {
+              "entity": "itau",
+              "proximity": 0.861
+            },
+            {
+              "entity": "bb",
+              "proximity": 0.849
+            }
+          ]
+        }
+      ],
+      "residual_regulatory_risk": "Os dados prudenciais (2017-09) e de reclamações (2017-T3) antecedem o rebaixamento, e o pacote não traz piso interno de capital, LCR, inadimplência, exposição soberana nem sanções ou processos contra o Santander; a ausência no pacote não prova ausência de passivos. O repasse de preço, com o Santander em 1º nas reclamações, expõe a risco de conduta junto ao BCB e ao Procon, e qualquer alinhamento de preço com pares é risco antitruste. A venda cruzada de seguros exige cuidado contra venda casada. A pressão competitiva dos pares não tem dados (cobertura 85%).",
+      "monitoring_triggers": [
+        {
+          "text": "Novo rebaixamento ou mudança de perspectiva do rating soberano, e rumo da reforma da previdência citada pela S&P como causa.",
+          "citations": [
+            "f-sector-event-trigger-sov-sp-2018-01"
+          ]
+        },
+        {
+          "text": "Spread e custo de captação do Santander frente a Itaú, Bradesco e BB, e sinais de saída de depósitos; o pacote não traz esses dados e eles devem ser obtidos.",
+          "citations": [
+            "f-proximity-itau",
+            "f-proximity-bradesco",
+            "f-proximity-bb"
+          ]
+        },
+        {
+          "text": "Próximo IF.data: Basileia (16,15%), capital principal (14,14%) e folga (5,65 p.p.) vs pares próximos, com atenção a Itaú (8,97 p.p.) e BB (8,65 p.p.).",
+          "citations": [
+            "f-soundness-santander",
+            "f-fundamentals-santander",
+            "f-fundamentals-itau",
+            "f-fundamentals-bb"
+          ]
+        },
+        {
+          "text": "Próximo ranking de reclamações do BCB: índice do Santander (41,16 em 2017-T3, 1º lugar) frente a Bradesco (23,99) e Itaú (17,2), principalmente se houver repasse de preço.",
+          "citations": [
+            "f-reputation-rk-santander-2017-t3",
+            "f-reputation-rk-bradesco-2017-t3",
+            "f-reputation-rk-itau-2017-t3"
+          ]
+        },
+        {
+          "text": "Próximas decisões do Copom (Selic em 7,0% após corte de 7,5%) e próximo Relatório de Estabilidade Financeira do BCB, que em 2017-10 projetava Basileia III plena do sistema em 15,5%.",
+          "citations": [
+            "f-macro-selic",
+            "f-sector-event-ref-2017-10"
+          ]
+        },
+        {
+          "text": "Reação dos pares próximos em atendimento e preço, como as ações de melhoria de atendimento do BB em 2018-01-05, e comunicados do Santander à CVM sobre captação e capital.",
+          "citations": [
+            "f-narrative-ipe-cvm-fato-001023ipe050120180104310505-28",
+            "f-proximity-bb"
+          ]
+        }
+      ]
+    },
+    "dissents": [
+      {
+        "officer": "cro",
+        "challenged": [
+          "cpo",
+          "risk"
+        ],
+        "text": "Contesto CPO e Risk em três pontos. (1) Ambos tratam a folga de 5,65 p.p. (IF.data 2017-09, pré-rebaixamento) como restrição central, mas nenhum mostra o piso regulatório ou interno, então 'menor folga' não vira limite operacional. (2) Ambos citam a HDI (fato relevante 2017-12-20) e a BW Guirapá (2017-12-22) como iniciativas leves em capital, sem efeito numérico no pacote. (3) Nenhum aponta que o REF 2017-10 projeta Basileia III pleno em 15,5% para o sistema, com necessidade de capital em queda de 50,5%: o ponto de partida do setor era benigno, e o choque soberano é novo. Faltam LCR, carteira de soberanos, custo de funding, inadimplência e a reação dos pares (pressão competitiva sem dados). Briefing outside-in, sem decisão de capital ou preço.",
+        "red_lines": [
+          "Não captar a qualquer custo só para elevar o caixa",
+          "Não concentrar vencimentos em uma fonte ou janela",
+          "Não agir sem medir antes a exposição a soberanos"
+        ]
+      },
+      {
+        "officer": "cco",
+        "challenged": [
+          "cpo",
+          "risk"
+        ],
+        "text": "Lente de conduta e integridade: o pacote não traz nenhuma sanção, processo CEIS/CNEP, lista internacional ou caso CADE contra o Santander, e isso não equivale a ausência (não houve checagem de listas). O achado de conduta mais relevante é o 1º lugar no ranking de reclamações do BCB (índice 41,16, 2017-T3, contra Itaú 17,2 e Bradesco 23,99). Reprecificar com esse histórico expõe a instituição a Procon/SPA e BCB. Os opções anteriores (cpo, risk) tratam o repasse de preço como questão comercial, mas ele é questão de conduta: sem base contratual, comunicação clara e tratamento por perfil, vira risco sancionatório. O headroom de 5,65 p.p. (2017-09) é o menor entre os pares próximos, o que reduz a tolerância a erro. Dados defasados (2017-09/T3), anteriores ao rebaixamento da S&P (BB-, 2018-01-11).",
+        "red_lines": [
+          "Não alterar contratos vigentes sem base contratual",
+          "Não repassar custo sem trilha documental",
+          "Não aplicar aumento uniforme a clientes com reclamações abertas",
+          "Não comunicar o repasse de forma opaca ou tardia",
+          "Não prometer metas públicas sem baseline",
+          "Não afrouxar controles de crédito ou KYC para reter clientes",
+          "Não tratar ranking 2017-T3 como atual",
+          "Não esconder reclamações por reclassificação",
+          "Não captar de contraparte sem due diligence de sanções",
+          "Não alinhar preço ou condições com concorrentes",
+          "Não omitir ao mercado fato relevante de captação ou capital",
+          "Não usar a distância a pares mais afastados (Caixa 0,81, Safra 0,76) como justificativa de preço"
+        ]
+      },
+      {
+        "officer": "risk",
+        "challenged": [
+          "cso"
+        ],
+        "text": "O CSO acerta ao tratar o rebaixamento (S&P, BB→BB-, 2018-01-11) como choque sistêmico, mas há falhas. (1) Diz que o ROE de 3,9% é o menor entre os pares, porém o Bradesco tem 3,5% (IF.data 2017-09). (2) O porte do Santander (676 bi) é cerca de 66% do Bradesco (1,51×) e 52% do Itaú (1,91×), não \"metade\" de ambos. (3) Nenhuma opção traz gatilhos de monitoramento, que a tarefa pedia. (4) Faltam LCR, inadimplência/provisões, exposição a títulos públicos e funding externo, então nenhuma opção é dimensionável. Solidez: Basileia 16,15%, capital principal 14,14%, alavancagem 9,42 (a maior do grupo) e headroom de 5,65 pp, abaixo de Itaú (8,97), BB (8,65) e Bradesco (7,15), mas acima de Caixa (4,74) e Safra (4,82). O REF 2017-10 projeta Basileia III plena do sistema em 15,5%, e o Santander já está acima disso. Os dados são anteriores ao evento.",
+        "red_lines": [
+          "Sem piso de Basileia e de capital principal definido pelo conselho, a opção é incompleta.",
+          "Não depender de funding de curto prazo sensível ao rating.",
+          "Não aprovar antecipação de funding sem custo de carrego estimado.",
+          "Não repassar o choque de forma linear a toda a carteira.",
+          "Não precificar abaixo do custo marginal de funding.",
+          "Não ampliar prazo ou risco para compensar volume perdido.",
+          "Não sacrificar a qualidade de crédito para ganhar volume.",
+          "Não comunicar o rebaixamento ao cliente de forma que gere alarme.",
+          "Não expandir venda cruzada enquanto o índice de reclamações não cair."
+        ]
+      }
+    ],
+    "dropped": [],
+    "gaps": [],
+    "elapsed_s": 482.8
+  },
+  "focal": "santander",
+  "subject": "santander",
+  "proximity": [
+    {
+      "peer": "bradesco",
+      "label": "Bradesco",
+      "score": 0.881,
+      "coverage": 0.85,
+      "low_coverage": false,
+      "components": {
+        "size": 0.911,
+        "market": 1.0,
+        "business_model": 0.928,
+        "prudential": 0.601
+      },
+      "missing": [
+        "pressure"
+      ]
+    },
+    {
+      "peer": "itau",
+      "label": "Itaú",
+      "score": 0.861,
+      "coverage": 0.85,
+      "low_coverage": false,
+      "components": {
+        "size": 0.859,
+        "market": 1.0,
+        "business_model": 0.907,
+        "prudential": 0.617
+      },
+      "missing": [
+        "pressure"
+      ]
+    },
+    {
+      "peer": "bb",
+      "label": "Banco do Brasil",
+      "score": 0.849,
+      "coverage": 0.85,
+      "low_coverage": false,
+      "components": {
+        "size": 0.842,
+        "market": 1.0,
+        "business_model": 0.949,
+        "prudential": 0.527
+      },
+      "missing": [
+        "pressure"
+      ]
+    },
+    {
+      "peer": "caixa",
+      "label": "Caixa Econômica Federal",
+      "score": 0.805,
+      "coverage": 0.85,
+      "low_coverage": false,
+      "components": {
+        "size": 0.863,
+        "market": 1.0,
+        "business_model": 0.822,
+        "prudential": 0.409
+      },
+      "missing": [
+        "pressure"
+      ]
+    },
+    {
+      "peer": "safra",
+      "label": "Safra",
+      "score": 0.763,
+      "coverage": 0.85,
+      "low_coverage": false,
+      "components": {
+        "size": 0.67,
+        "market": 1.0,
+        "business_model": 0.839,
+        "prudential": 0.53
+      },
+      "missing": [
+        "pressure"
+      ]
+    }
+  ]
+}

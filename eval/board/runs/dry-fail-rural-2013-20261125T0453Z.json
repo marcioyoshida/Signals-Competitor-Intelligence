@@ -1,0 +1,1514 @@
+{
+  "model": "sonnet",
+  "provider": "claude-cli (subscription)",
+  "scenario": "fail-rural-2013",
+  "pack_sha256": "a6f045b76efdbc68d603bd33265409df9f604d0aaf0c0f9a8d9399798ebaec5c",
+  "usage": {
+    "calls": 13,
+    "tokens_in": 157189,
+    "tokens_out": 25166,
+    "cache_read": 1254547,
+    "token_cap": 400000
+  },
+  "calls": [
+    {
+      "officer": "cso",
+      "phase": "diagnosis",
+      "s": 15.4,
+      "input_tokens": 6521,
+      "cache_read": 96507,
+      "output_tokens": 1458,
+      "is_error": false
+    },
+    {
+      "officer": "risk",
+      "phase": "diagnosis",
+      "s": 16.7,
+      "input_tokens": 6521,
+      "cache_read": 96535,
+      "output_tokens": 1484,
+      "is_error": false
+    },
+    {
+      "officer": "cco",
+      "phase": "diagnosis",
+      "s": 18.4,
+      "input_tokens": 6521,
+      "cache_read": 96513,
+      "output_tokens": 2103,
+      "is_error": false
+    },
+    {
+      "officer": "cpo",
+      "phase": "diagnosis",
+      "s": 15.9,
+      "input_tokens": 6522,
+      "cache_read": 96495,
+      "output_tokens": 1619,
+      "is_error": false
+    },
+    {
+      "officer": "cpo",
+      "phase": "diagnosis",
+      "s": 16.4,
+      "input_tokens": 6581,
+      "cache_read": 96495,
+      "output_tokens": 1776,
+      "is_error": false
+    },
+    {
+      "officer": "cro",
+      "phase": "diagnosis",
+      "s": 16.9,
+      "input_tokens": 6521,
+      "cache_read": 96487,
+      "output_tokens": 1706,
+      "is_error": false
+    },
+    {
+      "officer": "cro",
+      "phase": "challenge",
+      "s": 17.0,
+      "input_tokens": 9921,
+      "cache_read": 96487,
+      "output_tokens": 1937,
+      "is_error": false
+    },
+    {
+      "officer": "cco",
+      "phase": "challenge",
+      "s": 20.2,
+      "input_tokens": 9921,
+      "cache_read": 96513,
+      "output_tokens": 2470,
+      "is_error": false
+    },
+    {
+      "officer": "risk",
+      "phase": "challenge",
+      "s": 16.1,
+      "input_tokens": 8070,
+      "cache_read": 96535,
+      "output_tokens": 1674,
+      "is_error": false
+    },
+    {
+      "officer": "risk",
+      "phase": "quantify",
+      "s": 16.4,
+      "input_tokens": 21017,
+      "cache_read": 96535,
+      "output_tokens": 2231,
+      "is_error": false
+    },
+    {
+      "officer": "cpo",
+      "phase": "quantify",
+      "s": 14.9,
+      "input_tokens": 20986,
+      "cache_read": 96495,
+      "output_tokens": 1799,
+      "is_error": false
+    },
+    {
+      "officer": "cso",
+      "phase": "quantify",
+      "s": 17.1,
+      "input_tokens": 20972,
+      "cache_read": 96507,
+      "output_tokens": 2248,
+      "is_error": false
+    },
+    {
+      "officer": "secretary",
+      "phase": "synthesize",
+      "s": 19.9,
+      "input_tokens": 27115,
+      "cache_read": 96443,
+      "output_tokens": 2661,
+      "is_error": false
+    }
+  ],
+  "result": {
+    "run_id": "dry-fail-rural-2013-20261125T0453Z",
+    "shared_context_id": "a6f045b76efdbc68d603bd33265409df9f604d0aaf0c0f9a8d9399798ebaec5c",
+    "task": "Com os dados públicos disponíveis até hoje, o conselho do Banco Rural deve se preocupar com a solvência ou a liquidez da instituição nos próximos 90 dias? Que sinais de alerta existem, que ações preventivas considerar e o que os dados públicos não permitem afirmar?",
+    "status": "complete",
+    "phases": {
+      "diagnosis": {
+        "cso": {
+          "officer": "cso",
+          "phase": "diagnosis",
+          "run_id": "dry-fail-rural-2013-20261125T0453Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cso",
+            "diagnosis": "Com dados de 2013-03 (defasagem de ~4 meses até o feed de 2013-08-01), os sinais públicos apontam primeiro para SOLVÊNCIA, com liquidez como risco derivado. O Banco Rural tem ROE -83,0%, ROA -6,08%, folga de Basileia de -2,74 p.p. (abaixo do mínimo) e lucro_share -0,59%, em ativo de R$4,18 bi. Isso é déficit de capital em prejuízo recorrente, não ruído. Para um banco pequeno, capital insuficiente tende a corroer a confiança de depositantes e contrapartes, mas o pacote não traz dados de liquidez, captação ou depósitos, então não sustenta prever corrida ou ruptura em 90 dias. Selic subiu a 8,5% (2013-07-11), encarecendo a captação. Os pares têm folga positiva (Fibra +2,94 p.p., o mais próximo, proximidade 0,76).",
+            "constraints": [
+              "Dados de IF.data são de 2013-03; nada público sustenta a situação em 2013-08 ou nos próximos 90 dias.",
+              "O pacote não traz índice de liquidez, composição/prazo da captação, depósitos nem linhas de funding: liquidez não pode ser avaliada.",
+              "Não há dados prudenciais ou de pressão competitiva dos pares (cobertura de proximidade 70%).",
+              "Crédito/captações de 86,77% é um indicador de estrutura, não prova de descasamento.",
+              "O REF 2013-03 trata do sistema como um todo; não descreve o Rural individualmente."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Tratar a folga de Basileia negativa como prioridade: validar internamente o índice atual e preparar com o acionista e o BCB um plano de recomposição de capital (aporte, retenção, redução de ativos ponderados).",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Recompõe o índice (-2,74 p.p. em 2013-03) e reduz o risco de intervenção; reduzir ativos ponderados contrai a carteira (share 0,12%).",
+                "red_lines": [
+                  "Não operar sem plano de capital acordado com o supervisor",
+                  "Não distribuir resultado enquanto houver déficit de capital",
+                  "Não omitir do BCB o índice atualizado"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Montar monitoramento interno diário de liquidez (saques, vencimentos de captação, linhas disponíveis) com gatilhos e plano de contingência, já que o pacote público não permite medir a liquidez.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Antecipa estresse de captação sob Selic 8,5% e prejuízos; efeito sobre capital é indireto.",
+                "red_lines": [
+                  "Não depender só de dados públicos defasados para decidir sobre liquidez",
+                  "Não esgotar colateral sem reserva de contingência"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Reforçar comunicação a clientes, depositantes e contrapartes, com mensagem coordenada ao plano de capital, para conter risco reputacional sem prometer o que não está confirmado.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Protege a base de captação; não gera capital.",
+                "red_lines": [
+                  "Não fazer declarações sobre solvência não sustentadas pelos números",
+                  "Não divulgar seletivamente"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-fundamentals-ep-rural",
+                "source": "BCB IF.data",
+                "as_of": "2013-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-fibra",
+                "source": "BCB IF.data",
+                "as_of": "2013-03"
+              },
+              {
+                "pack_fact_id": "f-proximity-fibra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2013-08-01"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2013-08-01"
+              },
+              {
+                "pack_fact_id": "f-sector-event-ref-2013-03",
+                "source": "BCB Relatório de Estabilidade Financeira",
+                "as_of": "2013-03-31"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "risk": {
+          "officer": "risk",
+          "phase": "diagnosis",
+          "run_id": "dry-fail-rural-2013-20261125T0453Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "risk",
+            "diagnosis": "Dados públicos de 2013-03 (BCB IF.data) indicam fragilidade grave no Banco Rural: Basileia com headroom de -2,74 pp (abaixo do mínimo), ROE -83,0%, ROA -6,08%, lucro_share -0,59%, ativo R$4,18 bi. Capital/solvência é a preocupação primária; a liquidez não é mensurável, pois o pacote não traz LCR nem perfil de captação (só crédito/captações 86,77%, o que sugere carteira financiada quase integralmente por captações). Sinais de alerta: capital negativo vs. mínimo e prejuízo que corrói o patrimônio. Os dados têm defasagem de ~4 meses (feed 2013-08-01), então a situação atual pode ser pior ou melhor. Nada no pacote permite afirmar iminência de resolução pelo BCB (liquidação, intervenção, RAET), nem o contrário.",
+            "constraints": [
+              "Defasagem: números são de 2013-03; não refletem o 2º trimestre nem julho/2013.",
+              "Sem dados de LCR, vencimentos de captação, provisões, inadimplência ou composição do patrimônio de referência no pacote.",
+              "Sem dados de incidentes operacionais, processos de supervisão ou controle acionário; não se pode inferir ação do BCB.",
+              "Proximidade dos pares tem cobertura de 70% e sem perfil prudencial; comparações são indicativas.",
+              "Selic subiu de 8,0% para 8,5% em 2013-07-11, o que pressiona custo de captação, mas o pacote não quantifica o efeito sobre o Rural."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Plano de recomposição de capital imediato: aporte dos controladores, retenção total de resultados e/ou emissão de capital, para recuperar o mínimo de Basileia (déficit de 2,74 pp em 2013-03) e antecipar-se à supervisão.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Fecha o déficit de capital; depende da capacidade e disposição dos acionistas, que o pacote não informa.",
+                "red_lines": [
+                  "Não operar abaixo do mínimo regulatório sem plano formal ao BCB",
+                  "Não distribuir dividendos nem remunerar capital enquanto o déficit persistir"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Reduzir ativos ponderados pelo risco (cessão de carteira, contenção de novas concessões) para elevar o índice sem novo capital, preservando caixa e acesso à captação.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Melhora o índice de Basileia e gera liquidez; reduz a receita futura e pode pressionar o prejuízo (ROA -6,08%). A magnitude não é estimável com o pacote.",
+                "red_lines": [
+                  "Não vender ativos com perda que aprofunde o déficit de capital",
+                  "Não restringir de forma disruptiva o acesso de depositantes a recursos"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Montar teste de liquidez de 90 dias e monitoramento diário de captação (resgates, concentração de depositantes, linhas interbancárias), com plano de contingência acionável, pois o pacote não mostra LCR.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Não altera o capital; reduz o risco de ser surpreendido por fuga de captação, principal canal de agravamento de instituição com capital abaixo do mínimo.",
+                "red_lines": [
+                  "Não depender apenas de dados trimestrais públicos para decidir liquidez",
+                  "Não adiar a comunicação ao BCB se houver saída de captação relevante"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-fundamentals-ep-rural",
+                "source": "BCB IF.data",
+                "as_of": "2013-03"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2013-08-01"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-fibra",
+                "source": "BCB IF.data",
+                "as_of": "2013-03"
+              },
+              {
+                "pack_fact_id": "f-proximity-fibra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2013-08-01"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cco": {
+          "officer": "cco",
+          "phase": "diagnosis",
+          "run_id": "dry-fail-rural-2013-20261125T0453Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cco",
+            "diagnosis": "Com dados públicos de IF.data 2013-03 (defasados ~5 meses frente ao feed de 2013-08-01), há motivo para o conselho se preocupar com a solvência do Banco Rural nos próximos 90 dias. A instituição tem Basileia com headroom de -2.74 pp (abaixo do mínimo), ROE -83.0%, ROA -6.08% e lucro_share -0.59%; é o único do grupo com headroom negativo. Ativo de R$ 4.18 bi, crédito/captações 86.77%. Liquidez: o pacote não traz indicadores de liquidez, funding ou depósitos, então não sustenta conclusão sobre liquidez. Pares próximos (Fibra, proximidade 0.76; ABC, 0.74; Daycoval, 0.73; Mercantil, 0.73; Pan, 0.68) têm headroom positivo (1.85 a 9.11 pp), logo o problema parece específico do Rural, não do setor. REF 2013-03 não aponta necessidade extra de capital para o sistema, o que reforça essa leitura. Do lado de conduta/integridade, o pacote não contém sanções, CEIS/CNEP, CADE ou listas internacionais: ausência de dados, não de achados.",
+            "constraints": [
+              "Dados IF.data de 2013-03; nada posterior sobre capital, liquidez ou resultado do 2º trimestre está no pacote.",
+              "Sem indicadores de liquidez, vencimentos, depósitos ou acesso a funding: não é possível afirmar risco de liquidez em 90 dias.",
+              "Sem dados de sanções, CEIS/CNEP, CADE, listas internacionais ou reputação: não é possível afirmar nada sobre conduta.",
+              "Comparações com pares têm cobertura de proximidade de 70% (sem perfil prudencial e pressão competitiva); Rural é 2.5 a 5× menor que os pares.",
+              "Não há dado sobre plano de capital, controladores ou aportes em curso; o pacote não permite avaliar capacidade de recomposição."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Plano de recomposição de capital imediato: aporte dos controladores, retenção de resultados e venda de ativos, para restaurar Basileia acima do mínimo, com comunicação prévia e coordenada ao BCB.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Elimina o déficit de 2.74 pp de headroom; exige capital novo ou redução de ativos ponderados pelo risco. Valor necessário não calculável com o pacote.",
+                "red_lines": [
+                  "Não operar sem plano de enquadramento formalizado e apresentado ao BCB",
+                  "Não distribuir dividendos ou resultados enquanto o capital estiver abaixo do mínimo",
+                  "Não ocultar ao supervisor a posição de capital"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Contenção do balanço: reduzir originação de crédito e ativos ponderados pelo risco, preservando caixa e ativos líquidos, enquanto se prepara o plano de capital.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Reduz consumo de capital e protege liquidez; sacrifica receita e relacionamento num quadro de prejuízo (ROA -6.08%).",
+                "red_lines": [
+                  "Não interromper abruptamente linhas a clientes sem aviso e critério",
+                  "Não vender ativos a preços que agravem o prejuízo sem análise",
+                  "Não discriminar clientes de forma que gere risco de conduta"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Montar monitoramento semanal de liquidez e capital (caixa, vencimentos, concentração de depósitos, saques) com gatilhos de escalonamento ao conselho, para suprir a lacuna de dados.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Sem efeito direto; reduz o ponto cego sobre liquidez e dá alerta antecipado de corrida ou perda de funding.",
+                "red_lines": [
+                  "Não basear decisões em dados desatualizados de 2013-03",
+                  "Não deixar a liquidez sem responsável e limite definidos"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-fundamentals-ep-rural",
+                "source": "BCB IF.data",
+                "as_of": "2013-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-fibra",
+                "source": "BCB IF.data",
+                "as_of": "2013-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-abc-brasil",
+                "source": "BCB IF.data",
+                "as_of": "2013-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-daycoval",
+                "source": "BCB IF.data",
+                "as_of": "2013-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-mercantil",
+                "source": "BCB IF.data",
+                "as_of": "2013-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-pan",
+                "source": "BCB IF.data",
+                "as_of": "2013-03"
+              },
+              {
+                "pack_fact_id": "f-proximity-fibra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2013-08-01"
+              },
+              {
+                "pack_fact_id": "f-proximity-abc-brasil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2013-08-01"
+              },
+              {
+                "pack_fact_id": "f-proximity-daycoval",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2013-08-01"
+              },
+              {
+                "pack_fact_id": "f-proximity-mercantil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2013-08-01"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-pan",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2013-08-01"
+              },
+              {
+                "pack_fact_id": "f-sector-event-ref-2013-03",
+                "source": "BCB Relatório de Estabilidade Financeira",
+                "as_of": "2013-03-31"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cpo": {
+          "officer": "cpo",
+          "phase": "diagnosis",
+          "run_id": "dry-fail-rural-2013-20261125T0453Z",
+          "status": "ok",
+          "attempts": 2,
+          "position": {
+            "officer": "cpo",
+            "diagnosis": "Dados públicos até 2013-03 (BCB IF.data) indicam risco de solvência relevante para o Banco Rural: ROE -83,0%, ROA -6,08%, headroom de Basileia -2,74 p.p. (abaixo do mínimo) e lucro_share -0,59%. Ativo de R$4,18 bi, carteira_share 0,12%. Crédito/captações 86,77% sugere carteira financiada por captação, mas o pacote não traz dados de liquidez (caixa, vencimentos, resgates), então liquidez em 90 dias não é afirmável. Selic subiu de 8,0% para 8,5% em 2013-07-11, encarecendo captação. Pares próximos estão menos fracos: Fibra (proximidade 0,76) ROE -9,1%, headroom +2,94 p.p.; Mercantil (0,73) headroom +1,85 p.p. Prioridade: solvência (capital) primeiro, liquidez monitorada.",
+            "constraints": [
+              "Fundamentos são de 2013-03 (BCB IF.data); defasagem de ~4 meses até 2013-08-01 e nada posterior sobre capital, caixa ou resgates.",
+              "O pacote não tem perfil prudencial, perfil de vencimentos de captação nem pressão competitiva (proximidade com cobertura de 70%).",
+              "Comparações com pares: Fibra (f-proximity-fibra 0,76), Mercantil (f-proximity-mercantil 0,73) e Daycoval (f-proximity-daycoval 0,73) são próximos, mas não idênticos em porte (2,5× a 3,2× o do Rural) nem em modelo de negócio.",
+              "O REF 2013-03 aponta que o sistema como um todo não precisa de capital extra de Basileia III até 2019, o que não descreve a situação individual do Rural.",
+              "Sem informação do pacote não se pode afirmar risco de corrida, rating, ações do supervisor ou plano de capitalização."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Plano de recomposição de capital imediato: avaliar aporte de acionistas, retenção e venda de ativos para eliminar o headroom negativo de Basileia (-2,74 p.p. em 2013-03).",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Eleva o capital regulatório; venda de ativos pode reduzir carteira e receita, mas aumenta a liquidez.",
+                "red_lines": [
+                  "Não operar de forma sustentada abaixo do mínimo de Basileia",
+                  "Não distribuir resultado ou dividendos enquanto o headroom for negativo",
+                  "Não comunicar ao mercado número de capital que o pacote não sustente"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Monitoramento de liquidez em 90 dias: painel interno de caixa, concentração e vencimentos de captação e testes de estresse de saque, já que o pacote público não mostra liquidez.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Dá visibilidade ao risco de liquidez; custo baixo; não corrige o déficit de capital.",
+                "red_lines": [
+                  "Não depender só de dados públicos defasados para decidir liquidez",
+                  "Não alongar ativos ilíquidos sem cobertura de captação"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Reduzir o consumo de capital: conter novas concessões e rever a carteira (credito/captações 86,77%), considerando Selic em 8,5%, até o capital se recompor.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Diminui ativos ponderados pelo risco e preserva capital; reduz receita e pode afastar clientes.",
+                "red_lines": [
+                  "Não cortar crédito de forma desordenada sem avaliar o efeito na inadimplência",
+                  "Não cortar linhas essenciais sem plano de comunicação aos clientes"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-fundamentals-ep-rural",
+                "source": "BCB IF.data",
+                "as_of": "2013-03"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2013-08-01"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-fibra",
+                "source": "BCB IF.data",
+                "as_of": "2013-03"
+              },
+              {
+                "pack_fact_id": "f-proximity-fibra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2013-08-01"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-mercantil",
+                "source": "BCB IF.data",
+                "as_of": "2013-03"
+              },
+              {
+                "pack_fact_id": "f-proximity-mercantil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2013-08-01"
+              },
+              {
+                "pack_fact_id": "f-proximity-daycoval",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2013-08-01"
+              },
+              {
+                "pack_fact_id": "f-sector-event-ref-2013-03",
+                "source": "BCB Relatório de Estabilidade Financeira",
+                "as_of": "2013-03-31"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cro": {
+          "officer": "cro",
+          "phase": "diagnosis",
+          "run_id": "dry-fail-rural-2013-20261125T0453Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cro",
+            "diagnosis": "Os dados públicos (IF.data, 2013-03) apontam solvência como preocupação central e liquidez como risco derivado. O Banco Rural tem ROE -83,0%, ROA -6,08%, lucro_share -0,59% e folga de Basileia de -2,74 pp (abaixo do mínimo), com ativo de R$4,18 bi. Capital negativo vs. exigência significa que perdas adicionais exigem aporte ou redução de ativos; com Selic subindo (8,0%→8,5%, 2013-07-11), o custo de captação tende a pressionar ainda mais o resultado. Crédito/captações de 86,77% é comparável aos pares (80–93%), então não há sinal público de descasamento extremo, mas a confiança de depositantes de um banco desenquadrado é frágil. Os dados têm defasagem de ~4 meses (2013-03) e não mostram caixa, vencimentos nem captação recente.",
+            "constraints": [
+              "Dados de balanço são de 2013-03, ~4 meses antes de 2013-08-01; a posição atual de capital e caixa pode ser diferente.",
+              "O pacote não traz indicadores de liquidez (caixa, LCR, vencimentos, concentração de depositantes, saques recentes), então liquidez de 90 dias não pode ser afirmada nem descartada.",
+              "O pacote não traz plano de capitalização, acionistas, decisões do BCB sobre a instituição ou prazo de reenquadramento.",
+              "Não há ação de mercado do Banco Rural no pacote; não é possível medir a percepção de mercado sobre a instituição.",
+              "Comparações com pares têm cobertura de proximidade de 70% (sem perfil prudencial e pressão competitiva), e os pares são 2,5 a 5 vezes maiores."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Recomposição imediata de capital: plano formal com aporte de acionistas ou venda de ativos para trazer Basileia acima do mínimo (hoje -2,74 pp de folga), com cronograma e comunicação ao BCB.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Aporte/redução de ativos restaura a folga de Basileia; um aporte em caixa também fortalece a liquidez. Valor necessário não é estimável com os dados do pacote.",
+                "red_lines": [
+                  "Não manter operação com folga de Basileia negativa sem plano aprovado e comunicado ao supervisor.",
+                  "Não distribuir resultados ou dividendos enquanto o capital estiver abaixo do mínimo."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Contenção de balanço: frear originação de crédito e reduzir ativos ponderados por risco até o reenquadramento, preservando colchão de caixa e ativos líquidos.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Reduz exigência de capital e preserva liquidez, mas diminui receita e pode prolongar prejuízo (ROA -6,08%); carteira já é só 0,12% do sistema.",
+                "red_lines": [
+                  "Não vender carteira em condições que realizem perdas além do suportável pelo capital remanescente.",
+                  "Não restringir saques ou serviços a depositantes fora do que o regulador permitir."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Teste de estresse de liquidez e plano de contingência: simular saídas de depósitos em 30/60/90 dias, mapear ativos líquidos e linhas de socorro, e definir gatilhos de acionamento pelo conselho.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Não altera capital; fecha a lacuna de informação sobre liquidez, que o dado público não cobre.",
+                "red_lines": [
+                  "Não esperar deterioração de captação para ativar o plano.",
+                  "Não depender de suposição de apoio externo sem compromisso formal."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-fundamentals-ep-rural",
+                "source": "BCB IF.data",
+                "as_of": "2013-03"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2013-08-01"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-fibra",
+                "source": "BCB IF.data",
+                "as_of": "2013-03"
+              },
+              {
+                "pack_fact_id": "f-proximity-fibra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2013-08-01"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-pan",
+                "source": "BCB IF.data",
+                "as_of": "2013-03"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-pan",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2013-08-01"
+              },
+              {
+                "pack_fact_id": "f-sector-event-ref-2013-03",
+                "source": "BCB Relatório de Estabilidade Financeira",
+                "as_of": "2013-03-31"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        }
+      },
+      "challenge": {
+        "cro": {
+          "officer": "cro",
+          "phase": "challenge",
+          "run_id": "dry-fail-rural-2013-20261125T0453Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cro",
+            "diagnosis": "Contestação a cpo e risk: ambos acertam que o sinal primário é solvência, mas a gravidade é maior do que 'risco relevante'. Em 2013-03 (BCB IF.data) o Rural tem headroom de Basileia -2,74 p.p., ROE -83,0%, ROA -6,08%, ativo R$4,18 bi. Com prejuízo dessa magnitude o capital tende a piorar a cada trimestre, e o déficit passa a ser lido como insolvência regulatória, não só alerta. A liquidez em 90 dias não é mensurável com o pacote (só crédito/captações 86,77%), mas capital abaixo do mínimo costuma ser gatilho de fuga de captação, então os dois riscos se acoplam. Selic 8,0%→8,5% (2013-07-11) encarece captação. Dados têm ~4 meses de defasagem; o 2º trimestre e julho são desconhecidos. Fibra (proximidade 0,76), o par mais próximo, tem headroom +2,94 p.p. e ROE -9,1%: o Rural está claramente pior que o grupo próximo.",
+            "constraints": [
+              "Fundamentos de 2013-03 (BCB IF.data); nada de 2º trimestre ou julho/2013 sobre capital, caixa ou resgates.",
+              "Sem perfil prudencial, LCR, vencimentos de captação, provisões, inadimplência ou composição do capital: liquidez em 90 dias não é afirmável.",
+              "Sem informação sobre controle acionário, capacidade de aporte, rating ou ações do supervisor; não se pode afirmar nem descartar intervenção ou liquidação.",
+              "Proximidade dos pares tem cobertura de 70% e sem perfil prudencial; Fibra (f-proximity-fibra 0,76) tem porte 2,47× o do Rural, comparação apenas indicativa.",
+              "O REF 2013-03 diz que o sistema não precisa de capital extra de Basileia III até 2019; isso descreve o agregado, não o Rural, que já está abaixo do mínimo."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Contestação à opção de recomposição de capital (cpo/risk opt-1): exigir cronograma datado, valor e fonte do aporte (controladores) em prazo curto, com comunicação proativa ao BCB. Plano sem compromisso de acionistas verificável não conta como mitigação; o pacote não mostra capacidade de aporte.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Fecha o déficit de 2,74 p.p. se executado; o valor necessário em R$ não é estimável com o pacote.",
+                "red_lines": [
+                  "Não operar abaixo do mínimo de Basileia sem plano formal ao BCB",
+                  "Não distribuir dividendos ou remunerar capital com headroom negativo",
+                  "Não divulgar número de capital que o pacote não sustente",
+                  "Não tratar promessa de aporte sem prazo como solução"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Contestação à redução de ativos ponderados (cpo opt-3/risk opt-2): permitida só com teto de perda. Vender carteira com deságio ou cortar crédito de forma desordenada aprofunda o prejuízo (ROA -6,08%) e pode piorar o capital, além de gerar sinal negativo ao mercado. Exigir simulação de efeito líquido no índice antes de executar.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Eleva o índice e gera caixa, mas reduz receita e pode ampliar a perda; o efeito líquido não é estimável com o pacote.",
+                "red_lines": [
+                  "Não vender ativos com perda que aumente o déficit de capital",
+                  "Não restringir de forma disruptiva o acesso de depositantes a recursos",
+                  "Não cortar linhas essenciais sem plano de comunicação"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Contestação ao monitoramento de liquidez (cpo opt-2/risk opt-3): não basta painel; exigir teste de estresse de saque de 90 dias, plano de contingência com gatilhos, diário de captação e linhas de reserva, com governança do conselho. Monitorar sem gatilho de ação é insuficiente para um banco com capital abaixo do mínimo.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Não corrige capital; reduz chance de surpresa em saída de captação, principal canal de agravamento.",
+                "red_lines": [
+                  "Não decidir liquidez só com dados públicos trimestrais defasados",
+                  "Não adiar comunicação ao BCB diante de saída de captação relevante",
+                  "Não alongar ativos ilíquidos sem cobertura de captação"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-fundamentals-ep-rural",
+                "source": "BCB IF.data",
+                "as_of": "2013-03"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2013-08-01"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-fibra",
+                "source": "BCB IF.data",
+                "as_of": "2013-03"
+              },
+              {
+                "pack_fact_id": "f-proximity-fibra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2013-08-01"
+              },
+              {
+                "pack_fact_id": "f-sector-event-ref-2013-03",
+                "source": "BCB Relatório de Estabilidade Financeira",
+                "as_of": "2013-03-31"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cco": {
+          "officer": "cco",
+          "phase": "challenge",
+          "run_id": "dry-fail-rural-2013-20261125T0453Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cco",
+            "diagnosis": "Contesto cpo e risk: ambos tratam solvência e liquidez, mas sem lente de conduta. Dados do Banco Rural (BCB IF.data, 2013-03): Basileia -2,74 p.p., ROE -83,0%, ROA -6,08%. A solvência preocupa; a liquidez em 90 dias não é afirmável. Linhas vermelhas de conduta que faltam nas opções deles: (1) cessão ou venda de carteira só em condições de mercado e sem partes relacionadas, nem para os controladores; (2) nenhum credor, depositante ou parte relacionada pode ter tratamento preferencial; (3) comunicação ao BCB tempestiva e consistente, sem divulgar números que o pacote não sustente; (4) registro formal das decisões do conselho. O pacote não traz sanções (BCB, CVM, CEIS/CNEP, listas internacionais), CADE, Procon, reputação nem curadoria. Não é possível afirmar ausência de achados de integridade. Pares (Fibra, proximidade 0,76; Mercantil, 0,73) estão menos fracos, então o problema parece específico do Rural.",
+            "constraints": [
+              "Fundamentos de 2013-03 (BCB IF.data), com defasagem de cerca de 4 meses até o feed de 2013-08-01; nada posterior sobre capital, caixa ou resgates.",
+              "O pacote não tem sanções, CEIS/CNEP, listas internacionais, CADE, Procon, reputação nem log de curadoria; não se afirma ausência de achados.",
+              "Sem dados de controle acionário, partes relacionadas, perfil prudencial ou vencimentos; não se infere ação do supervisor nem capacidade dos acionistas.",
+              "Proximidade dos pares com cobertura de 70% e sem perfil prudencial; Fibra (0,76) e Mercantil (0,73) são indicativos, não equivalentes em porte ou modelo.",
+              "Selic de 8,0% para 8,5% em 2013-07-11 encarece a captação, mas o efeito sobre o Rural não é quantificável com o pacote."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Recomposição de capital (opt-1 de cpo e risk) com governança de conduta: plano formal ao BCB, aporte e eventuais vendas de ativos aprovados pelo conselho, a preços de mercado, com avaliação independente e registro das decisões.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Fecha o déficit de 2,74 p.p. em 2013-03 se houver aporte ou venda; a capacidade dos acionistas não consta do pacote. Reduz risco de conduta na venda de ativos.",
+                "red_lines": [
+                  "Não vender ou ceder ativos a partes relacionadas ou controladores fora de condições de mercado",
+                  "Não operar abaixo do mínimo de Basileia sem plano formal ao BCB",
+                  "Não distribuir dividendos nem remunerar capital enquanto o déficit persistir",
+                  "Não divulgar número de capital que o pacote não sustente"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Monitoramento de liquidez em 90 dias (opt-2 de cpo, opt-3 de risk) com gatilhos de escalonamento ao BCB e regra de igualdade de tratamento entre depositantes e credores durante eventual estresse de saque.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Não corrige o capital, mas dá visibilidade a fuga de captação, o canal de agravamento para quem está abaixo do mínimo; a magnitude não é estimável com o pacote.",
+                "red_lines": [
+                  "Não favorecer partes relacionadas ou grandes depositantes em resgates antecipados",
+                  "Não adiar a comunicação ao BCB diante de saída relevante de captação",
+                  "Não decidir liquidez apenas com dados públicos trimestrais defasados"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Conter novas concessões e cessão de carteira (opt-3 de cpo, opt-2 de risk) só com critérios de crédito documentados e comunicação transparente aos clientes, evitando corte discriminatório ou desordenado.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Reduz ativos ponderados pelo risco e preserva capital; reduz receita e pode agravar o prejuízo (ROA -6,08% em 2013-03). Efeito líquido não estimável com o pacote.",
+                "red_lines": [
+                  "Não vender carteira com perda que aprofunde o déficit de capital",
+                  "Não cortar linhas essenciais sem plano de comunicação e tratamento equitativo aos clientes",
+                  "Não restringir de forma disruptiva o acesso de depositantes a seus recursos"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-fundamentals-ep-rural",
+                "source": "BCB IF.data",
+                "as_of": "2013-03"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2013-08-01"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-fibra",
+                "source": "BCB IF.data",
+                "as_of": "2013-03"
+              },
+              {
+                "pack_fact_id": "f-proximity-fibra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2013-08-01"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-mercantil",
+                "source": "BCB IF.data",
+                "as_of": "2013-03"
+              },
+              {
+                "pack_fact_id": "f-proximity-mercantil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2013-08-01"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "risk": {
+          "officer": "risk",
+          "phase": "challenge",
+          "run_id": "dry-fail-rural-2013-20261125T0453Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "risk",
+            "diagnosis": "Contesto o cso: a ordem solvência→liquidez é razoável, mas está subespecificada. Em 2013-03 (IF.data, ~4 meses de defasagem) o Rural tem ROE -83,0%, ROA -6,08%, folga de Basileia -2,74 p.p. e lucro_share -0,59, em ativo de R$4,18 bi. É o pior do grupo: o par mais próximo, Fibra (proximidade 0,76, próximo), também tem prejuízo (ROE -9,1%), mas folga de +2,94 p.p. Capital negativo com prejuízo recorrente é o gatilho típico de ação do supervisor (plano de capital, intervenção, RAET), e isso pode ocorrer antes de qualquer corrida. Para o conselho, o risco dos 90 dias é mais regulatório/de confiança do que de caixa, mas o pacote não mede liquidez. Selic 8,5% (2013-07-11) encarece captação. Não há dado público que sustente probabilidade de resolução.",
+            "constraints": [
+              "Dados de 2013-03; nada público cobre 2013-04 a 2013-08 nem os próximos 90 dias: o índice atual pode ser melhor ou pior.",
+              "Sem índice de liquidez, prazo/concentração da captação, depósitos ou linhas: liquidez e risco de corrida não são avaliáveis; crédito/captações 86,77% é estrutura, não descasamento.",
+              "Sem provisões, inadimplência, composição do prejuízo nem qualidade da carteira: não se sabe se o prejuízo é recorrente ou evento pontual.",
+              "Sem dados sobre o acionista, capacidade de aporte, relação com o BCB ou incidentes operacionais.",
+              "Pares sem dado prudencial (cobertura de proximidade 70%); o REF 2013-03 é sistêmico e não descreve o Rural."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Priorizar capital: apurar internamente o índice de Basileia atual e abrir interlocução antecipada com acionista e BCB sobre aporte comprovado e redução de ativos ponderados, com prazo e gatilhos definidos.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Atua sobre a folga de -2,74 p.p. (2013-03); a venda de ativos ponderados contrai a carteira e pode reduzir receita. Aporte, se houver, precisa ser concreto, não intenção.",
+                "red_lines": [
+                  "Não distribuir resultado nem pagar dividendos/JCP com déficit de capital",
+                  "Não ocultar ou atrasar ao BCB o índice atualizado",
+                  "Não depender de aporte não contratado no plano",
+                  "Não manter plano sem prazo e responsável"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Montar painel diário de liquidez (saques, vencimentos, concentração de depositantes, colateral e linhas disponíveis) com gatilhos e plano de contingência aprovado pelo conselho, já que o pacote não mede liquidez.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Antecipa estresse de captação sob Selic 8,5% e prejuízos; efeito sobre capital é indireto.",
+                "red_lines": [
+                  "Não decidir sobre liquidez com base apenas em dados públicos defasados",
+                  "Não esgotar colateral sem reserva de contingência",
+                  "Não conceder crédito a partes relacionadas ou ampliar exposição de contraparte sem aval"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Preparar plano de resolução e comunicação: cenários de intervenção/RAET, protocolo de incidentes e mensagem única a depositantes e contrapartes, ativada só com fatos confirmados.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Protege a base de captação e a governança; não gera capital.",
+                "red_lines": [
+                  "Não fazer declarações sobre solvência que os números não sustentem",
+                  "Não divulgar seletivamente a contrapartes ou imprensa",
+                  "Não tratar preparação como previsão de resolução"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-fundamentals-ep-rural",
+                "source": "BCB IF.data",
+                "as_of": "2013-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-fibra",
+                "source": "BCB IF.data",
+                "as_of": "2013-03"
+              },
+              {
+                "pack_fact_id": "f-proximity-fibra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2013-08-01"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2013-08-01"
+              },
+              {
+                "pack_fact_id": "f-sector-event-ref-2013-03",
+                "source": "BCB Relatório de Estabilidade Financeira",
+                "as_of": "2013-03-31"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        }
+      },
+      "quantify": {
+        "risk": {
+          "officer": "risk",
+          "phase": "quantify",
+          "run_id": "dry-fail-rural-2013-20261125T0453Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "risk",
+            "diagnosis": "Em 2013-03 (BCB IF.data, defasagem ~4 meses até 2013-08-01) o Banco Rural é o único do grupo com folga de Basileia negativa: -2,74 p.p., contra Fibra +2,94 (proximidade 0,76), Mercantil +1,85 (0,73), Banco PAN +3,81 (0,68), ABC +5,23 (0,74) e Daycoval +9,11 (0,73). ROE -83,0% e ROA -6,08% (Fibra: -9,1% e -0,9%; demais positivos). Ativo R$4,18 bi, 2,5 a 5× menor que os pares. Preocupação primária é solvência/capital; no horizonte de 90 dias o risco mais provável é regulatório e de confiança (plano de capital, RAET, intervenção), antes de qualquer corrida. Liquidez não é mensurável: o pacote não traz LCR/NSFR, alavancagem nem inadimplência. Crédito/captações 86,77% está na faixa dos pares (80,26 a 93,43%), sem sinal de descasamento.",
+            "constraints": [
+              "Dados de 2013-03; nada público cobre abr-ago/2013 nem os próximos 90 dias: o índice atual pode ser melhor ou pior.",
+              "O pacote não traz LCR/NSFR, alavancagem, inadimplência, provisões, prazo/concentração de captação: esses comparativos com pares não podem ser feitos.",
+              "Sem dados de acionista, capacidade de aporte, relação com o BCB ou incidentes operacionais; não se estima probabilidade de resolução.",
+              "Pares têm cobertura de proximidade de 70%, sem perfil prudencial; porte 2,5 a 5× o do Rural, comparação indicativa.",
+              "REF 2013-03 é sistêmico (sem necessidade extra de capital até 2019) e não descreve o Rural; Selic 8,0%→8,5% em 2013-07-11 encarece captação, efeito não quantificável."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Priorizar capital: apurar o índice de Basileia atual e abrir interlocução antecipada com acionistas e BCB sobre aporte contratado e redução de ativos ponderados, com prazo, valor e responsável definidos.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Atua sobre a folga de -2,74 p.p. (2013-03); venda de ativos contrai carteira e receita. Aporte só conta se contratado; capacidade dos acionistas não consta do pacote.",
+                "red_lines": [
+                  "Não distribuir resultado, dividendos ou JCP com déficit de capital",
+                  "Não ocultar ou atrasar ao BCB o índice atualizado",
+                  "Não incluir no plano aporte não contratado",
+                  "Não vender ativos com perda que aprofunde o déficit"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Painel diário de liquidez (saques, vencimentos, concentração de depositantes, colateral, linhas) e teste de estresse de saque a 30/60/90 dias, com gatilhos e plano de contingência aprovados pelo conselho.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Cobre a lacuna de LCR/NSFR que o dado público não preenche; efeito sobre capital é indireto.",
+                "red_lines": [
+                  "Não decidir liquidez só com dados públicos trimestrais defasados",
+                  "Não esgotar colateral sem reserva de contingência",
+                  "Não adiar comunicação ao BCB diante de saída relevante de captação",
+                  "Não favorecer partes relacionadas ou grandes depositantes"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Preparar plano de resolução e comunicação: cenários de intervenção/RAET, protocolo de incidentes e mensagem única a depositantes e contrapartes, ativada só com fatos confirmados.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Protege a base de captação e a governança; não gera capital.",
+                "red_lines": [
+                  "Não fazer declarações sobre solvência que os números não sustentem",
+                  "Não divulgar seletivamente a contrapartes ou imprensa",
+                  "Não tratar a preparação como previsão de resolução"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-fundamentals-ep-rural",
+                "source": "BCB IF.data",
+                "as_of": "2013-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-fibra",
+                "source": "BCB IF.data",
+                "as_of": "2013-03"
+              },
+              {
+                "pack_fact_id": "f-proximity-fibra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2013-08-01"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-mercantil",
+                "source": "BCB IF.data",
+                "as_of": "2013-03"
+              },
+              {
+                "pack_fact_id": "f-proximity-mercantil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2013-08-01"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-pan",
+                "source": "BCB IF.data",
+                "as_of": "2013-03"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-pan",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2013-08-01"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-abc-brasil",
+                "source": "BCB IF.data",
+                "as_of": "2013-03"
+              },
+              {
+                "pack_fact_id": "f-proximity-abc-brasil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2013-08-01"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-daycoval",
+                "source": "BCB IF.data",
+                "as_of": "2013-03"
+              },
+              {
+                "pack_fact_id": "f-proximity-daycoval",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2013-08-01"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2013-08-01"
+              },
+              {
+                "pack_fact_id": "f-sector-event-ref-2013-03",
+                "source": "BCB Relatório de Estabilidade Financeira",
+                "as_of": "2013-03-31"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cpo": {
+          "officer": "cpo",
+          "phase": "quantify",
+          "run_id": "dry-fail-rural-2013-20261125T0453Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cpo",
+            "diagnosis": "Lente de produto/cobertura: com IF.data de 2013-03 (~4 meses de defasagem até 2013-08-01), o Banco Rural tem folga de Basileia -2,74 p.p., ROE -83,0%, ROA -6,08%, ativo R$4,18 bi, carteira_share 0,12%. A preocupação primária é solvência; liquidez em 90 dias não é mensurável, pois o pacote não traz caixa, vencimentos nem depósitos (crédito/captações 86,77% é só estrutura). O Rural é o único com folga negativa; Fibra (proximidade 0,76) tem +2,94 p.p. e ROE -9,1%. Ponto cego de cobertura: não há taxas, reclamações nem reputação do Rural no pacote, então a evidência pedida não pode ser anexada nem para sustentar nem para contrariar as opções. Selic 8,0%→8,5% (2013-07-11) encarece captação.",
+            "constraints": [
+              "Fundamentos de 2013-03 (BCB IF.data); nada de abril a agosto/2013 sobre capital, caixa ou resgates.",
+              "Lacuna de cobertura: o pacote não traz taxas, reclamações (ex.: Procon/BCB), reputação nem curadoria do Rural; a quantificação pedida dessa evidência não é possível.",
+              "Sem liquidez, vencimentos, depósitos, perfil prudencial ou pressão competitiva (proximidade com cobertura de 70%); não se afirma risco de corrida nem de intervenção.",
+              "Pares são 2,5× a 5× maiores que o Rural (Fibra 0,76; Mercantil 0,73; Daycoval 0,73): comparação só indicativa.",
+              "REF 2013-03 é sistêmico (sem necessidade extra de capital até 2019) e não descreve o Rural individualmente."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Recomposição de capital com cronograma, valor e fonte do aporte, comunicada ao BCB, para eliminar a folga de -2,74 p.p. (2013-03); inclui apurar o índice atual internamente.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Fecha o déficit de capital se o aporte for concreto; valor em R$ não estimável com o pacote. Redução de ativos ponderados contrai a carteira (share 0,12%).",
+                "red_lines": [
+                  "Não operar abaixo do mínimo sem plano formal ao BCB",
+                  "Não distribuir resultado enquanto houver déficit de capital",
+                  "Não contar com aporte não contratado",
+                  "Não divulgar número de capital que o pacote não sustente"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Teste de estresse de saque 30/60/90 dias e painel diário de captação, com gatilhos e plano de contingência aprovados pelo conselho, para cobrir o ponto cego de liquidez.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Não altera o capital; reduz o risco de surpresa na saída de captação, sob Selic de 8,5%.",
+                "red_lines": [
+                  "Não decidir liquidez só com dados públicos defasados",
+                  "Não esgotar colateral sem reserva de contingência",
+                  "Não adiar comunicação ao BCB diante de saída relevante"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Monitorar reclamações, tarifas/taxas e reputação do Rural (fontes hoje fora do pacote) como indicador antecedente de confiança, e preparar comunicação coordenada ao plano de capital.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Protege a base de captação ao detectar cedo perda de confiança; não gera capital.",
+                "red_lines": [
+                  "Não fazer declarações sobre solvência que os números não sustentem",
+                  "Não divulgar seletivamente a clientes ou contrapartes",
+                  "Não tratar a ausência de dados de reputação como ausência de problema"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-fundamentals-ep-rural",
+                "source": "BCB IF.data",
+                "as_of": "2013-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-fibra",
+                "source": "BCB IF.data",
+                "as_of": "2013-03"
+              },
+              {
+                "pack_fact_id": "f-proximity-fibra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2013-08-01"
+              },
+              {
+                "pack_fact_id": "f-proximity-mercantil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2013-08-01"
+              },
+              {
+                "pack_fact_id": "f-proximity-daycoval",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2013-08-01"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2013-08-01"
+              },
+              {
+                "pack_fact_id": "f-sector-event-ref-2013-03",
+                "source": "BCB Relatório de Estabilidade Financeira",
+                "as_of": "2013-03-31"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cso": {
+          "officer": "cso",
+          "phase": "quantify",
+          "run_id": "dry-fail-rural-2013-20261125T0453Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cso",
+            "diagnosis": "Lente competitiva: o Banco Rural está isolado no pior quadrante do grupo. Em 2013-03 (IF.data): ROE -83,0%, ROA -6,08%, folga de Basileia -2,74 p.p., ativo R$4,18 bi, carteira_share 0,12%. Fibra (proximidade 0,76, par mais próximo) também perde (ROE -9,1%), mas tem folga +2,94 p.p.; Mercantil (0,73) +1,85; Daycoval (0,73) +9,11; ABC (0,74) +5,23. O problema é específico do Rural, não do setor (REF 2013-03 não vê necessidade extra de capital sistêmica). Para os 90 dias, solvência/capital é a preocupação primária; liquidez é risco derivado (confiança de depositantes, Selic 8,0%→8,5% em 2013-07-11) e não é mensurável com dados públicos. Ordem por encaixe: 1) capital, que protege a franquia; 2) contingência de liquidez, que protege a captação; 3) contenção de balanço, que cede participação e ainda tem risco de perda.",
+            "constraints": [
+              "Fundamentos de 2013-03; defasagem de ~4 meses até o feed de 2013-08-01. Nada público cobre abril–agosto nem os próximos 90 dias.",
+              "O pacote não traz liquidez, vencimentos, depósitos nem funding: não se afirma risco de corrida nem se o descarta. Crédito/captações de 86,77% é estrutura, não prova de descasamento.",
+              "Não há dados sobre acionistas, capacidade de aporte, plano de capital ou posição do BCB: não se afirma nem se descarta intervenção.",
+              "Pares com proximidade de 0,73 a 0,76 e cobertura de 70% (sem perfil prudencial); são 2,5 a 5× maiores, comparação apenas indicativa.",
+              "O REF 2013-03 é sistêmico e não descreve o Rural individualmente."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Plano de recomposição de capital com aporte comprovado dos controladores, retenção de resultados e interlocução antecipada com o BCB, com valor, prazo e responsável. Encaixe 1º: único caminho que elimina o déficit de -2,74 p.p. e preserva a franquia frente aos pares com folga positiva.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Fecha a folga de -2,74 p.p. (2013-03) se o aporte for concreto; capacidade dos acionistas não consta do pacote e o valor em R$ não é estimável.",
+                "red_lines": [
+                  "Não operar abaixo do mínimo sem plano formal ao BCB",
+                  "Não distribuir dividendos nem resultado com déficit de capital",
+                  "Não contar com aporte não contratado",
+                  "Não omitir ao BCB o índice atualizado"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Teste de estresse de saque (30/60/90 dias), painel diário de captação e plano de contingência com gatilhos aprovados pelo conselho. Encaixe 2º: protege a base de captação, canal pelo qual o capital fraco se converte em crise, e cobre a lacuna de dados públicos.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Não gera capital; reduz o risco de surpresa de captação sob Selic 8,5% e prejuízo recorrente. Magnitude não estimável com o pacote.",
+                "red_lines": [
+                  "Não decidir liquidez só com dados públicos defasados",
+                  "Não esgotar colateral sem reserva de contingência",
+                  "Não adiar comunicação ao BCB diante de saída relevante",
+                  "Não dar tratamento preferencial a partes relacionadas"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Conter novas concessões e reduzir ativos ponderados, com teto de perda e simulação prévia do efeito líquido no índice. Encaixe 3º: carteira já é 0,12% do sistema; encolher mais cede posição aos pares e pode aprofundar o prejuízo (ROA -6,08%).",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Reduz consumo de capital e gera caixa, mas corta receita e pode ampliar a perda; efeito líquido não estimável com o pacote.",
+                "red_lines": [
+                  "Não vender ativos com perda que aumente o déficit de capital",
+                  "Não vender carteira a partes relacionadas fora de condições de mercado",
+                  "Não restringir de forma disruptiva o acesso de depositantes",
+                  "Não cortar linhas essenciais sem plano de comunicação"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-fundamentals-ep-rural",
+                "source": "BCB IF.data",
+                "as_of": "2013-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-fibra",
+                "source": "BCB IF.data",
+                "as_of": "2013-03"
+              },
+              {
+                "pack_fact_id": "f-proximity-fibra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2013-08-01"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-mercantil",
+                "source": "BCB IF.data",
+                "as_of": "2013-03"
+              },
+              {
+                "pack_fact_id": "f-proximity-mercantil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2013-08-01"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-daycoval",
+                "source": "BCB IF.data",
+                "as_of": "2013-03"
+              },
+              {
+                "pack_fact_id": "f-proximity-daycoval",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2013-08-01"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-abc-brasil",
+                "source": "BCB IF.data",
+                "as_of": "2013-03"
+              },
+              {
+                "pack_fact_id": "f-proximity-abc-brasil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2013-08-01"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2013-08-01"
+              },
+              {
+                "pack_fact_id": "f-sector-event-ref-2013-03",
+                "source": "BCB Relatório de Estabilidade Financeira",
+                "as_of": "2013-03-31"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        }
+      },
+      "synthesize": {
+        "secretary": {
+          "status": "ok"
+        }
+      }
+    },
+    "synthesis": {
+      "summary": "Com dados públicos de IF.data de 2013-03 (defasagem de ~4 meses até o feed de 2013-08-01), a preocupação primária do conselho do Banco Rural é a solvência, não a liquidez. O Rural é o único do grupo com folga de Basileia negativa (-2,74 p.p.), com ROE -83,0%, ROA -6,08% e ativo de R$4,18 bi. O par mais próximo, Fibra, tem folga de +2,94 p.p., o que sugere problema específico do Rural, não do setor. A liquidez em 90 dias não é mensurável com o pacote (sem caixa, vencimentos, depósitos ou LCR). Capital abaixo do mínimo costuma acoplar os dois riscos via perda de confiança de depositantes, e a Selic em 8,5% encarece a captação. No horizonte de 90 dias, o risco mais provável é regulatório e de confiança. Este briefing é externo e não constitui decisão de capital ou preço.",
+      "options": [
+        {
+          "id": "opt-1",
+          "description": "Priorizar a recomposição de capital: apurar internamente o índice de Basileia atual e apresentar ao BCB um plano formal com valor, prazo, responsável e fonte do aporte (controladores), somado à retenção de resultados. Aporte não contratado não conta como mitigação. Reduções de ativos ponderados só entram com simulação prévia do efeito líquido no índice. Vendas ou cessões de carteira devem ocorrer a preços de mercado, com avaliação independente e sem partes relacionadas.",
+          "customer_impact": "medium",
+          "capital_liquidity_effect": "Atua sobre a folga de -2,74 p.p. (2013-03). Um aporte concreto fecha o déficit e fortalece o caixa. A capacidade dos acionistas e o valor em R$ não constam do pacote. Reduzir ativos ponderados contrai a carteira (0,12% do sistema) e a receita, e pode aprofundar o prejuízo se houver venda com perda.",
+          "citations": [
+            "f-fundamentals-ep-rural",
+            "f-fundamentals-fibra",
+            "f-proximity-fibra",
+            "f-sector-event-ref-2013-03"
+          ],
+          "derived_from": [
+            {
+              "officer": "cso",
+              "option": "opt-1"
+            },
+            {
+              "officer": "risk",
+              "option": "opt-1"
+            },
+            {
+              "officer": "cco",
+              "option": "opt-1"
+            },
+            {
+              "officer": "cpo",
+              "option": "opt-1"
+            },
+            {
+              "officer": "cro",
+              "option": "opt-1"
+            }
+          ],
+          "supported_by": [
+            "cso",
+            "risk",
+            "cco",
+            "cpo",
+            "cro"
+          ],
+          "contested_by": [
+            "risk",
+            "cco",
+            "cro"
+          ],
+          "competitor_signals": [
+            {
+              "entity": "fibra",
+              "proximity": 0.762
+            }
+          ]
+        },
+        {
+          "id": "opt-2",
+          "description": "Cobrir o ponto cego de liquidez: teste de estresse de saque a 30/60/90 dias, painel diário de captação (saques, vencimentos, concentração de depositantes, colateral e linhas), plano de contingência com gatilhos aprovados pelo conselho e tratamento igualitário de depositantes e credores. Comunicar o BCB sem demora diante de saída relevante de captação.",
+          "customer_impact": "low",
+          "capital_liquidity_effect": "Não altera o capital. Reduz o risco de ser surpreendido por fuga de captação, principal canal de agravamento para quem está abaixo do mínimo, sob Selic de 8,5%. Magnitude não estimável com o pacote.",
+          "citations": [
+            "f-fundamentals-ep-rural",
+            "f-macro-selic",
+            "f-sector-event-ref-2013-03"
+          ],
+          "derived_from": [
+            {
+              "officer": "cso",
+              "option": "opt-2"
+            },
+            {
+              "officer": "risk",
+              "option": "opt-2"
+            },
+            {
+              "officer": "cco",
+              "option": "opt-2"
+            },
+            {
+              "officer": "cpo",
+              "option": "opt-2"
+            },
+            {
+              "officer": "cro",
+              "option": "opt-3"
+            }
+          ],
+          "supported_by": [
+            "cso",
+            "risk",
+            "cco",
+            "cpo",
+            "cro"
+          ],
+          "contested_by": [
+            "risk",
+            "cco",
+            "cro"
+          ],
+          "competitor_signals": []
+        },
+        {
+          "id": "opt-3",
+          "description": "Preparar a contenção de balanço e a comunicação: conter novas concessões e reduzir ativos ponderados apenas com teto de perda e critérios de crédito documentados; preparar protocolo de incidentes e mensagem única a depositantes e contrapartes, ativada só com fatos confirmados, sem declarações sobre solvência que os números não sustentem. Incluir cenários de supervisão (plano de capital, RAET, intervenção) como preparação, não como previsão.",
+          "customer_impact": "high",
+          "capital_liquidity_effect": "Reduz o consumo de capital e gera caixa, mas corta receita e pode ampliar o prejuízo (ROA -6,08%) e ceder posição aos pares. Efeito líquido não estimável com o pacote. A comunicação protege a base de captação, mas não gera capital.",
+          "citations": [
+            "f-fundamentals-ep-rural",
+            "f-fundamentals-fibra",
+            "f-proximity-fibra",
+            "f-macro-selic"
+          ],
+          "derived_from": [
+            {
+              "officer": "cso",
+              "option": "opt-3"
+            },
+            {
+              "officer": "risk",
+              "option": "opt-3"
+            },
+            {
+              "officer": "cco",
+              "option": "opt-3"
+            },
+            {
+              "officer": "cpo",
+              "option": "opt-3"
+            },
+            {
+              "officer": "cro",
+              "option": "opt-2"
+            }
+          ],
+          "supported_by": [
+            "cso",
+            "risk",
+            "cco",
+            "cpo",
+            "cro"
+          ],
+          "contested_by": [
+            "risk",
+            "cco",
+            "cro"
+          ],
+          "competitor_signals": [
+            {
+              "entity": "fibra",
+              "proximity": 0.762
+            }
+          ]
+        }
+      ],
+      "residual_regulatory_risk": "Mesmo com as ações acima, permanece risco regulatório relevante: capital abaixo do mínimo com prejuízo recorrente (ROE -83,0%, ROA -6,08%) é o gatilho típico de plano de capital exigido, intervenção ou RAET, que pode ocorrer antes de qualquer corrida. Os dados públicos não permitem afirmar nem descartar a probabilidade ou o prazo de uma ação do BCB, pois o pacote não traz o índice de Basileia posterior a 2013-03, o resultado do 2º trimestre, a capacidade de aporte dos acionistas, provisões, inadimplência, composição do prejuízo, nem dados de sanções, reclamações ou reputação. Os pares têm cobertura de proximidade de 70%, sem perfil prudencial, e são de 2,5 a 5 vezes maiores, então a comparação é apenas indicativa.",
+      "monitoring_triggers": [
+        {
+          "text": "Índice de Basileia apurado internamente ou divulgado em IF.data seguinte permanecer abaixo do mínimo (folga negativa, ponto de partida de -2,74 p.p. em 2013-03) ou piorar, ou prejuízo recorrente (ROE -83,0%, ROA -6,08%) sem aporte contratado: escalar ao conselho e ao BCB.",
+          "citations": [
+            "f-fundamentals-ep-rural"
+          ]
+        },
+        {
+          "text": "Saída relevante de captação, concentração de saques ou encurtamento do prazo da captação nos painéis diários: acionar o plano de contingência e comunicar o BCB. O crédito/captações de 86,77% é estrutura, não prova de descasamento, e serve de referência para acompanhar mudanças.",
+          "citations": [
+            "f-fundamentals-ep-rural",
+            "f-sector-event-ref-2013-03"
+          ]
+        },
+        {
+          "text": "Nova elevação da Selic além de 8,5% (última decisão em 2013-07-11, de 8,0% para 8,5%): reavaliar o custo de captação e o teste de estresse de liquidez.",
+          "citations": [
+            "f-macro-selic"
+          ]
+        },
+        {
+          "text": "Deterioração relativa frente ao par mais próximo (Fibra, folga de +2,94 p.p. e ROE -9,1% em 2013-03) ou frente aos demais pares com folga positiva (Mercantil +1,85 p.p.): indica que o problema é específico do Rural e reforça a urgência do plano de capital.",
+          "citations": [
+            "f-fundamentals-fibra",
+            "f-proximity-fibra",
+            "f-fundamentals-mercantil",
+            "f-proximity-mercantil"
+          ]
+        }
+      ]
+    },
+    "dissents": [
+      {
+        "officer": "cro",
+        "challenged": [
+          "cpo",
+          "risk"
+        ],
+        "text": "Contestação a cpo e risk: ambos acertam que o sinal primário é solvência, mas a gravidade é maior do que 'risco relevante'. Em 2013-03 (BCB IF.data) o Rural tem headroom de Basileia -2,74 p.p., ROE -83,0%, ROA -6,08%, ativo R$4,18 bi. Com prejuízo dessa magnitude o capital tende a piorar a cada trimestre, e o déficit passa a ser lido como insolvência regulatória, não só alerta. A liquidez em 90 dias não é mensurável com o pacote (só crédito/captações 86,77%), mas capital abaixo do mínimo costuma ser gatilho de fuga de captação, então os dois riscos se acoplam. Selic 8,0%→8,5% (2013-07-11) encarece captação. Dados têm ~4 meses de defasagem; o 2º trimestre e julho são desconhecidos. Fibra (proximidade 0,76), o par mais próximo, tem headroom +2,94 p.p. e ROE -9,1%: o Rural está claramente pior que o grupo próximo.",
+        "red_lines": [
+          "Não operar abaixo do mínimo de Basileia sem plano formal ao BCB",
+          "Não distribuir dividendos ou remunerar capital com headroom negativo",
+          "Não divulgar número de capital que o pacote não sustente",
+          "Não tratar promessa de aporte sem prazo como solução",
+          "Não vender ativos com perda que aumente o déficit de capital",
+          "Não restringir de forma disruptiva o acesso de depositantes a recursos",
+          "Não cortar linhas essenciais sem plano de comunicação",
+          "Não decidir liquidez só com dados públicos trimestrais defasados",
+          "Não adiar comunicação ao BCB diante de saída de captação relevante",
+          "Não alongar ativos ilíquidos sem cobertura de captação"
+        ]
+      },
+      {
+        "officer": "cco",
+        "challenged": [
+          "cpo",
+          "risk"
+        ],
+        "text": "Contesto cpo e risk: ambos tratam solvência e liquidez, mas sem lente de conduta. Dados do Banco Rural (BCB IF.data, 2013-03): Basileia -2,74 p.p., ROE -83,0%, ROA -6,08%. A solvência preocupa; a liquidez em 90 dias não é afirmável. Linhas vermelhas de conduta que faltam nas opções deles: (1) cessão ou venda de carteira só em condições de mercado e sem partes relacionadas, nem para os controladores; (2) nenhum credor, depositante ou parte relacionada pode ter tratamento preferencial; (3) comunicação ao BCB tempestiva e consistente, sem divulgar números que o pacote não sustente; (4) registro formal das decisões do conselho. O pacote não traz sanções (BCB, CVM, CEIS/CNEP, listas internacionais), CADE, Procon, reputação nem curadoria. Não é possível afirmar ausência de achados de integridade. Pares (Fibra, proximidade 0,76; Mercantil, 0,73) estão menos fracos, então o problema parece específico do Rural.",
+        "red_lines": [
+          "Não vender ou ceder ativos a partes relacionadas ou controladores fora de condições de mercado",
+          "Não operar abaixo do mínimo de Basileia sem plano formal ao BCB",
+          "Não distribuir dividendos nem remunerar capital enquanto o déficit persistir",
+          "Não divulgar número de capital que o pacote não sustente",
+          "Não favorecer partes relacionadas ou grandes depositantes em resgates antecipados",
+          "Não adiar a comunicação ao BCB diante de saída relevante de captação",
+          "Não decidir liquidez apenas com dados públicos trimestrais defasados",
+          "Não vender carteira com perda que aprofunde o déficit de capital",
+          "Não cortar linhas essenciais sem plano de comunicação e tratamento equitativo aos clientes",
+          "Não restringir de forma disruptiva o acesso de depositantes a seus recursos"
+        ]
+      },
+      {
+        "officer": "risk",
+        "challenged": [
+          "cso"
+        ],
+        "text": "Contesto o cso: a ordem solvência→liquidez é razoável, mas está subespecificada. Em 2013-03 (IF.data, ~4 meses de defasagem) o Rural tem ROE -83,0%, ROA -6,08%, folga de Basileia -2,74 p.p. e lucro_share -0,59, em ativo de R$4,18 bi. É o pior do grupo: o par mais próximo, Fibra (proximidade 0,76, próximo), também tem prejuízo (ROE -9,1%), mas folga de +2,94 p.p. Capital negativo com prejuízo recorrente é o gatilho típico de ação do supervisor (plano de capital, intervenção, RAET), e isso pode ocorrer antes de qualquer corrida. Para o conselho, o risco dos 90 dias é mais regulatório/de confiança do que de caixa, mas o pacote não mede liquidez. Selic 8,5% (2013-07-11) encarece captação. Não há dado público que sustente probabilidade de resolução.",
+        "red_lines": [
+          "Não distribuir resultado nem pagar dividendos/JCP com déficit de capital",
+          "Não ocultar ou atrasar ao BCB o índice atualizado",
+          "Não depender de aporte não contratado no plano",
+          "Não manter plano sem prazo e responsável",
+          "Não decidir sobre liquidez com base apenas em dados públicos defasados",
+          "Não esgotar colateral sem reserva de contingência",
+          "Não conceder crédito a partes relacionadas ou ampliar exposição de contraparte sem aval",
+          "Não fazer declarações sobre solvência que os números não sustentem",
+          "Não divulgar seletivamente a contrapartes ou imprensa",
+          "Não tratar preparação como previsão de resolução"
+        ]
+      }
+    ],
+    "dropped": [],
+    "gaps": [],
+    "elapsed_s": 221.5
+  },
+  "focal": "ep-rural",
+  "subject": "ep-rural",
+  "proximity": [
+    {
+      "peer": "fibra",
+      "label": "Fibra",
+      "score": 0.762,
+      "coverage": 0.7,
+      "low_coverage": false,
+      "components": {
+        "size": 0.804,
+        "market": 1.0,
+        "business_model": 0.461
+      },
+      "missing": [
+        "prudential",
+        "pressure"
+      ]
+    },
+    {
+      "peer": "abc_brasil",
+      "label": "Banco ABC Brasil",
+      "score": 0.742,
+      "coverage": 0.7,
+      "low_coverage": false,
+      "components": {
+        "size": 0.738,
+        "market": 1.0,
+        "business_model": 0.491
+      },
+      "missing": [
+        "prudential",
+        "pressure"
+      ]
+    },
+    {
+      "peer": "mercantil",
+      "label": "Mercantil",
+      "score": 0.734,
+      "coverage": 0.7,
+      "low_coverage": false,
+      "components": {
+        "size": 0.744,
+        "market": 1.0,
+        "business_model": 0.454
+      },
+      "missing": [
+        "prudential",
+        "pressure"
+      ]
+    },
+    {
+      "peer": "daycoval",
+      "label": "Banco Daycoval",
+      "score": 0.729,
+      "coverage": 0.7,
+      "low_coverage": false,
+      "components": {
+        "size": 0.756,
+        "market": 1.0,
+        "business_model": 0.419
+      },
+      "missing": [
+        "prudential",
+        "pressure"
+      ]
+    },
+    {
+      "peer": "banco_pan",
+      "label": "Banco PAN",
+      "score": 0.683,
+      "coverage": 0.7,
+      "low_coverage": false,
+      "components": {
+        "size": 0.649,
+        "market": 1.0,
+        "business_model": 0.417
+      },
+      "missing": [
+        "prudential",
+        "pressure"
+      ]
+    }
+  ]
+}

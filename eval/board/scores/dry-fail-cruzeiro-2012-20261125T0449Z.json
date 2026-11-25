@@ -1,0 +1,109 @@
+{
+ "run_id": "dry-fail-cruzeiro-2012-20261125T0449Z",
+ "scenario": "fail-cruzeiro-2012",
+ "model": "sonnet",
+ "provider": "claude-cli (subscription)",
+ "status": "complete",
+ "pack_sha256": "c91028bb0b9084309b912fb1ca01d3e55b13d72236e0abb2bee7637d87bf7394",
+ "pack_matches": true,
+ "gaps": [],
+ "citations": {
+  "citations": 155,
+  "invalid": [],
+  "citation_validity": 1.0,
+  "figures": 23,
+  "ungrounded_figures": [],
+  "numbers_grounded": 1.0,
+  "dropped_by_guard": 0
+ },
+ "regulatory": {
+  "covered": [
+   "capital",
+   "liquidity",
+   "credit",
+   "conduct",
+   "disclosure",
+   "supervisor"
+  ],
+  "missing": [],
+  "n": 6,
+  "of": 6,
+  "coverage": 1.0
+ },
+ "dissent": {
+  "challenges": 3,
+  "problems": [],
+  "contested_options": 3,
+  "dissent_preservation": 1.0
+ },
+ "options": {
+  "options": 3,
+  "triggers": 5,
+  "option_traced": 1.0,
+  "with_capital_liquidity_effect": 3,
+  "with_impact_band": 3,
+  "max_jaccard": 0.1,
+  "impact_bands": [
+   "low",
+   "medium"
+  ]
+ },
+ "cost": {
+  "calls": 13,
+  "tokens_in": 212568,
+  "tokens_out": 28877,
+  "tokens": 241445,
+  "cache_read": 1158040,
+  "token_cap": 400000,
+  "tokens_by_phase": {
+   "diagnosis": 54225,
+   "challenge": 36826,
+   "quantify": 117706,
+   "synthesize": 32688
+  }
+ },
+ "latency": {
+  "elapsed_s": 228.8,
+  "slowest_call_s": 24.2,
+  "mean_call_s": 17.6,
+  "call_errors": [],
+  "timeouts": 0
+ },
+ "episode": {
+  "rubric": {
+   "covered": [
+    "capital_shortfall"
+   ],
+   "missing": [
+    "losses",
+    "supervisory_action",
+    "recapitalization"
+   ],
+   "n": 1,
+   "of": 4,
+   "coverage": 0.25
+  },
+  "signal": {
+   "basis": [
+    "market"
+   ],
+   "caught": true,
+   "matched": {
+    "market": [
+     "ação",
+     "queda",
+     "mercado",
+     "preço"
+    ]
+   }
+  }
+ },
+ "gate": {
+  "version": 1,
+  "passed": true,
+  "fails": [],
+  "warnings": [
+   "rubric 1/4 (missing losses, supervisory_action, recapitalization)"
+  ]
+ }
+}

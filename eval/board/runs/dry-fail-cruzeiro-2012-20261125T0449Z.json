@@ -1,0 +1,1752 @@
+{
+  "model": "sonnet",
+  "provider": "claude-cli (subscription)",
+  "scenario": "fail-cruzeiro-2012",
+  "pack_sha256": "c91028bb0b9084309b912fb1ca01d3e55b13d72236e0abb2bee7637d87bf7394",
+  "usage": {
+    "calls": 13,
+    "tokens_in": 212568,
+    "tokens_out": 28877,
+    "cache_read": 1158040,
+    "token_cap": 400000
+  },
+  "calls": [
+    {
+      "officer": "cso",
+      "phase": "diagnosis",
+      "s": 17.6,
+      "input_tokens": 6780,
+      "cache_read": 96507,
+      "output_tokens": 2129,
+      "is_error": false
+    },
+    {
+      "officer": "risk",
+      "phase": "diagnosis",
+      "s": 17.8,
+      "input_tokens": 6780,
+      "cache_read": 96535,
+      "output_tokens": 2061,
+      "is_error": false
+    },
+    {
+      "officer": "cco",
+      "phase": "diagnosis",
+      "s": 19.5,
+      "input_tokens": 6780,
+      "cache_read": 96513,
+      "output_tokens": 2267,
+      "is_error": false
+    },
+    {
+      "officer": "cpo",
+      "phase": "diagnosis",
+      "s": 18.4,
+      "input_tokens": 6781,
+      "cache_read": 96495,
+      "output_tokens": 2168,
+      "is_error": false
+    },
+    {
+      "officer": "cpo",
+      "phase": "diagnosis",
+      "s": 15.2,
+      "input_tokens": 6853,
+      "cache_read": 96495,
+      "output_tokens": 1834,
+      "is_error": false
+    },
+    {
+      "officer": "cro",
+      "phase": "diagnosis",
+      "s": 24.2,
+      "input_tokens": 6780,
+      "cache_read": 96487,
+      "output_tokens": 3012,
+      "is_error": false
+    },
+    {
+      "officer": "cro",
+      "phase": "challenge",
+      "s": 16.4,
+      "input_tokens": 10852,
+      "cache_read": 96487,
+      "output_tokens": 1979,
+      "is_error": false
+    },
+    {
+      "officer": "cco",
+      "phase": "challenge",
+      "s": 15.5,
+      "input_tokens": 10852,
+      "cache_read": 96513,
+      "output_tokens": 1748,
+      "is_error": false
+    },
+    {
+      "officer": "risk",
+      "phase": "challenge",
+      "s": 18.9,
+      "input_tokens": 9029,
+      "cache_read": 96535,
+      "output_tokens": 2366,
+      "is_error": false
+    },
+    {
+      "officer": "risk",
+      "phase": "quantify",
+      "s": 16.7,
+      "input_tokens": 23418,
+      "cache_read": 96535,
+      "output_tokens": 2413,
+      "is_error": false
+    },
+    {
+      "officer": "cpo",
+      "phase": "quantify",
+      "s": 15.4,
+      "input_tokens": 23387,
+      "cache_read": 96495,
+      "output_tokens": 2220,
+      "is_error": false
+    },
+    {
+      "officer": "cso",
+      "phase": "quantify",
+      "s": 15.6,
+      "input_tokens": 64084,
+      "cache_read": 0,
+      "output_tokens": 2184,
+      "is_error": false
+    },
+    {
+      "officer": "secretary",
+      "phase": "synthesize",
+      "s": 17.7,
+      "input_tokens": 30192,
+      "cache_read": 96443,
+      "output_tokens": 2496,
+      "is_error": false
+    }
+  ],
+  "result": {
+    "run_id": "dry-fail-cruzeiro-2012-20261125T0449Z",
+    "shared_context_id": "c91028bb0b9084309b912fb1ca01d3e55b13d72236e0abb2bee7637d87bf7394",
+    "task": "Com os dados públicos disponíveis até hoje, o conselho do Banco Cruzeiro do Sul deve se preocupar com a solvência ou a liquidez da instituição nos próximos 90 dias? Que sinais de alerta existem, que ações preventivas considerar e o que os dados públicos não permitem afirmar?",
+    "status": "complete",
+    "phases": {
+      "diagnosis": {
+        "cso": {
+          "officer": "cso",
+          "phase": "diagnosis",
+          "run_id": "dry-fail-cruzeiro-2012-20261125T0449Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cso",
+            "diagnosis": "Com dados de 2011-12 (defasados) e mercado até 2012-06-02, há sinais de alerta de confiança/liquidez, mais que de solvência contábil imediata. Solvência: folga de Basileia de 4,34 p.p. (acima de Mercantil 2,08 e Fibra 3,07; abaixo de Daycoval 5,98), mas ROE 4,6% e ROA 0,48% são baixos. Liquidez/mercado: CZRS4 caiu -43,7% em 3/4 a 2/6/2012 vs mediana do setor -14,97%, pior que todos os pares (PAN -34,31%). Crédito/captações de 18,15% contra 73–98% nos pares é diferença estrutural que o pacote não explica. Conclusão: atenção elevada e monitoramento semanal; não há evidência pública de insolvência ou corrida em 90 dias.",
+            "constraints": [
+              "Fundamentos são de 2011-12; nada cobre jan–mai/2012, então a folga de 4,34 p.p. pode já ter mudado.",
+              "O pacote não traz dados de liquidez (perfil de captação, vencimentos, caixa, depósitos, linhas interbancárias); não dá para afirmar que há ou não risco de liquidez.",
+              "A queda de -43,7% é sinal de mercado, sem causa identificada no pacote; preços sem ajuste por proventos.",
+              "Pares citados têm proximidade 0,72–0,83 (cobertura 70%, sem perfil prudencial nem pressão competitiva) e modelo de negócio distante (0,05–0,44); pesam menos como referência.",
+              "Selic 8,5% (corte de 9,0% em 2012-05-31) e o REF 2012-03 indicam sistema robusto em estresse, mas é visão agregada e não sobre a focal."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Ativar monitoramento de liquidez e confiança: painel semanal de captação, caixa e vencimentos, mais gatilhos de alerta ao conselho. Com dados internos, confirmar o que o pacote não mostra.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Sem efeito direto em capital; melhora a antecipação de pressão de liquidez. Custo operacional baixo.",
+                "red_lines": [
+                  "Não divulgar projeções sem dados internos validados",
+                  "Não sinalizar fragilidade ao mercado sem decisão do conselho"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Preparar plano de contingência de liquidez e capital (fontes de funding, cenários de estresse com saque de captação, opções de reforço de capital) para acionar se os gatilhos forem atingidos. Não é decisão de capital nem de preço.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Reduz tempo de resposta; a eventual ativação preservaria folga de Basileia (4,34 p.p. em 2011-12) e caixa, com custo de carregamento a avaliar.",
+                "red_lines": [
+                  "Não acionar sem gatilho aprovado pelo conselho",
+                  "Manter conformidade com mínimos regulatórios de Basileia"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Comunicação proativa a investidores e contrapartes sobre fundamentos e a queda da ação, e diálogo preventivo com o regulador, apoiados em dados internos atualizados.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Pode estabilizar confiança e captação; risco de amplificar percepção se mal calibrada. Efeito não quantificável com dados públicos.",
+                "red_lines": [
+                  "Não fazer afirmações não sustentadas por dados internos auditáveis",
+                  "Não tratar seletivamente informação relevante"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-fundamentals-ep-cruzeiro-do-sul",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-ep-cruzeiro-do-sul-2012-06-02",
+                "source": "Onça market:b3",
+                "as_of": "2012-06-02"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-banco-pan-2012-06-02",
+                "source": "Onça market:b3",
+                "as_of": "2012-06-02"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-pan",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-mercantil",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-proximity-mercantil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-fibra",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-proximity-fibra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-daycoval",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-proximity-daycoval",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-pan",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-abc-brasil",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-proximity-abc-brasil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-sector-event-ref-2012-03",
+                "source": "BCB Relatório de Estabilidade Financeira",
+                "as_of": "2012-03-31"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "risk": {
+          "officer": "risk",
+          "phase": "diagnosis",
+          "run_id": "dry-fail-cruzeiro-2012-20261125T0449Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "risk",
+            "diagnosis": "Dados públicos (IF.data 2011-12, defasados ~5 meses; feed 2012-06-03) não permitem afirmar insolvência ou iliquidez em 90 dias, mas mostram fragilidade composta. Basileia: folga de 4,34 pp (acima de PAN, -0,32, e Fibra, 3,07; abaixo de ABC 5,05 e Daycoval 5,98). Rentabilidade fraca: ROE 4,6%, ROA 0,48%, abaixo dos pares próximos ABC (7,9%) e Daycoval (9,5%). Sinal mais forte e mais recente: a ação CZRS4 caiu 43,7% em 03/04–02/06/2012 contra mediana do setor de -14,97%, sinalizando perda de confiança do mercado, o que é risco de liquidez/captação, não prova de problema. O REF 2012-03 diz que o sistema é robusto, mas é avaliação agregada, não da focal. Para o conselho: liquidez/confiança é a preocupação prioritária.",
+            "constraints": [
+              "Sem dados públicos de LCR, composição de captação, vencimentos, provisões, inadimplência ou carteira por qualidade: liquidez e qualidade de ativos não podem ser avaliadas.",
+              "Fundamentos são de 2011-12; nada cobre 2012 T1 em diante, e a queda de 43,7% da ação não é explicada pelo pacote.",
+              "Crédito/captações de 18,15% (vs 73–98% dos pares) é indicador isolado e não interpretável com segurança sem a metodologia; não permite concluir sobre a estrutura de funding.",
+              "Pares (proximidade 0,72–0,83; sem dados de perfil prudencial) servem de referência limitada: PAN (0,81) tem Basileia negativa e queda de 34,3%, Fibra (0,72) tem ROE -9,6%, o que indica estresse no segmento.",
+              "O pacote não contém informação sobre ação de supervisão do BCB, rating, incidente operacional ou recuperação judicial; não afirmar ausência ou presença."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Ativar monitoramento reforçado de liquidez: projeção diária de caixa a 90 dias, teste de saída de captação e revisão da carteira de ativos líquidos, com reporte semanal ao conselho.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Sem efeito direto em capital; melhora a visibilidade de liquidez e permite agir antes de pressão de resgates.",
+                "red_lines": [
+                  "Não divulgar projeções internas de liquidez sem alinhamento com o BCB e a comunicação",
+                  "Não tratar a queda da ação como evidência de problema de solvência"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Reforçar a folga de Basileia (4,34 pp) por retenção de lucros, contenção de crescimento da carteira ou aporte de capital dos controladores, com plano de contingência de capital.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Aumenta a folga de capital e a credibilidade; reduz a oferta de crédito e pode pressionar a rentabilidade (ROE 4,6%).",
+                "red_lines": [
+                  "Não executar redução de ativos com perda relevante sem avaliar efeito em liquidez e clientes",
+                  "Não comprometer o cumprimento mínimo regulatório"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Diálogo preventivo e reservado com o BCB e agências de rating, apresentando o plano de liquidez e capital, e comunicação ao mercado sobre a movimentação das ações.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Sem efeito direto; reduz risco de leitura negativa, e de corrida de captação por falta de informação.",
+                "red_lines": [
+                  "Não fazer comunicação seletiva a investidores ou credores",
+                  "Não afirmar solidez sem dados internos que a sustentem"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-fundamentals-ep-cruzeiro-do-sul",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-ep-cruzeiro-do-sul-2012-06-02",
+                "source": "Onça market:b3",
+                "as_of": "2012-06-02"
+              },
+              {
+                "pack_fact_id": "f-sector-event-ref-2012-03",
+                "source": "BCB Relatório de Estabilidade Financeira",
+                "as_of": "2012-03-31"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-abc-brasil",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-proximity-abc-brasil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-daycoval",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-proximity-daycoval",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-pan",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-banco-pan-2012-06-02",
+                "source": "Onça market:b3",
+                "as_of": "2012-06-02"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-pan",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-fibra",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-proximity-fibra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cco": {
+          "officer": "cco",
+          "phase": "diagnosis",
+          "run_id": "dry-fail-cruzeiro-2012-20261125T0449Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cco",
+            "diagnosis": "Os dados públicos não mostram insolvência, mas há sinal de mercado forte. CZRS4 caiu 43,7% de 03/04 a 02/06/2012, contra mediana do setor de -14,97% (f-narrative-b3-ep-cruzeiro-do-sul). Pelo IF.data de 2011-12, o ROE é 4,6%, o ROA 0,48% e a folga de Basileia 4,34 p.p. (f-fundamentals-ep-cruzeiro-do-sul). A folga é positiva, mas defasada em cerca de 5 meses. A queda de preço, bem acima da do setor, sugere que o mercado vê um risco não explicado por esses indicadores, e o pacote não identifica a causa. O pacote não traz dados de liquidez, captação, vencimentos, sanções ou processos de conduta, então não dá para afirmar nada sobre liquidez em 90 dias. O REF 2012-03 indica sistema robusto (f-sector-event-ref-2012-03), o que não vale como garantia para a focal.",
+            "constraints": [
+              "Os fundamentos são de 2011-12 e o feed é de 2012-06-03; nada do pacote mostra a situação de abril a junho.",
+              "O pacote não tem indicadores de liquidez (caixa, vencimentos de captação, concentração de depósitos), nem sanções, CEIS/CNEP, CADE ou processos de conduta; ausência de dado não é ausência de problema.",
+              "O índice de crédito sobre captações da focal é 18,15%, contra 73% a 98% dos pares (f-fundamentals-ep-cruzeiro-do-sul). O pacote não explica a diferença; não a interpreto como folga nem como fragilidade.",
+              "Concorrentes servem só como referência. Banco PAN (proximidade 0,81) teve folga de Basileia de -0,32 p.p. e queda de 34,31% na ação (f-fundamentals-banco-pan, f-narrative-b3-banco-pan-2012-06-02). A queda coincide com a da focal, mas isso não prova contágio.",
+              "O pacote não mostra a causa da queda da ação da focal; é possível que seja um fator específico da instituição, mas isso não está sustentado."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Teste de estresse interno e de liquidez a 90 dias, com dados atuais (vencimentos, concentração de captação, margem de capital), e revisão semanal pelo conselho até a queda da ação ser explicada.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Sem efeito direto sobre capital ou liquidez; melhora a visibilidade sobre a folga de 4,34 p.p. (2011-12) e sobre eventuais descasamentos.",
+                "red_lines": [
+                  "Não divulgar números não auditados como se fossem atuais.",
+                  "Não tratar a folga de 2011-12 como a posição de hoje."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Preparar plano de contingência de capital e liquidez (fontes de captação alternativas, possível reforço de capital), acionável se os indicadores internos se deteriorarem.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Preserva a margem sobre o mínimo regulatório; um aumento de capital teria custo de diluição com a ação já em queda de 43,7%.",
+                "red_lines": [
+                  "Não aceitar condições que comprometam o cumprimento do mínimo regulatório.",
+                  "Não adiar a comunicação ao BCB se houver deterioração material."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Comunicação proativa e consistente a investidores, contrapartes e ao regulador sobre a posição de capital e a origem da queda, após verificação interna.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Pode reduzir pressão sobre a captação se houver boato; sem efeito direto sobre o índice de capital.",
+                "red_lines": [
+                  "Não fazer afirmações sem lastro em dados verificados internamente.",
+                  "Não divulgar informação seletiva a alguns agentes."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-fundamentals-ep-cruzeiro-do-sul",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-ep-cruzeiro-do-sul-2012-06-02",
+                "source": "Onça market:b3",
+                "as_of": "2012-06-02"
+              },
+              {
+                "pack_fact_id": "f-sector-event-ref-2012-03",
+                "source": "BCB Relatório de Estabilidade Financeira",
+                "as_of": "2012-03-31"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-pan",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-banco-pan-2012-06-02",
+                "source": "Onça market:b3",
+                "as_of": "2012-06-02"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-pan",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cpo": {
+          "officer": "cpo",
+          "phase": "diagnosis",
+          "run_id": "dry-fail-cruzeiro-2012-20261125T0449Z",
+          "status": "ok",
+          "attempts": 2,
+          "position": {
+            "officer": "cpo",
+            "diagnosis": "Dados públicos até 2011-12 (IF.data) e mercado até 2012-06-02 não permitem concluir insolvência, mas há sinais de alerta de liquidez/confiança. Cruzeiro do Sul: ROE 4,6%, ROA 0,48%, folga de Basileia 4,34 p.p., ativo R$ 11,48 bi (2011-12). Ação CZRS4 caiu 43,7% em 2012-04-03 a 06-02 vs mediana do setor -14,97%: o pior desempenho do grupo, indicando desconfiança de mercado. Crédito/captações de 18,15% (vs 73-98% dos pares) é atípico e o pacote não explica o motivo. Pares próximos: Banco PAN (proximidade 0,81) com Basileia -0,32 p.p. e ação -34,31%; Fibra (0,72) com ROE -9,6%. Sem dados de liquidez, vencimentos de captação ou perfil prudencial, o pacote não sustenta afirmação sobre os próximos 90 dias.",
+            "constraints": [
+              "Fundamentos são de 2011-12, defasados ~6 meses frente ao feed de 2012-06-03.",
+              "Sem dados de perfil prudencial e pressão competitiva (cobertura de proximidade 70%).",
+              "Nenhum dado de caixa, perfil de vencimentos, concentração de depósitos ou fundings no pacote.",
+              "Queda de ação é sinal de mercado, não prova de problema de solvência ou liquidez.",
+              "Crédito/captações de 18,15% não é interpretável sem composição de ativos e passivos."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Convocar revisão interna de liquidez a 90 dias: perfil de vencimentos, concentração de captação, linhas contingentes e testes de estresse, com resultados reportados ao conselho.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Sem efeito imediato; reduz o ponto cego sobre liquidez e dá base para decisões.",
+                "red_lines": [
+                  "Não divulgar conclusões sobre solvência sem dados internos validados.",
+                  "Não tomar decisão de capital com base só em dados públicos defasados."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Preparar plano de contingência de capital e liquidez (gatilhos, acesso a linhas de liquidez, comunicação a supervisor e mercado) para acionar se sinais de mercado se agravarem.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Preserva a folga de Basileia (4,34 p.p. em 2011-12) e a capacidade de resposta; custo de carregamento eventual.",
+                "red_lines": [
+                  "Não acionar o plano sem gatilhos definidos pelo conselho.",
+                  "Não comprometer a folga de Basileia abaixo do patamar interno aprovado."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-fundamentals-ep-cruzeiro-do-sul",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-ep-cruzeiro-do-sul-2012-06-02",
+                "source": "Onça market:b3",
+                "as_of": "2012-06-02"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-pan",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-pan",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-banco-pan-2012-06-02",
+                "source": "Onça market:b3",
+                "as_of": "2012-06-02"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-fibra",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-proximity-fibra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-abc-brasil",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-proximity-abc-brasil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-daycoval",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-proximity-daycoval",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-mercantil",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-proximity-mercantil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-sector-event-ref-2012-03",
+                "source": "BCB Relatório de Estabilidade Financeira",
+                "as_of": "2012-03-31"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2012-06-03"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cro": {
+          "officer": "cro",
+          "phase": "diagnosis",
+          "run_id": "dry-fail-cruzeiro-2012-20261125T0449Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cro",
+            "diagnosis": "Solvência: o último dado público (IF.data, 2011-12) mostra folga de Basileia de 4,34 pp, ROE 4,6% e ROA 0,48%. Não há sinal de descumprimento, mas o lucro é fino. A folga fica abaixo da de ABC (5,05) e Daycoval (5,98) e acima da de Mercantil (2,08) e Fibra (3,07). O sinal de alerta é de mercado: CZRS4 caiu 43,7% entre 2012-04-03 e 2012-06-02, contra mediana do setor de -14,97%. Pan (proximidade 0,81), com -34,31%, também caiu muito, mas tem folga negativa (-0,32 pp), o que não é o caso do Cruzeiro do Sul. O REF 2012-03 diz que o sistema é robusto em Basileia III, o que não isenta uma instituição específica. Liquidez: o pacote não traz dados de caixa, captação por prazo ou concentração de depositantes, então não dá para afirmar nada sobre os próximos 90 dias. Os números têm cerca de cinco meses de defasagem. Conclusão: atenção reforçada à liquidez e à confiança do mercado, sem evidência pública de problema de solvência.",
+            "constraints": [
+              "Os fundamentos são de 2011-12 e não captam o que ocorreu em 2012 até hoje; a queda de 43,7% da ação é posterior.",
+              "O pacote não explica a causa da queda da ação; não é possível atribuí-la a solvência, liquidez ou outro fator.",
+              "Crédito/captações de 18,15% é muito inferior ao dos pares (73% a 98%). O pacote não permite interpretar o que isso significa para o perfil de funding.",
+              "Sem dados de liquidez (caixa, vencimentos, concentração de depositantes), perfil prudencial ou pressão competitiva (cobertura de proximidade de 70%).",
+              "Pares de maior proximidade (Mercantil 0,83, Pan 0,81) são parâmetros imperfeitos: o componente de modelo de negócio é só 0,44 e 0,39."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Acionar já o monitoramento interno de liquidez em 90 dias, com cenários de estresse de captação e de perda de confiança. Obter dados atualizados de capital e de liquidez para substituir o 2011-12 defasado.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Sem efeito direto em capital ou liquidez; fecha a lacuna de informação e mostra quanto da folga de 4,34 pp e do caixa resiste ao estresse.",
+                "red_lines": [
+                  "Não afirmar solvência ou liquidez a terceiros com base apenas em dados de 2011-12.",
+                  "Não adiar a atualização dos dados até a próxima divulgação pública."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Preparar plano de contingência de liquidez e de capital: fontes alternativas de funding, venda de ativos e preservação da folga de Basileia, inclusive com contenção de distribuição de lucros, a ser acionado por gatilhos definidos.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Preserva a folga de 4,34 pp e amplia a capacidade de resposta; a contenção de dividendos retém capital, com custo reputacional e de acionistas.",
+                "red_lines": [
+                  "Não deixar a folga de Basileia cair para perto do nível de Pan (-0,32 pp).",
+                  "Não adotar vendas de ativos forçadas sem aprovação do conselho."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Definir comunicação preventiva a investidores, depositantes e ao regulador sobre a posição de capital e liquidez, apoiada em dados verificados e atualizados, após a validação interna da opção 1.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Pode conter a perda de confiança que acompanha a queda da ação; sem efeito direto em capital, e o risco de agravar a percepção cresce se os dados não sustentarem a mensagem.",
+                "red_lines": [
+                  "Não comunicar números que não tenham sido validados internamente.",
+                  "Não comunicar antes de concluir a opção 1."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-fundamentals-ep-cruzeiro-do-sul",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-ep-cruzeiro-do-sul-2012-06-02",
+                "source": "Onça market:b3",
+                "as_of": "2012-06-02"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-pan",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-pan",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-banco-pan-2012-06-02",
+                "source": "Onça market:b3",
+                "as_of": "2012-06-02"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-mercantil",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-proximity-mercantil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-fibra",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-proximity-fibra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-abc-brasil",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-proximity-abc-brasil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-daycoval",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-proximity-daycoval",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-sector-event-ref-2012-03",
+                "source": "BCB Relatório de Estabilidade Financeira",
+                "as_of": "2012-03-31"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        }
+      },
+      "challenge": {
+        "cro": {
+          "officer": "cro",
+          "phase": "challenge",
+          "run_id": "dry-fail-cruzeiro-2012-20261125T0449Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cro",
+            "diagnosis": "Contestação a cpo e risk: ambos concluem corretamente que o pacote não sustenta afirmação sobre solvência/liquidez em 90 dias, mas subestimam o conjunto. Cruzeiro do Sul (IF.data 2011-12): ROE 4,6%, ROA 0,48%, folga de Basileia 4,34 p.p., ativo R$ 11,48 bi. CZRS4 caiu 43,7% (03/04–02/06/2012) vs mediana -14,97%: pior do grupo, e 29 p.p. abaixo da mediana, o que não é só beta de setor. Crédito/captações de 18,15% (pares 73–98%) é anomalia sem explicação; pode refletir captação grande sem carteira correspondente ou ativos de outra natureza, e não deve ser lida como conforto. Pares: PAN (prox. 0,81) com Basileia -0,32 p.p. e ação -34,31%; Fibra (prox. 0,72, distante no modelo de negócio 0,05) com ROE -9,6%. Preocupação prioritária: confiança/liquidez, não solvência medida. Folga de 4,34 p.p. é dado de dez/2011 e pode ter mudado.",
+            "constraints": [
+              "Fundamentos de 2011-12, ~6 meses defasados frente ao feed de 2012-06-03; nada de 2012 T1 em diante sobre a focal.",
+              "Sem dados de caixa, vencimentos, concentração de captação, inadimplência, provisões, rating ou ação de supervisão: não afirmar presença nem ausência.",
+              "Queda da ação é sinal de mercado, não prova de problema de solvência ou liquidez.",
+              "Crédito/captações de 18,15% não é interpretável sem composição de ativos e passivos.",
+              "Pares têm cobertura de proximidade de 70% (sem perfil prudencial); Fibra é distante em modelo de negócio (0,05) e pesa menos."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Contestando cpo opt-1 e risk opt-1 (revisão/monitoramento sem prazo): fixar em 5 dias úteis um teste de saída de captação e projeção de caixa a 90 dias, com a Basileia atual recalculada (não a de 2011-12), reporte semanal ao conselho.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Sem efeito direto em capital; atualiza a folga de 4,34 p.p. e revela se há descasamento de funding antes de pressão de resgates.",
+                "red_lines": [
+                  "Não divulgar conclusões de solvência ou liquidez sem dados internos validados.",
+                  "Não tomar decisão de capital apoiada só em dados públicos defasados.",
+                  "Não tratar a queda da ação como prova de problema."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Contestando cpo opt-2 e risk opt-2: definir agora, pelo conselho, gatilhos quantitativos (queda de captação, folga de Basileia, preço da ação) e pré-negociar linhas de liquidez e aporte de controladores, antes de qualquer acionamento.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Preserva a folga e a capacidade de resposta; custo de carregamento e possível pressão sobre ROE (4,6%) se houver contenção de carteira.",
+                "red_lines": [
+                  "Não acionar o plano sem gatilhos aprovados pelo conselho.",
+                  "Não comprometer a folga de Basileia abaixo do patamar interno aprovado.",
+                  "Não vender ativos com perda relevante sem avaliar efeito em liquidez."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Contestando risk opt-3: comunicação ao BCB e rating só após o teste de liquidez da opt-1; contato reservado com o supervisor, sem declarações públicas sobre solidez, para evitar leitura de alarme.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Sem efeito direto; reduz risco de corrida de captação por assimetria de informação, se feito com dados validados.",
+                "red_lines": [
+                  "Não fazer comunicação seletiva a investidores ou credores.",
+                  "Não afirmar solidez sem dados internos que a sustentem."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-fundamentals-ep-cruzeiro-do-sul",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-ep-cruzeiro-do-sul-2012-06-02",
+                "source": "Onça market:b3",
+                "as_of": "2012-06-02"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-pan",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-pan",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-banco-pan-2012-06-02",
+                "source": "Onça market:b3",
+                "as_of": "2012-06-02"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-fibra",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-proximity-fibra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-sector-event-ref-2012-03",
+                "source": "BCB Relatório de Estabilidade Financeira",
+                "as_of": "2012-03-31"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cco": {
+          "officer": "cco",
+          "phase": "challenge",
+          "run_id": "dry-fail-cruzeiro-2012-20261125T0449Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cco",
+            "diagnosis": "Contesto CPO e Risk: ambos acertam ao não concluir insolvência, mas subestimam três pontos. (1) Ação CZRS4 -43,7% (2012-04-03 a 06-02) vs mediana -14,97%: pior do grupo, até de PAN (-34,31%; proximidade 0,81). Isso é sinal de confiança/reputação e merece tratamento de conduta, não só de liquidez. (2) Crédito/captações 18,15% (IF.data 2011-12) contra 73-98% dos pares é anomalia que ambos citam mas deixam sem dono; para integridade, é o primeiro item a explicar internamente. (3) Ambos propõem diálogo com BCB/mercado sem exigir governança de comunicação. Nada no pacote traz sanção, CEIS/CNEP, CADE ou ação do BCB sobre a focal: não afirmo presença nem ausência. Dados de 2011-12 têm ~6 meses de defasagem.",
+            "constraints": [
+              "Pacote sem dados de sanções (BCB, CVM, CEIS/CNEP, CADE, Procon), listas internacionais ou log de curadoria: ausência de achados não é ausência de problema.",
+              "Fundamentos IF.data são de 2011-12; mercado até 2012-06-02; nada cobre o 2º trimestre de 2012 em balanço.",
+              "Queda da ação não prova problema de solvência, liquidez ou conduta; o pacote não explica a causa.",
+              "Crédito/captações de 18,15% não é interpretável sem metodologia e composição de ativos e passivos.",
+              "Proximidade de pares com cobertura de 70% e sem perfil prudencial: PAN (0,81), Fibra (0,72) são referência limitada."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Antes de qualquer comunicação externa (opção de risk opt-3 / cpo opt-2), aprovar protocolo de divulgação: porta-voz único, conteúdo validado por jurídico e compliance, tratamento igual a investidores e credores, registro em ata.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Sem efeito direto; reduz risco de comunicação seletiva e de leitura de corrida de captação por assimetria de informação.",
+                "red_lines": [
+                  "Não fazer comunicação seletiva a investidores, credores ou agências.",
+                  "Não afirmar solidez ou ausência de problemas sem dados internos validados.",
+                  "Não divulgar projeções internas de liquidez sem alinhamento com o BCB."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Encomendar a compliance e auditoria interna uma explicação documentada do crédito/captações de 18,15% e uma varredura de integridade (sanções, listas, processos regulatórios, reclamações) a levar ao conselho antes de decidir capital.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Sem efeito imediato; fecha o ponto cego sobre a anomalia estrutural e sobre achados de conduta que os dados públicos não mostram.",
+                "red_lines": [
+                  "Não tomar decisão de capital com base só em dados públicos defasados.",
+                  "Não tratar a queda da ação como evidência de conduta ou solvência.",
+                  "Não restringir o escopo da varredura para evitar achados."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Aprovar gatilhos objetivos e escalonamento prévios (queda adicional da ação, saída de captação, contato do supervisor) com registro de quem decide e quando, antes de ativar o plano de contingência.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Preserva a folga de Basileia (4,34 p.p. em 2011-12) e evita acionamento ad hoc ou tardio.",
+                "red_lines": [
+                  "Não acionar o plano sem gatilhos aprovados pelo conselho.",
+                  "Não comprometer a folga de Basileia abaixo do patamar interno aprovado.",
+                  "Não retardar a informação ao supervisor quando houver obrigação de reporte."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-narrative-b3-ep-cruzeiro-do-sul-2012-06-02",
+                "source": "Onça market:b3",
+                "as_of": "2012-06-02"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-ep-cruzeiro-do-sul",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-banco-pan-2012-06-02",
+                "source": "Onça market:b3",
+                "as_of": "2012-06-02"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-pan",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-proximity-fibra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-fibra",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "risk": {
+          "officer": "risk",
+          "phase": "challenge",
+          "run_id": "dry-fail-cruzeiro-2012-20261125T0449Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "risk",
+            "diagnosis": "Contesto o cso: 'sem evidência de insolvência' é frágil, pois o pacote não tem dado de liquidez nem de 2012. Banco Cruzeiro do Sul (IF.data 2011-12): Basileia folga 4,34 p.p., ROE 4,6%, ROA 0,48%. Crédito/captações de 18,15% (pares 73–98%) é anomalia, não só 'diferença estrutural': pode indicar captação grande sem lastro em crédito (liquidez/contraparte) ou carteira fora do balanço; sem explicação, é bandeira vermelha. CZRS4 -43,7% (3/4 a 2/6/2012) vs setor -14,97%: o mercado precifica algo que os fundamentos de dez/2011 não mostram. Folga defasada de 5 meses pode ter sido consumida. O PAN (proximidade 0,81), com folga -0,32 p.p. e -34,31%, mostra que mercado e capital se movem juntos. Para 90 dias, preocupação de liquidez e confiança: ALTA; solvência: INDETERMINADA. Monitorar semanalmente é insuficiente; a diretoria precisa de dados internos já.",
+            "constraints": [
+              "Fundamentos são de 2011-12; nada cobre jan–mai/2012, e a folga de 4,34 p.p. pode ter mudado.",
+              "Sem dados de liquidez (LCR, vencimentos, caixa, composição de depósitos/interbancário, concentração de investidores): não dá para afirmar ou excluir risco de liquidez.",
+              "Sem dados de provisões, inadimplência, qualidade de ativos nem causa da queda de -43,7% (preços sem ajuste por proventos); o pacote não permite atribuir causa.",
+              "Pares têm proximidade 0,72–0,83 (cobertura 70%, sem perfil prudencial) e modelo de negócio distante (0,05–0,44); PAN (0,81, modelo 0,39) é referência parcial; o REF 2012-03 é visão agregada do sistema, não da focal.",
+              "Nada no pacote sustenta nem exclui regime de resolução do BCB ou incidente operacional; não especular."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Substituir monitoramento semanal por revisão imediata de liquidez e capital com dados internos: Basileia atual, LCR, vencimentos de captação 90 dias, concentração de depositantes, e explicação da razão crédito/captações de 18,15%. Reporte diário ao conselho até o gatilho ser desativado.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Sem efeito direto em capital; converte incógnitas do pacote em números e dá tempo de reação. Custo operacional baixo.",
+                "red_lines": [
+                  "Não projetar números públicos sem dados internos validados",
+                  "Não vazar a revisão ao mercado fora de canal formal",
+                  "Não usar folga de 2011-12 como se fosse atual"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Aprovar já o plano de contingência com gatilhos quantitativos (queda de Basileia, saída de captação, LCR) e fontes de funding e de reforço de capital pré-negociadas, testado em estresse de saque severo de captação.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Reduz o tempo de resposta; ativar preservaria folga de Basileia e caixa, com custo de carregamento. Não é decisão de capital nem de preço.",
+                "red_lines": [
+                  "Não acionar sem gatilho aprovado pelo conselho",
+                  "Manter mínimos regulatórios de Basileia",
+                  "Não oferecer garantias a contrapartes em condições que agravem a liquidez"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Diálogo reservado e preventivo com o BCB, apenas depois da revisão da opt-1, com dados internos auditáveis. Comunicação ampla ao mercado só com conteúdo validado e tratamento igualitário da informação.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Pode abrir canais de apoio e estabilizar confiança; mal calibrada, amplifica a percepção de fragilidade. Efeito não quantificável com dados públicos.",
+                "red_lines": [
+                  "Não fazer afirmações sem sustentação em dados internos auditáveis",
+                  "Não tratar seletivamente informação relevante",
+                  "Não comunicar antes da revisão interna"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-fundamentals-ep-cruzeiro-do-sul",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-ep-cruzeiro-do-sul-2012-06-02",
+                "source": "Onça market:b3",
+                "as_of": "2012-06-02"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-pan",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-banco-pan-2012-06-02",
+                "source": "Onça market:b3",
+                "as_of": "2012-06-02"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-pan",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-mercantil",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-proximity-mercantil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-fibra",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-proximity-fibra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-daycoval",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-proximity-daycoval",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-abc-brasil",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-proximity-abc-brasil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-sector-event-ref-2012-03",
+                "source": "BCB Relatório de Estabilidade Financeira",
+                "as_of": "2012-03-31"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2012-06-03"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        }
+      },
+      "quantify": {
+        "risk": {
+          "officer": "risk",
+          "phase": "quantify",
+          "run_id": "dry-fail-cruzeiro-2012-20261125T0449Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "risk",
+            "diagnosis": "Dados públicos (IF.data 2011-12, ~5 meses de defasagem; mercado até 2012-06-02) não permitem afirmar insolvência nem iliquidez em 90 dias, mas indicam fragilidade composta. Folga de Basileia 4,34 p.p.: +4,66 vs PAN (-0,32), +2,26 vs Mercantil (2,08), +1,27 vs Fibra (3,07), -0,71 vs ABC (5,05), -1,64 vs Daycoval (5,98). ROE 4,6%/ROA 0,48%: abaixo de ABC (7,9/1,13) e Daycoval (9,5/1,54). CZRS4 -43,7% (03/04-02/06/2012) vs mediana -14,97%: pior do grupo (PAN, prox. 0,81: -34,31%), sinal de perda de confiança com risco de captação. Crédito/captações 18,15% vs 73-98% dos pares é anomalia sem explicação. Liquidez: preocupação ALTA; solvência: INDETERMINADA.",
+            "constraints": [
+              "Alavancagem, LCR/NSFR, inadimplência e provisões não constam do pacote: não é possível quantificar essas diferenças contra os pares; só há Basileia (folga), ROE/ROA e crédito/captações, todos de 2011-12.",
+              "Fundamentos de 2011-12 sem cobertura de jan-mai/2012: a folga de 4,34 p.p. pode ter mudado; a queda de 43,7% da ação não tem causa identificada e é sinal de mercado, não prova.",
+              "Pares com proximidade 0,72-0,83 (cobertura 70%, sem perfil prudencial) e modelo de negócio distante (0,05-0,44): Fibra (0,72, modelo 0,05) pesa menos; PAN (0,81) e Mercantil (0,83) são referências parciais.",
+              "O REF 2012-03 (sistema robusto em estresse de Basileia III) é visão agregada, não da focal; nada no pacote sustenta nem exclui ação de supervisão, regime de resolução ou incidente operacional.",
+              "Crédito/captações de 18,15% não é interpretável sem composição de ativos e passivos: não é conforto nem prova de fragilidade."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Revisão imediata com dados internos em até 5 dias úteis: Basileia atual, alavancagem, LCR/NSFR, inadimplência, vencimentos de captação a 90 dias, concentração de depositantes e explicação do crédito/captações de 18,15%. Reporte semanal ao conselho, diário se houver saída de captação.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Sem efeito direto em capital; troca os números defasados de 2011-12 por posição atual e mostra se há descasamento antes de pressão de resgates.",
+                "red_lines": [
+                  "Não usar a folga de 2011-12 como se fosse a posição atual",
+                  "Não divulgar conclusões de solvência ou liquidez sem dados internos validados",
+                  "Não tratar a queda da ação como prova de problema"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Aprovar gatilhos quantitativos (Basileia, saída de captação, LCR, queda adicional da ação) e plano de contingência de liquidez e capital, com funding e aporte de controladores pré-negociados e teste de saque severo de captação.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Reduz o tempo de resposta e preserva folga e caixa se ativado; custo de carregamento e possível pressão sobre o ROE de 4,6%. Não é decisão de capital nem de preço.",
+                "red_lines": [
+                  "Não acionar sem gatilho aprovado pelo conselho",
+                  "Manter os mínimos regulatórios de Basileia",
+                  "Não vender ativos com perda relevante sem avaliar efeito em liquidez"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Diálogo reservado com o BCB e, se cabível, agências de rating, somente após a opt-1 e com dados internos auditáveis; comunicação ampla ao mercado só com conteúdo validado, porta-voz único e tratamento igualitário da informação.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Pode abrir canais de apoio e estabilizar a confiança; mal calibrada, amplifica a percepção de fragilidade. Efeito não quantificável com dados públicos.",
+                "red_lines": [
+                  "Não fazer comunicação seletiva a investidores ou credores",
+                  "Não afirmar solidez sem dados internos que a sustentem",
+                  "Não comunicar antes da revisão interna da opt-1"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-fundamentals-ep-cruzeiro-do-sul",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-ep-cruzeiro-do-sul-2012-06-02",
+                "source": "Onça market:b3",
+                "as_of": "2012-06-02"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-pan",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-banco-pan-2012-06-02",
+                "source": "Onça market:b3",
+                "as_of": "2012-06-02"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-pan",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-mercantil",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-proximity-mercantil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-fibra",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-proximity-fibra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-abc-brasil",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-proximity-abc-brasil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-daycoval",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-proximity-daycoval",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-sector-event-ref-2012-03",
+                "source": "BCB Relatório de Estabilidade Financeira",
+                "as_of": "2012-03-31"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cpo": {
+          "officer": "cpo",
+          "phase": "quantify",
+          "run_id": "dry-fail-cruzeiro-2012-20261125T0449Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cpo",
+            "diagnosis": "Pelos dados públicos, o conselho deve priorizar liquidez/confiança; solvência é indeterminada, não afastada. IF.data 2011-12 (defasado ~6 meses): folga de Basileia 4,34 p.p., ROE 4,6%, ROA 0,48%, ativo R$ 11,48 bi. Sinal mais recente: CZRS4 -43,7% (2012-04-03 a 06-02) vs mediana do setor -14,97%, o pior do grupo (PAN, prox. 0,81: -34,31%, Basileia -0,32 p.p.). Crédito/captações de 18,15% vs 73–98% dos pares é anomalia que o pacote não explica. Sem dados de caixa, vencimentos, concentração de captação, reclamações ou reputação, nada se afirma sobre os próximos 90 dias. O REF 2012-03 mostra sistema robusto, mas é visão agregada.",
+            "constraints": [
+              "Fundamentos são de 2011-12; nada cobre jan–mai/2012, e a folga de 4,34 p.p. pode ter mudado.",
+              "O pacote não traz taxas de captação, reclamações nem indicadores de reputação além do preço da ação: a evidência pedida nesses eixos não existe aqui.",
+              "Sem dados de liquidez (caixa, vencimentos, depósitos, interbancário); não dá para afirmar nem excluir risco de liquidez.",
+              "A queda de -43,7% é sinal de mercado sem causa identificada; preços sem ajuste por proventos. Crédito/captações de 18,15% não é interpretável sem composição de ativos e passivos.",
+              "Pares têm proximidade 0,72–0,83 (cobertura 70%, sem perfil prudencial) e modelo de negócio distante (0,05–0,44); pesam menos como referência."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Revisão imediata com dados internos: Basileia atual, caixa e vencimentos de captação a 90 dias, concentração de depositantes e explicação do crédito/captações de 18,15%. Reporte semanal ao conselho. Fecha o principal ponto cego.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Sem efeito direto em capital; converte incógnitas em números e atualiza a folga de 4,34 p.p. (2011-12).",
+                "red_lines": [
+                  "Não tratar a folga de 2011-12 como posição atual",
+                  "Não divulgar conclusões sem dados internos validados",
+                  "Não tratar a queda da ação como prova de problema"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Aprovar gatilhos quantitativos (folga de Basileia, saída de captação, preço da ação) e plano de contingência de liquidez e capital, com fontes de funding e reforço pré-negociadas. Não é decisão de capital nem de preço.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Reduz o tempo de resposta e preserva folga e caixa se acionado; custo de carregamento e possível pressão sobre ROE (4,6%).",
+                "red_lines": [
+                  "Não acionar sem gatilho aprovado pelo conselho",
+                  "Manter os mínimos regulatórios de Basileia",
+                  "Não vender ativos com perda relevante sem avaliar efeito em liquidez"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Após a opt-1, diálogo reservado com o BCB e comunicação a investidores e contrapartes com dados internos validados e tratamento igualitário da informação, para conter perda de confiança.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Pode estabilizar confiança e captação; mal calibrada, amplifica a percepção de fragilidade. Efeito não quantificável com dados públicos.",
+                "red_lines": [
+                  "Não comunicar antes da revisão interna",
+                  "Não fazer comunicação seletiva",
+                  "Não afirmar solidez sem dados auditáveis"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-fundamentals-ep-cruzeiro-do-sul",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-ep-cruzeiro-do-sul-2012-06-02",
+                "source": "Onça market:b3",
+                "as_of": "2012-06-02"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-pan",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-banco-pan-2012-06-02",
+                "source": "Onça market:b3",
+                "as_of": "2012-06-02"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-pan",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-mercantil",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-proximity-mercantil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-fibra",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-proximity-fibra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-daycoval",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-proximity-daycoval",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-abc-brasil",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-proximity-abc-brasil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-sector-event-ref-2012-03",
+                "source": "BCB Relatório de Estabilidade Financeira",
+                "as_of": "2012-03-31"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cso": {
+          "officer": "cso",
+          "phase": "quantify",
+          "run_id": "dry-fail-cruzeiro-2012-20261125T0449Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cso",
+            "diagnosis": "Com IF.data 2011-12 (defasado ~5 meses) e mercado até 2012-06-02: preocupação de confiança/liquidez ALTA; solvência INDETERMINADA, sem evidência pública de descumprimento. Folga de Basileia 4,34 p.p. (acima de Mercantil 2,08 e Fibra 3,07; abaixo de Daycoval 5,98), ROE 4,6%, ROA 0,48%. CZRS4 -43,7% vs mediana -14,97%, pior que PAN (-34,31%; proximidade 0,81, folga -0,32 p.p.): mercado e capital se movem juntos nos pares próximos. Crédito/captações 18,15% vs 73–98% é anomalia sem explicação no pacote. Tese competitiva: a focal perde terreno em confiança frente a pares de porte similar (0,90–1,13× seu ativo), o que ameaça captação antes do capital. Ordenação por encaixe: opt-1 > opt-2 > opt-3.",
+            "constraints": [
+              "Fundamentos de 2011-12: nada cobre jan–mai/2012; a folga de 4,34 p.p. pode ter mudado.",
+              "Pacote sem dados de liquidez (caixa, vencimentos, concentração de captação, LCR): não afirmar presença nem ausência de risco de liquidez em 90 dias.",
+              "Queda de -43,7% é sinal de mercado sem causa identificada; preços sem ajuste por proventos; não prova problema de solvência.",
+              "Pares têm proximidade 0,72–0,83 (cobertura 70%, sem perfil prudencial) e modelo de negócio distante (0,05–0,44): referência parcial, pesam menos.",
+              "Selic 8,5% e REF 2012-03 (sistema robusto) são visão agregada, não da focal."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "1º no encaixe: revisão imediata (prazo de 5 dias úteis) de liquidez e capital com dados internos: Basileia atual, projeção de caixa a 90 dias, teste de saída de captação e explicação do crédito/captações de 18,15%; reporte semanal ao conselho. Converte as incógnitas em números e é pré-requisito das demais.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Sem efeito direto em capital; atualiza a folga de 4,34 p.p. (2011-12) e antecipa descasamento de funding. Custo operacional baixo.",
+                "red_lines": [
+                  "Não usar a folga de 2011-12 como posição atual",
+                  "Não divulgar conclusões sem dados internos validados",
+                  "Não tratar a queda da ação como prova de problema"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "2º no encaixe: o conselho aprova gatilhos quantitativos (saída de captação, folga de Basileia, preço da ação) e pré-negocia linhas de liquidez e reforço de capital dos controladores, para acionar só se os gatilhos forem atingidos. Não é decisão de capital nem de preço.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Reduz o tempo de resposta e preserva folga e caixa; custo de carregamento e possível pressão sobre ROE (4,6%) se houver contenção de carteira.",
+                "red_lines": [
+                  "Não acionar sem gatilho aprovado pelo conselho",
+                  "Não comprometer o mínimo regulatório de Basileia",
+                  "Não vender ativos com perda relevante sem avaliar efeito em liquidez"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "3º no encaixe: diálogo reservado com o BCB e agências de rating, e comunicação ao mercado, só após a opt-1, com dados auditáveis, porta-voz único e tratamento igual da informação. Mal calibrada, amplifica a percepção de fragilidade.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Pode estabilizar confiança e captação e abrir canais de apoio; efeito não quantificável com dados públicos.",
+                "red_lines": [
+                  "Não comunicar antes da opt-1",
+                  "Não fazer comunicação seletiva a investidores ou credores",
+                  "Não afirmar solidez sem dados internos que a sustentem"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-fundamentals-ep-cruzeiro-do-sul",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-ep-cruzeiro-do-sul-2012-06-02",
+                "source": "Onça market:b3",
+                "as_of": "2012-06-02"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-banco-pan-2012-06-02",
+                "source": "Onça market:b3",
+                "as_of": "2012-06-02"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-banco-pan",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-proximity-banco-pan",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-mercantil",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-proximity-mercantil",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-fibra",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-proximity-fibra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-daycoval",
+                "source": "BCB IF.data",
+                "as_of": "2011-12"
+              },
+              {
+                "pack_fact_id": "f-proximity-daycoval",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2012-06-03"
+              },
+              {
+                "pack_fact_id": "f-sector-event-ref-2012-03",
+                "source": "BCB Relatório de Estabilidade Financeira",
+                "as_of": "2012-03-31"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2012-06-03"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        }
+      },
+      "synthesize": {
+        "secretary": {
+          "status": "ok"
+        }
+      }
+    },
+    "synthesis": {
+      "summary": "Com dados públicos até 2011-12 (IF.data) e mercado até 2012-06-02, o conselho deve priorizar liquidez e confiança nos próximos 90 dias; a solvência é indeterminada, não afastada. A folga de Basileia era de 4,34 p.p. (ROE 4,6%, ROA 0,48%), sem sinal público de descumprimento, mas defasada em cerca de 5 meses. O alerta mais forte é a ação CZRS4, que caiu 43,7% contra mediana setorial de -14,97%, a pior do grupo. A razão crédito/captações de 18,15% (pares: 73–98%) é anomalia sem explicação no pacote. O pacote não traz caixa, vencimentos, concentração de captação, inadimplência nem causa da queda. O REF 2012-03 mostra sistema robusto, mas é visão agregada. Este é um briefing externo, não uma decisão de capital ou de preço.",
+      "options": [
+        {
+          "id": "opt-1",
+          "description": "Revisão imediata (5 dias úteis) com dados internos: Basileia atual, projeção de caixa e vencimentos de captação a 90 dias, teste de saída de captação, concentração de depositantes e explicação documentada do crédito/captações de 18,15%. Reporte semanal ao conselho, diário se houver saída de captação. Pré-requisito das demais opções.",
+          "customer_impact": "low",
+          "capital_liquidity_effect": "Sem efeito direto em capital ou liquidez; substitui a folga de 4,34 p.p. de 2011-12 pela posição atual e revela descasamentos de funding antes de pressão de resgates. Custo operacional baixo.",
+          "citations": [
+            "f-fundamentals-ep-cruzeiro-do-sul",
+            "f-narrative-b3-ep-cruzeiro-do-sul-2012-06-02",
+            "f-fundamentals-banco-pan",
+            "f-fundamentals-mercantil",
+            "f-fundamentals-daycoval"
+          ],
+          "derived_from": [
+            {
+              "officer": "cso",
+              "option": "opt-1"
+            },
+            {
+              "officer": "risk",
+              "option": "opt-1"
+            },
+            {
+              "officer": "cco",
+              "option": "opt-1"
+            },
+            {
+              "officer": "cpo",
+              "option": "opt-1"
+            },
+            {
+              "officer": "cro",
+              "option": "opt-1"
+            }
+          ],
+          "supported_by": [
+            "cso",
+            "risk",
+            "cco",
+            "cpo",
+            "cro"
+          ],
+          "contested_by": [
+            "risk",
+            "cco",
+            "cro"
+          ],
+          "competitor_signals": [
+            {
+              "entity": "mercantil",
+              "proximity": 0.83
+            },
+            {
+              "entity": "banco_pan",
+              "proximity": 0.815
+            },
+            {
+              "entity": "daycoval",
+              "proximity": 0.752
+            }
+          ]
+        },
+        {
+          "id": "opt-2",
+          "description": "O conselho aprova gatilhos quantitativos (folga de Basileia, saída de captação, queda adicional da ação) e um plano de contingência de liquidez e capital, com fontes de funding e reforço de capital pré-negociadas e teste de saque severo de captação. Só é acionado se os gatilhos forem atingidos. Não é decisão de capital nem de preço.",
+          "customer_impact": "medium",
+          "capital_liquidity_effect": "Reduz o tempo de resposta e preserva a folga de Basileia (4,34 p.p. em 2011-12) e o caixa se acionado; há custo de carregamento e possível pressão sobre o ROE de 4,6% se houver contenção de carteira ou de dividendos.",
+          "citations": [
+            "f-fundamentals-ep-cruzeiro-do-sul",
+            "f-narrative-b3-ep-cruzeiro-do-sul-2012-06-02",
+            "f-fundamentals-banco-pan",
+            "f-narrative-b3-banco-pan-2012-06-02",
+            "f-proximity-banco-pan"
+          ],
+          "derived_from": [
+            {
+              "officer": "cso",
+              "option": "opt-2"
+            },
+            {
+              "officer": "risk",
+              "option": "opt-2"
+            },
+            {
+              "officer": "cco",
+              "option": "opt-2"
+            },
+            {
+              "officer": "cco",
+              "option": "opt-3"
+            },
+            {
+              "officer": "cpo",
+              "option": "opt-2"
+            },
+            {
+              "officer": "cro",
+              "option": "opt-2"
+            }
+          ],
+          "supported_by": [
+            "cso",
+            "risk",
+            "cco",
+            "cpo",
+            "cro"
+          ],
+          "contested_by": [
+            "risk",
+            "cco",
+            "cro"
+          ],
+          "competitor_signals": [
+            {
+              "entity": "banco_pan",
+              "proximity": 0.815
+            }
+          ]
+        },
+        {
+          "id": "opt-3",
+          "description": "Somente após a opt-1, diálogo reservado com o BCB e agências de rating e comunicação a investidores e contrapartes, com dados internos auditáveis, porta-voz único, validação jurídica e de compliance e tratamento igualitário da informação. Sem declarações públicas sobre solidez que os dados não sustentem.",
+          "customer_impact": "medium",
+          "capital_liquidity_effect": "Pode estabilizar a confiança e a captação e abrir canais de apoio; mal calibrada, amplifica a percepção de fragilidade. Efeito não quantificável com dados públicos.",
+          "citations": [
+            "f-narrative-b3-ep-cruzeiro-do-sul-2012-06-02",
+            "f-fundamentals-ep-cruzeiro-do-sul",
+            "f-sector-event-ref-2012-03"
+          ],
+          "derived_from": [
+            {
+              "officer": "cso",
+              "option": "opt-3"
+            },
+            {
+              "officer": "risk",
+              "option": "opt-3"
+            },
+            {
+              "officer": "cco",
+              "option": "opt-1"
+            },
+            {
+              "officer": "cpo",
+              "option": "opt-3"
+            },
+            {
+              "officer": "cro",
+              "option": "opt-3"
+            }
+          ],
+          "supported_by": [
+            "cso",
+            "risk",
+            "cco",
+            "cpo",
+            "cro"
+          ],
+          "contested_by": [
+            "risk",
+            "cco",
+            "cro"
+          ],
+          "competitor_signals": []
+        }
+      ],
+      "residual_regulatory_risk": "Os dados públicos não permitem afirmar nem excluir insolvência, iliquidez, ação de supervisão do BCB, regime de resolução, sanções ou processos de conduta contra a instituição. Os fundamentos são de 2011-12, sem cobertura de 2012, e a causa da queda de 43,7% da ação é desconhecida. A folga de 4,34 p.p. pode ter mudado, e o REF 2012-03 descreve o sistema, não a focal. Qualquer comunicação feita sem dados internos validados traz risco regulatório e de tratamento desigual da informação.",
+      "monitoring_triggers": [
+        {
+          "text": "Nova queda relevante de CZRS4 frente à mediana do setor (hoje -43,7% contra -14,97% em 03/04–02/06/2012), ou piora do desempenho relativo ao de PAN (-34,31%).",
+          "citations": [
+            "f-narrative-b3-ep-cruzeiro-do-sul-2012-06-02",
+            "f-narrative-b3-banco-pan-2012-06-02"
+          ]
+        },
+        {
+          "text": "Recálculo interno da folga de Basileia abaixo do patamar interno aprovado, com referência de 4,34 p.p. em 2011-12. PAN (-0,32 p.p.) mostra o cenário de capital negativo.",
+          "citations": [
+            "f-fundamentals-ep-cruzeiro-do-sul",
+            "f-fundamentals-banco-pan"
+          ]
+        },
+        {
+          "text": "Saída relevante de captação ou concentração de vencimentos de captação a 90 dias sem cobertura em ativos líquidos, o que aciona o plano de contingência e o reporte diário ao conselho.",
+          "citations": [
+            "f-fundamentals-ep-cruzeiro-do-sul"
+          ]
+        },
+        {
+          "text": "Divulgação de nova edição do IF.data ou do REF do BCB que altere a leitura de ROE (4,6%), ROA (0,48%) ou da razão crédito/captações (18,15%) da focal.",
+          "citations": [
+            "f-fundamentals-ep-cruzeiro-do-sul",
+            "f-sector-event-ref-2012-03"
+          ]
+        },
+        {
+          "text": "Mudança na postura de supervisão, contato do BCB ou deterioração adicional do segmento de pares próximos (ROE de Fibra em -9,6%, folga de Mercantil em 2,08 p.p.).",
+          "citations": [
+            "f-fundamentals-fibra",
+            "f-fundamentals-mercantil",
+            "f-sector-event-ref-2012-03"
+          ]
+        }
+      ]
+    },
+    "dissents": [
+      {
+        "officer": "cro",
+        "challenged": [
+          "cpo",
+          "risk"
+        ],
+        "text": "Contestação a cpo e risk: ambos concluem corretamente que o pacote não sustenta afirmação sobre solvência/liquidez em 90 dias, mas subestimam o conjunto. Cruzeiro do Sul (IF.data 2011-12): ROE 4,6%, ROA 0,48%, folga de Basileia 4,34 p.p., ativo R$ 11,48 bi. CZRS4 caiu 43,7% (03/04–02/06/2012) vs mediana -14,97%: pior do grupo, e 29 p.p. abaixo da mediana, o que não é só beta de setor. Crédito/captações de 18,15% (pares 73–98%) é anomalia sem explicação; pode refletir captação grande sem carteira correspondente ou ativos de outra natureza, e não deve ser lida como conforto. Pares: PAN (prox. 0,81) com Basileia -0,32 p.p. e ação -34,31%; Fibra (prox. 0,72, distante no modelo de negócio 0,05) com ROE -9,6%. Preocupação prioritária: confiança/liquidez, não solvência medida. Folga de 4,34 p.p. é dado de dez/2011 e pode ter mudado.",
+        "red_lines": [
+          "Não divulgar conclusões de solvência ou liquidez sem dados internos validados.",
+          "Não tomar decisão de capital apoiada só em dados públicos defasados.",
+          "Não tratar a queda da ação como prova de problema.",
+          "Não acionar o plano sem gatilhos aprovados pelo conselho.",
+          "Não comprometer a folga de Basileia abaixo do patamar interno aprovado.",
+          "Não vender ativos com perda relevante sem avaliar efeito em liquidez.",
+          "Não fazer comunicação seletiva a investidores ou credores.",
+          "Não afirmar solidez sem dados internos que a sustentem."
+        ]
+      },
+      {
+        "officer": "cco",
+        "challenged": [
+          "cpo",
+          "risk"
+        ],
+        "text": "Contesto CPO e Risk: ambos acertam ao não concluir insolvência, mas subestimam três pontos. (1) Ação CZRS4 -43,7% (2012-04-03 a 06-02) vs mediana -14,97%: pior do grupo, até de PAN (-34,31%; proximidade 0,81). Isso é sinal de confiança/reputação e merece tratamento de conduta, não só de liquidez. (2) Crédito/captações 18,15% (IF.data 2011-12) contra 73-98% dos pares é anomalia que ambos citam mas deixam sem dono; para integridade, é o primeiro item a explicar internamente. (3) Ambos propõem diálogo com BCB/mercado sem exigir governança de comunicação. Nada no pacote traz sanção, CEIS/CNEP, CADE ou ação do BCB sobre a focal: não afirmo presença nem ausência. Dados de 2011-12 têm ~6 meses de defasagem.",
+        "red_lines": [
+          "Não fazer comunicação seletiva a investidores, credores ou agências.",
+          "Não afirmar solidez ou ausência de problemas sem dados internos validados.",
+          "Não divulgar projeções internas de liquidez sem alinhamento com o BCB.",
+          "Não tomar decisão de capital com base só em dados públicos defasados.",
+          "Não tratar a queda da ação como evidência de conduta ou solvência.",
+          "Não restringir o escopo da varredura para evitar achados.",
+          "Não acionar o plano sem gatilhos aprovados pelo conselho.",
+          "Não comprometer a folga de Basileia abaixo do patamar interno aprovado.",
+          "Não retardar a informação ao supervisor quando houver obrigação de reporte."
+        ]
+      },
+      {
+        "officer": "risk",
+        "challenged": [
+          "cso"
+        ],
+        "text": "Contesto o cso: 'sem evidência de insolvência' é frágil, pois o pacote não tem dado de liquidez nem de 2012. Banco Cruzeiro do Sul (IF.data 2011-12): Basileia folga 4,34 p.p., ROE 4,6%, ROA 0,48%. Crédito/captações de 18,15% (pares 73–98%) é anomalia, não só 'diferença estrutural': pode indicar captação grande sem lastro em crédito (liquidez/contraparte) ou carteira fora do balanço; sem explicação, é bandeira vermelha. CZRS4 -43,7% (3/4 a 2/6/2012) vs setor -14,97%: o mercado precifica algo que os fundamentos de dez/2011 não mostram. Folga defasada de 5 meses pode ter sido consumida. O PAN (proximidade 0,81), com folga -0,32 p.p. e -34,31%, mostra que mercado e capital se movem juntos. Para 90 dias, preocupação de liquidez e confiança: ALTA; solvência: INDETERMINADA. Monitorar semanalmente é insuficiente; a diretoria precisa de dados internos já.",
+        "red_lines": [
+          "Não projetar números públicos sem dados internos validados",
+          "Não vazar a revisão ao mercado fora de canal formal",
+          "Não usar folga de 2011-12 como se fosse atual",
+          "Não acionar sem gatilho aprovado pelo conselho",
+          "Manter mínimos regulatórios de Basileia",
+          "Não oferecer garantias a contrapartes em condições que agravem a liquidez",
+          "Não fazer afirmações sem sustentação em dados internos auditáveis",
+          "Não tratar seletivamente informação relevante",
+          "Não comunicar antes da revisão interna"
+        ]
+      }
+    ],
+    "dropped": [],
+    "gaps": [],
+    "elapsed_s": 228.8
+  },
+  "focal": "ep-cruzeiro-do-sul",
+  "subject": "ep-cruzeiro-do-sul",
+  "proximity": [
+    {
+      "peer": "mercantil",
+      "label": "Mercantil",
+      "score": 0.83,
+      "coverage": 0.7,
+      "low_coverage": false,
+      "components": {
+        "size": 0.976,
+        "market": 1.0,
+        "business_model": 0.44
+      },
+      "missing": [
+        "prudential",
+        "pressure"
+      ]
+    },
+    {
+      "peer": "banco_pan",
+      "label": "Banco PAN",
+      "score": 0.815,
+      "coverage": 0.7,
+      "low_coverage": false,
+      "components": {
+        "size": 0.974,
+        "market": 1.0,
+        "business_model": 0.393
+      },
+      "missing": [
+        "prudential",
+        "pressure"
+      ]
+    },
+    {
+      "peer": "abc_brasil",
+      "label": "Banco ABC Brasil",
+      "score": 0.787,
+      "coverage": 0.7,
+      "low_coverage": false,
+      "components": {
+        "size": 0.981,
+        "market": 1.0,
+        "business_model": 0.283
+      },
+      "missing": [
+        "prudential",
+        "pressure"
+      ]
+    },
+    {
+      "peer": "daycoval",
+      "label": "Banco Daycoval",
+      "score": 0.752,
+      "coverage": 0.7,
+      "low_coverage": false,
+      "components": {
+        "size": 0.989,
+        "market": 1.0,
+        "business_model": 0.147
+      },
+      "missing": [
+        "prudential",
+        "pressure"
+      ]
+    },
+    {
+      "peer": "fibra",
+      "label": "Fibra",
+      "score": 0.725,
+      "coverage": 0.7,
+      "low_coverage": false,
+      "components": {
+        "size": 0.991,
+        "market": 1.0,
+        "business_model": 0.05
+      },
+      "missing": [
+        "prudential",
+        "pressure"
+      ]
+    }
+  ]
+}

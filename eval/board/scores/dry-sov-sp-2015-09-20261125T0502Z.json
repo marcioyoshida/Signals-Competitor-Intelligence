@@ -1,0 +1,118 @@
+{
+ "run_id": "dry-sov-sp-2015-09-20261125T0502Z",
+ "scenario": "sov-sp-2015-09",
+ "model": "sonnet",
+ "provider": "claude-cli (subscription)",
+ "status": "partial",
+ "pack_sha256": "18187859be3f7137f146c4a99b9aa85e5336e54b04be6301b4ee7e7ab97a14c0",
+ "pack_matches": true,
+ "gaps": [
+  "no_answer: model returned no answer",
+  "no_answer: model returned no answer",
+  "no_answer: model returned no answer"
+ ],
+ "citations": {
+  "citations": 159,
+  "invalid": [],
+  "citation_validity": 1.0,
+  "figures": 29,
+  "ungrounded_figures": [],
+  "numbers_grounded": 1.0,
+  "dropped_by_guard": 0
+ },
+ "regulatory": {
+  "covered": [
+   "capital",
+   "liquidity",
+   "credit",
+   "conduct",
+   "disclosure",
+   "supervisor"
+  ],
+  "missing": [],
+  "n": 6,
+  "of": 6,
+  "coverage": 1.0
+ },
+ "dissent": {
+  "challenges": 0,
+  "problems": [],
+  "contested_options": 0,
+  "dissent_preservation": 0.0
+ },
+ "options": {
+  "options": 3,
+  "triggers": 7,
+  "option_traced": 1.0,
+  "with_capital_liquidity_effect": 3,
+  "with_impact_band": 3,
+  "max_jaccard": 0.0923,
+  "impact_bands": [
+   "high",
+   "low",
+   "medium"
+  ]
+ },
+ "cost": {
+  "calls": 8,
+  "tokens_in": 94855,
+  "tokens_out": 24675,
+  "tokens": 119530,
+  "cache_read": 0,
+  "token_cap": 400000,
+  "tokens_by_phase": {
+   "diagnosis": 36627,
+   "challenge": 0,
+   "quantify": 56063,
+   "synthesize": 26840
+  }
+ },
+ "latency": {
+  "elapsed_s": 473.5,
+  "slowest_call_s": 90.7,
+  "mean_call_s": 43.1,
+  "call_errors": [
+   "diagnosis/cro: API Error: 529 Overloaded. This is a server-side issue, usually temporary — try again in a moment. If it persists, check https://status.claude.com.",
+   "challenge/cco: API Error: 529 Overloaded. This is a server-side issue, usually temporary — try again in a moment. If it persists, check https://status.claude.com.",
+   "challenge/risk: API Error: 529 Overloaded. This is a server-side issue, usually temporary — try again in a moment. If it persists, check https://status.claude.com."
+  ],
+  "timeouts": 0
+ },
+ "episode": {
+  "rubric": {
+   "covered": [
+    "funding_cost",
+    "capital_buffer",
+    "credit_quality",
+    "liquidity"
+   ],
+   "missing": [
+    "rating_ceiling"
+   ],
+   "n": 4,
+   "of": 5,
+   "coverage": 0.8
+  },
+  "answer_key": {
+   "board_categories": [
+    "funding",
+    "capital_return"
+   ],
+   "matched": [
+    "funding",
+    "capital_return"
+   ],
+   "alignment": 1.0
+  }
+ },
+ "gate": {
+  "version": 1,
+  "passed": false,
+  "fails": [
+   "status partial",
+   "dissent preservation 0.0",
+   "3 call errors"
+  ],
+  "warnings": []
+ }
+}

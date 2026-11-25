@@ -1,0 +1,109 @@
+{
+ "run_id": "dry-fail-bva-2012-20261125T0445Z",
+ "scenario": "fail-bva-2012",
+ "model": "sonnet",
+ "provider": "claude-cli (subscription)",
+ "status": "complete",
+ "pack_sha256": "cf9419a31197a996973b42e4b35dee147117fb3a1d782a41c9b8d505b682fd17",
+ "pack_matches": true,
+ "gaps": [],
+ "citations": {
+  "citations": 162,
+  "invalid": [],
+  "citation_validity": 1.0,
+  "figures": 24,
+  "ungrounded_figures": [],
+  "numbers_grounded": 1.0,
+  "dropped_by_guard": 0
+ },
+ "regulatory": {
+  "covered": [
+   "capital",
+   "liquidity",
+   "credit",
+   "conduct",
+   "supervisor"
+  ],
+  "missing": [
+   "disclosure"
+  ],
+  "n": 5,
+  "of": 6,
+  "coverage": 0.8333
+ },
+ "dissent": {
+  "challenges": 3,
+  "problems": [],
+  "contested_options": 3,
+  "dissent_preservation": 1.0
+ },
+ "options": {
+  "options": 3,
+  "triggers": 4,
+  "option_traced": 1.0,
+  "with_capital_liquidity_effect": 3,
+  "with_impact_band": 3,
+  "max_jaccard": 0.0794,
+  "impact_bands": [
+   "low",
+   "medium"
+  ]
+ },
+ "cost": {
+  "calls": 15,
+  "tokens_in": 357089,
+  "tokens_out": 31100,
+  "tokens": 388189,
+  "cache_read": 1253802,
+  "token_cap": 400000,
+  "tokens_by_phase": {
+   "diagnosis": 233092,
+   "challenge": 46651,
+   "quantify": 76131,
+   "synthesize": 32315
+  }
+ },
+ "latency": {
+  "elapsed_s": 252.6,
+  "slowest_call_s": 19.2,
+  "mean_call_s": 16.8,
+  "call_errors": [],
+  "timeouts": 0
+ },
+ "episode": {
+  "rubric": {
+   "covered": [
+    "capital_shortfall",
+    "losses",
+    "supervisory_action",
+    "recapitalization"
+   ],
+   "missing": [],
+   "n": 4,
+   "of": 4,
+   "coverage": 1.0
+  },
+  "signal": {
+   "basis": [
+    "prudential"
+   ],
+   "caught": true,
+   "matched": {
+    "prudential": [
+     "basileia",
+     "capital",
+     "prejuízo",
+     "roe",
+     "folga",
+     "abaixo do mínimo"
+    ]
+   }
+  }
+ },
+ "gate": {
+  "version": 1,
+  "passed": true,
+  "fails": [],
+  "warnings": []
+ }
+}

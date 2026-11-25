@@ -1,0 +1,106 @@
+{
+ "run_id": "dry-sov-moodys-2016-02-20261125T0517Z",
+ "scenario": "sov-moodys-2016-02",
+ "model": "sonnet",
+ "provider": "claude-cli (subscription)",
+ "status": "complete",
+ "pack_sha256": "7b94b69ea8d04320aa6f2ce07f21a40bf4cddb1472b72a3299bf81f5fc9c8fb9",
+ "pack_matches": true,
+ "gaps": [],
+ "citations": {
+  "citations": 277,
+  "invalid": [],
+  "citation_validity": 1.0,
+  "figures": 50,
+  "ungrounded_figures": [
+   "3,54 p.p."
+  ],
+  "numbers_grounded": 0.98,
+  "dropped_by_guard": 0
+ },
+ "regulatory": {
+  "covered": [
+   "capital",
+   "liquidity",
+   "credit",
+   "conduct",
+   "disclosure",
+   "supervisor"
+  ],
+  "missing": [],
+  "n": 6,
+  "of": 6,
+  "coverage": 1.0
+ },
+ "dissent": {
+  "challenges": 3,
+  "problems": [],
+  "contested_options": 3,
+  "dissent_preservation": 1.0
+ },
+ "options": {
+  "options": 3,
+  "triggers": 6,
+  "option_traced": 1.0,
+  "with_capital_liquidity_effect": 3,
+  "with_impact_band": 3,
+  "max_jaccard": 0.1081,
+  "impact_bands": [
+   "high",
+   "low",
+   "medium"
+  ]
+ },
+ "cost": {
+  "calls": 15,
+  "tokens_in": 201610,
+  "tokens_out": 49568,
+  "tokens": 251178,
+  "cache_read": 0,
+  "token_cap": 400000,
+  "tokens_by_phase": {
+   "diagnosis": 64618,
+   "challenge": 52578,
+   "quantify": 94374,
+   "synthesize": 39608
+  }
+ },
+ "latency": {
+  "elapsed_s": 521.2,
+  "slowest_call_s": 72.3,
+  "mean_call_s": 34.8,
+  "call_errors": [],
+  "timeouts": 0
+ },
+ "episode": {
+  "rubric": {
+   "covered": [
+    "funding_cost",
+    "rating_ceiling",
+    "capital_buffer",
+    "credit_quality",
+    "liquidity"
+   ],
+   "missing": [],
+   "n": 5,
+   "of": 5,
+   "coverage": 1.0
+  },
+  "answer_key": {
+   "board_categories": [
+    "governance",
+    "capital_return"
+   ],
+   "matched": [
+    "capital_return"
+   ],
+   "alignment": 0.5
+  }
+ },
+ "gate": {
+  "version": 1,
+  "passed": true,
+  "fails": [],
+  "warnings": []
+ }
+}

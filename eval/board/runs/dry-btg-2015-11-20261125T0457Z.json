@@ -1,0 +1,1876 @@
+{
+  "model": "sonnet",
+  "provider": "claude-cli (subscription)",
+  "scenario": "btg-2015-11",
+  "pack_sha256": "c53cf3794b927b2784f22f58f52239a134070fc272f4d20516807f3340215b41",
+  "usage": {
+    "calls": 14,
+    "tokens_in": 220487,
+    "tokens_out": 35581,
+    "cache_read": 1061677,
+    "token_cap": 400000
+  },
+  "calls": [
+    {
+      "officer": "cso",
+      "phase": "diagnosis",
+      "s": 21.2,
+      "input_tokens": 8204,
+      "cache_read": 96507,
+      "output_tokens": 2222,
+      "is_error": false
+    },
+    {
+      "officer": "risk",
+      "phase": "diagnosis",
+      "s": 22.8,
+      "input_tokens": 8204,
+      "cache_read": 96535,
+      "output_tokens": 2721,
+      "is_error": false
+    },
+    {
+      "officer": "risk",
+      "phase": "diagnosis",
+      "s": 18.7,
+      "input_tokens": 8272,
+      "cache_read": 96535,
+      "output_tokens": 2019,
+      "is_error": false
+    },
+    {
+      "officer": "cco",
+      "phase": "diagnosis",
+      "s": 20.3,
+      "input_tokens": 8204,
+      "cache_read": 96513,
+      "output_tokens": 2312,
+      "is_error": false
+    },
+    {
+      "officer": "cpo",
+      "phase": "diagnosis",
+      "s": 19.7,
+      "input_tokens": 8205,
+      "cache_read": 96495,
+      "output_tokens": 2245,
+      "is_error": false
+    },
+    {
+      "officer": "cro",
+      "phase": "diagnosis",
+      "s": 20.3,
+      "input_tokens": 8204,
+      "cache_read": 96487,
+      "output_tokens": 2196,
+      "is_error": false
+    },
+    {
+      "officer": "cro",
+      "phase": "challenge",
+      "s": 31.9,
+      "input_tokens": 12645,
+      "cache_read": 96487,
+      "output_tokens": 3979,
+      "is_error": false
+    },
+    {
+      "officer": "cco",
+      "phase": "challenge",
+      "s": 21.0,
+      "input_tokens": 12645,
+      "cache_read": 96513,
+      "output_tokens": 2541,
+      "is_error": false
+    },
+    {
+      "officer": "risk",
+      "phase": "challenge",
+      "s": 19.1,
+      "input_tokens": 10540,
+      "cache_read": 96535,
+      "output_tokens": 2302,
+      "is_error": false
+    },
+    {
+      "officer": "risk",
+      "phase": "quantify",
+      "s": 17.8,
+      "input_tokens": 27122,
+      "cache_read": 96535,
+      "output_tokens": 2502,
+      "is_error": false
+    },
+    {
+      "officer": "risk",
+      "phase": "quantify",
+      "s": 15.9,
+      "input_tokens": 27179,
+      "cache_read": 96535,
+      "output_tokens": 2404,
+      "is_error": false
+    },
+    {
+      "officer": "cpo",
+      "phase": "quantify",
+      "s": 59.1,
+      "input_tokens": 24443,
+      "cache_read": 0,
+      "output_tokens": 2555,
+      "is_error": false
+    },
+    {
+      "officer": "cso",
+      "phase": "quantify",
+      "s": 17.7,
+      "input_tokens": 24441,
+      "cache_read": 0,
+      "output_tokens": 2744,
+      "is_error": false
+    },
+    {
+      "officer": "secretary",
+      "phase": "synthesize",
+      "s": 17.9,
+      "input_tokens": 32179,
+      "cache_read": 0,
+      "output_tokens": 2839,
+      "is_error": false
+    }
+  ],
+  "result": {
+    "run_id": "dry-btg-2015-11-20261125T0457Z",
+    "shared_context_id": "c53cf3794b927b2784f22f58f52239a134070fc272f4d20516807f3340215b41",
+    "task": "O controlador e presidente do BTG Pactual foi preso hoje numa investigação da Lava Jato. Que opções o conselho do BTG Pactual deve considerar nos próximos 30 e 90 dias para liquidez, governança, balanço e relacionamento com clientes e contrapartes, e quais gatilhos monitorar?",
+    "status": "complete",
+    "phases": {
+      "diagnosis": {
+        "cso": {
+          "officer": "cso",
+          "phase": "diagnosis",
+          "run_id": "dry-btg-2015-11-20261125T0457Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cso",
+            "diagnosis": "Em 25/11/2015 a prisão de André Esteves (controlador e presidente) cria um choque de governança e confiança, não de solvência: em jun/2015 o BTG tinha Basileia 17,1%, capital principal 10,77% (o menor entre os pares, exceto Votorantim 9,63%), headroom 6,6 p.p., ROE 27,4% e crédito/captações de 20,47%, ou seja, financiamento pouco ancorado em depósitos e mais sensível a contrapartes e atacado. A Selic subiu a 14,25% (jul/2015), encarecendo a rolagem. Há ruído de 4 meses nos dados (IF.data jun/2015) e eles não captam o efeito pós-prisão. A ação subiu 17,2% em 2 meses, mas isso é anterior ao evento. O foco competitivo: Itaú, Bradesco e Safra (proximidade 0,70) disputam clientes e contrapartes se a confiança cair. Tese: separar a pessoa física do banco com governança visível.",
+            "constraints": [
+              "Dados de solidez e fundamentos são de jun/2015 (IF.data) e não refletem o pós-prisão; o pacote não traz dados de liquidez, funding, exposição a contrapartes ou efeito sobre clientes.",
+              "Crédito/captações de 20,47% indica balanço de tesouraria/atacado; o pacote não detalha a composição do funding nem prazos.",
+              "O pacote não traz informação jurídica sobre o escopo da investigação nem sobre a participação acionária do controlador; nada pode ser afirmado a respeito.",
+              "Concorrentes só entram como contexto: proximidade 0,64 a 0,70 e sem dados de pressão competitiva.",
+              "BTG não tem posição no ranking de reclamações (menos de 2 milhões de clientes), então não há baseline de reputação de varejo."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Primeiros 30 dias – estabilização: comitê de crise do conselho, ALCO diário, teste de estresse de liquidez com saída de funding de atacado, sobras de caixa/ativos líquidos elevadas, comunicação via fato relevante a mercado, reguladores, clientes e contrapartes, com ofício ao BCB.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Consome rentabilidade (carrego do caixa), mas protege contra corrida de funding; Basileia 17,1% e headroom de 6,6 p.p. (jun/2015) dão folga, a revalidar com dados atuais.",
+                "red_lines": [
+                  "Não vender ativos em condições forçadas que corroam o capital principal de 10,77%",
+                  "Não omitir informação relevante ao mercado (CVM) nem ao BCB",
+                  "Não condicionar atendimento de clientes a decisões do controlador"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "30–90 dias – governança: afastar o presidente das funções executivas, nomear presidente interino/CEO independente, ampliar comitês independentes de auditoria e compliance, investigação interna independente e blindagem de decisões de crédito/risco quanto ao controlador.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Efeito direto limitado em capital; reduz prêmio de risco de contraparte e preserva o acesso a funding. Custo de execução e risco de conflito com o bloco de controle.",
+                "red_lines": [
+                  "Sem decisão de capital ou de preço neste briefing",
+                  "Não permitir que o investigado participe de decisões do conselho sobre o tema",
+                  "Não deixar vácuo de comando por mais de poucos dias"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "30–90 dias – balanço e relacionamento: diversificar e alongar funding, reforçar contato direto com as principais contrapartes e clientes de gestão de patrimônio/atacado, e avaliar o programa de recompra (fato relevante de 25/11) em função da liquidez, a reexaminar ou suspender se a pressão aumentar.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Alongar funding encarece com a Selic a 14,25%; suspender recompra preserva caixa; retenção de clientes pode exigir concessões comerciais que pesam na margem.",
+                "red_lines": [
+                  "Não priorizar recompra sobre liquidez em ambiente de saída de funding",
+                  "Não oferecer tratamento preferencial a contrapartes que fira a isonomia",
+                  "Não deixar o capital principal cair abaixo do mínimo regulatório"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-sector-event-trigger-btg-2015-11",
+                "source": "Agência Brasil",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-soundness-btg",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-btg",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-soundness-votorantim",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-btg-2015-11-24",
+                "source": "Onça market:b3",
+                "as_of": "2015-11-24"
+              },
+              {
+                "pack_fact_id": "f-proximity-itau",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-proximity-bradesco",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-proximity-safra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-proximity-votorantim",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-022616ipe251120150104233309-69",
+                "source": "Onça filing:fato_relevante",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-btg-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "risk": {
+          "officer": "risk",
+          "phase": "diagnosis",
+          "run_id": "dry-btg-2015-11-20261125T0457Z",
+          "status": "ok",
+          "attempts": 2,
+          "position": {
+            "officer": "risk",
+            "diagnosis": "A prisão de André Esteves (controlador e presidente) em 2015-11-25 (Lava Jato) é um choque de reputação e governança, não de capital: em 2015-06 o BTG tinha Basileia 17,1%, capital principal 10,77%, nível I 13,86% (folga 6,6 p.p.), ROE 27,4%. A fragilidade está no financiamento: crédito/captações 20,47% e ativo de R$179,35 bi indicam dependência de captação atacadista; risco de fuga de depósitos, corte de linhas de contrapartes e rebaixamento. Dados de 2015-06 são defasados e não incluem liquidez (LCR) nem funding pós-evento; o pacote não os traz.",
+            "constraints": [
+              "Sem dados de LCR, vencimentos de captação ou exposição de contrapartes no pacote: levantar internamente nas primeiras 24h.",
+              "Basileia de 2015-06 (defasada ~5 meses); a ação BBTG11 subiu 17,23% em 2015-09-25 a 2015-11-24, antes do evento, e não reflete o choque.",
+              "Fato relevante de recompra e incorporação (2015-11-04 e 2015-11-25) consome capital/caixa: reavaliar o programa de recompra.",
+              "Concorrentes são referência, não substitutos: Itaú (0,70), Bradesco (0,70), Safra (0,70), Santander (0,68) e Votorantim (0,64) têm proximidade moderada e modelos de negócio distintos.",
+              "Pacote não sustenta afirmações sobre reação de reguladores, agências ou clientes."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "0-30 dias: comitê de crise de liquidez; mapear diariamente captação, margens e linhas de contrapartes; reforçar caixa e ativos líquidos; suspender recompra; comunicar mercado e BCB com transparência.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Preserva liquidez e capital; suspender recompra poupa caixa. Custo: possível carregamento maior de ativos líquidos, menor retorno. Folga de 6,6 p.p. (2015-06) dá margem.",
+                "red_lines": [
+                  "Não pagar recompra/proventos enquanto a liquidez não estiver validada",
+                  "Não esconder exposições de contraparte do BCB",
+                  "Não vender ativos sob estresse a desconto severo"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Governança: afastar Esteves da gestão executiva (licença) e nomear presidente interino e comitê independente de conselheiros para supervisionar investigação e conflitos; revisar partes relacionadas.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Sem efeito direto em capital; reduz risco de perda de confiança de contrapartes e financiadores que condicionam linhas à governança. Efeito em acionistas controladores a avaliar.",
+                "red_lines": [
+                  "Sem concentração de poder decisório no controlador investigado",
+                  "Sem decisões de capital/crédito de partes relacionadas sem comitê independente"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "30-90 dias: reforço de capital (retenção de lucros, ativos não estratégicos, aporte de acionistas) e diversificação de funding; contato proativo com principais clientes e contrapartes; plano de contingência de recuperação.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Eleva capital principal (10,77% em 2015-06, abaixo dos pares Itaú 13,16%, Bradesco 12,76%, Santander 15,49%) e reduz dependência atacadista; custo: diluição ou redução de ROE (27,4%).",
+                "red_lines": [
+                  "Não crescer o balanço em operações de crédito/trading de maior risco durante a crise",
+                  "Não aceitar aporte com condições que comprometam a independência",
+                  "Manter capital acima dos mínimos regulatórios"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-022616ipe251120150104233309-69",
+                "source": "CVM",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-sector-event-trigger-btg-2015-11",
+                "source": "Agência Brasil",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-soundness-btg",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-btg",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-btg-2015-11-24",
+                "source": "Onça market:b3",
+                "as_of": "2015-11-24"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-022616ipe041120150104231212-79",
+                "source": "CVM",
+                "as_of": "2015-11-04"
+              },
+              {
+                "pack_fact_id": "f-soundness-itau",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-soundness-bradesco",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-soundness-santander",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-itau",
+                "source": "Onça",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-proximity-bradesco",
+                "source": "Onça",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-proximity-safra",
+                "source": "Onça",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-proximity-santander",
+                "source": "Onça",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-proximity-votorantim",
+                "source": "Onça",
+                "as_of": "2015-11-25"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cco": {
+          "officer": "cco",
+          "phase": "diagnosis",
+          "run_id": "dry-btg-2015-11-20261125T0457Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cco",
+            "diagnosis": "Em 2015-11-25 a prisão do controlador e presidente do BTG Pactual (Lava Jato) é um evento de conduta/integridade sobre a própria instituição; o pacote não traz sanção, acusação formal contra a instituição, CEIS/CNEP, lista internacional nem CADE. A base de capital é sólida mas defasada (IF.data 2015-06): Basileia 17,1, capital principal 10,77 (o menor entre os pares, exceto Votorantim 9,63), nível I 13,86, folga de 6,6 pp. Captação/crédito de 20,47% (jun/15) sugere funding de mercado, mas o pacote não traz dados de liquidez, de concentração de contrapartes nem de resgates. A ação BBTG11 subiu 17,23% em 25/09–24/11, antes do evento; a reação posterior não consta.",
+            "constraints": [
+              "Dados de capital e rentabilidade são de 2015-06 e anteriores à prisão; não mostram liquidez, linhas de contrapartes ou resgates atuais.",
+              "O pacote não informa o escopo do envolvimento da instituição, nem decisões judiciais, do BCB ou da CVM após a prisão; não afirmar impacto regulatório.",
+              "BTG não tem posição/índice no ranking de reclamações do BCB (2015-S1, menos de 2 milhões de clientes): reputação de varejo não é a exposição principal.",
+              "Concorrentes têm proximidade 0,64-0,70 com cobertura de 85% e sem dado de pressão competitiva; usar só como referência de capital, não como previsão de captura de clientes.",
+              "Há fatos relevantes de 2015-11-04 (incorporação) e 2015-11-25 (recompra e outros assuntos) cujo conteúdo não está no pacote."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "0-30 dias: comitê de crise do conselho; afastar o controlador de funções executivas e de comitês de risco/crédito durante a investigação; investigação independente; divulgação tempestiva via fato relevante à CVM; comunicação coordenada ao BCB.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Sem efeito direto de capital. Preserva a confiança de contrapartes e reguladores. Base: Basileia 17,1 e folga de 6,6 pp (2015-06), a reconfirmar com dados atuais.",
+                "red_lines": [
+                  "Não manter o investigado com poder decisório sobre crédito, risco ou comunicação ao mercado.",
+                  "Não divulgar informação seletiva a contrapartes sem fato relevante equivalente.",
+                  "Não afirmar ausência de envolvimento da instituição sem apuração independente."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "0-30 dias: reforçar liquidez com teste de estresse interno de saques e perda de linhas de contrapartes; ampliar colateral disponível, alongar prazos de captação e mapear exposições de curto prazo; avaliar a recompra de ações apenas depois da revisão de liquidez.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Retém caixa e reduz risco de corrida de funding. O custo de captação pode subir, em Selic de 14,25%. Efeito quantitativo não é sustentável pelo pacote.",
+                "red_lines": [
+                  "Não executar recompra que reduza o colchão de liquidez antes do teste de estresse.",
+                  "Não vender ativos em condições de pressão sem aprovação do comitê de risco.",
+                  "Não deixar de aderir aos limites regulatórios de liquidez e capital."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "31-90 dias: com base na apuração independente, decidir sobre estrutura de controle e governança (conselheiros independentes, regras de sucessão, segregação entre acionista controlador e gestão) e revisar capital: capital principal 10,77 é inferior a Itaú (13,16) e Bradesco (12,76), ambos com proximidade 0,70.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Possível retenção de lucros ou aumento de capital principal, caso estresse ou fatos novos o exijam. A magnitude depende de dados pós-evento (ausentes).",
+                "red_lines": [
+                  "Não conceder privilégios a partes relacionadas durante a investigação.",
+                  "Não adiar decisão sobre sucessão se a ausência prolongada do controlador comprometer a gestão.",
+                  "Não usar números de 2015-06 como evidência de solidez atual."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-sector-event-trigger-btg-2015-11",
+                "source": "Agência Brasil",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-soundness-btg",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-btg",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-soundness-votorantim",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-soundness-itau",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-soundness-bradesco",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-itau",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-proximity-bradesco",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-proximity-votorantim",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-btg-2015-11-24",
+                "source": "Onça market:b3",
+                "as_of": "2015-11-24"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-btg-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-022616ipe251120150104233309-69",
+                "source": "Onça filing:fato_relevante",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-022616ipe041120150104231212-79",
+                "source": "Onça filing:fato_relevante",
+                "as_of": "2015-11-04"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cpo": {
+          "officer": "cpo",
+          "phase": "diagnosis",
+          "run_id": "dry-btg-2015-11-20261125T0457Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cpo",
+            "diagnosis": "Em 2015-11-25 o controlador e presidente do BTG Pactual, André Esteves, foi preso pela PF na Lava Jato (f-sector-event-trigger-btg-2015-11). Os números públicos são defasados (IF.data 2015-06) e anteriores ao evento: Basileia 17,1%, capital principal 10,77%, nível I 13,86%, folga de 6,6 p.p., ROE 27,4%, ativo R$179,35 bi (f-soundness-btg, f-fundamentals-btg). O ponto cego é que o pacote não traz liquidez, captação, exposição a contrapartes nem fluxo de clientes pós-evento. O perfil de captação é diferente do de varejo: crédito/captações de 20,47% (f-fundamentals-btg). O mercado ainda não mostra pânico até 11-24 (BBTG11 +17,23% em 60 dias, antes da prisão) (f-narrative-b3-btg-2015-11-24). A fragilidade é de confiança e governança, não de capital regulatório. O BTG também não aparece no ranking de reclamações (f-reputation-rk-btg-2015-s1).",
+            "constraints": [
+              "Sem dados do pacote sobre liquidez diária, linhas de funding, colaterais ou concentração de captação: a posição de liquidez de 30 dias não pode ser quantificada aqui e exige dados internos.",
+              "Dados de solidez e fundamentos são de 2015-06 (defasados) e anteriores à prisão; a ação de 2015-11-24 também é anterior ao evento. Não refletem o impacto real.",
+              "O pacote não traz o conteúdo do fato relevante de 2015-11-25 (recompra e outros assuntos), nem o estatuto, o acordo de acionistas ou a estrutura de sucessão: não afirmar nada sobre eles.",
+              "O pacote não traz dados de pressão competitiva (sem dados em f-proximity-*), nem sinais de concorrentes após o evento; qualquer migração de clientes é hipótese a verificar.",
+              "Esta é uma visão externa (outside-in): não é decisão de capital nem de preço."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "0-30 dias, liquidez e comunicação: comitê de crise do conselho, painel diário de caixa, funding e colaterais; comunicar BCB, CVM e contrapartes de forma proativa; fato relevante com a governança interina; apurar o conteúdo da recompra anunciada hoje antes de executá-la.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Preserva liquidez ao priorizar caixa e funding sobre a recompra. Parte da folga de 6,6 p.p. de Basileia (2015-06) é um colchão regulatório, mas não substitui a liquidez, que o pacote não mede.",
+                "red_lines": [
+                  "Não executar recompra ou distribuição que consuma liquidez sem validar o caixa pós-evento",
+                  "Não omitir fato relevante ao mercado ou ao regulador",
+                  "Não tratar o Basileia de 2015-06 como prova de liquidez"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "0-90 dias, governança: separar a gestão do controlador investigado, com presidência interina e comitê independente de conselheiros para a apuração e para transações com partes relacionadas; revisar compliance e plano de sucessão; avaliar os efeitos da incorporação societária em curso (f-narrative-ipe-cvm-fato-022616ipe041120150104231212-79).",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Efeito direto em capital pequeno; reduz o risco de reputação e de contraparte que pode pressionar funding. O custo e o prazo da reorganização não podem ser estimados com o pacote.",
+                "red_lines": [
+                  "Não conceder ao controlador investigado poder decisório sobre a própria apuração",
+                  "Não esconder a decisão de governança de acionistas e reguladores",
+                  "Não afirmar fatos sobre a investigação além do que for público"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "30-90 dias, balanço e relacionamento: contingência de funding (ativos líquidos, linhas e colaterais), revisão de limites e exposições a contrapartes, contato direto com os principais clientes e contrapartes, e teste interno de estresse de liquidez e capital (contexto: f-sector-event-ref-2015-10), com Selic a 14,25% (f-macro-selic) encarecendo o funding.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Reduz o risco de corrida e de chamadas de margem, ao custo de menor alavancagem e possível redução de ativos. Se for preciso vender ativos, o capital principal de 10,77% (2015-06) tem menos folga que o Basileia total.",
+                "red_lines": [
+                  "Não vender ativos em desconto forçado sem comparar alternativas",
+                  "Não tratar clientes e contrapartes de forma desigual em prejuízo de alguns",
+                  "Não descumprir limites regulatórios mínimos"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-sector-event-trigger-btg-2015-11",
+                "source": "Agência Brasil",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-soundness-btg",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-btg",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-btg-2015-11-24",
+                "source": "Onça market:b3",
+                "as_of": "2015-11-24"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-btg-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-022616ipe251120150104233309-69",
+                "source": "Onça filing:fato_relevante",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-022616ipe041120150104231212-79",
+                "source": "Onça filing:fato_relevante",
+                "as_of": "2015-11-04"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-sector-event-ref-2015-10",
+                "source": "BCB Relatório de Estabilidade Financeira",
+                "as_of": "2015-10-31"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cro": {
+          "officer": "cro",
+          "phase": "diagnosis",
+          "run_id": "dry-btg-2015-11-20261125T0457Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cro",
+            "diagnosis": "Lente regulatória, outside-in, com dados defasados. O pacote não traz norma nova nem prazo de vigência; o gatilho é a prisão de André Esteves, controlador e presidente (Agência Brasil, 2015-11-25). Base prudencial (IF.data, 2015-06): Basileia 17,1%, capital principal 10,77%, nível I 13,86%, folga 6,6 p.p., ROE 27,4%. Capital sólido, mas a captação depende de confiança: crédito/captações 20,47% e ativo de R$179,35 bi (porte menor que os pares maiores). Selic 14,25% (Copom, 2015-07-30) encarece o funding. Em 2015-11-25 o BTG divulgou fato relevante sobre recompra e 'outros assuntos', e em 2015-11-04 sobre incorporação de sociedade pelo Banco BTG Pactual S.A.; o conteúdo não consta do pacote. O pacote não traz dados de liquidez, saques ou linhas de contrapartes: é a maior lacuna. A ação BBTG11 subiu 17,23% em 2015-09-25 a 2015-11-24, antes da prisão.",
+            "constraints": [
+              "Sem dados de liquidez diária, concentração de funding, margens ou exposição a contrapartes no pacote; qualquer opção de liquidez depende de dados internos.",
+              "Dados prudenciais são de 2015-06 (defasados ~5 meses); não refletem o efeito da prisão.",
+              "O pacote não traz norma, diff de seção nem prazo regulatório específico; não afirmo exigência do BCB/CVM sobre governança do BTG.",
+              "O teor do fato relevante de 2015-11-25 (recompra e outros assuntos) não consta; a opção de recompra não pode ser avaliada.",
+              "Concorrentes são distantes (proximidade 0,64 a 0,70) e BTG não aparece no ranking de reclamações (menos de 2 milhões de clientes, 2015-S1): pouca base de varejo, sinal reputacional limitado."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "0-30 dias: governança de crise. Separar a gestão do controlador (afastamento ou delegação formal da presidência a executivo independente), comitê de crise do conselho, comunicação contínua a CVM/BCB e ao mercado via fatos relevantes. Revisar a recompra anunciada hoje à luz do estresse.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Preserva confiança de contrapartes. Recompra consome caixa e capital: com capital principal de 10,77% (2015-06), avaliar suspender ou reduzir até a liquidez se estabilizar.",
+                "red_lines": [
+                  "Não manter o controlador na decisão de assuntos que envolvam a investigação.",
+                  "Não omitir informação relevante ao mercado nem ao regulador.",
+                  "Não executar recompra sem teste de liquidez sob estresse."
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "0-30 dias: blindagem de liquidez. Mapear diariamente captação por contraparte/vencimento, ampliar colchão de ativos líquidos, acionar linhas com pares e BCB, e conversar proativamente com grandes depositantes e contrapartes de derivativos.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Custo de funding maior com Selic 14,25% (2015-07-30). Venda de ativos pode realizar perdas sobre Basileia 17,1% e folga de 6,6 p.p. (2015-06); calibrar com dados internos.",
+                "red_lines": [
+                  "Não vender ativos de forma que quebre o índice de Basileia mínimo.",
+                  "Não dar tratamento desigual a contrapartes que gere risco legal.",
+                  "Não depender de apoio de terceiros sem ter confirmado a linha."
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "30-90 dias: reforço de balanço e estrutura. Se houver fuga de captação, preparar redução de ativos não essenciais, alongamento de funding e avaliação de capitalização ou parceria, e rever a governança (conselho independente, política de sucessão) para sustentar relacionamento com clientes e contrapartes.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Desalavancagem protege Basileia (17,1%, 2015-06) mas reduz receita. Capitalização dilui acionistas. Efeito exato exige dados internos.",
+                "red_lines": [
+                  "Não diluir ou ceder controle sem aprovação do conselho e dos reguladores.",
+                  "Não alienar ativos estratégicos a preço de crise sem alternativas.",
+                  "Não comprometer o capital abaixo do mínimo regulatório."
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-sector-event-trigger-btg-2015-11",
+                "source": "Agência Brasil",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-soundness-btg",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-btg",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-022616ipe251120150104233309-69",
+                "source": "Onça filing:fato_relevante",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-022616ipe041120150104231212-79",
+                "source": "Onça filing:fato_relevante",
+                "as_of": "2015-11-04"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-btg-2015-11-24",
+                "source": "Onça market:b3",
+                "as_of": "2015-11-24"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-btg-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              },
+              {
+                "pack_fact_id": "f-proximity-bradesco",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-proximity-votorantim",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-11-25"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        }
+      },
+      "challenge": {
+        "cro": {
+          "officer": "cro",
+          "phase": "challenge",
+          "run_id": "dry-btg-2015-11-20261125T0457Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cro",
+            "diagnosis": "Contestação a cpo e risk, pela lente regulatória. (1) Ambos concluem 'choque de confiança, não de capital' com base em IF.data de 2015-06, anterior à prisão de 2015-11-25 (f-soundness-btg, f-sector-event-trigger-btg-2015-11). Isso é hipótese, não achado. (2) Risk afirma dependência atacadista, fuga de depósitos e rebaixamento. O pacote só traz crédito/captações de 20,47% (f-fundamentals-btg), que não prova a composição do funding. (3) Risk diz que a recompra e a incorporação consomem caixa, mas o fato de 2015-11-25 só informa o título, 'Programa de Recompra e Outros Assuntos' (f-narrative-ipe-cvm-fato-022616ipe251120150104233309-69). (4) Cpo usa como conforto a ação +17,23% até 11-24 e a ausência no ranking de reclamações. Ambos são anteriores ao evento ou não informativos: BTG tem posição e índice None (f-narrative-b3-btg-2015-11-24, f-reputation-rk-btg-2015-s1). (5) Falta o eixo regulatório: nenhuma opção trata de comunicação formal à CVM e ao BCB sobre a mudança de administração, nem de prazos e aprovações da incorporação em curso. Faltam também gatilhos de monitoramento numerados.",
+            "constraints": [
+              "O pacote não traz normas, prazos nem exigências do BCB ou da CVM sobre idoneidade de controlador e administradores ou sobre a incorporação: mapear com jurídico e compliance, sem afirmar o que a regra exige.",
+              "Solidez e fundamentos são de 2015-06 e pré-evento: Basileia 17,1%, capital principal 10,77%, nível I 13,86% (f-soundness-btg). Capital principal acima de Votorantim (9,63%) e Safra (10,66%) (f-soundness-votorantim, f-soundness-safra), abaixo de Itaú, Bradesco e Santander.",
+              "Peso dos pares: Safra 0,70 e Votorantim 0,64 de proximidade (f-proximity-safra, f-proximity-votorantim), mas com modelo de negócio distante (0,24 e 0,00). Comparações de capital são só referência. Sem dados de pressão competitiva.",
+              "O pacote não traz LCR, vencimentos, colaterais nem a composição dos controladores, e não sustenta afirmações sobre reação de agências, reguladores ou clientes.",
+              "Visão externa (outside-in): não é decisão de capital nem de preço."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "0-30 dias, regulatório e comunicação: formalizar com jurídico, BCB e CVM a comunicação da prisão e da governança interina. Mapear prazos e aprovações da incorporação (f-narrative-ipe-cvm-fato-022616ipe041120150104231212-79). Publicar o conteúdo da recompra de 11-25 e decidir sobre ela só depois de medir o caixa interno. Não presumir suspensão nem execução.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Reduz risco de descumprimento de prazo ou dever de informar. Efeito em liquidez depende de dado interno ausente do pacote. A folga de 6,6 p.p. de Basileia (2015-06) não substitui medida de liquidez.",
+                "red_lines": [
+                  "Não prosseguir com incorporação ou recompra sem checar exigências regulatórias e de informação",
+                  "Não divulgar de forma assimétrica a regulador, mercado e contrapartes",
+                  "Não tratar Basileia de 2015-06 como prova de liquidez pós-evento"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "0-90 dias, governança com limites reais: um comitê independente de conselheiros supervisiona investigação, partes relacionadas e comunicação. O afastamento de Esteves da gestão é decisão do conselho. Mudar a posição de controlador exige análise jurídica separada. Documentar a sucessão e o fluxo de informação a acionistas.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Efeito direto em capital é pequeno. Reduz risco de contraparte e de funding ligado à governança, mas esse risco não pode ser quantificado com o pacote.",
+                "red_lines": [
+                  "Não dar ao investigado voz decisória na própria apuração",
+                  "Não presumir poder do conselho sobre o controlador",
+                  "Não afirmar fatos da investigação além do público"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Gatilhos a monitorar (30 e 90 dias): (a) saídas de captação e cortes de linhas de contrapartes; (b) chamadas de margem e colateral; (c) capital principal contra 10,77% de 2015-06; (d) BBTG11 contra a mediana setorial de 3,7% (f-narrative-b3-btg-2015-11-24); (e) novos fatos relevantes e comunicados; (f) sinais de reguladores; (g) Selic 14,25% e custo de funding (f-macro-selic). Definir limite e responsável por gatilho.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Dá disparo objetivo para contingência de liquidez e reforço de capital. Limites numéricos exigem dados internos que o pacote não traz.",
+                "red_lines": [
+                  "Não vender ativos a desconto forçado sem comparar alternativas",
+                  "Não crescer risco de crédito ou de trading durante a crise",
+                  "Não descumprir mínimos regulatórios"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-sector-event-trigger-btg-2015-11",
+                "source": "Agência Brasil",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-soundness-btg",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-btg",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-022616ipe251120150104233309-69",
+                "source": "Onça filing:fato_relevante",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-022616ipe041120150104231212-79",
+                "source": "Onça filing:fato_relevante",
+                "as_of": "2015-11-04"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-btg-2015-11-24",
+                "source": "Onça market:b3",
+                "as_of": "2015-11-24"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-btg-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              },
+              {
+                "pack_fact_id": "f-soundness-safra",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-soundness-votorantim",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-safra",
+                "source": "Onça",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-proximity-votorantim",
+                "source": "Onça",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2015-11-25"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cco": {
+          "officer": "cco",
+          "phase": "challenge",
+          "run_id": "dry-btg-2015-11-20261125T0457Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cco",
+            "diagnosis": "Contesto CPO e Risk à luz de conduta e integridade. A prisão de André Esteves, controlador e presidente (Lava Jato, 2015-11-25), é um evento de integridade: o pacote não traz sanção, CEIS/CNEP, lista internacional nem processo do CADE contra o BTG, então não afirmo imputação à instituição. Ambos tratam o caso como choque de confiança, não de capital (Basileia 17,1%, capital principal 10,77%, IF.data 2015-06, anterior ao evento). Faltam nas duas posições: separar a pessoa do controlador da responsabilidade da instituição, preservar provas e conter o risco de conduta (lavagem, partes relacionadas). Risk afirma 'dependência de captação atacadista' e 'fuga de depósitos' sem dado: crédito/captações de 20,47% não prova isso. Risk também diz 'suspender recompra' sem ler o conteúdo do fato relevante de 2015-11-25.",
+            "constraints": [
+              "Dados de 2015-06 (IF.data) e de 2015-11-24 (B3) são anteriores à prisão; não medem o impacto. O pacote não traz liquidez, captação, contrapartes, o conteúdo do fato relevante de 2015-11-25, estatuto, acordo de acionistas nem sucessão.",
+              "O pacote não contém sanções do BCB, CVM, CADE, CEIS/CNEP ou listas internacionais contra o BTG: não há como afirmar que a instituição é investigada ou sancionada; a prisão é de pessoa física.",
+              "Concorrentes pesam pouco: proximidade 0,64 a 0,70 (f-proximity-*), com modelo de negócio distinto (Votorantim 0,00, Santander 0,19, Safra 0,24, Itaú 0,32, Bradesco 0,41). Comparar capital principal do BTG com Itaú, Bradesco e Santander (Risk) é referência fraca; pressão competitiva sem dados.",
+              "BTG sem posição no ranking de reclamações do BCB 2015-S1 (menos de dois milhões de clientes): ausência de reclamações não mede risco de conduta nem de relacionamento.",
+              "Visão externa (outside-in): não é decisão de capital nem de preço."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "0-30 dias, integridade: conselho forma comitê independente, com assessoria externa, para apurar o que a instituição sabe e responde; preservar documentos e comunicações (litigation hold); isolar o controlador de decisões de crédito, partes relacionadas e da própria apuração; cooperar com BCB, CVM e autoridades; fato relevante factual, sem juízo sobre a investigação.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Efeito direto em capital pequeno. Reduz o risco de que condicionantes de contrapartes por governança pressionem o funding; custo de assessoria e de eventual paralisia decisória não estimável com o pacote.",
+                "red_lines": [
+                  "Não destruir, alterar ou omitir registros",
+                  "Não conceder ao controlador investigado poder sobre a apuração ou sobre partes relacionadas",
+                  "Não fazer afirmação pública sobre culpa ou inocência além do que for público",
+                  "Não obstruir nem tratar de forma desigual BCB, CVM e autoridades"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "30-90 dias, conduta: revisão independente de compliance, PLD e partes relacionadas (transações com o controlador e empresas ligadas); registro e trilha de decisões do conselho; varredura reputacional e de listas (CEIS/CNEP, sanções internacionais) de contrapartes novas; plano de sucessão e avaliação da incorporação societária de 2015-11-04.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Sem efeito direto em capital. Pode revelar perdas, contingências ou exposições hoje não mensuráveis; reservar capacidade de absorção (capital principal 10,77%, 2015-06, folga de Basileia 6,6 p.p.).",
+                "red_lines": [
+                  "Não encerrar relação com cliente ou contraparte sem critério documentado",
+                  "Não omitir achados relevantes ao regulador",
+                  "Não aprovar partes relacionadas sem comitê independente",
+                  "Não limitar a revisão a escopo que poupe o controlador"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "0-90 dias, relacionamento e gatilhos: contato igual e documentado com clientes e contrapartes; monitorar gatilhos de conduta (denúncia, sanção ou processo contra a instituição, oficio do BCB ou CVM, bloqueio de bens, saída de conselheiros, restrição de linhas por contrapartes). Recompra só após ler o fato relevante de 2015-11-25 e validar caixa.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Se linhas forem restringidas, o efeito em liquidez é relevante, mas o pacote não o quantifica; a recompra consome caixa e deve esperar validação interna. Contrapartes como o mercado podem reagir de forma desigual.",
+                "red_lines": [
+                  "Não dar a algum cliente ou contraparte informação privilegiada ou tratamento desigual",
+                  "Não executar recompra sem validar caixa e legalidade",
+                  "Não tratar o mercado em alta de BBTG11 (+17,23% até 2015-11-24) como prova de confiança pós-evento"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-sector-event-trigger-btg-2015-11",
+                "source": "Agência Brasil",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-soundness-btg",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-btg",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-btg-2015-11-24",
+                "source": "Onça market:b3",
+                "as_of": "2015-11-24"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-btg-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-022616ipe251120150104233309-69",
+                "source": "Onça filing:fato_relevante",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-022616ipe041120150104231212-79",
+                "source": "Onça filing:fato_relevante",
+                "as_of": "2015-11-04"
+              },
+              {
+                "pack_fact_id": "f-soundness-itau",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-itau",
+                "source": "Onça",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-proximity-bradesco",
+                "source": "Onça",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-proximity-santander",
+                "source": "Onça",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-proximity-safra",
+                "source": "Onça",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-proximity-votorantim",
+                "source": "Onça",
+                "as_of": "2015-11-25"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "risk": {
+          "officer": "risk",
+          "phase": "challenge",
+          "run_id": "dry-btg-2015-11-20261125T0457Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "risk",
+            "diagnosis": "Contesto o CSO: tese certa (choque de governança/confiança, não de solvência em jun/2015: Basileia 17,1%, headroom 6,6 p.p., ROE 27,4%), mas o plano subestima a sobrevivência. Linha vermelha omitida: o pacote não traz LCR, composição/prazo do funding nem exposição de contrapartes, e crédito/captações de 20,47% sugere funding de atacado sensível a confiança; a Selic de 14,25% encarece a rolagem. Capital principal de 10,77% (jun/2015) é só 0,6 p.p. acima de Safra e 1,1 p.p. acima de Votorantim, folga pequena se houver marcação a mercado ou perdas. Falta: gatilhos numéricos, ordem de resolução/regulatória (o pacote não sustenta nenhuma afirmação sobre BCB ou escopo jurídico), contingência de cross-default/covenants e plano de fonte de liquidez. Dados têm 5 meses de defasagem e não refletem a prisão de 25/11/2015. A alta de 17,2% da ação até 24/11 é anterior ao evento e não é conforto.",
+            "constraints": [
+              "Solidez e fundamentos são de jun/2015 (IF.data) e não captam o pós-prisão; sem LCR, funding por prazo, colaterais ou exposição de contrapartes no pacote.",
+              "Nada no pacote sobre escopo da investigação, participação do controlador, cláusulas contratuais (cross-default, key-man) ou posição do BCB; não afirmar.",
+              "Concorrentes só contexto: Itaú/Bradesco/Safra 0,70 e Votorantim 0,64 de proximidade, sem dados de pressão competitiva.",
+              "Basileia 17,1% é sólida, mas capital principal de 10,77% é o menor entre os pares exceto Votorantim (9,63%).",
+              "Sem baseline de reputação: BTG sem posição no ranking de reclamações (2015-S1)."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Contestar opt-1 do CSO: antes de ALCO/comunicação, definir em 24-72h gatilhos quantitativos de liquidez (saídas de funding de atacado, chamadas de margem/colateral, cortes de linhas de contrapartes) e fontes de contingência. Estresse deve incluir perda total de funding não garantido e rebaixamento, não apenas 'saída de atacado'.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Mantém caixa elevado a custo de carrego com Selic 14,25%; protege a sobrevivência. Basileia 17,1% e headroom de 6,6 p.p. (jun/2015) são a base, a atualizar com dados correntes.",
+                "red_lines": [
+                  "Não vender ativos a preço forçado que corroa o capital principal de 10,77% (jun/2015)",
+                  "Não omitir ao mercado (CVM) ou ao BCB fato relevante",
+                  "Não concentrar a liquidez em contrapartes expostas ao mesmo evento"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Contestar opt-2: afastamento do presidente das funções executivas e comitê independente são necessários, mas devem ser imediatos (dias, não 30-90). Vácuo de comando é risco operacional e de contraparte. Acrescentar blindagem formal de decisões de risco e crédito e revisão de operações com partes relacionadas.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Capital sem efeito direto; reduz prêmio de risco de contraparte e protege o acesso a funding. Risco de conflito com o bloco de controle.",
+                "red_lines": [
+                  "O investigado não participa de decisões do conselho sobre o tema",
+                  "Não deixar vácuo de comando além de poucos dias",
+                  "Sem decisão de capital ou de preço neste briefing"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Contestar opt-3: suspender, e não apenas 'reexaminar', o programa de recompra divulgado em 25/11 (fato relevante) até a liquidez se estabilizar; recompra em dia de prisão do controlador é sinal contraditório. Alongar funding só se o custo for compatível com a margem; priorizar contrapartes críticas sem violar isonomia.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Suspender preserva caixa e capital principal (10,77%, jun/2015); alongar funding custa mais com Selic 14,25%; concessões a clientes pesam na margem.",
+                "red_lines": [
+                  "Não priorizar recompra sobre liquidez",
+                  "Não dar tratamento preferencial que fira a isonomia",
+                  "Não deixar o capital principal cair abaixo do mínimo regulatório",
+                  "Não prometer garantias sem base jurídica"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-sector-event-trigger-btg-2015-11",
+                "source": "Agência Brasil",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-soundness-btg",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-btg",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-soundness-safra",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-soundness-votorantim",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-btg-2015-11-24",
+                "source": "Onça market:b3",
+                "as_of": "2015-11-24"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-022616ipe251120150104233309-69",
+                "source": "Onça filing:fato_relevante",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-proximity-safra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-proximity-votorantim",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-btg-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        }
+      },
+      "quantify": {
+        "risk": {
+          "officer": "risk",
+          "phase": "quantify",
+          "run_id": "dry-btg-2015-11-20261125T0457Z",
+          "status": "ok",
+          "attempts": 2,
+          "position": {
+            "officer": "risk",
+            "diagnosis": "A prisão de André Esteves (controlador e presidente) em 2015-11-25 é choque de governança e confiança, não comprovado de solvência: em 2015-06 (IF.data, defasagem ~5 meses, pré-evento) o BTG tinha Basileia 17,1%, capital principal 10,77%, nível I 13,86%, folga 6,6 p.p., ROE 27,4%. Capital principal fica acima de Votorantim (9,63%) e Safra (10,66%) e abaixo de Itaú (13,16%), Bradesco (12,76%) e Santander (15,49%); Basileia 17,1% vs Itaú 17,16%, Santander 18,05%, Bradesco 15,98%, Safra 14,07%. Crédito/captações 20,47% não prova a composição do funding. O pacote não traz LCR/NSFR, alavancagem nem inadimplência. Selic 14,25% encarece a rolagem.",
+            "constraints": [
+              "Sem LCR/NSFR, alavancagem, inadimplência, prazos de funding, colaterais ou exposição de contrapartes no pacote: levantar internamente em 24-72h.",
+              "Basileia e fundamentos são de 2015-06, anteriores à prisão; BBTG11 +17,23% (até 2015-11-24) também é pré-evento e não é conforto.",
+              "Pares com proximidade 0,64-0,70 (Itaú 0,70, Bradesco 0,70, Safra 0,70, Santander 0,68, Votorantim 0,64) e modelos de negócio distintos; comparação é só referência, sem dados de pressão competitiva.",
+              "O conteúdo do fato relevante de 2015-11-25 (recompra e outros assuntos) e o escopo jurídico da investigação não constam do pacote.",
+              "BTG sem posição no ranking de reclamações 2015-S1: sem baseline de reputação."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "0-30 dias: comitê de crise de liquidez; gatilhos quantitativos em 24-72h (saída de funding de atacado, chamadas de margem/colateral, corte de linhas de contrapartes); estresse com perda total de funding não garantido; ampliar ativos líquidos; comunicar CVM e BCB.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Caixa elevado custa carrego com Selic 14,25%, mas protege a sobrevivência. Folga de 6,6 p.p. de Basileia (2015-06) não substitui medida de liquidez; atualizar com dados correntes.",
+                "red_lines": [
+                  "Não vender ativos a preço forçado que corroa o capital principal de 10,77% (2015-06)",
+                  "Não omitir fato relevante ao mercado (CVM) ou ao BCB",
+                  "Não concentrar a liquidez em contrapartes expostas ao mesmo evento"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Imediato a 30 dias: afastar o presidente das funções executivas, presidente interino e comitê independente; blindar decisões de risco, crédito e partes relacionadas. Vácuo de comando é risco operacional e de contraparte.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Sem efeito direto em capital; reduz prêmio de risco de contraparte e protege o acesso a funding. Risco de conflito com o bloco de controle.",
+                "red_lines": [
+                  "O investigado não participa de decisões do conselho sobre o tema",
+                  "Não deixar vácuo de comando além de poucos dias",
+                  "Sem decisão de capital ou de preço neste briefing"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "30-90 dias: suspender a recompra anunciada em 25/11 até a liquidez estabilizar; diversificar e alongar funding se o custo for compatível; contato isonômico com principais clientes e contrapartes; monitorar gatilhos: saídas de captação, margem, capital principal vs 10,77%, novos fatos relevantes.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Suspender preserva caixa e capital principal; alongar funding custa mais com Selic 14,25%; concessões a clientes pesam na margem.",
+                "red_lines": [
+                  "Não priorizar recompra sobre liquidez",
+                  "Não dar tratamento preferencial que fira a isonomia",
+                  "Não deixar o capital principal cair abaixo do mínimo regulatório"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-sector-event-trigger-btg-2015-11",
+                "source": "Agência Brasil",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-soundness-btg",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-btg",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-soundness-itau",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-soundness-bradesco",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-soundness-santander",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-soundness-safra",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-soundness-votorantim",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-itau",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-proximity-bradesco",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-proximity-santander",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-proximity-safra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-proximity-votorantim",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-btg-2015-11-24",
+                "source": "Onça market:b3",
+                "as_of": "2015-11-24"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-022616ipe251120150104233309-69",
+                "source": "Onça filing:fato_relevante",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-btg-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cpo": {
+          "officer": "cpo",
+          "phase": "quantify",
+          "run_id": "dry-btg-2015-11-20261125T0457Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cpo",
+            "diagnosis": "Lente produto/cobertura: em 25/11/2015 a prisão do controlador e presidente (f-sector-event-trigger-btg-2015-11) é choque de confiança sobre a franquia de atacado/gestão de patrimônio. Números públicos são pré-evento e defasados (IF.data 2015-06): Basileia 17,1%, capital principal 10,77%, folga 6,6 p.p., ROE 27,4%, crédito/captações 20,47% (f-soundness-btg, f-fundamentals-btg). Pontos cegos de cobertura: o pacote não traz liquidez, funding por prazo, exposição de contrapartes, fluxo de clientes pós-evento, nem o teor do fato relevante de 25/11 (recompra e outros assuntos). BBTG11 +17,23% até 24/11 é anterior ao evento e não é conforto. BTG não tem posição no ranking de reclamações (<2 mi de clientes, 2015-S1): sem baseline de reputação de varejo.",
+            "constraints": [
+              "Solidez e fundamentos são de 2015-06 e anteriores à prisão; a ação de 2015-11-24 também. Nada disso mede o impacto real.",
+              "Sem dados de liquidez, funding, colaterais, contrapartes ou clientes: opções de 30 dias exigem dados internos nas primeiras 24-72h.",
+              "Conteúdo dos fatos relevantes de 2015-11-04 (incorporação) e 2015-11-25 (recompra e outros assuntos) não consta; não afirmar suspensão ou execução da recompra.",
+              "Concorrentes são só contexto: Itaú e Bradesco 0,70, Safra 0,70, Santander 0,68, Votorantim 0,64, com modelo de negócio distante e sem dados de pressão competitiva; migração de clientes é hipótese a verificar.",
+              "Visão externa (outside-in): não é decisão de capital nem de preço; nada sobre escopo jurídico da investigação ou participação do controlador."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "0-30 dias, liquidez e comunicação: comitê de crise do conselho, painel diário de caixa, funding por prazo e linhas de contrapartes; comunicação coordenada a BCB, CVM, clientes e contrapartes; ler e divulgar o teor da recompra de 25/11 e só executá-la após validar o caixa.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Preserva liquidez ao priorizar caixa sobre recompra; custo de carrego de ativos líquidos com Selic a 14,25% (f-macro-selic). Folga de 6,6 p.p. de Basileia (2015-06) é colchão regulatório, não medida de liquidez.",
+                "red_lines": [
+                  "Não executar recompra que consuma liquidez antes de validar o caixa pós-evento",
+                  "Não omitir fato relevante ao mercado ou ao regulador",
+                  "Não tratar o Basileia de 2015-06 como prova de liquidez",
+                  "Não vender ativos a desconto forçado que corroa o capital principal de 10,77%"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "0-90 dias, governança: afastar a gestão do controlador investigado, com presidência interina e comitê independente para apuração e partes relacionadas; revisar sucessão e avaliar efeitos da incorporação em curso (fato de 2015-11-04). Vácuo de comando é risco de contraparte: decidir em dias.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Efeito direto em capital pequeno; reduz risco reputacional e de contraparte que pode pressionar funding. Custo e prazo não estimáveis com o pacote.",
+                "red_lines": [
+                  "Não dar ao investigado poder decisório sobre a própria apuração",
+                  "Não deixar vácuo de comando além de poucos dias",
+                  "Não afirmar fatos da investigação além do público",
+                  "Não presumir poder do conselho sobre o controlador sem análise jurídica"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "30-90 dias, balanço, relacionamento e gatilhos: diversificar e alongar funding, contato isonômico e documentado com principais clientes e contrapartes, estresse de liquidez e capital. Gatilhos: saídas de captação e cortes de linhas, chamadas de margem, capital principal vs 10,77%, BBTG11 vs mediana setorial 3,7%, novos fatos relevantes, sinais de reguladores.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Alongar funding custa mais com Selic 14,25%; desalavancagem protege capital mas reduz receita. Capital principal 10,77% (2015-06) fica abaixo de Itaú 13,16% e Bradesco 12,76% (proximidade 0,70, referência fraca) e acima de Votorantim 9,63% (0,64). Limites numéricos exigem dados internos.",
+                "red_lines": [
+                  "Não dar tratamento desigual a clientes ou contrapartes",
+                  "Não crescer risco de crédito ou trading durante a crise",
+                  "Não vender ativos estratégicos a preço de crise sem comparar alternativas",
+                  "Não descumprir mínimos regulatórios"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-sector-event-trigger-btg-2015-11",
+                "source": "Agência Brasil",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-soundness-btg",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-btg",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-btg-2015-11-24",
+                "source": "Onça market:b3",
+                "as_of": "2015-11-24"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-btg-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-022616ipe251120150104233309-69",
+                "source": "Onça filing:fato_relevante",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-022616ipe041120150104231212-79",
+                "source": "Onça filing:fato_relevante",
+                "as_of": "2015-11-04"
+              },
+              {
+                "pack_fact_id": "f-soundness-itau",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-soundness-bradesco",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-soundness-votorantim",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-proximity-itau",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-proximity-bradesco",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-proximity-votorantim",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-11-25"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        },
+        "cso": {
+          "officer": "cso",
+          "phase": "quantify",
+          "run_id": "dry-btg-2015-11-20261125T0457Z",
+          "status": "ok",
+          "attempts": 1,
+          "position": {
+            "officer": "cso",
+            "diagnosis": "A prisão do controlador e presidente do BTG (Agência Brasil, 2015-11-25) é um choque de governança e confiança; a solvência não aparece como problema nos dados de jun/2015 (pré-evento): Basileia 17,1%, capital principal 10,77%, headroom 6,6 p.p., ROE 27,4%. A fragilidade provável é o funding: crédito/captações de 20,47% e Selic 14,25% encarecem a rolagem, mas a composição do funding não está no pacote. Capital principal fica acima de Votorantim (9,63%) e Safra (10,66%) e abaixo de Itaú, Bradesco e Santander. Ranking de fit: 1) liquidez e comunicação (0-30d), porque o risco de corrida é o que destrói valor mais rápido; 2) governança imediata, que sustenta o acesso a contrapartes; 3) balanço e relacionamento (30-90d), condicionado aos gatilhos.",
+            "constraints": [
+              "Dados de solidez e fundamentos são de IF.data 2015-06 e anteriores à prisão; BBTG11 +17,23% (até 2015-11-24) também é pré-evento e não é conforto.",
+              "O pacote não traz LCR, prazos de funding, colaterais, exposição de contrapartes nem fluxo de clientes: não é possível quantificar a liquidez de 30 dias.",
+              "Sem informação sobre escopo da investigação, participação do controlador, estatuto, cláusulas contratuais ou posição de BCB/CVM; nada é afirmado sobre isso. O conteúdo do fato relevante de 2015-11-25 (recompra e outros assuntos) também não consta.",
+              "Concorrentes são só contexto: Itaú e Bradesco 0,70, Safra 0,70, Santander 0,68 e Votorantim 0,64 de proximidade, com modelos de negócio distintos e sem dados de pressão competitiva; migração de clientes é hipótese.",
+              "BTG não tem posição no ranking de reclamações (2015-S1, menos de 2 milhões de clientes): sem baseline de reputação de varejo. Visão outside-in, sem decisão de capital ou preço."
+            ],
+            "options": [
+              {
+                "id": "opt-1",
+                "description": "Fit 1 (0-30d), liquidez e comunicação: comitê de crise do conselho; painel diário de caixa, funding, margens e linhas de contrapartes; estresse com perda de funding não garantido; colchão líquido elevado; fato relevante e comunicação coordenada a CVM, BCB, clientes e contrapartes; recompra de 25/11 só após validar caixa.",
+                "customer_impact": "medium",
+                "capital_liquidity_effect": "Carrego do caixa pesa na rentabilidade com Selic 14,25%, mas protege contra fuga de funding. Basileia 17,1% e headroom de 6,6 p.p. (2015-06) dão folga, a revalidar com dados atuais; não substituem medida de liquidez.",
+                "red_lines": [
+                  "Não vender ativos sob pressão a preço que corroa o capital principal de 10,77% (2015-06)",
+                  "Não omitir fato relevante ao mercado nem ao regulador",
+                  "Não executar recompra que consuma liquidez antes do teste de estresse",
+                  "Não tratar o Basileia de 2015-06 como prova de liquidez atual"
+                ]
+              },
+              {
+                "id": "opt-2",
+                "description": "Fit 2 (imediato a 90d), governança: afastar o controlador das funções executivas e de decisões sobre a apuração, crédito e partes relacionadas; presidência interina e comitê independente; investigação independente; plano de sucessão. Evitar vácuo de comando; mudança de controle exige análise jurídica própria.",
+                "customer_impact": "low",
+                "capital_liquidity_effect": "Efeito direto em capital pequeno; reduz o risco de contraparte e de condicionantes de funding ligados à governança, não quantificável com o pacote. Risco de conflito com o bloco de controle.",
+                "red_lines": [
+                  "Não dar ao investigado voz decisória na própria apuração",
+                  "Não deixar vácuo de comando além de poucos dias",
+                  "Não afirmar fatos da investigação além do público",
+                  "Não presumir poder do conselho sobre o controlador"
+                ]
+              },
+              {
+                "id": "opt-3",
+                "description": "Fit 3 (30-90d), balanço e relacionamento: alongar e diversificar funding se o custo for compatível; contato direto e isonômico com principais clientes e contrapartes; reforço de capital ou venda de ativos não estratégicos só se os gatilhos dispararem. Gatilhos: saídas de captação, cortes de linhas, chamadas de margem, capital principal vs 10,77%, BBTG11 vs mediana 3,7%, novos fatos relevantes, sinais de reguladores.",
+                "customer_impact": "high",
+                "capital_liquidity_effect": "Alongar funding encarece com Selic 14,25%; desalavancar protege capital mas reduz receita; capitalização dilui; concessões a clientes pesam na margem. Magnitude exige dados internos.",
+                "red_lines": [
+                  "Não dar tratamento preferencial que fira a isonomia entre clientes e contrapartes",
+                  "Não alienar ativos a preço de crise sem comparar alternativas",
+                  "Não crescer risco de crédito ou trading durante a crise",
+                  "Não deixar o capital abaixo do mínimo regulatório"
+                ]
+              }
+            ],
+            "citations": [
+              {
+                "pack_fact_id": "f-sector-event-trigger-btg-2015-11",
+                "source": "Agência Brasil",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-soundness-btg",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-fundamentals-btg",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-soundness-itau",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-soundness-bradesco",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-soundness-santander",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-soundness-safra",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-soundness-votorantim",
+                "source": "BCB IF.data",
+                "as_of": "2015-06"
+              },
+              {
+                "pack_fact_id": "f-macro-selic",
+                "source": "BCB Copom",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-narrative-b3-btg-2015-11-24",
+                "source": "Onça market:b3",
+                "as_of": "2015-11-24"
+              },
+              {
+                "pack_fact_id": "f-narrative-ipe-cvm-fato-022616ipe251120150104233309-69",
+                "source": "Onça filing:fato_relevante",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-reputation-rk-btg-2015-s1",
+                "source": "BCB ranking de reclamações",
+                "as_of": "2015-S1"
+              },
+              {
+                "pack_fact_id": "f-proximity-itau",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-proximity-bradesco",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-proximity-safra",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-proximity-santander",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-11-25"
+              },
+              {
+                "pack_fact_id": "f-proximity-votorantim",
+                "source": "Onça (cálculo de proximidade 2026-11-15.1)",
+                "as_of": "2015-11-25"
+              }
+            ],
+            "tool_call_summary": []
+          }
+        }
+      },
+      "synthesize": {
+        "secretary": {
+          "status": "ok"
+        }
+      }
+    },
+    "synthesis": {
+      "summary": "A prisão do controlador e presidente do BTG Pactual (2015-11-25) é, pelos dados do pacote, um choque de governança e confiança e não de solvência: em 2015-06 (pré-evento, defasado) Basileia 17,1%, capital principal 10,77% e folga de 6,6 p.p. A vulnerabilidade provável é o funding (crédito/captações 20,47%, Selic 14,25%), mas o pacote não traz liquidez, prazos, contrapartes nem o teor do fato relevante de recompra de 25/11. Três frentes: liquidez e comunicação (0-30d), governança imediata (até 90d) e balanço/relacionamento condicionado a gatilhos (30-90d). Briefing externo, sem decisão de capital ou preço.",
+      "options": [
+        {
+          "id": "opt-1",
+          "description": "0-30 dias, liquidez e comunicação: comitê de crise do conselho; painel diário de caixa, funding por prazo, margens e linhas de contrapartes; estresse com perda de funding não garantido; ampliar ativos líquidos; comunicação factual e coordenada a CVM, BCB, clientes e contrapartes via fato relevante; ler o teor da recompra de 25/11 e só executá-la após validar o caixa (considerar suspensão até a liquidez estabilizar). Levantar internamente em 24-72h os dados ausentes do pacote.",
+          "customer_impact": "medium",
+          "capital_liquidity_effect": "Carrego do caixa pesa na rentabilidade com Selic a 14,25%, mas protege contra fuga de funding e preserva capital. Basileia 17,1% e folga de 6,6 p.p. (2015-06, pré-evento) são colchão regulatório, não medida de liquidez, e devem ser revalidados. Vender ativos sob pressão pode corroer o capital principal de 10,77%.",
+          "citations": [
+            "f-sector-event-trigger-btg-2015-11",
+            "f-soundness-btg",
+            "f-fundamentals-btg",
+            "f-macro-selic",
+            "f-narrative-ipe-cvm-fato-022616ipe251120150104233309-69"
+          ],
+          "derived_from": [
+            {
+              "officer": "cso",
+              "option": "opt-1"
+            },
+            {
+              "officer": "risk",
+              "option": "opt-1"
+            },
+            {
+              "officer": "cco",
+              "option": "opt-2"
+            },
+            {
+              "officer": "cpo",
+              "option": "opt-1"
+            },
+            {
+              "officer": "cro",
+              "option": "opt-1"
+            },
+            {
+              "officer": "cro",
+              "option": "opt-2"
+            }
+          ],
+          "supported_by": [
+            "cso",
+            "risk",
+            "cco",
+            "cpo",
+            "cro"
+          ],
+          "contested_by": [
+            "risk",
+            "cco",
+            "cro"
+          ],
+          "competitor_signals": []
+        },
+        {
+          "id": "opt-2",
+          "description": "Imediato a 90 dias, governança: afastar o controlador das funções executivas e de decisões sobre a apuração, crédito e partes relacionadas; presidência interina e comitê independente com assessoria externa; investigação independente, preservação de documentos e cooperação com autoridades; revisão de compliance e partes relacionadas; plano de sucessão; avaliar efeitos e aprovações da incorporação de 2015-11-04. Evitar vácuo de comando; qualquer mudança na posição de controlador exige análise jurídica própria, pois o pacote não informa estatuto nem acordo de acionistas.",
+          "customer_impact": "low",
+          "capital_liquidity_effect": "Efeito direto em capital pequeno; reduz o risco de contraparte e de condicionantes de funding ligados à governança, não quantificável com o pacote. Custo de execução e risco de conflito com o bloco de controle. Pode revelar contingências hoje não mensuráveis.",
+          "citations": [
+            "f-sector-event-trigger-btg-2015-11",
+            "f-narrative-ipe-cvm-fato-022616ipe041120150104231212-79",
+            "f-soundness-btg",
+            "f-reputation-rk-btg-2015-s1"
+          ],
+          "derived_from": [
+            {
+              "officer": "cso",
+              "option": "opt-2"
+            },
+            {
+              "officer": "risk",
+              "option": "opt-2"
+            },
+            {
+              "officer": "cco",
+              "option": "opt-1"
+            },
+            {
+              "officer": "cco",
+              "option": "opt-3"
+            },
+            {
+              "officer": "cpo",
+              "option": "opt-2"
+            },
+            {
+              "officer": "cro",
+              "option": "opt-1"
+            },
+            {
+              "officer": "cro",
+              "option": "opt-2"
+            }
+          ],
+          "supported_by": [
+            "cso",
+            "risk",
+            "cco",
+            "cpo",
+            "cro"
+          ],
+          "contested_by": [
+            "risk",
+            "cco",
+            "cro"
+          ],
+          "competitor_signals": []
+        },
+        {
+          "id": "opt-3",
+          "description": "30-90 dias, balanço e relacionamento condicionados a gatilhos: diversificar e alongar funding se o custo for compatível; contato direto, isonômico e documentado com principais clientes e contrapartes; estresse de liquidez e capital; reforço de capital, desalavancagem ou venda de ativos não estratégicos apenas se os gatilhos dispararem, sem crescer risco de crédito ou trading na crise e sem venda a preço forçado.",
+          "customer_impact": "high",
+          "capital_liquidity_effect": "Alongar funding encarece com Selic a 14,25%; desalavancar protege capital mas reduz receita; capitalização dilui acionistas; concessões a clientes pesam na margem. Capital principal de 10,77% (2015-06) fica abaixo de Itaú (13,16%) e Bradesco (12,76%), acima de Safra (10,66%) e Votorantim (9,63%), comparação só de referência dado o modelo de negócio distinto. Magnitude exige dados internos.",
+          "citations": [
+            "f-soundness-btg",
+            "f-soundness-itau",
+            "f-soundness-bradesco",
+            "f-soundness-safra",
+            "f-soundness-votorantim",
+            "f-macro-selic",
+            "f-proximity-itau",
+            "f-proximity-bradesco"
+          ],
+          "derived_from": [
+            {
+              "officer": "cso",
+              "option": "opt-3"
+            },
+            {
+              "officer": "risk",
+              "option": "opt-3"
+            },
+            {
+              "officer": "cpo",
+              "option": "opt-3"
+            },
+            {
+              "officer": "cro",
+              "option": "opt-3"
+            },
+            {
+              "officer": "cco",
+              "option": "opt-3"
+            }
+          ],
+          "supported_by": [
+            "cso",
+            "risk",
+            "cco",
+            "cpo",
+            "cro"
+          ],
+          "contested_by": [
+            "risk",
+            "cco",
+            "cro"
+          ],
+          "competitor_signals": [
+            {
+              "entity": "bradesco",
+              "proximity": 0.702
+            },
+            {
+              "entity": "itau",
+              "proximity": 0.698
+            },
+            {
+              "entity": "safra",
+              "proximity": 0.698
+            },
+            {
+              "entity": "votorantim",
+              "proximity": 0.644
+            }
+          ]
+        }
+      ],
+      "residual_regulatory_risk": "O pacote não traz normas, prazos nem posição do BCB ou da CVM sobre idoneidade de controlador e administradores, a incorporação em curso ou a recompra, nem sanção ou imputação contra a instituição (a prisão é de pessoa física). Todos os dados prudenciais e de mercado são anteriores ao evento. Permanece risco de dever de informar, de assimetria de divulgação entre regulador, mercado e contrapartes, e de exigências regulatórias não mapeadas; requer apuração com jurídico e compliance.",
+      "monitoring_triggers": [
+        {
+          "text": "Saídas de captação, cortes de linhas de contrapartes, chamadas de margem e de colateral; definir limite numérico e responsável por gatilho com dados internos (30 dias).",
+          "citations": [
+            "f-fundamentals-btg",
+            "f-sector-event-trigger-btg-2015-11"
+          ]
+        },
+        {
+          "text": "Capital principal e Basileia atualizados contra 10,77% e 17,1% de 2015-06, com atenção a perdas por marcação a mercado ou venda de ativos.",
+          "citations": [
+            "f-soundness-btg"
+          ]
+        },
+        {
+          "text": "Novos fatos relevantes e comunicados, incluindo o teor do programa de recompra de 25/11 e andamento da incorporação; sinais, ofícios ou sanções de BCB, CVM ou autoridades contra a instituição.",
+          "citations": [
+            "f-narrative-ipe-cvm-fato-022616ipe251120150104233309-69",
+            "f-narrative-ipe-cvm-fato-022616ipe041120150104231212-79"
+          ]
+        },
+        {
+          "text": "Custo de funding e Selic (14,25%), que encarece a rolagem e o alongamento de prazos.",
+          "citations": [
+            "f-macro-selic"
+          ]
+        },
+        {
+          "text": "BBTG11 contra a mediana setorial de 3,7% (referência pré-evento: +17,23% até 2015-11-24), como sinal de confiança do mercado.",
+          "citations": [
+            "f-narrative-b3-btg-2015-11-24"
+          ]
+        },
+        {
+          "text": "Sinais de migração de clientes e contrapartes para pares próximos (Itaú, Bradesco, Safra, proximidade 0,70), hoje sem dados de pressão competitiva; tratar como hipótese a verificar.",
+          "citations": [
+            "f-proximity-itau",
+            "f-proximity-bradesco",
+            "f-proximity-safra"
+          ]
+        },
+        {
+          "text": "Mudanças de governança: saída de conselheiros, vácuo de comando além de poucos dias, decisões do conselho sobre sucessão e presidência interina.",
+          "citations": [
+            "f-sector-event-trigger-btg-2015-11"
+          ]
+        }
+      ]
+    },
+    "dissents": [
+      {
+        "officer": "cro",
+        "challenged": [
+          "cpo",
+          "risk"
+        ],
+        "text": "Contestação a cpo e risk, pela lente regulatória. (1) Ambos concluem 'choque de confiança, não de capital' com base em IF.data de 2015-06, anterior à prisão de 2015-11-25 (f-soundness-btg, f-sector-event-trigger-btg-2015-11). Isso é hipótese, não achado. (2) Risk afirma dependência atacadista, fuga de depósitos e rebaixamento. O pacote só traz crédito/captações de 20,47% (f-fundamentals-btg), que não prova a composição do funding. (3) Risk diz que a recompra e a incorporação consomem caixa, mas o fato de 2015-11-25 só informa o título, 'Programa de Recompra e Outros Assuntos' (f-narrative-ipe-cvm-fato-022616ipe251120150104233309-69). (4) Cpo usa como conforto a ação +17,23% até 11-24 e a ausência no ranking de reclamações. Ambos são anteriores ao evento ou não informativos: BTG tem posição e índice None (f-narrative-b3-btg-2015-11-24, f-reputation-rk-btg-2015-s1). (5) Falta o eixo regulatório: nenhuma opção trata de comunicação formal à CVM e ao BCB sobre a mudança de administração, nem de prazos e aprovações da incorporação em curso. Faltam também gatilhos de monitoramento numerados.",
+        "red_lines": [
+          "Não prosseguir com incorporação ou recompra sem checar exigências regulatórias e de informação",
+          "Não divulgar de forma assimétrica a regulador, mercado e contrapartes",
+          "Não tratar Basileia de 2015-06 como prova de liquidez pós-evento",
+          "Não dar ao investigado voz decisória na própria apuração",
+          "Não presumir poder do conselho sobre o controlador",
+          "Não afirmar fatos da investigação além do público",
+          "Não vender ativos a desconto forçado sem comparar alternativas",
+          "Não crescer risco de crédito ou de trading durante a crise",
+          "Não descumprir mínimos regulatórios"
+        ]
+      },
+      {
+        "officer": "cco",
+        "challenged": [
+          "cpo",
+          "risk"
+        ],
+        "text": "Contesto CPO e Risk à luz de conduta e integridade. A prisão de André Esteves, controlador e presidente (Lava Jato, 2015-11-25), é um evento de integridade: o pacote não traz sanção, CEIS/CNEP, lista internacional nem processo do CADE contra o BTG, então não afirmo imputação à instituição. Ambos tratam o caso como choque de confiança, não de capital (Basileia 17,1%, capital principal 10,77%, IF.data 2015-06, anterior ao evento). Faltam nas duas posições: separar a pessoa do controlador da responsabilidade da instituição, preservar provas e conter o risco de conduta (lavagem, partes relacionadas). Risk afirma 'dependência de captação atacadista' e 'fuga de depósitos' sem dado: crédito/captações de 20,47% não prova isso. Risk também diz 'suspender recompra' sem ler o conteúdo do fato relevante de 2015-11-25.",
+        "red_lines": [
+          "Não destruir, alterar ou omitir registros",
+          "Não conceder ao controlador investigado poder sobre a apuração ou sobre partes relacionadas",
+          "Não fazer afirmação pública sobre culpa ou inocência além do que for público",
+          "Não obstruir nem tratar de forma desigual BCB, CVM e autoridades",
+          "Não encerrar relação com cliente ou contraparte sem critério documentado",
+          "Não omitir achados relevantes ao regulador",
+          "Não aprovar partes relacionadas sem comitê independente",
+          "Não limitar a revisão a escopo que poupe o controlador",
+          "Não dar a algum cliente ou contraparte informação privilegiada ou tratamento desigual",
+          "Não executar recompra sem validar caixa e legalidade",
+          "Não tratar o mercado em alta de BBTG11 (+17,23% até 2015-11-24) como prova de confiança pós-evento"
+        ]
+      },
+      {
+        "officer": "risk",
+        "challenged": [
+          "cso"
+        ],
+        "text": "Contesto o CSO: tese certa (choque de governança/confiança, não de solvência em jun/2015: Basileia 17,1%, headroom 6,6 p.p., ROE 27,4%), mas o plano subestima a sobrevivência. Linha vermelha omitida: o pacote não traz LCR, composição/prazo do funding nem exposição de contrapartes, e crédito/captações de 20,47% sugere funding de atacado sensível a confiança; a Selic de 14,25% encarece a rolagem. Capital principal de 10,77% (jun/2015) é só 0,6 p.p. acima de Safra e 1,1 p.p. acima de Votorantim, folga pequena se houver marcação a mercado ou perdas. Falta: gatilhos numéricos, ordem de resolução/regulatória (o pacote não sustenta nenhuma afirmação sobre BCB ou escopo jurídico), contingência de cross-default/covenants e plano de fonte de liquidez. Dados têm 5 meses de defasagem e não refletem a prisão de 25/11/2015. A alta de 17,2% da ação até 24/11 é anterior ao evento e não é conforto.",
+        "red_lines": [
+          "Não vender ativos a preço forçado que corroa o capital principal de 10,77% (jun/2015)",
+          "Não omitir ao mercado (CVM) ou ao BCB fato relevante",
+          "Não concentrar a liquidez em contrapartes expostas ao mesmo evento",
+          "O investigado não participa de decisões do conselho sobre o tema",
+          "Não deixar vácuo de comando além de poucos dias",
+          "Sem decisão de capital ou de preço neste briefing",
+          "Não priorizar recompra sobre liquidez",
+          "Não dar tratamento preferencial que fira a isonomia",
+          "Não deixar o capital principal cair abaixo do mínimo regulatório",
+          "Não prometer garantias sem base jurídica"
+        ]
+      }
+    ],
+    "dropped": [],
+    "gaps": [],
+    "elapsed_s": 323.5
+  },
+  "focal": "btg",
+  "subject": "btg",
+  "proximity": [
+    {
+      "peer": "bradesco",
+      "label": "Bradesco",
+      "score": 0.702,
+      "coverage": 0.85,
+      "low_coverage": false,
+      "components": {
+        "size": 0.663,
+        "market": 1.0,
+        "business_model": 0.406,
+        "prudential": 0.776
+      },
+      "missing": [
+        "pressure"
+      ]
+    },
+    {
+      "peer": "itau",
+      "label": "Itaú",
+      "score": 0.698,
+      "coverage": 0.85,
+      "low_coverage": false,
+      "components": {
+        "size": 0.602,
+        "market": 1.0,
+        "business_model": 0.323,
+        "prudential": 0.988
+      },
+      "missing": [
+        "pressure"
+      ]
+    },
+    {
+      "peer": "safra",
+      "label": "Safra",
+      "score": 0.698,
+      "coverage": 0.85,
+      "low_coverage": false,
+      "components": {
+        "size": 0.95,
+        "market": 1.0,
+        "business_model": 0.244,
+        "prudential": 0.394
+      },
+      "missing": [
+        "pressure"
+      ]
+    },
+    {
+      "peer": "santander",
+      "label": "Santander",
+      "score": 0.683,
+      "coverage": 0.85,
+      "low_coverage": false,
+      "components": {
+        "size": 0.735,
+        "market": 1.0,
+        "business_model": 0.193,
+        "prudential": 0.81
+      },
+      "missing": [
+        "pressure"
+      ]
+    },
+    {
+      "peer": "votorantim",
+      "label": "Votorantim",
+      "score": 0.644,
+      "coverage": 0.85,
+      "low_coverage": false,
+      "components": {
+        "size": 0.881,
+        "market": 1.0,
+        "business_model": 0.0,
+        "prudential": 0.552
+      },
+      "missing": [
+        "pressure"
+      ]
+    }
+  ]
+}

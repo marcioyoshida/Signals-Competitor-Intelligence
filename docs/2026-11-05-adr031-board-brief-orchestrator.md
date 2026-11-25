@@ -286,8 +286,21 @@ episode and prints its gate verdict.
 First scores: the latest synthetic runs pass. Two older runs fail for real reasons. The 04:45
 downgrade run predates option tracing (`derived_from`). The 07:30 competitor run's pack
 differs from today's scenario, so its citations cannot be checked against the pack it read.
-The release gate stays red until the eight episodes are run: about 12 model calls each, owner
-approval.
+**Episode run (2026-11-25, owner-approved, Sonnet through the claude CLI on the subscription;
+no Bedrock).** All 8 episodes pass and the **release gate v1 passes**.
+- *Every episode:* 100% of citations valid, 94–100% of figures in the pack, 5–6/6
+  regulatory items, dissents verbatim. Each run took 13–16 calls, 182k–388k tokens and
+  220–590 s.
+- *Failures:* BVA and Rural cover 4/4 of the rubric and name the prudential signal. Cruzeiro
+  do Sul names the market signal but covers 1/4: its IF.data looked healthy because the
+  losses were a fraud.
+- *BTG:* 4/4 rubric, and its options cover all 4 decision categories the board actually took.
+- *Sovereign episodes:* the options match 1–2 of the 2–3 decision categories. Three of the
+  four briefs never say that a sovereign downgrade usually drags the bank's own rating (the
+  sovereign ceiling). That is the main content finding, left to a prompt change.
+- *Re-run:* the first S&P 2015 run ended partial on three provider "529 Overloaded" errors,
+  and the gate failed it as designed. A re-run passed. The scorer always uses the latest run
+  per scenario.
 
 Out of scope: sovereign CDS, bank bond spreads and other paid market data (Bloomberg,
 LSEG, ANBIMA curves). They are a stated blind spot of the brief.

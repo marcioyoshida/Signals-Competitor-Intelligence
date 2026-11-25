@@ -2,7 +2,7 @@
  "schema": "board/v1/eval-summary",
  "gate_version": 1,
  "release_gate": {
-  "passed": false,
+  "passed": true,
   "required": [
    "competitor-v2",
    "downgrade-v1",
@@ -15,20 +15,23 @@
    "sov-sp-2015-09",
    "sov-sp-2018-01"
   ],
-  "missing": [
-   "btg-2015-11",
-   "fail-bva-2012",
-   "fail-cruzeiro-2012",
-   "fail-rural-2013",
-   "sov-fitch-2015-12",
-   "sov-moodys-2016-02",
-   "sov-sp-2015-09",
-   "sov-sp-2018-01"
-  ],
+  "missing": [],
   "failed": [],
-  "warnings": {}
+  "warnings": {
+   "fail-cruzeiro-2012": [
+    "rubric 1/4 (missing losses, supervisory_action, recapitalization)"
+   ]
+  }
  },
  "runs": [
+  {
+   "run_id": "dry-btg-2015-11-20261125T0457Z",
+   "scenario": "btg-2015-11",
+   "model": "sonnet",
+   "passed": true,
+   "fails": [],
+   "warnings": []
+  },
   {
    "run_id": "dry-competitor-v2-20261115T0730Z",
    "scenario": "competitor-v2",
@@ -60,6 +63,76 @@
   {
    "run_id": "dry-downgrade-v1-20261115T0502Z",
    "scenario": "downgrade-v1",
+   "model": "sonnet",
+   "passed": true,
+   "fails": [],
+   "warnings": []
+  },
+  {
+   "run_id": "dry-fail-bva-2012-20261125T0445Z",
+   "scenario": "fail-bva-2012",
+   "model": "sonnet",
+   "passed": true,
+   "fails": [],
+   "warnings": []
+  },
+  {
+   "run_id": "dry-fail-cruzeiro-2012-20261125T0449Z",
+   "scenario": "fail-cruzeiro-2012",
+   "model": "sonnet",
+   "passed": true,
+   "fails": [],
+   "warnings": [
+    "rubric 1/4 (missing losses, supervisory_action, recapitalization)"
+   ]
+  },
+  {
+   "run_id": "dry-fail-rural-2013-20261125T0453Z",
+   "scenario": "fail-rural-2013",
+   "model": "sonnet",
+   "passed": true,
+   "fails": [],
+   "warnings": []
+  },
+  {
+   "run_id": "dry-sov-fitch-2015-12-20261125T0510Z",
+   "scenario": "sov-fitch-2015-12",
+   "model": "sonnet",
+   "passed": true,
+   "fails": [],
+   "warnings": []
+  },
+  {
+   "run_id": "dry-sov-moodys-2016-02-20261125T0517Z",
+   "scenario": "sov-moodys-2016-02",
+   "model": "sonnet",
+   "passed": true,
+   "fails": [],
+   "warnings": []
+  },
+  {
+   "run_id": "dry-sov-sp-2015-09-20261125T0502Z",
+   "scenario": "sov-sp-2015-09",
+   "model": "sonnet",
+   "passed": false,
+   "fails": [
+    "status partial",
+    "dissent preservation 0.0",
+    "3 call errors"
+   ],
+   "warnings": []
+  },
+  {
+   "run_id": "dry-sov-sp-2015-09-20261125T0535Z",
+   "scenario": "sov-sp-2015-09",
+   "model": "sonnet",
+   "passed": true,
+   "fails": [],
+   "warnings": []
+  },
+  {
+   "run_id": "dry-sov-sp-2018-01-20261125T0526Z",
+   "scenario": "sov-sp-2018-01",
    "model": "sonnet",
    "passed": true,
    "fails": [],
