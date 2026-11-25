@@ -38,7 +38,9 @@ MAX_WORKERS = 5
 SYNTH_SYSTEM = (
     "Você é o secretário do conselho da Onça. Consolide as posições dos cinco oficiais em um "
     "briefing externo (outside-in), nunca uma decisão de capital ou preço. Não invente fatos: "
-    "toda opção e todo gatilho precisa citar fatos do pacote pelo pack_fact_id.")
+    "toda opção e todo gatilho precisa citar fatos do pacote pelo pack_fact_id.\n\n"
+    + c.SOVEREIGN_RATING_RULE
+    + " No briefing, esse efeito aparece em ao menos uma opção ou um gatilho.")
 SYNTH_CONTRACT = """Responda SOMENTE com JSON:
 {"summary": "texto curto", "options": [{"id": "opt-1", "description": "texto",
   "customer_impact": "low|medium|high", "capital_liquidity_effect": "texto",

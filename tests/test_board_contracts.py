@@ -123,3 +123,32 @@ def test_length_limits_are_stated_and_enforced():
     errs = c.validate_position(good(options=[opt], constraints=["c"] * 6), officer="risk", pack_fact_ids=PACK)
     assert any("description longer" in e for e in errs)
     assert any("red_lines" in e for e in errs) and any("constraints" in e for e in errs)
+
+
+def test_every_officer_gets_the_sovereign_rating_second_order_rule():
+    # #340 eval 2026-11-25: briefs named the sovereign downgrade but not the bank's own rating
+    # following it, nor what that does to funding cost.
+    rule = c.SOVEREIGN_RATING_RULE
+    assert "teto soberano" in rule and "captação" in rule
+    for off in c.BOARD_OFFICERS:
+        assert rule in c.system_prompt(off)
+
+
+def test_sovereign_rule_is_conditional_and_keeps_the_pack_only_guardrails():
+    rule = c.SOVEREIGN_RATING_RULE
+    assert rule.startswith("Se o pacote trouxer uma ação de rating soberano")
+    # a mechanism to monitor, tied to a cited pack fact, never an invented bank rating action
+    assert "não um fato do pacote" in rule and "citando o fato da ação soberana" in rule
+    assert "não afirme que uma agência rebaixou ou vai rebaixar o banco" in rule
+    assert "salvo se o pacote trouxer esse fato" in rule
+    assert not any(ch.isdigit() for ch in rule)  # no figure the grounding check could not trace
+    # the per-call contract (cite only pack facts) is untouched
+    user_p = c.user_prompt("risk", env())
+    assert "use apenas fatos do pacote" in user_p
+    assert "se o pacote não sustenta uma afirmação, não a faça" in user_p
+
+
+def test_sovereign_rule_stays_out_of_the_shared_ask_persona():
+    from src.dashboard import officers
+    for off in c.BOARD_OFFICERS:
+        assert "teto soberano" not in (officers.brief_persona(off) or "")

@@ -165,10 +165,26 @@ o f-proximity desse concorrente e diga a distância; um concorrente distante pod
 pesa menos."""
 
 
+# #340 eval 2026-11-25: 3 of 4 sovereign episodes named the downgrade and the "exposição soberana"
+# but never the bank's own rating following the sovereign. Board-only (not in the officers.py
+# persona, which the live Ask also uses) and task-agnostic: it acts only when the pack holds a
+# sovereign rating action. It names a mechanism, not a fact, so the cite-only-pack-facts rule
+# still governs every claim about the bank.
+SOVEREIGN_RATING_RULE = (
+    "Se o pacote trouxer uma ação de rating soberano (rebaixamento, perda do grau de investimento "
+    "ou perspectiva negativa), trate também o efeito de segunda ordem: as agências costumam limitar "
+    "o rating dos bancos domésticos ao teto soberano e rebaixá-los junto com o soberano, o que "
+    "encarece e encurta a captação, sobretudo a externa. Isso é um mecanismo de análise, não um "
+    "fato do pacote: apresente-o como risco ou gatilho a monitorar, citando o fato da ação "
+    "soberana; não afirme que uma agência rebaixou ou vai rebaixar o banco, nem dê nota de rating "
+    "do banco, salvo se o pacote trouxer esse fato.")
+
+
 def system_prompt(officer: str) -> str:
     persona = officers.brief_persona(officer) or ""
     return (persona + "\n\nVocê participa de um briefing de conselho (board brief). "
-            "É um briefing externo (outside-in), nunca uma decisão de capital ou preço.").strip()
+            "É um briefing externo (outside-in), nunca uma decisão de capital ou preço.\n\n"
+            + SOVEREIGN_RATING_RULE).strip()
 
 
 def user_prompt(officer: str, envelope: dict[str, Any]) -> str:

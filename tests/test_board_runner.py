@@ -138,3 +138,34 @@ def test_nobody_answers_means_no_synthesis_call():
     f = Fake({(o, "diagnosis"): None for o in ("cso", "risk", "cco", "cpo", "cro")})
     out = run(f)
     assert out["status"] == "partial" and ("secretary", "synthesize") not in f.calls
+
+
+def test_secretary_must_carry_the_sovereign_rating_effect_into_the_brief():
+    from src.board import contracts as C
+    assert C.SOVEREIGN_RATING_RULE in R.SYNTH_SYSTEM
+    assert "Não invente fatos" in R.SYNTH_SYSTEM and "pack_fact_id" in R.SYNTH_SYSTEM
+    assert "ao menos uma opção ou um gatilho" in R.SYNTH_SYSTEM
+    seen = {}
+
+    class Spy(Fake):
+        def __call__(self, officer, phase, system, prompt):
+            seen[(officer, phase)] = system
+            return super().__call__(officer, phase, system, prompt)
+
+    out = run(Spy())
+    assert out["status"] == "complete"
+    assert C.SOVEREIGN_RATING_RULE in seen[("secretary", "synthesize")]
+    assert all(C.SOVEREIGN_RATING_RULE in s for s in seen.values())
+
+
+def test_guard_still_drops_an_uncited_sovereign_ceiling_option():
+    synth = json.dumps({"summary": "s", "options": [
+        {"id": "opt-1", "description": "Teto soberano pode rebaixar o banco", "customer_impact": "low",
+         "citations": []},
+        {"id": "opt-2", "description": "a", "customer_impact": "low", "citations": ["f-km1-alfa"]},
+        {"id": "opt-3", "description": "b", "customer_impact": "low", "citations": ["f-npl-alfa"]}],
+        "monitoring_triggers": [{"text": "Agência rebaixa o banco junto com o soberano", "citations": []}]})
+    out = run(Fake(synth=synth))
+    descs = [o["description"] for o in out["synthesis"]["options"]]
+    assert "Teto soberano pode rebaixar o banco" not in descs
+    assert out["synthesis"]["monitoring_triggers"] == []
